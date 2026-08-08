@@ -1107,6 +1107,23 @@ class PostgresCollectionRepository:
 
     @staticmethod
     async def _locked_task(connection: AsyncConnection, task_id: str) -> RowMapping | None:
+        # Lock the parent first so concurrent completions and cancellation use one order.
+        run_id = (
+            await connection.execute(
+                text("SELECT collection_run_id::text FROM collection_task WHERE id::text = :id"),
+                {"id": task_id},
+            )
+        ).scalar_one_or_none()
+        if run_id is None:
+            return None
+        run_exists = (
+            await connection.execute(
+                text("SELECT id FROM collection_run WHERE id::text = :run_id FOR UPDATE"),
+                {"run_id": run_id},
+            )
+        ).first()
+        if run_exists is None:
+            return None
         return (
             (
                 await connection.execute(
