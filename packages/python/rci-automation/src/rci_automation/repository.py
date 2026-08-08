@@ -549,8 +549,11 @@ class PostgresAutomationRepository:
                     """
                     UPDATE analysis_automation_state
                     SET status = :status, locked_by = NULL, lease_expires_at = NULL,
-                        last_error = :error,
-                        evaluated_at = CASE WHEN :error IS NULL THEN now() ELSE evaluated_at END
+                        last_error = CAST(:error AS text),
+                        evaluated_at = CASE
+                          WHEN CAST(:error AS text) IS NULL THEN now()
+                          ELSE evaluated_at
+                        END
                     WHERE analysis_result_id::text = :id AND locked_by = :worker_id
                     """
                 ),
