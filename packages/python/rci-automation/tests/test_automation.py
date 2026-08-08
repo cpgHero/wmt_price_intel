@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from rci_automation.cron import CronExpressionError, CronSchedule
+from rci_automation.email import FakeEmailSender, email_sender_from_env
 from rci_automation.memory import InMemoryAutomationRepository, RecordingEmailSender
 from rci_automation.models import AnalysisContext, ScheduleSource
 from rci_automation.service import AutomationService
@@ -203,6 +204,36 @@ async def test_schedule_materialization_is_leased_and_idempotent() -> None:
         scheduled_for=schedule.last_scheduled_for,
     )
     assert repeated.id == run.id
+
+
+async def test_invalid_legacy_schedule_does_not_block_valid_scheduler_work() -> None:
+    collection_service, _ = _collection_service()
+    valid_config = _collection_config()
+    invalid_config = _collection_config()
+    invalid_config["id"] = "invalid-schedule"
+    invalid_config["schedule"] = {
+        "type": "cron",
+        "cron": "61 * * * *",
+        "timezone": "UTC",
+    }
+    repository = InMemoryAutomationRepository(
+        schedule_sources=(
+            ScheduleSource("definition-valid", "valid", True, valid_config),
+            ScheduleSource("definition-invalid", "invalid", True, invalid_config),
+        )
+    )
+    service = AutomationService(
+        repository,
+        collection_service,
+        RecordingEmailSender(),
+        REPOSITORY_ROOT,
+    )
+
+    result = await service.tick("scheduler-1")
+
+    assert result.schedules_synchronized == 1
+    assert result.failures == 1
+    assert [schedule.definition_key for schedule in await repository.list_schedules()] == ["valid"]
 
 
 async def test_alert_cooldown_is_atomic_across_concurrent_evaluations() -> None:
@@ -430,3 +461,47 @@ async def test_email_failure_retries_without_losing_evidence() -> None:
     assert all(delivery.status == "pending" for delivery in deliveries)
     assert all(delivery.attempt_count == 1 for delivery in deliveries)
     assert all(delivery.evidence for delivery in deliveries)
+
+
+async def test_fake_email_provider_is_non_network_and_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "fake")
+    sender = email_sender_from_env()
+    assert isinstance(sender, FakeEmailSender)
+    collection_service, _ = _collection_service()
+    current = _analysis_context(
+        "fake-delivery",
+        datetime.now(UTC),
+        competitor_lower_rate=0.6,
+        walmart_zips=3_700,
+        parity_rate=0.7,
+        quality_score=0.8,
+    )
+    current.collection_config["delivery"] = {"leadership_email": False}
+    repository = InMemoryAutomationRepository(analyses=(current,))
+    service = AutomationService(repository, collection_service, sender, REPOSITORY_ROOT)
+    await service.publish_alert(
+        _alert(
+            "fake-delivery",
+            path=["data_quality"],
+            where=None,
+            field="score",
+            operator="lt",
+            threshold=0.9,
+        )
+    )
+
+    assert await service.evaluate_analysis("fake-delivery") == (1, 1)
+    assert await service.deliver_emails("scheduler-1") == (1, 0)
+    delivery = (await repository.list_email_deliveries())[0]
+    assert delivery.status == "sent"
+    assert delivery.provider_message_id is not None
+    assert delivery.provider_message_id.startswith("fake-")
+    assert await service.deliver_emails("scheduler-2") == (0, 0)
+
+
+def test_unknown_email_provider_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EMAIL_PROVIDER", "unexpected")
+    with pytest.raises(RuntimeError, match="EMAIL_PROVIDER"):
+        email_sender_from_env()

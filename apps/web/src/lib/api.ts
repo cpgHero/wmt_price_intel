@@ -117,6 +117,7 @@ export interface EmailDeliveryRecord {
   status: string;
   attempt_count: number;
   max_attempts: number;
+  provider_message_id: string | null;
   last_error: string | null;
   created_at: string;
   sent_at: string | null;

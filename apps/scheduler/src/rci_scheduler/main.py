@@ -14,9 +14,7 @@ from uuid import uuid4
 from rci_automation import (
     AutomationService,
     PostgresAutomationRepository,
-    SMTPEmailSender,
-    SMTPSettings,
-    UnavailableEmailSender,
+    email_sender_from_env,
 )
 from rci_collections import (
     CollectionPlanner,
@@ -50,15 +48,10 @@ async def run() -> None:
         ),
         repository_root,
     )
-    email_sender = (
-        SMTPEmailSender(SMTPSettings.from_env())
-        if os.getenv("SMTP_HOST") and os.getenv("SMTP_FROM_EMAIL")
-        else UnavailableEmailSender()
-    )
     automation = AutomationService(
         PostgresAutomationRepository(database.engine),
         collection_service,
-        email_sender,
+        email_sender_from_env(),
         repository_root,
     )
     scheduler_id = (

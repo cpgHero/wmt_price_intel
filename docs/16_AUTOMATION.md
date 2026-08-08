@@ -7,7 +7,9 @@ synchronizes active definitions into `collection_schedule`, claims due rows with
 `FOR UPDATE SKIP LOCKED`, and advances each row to the next timezone-aware instant. The unique
 `(schedule_id, scheduled_for)` run constraint makes retries and multiple scheduler replicas safe.
 Manual and scheduled runs share the same planner, budget checks, task identities, cancellation, and
-collection worker path.
+collection worker path. Cron syntax and timezone are rejected before definition publication. The
+scheduler also isolates and records malformed legacy schedules so one bad row cannot block other
+schedules, analysis evaluation, or email delivery in the same tick.
 
 ## Run budgets
 
@@ -44,4 +46,6 @@ Triggered alerts and configured leadership reports enqueue immutable email jobs 
 idempotency keys. Scheduler replicas claim jobs with `FOR UPDATE SKIP LOCKED` leases. Failure uses
 bounded exponential retry; expired leases are reclaimable; sent and exhausted jobs are terminal.
 SMTP credentials come only from environment variables. Delivery rows retain analysis/event evidence
-and provider message IDs without persisting credentials.
+and provider message IDs without persisting credentials. `EMAIL_PROVIDER=unavailable` fails closed,
+`EMAIL_PROVIDER=fake` performs no network activity and is reserved for explicit acceptance tests,
+and `EMAIL_PROVIDER=smtp` requires the documented SMTP settings.

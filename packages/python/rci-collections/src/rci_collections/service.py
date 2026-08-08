@@ -17,7 +17,8 @@ from rci_collections.models import (
 )
 from rci_collections.planner import CollectionPlanner, canonical_checksum
 from rci_collections.ports import CollectionRepository
-from rci_contracts import validate_instance
+from rci_contracts import ContractError, validate_instance
+from rci_core import CronExpressionError, CronSchedule
 
 
 class CollectionNotFoundError(LookupError):
@@ -26,6 +27,18 @@ class CollectionNotFoundError(LookupError):
 
 class CollectionBudgetError(ValueError):
     pass
+
+
+def _validate_schedule(config: JsonObject) -> None:
+    schedule = config.get("schedule")
+    if not isinstance(schedule, dict):
+        return
+    timezone = str(schedule.get("timezone", "UTC"))
+    expression = str(schedule.get("cron") or "0 0 * * *")
+    try:
+        CronSchedule(expression, timezone)
+    except CronExpressionError as exc:
+        raise ContractError(f"collection definition: schedule: {exc}") from exc
 
 
 class CollectionService:
@@ -46,6 +59,7 @@ class CollectionService:
             config,
             label="collection definition",
         )
+        _validate_schedule(config)
         return await self.repository.publish_definition(config, canonical_checksum(config))
 
     async def list_definitions(self) -> list[DefinitionRecord]:
@@ -68,6 +82,7 @@ class CollectionService:
             config,
             label="collection definition",
         )
+        _validate_schedule(config)
         return (await self.planner.plan(config)).estimate
 
     async def create_run(

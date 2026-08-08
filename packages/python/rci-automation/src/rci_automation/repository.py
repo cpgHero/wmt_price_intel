@@ -267,15 +267,15 @@ class PostgresAutomationRepository:
             )
             return _schedule(row)
 
-    async def disable_schedule(self, definition_id: str) -> None:
+    async def disable_schedule(self, definition_id: str, *, error: str | None = None) -> None:
         async with self._engine.begin() as connection:
             await connection.execute(
                 text(
                     "UPDATE collection_schedule SET enabled = false, updated_at = now(), "
-                    "lease_owner = NULL, lease_expires_at = NULL "
+                    "lease_owner = NULL, lease_expires_at = NULL, last_error = :error "
                     "WHERE definition_id::text = :definition_id"
                 ),
-                {"definition_id": definition_id},
+                {"definition_id": definition_id, "error": error},
             )
 
     async def list_schedules(self) -> list[ScheduleRecord]:

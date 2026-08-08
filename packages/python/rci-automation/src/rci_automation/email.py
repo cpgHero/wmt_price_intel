@@ -65,6 +65,31 @@ class SMTPEmailSender:
         return message.get("Message-ID") or hashlib.sha256(message.as_bytes()).hexdigest()
 
 
+class FakeEmailSender:
+    """Non-network sender for explicit acceptance and development environments."""
+
+    async def send(self, delivery: EmailDeliveryRecord) -> str:
+        digest = hashlib.sha256(delivery.idempotency_key.encode()).hexdigest()[:24]
+        return f"fake-{digest}"
+
+
 class UnavailableEmailSender:
     async def send(self, delivery: EmailDeliveryRecord) -> str:
         raise RuntimeError("SMTP delivery is not configured")
+
+
+def email_sender_from_env() -> SMTPEmailSender | FakeEmailSender | UnavailableEmailSender:
+    provider = os.getenv("EMAIL_PROVIDER", "auto").strip().lower()
+    if provider == "fake":
+        return FakeEmailSender()
+    if provider == "unavailable":
+        return UnavailableEmailSender()
+    if provider == "smtp":
+        return SMTPEmailSender(SMTPSettings.from_env())
+    if provider == "auto":
+        return (
+            SMTPEmailSender(SMTPSettings.from_env())
+            if os.getenv("SMTP_HOST") and os.getenv("SMTP_FROM_EMAIL")
+            else UnavailableEmailSender()
+        )
+    raise RuntimeError("EMAIL_PROVIDER must be one of auto, fake, unavailable, or smtp")

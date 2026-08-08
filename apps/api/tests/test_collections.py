@@ -138,3 +138,23 @@ async def test_invalid_collection_definition_is_rejected() -> None:
         response = await client.post("/api/v1/collection-definitions", json={"id": "invalid"})
         assert response.status_code == 422
         assert "benchmark_retailer" in response.json()["detail"]
+
+        invalid_cron = _config()
+        invalid_cron["schedule"] = {
+            "type": "cron",
+            "cron": "61 * * * *",
+            "timezone": "UTC",
+        }
+        response = await client.post("/api/v1/collection-definitions", json=invalid_cron)
+        assert response.status_code == 422
+        assert "outside 0..59" in response.json()["detail"]
+
+        invalid_timezone = _config()
+        invalid_timezone["schedule"] = {
+            "type": "manual",
+            "cron": None,
+            "timezone": "Not/AZone",
+        }
+        response = await client.post("/api/v1/collection-definitions", json=invalid_timezone)
+        assert response.status_code == 422
+        assert "unknown timezone" in response.json()["detail"]

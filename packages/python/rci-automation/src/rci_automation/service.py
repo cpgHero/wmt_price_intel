@@ -9,7 +9,7 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
-from rci_automation.cron import CronSchedule
+from rci_automation.cron import CronExpressionError, CronSchedule
 from rci_automation.evaluator import AlertEvaluator, HistoricalComparator, MetricSelectionError
 from rci_automation.models import (
     AlertDefinitionRecord,
@@ -74,8 +74,13 @@ class AutomationService:
         return await self.repository.list_email_deliveries(limit)
 
     async def sync_schedules(self, *, now: datetime | None = None) -> int:
+        synchronized, _ = await self._synchronize_schedules(now=now)
+        return synchronized
+
+    async def _synchronize_schedules(self, *, now: datetime | None = None) -> tuple[int, int]:
         instant = now or datetime.now(UTC)
         synchronized = 0
+        failures = 0
         for source in await self.repository.schedule_sources():
             config = source.config.get("schedule")
             if (
@@ -86,7 +91,15 @@ class AutomationService:
             ):
                 await self.repository.disable_schedule(source.definition_id)
                 continue
-            cron = CronSchedule(str(config["cron"]), str(config.get("timezone", "UTC")))
+            try:
+                cron = CronSchedule(str(config["cron"]), str(config.get("timezone", "UTC")))
+            except CronExpressionError as exc:
+                await self.repository.disable_schedule(
+                    source.definition_id,
+                    error=f"invalid schedule: {exc}"[:4_000],
+                )
+                failures += 1
+                continue
             await self.repository.upsert_schedule(
                 source,
                 cron_expression=cron.expression,
@@ -95,7 +108,7 @@ class AutomationService:
                 next_run_at=cron.next_after(instant),
             )
             synchronized += 1
-        return synchronized
+        return synchronized, failures
 
     async def materialize_due_schedules(
         self,
@@ -266,7 +279,7 @@ class AutomationService:
         claim_limit: int = 10,
         lease_seconds: int = 300,
     ) -> AutomationTickResult:
-        synchronized = await self.sync_schedules()
+        synchronized, synchronization_failures = await self._synchronize_schedules()
         runs, schedule_failures = await self.materialize_due_schedules(
             worker_id, limit=claim_limit, lease_seconds=lease_seconds
         )
@@ -282,7 +295,9 @@ class AutomationService:
             analyses_evaluated=analyses,
             alert_events_triggered=alerts,
             emails_sent=sent,
-            failures=schedule_failures + analysis_failures + email_failures,
+            failures=(
+                synchronization_failures + schedule_failures + analysis_failures + email_failures
+            ),
         )
 
     async def _analysis(self, identifier: str | None) -> AnalysisContext:

@@ -91,11 +91,16 @@ class InMemoryAutomationRepository:
             self._schedules[record.id] = record
             return copy.deepcopy(record)
 
-    async def disable_schedule(self, definition_id: str) -> None:
+    async def disable_schedule(self, definition_id: str, *, error: str | None = None) -> None:
         async with self._lock:
             for schedule_id, schedule in tuple(self._schedules.items()):
                 if schedule.definition_id == definition_id:
-                    self._schedules[schedule_id] = replace(schedule, enabled=False)
+                    self._schedules[schedule_id] = replace(
+                        schedule,
+                        enabled=False,
+                        last_error=error,
+                        updated_at=datetime.now(UTC),
+                    )
 
     async def list_schedules(self) -> list[ScheduleRecord]:
         return sorted(self._schedules.values(), key=lambda row: row.definition_key)

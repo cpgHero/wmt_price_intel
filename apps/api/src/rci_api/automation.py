@@ -15,9 +15,7 @@ from rci_api.collections import get_collection_service
 from rci_automation import (
     AutomationService,
     PostgresAutomationRepository,
-    SMTPEmailSender,
-    SMTPSettings,
-    UnavailableEmailSender,
+    email_sender_from_env,
 )
 from rci_automation.models import (
     AlertDefinitionRecord,
@@ -138,15 +136,10 @@ class EvaluationResponse(BaseModel):
 
 def get_automation_service(request: Request) -> AutomationService:
     repository = PostgresAutomationRepository(request.app.state.database_probe.engine)
-    sender = (
-        SMTPEmailSender(SMTPSettings.from_env())
-        if os.getenv("SMTP_HOST") and os.getenv("SMTP_FROM_EMAIL")
-        else UnavailableEmailSender()
-    )
     return AutomationService(
         repository,
         get_collection_service(request),
-        sender,
+        email_sender_from_env(),
         Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve(),
     )
 

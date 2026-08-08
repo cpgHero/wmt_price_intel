@@ -72,6 +72,7 @@ export default async function AutomationPage() {
     subject: delivery.subject,
     status: delivery.status,
     attempts: `${delivery.attempt_count}/${delivery.max_attempts}`,
+    provider_message_id: delivery.provider_message_id,
     evidence: delivery.evidence,
     last_error: delivery.last_error,
     sent: delivery.sent_at ? displayDate(delivery.sent_at) : null,

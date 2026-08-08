@@ -1146,6 +1146,7 @@ source = { editable = "packages/python/rci-automation" }
 dependencies = [
     { name = "rci-collections" },
     { name = "rci-contracts" },
+    { name = "rci-core" },
     { name = "rci-results" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
@@ -1154,6 +1155,7 @@ dependencies = [
 requires-dist = [
     { name = "rci-collections", editable = "packages/python/rci-collections" },
     { name = "rci-contracts", editable = "packages/python/rci-contracts" },
+    { name = "rci-core", editable = "packages/python/rci-core" },
     { name = "rci-results", editable = "packages/python/rci-results" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
 ]

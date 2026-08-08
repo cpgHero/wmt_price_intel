@@ -94,6 +94,7 @@ RCI_REPOSITORY_ROOT=/app
 SCHEDULER_POLL_SECONDS=30
 SCHEDULER_CLAIM_LIMIT=10
 SCHEDULER_LEASE_SECONDS=300
+EMAIL_PROVIDER=smtp
 SMTP_HOST=<sealed secret or private relay host>
 SMTP_PORT=587
 SMTP_USERNAME=<sealed secret>
@@ -102,8 +103,9 @@ SMTP_FROM_EMAIL=retail-intelligence@example.com
 SMTP_STARTTLS=true
 ```
 
-If email is intentionally disabled, omit `SMTP_HOST` and `SMTP_FROM_EMAIL`; queued deliveries fail
-through the normal bounded retry path instead of silently disappearing. Configure SMTP before
+If email is intentionally disabled, set `EMAIL_PROVIDER=unavailable`; queued deliveries fail through
+the normal bounded retry path instead of silently disappearing. `EMAIL_PROVIDER=fake` is a
+non-network acceptance mode and must not be mistaken for real delivery. Configure SMTP before
 publishing any email-enabled alert or leadership delivery in production.
 
 Railway's current Buckets use virtual-hosted S3 URLs by default, hence

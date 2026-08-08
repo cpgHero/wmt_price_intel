@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
   "rci-collections",
   "rci-contracts",
+  "rci-core",
   "rci-results",
   "sqlalchemy[asyncio]==2.0.51",
 ]
@@ -13,6 +14,7 @@ dependencies = [
 [tool.uv.sources]
 rci-collections = { workspace = true }
 rci-contracts = { workspace = true }
+rci-core = { workspace = true }
 rci-results = { workspace = true }
 
 [build-system]
