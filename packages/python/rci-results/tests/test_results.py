@@ -85,6 +85,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
 
     workbook = renderer.render(result, "xlsx")
     assert workbook.body.startswith(b"PK")
+    assert renderer.render(result, "xlsx").body == workbook.body
     with ZipFile(BytesIO(workbook.body)) as archive:
         workbook_xml = archive.read("xl/workbook.xml")
         assert b"Executive Summary" in workbook_xml
@@ -97,6 +98,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     assert "Amazon is the main 1 lb" in parsed.get_content()
 
     audit = renderer.render(result, "audit_zip")
+    assert renderer.render(result, "audit_zip").body == audit.body
     with ZipFile(BytesIO(audit.body)) as archive:
         assert set(archive.namelist()) == {
             "analysis-result.json",
@@ -128,8 +130,12 @@ async def test_artifact_generation_is_immutable_and_uses_short_lived_downloads()
         "leadership_email",
         "audit_zip",
     }
-    repeated = await service.generate_artifact(analysis.analysis_id, "html")
-    assert repeated.id == artifacts[0].id
+    repeated = [
+        await service.generate_artifact(analysis.analysis_id, artifact_type)
+        for artifact_type in ("html", "xlsx", "leadership_email", "audit_zip")
+    ]
+    assert [artifact.id for artifact in repeated] == [artifact.id for artifact in artifacts]
+    assert len(store.objects) == 4
     download = await service.download_link(artifacts[0].id)
     assert download.expires_in_seconds == 300
     assert download.url.startswith("https://download.test/")

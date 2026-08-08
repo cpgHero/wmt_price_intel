@@ -82,6 +82,16 @@ class AnalysisResultService:
         self, identifier: str, artifact_type: ArtifactType
     ) -> ReportArtifactRecord:
         analysis = await self.get(identifier)
+        existing = next(
+            (
+                artifact
+                for artifact in await self._repository.list_artifacts(analysis.analysis_id)
+                if artifact.artifact_type == artifact_type
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
         payload = self._renderer.render(analysis.result, artifact_type)
         storage_uri = await self._object_store.put(analysis.analysis_id, payload)
         return await self._repository.record_artifact(analysis, payload, storage_uri)

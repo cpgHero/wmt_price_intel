@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from html import escape
 from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import xlsxwriter  # type: ignore[import-untyped]
 
@@ -37,6 +38,22 @@ def _display(value: object) -> str:
     if isinstance(value, list | dict):
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     return str(value)
+
+
+def _generated_at(result: JsonObject) -> datetime:
+    value = str(result.get("generated_at", "1980-01-01T00:00:00+00:00"))
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
+def _zip_entry(filename: str) -> ZipInfo:
+    entry = ZipInfo(filename, date_time=(1980, 1, 1, 0, 0, 0))
+    entry.compress_type = ZIP_DEFLATED
+    entry.create_system = 3
+    entry.external_attr = 0o600 << 16
+    return entry
 
 
 def _table(title: str, rows: list[JsonObject]) -> str:
@@ -145,6 +162,7 @@ class ExcelAuditRenderer:
     def render(self, result: JsonObject) -> bytes:
         output = BytesIO()
         workbook = xlsxwriter.Workbook(output, {"in_memory": True})
+        workbook.set_properties({"created": _generated_at(result)})
         self._write_rows(
             workbook,
             "Executive Summary",
@@ -256,11 +274,11 @@ class ArtifactRenderer:
         }
         output = BytesIO()
         with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-            archive.writestr("analysis-result.json", result_body)
+            archive.writestr(_zip_entry("analysis-result.json"), result_body)
             for child in children:
-                archive.writestr(child.filename, child.body)
+                archive.writestr(_zip_entry(child.filename), child.body)
             archive.writestr(
-                "manifest.json",
+                _zip_entry("manifest.json"),
                 json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
             )
         analysis_id = str(result["analysis_id"])
