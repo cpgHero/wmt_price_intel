@@ -15,6 +15,7 @@ dependencies = [
   "rci-core",
   "rci-db",
   "rci-providers",
+  "rci-results",
 ]
 
 [project.scripts]
@@ -27,6 +28,7 @@ rci-collections = { workspace = true }
 rci-core = { workspace = true }
 rci-db = { workspace = true }
 rci-providers = { workspace = true }
+rci-results = { workspace = true }
 
 [build-system]
 requires = ["hatchling==1.29.0"]

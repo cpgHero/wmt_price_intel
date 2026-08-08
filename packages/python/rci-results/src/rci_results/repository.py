@@ -104,6 +104,30 @@ class PostgresResultsRepository:
                 if record.checksum != checksum:
                     raise ValueError(f"AnalysisResult {analysis_id!r} is immutable")
                 return record
+            source_existing = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_ANALYSIS_SELECT} "
+                            "WHERE ar.collection_run_id::text = :collection_run_id "
+                            "AND ar.product_pack_id = :product_pack_id "
+                            "AND ar.product_pack_version = :product_pack_version"
+                        ),
+                        {
+                            "collection_run_id": collection_run_id,
+                            "product_pack_id": str(product_pack["id"]),
+                            "product_pack_version": str(product_pack["version"]),
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if source_existing is not None:
+                record = _analysis(source_existing)
+                if record.checksum != checksum:
+                    raise ValueError("AnalysisResult collection run and Product Pack are immutable")
+                return record
             collection_exists = bool(
                 (
                     await connection.execute(
@@ -126,7 +150,15 @@ class PostgresResultsRepository:
                               CAST(:collection_run_id AS uuid), :product_pack_id,
                               :product_pack_version, 'succeeded', :code_version,
                               CAST(:generated_at AS timestamptz), CAST(:generated_at AS timestamptz)
-                            ) RETURNING id::text
+                            )
+                            ON CONFLICT ON CONSTRAINT analysis_run_collection_pack_uq
+                            DO UPDATE SET status = 'succeeded',
+                              code_version = EXCLUDED.code_version,
+                              started_at = COALESCE(analysis_run.started_at, EXCLUDED.started_at),
+                              completed_at = EXCLUDED.completed_at,
+                              locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                              last_error = NULL
+                            RETURNING id::text
                             """
                         ),
                         {
@@ -216,6 +248,24 @@ class PostgresResultsRepository:
                             "WHERE r.analysis_id = :identifier OR r.id::text = :identifier"
                         ),
                         {"identifier": identifier},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _analysis(row) if row is not None else None
+
+    async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_ANALYSIS_SELECT} "
+                            "WHERE ar.collection_run_id::text = :run_id "
+                            "ORDER BY r.created_at DESC LIMIT 1"
+                        ),
+                        {"run_id": run_id},
                     )
                 )
                 .mappings()

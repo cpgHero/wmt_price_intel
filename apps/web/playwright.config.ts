@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = Number(process.env.PLAYWRIGHT_PORT ?? "3000");
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -7,7 +9,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: `http://127.0.0.1:${port}`,
     trace: "on-first-retry",
   },
   projects: [
@@ -17,8 +19,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm build && node .next/standalone/apps/web/server.js",
-    url: "http://127.0.0.1:3000/health",
+    command: `pnpm build && PORT=${port} node .next/standalone/apps/web/server.js`,
+    url: `http://127.0.0.1:${port}/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -65,6 +65,15 @@ async def test_strawberry_cost_estimate_matches_supplied_contract() -> None:
     assert plan.estimate.estimated_total_pages == expected["estimated_total_pages"]
     assert plan.estimate.estimated_total_credits == expected["estimated_total_credits"]
     assert len(plan.initial_tasks) == 11500
+    preflight = [task for task in plan.initial_tasks if task.is_preflight]
+    assert len(preflight) == 5
+    assert {task.retailer_id for task in preflight} == {"aldi_us"}
+    assert plan.availability_gate == {
+        "enabled": True,
+        "retailer_ids": ["aldi_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+    }
 
 
 async def test_definition_publication_is_checksum_idempotent_and_versioned() -> None:

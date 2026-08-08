@@ -19,6 +19,18 @@ For each retailer:
 The estimate is a maximum if pagination may stop early. Actual credits are recorded for billable 2xx
 and 404 response pages; successful-page counts remain limited to 2xx responses.
 
+The browser wizard estimates an unpublished definition directly, invalidates the estimate whenever
+scope changes, enforces the configured hard cap, and requires an explicit approval before publishing
+the definition and creating its run.
+
+## Availability gate
+
+An optional definition-level gate marks a deterministic sample of first-page tasks per configured
+retailer. While the gate is pending, `FOR UPDATE SKIP LOCKED` claims only those sample tasks. The
+remaining tasks are released only when the billable-404 rate is at or below the configured threshold
+and no other terminal provider failure occurred. A failed gate cancels every still-pending non-sample
+task without issuing provider requests; already incurred 2xx/404 credits remain in actual usage.
+
 ## Location expansion
 
 - Store+ZIP retailers: one first-page task per eligible location row.
@@ -49,3 +61,9 @@ Cancellation prevents new task claims but does not delete raw pages already coll
 ## Idempotency
 
 Raw object key includes run/task/attempt/page identity. Successful task completion records canonical artifact checksum. Replaying a completed task must not double-count credits or overwrite evidence silently.
+
+After a run succeeds (including a partial result with billable-404 warnings), a separate durable
+`analysis_run` queue loads the configured Product Pack, normalizes provider pages, writes immutable
+partitioned Parquet datasets, computes comparisons, publishes one canonical `AnalysisResult`, and
+generates requested delivery artifacts. It uses the same lease/retry/`SKIP LOCKED` pattern as the
+collection queue and has no product-category branches.

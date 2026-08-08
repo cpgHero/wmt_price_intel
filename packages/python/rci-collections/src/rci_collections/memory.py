@@ -121,6 +121,8 @@ class InMemoryCollectionRepository:
                 trigger_type=trigger_type,
                 schedule_id=schedule_id,
                 scheduled_for=scheduled_for,
+                availability_gate_status=("pending" if plan.availability_gate else "skipped"),
+                availability_gate_config=dict(plan.availability_gate),
             )
             self._runs[run.id] = run
             if schedule_id is not None and scheduled_for is not None:
@@ -171,7 +173,7 @@ class InMemoryCollectionRepository:
             ]
             used = sum(
                 run.actual_credits
-                if run.status in {"succeeded", "failed", "cancelled"}
+                if run.status in {"succeeded", "completed_with_warnings", "failed", "cancelled"}
                 else run.estimated_credits
                 for run in selected
             )
@@ -216,6 +218,7 @@ class InMemoryCollectionRepository:
             locked_by=None,
             lease_expires_at=None,
             created_at=now,
+            is_preflight=seed.is_preflight,
         )
         self._tasks[task.id] = task
         return True
@@ -378,6 +381,10 @@ class InMemoryCollectionRepository:
                     and task.attempt_count < task.max_attempts
                     and run.cancel_requested_at is None
                     and run.status in {"queued", "running"}
+                    and (
+                        run.availability_gate_status in {"skipped", "passed"}
+                        or (run.availability_gate_status == "pending" and task.is_preflight)
+                    )
                 ):
                     eligible.append(task)
             eligible.sort(key=lambda item: (item.priority, item.created_at, item.id))
@@ -527,7 +534,7 @@ class InMemoryCollectionRepository:
             run = self._runs.get(run_id)
             if run is None:
                 return None
-            if run.status in {"cancelled", "succeeded", "failed"}:
+            if run.status in {"cancelled", "succeeded", "completed_with_warnings", "failed"}:
                 return run
             run = replace(run, status="cancel_requested", cancel_requested_at=now)
             self._runs[run_id] = run
@@ -560,20 +567,67 @@ class InMemoryCollectionRepository:
                     )
                     retried += 1
             if retried:
+                if run.availability_gate_status == "failed":
+                    for task_id, task in tuple(self._tasks.items()):
+                        if (
+                            task.collection_run_id == run_id
+                            and not task.is_preflight
+                            and task.status == "cancelled"
+                        ):
+                            self._tasks[task_id] = replace(task, status="pending", available_at=now)
                 self._runs[run_id] = replace(
-                    run, status="running" if run.started_at else "queued", completed_at=None
+                    run,
+                    status="running" if run.started_at else "queued",
+                    completed_at=None,
+                    availability_gate_status=(
+                        "pending"
+                        if run.availability_gate_status == "failed"
+                        else run.availability_gate_status
+                    ),
                 )
             return retried
 
     def _reconcile_run(self, run_id: str, now: datetime) -> None:
         run = self._runs[run_id]
         tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
+        if run.availability_gate_status == "pending":
+            preflight = [task for task in tasks if task.is_preflight]
+            if preflight and not any(task.status in {"pending", "running"} for task in preflight):
+                maximum = float(run.availability_gate_config.get("max_billable_404_rate", 0.5))
+                rate = sum(task.http_status == 404 for task in preflight) / len(preflight)
+                unavailable_for_other_reason = any(
+                    task.status == "failed" and task.http_status != 404 for task in preflight
+                )
+                if rate > maximum or unavailable_for_other_reason:
+                    for task_id, task in tuple(self._tasks.items()):
+                        if (
+                            task.collection_run_id == run_id
+                            and not task.is_preflight
+                            and task.status == "pending"
+                        ):
+                            self._tasks[task_id] = replace(task, status="cancelled")
+                    run = replace(run, availability_gate_status="failed")
+                else:
+                    run = replace(run, availability_gate_status="passed")
+                self._runs[run_id] = run
+                tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
         if any(task.status in {"pending", "running"} for task in tasks):
             return
         if run.cancel_requested_at is not None:
             status = "cancelled"
-        elif any(task.status == "failed" for task in tasks):
+        elif run.availability_gate_status == "failed":
             status = "failed"
+        elif any(task.status == "failed" for task in tasks):
+            failures = [task for task in tasks if task.status == "failed"]
+            only_billable_unavailable = all(
+                task.http_status == 404 and task.failure_class == "invalid_request"
+                for task in failures
+            )
+            status = (
+                "completed_with_warnings"
+                if only_billable_unavailable and any(task.status == "succeeded" for task in tasks)
+                else "failed"
+            )
         else:
             status = "succeeded"
         self._runs[run_id] = replace(run, status=status, completed_at=now)

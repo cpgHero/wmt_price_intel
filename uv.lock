@@ -1308,6 +1308,7 @@ dependencies = [
     { name = "rci-core" },
     { name = "rci-db" },
     { name = "rci-providers" },
+    { name = "rci-results" },
 ]
 
 [package.metadata]
@@ -1323,6 +1324,7 @@ requires-dist = [
     { name = "rci-core", editable = "packages/python/rci-core" },
     { name = "rci-db", editable = "packages/python/rci-db" },
     { name = "rci-providers", editable = "packages/python/rci-providers" },
+    { name = "rci-results", editable = "packages/python/rci-results" },
 ]
 
 [[package]]

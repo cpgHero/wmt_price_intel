@@ -64,6 +64,47 @@ def _repository(size: int) -> InMemoryCollectionRepository:
     )
 
 
+def _gated_repository(size: int = 5) -> InMemoryCollectionRepository:
+    return InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id=f"aldi-location-{index}",
+                retailer_id="aldi_us",
+                zipcode=f"45{index:03d}",
+                store_number=f"046-{index:03d}",
+                state="OH",
+                country="USA",
+            )
+            for index in range(size)
+        ]
+    )
+
+
+async def _gated_run(repository: InMemoryCollectionRepository):
+    config = _config()
+    config["benchmark_retailer"] = "aldi_us"
+    config["retailers"] = [
+        {
+            "retailer_id": "aldi_us",
+            "adapter_id": "metricscart_new_aldi_serp_zipcode",
+            "enabled": True,
+            "request_overrides": {},
+        }
+    ]
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["aldi_us"],
+        "sample_size_per_retailer": 2,
+        "max_billable_404_rate": 0.5,
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    planner = CollectionPlanner(
+        repository,
+        CollectionRetailerCatalog.from_path(REPOSITORY_ROOT / "config" / "retailer-catalog.json"),
+    )
+    return await repository.create_run(definition, await planner.plan(config))
+
+
 async def _run(repository: InMemoryCollectionRepository, *, max_pages: int = 1):
     config = _config(max_pages=max_pages)
     definition = await repository.publish_definition(config, canonical_checksum(config))
@@ -265,3 +306,90 @@ async def test_budget_blocks_run_before_tasks_are_created() -> None:
 def test_postgres_claim_query_uses_skip_locked() -> None:
     source = inspect.getsource(PostgresCollectionRepository.claim_tasks)
     assert "FOR UPDATE OF t SKIP LOCKED" in source
+
+
+async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() -> None:
+    repository = _gated_repository()
+    run = await _gated_run(repository)
+
+    preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+    assert len(preflight) == 2
+    assert all(task.is_preflight for task in preflight)
+    for task in preflight:
+        assert await repository.complete_failure(
+            task.id,
+            "gate-worker",
+            failure_class="invalid_request",
+            error_message="provider returned 404",
+            retryable=False,
+            retry_delay_seconds=0,
+            http_status=404,
+            billable=True,
+        )
+
+    assert not await repository.claim_tasks("other-worker", claim_limit=10, lease_seconds=30)
+    final = await repository.get_run(run.id)
+    usage = await repository.usage(run.id)
+    assert final is not None and usage is not None
+    assert final.availability_gate_status == "failed"
+    assert final.status == "failed"
+    assert usage.failed_tasks == 2
+    assert usage.cancelled_tasks == 3
+    assert usage.actual_credits == 4
+
+    assert await repository.retry_failed(run.id) == 2
+    retried_preflight = await repository.claim_tasks(
+        "retry-worker", claim_limit=10, lease_seconds=30
+    )
+    assert len(retried_preflight) == 2
+    assert all(task.is_preflight for task in retried_preflight)
+    for task in retried_preflight:
+        assert await repository.complete_success(
+            task.id,
+            "retry-worker",
+            http_status=200,
+            result_count=1,
+            next_task=None,
+        )
+    released = await repository.claim_tasks("released-worker", claim_limit=10, lease_seconds=30)
+    assert len(released) == 3
+
+
+async def test_availability_gate_releases_remaining_tasks_at_threshold() -> None:
+    repository = _gated_repository()
+    run = await _gated_run(repository)
+    preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+    assert await repository.complete_success(
+        preflight[0].id,
+        "gate-worker",
+        http_status=200,
+        result_count=1,
+        next_task=None,
+    )
+    assert await repository.complete_failure(
+        preflight[1].id,
+        "gate-worker",
+        failure_class="invalid_request",
+        error_message="provider returned 404",
+        retryable=False,
+        retry_delay_seconds=0,
+        http_status=404,
+        billable=True,
+    )
+
+    remaining = await repository.claim_tasks("collection-worker", claim_limit=10, lease_seconds=30)
+    assert len(remaining) == 3
+    assert all(not task.is_preflight for task in remaining)
+    for task in remaining:
+        assert await repository.complete_success(
+            task.id,
+            "collection-worker",
+            http_status=200,
+            result_count=1,
+            next_task=None,
+        )
+    final = await repository.get_run(run.id)
+    assert final is not None
+    assert final.availability_gate_status == "passed"
+    assert final.status == "completed_with_warnings"
+    assert final.actual_credits == 10

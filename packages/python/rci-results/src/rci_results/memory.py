@@ -33,6 +33,20 @@ class InMemoryResultsRepository:
                 return copy.deepcopy(existing)
             product_pack = result["product_pack"]
             assert isinstance(product_pack, dict)
+            source_existing = next(
+                (
+                    record
+                    for record in self._analyses.values()
+                    if record.collection_run_id == str(result["collection_run_id"])
+                    and record.product_pack_id == str(product_pack["id"])
+                    and record.product_pack_version == str(product_pack["version"])
+                ),
+                None,
+            )
+            if source_existing is not None:
+                if source_existing.checksum != checksum:
+                    raise ValueError("AnalysisResult collection run and Product Pack are immutable")
+                return copy.deepcopy(source_existing)
             record = AnalysisRecord(
                 id=str(uuid4()),
                 analysis_run_id=str(uuid4()),
@@ -61,6 +75,15 @@ class InMemoryResultsRepository:
         async with self._lock:
             analysis_id = self._analysis_ids_by_record.get(identifier, identifier)
             return copy.deepcopy(self._analyses.get(analysis_id))
+
+    async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None:
+        async with self._lock:
+            matching = [
+                record for record in self._analyses.values() if record.collection_run_id == run_id
+            ]
+            if not matching:
+                return None
+            return copy.deepcopy(max(matching, key=lambda record: record.created_at))
 
     async def record_artifact(
         self,

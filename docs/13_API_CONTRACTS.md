@@ -18,6 +18,7 @@ Prefix: `/api/v1`.
 - `POST /collection-definitions`
 - `GET /collection-definitions`
 - `GET /collection-definitions/{id}`
+- `POST /collection-estimates` validates and estimates an unpublished definition without persisting it.
 - `POST /collection-definitions/{id}/estimate`
 - `POST /collection-definitions/{id}/runs`
 
@@ -35,6 +36,7 @@ Prefix: `/api/v1`.
 - `GET /analyses`
 - `GET /analyses/{id}`
 - `POST /collection-runs/{id}/analysis`
+- `GET /collection-runs/{id}/analysis` returns the latest canonical result for a source run.
 - `GET /analyses/{id}/matches`
 - `GET /analyses/{id}/quality`
 - `GET /analyses/{id}/history?baseline_id=` returns numeric metric changes with current and baseline

@@ -62,6 +62,8 @@ def _run(row: RowMapping) -> RunRecord:
         trigger_type=str(row.get("trigger_type", "manual")),
         schedule_id=str(row["schedule_id"]) if row.get("schedule_id") is not None else None,
         scheduled_for=row.get("scheduled_for"),
+        availability_gate_status=str(row.get("availability_gate_status", "skipped")),
+        availability_gate_config=dict(row.get("availability_gate_config") or {}),
     )
 
 
@@ -100,6 +102,7 @@ def _task(row: RowMapping) -> QueueTask:
         raw_artifact_id=(
             str(row["raw_artifact_id"]) if row.get("raw_artifact_id") is not None else None
         ),
+        is_preflight=bool(row.get("is_preflight", False)),
     )
 
 
@@ -358,11 +361,13 @@ class PostgresCollectionRepository:
                         INSERT INTO collection_run (
                           organization_id, definition_version_id, status,
                           estimated_pages, estimated_credits, trigger_type,
-                          schedule_id, scheduled_for
+                          schedule_id, scheduled_for, availability_gate_status,
+                          availability_gate_config
                         ) VALUES (
                           CAST(:organization_id AS uuid), CAST(:definition_version_id AS uuid),
                           :status, :estimated_pages, :estimated_credits, :trigger_type,
-                          CAST(:schedule_id AS uuid), :scheduled_for
+                          CAST(:schedule_id AS uuid), :scheduled_for,
+                          :availability_gate_status, CAST(:availability_gate_config AS jsonb)
                         )
                         ON CONFLICT ON CONSTRAINT collection_run_schedule_slot_uq DO NOTHING
                         RETURNING *
@@ -377,6 +382,10 @@ class PostgresCollectionRepository:
                             "trigger_type": trigger_type,
                             "schedule_id": schedule_id,
                             "scheduled_for": scheduled_for,
+                            "availability_gate_status": (
+                                "pending" if plan.availability_gate else "skipped"
+                            ),
+                            "availability_gate_config": _json(plan.availability_gate),
                         },
                     )
                 )
@@ -455,7 +464,9 @@ class PostgresCollectionRepository:
                         text(
                             f"""
                             SELECT COALESCE(sum(
-                              CASE WHEN r.status IN ('succeeded', 'failed', 'cancelled')
+                              CASE WHEN r.status IN (
+                                'succeeded', 'completed_with_warnings', 'failed', 'cancelled'
+                              )
                                 THEN r.actual_credits ELSE r.estimated_credits END
                             ), 0)
                             FROM collection_run r
@@ -485,13 +496,13 @@ class PostgresCollectionRepository:
               collection_run_id, retailer_id, retailer_location_id, adapter_id,
               location_scope_key, zipcode, store_number, page_number, max_pages,
               stop_on_empty, stop_on_short_page, credits_per_success,
-              request_payload, request_fingerprint, priority, max_attempts
+              request_payload, request_fingerprint, priority, max_attempts, is_preflight
             ) VALUES (
               CAST(:collection_run_id AS uuid), :retailer_id,
               CAST(:retailer_location_id AS uuid), :adapter_id, :location_scope_key,
               :zipcode, :store_number, :page_number, :max_pages, :stop_on_empty,
               :stop_on_short_page, :credits_per_success, CAST(:request_payload AS jsonb),
-              :request_fingerprint, :priority, :max_attempts
+              :request_fingerprint, :priority, :max_attempts, :is_preflight
             )
             ON CONFLICT ON CONSTRAINT collection_task_identity_uq DO NOTHING
             """
@@ -516,6 +527,7 @@ class PostgresCollectionRepository:
             "request_fingerprint": seed.request_fingerprint,
             "priority": seed.priority,
             "max_attempts": seed.max_attempts,
+            "is_preflight": seed.is_preflight,
         }
 
     async def get_run(self, run_id: str) -> RunRecord | None:
@@ -660,6 +672,10 @@ class PostgresCollectionRepository:
                 AND r.status IN ('queued', 'running')
                 AND r.cancel_requested_at IS NULL
                 AND t.attempt_count < t.max_attempts
+                AND (
+                  r.availability_gate_status IN ('skipped', 'passed') OR
+                  (r.availability_gate_status = 'pending' AND t.is_preflight)
+                )
               ORDER BY t.priority, t.created_at, t.id
               FOR UPDATE OF t SKIP LOCKED
               LIMIT :claim_limit
@@ -939,11 +955,10 @@ class PostgresCollectionRepository:
     ) -> str | None:
         if artifact is None:
             return None
-        return str(
-            (
-                await connection.execute(
-                    text(
-                        """
+        artifact_id = (
+            await connection.execute(
+                text(
+                    """
                         INSERT INTO dataset_artifact (
                           collection_run_id, artifact_type, storage_uri, content_type,
                           row_count, byte_size, checksum, schema_version, metadata
@@ -954,28 +969,31 @@ class PostgresCollectionRepository:
                         )
                         ON CONFLICT (storage_uri) DO UPDATE
                         SET storage_uri = EXCLUDED.storage_uri
+                        WHERE dataset_artifact.checksum = EXCLUDED.checksum
                         RETURNING id::text
                         """
+                ),
+                {
+                    "run_id": run_id,
+                    "artifact_type": artifact.artifact_type,
+                    "storage_uri": artifact.storage_uri,
+                    "content_type": artifact.content_type,
+                    "byte_size": artifact.byte_size,
+                    "row_count": artifact.row_count,
+                    "checksum": artifact.checksum,
+                    "schema_version": artifact.schema_version,
+                    "metadata": _json(
+                        {
+                            **artifact.metadata,
+                            **({"task_id": task_id} if task_id is not None else {}),
+                        }
                     ),
-                    {
-                        "run_id": run_id,
-                        "artifact_type": artifact.artifact_type,
-                        "storage_uri": artifact.storage_uri,
-                        "content_type": artifact.content_type,
-                        "byte_size": artifact.byte_size,
-                        "row_count": artifact.row_count,
-                        "checksum": artifact.checksum,
-                        "schema_version": artifact.schema_version,
-                        "metadata": _json(
-                            {
-                                **artifact.metadata,
-                                **({"task_id": task_id} if task_id is not None else {}),
-                            }
-                        ),
-                    },
-                )
-            ).scalar_one()
-        )
+                },
+            )
+        ).scalar_one_or_none()
+        if artifact_id is None:
+            raise ValueError(f"dataset artifact {artifact.storage_uri!r} is immutable")
+        return str(artifact_id)
 
     async def cancel_run(self, run_id: str) -> RunRecord | None:
         async with self._engine.begin() as connection:
@@ -987,7 +1005,9 @@ class PostgresCollectionRepository:
                         UPDATE collection_run
                         SET cancel_requested_at = COALESCE(cancel_requested_at, now()),
                             status = CASE
-                              WHEN status IN ('succeeded', 'failed', 'cancelled') THEN status
+                              WHEN status IN (
+                                'succeeded', 'completed_with_warnings', 'failed', 'cancelled'
+                              ) THEN status
                               ELSE 'cancel_requested'
                             END
                         WHERE id::text = :run_id
@@ -1059,9 +1079,25 @@ class PostgresCollectionRepository:
                 await connection.execute(
                     text(
                         """
+                        UPDATE collection_task t
+                        SET status = 'pending', available_at = now(), completed_at = NULL
+                        FROM collection_run r
+                        WHERE r.id = t.collection_run_id AND r.id::text = :run_id
+                          AND r.availability_gate_status = 'failed'
+                          AND NOT t.is_preflight AND t.status = 'cancelled'
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+                await connection.execute(
+                    text(
+                        """
                         UPDATE collection_run
                         SET status = CASE WHEN started_at IS NULL THEN 'queued' ELSE 'running' END,
-                            completed_at = NULL, error_summary = NULL
+                            completed_at = NULL, error_summary = NULL,
+                            availability_gate_status = CASE
+                              WHEN availability_gate_status = 'failed' THEN 'pending'
+                              ELSE availability_gate_status END
                         WHERE id::text = :run_id
                         """
                     ),
@@ -1087,12 +1123,105 @@ class PostgresCollectionRepository:
 
     @staticmethod
     async def _reconcile_run(connection: AsyncConnection, run_id: str) -> None:
+        gate = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT availability_gate_status, availability_gate_config "
+                        "FROM collection_run WHERE id::text = :run_id FOR UPDATE"
+                    ),
+                    {"run_id": run_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if gate["availability_gate_status"] == "pending":
+            summary = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT count(*)::integer AS total,
+                                   count(*) FILTER (
+                                     WHERE status IN ('pending', 'running')
+                                   )::integer AS open,
+                                   count(*) FILTER (WHERE http_status = 404)::integer AS not_found,
+                                   count(*) FILTER (
+                                     WHERE status = 'failed' AND http_status IS DISTINCT FROM 404
+                                   )::integer AS other_failures
+                            FROM collection_task
+                            WHERE collection_run_id::text = :run_id AND is_preflight
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if int(summary["total"]) and not int(summary["open"]):
+                config = dict(gate["availability_gate_config"] or {})
+                rate = int(summary["not_found"]) / int(summary["total"])
+                maximum = float(config.get("max_billable_404_rate", 0.5))
+                gate_status = (
+                    "failed" if rate > maximum or int(summary["other_failures"]) else "passed"
+                )
+                error_summary = (
+                    f"availability preflight failed: billable 404 rate {rate:.3f} "
+                    f"exceeded {maximum:.3f}"
+                    if rate > maximum
+                    else "availability preflight failed: provider sample had terminal failures"
+                )
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE collection_run
+                        SET availability_gate_status = :gate_status,
+                            error_summary = CASE WHEN :gate_status = 'failed'
+                              THEN :error_summary ELSE error_summary END
+                        WHERE id::text = :run_id
+                        """
+                    ),
+                    {
+                        "run_id": run_id,
+                        "gate_status": gate_status,
+                        "error_summary": error_summary,
+                    },
+                )
+                if gate_status == "failed":
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE collection_task
+                            SET status = 'cancelled', completed_at = now()
+                            WHERE collection_run_id::text = :run_id
+                              AND NOT is_preflight AND status = 'pending'
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
         await connection.execute(
             text(
                 """
                 UPDATE collection_run r
                 SET status = CASE
                       WHEN r.cancel_requested_at IS NOT NULL THEN 'cancelled'
+                      WHEN r.availability_gate_status = 'failed' THEN 'failed'
+                      WHEN EXISTS (
+                        SELECT 1 FROM collection_task t
+                        WHERE t.collection_run_id = r.id AND t.status = 'failed'
+                          AND NOT (
+                            t.http_status = 404 AND t.failure_class = 'invalid_request'
+                          )
+                      ) THEN 'failed'
+                      WHEN EXISTS (
+                        SELECT 1 FROM collection_task t
+                        WHERE t.collection_run_id = r.id AND t.status = 'failed'
+                      ) AND EXISTS (
+                        SELECT 1 FROM collection_task t
+                        WHERE t.collection_run_id = r.id AND t.status = 'succeeded'
+                      ) THEN 'completed_with_warnings'
                       WHEN EXISTS (
                         SELECT 1 FROM collection_task t
                         WHERE t.collection_run_id = r.id AND t.status = 'failed'

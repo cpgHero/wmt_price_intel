@@ -1,4 +1,4 @@
-"""Durable queue worker using the Phase 2 fake provider."""
+"""Durable collection and post-collection analysis worker."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import uuid4
 
+from rci_analytics import ParquetDatasetWriter
+from rci_analytics.parquet import S3DatasetStore
 from rci_collections import FakeProvider, PostgresCollectionRepository, QueueWorker
 from rci_collections.worker import CollectionProvider
 from rci_core import APP_VERSION, AppSettings, AsyncHealthServer, configure_logging
@@ -23,6 +25,18 @@ from rci_providers import (
     S3RawObjectStore,
 )
 from rci_providers.client import credential_budget_key
+from rci_results import (
+    AnalysisResultService,
+    AnalysisResultValidator,
+    PostgresResultsRepository,
+    S3ReportObjectStore,
+)
+from rci_worker.analysis import (
+    AnalysisProcessor,
+    AnalysisWorker,
+    PostgresAnalysisQueue,
+    S3RawPageReader,
+)
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -44,6 +58,8 @@ async def run() -> None:
     for signum in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(signum, stop.set)
     database = DatabaseProbe(settings.database_url)
+    repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
+    collection_repository = PostgresCollectionRepository(database.engine)
     worker_id = (
         os.getenv("WORKER_ID")
         or os.getenv("RAILWAY_REPLICA_ID")
@@ -52,6 +68,9 @@ async def run() -> None:
     provider_mode = os.getenv("COLLECTION_PROVIDER", "fake").strip().lower()
     metricscart_client: MetricsCartClient | None = None
     provider: CollectionProvider
+    adapter_registry = MetricsCartAdapterRegistry.from_catalog(
+        repository_root / "config" / "retailer-catalog.json"
+    )
     if provider_mode == "fake":
         provider = FakeProvider()
     elif provider_mode == "metricscart":
@@ -73,7 +92,7 @@ async def run() -> None:
         )
         metricscart_client = MetricsCartClient(
             metricscart_settings,
-            MetricsCartAdapterRegistry.from_catalog(Path("config/retailer-catalog.json")),
+            adapter_registry,
             limiter,
             object_store,
         )
@@ -81,12 +100,56 @@ async def run() -> None:
     else:
         raise ValueError("COLLECTION_PROVIDER must be 'fake' or 'metricscart'")
     worker = QueueWorker(
-        PostgresCollectionRepository(database.engine),
+        collection_repository,
         provider,
         worker_id=worker_id,
         claim_limit=int(os.getenv("WORKER_CLAIM_LIMIT", "10")),
         lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
     )
+    analysis_worker: AnalysisWorker | None = None
+    if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
+        "OBJECT_STORAGE_BUCKET"
+    ):
+        import boto3  # type: ignore[import-untyped]
+        from botocore.config import Config  # type: ignore[import-untyped]
+
+        force_path_style = _enabled(os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE"), default=True)
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=os.getenv("OBJECT_STORAGE_ENDPOINT") or None,
+            region_name=os.getenv("OBJECT_STORAGE_REGION") or None,
+            aws_access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY_ID") or None,
+            aws_secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY") or None,
+            config=Config(s3={"addressing_style": "path" if force_path_style else "virtual"}),
+        )
+        bucket = os.environ["OBJECT_STORAGE_BUCKET"]
+        analysis_queue = PostgresAnalysisQueue(
+            database.engine,
+            code_version=settings.app_version or APP_VERSION,
+            max_attempts=int(os.getenv("ANALYSIS_MAX_ATTEMPTS", "3")),
+        )
+        analysis_worker = AnalysisWorker(
+            analysis_queue,
+            AnalysisProcessor(
+                repository_root=repository_root,
+                queue=analysis_queue,
+                adapters=adapter_registry,
+                raw_reader=S3RawPageReader(bucket=bucket, client=s3_client),
+                dataset_writer=ParquetDatasetWriter(
+                    S3DatasetStore(bucket=bucket, client=s3_client)
+                ),
+                collections=collection_repository,
+                results=AnalysisResultService(
+                    PostgresResultsRepository(database.engine),
+                    AnalysisResultValidator(repository_root),
+                    S3ReportObjectStore(bucket=bucket, client=s3_client),
+                ),
+                code_version=settings.app_version or APP_VERSION,
+            ),
+            worker_id=f"{worker_id}-analysis",
+            claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),
+            lease_seconds=int(os.getenv("ANALYSIS_LEASE_SECONDS", "600")),
+        )
     health_server = AsyncHealthServer(
         "worker",
         database.is_ready,
@@ -105,7 +168,8 @@ async def run() -> None:
     try:
         while not stop.is_set():
             claimed = await worker.run_once()
-            if claimed == 0:
+            analyses = await analysis_worker.run_once() if analysis_worker is not None else 0
+            if claimed + analyses == 0:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=1)
     finally:

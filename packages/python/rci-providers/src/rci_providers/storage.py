@@ -142,19 +142,34 @@ class S3RawObjectStore:
             body=body,
             response_content_type=response_content_type,
         )
-        await asyncio.to_thread(
-            self._client.put_object,
-            Bucket=self.bucket,
-            Key=key,
-            Body=compressed,
-            ContentType="application/json",
-            ContentEncoding="gzip",
-            IfNoneMatch="*",
-            Metadata={
-                "provider": "metricscart",
-                "retailer-id": task.retailer_id,
-                "task-id": task.id,
-                "body-sha256": str(artifact.metadata["body_checksum"]),
-            },
-        )
+
+        def put_once() -> None:
+            try:
+                self._client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=compressed,
+                    ContentType="application/json",
+                    ContentEncoding="gzip",
+                    IfNoneMatch="*",
+                    Metadata={
+                        "provider": "metricscart",
+                        "retailer-id": task.retailer_id,
+                        "task-id": task.id,
+                        "body-sha256": str(artifact.metadata["body_checksum"]),
+                        "sha256": artifact.checksum,
+                    },
+                )
+            except Exception as exc:
+                response = getattr(exc, "response", {})
+                error = response.get("Error", {}) if isinstance(response, dict) else {}
+                code = str(error.get("Code", "")) if isinstance(error, dict) else ""
+                if code not in {"PreconditionFailed", "412"}:
+                    raise
+                existing = self._client.head_object(Bucket=self.bucket, Key=key)
+                metadata = existing.get("Metadata", {})
+                if not isinstance(metadata, dict) or metadata.get("sha256") != artifact.checksum:
+                    raise RuntimeError(f"immutable raw response collision at {key}") from exc
+
+        await asyncio.to_thread(put_once)
         return artifact

@@ -82,6 +82,8 @@ class RunResponse(BaseModel):
     trigger_type: str
     schedule_id: str | None
     scheduled_for: datetime | None
+    availability_gate_status: str
+    availability_gate_config: dict[str, Any]
 
 
 class TaskResponse(BaseModel):
@@ -241,6 +243,23 @@ async def get_definition(
         return await service.get_definition(identifier)
     except CollectionNotFoundError as exc:
         raise _not_found(exc) from exc
+
+
+@router.post(
+    "/collection-estimates",
+    response_model=CostEstimateResponse,
+    tags=["collections"],
+)
+async def estimate_config(
+    service: CollectionServiceDependency,
+    config: CollectionConfigBody,
+) -> CostEstimate:
+    try:
+        return await service.estimate_config(config)
+    except ContractError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 @router.post(

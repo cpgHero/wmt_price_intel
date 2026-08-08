@@ -1,28 +1,33 @@
 {
   "schema_version": "1.0",
+  "default_pack_id": "fresh_strawberries",
   "packs": [
     {
       "id": "fresh_shell_eggs",
       "name": "Fresh Shell Eggs",
       "version": "1.0.0",
+      "default_keyword": "eggs",
       "file": "fresh_shell_eggs.json"
     },
     {
       "id": "fresh_fluid_milk",
       "name": "Fresh Fluid Milk",
       "version": "1.0.0",
+      "default_keyword": "milk",
       "file": "fresh_fluid_milk.json"
     },
     {
       "id": "fresh_bananas",
       "name": "Fresh Bananas & Plantains",
       "version": "1.0.0",
+      "default_keyword": "bananas",
       "file": "fresh_bananas.json"
     },
     {
       "id": "fresh_strawberries",
       "name": "Fresh Strawberries",
       "version": "1.0.0",
+      "default_keyword": "strawberries",
       "file": "fresh_strawberries.json"
     }
   ]

@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/app/components/empty-state";
-import { getApi, type RunMonitor } from "@/lib/api";
+import { getApi, type AnalysisRecord, type RunMonitor } from "@/lib/api";
 import { displayDate, displayDuration, displayLabel } from "@/lib/presentation";
 
 import { RunActions } from "./run-actions";
+import { RunAutoRefresh } from "./run-auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +16,14 @@ export default async function RunMonitorPage({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
-  const response = await getApi<RunMonitor>(
-    `/api/v1/collection-runs/${encodeURIComponent(runId)}/monitor`,
-  );
+  const [response, analysisResponse] = await Promise.all([
+    getApi<RunMonitor>(
+      `/api/v1/collection-runs/${encodeURIComponent(runId)}/monitor`,
+    ),
+    getApi<AnalysisRecord>(
+      `/api/v1/collection-runs/${encodeURIComponent(runId)}/analysis`,
+    ),
+  ]);
   if (response.status === 404) notFound();
   if (!response.data)
     return (
@@ -29,12 +36,20 @@ export default async function RunMonitorPage({
       </main>
     );
   const monitor = response.data;
+  const analysis = analysisResponse.data;
   const { run, usage, provider_state: provider } = monitor;
+  const terminal = [
+    "succeeded",
+    "completed_with_warnings",
+    "failed",
+    "cancelled",
+  ].includes(run.status);
   const coolingDown = provider?.paused_until
     ? new Date(provider.paused_until) > new Date()
     : false;
   return (
     <main>
+      <RunAutoRefresh active={!terminal || (terminal && !analysis)} />
       <header className="workspace-header">
         <div>
           <p className="eyebrow">Live collection monitor</p>
@@ -52,6 +67,14 @@ export default async function RunMonitorPage({
             runId={run.id}
             cancellable={!run.completed_at && !run.cancel_requested_at}
           />
+          {analysis && (
+            <Link
+              className="button primary"
+              href={`/analyses/${encodeURIComponent(analysis.analysis_id)}`}
+            >
+              Open analysis
+            </Link>
+          )}
         </div>
       </header>
       {coolingDown && (
@@ -63,6 +86,32 @@ export default async function RunMonitorPage({
           </span>
         </div>
       )}
+      {run.availability_gate_status !== "skipped" && (
+        <div
+          className={`gate-banner ${run.availability_gate_status}`}
+          data-status={run.availability_gate_status}
+        >
+          <b>
+            ALDI availability gate: {displayLabel(run.availability_gate_status)}
+          </b>
+          <span>
+            The gate runs before the remaining retailer tasks and stops the run
+            when its configured billable-404 threshold is exceeded.
+          </span>
+        </div>
+      )}
+      {terminal &&
+        !analysis &&
+        run.status !== "failed" &&
+        run.status !== "cancelled" && (
+          <div className="analysis-pending-banner">
+            <b>Collection complete · analysis queued</b>
+            <span>
+              This page refreshes while normalization and Product Pack analytics
+              run.
+            </span>
+          </div>
+        )}
       <section className="metric-grid monitor-metrics">
         <div className="metric-card">
           <span>Successful pages</span>

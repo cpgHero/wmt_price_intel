@@ -49,6 +49,8 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
         assert [row["analysis_id"] for row in listing.json()] == [analysis_id]
         fetched = await client.get(f"/api/v1/analyses/{analysis_id}")
         assert fetched.json()["result"] == document
+        by_run = await client.get("/api/v1/collection-runs/run-example/analysis")
+        assert by_run.json()["analysis_id"] == analysis_id
         matches = await client.get(f"/api/v1/analyses/{analysis_id}/matches")
         assert len(matches.json()["comparisons"]) == 4
         quality = await client.get(f"/api/v1/analyses/{analysis_id}/quality")

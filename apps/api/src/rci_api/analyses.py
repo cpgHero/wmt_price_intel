@@ -120,6 +120,21 @@ async def publish_analysis(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+@router.get(
+    "/collection-runs/{run_id}/analysis",
+    response_model=AnalysisResponse,
+    tags=["analyses"],
+)
+async def get_collection_run_analysis(
+    run_id: str,
+    service: AnalysisServiceDependency,
+) -> AnalysisRecord:
+    try:
+        return await service.get_by_collection_run(run_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+
+
 @router.get("/analyses", response_model=list[AnalysisResponse], tags=["analyses"])
 async def list_analyses(
     service: AnalysisServiceDependency,

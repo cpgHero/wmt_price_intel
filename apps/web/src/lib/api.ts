@@ -33,6 +33,37 @@ export interface RunRecord {
   completed_at: string | null;
   cancel_requested_at: string | null;
   created_at: string;
+  availability_gate_status: string;
+  availability_gate_config: JsonObject;
+}
+
+export interface RetailerEstimate {
+  retailer_id: string;
+  location_units: number;
+  credits_per_page: number;
+  max_pages: number;
+  estimated_pages: number;
+  estimated_credits: number;
+}
+
+export interface CostEstimate {
+  definition_id: string;
+  retailers: RetailerEstimate[];
+  estimated_total_pages: number;
+  estimated_total_credits: number;
+}
+
+export interface ProductPackSummary {
+  id: string;
+  name: string;
+  version: string;
+  default_keyword: string;
+}
+
+export interface ProductPackCatalog {
+  schema_version: string;
+  default_pack_id: string;
+  packs: ProductPackSummary[];
 }
 
 export interface ScheduleRecord {
@@ -172,18 +203,31 @@ export async function getApi<T>(path: string): Promise<ApiResult<T>> {
 }
 
 export async function postApi<T>(path: string): Promise<ApiResult<T>> {
+  return postApiJson<T>(path);
+}
+
+export async function postApiJson<T>(
+  path: string,
+  body?: JsonObject,
+): Promise<ApiResult<T>> {
   const { apiInternalUrl } = loadServerConfig();
   try {
     const response = await fetch(new URL(path, apiInternalUrl), {
       method: "POST",
+      headers: body ? { "content-type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
       let detail = `API returned ${response.status}`;
       try {
-        const body = (await response.json()) as { detail?: string };
-        detail = body.detail ?? detail;
+        const responseBody = (await response.json()) as { detail?: unknown };
+        if (typeof responseBody.detail === "string") {
+          detail = responseBody.detail;
+        } else if (responseBody.detail) {
+          detail = JSON.stringify(responseBody.detail);
+        }
       } catch {
         // Preserve the status-only message for non-JSON upstream errors.
       }

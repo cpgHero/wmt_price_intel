@@ -53,6 +53,14 @@
     "stop_on_empty": true,
     "stop_on_short_page": false
   },
+  "availability_gate": {
+    "enabled": true,
+    "retailer_ids": [
+      "aldi_us"
+    ],
+    "sample_size_per_retailer": 5,
+    "max_billable_404_rate": 0.5
+  },
   "schedule": {
     "type": "manual",
     "cron": null,
@@ -62,7 +70,7 @@
     "comparison_profiles": [
       "strict",
       "unit_price",
-      "proximity_validation"
+      "aldi_10mi"
     ],
     "enable_ai_fallback": true,
     "enable_proximity_validation": true

@@ -55,6 +55,12 @@ class AnalysisResultService:
             raise AnalysisNotFoundError(f"analysis {identifier!r} was not found")
         return record
 
+    async def get_by_collection_run(self, run_id: str) -> AnalysisRecord:
+        record = await self._repository.get_by_collection_run(run_id)
+        if record is None:
+            raise AnalysisNotFoundError(f"analysis for collection run {run_id!r} was not found")
+        return record
+
     async def matches(self, identifier: str) -> JsonObject:
         record = await self.get(identifier)
         return {

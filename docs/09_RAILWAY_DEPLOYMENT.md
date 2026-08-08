@@ -70,6 +70,10 @@ METRICSCART_GLOBAL_RPM=108
 METRICSCART_MAX_ATTEMPTS=5
 WORKER_CLAIM_LIMIT=10
 WORKER_LEASE_SECONDS=300
+ANALYSIS_PIPELINE_ENABLED=true
+ANALYSIS_CLAIM_LIMIT=1
+ANALYSIS_LEASE_SECONDS=600
+ANALYSIS_MAX_ATTEMPTS=3
 OBJECT_STORAGE_ENDPOINT=${{artifacts.ENDPOINT}}
 OBJECT_STORAGE_REGION=${{artifacts.REGION}}
 OBJECT_STORAGE_BUCKET=${{artifacts.BUCKET}}
@@ -147,15 +151,16 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at `0008_metricscart_billing`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at `0009_vertical_slice`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
    ALDI counts and that Target contains only `Country=USA` rows.
 7. Deploy `worker` at one replica with `COLLECTION_PROVIDER=fake`; run a compact smoke collection,
    confirm leases, completion, and zero external provider calls, then switch to `metricscart`.
-8. Run a deliberately small one-location MetricsCart smoke collection. Verify a raw `json.gz` object,
-   actual credits, redacted logs, and no task duplication.
+8. Use the web collection wizard for a deliberately small one-location MetricsCart strawberry run.
+   Verify the exact estimate and approval cap, ALDI availability gate, raw `json.gz` objects, actual
+   credits, redacted logs, immutable Parquet datasets, canonical result, and no task duplication.
 9. Publish one disabled test alert and one scheduled collection definition. Deploy `scheduler` as
    one replica, enable the definitions, and verify one run per cron slot, one evaluation per result,
    immutable evidence references, and one idempotent SMTP delivery.

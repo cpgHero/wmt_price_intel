@@ -88,6 +88,10 @@ async def test_collection_definition_run_and_usage_apis() -> None:
         assert estimate.json()["estimated_total_pages"] == 2
         assert estimate.json()["estimated_total_credits"] == 2
 
+        direct_estimate = await client.post("/api/v1/collection-estimates", json=_config())
+        assert direct_estimate.status_code == 200
+        assert direct_estimate.json() == estimate.json()
+
         created = await client.post("/api/v1/collection-definitions/api-collection/runs")
         assert created.status_code == 201
         run_id = created.json()["id"]

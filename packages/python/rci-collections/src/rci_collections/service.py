@@ -61,6 +61,15 @@ class CollectionService:
         definition = await self.get_definition(identifier)
         return (await self.planner.plan(definition.config)).estimate
 
+    async def estimate_config(self, config: JsonObject) -> CostEstimate:
+        validate_instance(
+            self.schema_root,
+            "collection-definition.schema.json",
+            config,
+            label="collection definition",
+        )
+        return (await self.planner.plan(config)).estimate
+
     async def create_run(
         self,
         identifier: str,

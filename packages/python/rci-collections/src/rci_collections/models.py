@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -44,6 +44,7 @@ class TaskSeed:
     request_fingerprint: str
     priority: int = 100
     max_attempts: int = 5
+    is_preflight: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,7 @@ class CostEstimate:
 class CollectionPlan:
     estimate: CostEstimate
     initial_tasks: tuple[TaskSeed, ...]
+    availability_gate: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,8 @@ class RunRecord:
     trigger_type: str = "manual"
     schedule_id: str | None = None
     scheduled_for: datetime | None = None
+    availability_gate_status: str = "skipped"
+    availability_gate_config: JsonObject = field(default_factory=dict)
 
 
 class BudgetExceededError(ValueError):
@@ -136,6 +140,7 @@ class QueueTask:
     last_error: str | None = None
     billable_credits: int = 0
     raw_artifact_id: str | None = None
+    is_preflight: bool = False
 
 
 @dataclass(frozen=True, slots=True)

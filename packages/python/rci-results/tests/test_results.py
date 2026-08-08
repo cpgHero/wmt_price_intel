@@ -61,12 +61,17 @@ async def test_result_publication_is_idempotent_and_immutable() -> None:
     assert stored.result["analysis_id"] == first.analysis_id
     stored.result["analysis_id"] = "mutated-return-value"
     assert (await service.get(first.analysis_id)).result["analysis_id"] == first.analysis_id
+    assert (await service.get_by_collection_run(first.collection_run_id)).id == first.id
     result = _result()
     assert await service.publish(result) == first
     changed = copy.deepcopy(result)
     changed["comparisons"][0]["matches"] = 1  # type: ignore[index]
     with pytest.raises(ValueError, match="immutable"):
         await service.publish(changed)
+    different_id = copy.deepcopy(result)
+    different_id["analysis_id"] = "different-id-for-the-same-source-run"
+    with pytest.raises(ValueError, match="collection run and Product Pack"):
+        await service.publish(different_id)
 
 
 def test_renderers_preserve_result_and_create_auditable_formats() -> None:

@@ -19,6 +19,8 @@ class ResultsRepository(Protocol):
 
     async def get(self, identifier: str) -> AnalysisRecord | None: ...
 
+    async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None: ...
+
     async def record_artifact(
         self,
         analysis: AnalysisRecord,

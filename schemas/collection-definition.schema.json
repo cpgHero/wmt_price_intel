@@ -194,6 +194,41 @@
         }
       }
     },
+    "availability_gate": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "retailer_ids",
+        "sample_size_per_retailer",
+        "max_billable_404_rate"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "retailer_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "sample_size_per_retailer": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "max_billable_404_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
     "schedule": {
       "type": [
         "object",

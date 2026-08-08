@@ -66,15 +66,30 @@ class S3DatasetStore:
         return cls(bucket=bucket, client=client)
 
     async def put_bytes(self, key: str, body: bytes, *, content_type: str) -> str:
-        await asyncio.to_thread(
-            self._client.put_object,
-            Bucket=self.bucket,
-            Key=key,
-            Body=body,
-            ContentType=content_type,
-            IfNoneMatch="*",
-            Metadata={"sha256": hashlib.sha256(body).hexdigest()},
-        )
+        checksum = hashlib.sha256(body).hexdigest()
+
+        def put_once() -> None:
+            try:
+                self._client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=body,
+                    ContentType=content_type,
+                    IfNoneMatch="*",
+                    Metadata={"sha256": checksum},
+                )
+            except Exception as exc:
+                response = getattr(exc, "response", {})
+                error = response.get("Error", {}) if isinstance(response, dict) else {}
+                code = str(error.get("Code", "")) if isinstance(error, dict) else ""
+                if code not in {"PreconditionFailed", "412"}:
+                    raise
+                existing = self._client.head_object(Bucket=self.bucket, Key=key)
+                metadata = existing.get("Metadata", {})
+                if not isinstance(metadata, dict) or metadata.get("sha256") != checksum:
+                    raise RuntimeError(f"immutable dataset collision at {key}") from exc
+
+        await asyncio.to_thread(put_once)
         return f"s3://{self.bucket}/{key}"
 
 

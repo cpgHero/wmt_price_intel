@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import replace
 from typing import Any
 
 from rci_collections.catalog import CollectionRetailerCatalog
@@ -202,7 +203,42 @@ class CollectionPlanner:
             estimated_total_pages=sum(item.estimated_pages for item in estimates),
             estimated_total_credits=sum(item.estimated_credits for item in estimates),
         )
-        return CollectionPlan(estimate=estimate, initial_tasks=tuple(all_tasks))
+        availability_gate = self._availability_gate(config, all_tasks)
+        preflight_ids = set(availability_gate.pop("task_fingerprints", []))
+        if preflight_ids:
+            all_tasks = [
+                replace(task, is_preflight=task.request_fingerprint in preflight_ids)
+                for task in all_tasks
+            ]
+        return CollectionPlan(
+            estimate=estimate,
+            initial_tasks=tuple(all_tasks),
+            availability_gate=availability_gate,
+        )
+
+    @staticmethod
+    def _availability_gate(config: JsonObject, tasks: list[TaskSeed]) -> JsonObject:
+        value = config.get("availability_gate")
+        if not isinstance(value, dict) or not bool(value.get("enabled")):
+            return {}
+        retailer_ids = {str(item) for item in value.get("retailer_ids", [])}
+        sample_size = int(value.get("sample_size_per_retailer", 5))
+        selected: list[str] = []
+        for retailer_id in sorted(retailer_ids):
+            candidates = sorted(
+                (task for task in tasks if task.retailer_id == retailer_id),
+                key=lambda task: (task.request_fingerprint, task.location_scope_key),
+            )
+            selected.extend(task.request_fingerprint for task in candidates[:sample_size])
+        if not selected:
+            return {}
+        return {
+            "enabled": True,
+            "retailer_ids": sorted(retailer_ids),
+            "sample_size_per_retailer": sample_size,
+            "max_billable_404_rate": float(value.get("max_billable_404_rate", 0.5)),
+            "task_fingerprints": selected,
+        }
 
     @staticmethod
     def _select_store_units(
@@ -367,4 +403,5 @@ def next_page_seed(task: QueueTask) -> TaskSeed | None:
         request_payload=payload,
         request_fingerprint=request_fingerprint(payload),
         max_attempts=task.max_attempts,
+        is_preflight=False,
     )

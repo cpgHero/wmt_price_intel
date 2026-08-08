@@ -30,6 +30,7 @@ COPY --chown=rci:rci packages/python packages/python
 COPY --chown=rci:rci config config
 COPY --chown=rci:rci database database
 COPY --chown=rci:rci fixtures/location_master fixtures/location_master
+COPY --chown=rci:rci product-packs product-packs
 COPY --chown=rci:rci schemas schemas
 RUN uv sync --frozen --no-dev --package rci-api
 

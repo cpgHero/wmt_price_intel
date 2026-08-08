@@ -60,6 +60,12 @@ export interface RetailCompetitiveIntelligenceCollectionDefinition {
     stop_on_empty: boolean;
     stop_on_short_page?: boolean;
   };
+  availability_gate?: {
+    enabled: boolean;
+    retailer_ids: string[];
+    sample_size_per_retailer: number;
+    max_billable_404_rate: number;
+  } | null;
   schedule?: {
     [k: string]: unknown;
   } & ({

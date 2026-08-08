@@ -17,6 +17,23 @@ class RecordingS3Client:
         self.calls.append(kwargs)
 
 
+class PreconditionFailed(Exception):
+    def __init__(self) -> None:
+        self.response = {"Error": {"Code": "PreconditionFailed"}}
+        super().__init__("object already exists")
+
+
+class ExistingS3Client:
+    def __init__(self, checksum: str) -> None:
+        self.checksum = checksum
+
+    def put_object(self, **_kwargs: Any) -> None:
+        raise PreconditionFailed
+
+    def head_object(self, **_kwargs: Any) -> dict[str, object]:
+        return {"Metadata": {"sha256": self.checksum}}
+
+
 def _task() -> QueueTask:
     now = datetime.now(UTC)
     return QueueTask(
@@ -64,3 +81,25 @@ async def test_s3_storage_uses_immutable_attempt_scoped_gzip_keys() -> None:
     assert call["ContentEncoding"] == "gzip"
     assert gzip.decompress(call["Body"]) == b'{"results":[]}'
     assert artifact.storage_uri == f"s3://raw-bucket/{call['Key']}"
+
+
+async def test_s3_storage_accepts_an_identical_immutable_retry() -> None:
+    first_store = S3RawObjectStore(bucket="raw-bucket", client=RecordingS3Client())
+    expected = await first_store.put_response(
+        _task(),
+        ProviderRequest(method="GET", path="/mc/walmart/search/zipcode/v2/", params={}),
+        http_status=200,
+        body=b'{"results":[]}',
+        response_content_type="application/json",
+    )
+    retry_store = S3RawObjectStore(bucket="raw-bucket", client=ExistingS3Client(expected.checksum))
+
+    repeated = await retry_store.put_response(
+        _task(),
+        ProviderRequest(method="GET", path="/mc/walmart/search/zipcode/v2/", params={}),
+        http_status=200,
+        body=b'{"results":[]}',
+        response_content_type="application/json",
+    )
+
+    assert repeated == expected

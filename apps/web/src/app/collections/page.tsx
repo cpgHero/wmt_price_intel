@@ -1,38 +1,33 @@
-export default function CollectionsPage() {
+import { EmptyState } from "@/app/components/empty-state";
+import { getApi, type ProductPackCatalog } from "@/lib/api";
+
+import { CollectionWizard } from "./collection-wizard";
+
+export const dynamic = "force-dynamic";
+
+export default async function CollectionsPage() {
+  const response = await getApi<ProductPackCatalog>("/api/v1/product-packs");
   return (
     <main>
       <header className="page-header compact">
         <div>
           <p className="eyebrow">Collection control</p>
-          <h1>Runs & operations</h1>
+          <h1>New collection</h1>
         </div>
         <p>
-          Open a run monitor using its durable run identifier. The monitor reads
-          exact task aggregates and shared provider state from Postgres.
+          Define a safe scope, calculate the exact maximum cost, explicitly
+          approve the credit ceiling, and follow the durable run into analysis.
         </p>
       </header>
-      <section className="content-card split-card">
-        <div>
-          <span className="section-kicker">Run monitor route</span>
-          <h2>/collections/runs/&lt;run-id&gt;</h2>
-          <p>
-            Shows retailer/status counts, pages, estimated and actual credits,
-            rate windows, 429 cooldown, retries, failures, elapsed time, and
-            cancellation.
-          </p>
-        </div>
-        <div className="status-stack">
-          <span>
-            <i className="dot green" /> Durable queue ready
-          </span>
-          <span>
-            <i className="dot green" /> Replica-safe provider budget
-          </span>
-          <span>
-            <i className="dot green" /> Idempotent task identity
-          </span>
-        </div>
-      </section>
+      {response.data ? (
+        <CollectionWizard catalog={response.data} />
+      ) : (
+        <EmptyState
+          eyebrow="Product Packs unavailable"
+          title="The collection wizard could not be loaded"
+          message={response.error ?? "Try again when the API is available."}
+        />
+      )}
     </main>
   );
 }

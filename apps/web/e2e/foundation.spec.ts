@@ -12,8 +12,8 @@ test("serves the application shell, workflow routes, and health route", async ({
   const collections = await request.get("/collections");
   expect(collections.ok()).toBe(true);
   const collectionsHtml = await collections.text();
-  expect(collectionsHtml).toContain("Runs &amp; operations");
-  expect(collectionsHtml).toContain("Replica-safe provider budget");
+  expect(collectionsHtml).toContain("New collection");
+  expect(collectionsHtml).toContain("Product Packs unavailable");
 
   const automation = await request.get("/automation");
   expect(automation.ok()).toBe(true);
