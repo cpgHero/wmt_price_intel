@@ -1,0 +1,136 @@
+/* Generated from the normative JSON Schema. Do not edit manually. */
+
+export interface RetailCompetitiveIntelligenceProductPack {
+  id: string;
+  name: string;
+  version: string;
+  category_family: string;
+  description?: string;
+  scope: {
+    include: string[];
+    exclude: string[];
+    hard_exclusion_patterns?: string[];
+    /**
+     * @minItems 1
+     */
+    target_terms?: [string, ...string[]];
+    availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
+    [k: string]: unknown;
+  };
+  attributes: {
+    name: string;
+    label?: string;
+    data_type: "string" | "number" | "boolean" | "enum" | "array";
+    role: "identity" | "matching" | "normalization" | "reporting" | "qa";
+    required_for_strict?: boolean;
+    allowed_values?: unknown[];
+    unknown_values?: unknown[];
+    synonyms?: {
+      [k: string]: unknown;
+    };
+    unit?: string;
+    unknown_policy?: "reject_strict" | "allow_compatible" | "infer" | "review" | "not_applicable";
+    extractors?: (
+      "title_rule" | "url_rule" | "retailer_field" | "cross_product_inference" | "ai_fallback" | "manual"
+    )[];
+    extraction_rules?: {
+      type: "constant" | "field" | "measurement" | "number_pattern" | "term_map" | "boolean_terms";
+      /**
+       * @minItems 1
+       */
+      sources?: [string, ...string[]];
+      value?: unknown;
+      units?: {
+        [k: string]: number;
+      };
+      /**
+       * @minItems 1
+       */
+      patterns?: [string, ...string[]];
+      group?: number;
+      values?: {
+        /**
+         * @minItems 1
+         */
+        [k: string]: [string, ...string[]];
+      };
+      true_terms?: string[];
+      false_terms?: string[];
+      default?: unknown;
+    }[];
+    [k: string]: unknown;
+  }[];
+  normalization: {
+    primary_display_metric: string;
+    secondary_metrics?: string[];
+    conversion_rules?: {
+      [k: string]: unknown;
+    }[];
+    forbidden_metrics?: string[];
+    package_equivalence_policy?: "exact_package_first" | "unit_normalized_only" | "category_specific";
+    [k: string]: unknown;
+  };
+  matching_profiles: {
+    id: string;
+    label: string;
+    geography: "exact_zip" | "same_store_market" | "radius" | "national";
+    radius_miles?: number;
+    dimensions: string[];
+    attribute_constraints?: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [unknown, ...unknown[]];
+    };
+    brand_policy: "same_brand" | "private_label_equivalent" | "ignore_brand" | "category_specific";
+    unknown_policy?: "reject" | "wildcard_if_one_unknown" | "allow" | "review";
+    wildcard_dimensions?: string[];
+    price_selection?: "lowest_positive" | "median" | "retailer_primary_offer";
+    comparison_metric?: string;
+    [k: string]: unknown;
+  }[];
+  brand_rules?: {
+    aliases?: {
+      [k: string]: string[];
+    };
+    private_labels?: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [string, ...string[]];
+    };
+  };
+  qa_rules: {
+    parity_tolerance_dollars?: number;
+    min_price?: number;
+    max_price?: number;
+    suspicious_gap_pct?: number;
+    require_unit_confirmation_when?: string[];
+    human_review_conditions?: string[];
+    sensitivity_checks?: {
+      [k: string]: unknown;
+    }[];
+    [k: string]: unknown;
+  };
+  retailer_overrides?: {
+    [k: string]: unknown;
+  };
+  reporting: {
+    headline_segments: string[];
+    required_caveats: string[];
+    recommended_charts?: string[];
+    alertable_metrics?: string[];
+    [k: string]: unknown;
+  };
+  regression?: {
+    golden_dataset_ids?: string[];
+    expected_headlines?: {
+      [k: string]: unknown;
+    }[];
+    tolerances?: {
+      [k: string]: unknown;
+    };
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}

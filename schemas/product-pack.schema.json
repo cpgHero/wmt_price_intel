@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/product-pack.schema.json",
+  "title": "Retail Competitive Intelligence Product Pack",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "category_family",
+    "scope",
+    "attributes",
+    "normalization",
+    "matching_profiles",
+    "qa_rules",
+    "reporting"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "category_family": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "include",
+        "exclude"
+      ],
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hard_exclusion_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target_terms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "availability_policy": {
+          "enum": [
+            "search_presence",
+            "in_stock_only",
+            "retailer_specific"
+          ]
+        }
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "data_type",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "data_type": {
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "enum",
+              "array"
+            ]
+          },
+          "role": {
+            "enum": [
+              "identity",
+              "matching",
+              "normalization",
+              "reporting",
+              "qa"
+            ]
+          },
+          "required_for_strict": {
+            "type": "boolean"
+          },
+          "allowed_values": {
+            "type": "array"
+          },
+          "unknown_values": {
+            "type": "array",
+            "items": {}
+          },
+          "synonyms": {
+            "type": "object"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unknown_policy": {
+            "enum": [
+              "reject_strict",
+              "allow_compatible",
+              "infer",
+              "review",
+              "not_applicable"
+            ]
+          },
+          "extractors": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "title_rule",
+                "url_rule",
+                "retailer_field",
+                "cross_product_inference",
+                "ai_fallback",
+                "manual"
+              ]
+            }
+          },
+          "extraction_rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "constant",
+                    "field",
+                    "measurement",
+                    "number_pattern",
+                    "term_map",
+                    "boolean_terms"
+                  ]
+                },
+                "sources": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "value": {},
+                "units": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "patterns": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "group": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "values": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "true_terms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "false_terms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "default": {}
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    "normalization": {
+      "type": "object",
+      "required": [
+        "primary_display_metric"
+      ],
+      "properties": {
+        "primary_display_metric": {
+          "type": "string"
+        },
+        "secondary_metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conversion_rules": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "forbidden_metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "package_equivalence_policy": {
+          "enum": [
+            "exact_package_first",
+            "unit_normalized_only",
+            "category_specific"
+          ]
+        }
+      }
+    },
+    "matching_profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "geography",
+          "dimensions",
+          "brand_policy"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "geography": {
+            "enum": [
+              "exact_zip",
+              "same_store_market",
+              "radius",
+              "national"
+            ]
+          },
+          "radius_miles": {
+            "type": "number"
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attribute_constraints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1
+            }
+          },
+          "brand_policy": {
+            "enum": [
+              "same_brand",
+              "private_label_equivalent",
+              "ignore_brand",
+              "category_specific"
+            ]
+          },
+          "unknown_policy": {
+            "enum": [
+              "reject",
+              "wildcard_if_one_unknown",
+              "allow",
+              "review"
+            ]
+          },
+          "wildcard_dimensions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "price_selection": {
+            "enum": [
+              "lowest_positive",
+              "median",
+              "retailer_primary_offer"
+            ]
+          },
+          "comparison_metric": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "brand_rules": {
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "private_labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "qa_rules": {
+      "type": "object",
+      "properties": {
+        "parity_tolerance_dollars": {
+          "type": "number"
+        },
+        "min_price": {
+          "type": "number"
+        },
+        "max_price": {
+          "type": "number"
+        },
+        "suspicious_gap_pct": {
+          "type": "number"
+        },
+        "require_unit_confirmation_when": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "human_review_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sensitivity_checks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "retailer_overrides": {
+      "type": "object"
+    },
+    "reporting": {
+      "type": "object",
+      "required": [
+        "headline_segments",
+        "required_caveats"
+      ],
+      "properties": {
+        "headline_segments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_caveats": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommended_charts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "alertable_metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "regression": {
+      "type": "object",
+      "properties": {
+        "golden_dataset_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expected_headlines": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "tolerances": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

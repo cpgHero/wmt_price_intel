@@ -1,0 +1,226 @@
+id,created_at,Store_No,Name,Latitude,Longitude,Address,Street,City,State,Zip_Code,County,Phone,Provider,Status,Country,mc_location_id
+158461,1784315055347,309,Abbeville Supercenter,29.972959,-92.095153,"3005 Charity Street, Abbeville, LA, 70510",3005 Charity Street,Abbeville,LA,70510,,,Walmart,active,USA,1998
+158462,1784315055347,1520,Aberdeen Supercenter,45.456105,-98.436532,"3820 7th Ave Se, Aberdeen, SD, 57401",3820 7th Ave Se,Aberdeen,SD,57401,,,Walmart,active,USA,3655
+158463,1784315055347,2037,Aberdeen Supercenter,46.975351,-123.806682,"909 E Wishkah St, Aberdeen, WA, 98520",909 E Wishkah St,Aberdeen,WA,98520,,,Walmart,active,USA,4491
+158464,1784315055347,1968,Aberdeen Supercenter,39.494982,-76.177507,"645 S Philadelphia Blvd, Aberdeen, MD, 21001",645 S Philadelphia Blvd,Aberdeen,MD,21001,,,Walmart,active,USA,2154
+158465,1784315055347,1097,Aberdeen Supercenter,35.159691,-79.424522,"250 Turner St, Aberdeen, NC, 28315",250 Turner St,Aberdeen,NC,28315,,,Walmart,active,USA,2626
+158466,1784315055347,5715,Abilene Ambler Ave Neighborhood Market,32.473542,-99.738532,"1619 Ambler Ave, Abilene, TX, 79601",1619 Ambler Ave,Abilene,TX,79601,,,Walmart,active,USA,3886
+158467,1784315055347,535,Abilene Sw Drive Supercenter,32.410829,-99.781697,"4350 Southwest Dr, Abilene, TX, 79606",4350 Southwest Dr,Abilene,TX,79606,,,Walmart,active,USA,4011
+158468,1784315055347,2009,Abingdon Store,39.462158,-76.314835,"401 Constant Friendship Blvd, Abingdon, MD, 21009",401 Constant Friendship Blvd,Abingdon,MD,21009,,,Walmart,active,USA,2120
+158469,1784315055347,154,Abingdon Supercenter,36.714643,-81.927722,"16032 Fifteen Mile Boulevard, Abingdon, VA, 24211",16032 Fifteen Mile Boulevard,Abingdon,VA,24211,,,Walmart,active,USA,4408
+158470,1784315055347,2227,Abington Store,42.096303,-70.968505,"777 Brockton Ave, Abington, MA, 02351",777 Brockton Ave,Abington,MA,2351,,,Walmart,active,USA,1941754
+158471,1784315055347,3748,Acworth Supercenter,34.048747,-84.697994,"3826 Cobb Pkwy Nw, Acworth, GA, 30101",3826 Cobb Pkwy Nw,Acworth,GA,30101,,,Walmart,active,USA,1366
+158472,1784315055347,1158,Adamsville Supercenter,33.579051,-86.924237,"2473 Hackworth Rd, Adamsville, AL, 35214",2473 Hackworth Rd,Adamsville,AL,35214,,,Walmart,active,USA,37
+158473,1784315055347,231,Ada Supercenter,34.789173,-96.656174,"1419 N Country Club Rd, Ada, OK, 74820",1419 N Country Club Rd,Ada,OK,74820,,,Walmart,active,USA,168
+158474,1784315055347,5442,Addison Supercenter,41.949813,-88.034013,"1050 N Rohlwing Rd, Addison, IL, 60101",1050 N Rohlwing Rd,Addison,IL,60101,,,Walmart,active,USA,1621
+158475,1784315055347,7194,Adel Supercenter,31.133142,-83.439947,"351 Alabama Rd, Adel, GA, 31620",351 Alabama Rd,Adel,GA,31620,,,Walmart,active,USA,1335
+158476,1784315055347,1836,Adrian Supercenter,41.872722,-84.031302,"1601 E Us Highway 223, Adrian, MI, 49221",1601 E Us Highway 223,Adrian,MI,49221,,,Walmart,active,USA,2236
+158477,1784315055347,1950,Ahoskie Supercenter,36.265229,-76.968785,"2150 Us 13 South, Ahoskie, NC, 27910",2150 Us 13 South,Ahoskie,NC,27910,,,Walmart,active,USA,143
+158478,1784315055347,4487,Aiken Richland Ave W Supercenter,33.561311,-81.767285,"3581 Richland Ave W, Aiken, SC, 29801",3581 Richland Ave W,Aiken,SC,29801,,,Walmart,active,USA,3607
+158479,1784315055347,514,Aiken Whiskey Rd Supercenter,33.518172,-81.719602,"2035 Whiskey Rd, Aiken, SC, 29803",2035 Whiskey Rd,Aiken,SC,29803,,,Walmart,active,USA,3571
+158480,1784315055347,1911,Akron Supercenter,40.992552,-81.489164,"2887 S Arlington Rd, Akron, OH, 44312",2887 S Arlington Rd,Akron,OH,44312,,,Walmart,active,USA,3207
+158481,1784315055347,423,Alabaster Colonial Promenade Parkway Supercenter,33.235531,-86.801229,"630 Colonial Promenade Pkwy, Alabaster, AL, 35007",630 Colonial Promenade Pkwy,Alabaster,AL,35007,,,Walmart,active,USA,243
+158482,1784315055347,4756,Alabaster Hwy 119 Neighborhood Market,33.212135,-86.829994,"9085 Hwy 119, Alabaster, AL, 35007",9085 Hwy 119,Alabaster,AL,35007,,,Walmart,active,USA,280
+158483,1784315055347,5726,Alamogordo Indian Wells Rd Neighborhood Market,32.916471,-105.930635,"2401 Indian Wells Road, Alamogordo, NM, 88310",2401 Indian Wells Road,Alamogordo,NM,88310,,,Walmart,active,USA,2771
+158484,1784315055347,1306,Alamogordo S New York Ave Supercenter,32.887274,-105.957585,"233 S New York Ave, Alamogordo, NM, 88310",233 S New York Ave,Alamogordo,NM,88310,,,Walmart,active,USA,2907
+158485,1784315055347,869,Alamosa Supercenter,37.482248,-105.904093,"3333 Clark St, Alamosa, CO, 81101",3333 Clark St,Alamosa,CO,81101,,,Walmart,active,USA,889
+10334,1784312071811,471-044,"Aldi, Aberdeen",39.496608,-76.178982,"746 South Philadelphia Blvd, Aberdeen, MD, 21001",746 South Philadelphia Blvd,Aberdeen,MD,21001,,,ALDI,active,USA,1312878
+10335,1784312071811,466-152,"Aldi, Aberdeen",35.151852,-79.416224,"1500 N Sandhills Blvd, Aberdeen, NC, 28315",1500 N Sandhills Blvd,Aberdeen,NC,28315,,,ALDI,active,USA,1314176
+10336,1784312071811,475-104,"Aldi, Abilene",32.406242,-99.786866,"4765 Southwest Dr, Abilene, TX, 79606",4765 Southwest Dr,Abilene,TX,79606,,,ALDI,active,USA,1313581
+10337,1784312071811,471-172,"Aldi, Abingdon",39.46604,-76.31289,"3430 Emmorton Rd, Abingdon, MD, 21009",3430 Emmorton Rd,Abingdon,MD,21009,,,ALDI,active,USA,1312898
+10338,1784312071811,460-214,"Aldi, Absecon",39.434197,-74.513539,"676 White Horse Pike Unit 2, Absecon, NJ, 08201",676 White Horse Pike Unit 2,Absecon,NJ,8201,,,ALDI,active,USA,1941755
+10339,1784312071811,475-019,"Aldi, Ada",34.79078,-96.6603,"1320 Lonnie Abbott, Ada, OK, 74820",1320 Lonnie Abbott,Ada,OK,74820,,,ALDI,active,USA,1313959
+10340,1784312071811,440-033,"Aldi, Addison",41.948824,-88.035144,"1038 N Rohlwing Rd, Addison, IL, 60101",1038 N Rohlwing Rd,Addison,IL,60101,,,ALDI,active,USA,1314052
+10341,1784312071811,467-073,"Aldi, Adrian",41.874039,-84.035316,"1427 E Us 223, Adrian, MI, 49221",1427 E Us 223,Adrian,MI,49221,,,ALDI,active,USA,1312722
+10342,1784312071811,476-044,"Aldi, Aiken",33.50771,-81.709667,"2510 Whiskey Road, Aiken, SC, 29803",2510 Whiskey Road,Aiken,SC,29803,,,ALDI,active,USA,1313411
+10343,1784312071811,463-102,"Aldi, Akron",40.99056,-81.49151,"2981 S Arlington Rd, Akron, OH, 44312",2981 S Arlington Rd,Akron,OH,44312,,,ALDI,active,USA,1313234
+10344,1784312071811,463-011,"Aldi, Akron",41.067321,-81.526411,"772 S Main St, Akron, OH, 44311",772 S Main St,Akron,OH,44311,,,ALDI,active,USA,1313926
+10345,1784312071811,463-035,"Aldi, Akron",41.056587,-81.582705,"2100 Romig Road, Akron, OH, 44320",2100 Romig Road,Akron,OH,44320,,,ALDI,active,USA,1313947
+10346,1784312071811,463-030,"Aldi, Akron",41.036307,-81.490562,"1333 South Arlington St, Akron, OH, 44306",1333 South Arlington St,Akron,OH,44306,,,ALDI,active,USA,1313929
+10347,1784312071811,463-093,"Aldi, Akron",41.110984,-81.576176,"1890 West Market St Ste 200, Akron, OH, 44313",1890 West Market St Ste 200,Akron,OH,44313,,,ALDI,active,USA,1313249
+10348,1784312071811,463-027,"Aldi, Akron",41.107205,-81.467458,"1620 Brittain Road, Akron, OH, 44310",1620 Brittain Road,Akron,OH,44310,,,ALDI,active,USA,1313934
+10349,1784312071811,470-038,"Aldi, Alabaster",33.240018,-86.815485,"113 Simmsville Rd, Alabaster, AL, 35007",113 Simmsville Rd,Alabaster,AL,35007,,,ALDI,active,USA,1314357
+10350,1784312071811,482-140,"Aldi, Albany",31.6207,-84.20323,"2816 Nottingham Way, Albany, GA, 31707",2816 Nottingham Way,Albany,GA,31707,,,ALDI,active,USA,1312438
+10351,1784312071811,466-007,"Aldi, Albemarle",35.347837,-80.163768,"1920 E Main Street, Albemarle, NC, 28001",1920 E Main Street,Albemarle,NC,28001,,,ALDI,active,USA,1314180
+10352,1784312071811,472-153,"Aldi, Albert Lea",43.6603,-93.328,"1406 Blake Avenue, Albert Lea, MN, 56007",1406 Blake Avenue,Albert Lea,MN,56007,,,ALDI,active,USA,1312136
+10353,1784312071811,470-013,"Aldi, Alcoa",35.773474,-83.98966,"836 Louisville Rd, Alcoa, TN, 37701",836 Louisville Rd,Alcoa,TN,37701,,,ALDI,active,USA,1313556
+10354,1784312071811,482-245,"Aldi, Alexander City",32.92205,-85.96126,"1061 Us Hwy 280, Alexander City, AL, 35010",1061 Us Hwy 280,Alexander City,AL,35010,,,ALDI,active,USA,1312248
+10355,1784312071811,471-063,"Aldi, Alexandria",38.81171,-77.110518,"4580 Duke Street, Alexandria, VA, 22304",4580 Duke Street,Alexandria,VA,22304,,,ALDI,active,USA,1314324
+10356,1784312071811,472-050,"Aldi, Alexandria",45.84502,-95.385512,"600 50th Ave W, Alexandria, MN, 56308",600 50th Ave W,Alexandria,MN,56308,,,ALDI,active,USA,1312139
+10357,1784312071811,471-065,"Aldi, Alexandria",38.828808,-77.109627,"4602 Kenmore Avenue, Alexandria, VA, 22304",4602 Kenmore Avenue,Alexandria,VA,22304,,,ALDI,active,USA,1313641
+10358,1784312071811,471-067,"Aldi, Alexandria",38.820928,-77.053473,"425 E Monroe Ave, Alexandria, VA, 22301",425 E Monroe Ave,Alexandria,VA,22301,,,ALDI,active,USA,1314318
+84451,1784313405211,03500995,00994 Loyalty Fulfillment Indianapolis Kroger,32.6379546,-96.7537242,"4221 Telephone Rd, Dallas, TX, 75241",4221 Telephone Rd,Dallas,TX,75241,,,kroger,active,USA,19369
+84452,1784313405211,02100100,10th Shortridge Kroger,39.7808002,-86.0419191,"7101 E 10th St, Indianapolis, IN, 46219",7101 E 10th St,Indianapolis,IN,46219,,,kroger,active,USA,18580
+84453,1784313405211,2100100,10th Shortridge Kroger,39.7808002,-86.0419191,"7101 E 10th St, Indianapolis, IN, 46219",7101 E 10th St,Indianapolis,IN,46219,,,kroger,active,USA,33534
+84454,1784313405211,2100944,116th Allisonville Road Kroger,39.958609,-86.041368,"7272 Fishers Crossing Dr, Fishers, IN, 46038",7272 Fishers Crossing Dr,Fishers,IN,46038,,,kroger,active,USA,33138
+84455,1784313405211,02100944,116th Allisonville Road Kroger,39.958609,-86.041368,"7272 Fishers Crossing Dr, Fishers, IN, 46038",7272 Fishers Crossing Dr,Fishers,IN,46038,,,kroger,active,USA,18654
+84456,1784313405211,02100895,116th Cumberland Road Kroger,39.9548712,-85.9961063,"9799 E 116th St, Fishers, IN, 46037",9799 E 116th St,Fishers,IN,46037,,,kroger,active,USA,18658
+84457,1784313405211,2100895,116th Cumberland Road Kroger,39.9548712,-85.9961063,"9799 E 116th St, Fishers, IN, 46037",9799 E 116th St,Fishers,IN,46037,,,kroger,active,USA,32676
+84458,1784313405211,02100869,116th Olio Road Kroger,39.9577601,-85.9186702,"11700 Olio Rd, Fishers, IN, 46037",11700 Olio Rd,Fishers,IN,46037,,,kroger,active,USA,18543
+84459,1784313405211,2100869,116th Olio Road Kroger,39.9577601,-85.9186702,"11700 Olio Rd, Fishers, IN, 46037",11700 Olio Rd,Fishers,IN,46037,,,kroger,active,USA,33431
+84460,1784313405211,1800661,11 Middlebelt Kroger,42.483617,-83.337053,"25780 Middlebelt Rd, Farmington Hills, MI, 48336",25780 Middlebelt Rd,Farmington Hills,MI,48336,,,kroger,active,USA,33220
+84461,1784313405211,01800661,11 Middlebelt Kroger,42.483617,-83.337053,"25780 Middlebelt Rd, Farmington Hills, MI, 48336",25780 Middlebelt Rd,Farmington Hills,MI,48336,,,kroger,active,USA,18793
+84462,1784313405211,03500698,121 And Coit Kroger,33.1104879,-96.7687969,"9617 Coit Rd, Plano, TX, 75024",9617 Coit Rd,Plano,TX,75024,,,kroger,active,USA,767802
+84463,1784313405211,1800658,12 Evergreen Kroger,42.5003676,-83.2406444,"19855 W 12 Mile Rd, Southfield, MI, 48076",19855 W 12 Mile Rd,Southfield,MI,48076,,,kroger,active,USA,32838
+84464,1784313405211,01800658,12 Evergreen Kroger,42.5003676,-83.2406444,"19855 W 12 Mile Rd, Southfield, MI, 48076",19855 W 12 Mile Rd,Southfield,MI,48076,,,kroger,active,USA,18846
+84465,1784313405211,01800455,13 Mile Gratiot Kroger,42.5235759,-82.9229207,"30851 Gratiot Ave, Roseville, MI, 48066",30851 Gratiot Ave,Roseville,MI,48066,,,kroger,active,USA,18782
+84466,1784313405211,1800455,13 Mile Gratiot Kroger,42.5235759,-82.9229207,"30851 Gratiot Ave, Roseville, MI, 48066",30851 Gratiot Ave,Roseville,MI,48066,,,kroger,active,USA,33158
+84467,1784313405211,01800774,13 Mile Little Mack Kroger,42.5262881,-82.9053329,"20891 E 13 Mile Rd, Roseville, MI, 48066",20891 E 13 Mile Rd,Roseville,MI,48066,,,kroger,active,USA,18784
+84468,1784313405211,1800774,13 Mile Little Mack Kroger,42.5262881,-82.9053329,"20891 E 13 Mile Rd, Roseville, MI, 48066",20891 E 13 Mile Rd,Roseville,MI,48066,,,kroger,active,USA,32979
+84469,1784313405211,1400381,15th Madison Kroger,39.072869,-84.50848,"1525 Madison Ave, Covington, KY, 41011",1525 Madison Ave,Covington,KY,41011,,,kroger,active,USA,32645
+84470,1784313405211,01400381,15th Madison Kroger,39.072869,-84.50848,"1525 Madison Ave, Covington, KY, 41011",1525 Madison Ave,Covington,KY,41011,,,kroger,active,USA,18667
+84471,1784313405211,2100970,161st Spring MIll Kroger,40.0219555,-86.1614019,"150 W 161st St, Westfield, IN, 46074",150 W 161st St,Westfield,IN,46074,,,kroger,active,USA,33453
+84472,1784313405211,02100970,161st Spring MIll Kroger,40.0219555,-86.1614019,"150 W 161st St, Westfield, IN, 46074",150 W 161st St,Westfield,IN,46074,,,kroger,active,USA,18592
+84473,1784313405211,3400737,1960 Eldridge Kroger,29.9240479,-95.6044646,"12400 Fm 1960 Rd W, Houston, TX, 77065",12400 Fm 1960 Rd W,Houston,TX,77065,,,kroger,active,USA,33070
+84474,1784313405211,03400737,1960 Eldridge Kroger,29.9240479,-95.6044646,"12400 Fm 1960 Rd W, Houston, TX, 77065",12400 Fm 1960 Rd W,Houston,TX,77065,,,kroger,active,USA,19356
+84475,1784313405211,01800684,21 Card Kroger,42.64489,-82.898421,"21555 21 Mile Rd, Macomb, MI, 48044",21555 21 Mile Rd,Macomb,MI,48044,,,kroger,active,USA,18786
+141818,1784314696346,2173,Abington,42.110519,-70.927683,"385 Centre Ave, Abington, MA, 02351",385 Centre Ave,Abington,MA,2351,,,Target,active,USA,1941753
+141819,1784314696346,2249,Ansonia,41.340446,-73.078943,"20 W Main St, Ansonia, CT, 06401",20 W Main St,Ansonia,CT,6401,,,Target,active,USA,1941799
+141820,1784314696346,2880,Auburn Center St,44.124102,-70.22299,"603 Center St, Auburn, ME, 04210",603 Center St,Auburn,ME,4210,,,Target,active,USA,1941800
+141821,1784314696346,2315,Augusta,44.312403,-69.804993,"119 Crossing Way, Augusta, ME, 04330",119 Crossing Way,Augusta,ME,4330,,,Target,active,USA,1941803
+141822,1784314696346,1855,Bangor,44.842191,-68.74156,"60 Longview Dr, Bangor, ME, 04401",60 Longview Dr,Bangor,ME,4401,,,Target,active,USA,1941810
+141823,1784314696346,2009,Bedford,42.941002,-71.473513,"220 S River Rd, Bedford, NH, 03110",220 S River Rd,Bedford,NH,3110,,,Target,active,USA,1941820
+141824,1784314696346,1528,Bethel,41.415022,-73.401914,"7 Stony Hill Rd, Bethel, CT, 06801",7 Stony Hill Rd,Bethel,CT,6801,,,Target,active,USA,1941826
+141825,1784314696346,2166,Biddeford,43.474,-70.5141,"430 Mariner Way, Biddeford, ME, 04005",430 Mariner Way,Biddeford,ME,4005,,,Target,active,USA,1941827
+141826,1784314696346,3333,Bishops Corner,41.783976,-72.748229,"333 N Main St Ste 10, West Hartford, CT, 06117",333 N Main St Ste 10,West Hartford,CT,6117,,,Target,active,USA,1941830
+141827,1784314696346,3368,Boston Beacon Hill,42.361045,-71.0626,"100 Cambridge St Ste 2, Boston, MA, 02114",100 Cambridge St Ste 2,Boston,MA,2114,,,Target,active,USA,1941832
+141828,1784314696346,3363,Boston Dorchester Fields Corner,42.299241,-71.062748,"500 Geneva Ave, Dorchester, MA, 02122",500 Geneva Ave,Dorchester,MA,2122,,,Target,active,USA,1941833
+141829,1784314696346,2822,Boston Fenway,42.344172,-71.099961,"1341 Boylston St, Boston, MA, 02215",1341 Boylston St,Boston,MA,2215,,,Target,active,USA,1941834
+141830,1784314696346,3226,Boston Packards Corner,42.350679,-71.114022,"860 Commonwealth Ave, Boston, MA, 02215",860 Commonwealth Ave,Boston,MA,2215,,,Target,active,USA,1941835
+141831,1784314696346,3223,Boston Roslindale,42.2882972,-71.1267483,"4165 Washington St, Roslindale, MA, 02131",4165 Washington St,Roslindale,MA,2131,,,Target,active,USA,1941836
+141832,1784314696346,1898,Boston South Bay,42.328872,-71.062845,"7 Allstate Rd, Dorchester, MA, 02125",7 Allstate Rd,Dorchester,MA,2125,,,Target,active,USA,1941837
+141833,1784314696346,2693,Braintree,42.22142,-71.021844,"250 Granite St, Braintree, MA, 02184",250 Granite St,Braintree,MA,2184,,,Target,active,USA,1941859
+141834,1784314696346,1153,Brick,40.058814,-74.150328,"570 Route 70, Brick, NJ, 08723",570 Route 70,Brick,NJ,8723,,,Target,active,USA,1941862
+141835,1784314696346,1224,Bridgewater,40.562362,-74.553134,"200 Promenade Blvd, Bridgewater, NJ, 08807",200 Promenade Blvd,Bridgewater,NJ,8807,,,Target,active,USA,1941868
+141836,1784314696346,1158,Burlington,40.036142,-74.822986,"2703 Route 541, Burlington, NJ, 08016",2703 Route 541,Burlington,NJ,8016,,,Target,active,USA,1941875
+141837,1784314696346,3305,Burlington Ma,42.484104,-71.186185,"34 Cambridge St Ste 145, Burlington, MA, 01803",34 Cambridge St Ste 145,Burlington,MA,1803,,,Target,active,USA,1941877
+141838,1784314696346,3222,Cambridge Central Square,42.364561,-71.102575,"564 Massachusetts Ave, Cambridge, MA, 02139",564 Massachusetts Ave,Cambridge,MA,2139,,,Target,active,USA,1941884
+141839,1784314696346,3304,Cambridge Porter Square,42.388648,-71.118659,"822 Somerville Ave, Cambridge, MA, 02140",822 Somerville Ave,Cambridge,MA,2140,,,Target,active,USA,1941885
+141840,1784314696346,1085,Cherry Hill,39.934744,-75.024516,"2137 Route 38, Cherry Hill, NJ, 08002",2137 Route 38,Cherry Hill,NJ,8002,,,Target,active,USA,1941894
+141841,1784314696346,1467,Clark,40.627381,-74.307959,"45 Central Ave, Clark, NJ, 07066",45 Central Ave,Clark,NJ,7066,,,Target,active,USA,1941904
+141842,1784314696346,3308,Cleveland Park,38.935992,-77.058198,"3505 Connecticut Ave Nw, Washington, DC, 20008",3505 Connecticut Ave Nw,Washington,DC,20008,,,Target,active,USA,14066
+114492,1784314270104,459,Grocery 108th Ave Se,47.41512081,-122.19561904,"20830 108th Ave Se, Kent, WA, 98031",20830 108th Ave Se,Kent,WA,98031,,,Safeway,active,USA,755310
+114493,1784314270104,3148,Grocery 10th Ave Ne,47.7380655,-122.6368054,"19245 10th Ave Ne, Poulsbo, WA, 98370",19245 10th Ave Ne,Poulsbo,WA,98370,,,Safeway,active,USA,755353
+114494,1784314270104,983,Grocery 11th St,39.04853874,-122.92562435,"1071 11th St, Lakeport, CA, 95453",1071 11th St,Lakeport,CA,95453,,,Safeway,active,USA,755599
+114495,1784314270104,593,Grocery 11th St,48.51226216,-122.61168392,"911 11th St, Anacortes, WA, 98221",911 11th St,Anacortes,WA,98221,,,Safeway,active,USA,755430
+114496,1784314270104,382,Grocery 122nd Ave,45.49625161,-122.5392428,"3527 Se 122nd Ave, Portland, OR, 97236",3527 Se 122nd Ave,Portland,OR,97236,,,Safeway,active,USA,755236
+114497,1784314270104,526,Grocery 124th Ave Ne,47.7325226,-122.17407346,"14444 124th Ave Ne, Kirkland, WA, 98034",14444 124th Ave Ne,Kirkland,WA,98034,,,Safeway,active,USA,755458
+114498,1784314270104,1461,Grocery 128th & I - 5,47.88073813,-122.24039828,"520 128th St Sw, Everett, WA, 98204",520 128th St Sw,Everett,WA,98204,,,Safeway,active,USA,755446
+114499,1784314270104,2645,Grocery 134th Place Se,47.87535556,-122.15362625,"5802 134th Place Se, Everett, WA, 98208",5802 134th Place Se,Everett,WA,98208,,,Safeway,active,USA,755354
+114500,1784314270104,1076,Grocery 13th St,47.92607031,-122.09549816,"1119 13th St, Snohomish, WA, 98290",1119 13th St,Snohomish,WA,98290,,,Safeway,active,USA,755309
+114501,1784314270104,490,Grocery 140th Ave Ne,47.62570827,-122.15491712,"1645 140th Ave Ne, Bellevue, WA, 98005",1645 140th Ave Ne,Bellevue,WA,98005,,,Safeway,active,USA,755396
+114502,1784314270104,519,Grocery 140th Ave Se,47.44742837,-122.15245219,"17230 140th Ave Se, Renton, WA, 98058",17230 140th Ave Se,Renton,WA,98058,,,Safeway,active,USA,755432
+114503,1784314270104,1659,Grocery 14th Ave Se,44.6272589,-123.0795751,"1990 14th Ave Se, Albany, OR, 97322",1990 14th Ave Se,Albany,OR,97322,,,Safeway,active,USA,755212
+114504,1784314270104,3217,Grocery 14th St,38.88355626,-76.98651781,"415 14th St Se, Washington, DC, 20003",415 14th St Se,Washington,DC,20003,,,Safeway,active,USA,755023
+114505,1784314270104,91,Grocery 15th Ave,46.1367721,-122.9385472,"1227 15th Ave, Longview, WA, 98632",1227 15th Ave,Longview,WA,98632,,,Safeway,active,USA,755305
+114506,1784314270104,497,Grocery 15th Ave Ne,47.75431609,-122.31275364,"17202 15th Ave Ne, Shoreline, WA, 98155",17202 15th Ave Ne,Shoreline,WA,98155,,,Safeway,active,USA,755317
+114507,1784314270104,1586,Grocery 15th Ave Ne,47.71802281,-122.31192723,"12318 15th Ave Ne, Seattle, WA, 98125",12318 15th Ave Ne,Seattle,WA,98125,,,Safeway,active,USA,755319
+114508,1784314270104,1143,Grocery 15th Ave Nw,47.69007562,-122.37624032,"8340 15th Ave Nw, Seattle, WA, 98117",8340 15th Ave Nw,Seattle,WA,98117,,,Safeway,active,USA,755327
+114509,1784314270104,1490,Grocery 16th St,37.76602796,-122.40795898,"2300 16th St Unit 203, San Francisco, CA, 94103",2300 16th St Unit 203,San Francisco,CA,94103,,,Safeway,active,USA,755717
+114510,1784314270104,2462,Grocery 16th St,42.06074801,-104.96456981,"1307 16th St, Wheatland, WY, 82201",1307 16th St,Wheatland,WY,82201,,,Safeway,active,USA,755474
+114511,1784314270104,534,Grocery 172nd St,48.15136163,-122.18119474,"3532 172nd St Ne, Arlington, WA, 98223",3532 172nd St Ne,Arlington,WA,98223,,,Safeway,active,USA,755441
+114512,1784314270104,3228,Grocery 176th St E,47.09509238,-122.35302689,"5616 176th St E, Puyallup, WA, 98375",5616 176th St E,Puyallup,WA,98375,,,Safeway,active,USA,755407
+114513,1784314270104,503,Grocery 19th Ave Se,47.89728049,-122.20501918,"11031 19th Ave Se, Everett, WA, 98208",11031 19th Ave Se,Everett,WA,98208,,,Safeway,active,USA,755391
+114514,1784314270104,2684,Grocery 19th St,38.56795254,-121.48611903,"1814 19th St, Sacramento, CA, 95811",1814 19th St,Sacramento,CA,95811,,,Safeway,active,USA,755714
+114515,1784314270104,1885,Grocery 1st Ave W,47.62362391,-122.357786,"516 1st Ave W, Seattle, WA, 98119",516 1st Ave W,Seattle,WA,98119,,,Safeway,active,USA,755339
+114516,1784314270104,2814,Grocery 1st St,37.37897447,-122.11904516,"160 1st St, Los Altos, CA, 94022",160 1st St,Los Altos,CA,94022,,,Safeway,active,USA,755672
+9581,1784312030982,37&target=weeklyad,Albertsons 10th Avenue,47.4930435,-111.269422,"2250 10th Ave S, Great Falls, MT, 59405",2250 10th Ave S,Great Falls,MT,59405,,,Albertsons,active,USA,766557
+9582,1784312030982,37,Albertsons 10th Avenue,47.49303965,-111.26941234,"2250 10th Ave S, Great Falls, MT, 59405",2250 10th Ave S,Great Falls,MT,59405,,,Albertsons,active,USA,159940
+9583,1784312030982,38,Albertsons 13th & Grand,45.78265881,-108.54783967,"1212 Grand Ave, Billings, MT, 59102",1212 Grand Ave,Billings,MT,59102,,,Albertsons,active,USA,159683
+9584,1784312030982,38&target=weeklyad,Albertsons 13th & Grand,45.7826629,-108.5478378,"1212 Grand Ave, Billings, MT, 59102",1212 Grand Ave,Billings,MT,59102,,,Albertsons,active,USA,766614
+9585,1784312030982,745&target=weeklyad,Albertsons 14th & Market,32.7120686,-117.1513545,"655 14th St, San Diego, CA, 92101",655 14th St,San Diego,CA,92101,,,Albertsons,active,USA,766495
+9586,1784312030982,745,Albertsons 14th & Market,32.71209877,-117.15144852,"655 14th St, San Diego, CA, 92101",655 14th St,San Diego,CA,92101,,,Albertsons,active,USA,159804
+9587,1784312030982,493,Albertsons 152nd & Pacific,47.11741897,-122.43277594,"104 Military Rd, Tacoma, WA, 98444",104 Military Rd,Tacoma,WA,98444,,,Albertsons,active,USA,160016
+9588,1784312030982,493&target=weeklyad,Albertsons 152nd & Pacific,47.11741897,-122.43277594,"104 Military Rd, Tacoma, WA, 98444",104 Military Rd,Tacoma,WA,98444,,,Albertsons,active,USA,766822
+9589,1784312030982,101,Albertsons 16th & State,43.62493169,-116.20936304,"1650 W State St, Boise, ID, 83702",1650 W State St,Boise,ID,83702,,,Albertsons,active,USA,167746
+9590,1784312030982,101&target=weeklyad,Albertsons 16th & State,43.62493169,-116.20936304,"1650 W State St, Boise, ID, 83702",1650 W State St,Boise,ID,83702,,,Albertsons,active,USA,766595
+9591,1784312030982,138&target=weeklyad,Albertsons 17th Street,43.48112344,-112.02171567,"590 E 17th St, Idaho Falls, ID, 83404",590 E 17th St,Idaho Falls,ID,83404,,,Albertsons,active,USA,766733
+9592,1784312030982,138,Albertsons 17th Street,43.48112344,-112.02171567,"590 E 17th St, Idaho Falls, ID, 83404",590 E 17th St,Idaho Falls,ID,83404,,,Albertsons,active,USA,167744
+9593,1784312030982,598,Albertsons 17th & Tustin,33.75859443,-117.8382531,"2000 E 17th St, Santa Ana, CA, 92705",2000 E 17th St,Santa Ana,CA,92705,,,Albertsons,active,USA,159773
+9594,1784312030982,598&target=weeklyad,Albertsons 17th & Tustin,33.75859443,-117.8382531,"2000 E 17th St, Santa Ana, CA, 92705",2000 E 17th St,Santa Ana,CA,92705,,,Albertsons,active,USA,766646
+9595,1784312030982,2599&target=weeklyad,Albertsons 1800 Ne,44.0681035,-121.3015211,"1800 Ne 3rd St, Bend, OR, 97701",1800 Ne 3rd St,Bend,OR,97701,,,Albertsons,active,USA,766800
+9596,1784312030982,2599,Albertsons 1800 Ne,44.06827573,-121.30148381,"1800 Ne 3rd St, Bend, OR, 97701",1800 Ne 3rd St,Bend,OR,97701,,,Albertsons,active,USA,159973
+9597,1784312030982,564&target=weeklyad,Albertsons 181st & Glisan,45.52562269,-122.47900978,"451 Ne 181st St, Portland, OR, 97230",451 Ne 181st St,Portland,OR,97230,,,Albertsons,active,USA,766794
+9598,1784312030982,564,Albertsons 181st & Glisan,45.52562269,-122.47900978,"451 Ne 181st St, Portland, OR, 97230",451 Ne 181st St,Portland,OR,97230,,,Albertsons,active,USA,159982
+9599,1784312030982,3447,Albertsons 1st Ave And Railroad St,45.66664807,-108.77031193,"205 S 1st Ave, Laurel, MT, 59044",205 S 1st Ave,Laurel,MT,59044,,,Albertsons,active,USA,159938
+9600,1784312030982,3447&target=weeklyad,Albertsons 1st Ave And Railroad St,45.66664807,-108.77031193,"205 S 1st Ave, Laurel, MT, 59044",205 S 1st Ave,Laurel,MT,59044,,,Albertsons,active,USA,766558
+9601,1784312030982,3574&target=weeklyad,Albertsons 1st & Newport,33.74523628,-117.81293153,"13270 Newport Ave, Tustin, CA, 92780",13270 Newport Ave,Tustin,CA,92780,,,Albertsons,active,USA,766490
+9602,1784312030982,3574,Albertsons 1st & Newport,33.74523628,-117.81293153,"13270 Newport Ave, Tustin, CA, 92780",13270 Newport Ave,Tustin,CA,92780,,,Albertsons,active,USA,159900
+9603,1784312030982,1322&target=weeklyad,Albertsons 20th Street West & Ave K,34.6738463,-118.1677224,"43543 20th St W, Lancaster, CA, 93534",43543 20th St W,Lancaster,CA,93534,,,Albertsons,active,USA,766473
+9604,1784312030982,1322,Albertsons 20th Street West & Ave K,34.673795,-118.167673,"43543 20th St W, Lancaster, CA, 93534",43543 20th St W,Lancaster,CA,93534,,,Albertsons,active,USA,159842
+9605,1784312030982,590,Albertsons 219th & Baseline,45.51464765,-122.90399106,"7500 Sw Baseline Rd, Hillsboro, OR, 97123",7500 Sw Baseline Rd,Hillsboro,OR,97123,,,Albertsons,active,USA,159980
+75180,1784313122824,590,10th And Trenton H-E-B,26.26627,-98.21837,"901 Trenton Rd, Mcallen, TX, 78504",901 Trenton Rd,Mcallen,TX,78504,,,H-E-B,active,USA,166006
+75181,1784313122824,64,19th And Meridian H-E-B,31.5804,-97.17255,"3801 N 19th St, Waco, TX, 76708",3801 N 19th St,Waco,TX,76708,,,H-E-B,active,USA,165738
+75182,1784313122824,771,211 And Potranco H-E-B,29.42347,-98.78003,"14325 Potranco Rd, San Antonio, TX, 78253",14325 Potranco Rd,San Antonio,TX,78253,,,H-E-B,active,USA,165847
+75183,1784313122824,397,281 And 1604 H-E-B,29.60689,-98.4669,"18140 San Pedro, San Antonio, TX, 78232",18140 San Pedro,San Antonio,TX,78232,,,H-E-B,active,USA,165867
+75184,1784313122824,108,281 And Evans Road H-E-B Plus!,29.63886,-98.45756,"20935 Us Highway 281 North, San Antonio, TX, 78258",20935 Us Highway 281 North,San Antonio,TX,78258,,,H-E-B,active,USA,165996
+75185,1784313122824,557,35 And 84 H-E-B Plus!,31.58764,-97.10723,"801 North I-H 35, Bellmead, TX, 76705",801 North I-H 35,Bellmead,TX,76705,,,H-E-B,active,USA,165954
+75186,1784313122824,255,35 And Calton H-E-B,27.5422,-99.50087,"4801 San Dario, Laredo, TX, 78041",4801 San Dario,Laredo,TX,78041,,,H-E-B,active,USA,166025
+75187,1784313122824,570,35 And Del Mar H-E-B,27.56786,-99.49676,"210 West Del Mar Boulevard, Laredo, TX, 78041",210 West Del Mar Boulevard,Laredo,TX,78041,,,H-E-B,active,USA,166005
+75188,1784313122824,387,42nd St. H-E-B,31.89134,-102.34383,"3801 E 42nd, Odessa, TX, 79762",3801 E 42nd,Odessa,TX,79762,,,H-E-B,active,USA,166007
+75189,1784313122824,554,59 And Laurent H-E-B,28.8062,-96.9896,"1505 East Rio Grande, Victoria, TX, 77901",1505 East Rio Grande,Victoria,TX,77901,,,H-E-B,active,USA,165755
+75190,1784313122824,373,620 And O'connor H-E-B,30.50068,-97.723,"16900 Ranch Road 620, Round Rock, TX, 78681",16900 Ranch Road 620,Round Rock,TX,78681,,,H-E-B,active,USA,165886
+75191,1784313122824,465,7th Street H-E-B,30.2591,-97.71163,"2701 East 7th, Austin, TX, 78702",2701 East 7th,Austin,TX,78702,,,H-E-B,active,USA,165981
+75192,1784313122824,291,83 And Lincoln H-E-B,26.18328,-97.71403,"613 S Expwy 83, Harlingen, TX, 78550",613 S Expwy 83,Harlingen,TX,78550,,,H-E-B,active,USA,165871
+75193,1784313122824,231,83 And N Texas H-E-B,26.17128,-97.98923,"1004 N Texas, Weslaco, TX, 78596",1004 N Texas,Weslaco,TX,78596,,,H-E-B,active,USA,165726
+75194,1784313122824,485,83 And Westgate H-E-B,26.16495,-98.00129,"310 N Westgate Drive, Weslaco, TX, 78596",310 N Westgate Drive,Weslaco,TX,78596,,,H-E-B,active,USA,165790
+75195,1784313122824,70,Abilene H-E-B,32.43348,-99.75934,"1345 Barrow, Abilene, TX, 79605",1345 Barrow,Abilene,TX,79605,,,H-E-B,active,USA,165924
+75196,1784313122824,71,Adams And 25th St H-E-B,31.10153,-97.35378,"1314 West Adams, Temple, TX, 76504",1314 West Adams,Temple,TX,76504,,,H-E-B,active,USA,165750
+75197,1784313122824,210,Alameda And Robert H-E-B,27.73002,-97.37175,"4320 S Alameda St, Corpus Christi, TX, 78412",4320 S Alameda St,Corpus Christi,TX,78412,,,H-E-B,active,USA,165941
+75198,1784313122824,413,Alameda / Texan Trail (Medical District),27.75745,-97.3912,"3133 S Alameda, Corpus Christi, TX, 78404",3133 S Alameda,Corpus Christi,TX,78404,,,H-E-B,active,USA,165878
+75199,1784313122824,421,Alamo H-E-B,26.19078,-98.1251,"1211 East Frontage Rd, Alamo, TX, 78516",1211 East Frontage Rd,Alamo,TX,78516,,,H-E-B,active,USA,165969
+75200,1784313122824,733,Alamo Ranch H-E-B,29.48572,-98.73294,"12125 Alamo Ranch Pkwy, San Antonio, TX, 78253",12125 Alamo Ranch Pkwy,San Antonio,TX,78253,,,H-E-B,active,USA,165989
+75201,1784313122824,724,Aliana Market H-E-B,29.6597,-95.7137,"10161 W Grand Parkway S, Richmond, TX, 77407",10161 W Grand Parkway S,Richmond,TX,77407,,,H-E-B,active,USA,165769
+75202,1784313122824,223,Alice H-E-B,27.75272,-98.06311,"1115 E Main, Alice, TX, 78332",1115 E Main,Alice,TX,78332,,,H-E-B,active,USA,165759
+75203,1784313122824,102,Alon Market H-E-B,29.55254,-98.53463,"8503 Nw Military Hwy, San Antonio, TX, 78231",8503 Nw Military Hwy,San Antonio,TX,78231,,,H-E-B,active,USA,165848
+75204,1784313122824,288,Alvin H-E-B,29.40942,-95.24298,"207 E South, Alvin, TX, 77511",207 E South,Alvin,TX,77511,,,H-E-B,active,USA,165703
+10338,1784312071811,460-214,"Aldi, Absecon",39.434197,-74.513539,"676 White Horse Pike Unit 2, Absecon, NJ, 08201",676 White Horse Pike Unit 2,Absecon,NJ,8201,,,ALDI,active,USA,1941755
+10496,1784312071811,460-019,"Aldi, Bellmawr",39.86576,-75.086826,"156 W Browning Road, Bellmawr, NJ, 08031",156 W Browning Road,Bellmawr,NJ,8031,,,ALDI,active,USA,1941756
+10504,1784312071811,473-029,"Aldi, Bennington",42.89386,-73.19357,"10 Kocher Dr, Bennington, VT, 05201",10 Kocher Dr,Bennington,VT,5201,,,ALDI,active,USA,1941757
+10528,1784312071811,460-070,"Aldi, Bloomfield",40.782512,-74.192517,"244 Bloomfield Ave, Bloomfield, NJ, 07003",244 Bloomfield Ave,Bloomfield,NJ,7003,,,ALDI,active,USA,1941759
+10568,1784312072256,473-116,"Aldi, Branford",41.276429,-72.827702,"1151 West Main St Unit 1, Branford, CT, 06405",1151 West Main St Unit 1,Branford,CT,6405,,,ALDI,active,USA,1941761
+10574,1784312072256,460-069,"Aldi, Brick",40.064984,-74.136047,"780 Route 70, Brick, NJ, 08723",780 Route 70,Brick,NJ,8723,,,ALDI,active,USA,1941763
+10575,1784312072256,460-015,"Aldi, Bridgeton",39.46237,-75.20961,"18 Cornwell Drive, Bridgeton, NJ, 08302",18 Cornwell Drive,Bridgeton,NJ,8302,,,ALDI,active,USA,1941764
+10581,1784312072256,473-062,"Aldi, Bristol",41.66648,-72.92216,"110 Middle St, Bristol, CT, 06010",110 Middle St,Bristol,CT,6010,,,ALDI,active,USA,1941765
+10586,1784312072256,473-080,"Aldi, Brockton",42.0924,-71.051169,"544 Westgate Drive, Brockton, MA, 02301",544 Westgate Drive,Brockton,MA,2301,,,ALDI,active,USA,1941766
+10623,1784312072256,460-230,"Aldi, Burlington",40.05649,-74.84452,"1801 Mount Holly Road, Burlington, NJ, 08016",1801 Mount Holly Road,Burlington,NJ,8016,,,ALDI,active,USA,1941767
+10778,1784312072770,473-022,"Aldi, Chicopee",42.17167,-72.57658,"505 Memorial Drive, Chicopee, MA, 01020",505 Memorial Drive,Chicopee,MA,1020,,,ALDI,active,USA,1941770
+10839,1784312072770,460-052,"Aldi, Collingswood",39.9204609,-75.0924049,"30 White Horse Pike, Collingswood, NJ, 08107",30 White Horse Pike,Collingswood,NJ,8107,,,ALDI,active,USA,1942052
+10933,1784312072770,473-055,"Aldi, Danbury",41.40514,-73.4191,"63 Newtown Road, Danbury, CT, 06810",63 Newtown Road,Danbury,CT,6810,,,ALDI,active,USA,1942055
+10935,1784312073514,473-146,"Aldi, Danvers",42.552149,-70.938807,"100 Independence Way, Danvers, MA, 01923",100 Independence Way,Danvers,MA,1923,,,ALDI,active,USA,1942056
+10941,1784312073514,473-117,"Aldi, Dartmouth",41.641265,-70.989382,"200 N Dartmouth Mall, Dartmouth, MA, 02747",200 N Dartmouth Mall,Dartmouth,MA,2747,,,ALDI,active,USA,1942057
+10980,1784312073514,460-202,"Aldi, Deptford",39.82746,-75.09759,"1755 Deptford Center Road, Deptford, NJ, 08096",1755 Deptford Center Road,Deptford,NJ,8096,,,ALDI,active,USA,1942059
+10981,1784312073514,473-054,"Aldi, Derby",41.3391,-73.0843,"72 Pershing Drive, Derby, CT, 06418",72 Pershing Drive,Derby,CT,6418,,,ALDI,active,USA,1942060
+11028,1784312073514,473-047,"Aldi, East Hartford",41.76455,-72.60874,"801 Silver Lane, East Hartford, CT, 06118",801 Silver Lane,East Hartford,CT,6118,,,ALDI,active,USA,1942064
+11035,1784312073514,460-031,"Aldi, East Rutherford",40.83114,-74.09295,"59 Route 17 South, East Rutherford, NJ, 07073",59 Route 17 South,East Rutherford,NJ,7073,,,ALDI,active,USA,1942065
+11037,1784312073514,473-115,"Aldi, East Walpole",42.15574,-71.20144,"70 Boston Providence Tpke, East Walpole, MA, 02032",70 Boston Providence Tpke,East Walpole,MA,2032,,,ALDI,active,USA,1942066
+11038,1784312073514,460-006,"Aldi, East Windsor",40.273412,-74.541051,"440 Us Highway 130, East Windsor, NJ, 08520",440 Us Highway 130,East Windsor,NJ,8520,,,ALDI,active,USA,1942067
+11067,1784312073514,473-044,"Aldi, Enfield",41.98989,-72.58104,"25 Hazard Ave Ste 7, Enfield, CT, 06082",25 Hazard Ave Ste 7,Enfield,CT,6082,,,ALDI,active,USA,1942071
+11098,1784312073514,473-118,"Aldi, Fairfield",41.177486,-73.228433,"290 Tunxis Hill Road, Fairfield, CT, 06825",290 Tunxis Hill Road,Fairfield,CT,6825,,,ALDI,active,USA,1942073
+11107,1784312073514,473-166,"Aldi, Falmouth",41.557204,-70.598454,"39 Davis Straits, Falmouth, MA, 02540",39 Davis Straits,Falmouth,MA,2540,,,ALDI,active,USA,1942075
+11131,1784312073514,460-113,"Aldi, Flemington",40.50609549,-74.84831466,"325 Route 202, Flemington, NJ, 08822",325 Route 202,Flemington,NJ,8822,,,ALDI,active,USA,1942076
+141952,1784314696346,5213,Target â€“ Alice Springs,-23.69745,133.882472,"Todd Street, Alice Springs, NT, 0870",Todd Street,Alice Springs,NT,870,,,Target,active,Australia,1942009
+141953,1784314696346,5146,Target â€“ Palmerston,-12.479336,130.986315,"Palmerston Shopping Centre Temple Terrace, Palmerston, NT, 0830",Palmerston Shopping Centre Temple Terrace,Palmerston,NT,830,,,Target,active,Australia,1942010
+141963,1784314696346,5168,Target – Airport West,-37.715304,144.88295,"Westfield Shoppingtown Matthews Avenue, Airport West, VIC, 3042",Westfield Shoppingtown Matthews Avenue,Airport West,VIC,3042,,,Target,active,Australia,73044
+141973,1784314696346,5005,Target – Albury,-36.082256,146.915805,"Kiewa Street, Albury, NSW, 2640",Kiewa Street,Albury,NSW,2640,,,Target,active,Australia,72981
+142019,1784314696531,5287,Target – Armadale,-32.152489,116.016082,"Armadale Shopping Centre Church Ave & Whitehead Street, Armadale, WA, 6112",Armadale Shopping Centre Church Ave & Whitehead Street,Armadale,WA,6112,,,Target,active,Australia,73059
+142064,1784314696531,5004,Target – Ballarat,-37.562667,143.854963,"5 Doveton Street South, Ballarat Central, VIC, 3350",5 Doveton Street South,Ballarat Central,VIC,3350,,,Target,active,Australia,73049
+142086,1784314696531,5123,Target – Belconnen,-35.237592,149.063815,"18 Benjamin Way, Belconnen, ACT, 2617",18 Benjamin Way,Belconnen,ACT,2617,,,Target,active,Australia,72952
+142095,1784314696531,5008,Target – Bendigo,-36.762668,144.279917,"King Street, Bendigo, VIC, 3550",King Street,Bendigo,VIC,3550,,,Target,active,Australia,73037
+142111,1784314696531,5178,Target – Blacktown,-33.770236,150.907428,"17 Patrick St, Blacktown, NSW, 2148",17 Patrick St,Blacktown,NSW,2148,,,Target,active,Australia,72985
+142146,1784314696531,5195,Target – Bribie Island,-27.063713,153.158174,"Cnr Goodwin Drive & Hornsby Road, Bribie Island, QLD, 4507",Cnr Goodwin Drive & Hornsby Road,Bribie Island,QLD,4507,,,Target,active,Australia,73014
+142151,1784314696531,5158,Target – Brimbank Central,-37.750852,144.774111,"Brimbank Central Shop Centre Cnr Neale & Station Roads, Deer Park, VIC, 3023",Brimbank Central Shop Centre Cnr Neale & Station Roads,Deer Park,VIC,3023,,,Target,active,Australia,73039
+142152,1784314696531,5184,Target – Brisbane,-27.470894,153.024533,"Myer Centre Cnr Elizabeth & Albert Streets, Brisbane City, QLD, 4000",Myer Centre Cnr Elizabeth & Albert Streets,Brisbane City,QLD,4000,,,Target,active,Australia,73003
+142155,1784314696531,5286,Target – Broadway,-33.883677,151.1934,"Broadway Shopping Centre 1 Bay St, Glebe, NSW, 2037",Broadway Shopping Centre 1 Bay St,Glebe,NSW,2037,,,Target,active,Australia,72965
+142172,1784314696531,5434,Target – Brookside,-27.40936,152.97911,"Brookside Shopping Centre 159 Osborne Road, Mitchelton, QLD, 4053",Brookside Shopping Centre 159 Osborne Road,Mitchelton,QLD,4053,,,Target,active,Australia,72992
+142174,1784314696531,5133,Target – Browns Plains,-27.662846,153.039614,"Cnr Mt Lindsay Hway & Browns Plains Rd, Browns Plains, QLD, 4118",Cnr Mt Lindsay Hway & Browns Plains Rd,Browns Plains,QLD,4118,,,Target,active,Australia,73009
+142185,1784314696531,5076,Target – Bull Creek,-32.064095,115.856377,"Bullcreek Shopping Centre Cnr Benningfield Road & South Street, Bull Creek, WA, 6149",Bullcreek Shopping Centre Cnr Benningfield Road & South Street,Bull Creek,WA,6149,,,Target,active,Australia,73067
+142187,1784314696531,5173,Target – Bunbury,-33.32635,115.640573,"Cnr Blair & Stirling Streets, Bunbury, WA, 6230",Cnr Blair & Stirling Streets,Bunbury,WA,6230,,,Target,active,Australia,73065
+142188,1784314696531,5048,Target – Bundaberg,-24.865254,152.352555,"Bourbong Street, Bundaberg, QLD, 4670",Bourbong Street,Bundaberg,QLD,4670,,,Target,active,Australia,73010
+142189,1784314696531,5059,Target – Buranda,-27.500833,153.037013,"Cnr Ipswich Rd & Cornwall St, Woolloongabba, QLD, 4102",Cnr Ipswich Rd & Cornwall St,Woolloongabba,QLD,4102,,,Target,active,Australia,72994
+142195,1784314696531,5273,Target – Burnie,-41.053101,145.904364,"64 Mount Street, Burnie, TAS, 7320",64 Mount Street,Burnie,TAS,7320,,,Target,active,Australia,73029
+142197,1784314696531,5171,Target – Burwood,-33.874467,151.106931,"Westfield Shoppingtown 100-114 Burwood Road, Burwood, NSW, 2134",Westfield Shoppingtown 100-114 Burwood Road,Burwood,NSW,2134,,,Target,active,Australia,72971
+142199,1784314696531,5436,Target – Cairns City,-16.9250829,145.7694851,"Shop 1 1-21 Mcleod Street Cairns Central Shopping Centre, Cairns City, QLD, 4870",Shop 1 1-21 Mcleod Street Cairns Central Shopping Centre,Cairns City,QLD,4870,,,Target,active,Australia,73013
+142207,1784314696531,5135,Target – Capalaba,-27.523552,153.191138,"Capalaba Park Cnr Redland Bay & Mt Cotton Road, Capalaba, QLD, 4157",Capalaba Park Cnr Redland Bay & Mt Cotton Road,Capalaba,QLD,4157,,,Target,active,Australia,72999
+142212,1784314696531,5233,Target – Carindale,-27.502286,153.102966,"Shop 197 1151 Creek Road, Carindale, QLD, 4152",Shop 197 1151 Creek Road,Carindale,QLD,4152,,,Target,active,Australia,73001
+142213,1784314696531,5292,Target – Carlingford,-33.77553,151.052403,"Carlingford Shopping Centre Cnr Pennant Hill & Carlingford Rds, Carlingford, NSW, 2118",Carlingford Shopping Centre Cnr Pennant Hill & Carlingford Rds,Carlingford,NSW,2118,,,Target,active,Australia,72970

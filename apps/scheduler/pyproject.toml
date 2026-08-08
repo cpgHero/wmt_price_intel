@@ -1,0 +1,24 @@
+[project]
+name = "rci-scheduler"
+version = "0.1.0"
+description = "Schedule materialization service for Retail Competitive Intelligence."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-automation",
+  "rci-collections",
+  "rci-core",
+  "rci-db",
+]
+
+[project.scripts]
+rci-scheduler = "rci_scheduler.main:main"
+
+[tool.uv.sources]
+rci-automation = { workspace = true }
+rci-collections = { workspace = true }
+rci-core = { workspace = true }
+rci-db = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

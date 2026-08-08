@@ -1,0 +1,284 @@
+{
+  "schema_version": "2.0.0",
+  "purpose": "Executable golden regression assertions derived from the four human-validated August 2026 studies. Full raw category datasets are intentionally not duplicated in this handoff bundle; attach them separately for full regression runs.",
+  "categories": {
+    "fresh_shell_eggs": {
+      "dataset_id": "egg_aug2026_full_retailer",
+      "source_rows": 386889,
+      "assertions": [
+        {
+          "name": "total_strict_matches",
+          "source": "eggs/strict_price_summary.csv",
+          "source_format": "csv",
+          "selector": {
+            "type": "aggregate",
+            "operation": "sum",
+            "field": "matches"
+          },
+          "expected": 5155,
+          "tolerance_abs": 5
+        },
+        {
+          "name": "overall_strict_walmart_lower_rate",
+          "source": "eggs/strict_price_summary.csv",
+          "source_format": "csv",
+          "selector": {
+            "type": "ratio_of_sums",
+            "numerator_field": "walmart_lower_count",
+            "denominator_field": "matches"
+          },
+          "expected": 0.7468477206595538,
+          "tolerance_abs": 0.001
+        },
+        {
+          "name": "aldi_strict_competitor_lower_rate",
+          "source": "eggs/strict_price_summary.csv",
+          "source_format": "csv",
+          "selector": {
+            "type": "row_filter",
+            "where": {
+              "retailer_name": "ALDI"
+            },
+            "field": "competitor_lower_rate"
+          },
+          "expected": 0.5525040387722132,
+          "tolerance_abs": 0.002
+        }
+      ]
+    },
+    "fresh_fluid_milk": {
+      "dataset_id": "milk_aug2026_wmt_aldi_amz",
+      "source_rows": 348980,
+      "assertions": [
+        {
+          "name": "source_rows_total",
+          "source": "milk/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "source_rows_total"
+            ]
+          },
+          "expected": 348980,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_private_label_walmart_lower_rate",
+          "source": "milk/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "comparisons",
+              "ALDI_private_label",
+              "walmart_lower_rate"
+            ]
+          },
+          "expected": 0.5962208769033205,
+          "tolerance_abs": 0.002
+        },
+        {
+          "name": "amazon_same_brand_parity_rate",
+          "source": "milk/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "comparisons",
+              "Amazon_same_brand",
+              "parity_rate"
+            ]
+          },
+          "expected": 0.3544271820133889,
+          "tolerance_abs": 0.002
+        },
+        {
+          "name": "amazon_private_label_competitor_lower_rate",
+          "source": "milk/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "comparisons",
+              "Amazon_private_label",
+              "competitor_lower_rate"
+            ]
+          },
+          "expected": 0.529046203728722,
+          "tolerance_abs": 0.002
+        }
+      ]
+    },
+    "fresh_bananas": {
+      "dataset_id": "bananas_aug2026_wmt_aldi_amz",
+      "source_rows": 168440,
+      "assertions": [
+        {
+          "name": "source_rows_total",
+          "source": "bananas/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "raw_rows",
+              "total"
+            ]
+          },
+          "expected": 168440,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_standard_each_gap",
+          "source": "bananas/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "key_findings",
+              "aldi_standard_each_gap"
+            ]
+          },
+          "expected": -0.04,
+          "tolerance_abs": 0.01
+        },
+        {
+          "name": "aldi_standard_per_lb_gap",
+          "source": "bananas/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "key_findings",
+              "aldi_standard_per_lb_gap"
+            ]
+          },
+          "expected": -0.01,
+          "tolerance_abs": 0.01
+        },
+        {
+          "name": "amazon_standard_each_walmart_lower_rate",
+          "source": "bananas/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "key_findings",
+              "amazon_standard_each_walmart_lower_rate"
+            ]
+          },
+          "expected": 0.5628865979381443,
+          "tolerance_abs": 0.002
+        }
+      ]
+    },
+    "fresh_strawberries": {
+      "dataset_id": "strawberries_aug2026_wmt_aldi_amz",
+      "source_rows": 297443,
+      "assertions": [
+        {
+          "name": "source_rows_total",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": [
+              "total_source_rows"
+            ]
+          },
+          "expected": 297443,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_all_strict_walmart_lower_rate",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "list_filter",
+            "path": [
+              "strict_summary"
+            ],
+            "where": {
+              "competitor": "ALDI",
+              "segment": "All strict same-weight segments"
+            },
+            "field": "walmart_lower_rate"
+          },
+          "expected": 0.9996397694524496,
+          "tolerance_abs": 0.0005
+        },
+        {
+          "name": "amazon_1lb_conventional_competitor_lower_rate",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "list_filter",
+            "path": [
+              "strict_summary"
+            ],
+            "where": {
+              "competitor": "Amazon",
+              "segment": "Conventional whole strawberries \u2014 1 lb"
+            },
+            "field": "competitor_lower_rate"
+          },
+          "expected": 0.6936507936507936,
+          "tolerance_abs": 0.002
+        },
+        {
+          "name": "amazon_2lb_conventional_walmart_lower_rate",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "list_filter",
+            "path": [
+              "strict_summary"
+            ],
+            "where": {
+              "competitor": "Amazon",
+              "segment": "Conventional whole strawberries \u2014 2 lb"
+            },
+            "field": "walmart_lower_rate"
+          },
+          "expected": 0.9416498993963782,
+          "tolerance_abs": 0.002
+        },
+        {
+          "name": "amazon_1lb_organic_parity_rate",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "list_filter",
+            "path": [
+              "strict_summary"
+            ],
+            "where": {
+              "competitor": "Amazon",
+              "segment": "Organic whole strawberries \u2014 1 lb"
+            },
+            "field": "parity_rate"
+          },
+          "expected": 0.7023319615912208,
+          "tolerance_abs": 0.002
+        },
+        {
+          "name": "aldi_10mi_walmart_lower_count",
+          "source": "strawberries/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "list_filter",
+            "path": [
+              "aldi_proximity_summary"
+            ],
+            "where": {
+              "segment": "All validated ALDI store-segment matches within 10 miles"
+            },
+            "field": "walmart_lower"
+          },
+          "expected": 5236,
+          "tolerance_abs": 0
+        }
+      ]
+    }
+  }
+}

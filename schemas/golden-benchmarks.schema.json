@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://retail-ci.local/schemas/golden-benchmarks.schema.json",
+  "title": "Retail Competitive Intelligence Golden Benchmarks",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "categories"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "categories": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/category"
+      }
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "required": [
+        "dataset_id",
+        "source_rows",
+        "assertions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "type": "string"
+        },
+        "source_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assertion"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "required": [
+        "name",
+        "source",
+        "source_format",
+        "selector",
+        "expected",
+        "tolerance_abs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_format": {
+          "enum": [
+            "json",
+            "csv"
+          ]
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "expected": {
+          "type": "number"
+        },
+        "tolerance_abs": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "path"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "json_path"
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "path",
+            "where",
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "list_filter"
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "minItems": 1
+            },
+            "where": {
+              "type": "object"
+            },
+            "field": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "where",
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "row_filter"
+            },
+            "where": {
+              "type": "object"
+            },
+            "field": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "operation",
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "aggregate"
+            },
+            "operation": {
+              "const": "sum"
+            },
+            "field": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "numerator_field",
+            "denominator_field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "ratio_of_sums"
+            },
+            "numerator_field": {
+              "type": "string"
+            },
+            "denominator_field": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

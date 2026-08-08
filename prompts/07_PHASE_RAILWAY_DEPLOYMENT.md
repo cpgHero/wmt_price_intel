@@ -1,0 +1,1 @@
+Prepare production Railway deployment for web, api, worker, scheduler, PostgreSQL, and S3-compatible bucket. Add Dockerfiles/build configs, health/readiness checks, migrations, private networking assumptions, signed artifact downloads, structured logs, and rollout checklist. Start worker scaling at one replica and document safe gradual scaling with shared provider limits.

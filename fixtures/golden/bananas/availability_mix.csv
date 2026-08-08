@@ -1,0 +1,26 @@
+retailer,variety,organic,unit,rows,zips,products,median_price
+Walmart,Burro Banana,False,Each,138,123,1,1.58
+Walmart,Green / Cooking Banana,False,Bunch,177,146,1,1.08
+Walmart,Green / Cooking Banana,False,Fixed Weight,6,5,1,0.97
+Walmart,Green / Cooking Banana,False,Unknown,10,5,1,3.57
+Walmart,Manzano / Apple Banana,False,Each,112,99,1,1.24
+Walmart,Manzano / Apple Banana,False,Fixed Weight,8,8,1,6.98
+Walmart,Mini / Baby Banana,False,Bunch,4,3,1,1.11
+Walmart,Plantain,False,Each,4264,3699,2,0.58
+Walmart,Red Banana,False,Each,124,113,1,1.58
+Walmart,Standard Yellow Banana,False,Each (weighted),4433,3866,1,0.2
+Walmart,Standard Yellow Banana,True,Bunch (weighted),4149,3640,1,1.74
+ALDI,Plantain,False,Each,1740,1525,1,0.65
+ALDI,Standard Yellow Banana,False,Each (weighted),2676,2416,1,0.16
+ALDI,Standard Yellow Banana,True,By Weight (~1 lb est.),2,2,1,0.59
+ALDI,Standard Yellow Banana,True,Each,11,11,1,0.24
+Amazon,Manzano / Apple Banana,False,Each,5,5,1,0.7
+Amazon,Manzano / Apple Banana,False,Unknown,5,5,1,1.3
+Amazon,Plantain,False,Each,11,11,1,0.92
+Amazon,Standard Yellow Banana,False,Bunch,883,883,2,0.99
+Amazon,Standard Yellow Banana,False,Each,571,534,4,0.21
+Amazon,Standard Yellow Banana,False,Unknown,44,44,3,0.75
+Amazon,Standard Yellow Banana,True,Bunch,866,866,3,1.49
+Amazon,Standard Yellow Banana,True,Each,527,507,2,0.33
+Amazon,Standard Yellow Banana,True,Fixed Weight,26,26,1,0.98
+Amazon,Standard Yellow Banana,True,Unknown,11,11,1,0.38

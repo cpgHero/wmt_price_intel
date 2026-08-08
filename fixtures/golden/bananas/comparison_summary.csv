@@ -1,0 +1,11 @@
+comparison,competitor,matches,unique_zips,walmart_lower,competitor_lower,parity,walmart_lower_rate,competitor_lower_rate,parity_rate,median_gap,mean_gap,metric,mode
+Standard yellow banana — each price,ALDI,1464,1464,0,1464,0,0.0,1.0,0.0,-0.04000000000000001,-0.040000000000000015,$/each,Strict
+Standard yellow banana — normalized weight price,ALDI,1464,1464,0,1464,0,0.0,1.0,0.0,-0.010000000000000009,-0.010000000000000009,$/lb,Weight-normalized
+Plantain — each price,ALDI,883,883,883,0,0,1.0,0.0,0.0,0.07000000000000006,0.07000000000000006,$/each,Strict
+Standard yellow banana — each price,Amazon,485,485,273,212,0,0.5628865979381443,0.43711340206185567,0.0,0.009999999999999981,-0.0030927835051546473,$/each,Strict
+Plantain — each price,Amazon,6,6,6,0,0,1.0,0.0,0.0,0.5300000000000001,0.46666666666666684,$/each,Strict
+Organic yellow banana — normalized weight price,ALDI,1,1,0,1,0,0.0,1.0,0.0,-0.15000000000000002,-0.15000000000000002,$/lb,Weight-normalized
+Organic yellow banana — normalized weight price,Amazon,26,26,26,0,0,1.0,0.0,0.0,0.24,0.24000000000000002,$/lb,Weight-normalized
+Standard yellow banana — Amazon 4-5 count bunch vs Walmart each,Amazon,811,811,0,0,811,0.0,0.0,1.0,0.022749999999999992,0.022749999999999996,$/banana range,Count-compatible
+Organic banana bunch — package price,Amazon,741,741,0,741,0,0.0,1.0,0.0,-0.25,-0.2671524966261808,$/bunch,Package-compatible
+Organic banana bunch — estimated midpoint price per banana,Amazon,741,741,710,31,0,0.9581646423751687,0.04183535762483131,0.0,0.041111111111111154,0.03729944519418208,$/banana midpoint,Count-compatible

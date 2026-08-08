@@ -1,0 +1,32 @@
+{
+  "query": {
+    "keyword": "beef",
+    "zipcode": "10001",
+    "retailer_store_id": "473-103",
+    "retailer": "new_aldi"
+  },
+  "results": [
+    {
+      "result_position": 1,
+      "name": "Fresh 85% Lean Ground Beef",
+      "brand": "ALDI",
+      "price": "$4.49",
+      "price_regular": "$4.49",
+      "rating": null,
+      "rating_count": null,
+      "reviews_count": null,
+      "is_sponsored": false,
+      "retailer": "aldi",
+      "retailer_product_id": "0000000001234",
+      "product_identifiers": {
+        "product_id": "0000000001234"
+      },
+      "url": "https://www.aldi.us/product/example",
+      "image_primary": "https://example-cdn.aldi.us/product.jpg",
+      "stock_availability": true,
+      "pickup_available": true,
+      "pickup_store_id": "473-103",
+      "pickup_zipcode": "10001"
+    }
+  ]
+}

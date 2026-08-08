@@ -1,0 +1,23 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "apps/scheduler/Dockerfile",
+    "watchPatterns": [
+      "/apps/scheduler/**",
+      "/packages/python/**",
+      "/config/**",
+      "/schemas/**",
+      "/pyproject.toml",
+      "/uv.lock"
+    ]
+  },
+  "deploy": {
+    "healthcheckPath": "/health/ready",
+    "healthcheckTimeout": 180,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "overlapSeconds": 0,
+    "drainingSeconds": 30
+  }
+}

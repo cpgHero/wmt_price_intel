@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0.0",
+  "provider": "metricscart",
+  "source": "source_material/metricscart_product_details_by_zipcode_apis.csv",
+  "status": "configuration_only_response_fixtures_required",
+  "endpoints": [
+    {
+      "retailer_id": "albertsons_us",
+      "provider_retailer": "albertsons",
+      "domain": "albertsons.com",
+      "endpoint_id": "11",
+      "method": "GET",
+      "path": "/mc/albertsons/pdp/zipcode",
+      "credits_per_successful_page": 3,
+      "required_params": ["url", "zipcode", "store"],
+      "supported_params": ["url", "zipcode", "store"]
+    },
+    {
+      "retailer_id": "aldi_instacart_us",
+      "provider_retailer": "shop_aldi",
+      "domain": "shop.aldi.us",
+      "endpoint_id": "16",
+      "method": "GET",
+      "path": "/mc/shop_aldi/pdp/zipcode",
+      "credits_per_successful_page": 3,
+      "required_params": ["zipcode", "store"],
+      "supported_params": ["url", "product_id", "zipcode", "store"]
+    },
+    {
+      "retailer_id": "aldi_us",
+      "provider_retailer": "new_aldi",
+      "domain": "aldi.us",
+      "endpoint_id": "14",
+      "method": "GET",
+      "path": "/mc/new_aldi/pdp/zipcode",
+      "credits_per_successful_page": 1,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"]
+    },
+    {
+      "retailer_id": "amazon_us_same_day",
+      "provider_retailer": "amazon",
+      "domain": "amazon.com",
+      "endpoint_id": "41",
+      "method": "GET",
+      "path": "/mc/amazon/pdp/zipcode",
+      "credits_per_successful_page": 2,
+      "required_params": [],
+      "supported_params": ["product_id", "url", "zipcode"]
+    },
+    {
+      "retailer_id": "heb_us",
+      "provider_retailer": "heb",
+      "domain": "heb.com",
+      "endpoint_id": "93",
+      "method": "GET",
+      "path": "/mc/heb/pdp/zipcode",
+      "credits_per_successful_page": 1,
+      "required_params": ["zipcode", "store"],
+      "supported_params": ["url", "product_id", "zipcode", "store"]
+    },
+    {
+      "retailer_id": "kroger_us",
+      "provider_retailer": "kroger",
+      "domain": "kroger.com",
+      "endpoint_id": "105",
+      "method": "GET",
+      "path": "/mc/kroger/pdp/zipcode",
+      "credits_per_successful_page": 1,
+      "required_params": ["fulfillment_type"],
+      "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"]
+    },
+    {
+      "retailer_id": "safeway_us",
+      "provider_retailer": "safeway",
+      "domain": "safeway.com",
+      "endpoint_id": "151",
+      "method": "GET",
+      "path": "/mc/safeway/pdp/zipcode",
+      "credits_per_successful_page": 3,
+      "required_params": ["zipcode", "store"],
+      "supported_params": ["url", "product_id", "zipcode", "store"]
+    },
+    {
+      "retailer_id": "target_us",
+      "provider_retailer": "target",
+      "domain": "target.com",
+      "endpoint_id": "172",
+      "method": "GET",
+      "path": "/mc/target/pdp/zipcode",
+      "credits_per_successful_page": 3,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["product_id", "url", "zipcode", "store", "fulfillment_type"]
+    },
+    {
+      "retailer_id": "walmart_mx",
+      "provider_retailer": "walmart_mx",
+      "domain": "walmart.com.mx",
+      "endpoint_id": "189",
+      "method": "GET",
+      "path": "/mc/walmart_mx/product/zipcode",
+      "credits_per_successful_page": 1,
+      "required_params": ["zipcode"],
+      "supported_params": ["url", "product_id", "zipcode"]
+    },
+    {
+      "retailer_id": "walmart_us",
+      "provider_retailer": "walmart",
+      "domain": "walmart.com",
+      "endpoint_id": "3",
+      "method": "GET",
+      "path": "/mc/walmart/product/zipcode",
+      "credits_per_successful_page": 2,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"]
+    }
+  ]
+}

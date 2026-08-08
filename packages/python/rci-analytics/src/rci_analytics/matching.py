@@ -1,0 +1,502 @@
+"""Generic dimension, unit-price, geography, and proximity comparisons."""
+
+from __future__ import annotations
+
+import math
+import statistics
+from collections.abc import Iterable
+from decimal import Decimal
+from typing import Any
+
+from rci_analytics.models import (
+    ClassifiedOffer,
+    ComparisonSummary,
+    JsonObject,
+    MatchRecord,
+)
+from rci_analytics.product_pack import ProductPack
+
+
+def haversine_miles(
+    latitude_a: float, longitude_a: float, latitude_b: float, longitude_b: float
+) -> float:
+    radius_miles = 3958.7613
+    lat_a, lon_a, lat_b, lon_b = map(
+        math.radians, (latitude_a, longitude_a, latitude_b, longitude_b)
+    )
+    delta_lat = lat_b - lat_a
+    delta_lon = lon_b - lon_a
+    value = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+    )
+    return 2 * radius_miles * math.asin(math.sqrt(value))
+
+
+def geographic_overlap(
+    offers: Iterable[ClassifiedOffer], benchmark_id: str, competitor_id: str
+) -> set[str]:
+    benchmark = {
+        item.offer.zipcode
+        for item in offers
+        if item.in_scope
+        and item.offer.retailer_id == benchmark_id
+        and item.offer.zipcode is not None
+    }
+    competitor = {
+        item.offer.zipcode
+        for item in offers
+        if item.in_scope
+        and item.offer.retailer_id == competitor_id
+        and item.offer.zipcode is not None
+    }
+    return benchmark & competitor
+
+
+class ComparisonEngine:
+    def __init__(self, pack: ProductPack) -> None:
+        self.pack = pack
+        self._tolerance = Decimal(str(pack.document["qa_rules"].get("parity_tolerance_dollars", 0)))
+        self._unknown_values = {
+            str(definition["name"]): tuple(definition.get("unknown_values", []))
+            for definition in pack.attributes
+        }
+
+    def compare(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        competitor_id: str,
+        profile_id: str,
+    ) -> list[MatchRecord]:
+        profile = self.pack.profile(profile_id)
+        if profile["geography"] == "radius":
+            return self._radius_matches(offers, benchmark_id, competitor_id, profile)
+        if profile["geography"] != "exact_zip":
+            raise ValueError(
+                f"geography {profile['geography']!r} is not implemented for this engine"
+            )
+        return self._exact_zip_matches(offers, benchmark_id, competitor_id, profile)
+
+    def _comparison_metric(self, profile: JsonObject) -> str:
+        configured = profile.get("comparison_metric")
+        if configured:
+            return str(configured)
+        dimensions = {str(value) for value in profile["dimensions"]}
+        secondary = set(self.pack.document["normalization"].get("secondary_metrics", []))
+        for rule in self.pack.document["normalization"].get("conversion_rules", []):
+            if str(rule["from"]) not in dimensions and str(rule["to"]) in secondary:
+                return str(rule["to"])
+        return "package_price"
+
+    def _dimension_key(
+        self,
+        item: ClassifiedOffer,
+        dimensions: tuple[str, ...],
+        unknown_policy: str,
+        brand_policy: str,
+    ) -> tuple[Any, ...] | None:
+        values = tuple(item.attributes.get(name) for name in dimensions)
+        if any(value is None for value in values) and unknown_policy in {"reject", "review"}:
+            return None
+        brand = self._brand_component(item, brand_policy)
+        if brand is None:
+            return None
+        return (*values, *brand)
+
+    def _brand_component(self, item: ClassifiedOffer, brand_policy: str) -> tuple[str, ...] | None:
+        if brand_policy == "ignore_brand":
+            return ()
+        brand = item.attributes.get("brand") or item.offer.brand
+        if not brand:
+            return None
+        normalized = self._normalized_brand(str(brand))
+        if brand_policy == "same_brand":
+            return (normalized,)
+        if brand_policy == "private_label_equivalent":
+            configured = self.pack.document.get("brand_rules", {}).get("private_labels", {})
+            private_labels = configured.get(item.offer.retailer_id, [])
+            if normalized not in {self._normalized_brand(str(value)) for value in private_labels}:
+                return None
+            return ("private_label",)
+        raise ValueError(f"brand policy {brand_policy!r} is not implemented")
+
+    def _normalized_brand(self, value: str) -> str:
+        normalized = " ".join(
+            "".join(
+                character if character.isalnum() else " " for character in value.casefold()
+            ).split()
+        )
+        aliases = self.pack.document.get("brand_rules", {}).get("aliases", {})
+        for canonical, values in aliases.items():
+            candidates = [canonical, *values]
+            if normalized in {
+                " ".join(
+                    "".join(
+                        character if character.isalnum() else " "
+                        for character in str(candidate).casefold()
+                    ).split()
+                )
+                for candidate in candidates
+            }:
+                return str(canonical).casefold()
+        return normalized
+
+    @staticmethod
+    def _metric_value(item: ClassifiedOffer, metric: str) -> Decimal | None:
+        value = item.offer.price if metric == "package_price" else item.metrics.get(metric)
+        return value if value is not None and value > 0 else None
+
+    def _selected(
+        self,
+        offers: list[ClassifiedOffer],
+        retailer_id: str,
+        profile: JsonObject,
+        metric: str,
+    ) -> dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]]:
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        unknown_policy = str(profile.get("unknown_policy", "reject"))
+        brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+        selected: dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
+        for item in offers:
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or item.offer.zipcode is None
+                or not self._satisfies_constraints(item, profile)
+            ):
+                continue
+            dimension_key = self._dimension_key(item, dimensions, unknown_policy, brand_policy)
+            value = self._metric_value(item, metric)
+            if dimension_key is None or value is None:
+                continue
+            key = (item.offer.zipcode, dimension_key)
+            previous = selected.get(key)
+            if previous is None or value < previous[1]:
+                selected[key] = (item, value)
+        return selected
+
+    @staticmethod
+    def _satisfies_constraints(item: ClassifiedOffer, profile: JsonObject) -> bool:
+        return all(
+            item.attributes.get(name) in allowed
+            for name, allowed in profile.get("attribute_constraints", {}).items()
+        )
+
+    def _exact_zip_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+    ) -> list[MatchRecord]:
+        if profile.get("unknown_policy") == "wildcard_if_one_unknown":
+            return self._wildcard_exact_zip_matches(offers, benchmark_id, competitor_id, profile)
+        metric = self._comparison_metric(profile)
+        benchmark = self._selected(offers, benchmark_id, profile, metric)
+        competitor = self._selected(offers, competitor_id, profile, metric)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        matches: list[MatchRecord] = []
+        for key in sorted(benchmark.keys() & competitor.keys(), key=str):
+            benchmark_offer, benchmark_value = benchmark[key]
+            competitor_offer, competitor_value = competitor[key]
+            matches.append(
+                self._match(
+                    profile_id=str(profile["id"]),
+                    competitor_id=competitor_id,
+                    geography_key=key[0],
+                    benchmark=benchmark_offer,
+                    competitor=competitor_offer,
+                    dimensions=dimensions,
+                    metric=metric,
+                    benchmark_value=benchmark_value,
+                    competitor_value=competitor_value,
+                )
+            )
+        return matches
+
+    def _wildcard_exact_zip_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+    ) -> list[MatchRecord]:
+        metric = self._comparison_metric(profile)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        wildcard_dimensions = frozenset(
+            str(value) for value in profile.get("wildcard_dimensions", dimensions)
+        )
+        brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+        benchmark = self._eligible_by_zip(offers, benchmark_id, profile, metric)
+        competitor = self._eligible_by_zip(offers, competitor_id, profile, metric)
+        selected: dict[
+            tuple[str, tuple[Any, ...]],
+            tuple[ClassifiedOffer, Decimal, ClassifiedOffer, Decimal],
+        ] = {}
+        for zipcode in benchmark.keys() & competitor.keys():
+            for benchmark_offer, benchmark_value in benchmark[zipcode]:
+                for competitor_offer, competitor_value in competitor[zipcode]:
+                    resolved = self._compatible_dimension_key(
+                        benchmark_offer,
+                        competitor_offer,
+                        dimensions,
+                        wildcard_dimensions,
+                        brand_policy,
+                    )
+                    if resolved is None:
+                        continue
+                    key = (zipcode, resolved)
+                    candidate = (
+                        benchmark_offer,
+                        benchmark_value,
+                        competitor_offer,
+                        competitor_value,
+                    )
+                    previous = selected.get(key)
+                    if previous is None or (
+                        benchmark_value,
+                        competitor_value,
+                        benchmark_offer.offer.offer_id,
+                        competitor_offer.offer.offer_id,
+                    ) < (
+                        previous[1],
+                        previous[3],
+                        previous[0].offer.offer_id,
+                        previous[2].offer.offer_id,
+                    ):
+                        selected[key] = candidate
+        return [
+            self._match(
+                profile_id=str(profile["id"]),
+                competitor_id=competitor_id,
+                geography_key=zipcode,
+                benchmark=benchmark_offer,
+                competitor=competitor_offer,
+                dimensions=dimensions,
+                metric=metric,
+                benchmark_value=benchmark_value,
+                competitor_value=competitor_value,
+                matched_attributes={name: resolved[index] for index, name in enumerate(dimensions)},
+            )
+            for (zipcode, resolved), (
+                benchmark_offer,
+                benchmark_value,
+                competitor_offer,
+                competitor_value,
+            ) in sorted(selected.items(), key=lambda item: str(item[0]))
+        ]
+
+    def _eligible_by_zip(
+        self,
+        offers: list[ClassifiedOffer],
+        retailer_id: str,
+        profile: JsonObject,
+        metric: str,
+    ) -> dict[str, list[tuple[ClassifiedOffer, Decimal]]]:
+        selected: dict[str, list[tuple[ClassifiedOffer, Decimal]]] = {}
+        for item in offers:
+            value = self._metric_value(item, metric)
+            if (
+                item.in_scope
+                and item.offer.retailer_id == retailer_id
+                and item.offer.zipcode is not None
+                and self._satisfies_constraints(item, profile)
+                and value is not None
+            ):
+                selected.setdefault(item.offer.zipcode, []).append((item, value))
+        return selected
+
+    def _compatible_dimension_key(
+        self,
+        benchmark: ClassifiedOffer,
+        competitor: ClassifiedOffer,
+        dimensions: tuple[str, ...],
+        wildcard_dimensions: frozenset[str],
+        brand_policy: str,
+    ) -> tuple[Any, ...] | None:
+        resolved: list[Any] = []
+        for name in dimensions:
+            benchmark_value = benchmark.attributes.get(name)
+            competitor_value = competitor.attributes.get(name)
+            benchmark_unknown = self._is_unknown(name, benchmark_value)
+            competitor_unknown = self._is_unknown(name, competitor_value)
+            if name not in wildcard_dimensions:
+                if benchmark_unknown or competitor_unknown or benchmark_value != competitor_value:
+                    return None
+                resolved.append(benchmark_value)
+            elif not benchmark_unknown and not competitor_unknown:
+                if benchmark_value != competitor_value:
+                    return None
+                resolved.append(benchmark_value)
+            elif benchmark_unknown and competitor_unknown:
+                return None
+            else:
+                resolved.append(benchmark_value if not benchmark_unknown else competitor_value)
+        benchmark_brand = self._brand_component(benchmark, brand_policy)
+        competitor_brand = self._brand_component(competitor, brand_policy)
+        if benchmark_brand is None or competitor_brand is None:
+            return None
+        if benchmark_brand != competitor_brand:
+            return None
+        return (*resolved, *benchmark_brand)
+
+    def _is_unknown(self, dimension: str, value: Any) -> bool:
+        return value is None or any(
+            value == configured for configured in self._unknown_values.get(dimension, ())
+        )
+
+    def _radius_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+    ) -> list[MatchRecord]:
+        radius = float(profile["radius_miles"])
+        metric = self._comparison_metric(profile)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        unknown_policy = str(profile.get("unknown_policy", "reject"))
+        benchmark = self._selected_stores(
+            offers, benchmark_id, dimensions, unknown_policy, metric, profile
+        )
+        competitors = self._selected_stores(
+            offers, competitor_id, dimensions, unknown_policy, metric, profile
+        )
+        by_dimensions: dict[tuple[Any, ...], list[tuple[ClassifiedOffer, Decimal]]] = {}
+        for (_, dimension_key), value in benchmark.items():
+            by_dimensions.setdefault(dimension_key, []).append(value)
+        matches: list[MatchRecord] = []
+        for (store_key, dimension_key), (competitor_offer, competitor_value) in sorted(
+            competitors.items(), key=lambda item: str(item[0])
+        ):
+            latitude = competitor_offer.offer.latitude
+            longitude = competitor_offer.offer.longitude
+            if latitude is None or longitude is None:
+                continue
+            candidates: list[tuple[float, ClassifiedOffer, Decimal]] = []
+            for benchmark_offer, benchmark_value in by_dimensions.get(dimension_key, []):
+                benchmark_lat = benchmark_offer.offer.latitude
+                benchmark_lon = benchmark_offer.offer.longitude
+                if benchmark_lat is None or benchmark_lon is None:
+                    continue
+                distance = haversine_miles(latitude, longitude, benchmark_lat, benchmark_lon)
+                if distance <= radius:
+                    candidates.append((distance, benchmark_offer, benchmark_value))
+            if not candidates:
+                continue
+            distance, benchmark_offer, benchmark_value = min(
+                candidates, key=lambda value: (value[0], value[2], value[1].offer.offer_id)
+            )
+            matches.append(
+                self._match(
+                    profile_id=str(profile["id"]),
+                    competitor_id=competitor_id,
+                    geography_key=self._proximity_key(store_key, benchmark_offer),
+                    benchmark=benchmark_offer,
+                    competitor=competitor_offer,
+                    dimensions=dimensions,
+                    metric=metric,
+                    benchmark_value=benchmark_value,
+                    competitor_value=competitor_value,
+                    distance_miles=distance,
+                )
+            )
+        return matches
+
+    @staticmethod
+    def _proximity_key(store_key: str, benchmark: ClassifiedOffer) -> str:
+        benchmark_key = benchmark.offer.store_number or benchmark.offer.offer_id
+        return f"{store_key}->{benchmark_key}"
+
+    def _selected_stores(
+        self,
+        offers: list[ClassifiedOffer],
+        retailer_id: str,
+        dimensions: tuple[str, ...],
+        unknown_policy: str,
+        metric: str,
+        profile: JsonObject,
+    ) -> dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]]:
+        selected: dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
+        brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+        for item in offers:
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or not self._satisfies_constraints(item, profile)
+            ):
+                continue
+            dimension_key = self._dimension_key(item, dimensions, unknown_policy, brand_policy)
+            value = self._metric_value(item, metric)
+            if dimension_key is None or value is None:
+                continue
+            store_key = item.offer.store_number or item.offer.zipcode
+            if store_key is None:
+                continue
+            key = (store_key, dimension_key)
+            previous = selected.get(key)
+            if previous is None or value < previous[1]:
+                selected[key] = (item, value)
+        return selected
+
+    def _match(
+        self,
+        *,
+        profile_id: str,
+        competitor_id: str,
+        geography_key: str,
+        benchmark: ClassifiedOffer,
+        competitor: ClassifiedOffer,
+        dimensions: tuple[str, ...],
+        metric: str,
+        benchmark_value: Decimal,
+        competitor_value: Decimal,
+        distance_miles: float | None = None,
+        matched_attributes: JsonObject | None = None,
+    ) -> MatchRecord:
+        gap = competitor_value - benchmark_value
+        if abs(gap) <= self._tolerance:
+            winner = "parity"
+        elif gap > 0:
+            winner = "benchmark_lower"
+        else:
+            winner = "competitor_lower"
+        return MatchRecord(
+            profile_id=profile_id,
+            competitor_id=competitor_id,
+            geography_key=geography_key,
+            benchmark_offer_id=benchmark.offer.offer_id,
+            competitor_offer_id=competitor.offer.offer_id,
+            attributes=matched_attributes
+            or {name: benchmark.attributes.get(name) for name in dimensions},
+            comparison_metric=metric,
+            benchmark_value=benchmark_value,
+            competitor_value=competitor_value,
+            gap=gap,
+            winner=winner,
+            distance_miles=distance_miles,
+        )
+
+    @staticmethod
+    def summarize(matches: list[MatchRecord]) -> ComparisonSummary:
+        if not matches:
+            raise ValueError("cannot summarize an empty match set")
+        total = len(matches)
+        benchmark_lower = sum(item.winner == "benchmark_lower" for item in matches)
+        competitor_lower = sum(item.winner == "competitor_lower" for item in matches)
+        parity = sum(item.winner == "parity" for item in matches)
+        return ComparisonSummary(
+            profile_id=matches[0].profile_id,
+            competitor_id=matches[0].competitor_id,
+            matches=total,
+            unique_geographies=len({item.geography_key for item in matches}),
+            benchmark_lower=benchmark_lower,
+            competitor_lower=competitor_lower,
+            parity=parity,
+            benchmark_lower_rate=benchmark_lower / total,
+            competitor_lower_rate=competitor_lower / total,
+            parity_rate=parity / total,
+            median_gap=float(statistics.median(item.gap for item in matches)),
+        )

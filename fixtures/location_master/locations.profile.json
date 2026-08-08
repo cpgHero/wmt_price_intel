@@ -1,0 +1,930 @@
+{
+  "source_file": "locations.csv",
+  "rows": 157806,
+  "providers": 83,
+  "status_counts": {
+    "active": 157806
+  },
+  "columns": [
+    "id",
+    "created_at",
+    "Store_No",
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Address",
+    "Street",
+    "City",
+    "State",
+    "Zip_Code",
+    "County",
+    "Phone",
+    "Provider",
+    "Status",
+    "Country",
+    "mc_location_id"
+  ],
+  "normalization_rules": [
+    "Store_No and mc_location_id are strings; never cast provider/store identifiers to integers.",
+    "For USA/PR numeric ZIP values shorter than five digits, left-pad with zeros to five characters.",
+    "Retailer universe selection must include country; provider name alone is insufficient (e.g. Target includes USA and Australia).",
+    "Preserve raw values alongside normalized values for auditability."
+  ],
+  "relevant_retailers": {
+    "Walmart": {
+      "locations": 4683,
+      "unique_store_numbers": 4683,
+      "normalized_unique_zips": 4190,
+      "countries": {
+        "USA": 4683
+      }
+    },
+    "ALDI": {
+      "locations": 2627,
+      "unique_store_numbers": 2627,
+      "normalized_unique_zips": 2499,
+      "countries": {
+        "USA": 2627
+      }
+    },
+    "kroger": {
+      "locations": 2668,
+      "unique_store_numbers": 2668,
+      "normalized_unique_zips": 1072,
+      "countries": {
+        "USA": 2667,
+        "": 1
+      }
+    },
+    "Target": {
+      "locations": 2148,
+      "unique_store_numbers": 2148,
+      "normalized_unique_zips": 2079,
+      "countries": {
+        "USA": 2023,
+        "Australia": 124,
+        "": 1
+      }
+    },
+    "Safeway": {
+      "locations": 927,
+      "unique_store_numbers": 927,
+      "normalized_unique_zips": 804,
+      "countries": {
+        "USA": 927
+      }
+    },
+    "Albertsons": {
+      "locations": 753,
+      "unique_store_numbers": 753,
+      "normalized_unique_zips": 339,
+      "countries": {
+        "USA": 753
+      }
+    },
+    "H-E-B": {
+      "locations": 365,
+      "unique_store_numbers": 365,
+      "normalized_unique_zips": 295,
+      "countries": {
+        "USA": 365
+      }
+    }
+  },
+  "provider_profile": [
+    {
+      "provider": "Dollar General",
+      "rows": 20540,
+      "unique_store_numbers": 20540,
+      "raw_unique_zips": 12649,
+      "normalized_unique_zips": 12649,
+      "countries": {
+        "USA": 20540
+      }
+    },
+    {
+      "provider": "Sodastream",
+      "rows": 17114,
+      "unique_store_numbers": 17114,
+      "raw_unique_zips": 6627,
+      "normalized_unique_zips": 6627,
+      "countries": {
+        "USA": 17114
+      }
+    },
+    {
+      "provider": "CVS",
+      "rows": 9841,
+      "unique_store_numbers": 9841,
+      "raw_unique_zips": 6597,
+      "normalized_unique_zips": 6597,
+      "countries": {
+        "USA": 9841
+      }
+    },
+    {
+      "provider": "Dollar Tree",
+      "rows": 9198,
+      "unique_store_numbers": 9198,
+      "raw_unique_zips": 6794,
+      "normalized_unique_zips": 6794,
+      "countries": {
+        "USA": 9198
+      }
+    },
+    {
+      "provider": "Walgreens",
+      "rows": 8988,
+      "unique_store_numbers": 8988,
+      "raw_unique_zips": 6577,
+      "normalized_unique_zips": 6577,
+      "countries": {
+        "USA": 8980,
+        "": 8
+      }
+    },
+    {
+      "provider": "Family Dollar",
+      "rows": 7786,
+      "unique_store_numbers": 7786,
+      "raw_unique_zips": 5863,
+      "normalized_unique_zips": 5863,
+      "countries": {
+        "USA": 7786
+      }
+    },
+    {
+      "provider": "AutoZone",
+      "rows": 6778,
+      "unique_store_numbers": 6778,
+      "raw_unique_zips": 5810,
+      "normalized_unique_zips": 5810,
+      "countries": {
+        "USA": 6778
+      }
+    },
+    {
+      "provider": "O'Reilly Auto Parts",
+      "rows": 6527,
+      "unique_store_numbers": 6527,
+      "raw_unique_zips": 5745,
+      "normalized_unique_zips": 5745,
+      "countries": {
+        "USA": 6527
+      }
+    },
+    {
+      "provider": "NAPA Auto Parts",
+      "rows": 5782,
+      "unique_store_numbers": 5782,
+      "raw_unique_zips": 5390,
+      "normalized_unique_zips": 5390,
+      "countries": {
+        "USA": 5782
+      }
+    },
+    {
+      "provider": "Ace Hardware",
+      "rows": 5069,
+      "unique_store_numbers": 5069,
+      "raw_unique_zips": 4751,
+      "normalized_unique_zips": 4751,
+      "countries": {
+        "USA": 5069
+      }
+    },
+    {
+      "provider": "Walmart",
+      "rows": 4683,
+      "unique_store_numbers": 4683,
+      "raw_unique_zips": 4193,
+      "normalized_unique_zips": 4190,
+      "countries": {
+        "USA": 4683
+      }
+    },
+    {
+      "provider": "Advance Auto Parts",
+      "rows": 4511,
+      "unique_store_numbers": 4511,
+      "raw_unique_zips": 4001,
+      "normalized_unique_zips": 4001,
+      "countries": {
+        "USA": 4511
+      }
+    },
+    {
+      "provider": "Sherwin-Williams",
+      "rows": 4064,
+      "unique_store_numbers": 4064,
+      "raw_unique_zips": 3722,
+      "normalized_unique_zips": 3722,
+      "countries": {
+        "USA": 4064
+      }
+    },
+    {
+      "provider": "Publix",
+      "rows": 2946,
+      "unique_store_numbers": 2946,
+      "raw_unique_zips": 973,
+      "normalized_unique_zips": 973,
+      "countries": {
+        "USA": 2946
+      }
+    },
+    {
+      "provider": "kroger",
+      "rows": 2668,
+      "unique_store_numbers": 2668,
+      "raw_unique_zips": 1072,
+      "normalized_unique_zips": 1072,
+      "countries": {
+        "USA": 2667,
+        "": 1
+      }
+    },
+    {
+      "provider": "ALDI",
+      "rows": 2627,
+      "unique_store_numbers": 2627,
+      "raw_unique_zips": 2501,
+      "normalized_unique_zips": 2499,
+      "countries": {
+        "USA": 2627
+      }
+    },
+    {
+      "provider": "Tractor Supply",
+      "rows": 2457,
+      "unique_store_numbers": 2457,
+      "raw_unique_zips": 2443,
+      "normalized_unique_zips": 2443,
+      "countries": {
+        "USA": 2457
+      }
+    },
+    {
+      "provider": "Target",
+      "rows": 2148,
+      "unique_store_numbers": 2148,
+      "raw_unique_zips": 2079,
+      "normalized_unique_zips": 2079,
+      "countries": {
+        "USA": 2023,
+        "Australia": 124,
+        "": 1
+      }
+    },
+    {
+      "provider": "Homedepot",
+      "rows": 2146,
+      "unique_store_numbers": 2022,
+      "raw_unique_zips": 1982,
+      "normalized_unique_zips": 1982,
+      "countries": {
+        "USA": 2146
+      }
+    },
+    {
+      "provider": "PetSmart",
+      "rows": 1966,
+      "unique_store_numbers": 1966,
+      "raw_unique_zips": 1516,
+      "normalized_unique_zips": 1516,
+      "countries": {
+        "USA": 1966
+      }
+    },
+    {
+      "provider": "Sephora",
+      "rows": 1838,
+      "unique_store_numbers": 1838,
+      "raw_unique_zips": 1637,
+      "normalized_unique_zips": 1637,
+      "countries": {
+        "USA": 1838
+      }
+    },
+    {
+      "provider": "Lowes",
+      "rows": 1765,
+      "unique_store_numbers": 1765,
+      "raw_unique_zips": 1746,
+      "normalized_unique_zips": 1746,
+      "countries": {
+        "USA": 1765
+      }
+    },
+    {
+      "provider": "Rite Aid",
+      "rows": 1459,
+      "unique_store_numbers": 1459,
+      "raw_unique_zips": 1311,
+      "normalized_unique_zips": 1311,
+      "countries": {
+        "USA": 1459
+      }
+    },
+    {
+      "provider": "Petco",
+      "rows": 1400,
+      "unique_store_numbers": 1400,
+      "raw_unique_zips": 1379,
+      "normalized_unique_zips": 1379,
+      "countries": {
+        "USA": 1400
+      }
+    },
+    {
+      "provider": "Kroger Instacart",
+      "rows": 1266,
+      "unique_store_numbers": 1266,
+      "raw_unique_zips": 1022,
+      "normalized_unique_zips": 1022,
+      "countries": {
+        "USA": 1266
+      }
+    },
+    {
+      "provider": "Fastenal",
+      "rows": 1249,
+      "unique_store_numbers": 1249,
+      "raw_unique_zips": 1235,
+      "normalized_unique_zips": 1235,
+      "countries": {
+        "USA": 1249
+      }
+    },
+    {
+      "provider": "KOHL's",
+      "rows": 1181,
+      "unique_store_numbers": 1181,
+      "raw_unique_zips": 1178,
+      "normalized_unique_zips": 1178,
+      "countries": {
+        "USA": 1181
+      }
+    },
+    {
+      "provider": "Food Lion",
+      "rows": 1114,
+      "unique_store_numbers": 1114,
+      "raw_unique_zips": 788,
+      "normalized_unique_zips": 788,
+      "countries": {
+        "USA": 1114
+      }
+    },
+    {
+      "provider": "Bestbuy",
+      "rows": 1067,
+      "unique_store_numbers": 1067,
+      "raw_unique_zips": 1032,
+      "normalized_unique_zips": 1032,
+      "countries": {
+        "USA": 1067
+      }
+    },
+    {
+      "provider": "Home Hardware Canada",
+      "rows": 985,
+      "unique_store_numbers": 985,
+      "raw_unique_zips": 953,
+      "normalized_unique_zips": 953,
+      "countries": {
+        "Canada": 985
+      }
+    },
+    {
+      "provider": "Pet Supplies Plus",
+      "rows": 977,
+      "unique_store_numbers": 977,
+      "raw_unique_zips": 761,
+      "normalized_unique_zips": 761,
+      "countries": {
+        "USA": 977
+      }
+    },
+    {
+      "provider": "Staples",
+      "rows": 963,
+      "unique_store_numbers": 963,
+      "raw_unique_zips": 956,
+      "normalized_unique_zips": 956,
+      "countries": {
+        "USA": 963
+      }
+    },
+    {
+      "provider": "Safeway",
+      "rows": 927,
+      "unique_store_numbers": 927,
+      "raw_unique_zips": 804,
+      "normalized_unique_zips": 804,
+      "countries": {
+        "USA": 927
+      }
+    },
+    {
+      "provider": "Office Depot",
+      "rows": 793,
+      "unique_store_numbers": 793,
+      "raw_unique_zips": 785,
+      "normalized_unique_zips": 785,
+      "countries": {
+        "USA": 793
+      }
+    },
+    {
+      "provider": "Albertsons",
+      "rows": 753,
+      "unique_store_numbers": 753,
+      "raw_unique_zips": 339,
+      "normalized_unique_zips": 339,
+      "countries": {
+        "USA": 753
+      }
+    },
+    {
+      "provider": "Trader Joes",
+      "rows": 670,
+      "unique_store_numbers": 670,
+      "raw_unique_zips": 638,
+      "normalized_unique_zips": 638,
+      "countries": {
+        "USA": 670
+      }
+    },
+    {
+      "provider": "JCPenney",
+      "rows": 659,
+      "unique_store_numbers": 659,
+      "raw_unique_zips": 659,
+      "normalized_unique_zips": 659,
+      "countries": {
+        "USA": 659
+      }
+    },
+    {
+      "provider": "Costco",
+      "rows": 652,
+      "unique_store_numbers": 652,
+      "raw_unique_zips": 641,
+      "normalized_unique_zips": 640,
+      "countries": {
+        "USA": 652
+      }
+    },
+    {
+      "provider": "SamsClub",
+      "rows": 609,
+      "unique_store_numbers": 609,
+      "raw_unique_zips": 605,
+      "normalized_unique_zips": 605,
+      "countries": {
+        "USA": 609
+      }
+    },
+    {
+      "provider": "Sams Club Instacart",
+      "rows": 608,
+      "unique_store_numbers": 608,
+      "raw_unique_zips": 604,
+      "normalized_unique_zips": 604,
+      "countries": {
+        "USA": 608
+      }
+    },
+    {
+      "provider": "Macy's",
+      "rows": 509,
+      "unique_store_numbers": 509,
+      "raw_unique_zips": 468,
+      "normalized_unique_zips": 468,
+      "countries": {
+        "USA": 509
+      }
+    },
+    {
+      "provider": "Canadian Tire",
+      "rows": 504,
+      "unique_store_numbers": 504,
+      "raw_unique_zips": 504,
+      "normalized_unique_zips": 504,
+      "countries": {
+        "Canada": 504
+      }
+    },
+    {
+      "provider": "Sprouts",
+      "rows": 495,
+      "unique_store_numbers": 495,
+      "raw_unique_zips": 488,
+      "normalized_unique_zips": 488,
+      "countries": {
+        "USA": 495
+      }
+    },
+    {
+      "provider": "Walmart Canada",
+      "rows": 410,
+      "unique_store_numbers": 410,
+      "raw_unique_zips": 410,
+      "normalized_unique_zips": 410,
+      "countries": {
+        "Canada": 410
+      }
+    },
+    {
+      "provider": "MediaMarkt",
+      "rows": 370,
+      "unique_store_numbers": 370,
+      "raw_unique_zips": 357,
+      "normalized_unique_zips": 357,
+      "countries": {
+        "Germany": 370
+      }
+    },
+    {
+      "provider": "Bed Bath & Beyond",
+      "rows": 365,
+      "unique_store_numbers": 365,
+      "raw_unique_zips": 365,
+      "normalized_unique_zips": 365,
+      "countries": {
+        "USA": 365
+      }
+    },
+    {
+      "provider": "H-E-B",
+      "rows": 365,
+      "unique_store_numbers": 365,
+      "raw_unique_zips": 295,
+      "normalized_unique_zips": 295,
+      "countries": {
+        "USA": 365
+      }
+    },
+    {
+      "provider": "Stop & Shop",
+      "rows": 363,
+      "unique_store_numbers": 363,
+      "raw_unique_zips": 336,
+      "normalized_unique_zips": 336,
+      "countries": {
+        "USA": 363
+      }
+    },
+    {
+      "provider": "Menards",
+      "rows": 341,
+      "unique_store_numbers": 341,
+      "raw_unique_zips": 341,
+      "normalized_unique_zips": 341,
+      "countries": {
+        "USA": 341
+      }
+    },
+    {
+      "provider": "Bestbuy Canada",
+      "rows": 331,
+      "unique_store_numbers": 331,
+      "raw_unique_zips": 297,
+      "normalized_unique_zips": 297,
+      "countries": {
+        "Canada": 331
+      }
+    },
+    {
+      "provider": "ShopRite",
+      "rows": 330,
+      "unique_store_numbers": 330,
+      "raw_unique_zips": 297,
+      "normalized_unique_zips": 272,
+      "countries": {
+        "USA": 330
+      }
+    },
+    {
+      "provider": "B&Q",
+      "rows": 304,
+      "unique_store_numbers": 304,
+      "raw_unique_zips": 303,
+      "normalized_unique_zips": 303,
+      "countries": {
+        "UK": 304
+      }
+    },
+    {
+      "provider": "Total Wine & More",
+      "rows": 297,
+      "unique_store_numbers": 297,
+      "raw_unique_zips": 296,
+      "normalized_unique_zips": 296,
+      "countries": {
+        "USA": 297
+      }
+    },
+    {
+      "provider": "BJS",
+      "rows": 286,
+      "unique_store_numbers": 286,
+      "raw_unique_zips": 279,
+      "normalized_unique_zips": 279,
+      "countries": {
+        "USA": 286
+      }
+    },
+    {
+      "provider": "Meijer",
+      "rows": 278,
+      "unique_store_numbers": 278,
+      "raw_unique_zips": 272,
+      "normalized_unique_zips": 272,
+      "countries": {
+        "USA": 278
+      }
+    },
+    {
+      "provider": "Grainger",
+      "rows": 251,
+      "unique_store_numbers": 251,
+      "raw_unique_zips": 251,
+      "normalized_unique_zips": 251,
+      "countries": {
+        "USA": 251
+      }
+    },
+    {
+      "provider": "Wegmans",
+      "rows": 228,
+      "unique_store_numbers": 228,
+      "raw_unique_zips": 123,
+      "normalized_unique_zips": 109,
+      "countries": {
+        "USA": 228
+      }
+    },
+    {
+      "provider": "Weis Markets",
+      "rows": 204,
+      "unique_store_numbers": 204,
+      "raw_unique_zips": 181,
+      "normalized_unique_zips": 181,
+      "countries": {
+        "USA": 204
+      }
+    },
+    {
+      "provider": "Giant Eagle",
+      "rows": 200,
+      "unique_store_numbers": 200,
+      "raw_unique_zips": 173,
+      "normalized_unique_zips": 173,
+      "countries": {
+        "USA": 200
+      }
+    },
+    {
+      "provider": "Lidl",
+      "rows": 200,
+      "unique_store_numbers": 200,
+      "raw_unique_zips": 196,
+      "normalized_unique_zips": 196,
+      "countries": {
+        "USA": 200
+      }
+    },
+    {
+      "provider": "Jewel-Osco",
+      "rows": 189,
+      "unique_store_numbers": 189,
+      "raw_unique_zips": 160,
+      "normalized_unique_zips": 160,
+      "countries": {
+        "USA": 189
+      }
+    },
+    {
+      "provider": "Ralphs",
+      "rows": 189,
+      "unique_store_numbers": 189,
+      "raw_unique_zips": 165,
+      "normalized_unique_zips": 165,
+      "countries": {
+        "USA": 189
+      }
+    },
+    {
+      "provider": "Hannaford",
+      "rows": 188,
+      "unique_store_numbers": 188,
+      "raw_unique_zips": 179,
+      "normalized_unique_zips": 172,
+      "countries": {
+        "USA": 188
+      }
+    },
+    {
+      "provider": "Vons",
+      "rows": 188,
+      "unique_store_numbers": 188,
+      "raw_unique_zips": 170,
+      "normalized_unique_zips": 170,
+      "countries": {
+        "USA": 188
+      }
+    },
+    {
+      "provider": "Home Depot Canada",
+      "rows": 182,
+      "unique_store_numbers": 182,
+      "raw_unique_zips": 182,
+      "normalized_unique_zips": 182,
+      "countries": {
+        "Canada": 182
+      }
+    },
+    {
+      "provider": "Leroy Merlin",
+      "rows": 147,
+      "unique_store_numbers": 147,
+      "raw_unique_zips": 145,
+      "normalized_unique_zips": 145,
+      "countries": {
+        "France": 147
+      }
+    },
+    {
+      "provider": "Tommy Hilfiger",
+      "rows": 145,
+      "unique_store_numbers": 145,
+      "raw_unique_zips": 136,
+      "normalized_unique_zips": 136,
+      "countries": {
+        "USA": 145
+      }
+    },
+    {
+      "provider": "Fred Meyer",
+      "rows": 136,
+      "unique_store_numbers": 136,
+      "raw_unique_zips": 128,
+      "normalized_unique_zips": 128,
+      "countries": {
+        "USA": 136
+      }
+    },
+    {
+      "provider": "King Soopers",
+      "rows": 125,
+      "unique_store_numbers": 125,
+      "raw_unique_zips": 84,
+      "normalized_unique_zips": 84,
+      "countries": {
+        "USA": 125
+      }
+    },
+    {
+      "provider": "Calvin Klein",
+      "rows": 122,
+      "unique_store_numbers": 122,
+      "raw_unique_zips": 105,
+      "normalized_unique_zips": 105,
+      "countries": {
+        "USA": 122
+      }
+    },
+    {
+      "provider": "Real Canadian Superstore",
+      "rows": 119,
+      "unique_store_numbers": 119,
+      "raw_unique_zips": 119,
+      "normalized_unique_zips": 119,
+      "countries": {
+        "Canada": 119
+      }
+    },
+    {
+      "provider": "Food 4 Less",
+      "rows": 103,
+      "unique_store_numbers": 103,
+      "raw_unique_zips": 97,
+      "normalized_unique_zips": 97,
+      "countries": {
+        "USA": 103
+      }
+    },
+    {
+      "provider": "Pick 'n Save",
+      "rows": 82,
+      "unique_store_numbers": 82,
+      "raw_unique_zips": 71,
+      "normalized_unique_zips": 71,
+      "countries": {
+        "USA": 82
+      }
+    },
+    {
+      "provider": "London Drugs",
+      "rows": 80,
+      "unique_store_numbers": 80,
+      "raw_unique_zips": 80,
+      "normalized_unique_zips": 80,
+      "countries": {
+        "Canada": 80
+      }
+    },
+    {
+      "provider": "GIANT",
+      "rows": 77,
+      "unique_store_numbers": 77,
+      "raw_unique_zips": 69,
+      "normalized_unique_zips": 69,
+      "countries": {
+        "USA": 77
+      }
+    },
+    {
+      "provider": "Tom Thumb",
+      "rows": 71,
+      "unique_store_numbers": 71,
+      "raw_unique_zips": 64,
+      "normalized_unique_zips": 64,
+      "countries": {
+        "USA": 71
+      }
+    },
+    {
+      "provider": "Dillons",
+      "rows": 65,
+      "unique_store_numbers": 65,
+      "raw_unique_zips": 47,
+      "normalized_unique_zips": 47,
+      "countries": {
+        "USA": 65
+      }
+    },
+    {
+      "provider": "QFC",
+      "rows": 59,
+      "unique_store_numbers": 59,
+      "raw_unique_zips": 54,
+      "normalized_unique_zips": 54,
+      "countries": {
+        "USA": 59
+      }
+    },
+    {
+      "provider": "Loblaws",
+      "rows": 48,
+      "unique_store_numbers": 48,
+      "raw_unique_zips": 48,
+      "normalized_unique_zips": 48,
+      "countries": {
+        "Canada": 48
+      }
+    },
+    {
+      "provider": "Costco UK",
+      "rows": 29,
+      "unique_store_numbers": 29,
+      "raw_unique_zips": 29,
+      "normalized_unique_zips": 29,
+      "countries": {
+        "UK": 29
+      }
+    },
+    {
+      "provider": "Randalls",
+      "rows": 27,
+      "unique_store_numbers": 27,
+      "raw_unique_zips": 26,
+      "normalized_unique_zips": 26,
+      "countries": {
+        "USA": 27
+      }
+    },
+    {
+      "provider": "Foods Co",
+      "rows": 20,
+      "unique_store_numbers": 20,
+      "raw_unique_zips": 20,
+      "normalized_unique_zips": 20,
+      "countries": {
+        "USA": 20
+      }
+    },
+    {
+      "provider": "Carrs",
+      "rows": 10,
+      "unique_store_numbers": 10,
+      "raw_unique_zips": 9,
+      "normalized_unique_zips": 9,
+      "countries": {
+        "USA": 10
+      }
+    }
+  ]
+}

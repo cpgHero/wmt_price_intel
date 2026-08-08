@@ -1,0 +1,30 @@
+OK schema examples/collection-definition.strawberries.json
+OK schema examples/analysis-result.strawberries.json
+OK schema product-packs/fresh_bananas.json
+OK schema product-packs/fresh_fluid_milk.json
+OK schema product-packs/fresh_shell_eggs.json
+OK schema product-packs/fresh_strawberries.json
+OK location row count
+OK provider count
+OK Walmart location count
+OK Walmart normalized ZIP count
+OK ALDI location count
+OK schema fixtures/golden/benchmarks.json
+OK golden fresh_shell_eggs.total_strict_matches: actual=5155 expected=5155 tol=5
+OK golden fresh_shell_eggs.overall_strict_walmart_lower_rate: actual=0.74684772066 expected=0.74684772066 tol=0.001
+OK golden fresh_shell_eggs.aldi_strict_competitor_lower_rate: actual=0.552504038772 expected=0.552504038772 tol=0.002
+OK golden fresh_fluid_milk.source_rows_total: actual=348980 expected=348980 tol=0
+OK golden fresh_fluid_milk.aldi_private_label_walmart_lower_rate: actual=0.596220876903 expected=0.596220876903 tol=0.002
+OK golden fresh_fluid_milk.amazon_same_brand_parity_rate: actual=0.354427182013 expected=0.354427182013 tol=0.002
+OK golden fresh_fluid_milk.amazon_private_label_competitor_lower_rate: actual=0.529046203729 expected=0.529046203729 tol=0.002
+OK golden fresh_bananas.source_rows_total: actual=168440 expected=168440 tol=0
+OK golden fresh_bananas.aldi_standard_each_gap: actual=-0.04 expected=-0.04 tol=0.01
+OK golden fresh_bananas.aldi_standard_per_lb_gap: actual=-0.01 expected=-0.01 tol=0.01
+OK golden fresh_bananas.amazon_standard_each_walmart_lower_rate: actual=0.562886597938 expected=0.562886597938 tol=0.002
+OK golden fresh_strawberries.source_rows_total: actual=297443 expected=297443 tol=0
+OK golden fresh_strawberries.aldi_all_strict_walmart_lower_rate: actual=0.999639769452 expected=0.999639769452 tol=0.0005
+OK golden fresh_strawberries.amazon_1lb_conventional_competitor_lower_rate: actual=0.693650793651 expected=0.693650793651 tol=0.002
+OK golden fresh_strawberries.amazon_2lb_conventional_walmart_lower_rate: actual=0.941649899396 expected=0.941649899396 tol=0.002
+OK golden fresh_strawberries.amazon_1lb_organic_parity_rate: actual=0.702331961591 expected=0.702331961591 tol=0.002
+OK golden fresh_strawberries.aldi_10mi_walmart_lower_count: actual=5236 expected=5236 tol=0
+HANDOFF_VALIDATION_PASSED

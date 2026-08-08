@@ -1,0 +1,28 @@
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad=0.25, nodesep=0.35, ranksep=0.55];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=10, color="#9AA8B5", fillcolor="#F7F9FB", fontcolor="#1F2937", margin="0.15,0.08"];
+  edge [color="#778899", arrowsize=0.7, penwidth=1.2];
+
+  user [label="Retail Analyst / Leadership", fillcolor="#EAF4FB", color="#0071CE"];
+  web [label="Next.js Web App\nCollection Wizard • Run Monitor • Analysis Workspace", fillcolor="#EAF4FB", color="#0071CE"];
+  api [label="FastAPI Control Plane\nDefinitions • Costs • Runs • Results • Signed Artifacts", fillcolor="#EAF4FB", color="#0071CE"];
+  pg [label="PostgreSQL Control Plane\nLocations • Durable Queue • Shared Rate Limits • Metadata", fillcolor="#FFF6D6", color="#D39E00"];
+  worker [label="Python Worker Replicas\nCollect • Normalize • Classify • Match • Analyze • Export", fillcolor="#EAF4FB", color="#0071CE"];
+  bucket [label="Railway S3-Compatible Bucket\nRaw JSON.GZ • Parquet • HTML • XLSX • ZIP", fillcolor="#FFF6D6", color="#D39E00"];
+  mc [label="MetricsCart APIs\nWalmart • ALDI • Amazon Same Day • Later Retailers", fillcolor="#F3F4F6"];
+  packs [label="Versioned Product Packs\nEggs • Milk • Bananas • Strawberries • Future", fillcolor="#F3F4F6"];
+  ai [label="Bounded AI Layer\nClassification Fallback • QA • Insights • Narrative", fillcolor="#F3F4F6"];
+  result [label="Canonical AnalysisResult\nSingle Source for UI • HTML • Excel • Email • Alerts", fillcolor="#E7F8EF", color="#2E8B57"];
+
+  user -> web -> api -> pg;
+  pg -> worker [label=" claim tasks / leases", fontname="Arial", fontsize=8];
+  worker -> mc [label=" shared permit", fontsize=8];
+  mc -> worker;
+  worker -> bucket [label=" immutable artifacts", fontsize=8];
+  packs -> worker;
+  ai -> worker [style=dashed];
+  worker -> result;
+  result -> pg [label=" summary + provenance", fontsize=8];
+  result -> web;
+  result -> bucket [label=" rendered outputs", fontsize=8];
+}

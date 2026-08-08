@@ -1,0 +1,20 @@
+[project]
+name = "rci-automation"
+version = "0.1.0"
+description = "Schedules, historical comparisons, evidence-backed alerts, and email delivery."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-collections",
+  "rci-contracts",
+  "rci-results",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-collections = { workspace = true }
+rci-contracts = { workspace = true }
+rci-results = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

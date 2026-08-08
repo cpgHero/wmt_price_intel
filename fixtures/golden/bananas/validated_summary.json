@@ -1,0 +1,95 @@
+{
+  "raw_rows": {
+    "Walmart": 96994,
+    "ALDI": 4429,
+    "Amazon": 67017,
+    "total": 168440
+  },
+  "collection_window": {
+    "Walmart": [
+      "2026-08-07 02:47:10.792506",
+      "2026-08-07 03:54:49.528372"
+    ],
+    "ALDI": [
+      "2026-08-07 04:25:02.370415",
+      "2026-08-07 05:07:34.714851"
+    ],
+    "Amazon": [
+      "2026-08-07 03:56:21.025000",
+      "2026-08-07 06:30:54.432000"
+    ]
+  },
+  "scorecard": [
+    {
+      "retailer": "Walmart",
+      "raw_rows": 96994,
+      "collected_zips": 4147,
+      "collected_stores": 4597,
+      "fresh_rows": 13425,
+      "fresh_zips": 3867,
+      "fresh_stores": 4296,
+      "fresh_products": 12,
+      "fresh_zip_rate": 0.9324813117916566,
+      "organic_zips": 3640,
+      "plantain_zips": 3699,
+      "positive_price_rate": 1.0,
+      "overlap_with_walmart": 3867,
+      "explicit_same_day_rows": 0,
+      "explicit_same_day_zips": 0
+    },
+    {
+      "retailer": "ALDI",
+      "raw_rows": 4429,
+      "collected_zips": 2418,
+      "collected_stores": 2537,
+      "fresh_rows": 4429,
+      "fresh_zips": 2418,
+      "fresh_stores": 2537,
+      "fresh_products": 4,
+      "fresh_zip_rate": 1.0,
+      "organic_zips": 13,
+      "plantain_zips": 1525,
+      "positive_price_rate": 1.0,
+      "overlap_with_walmart": 1465,
+      "explicit_same_day_rows": 0,
+      "explicit_same_day_zips": 0
+    },
+    {
+      "retailer": "Amazon",
+      "raw_rows": 67017,
+      "collected_zips": 4183,
+      "collected_stores": 0,
+      "fresh_rows": 2949,
+      "fresh_zips": 1450,
+      "fresh_stores": 0,
+      "fresh_products": 19,
+      "fresh_zip_rate": 0.34664116662682287,
+      "organic_zips": 1324,
+      "plantain_zips": 11,
+      "positive_price_rate": 0.9993218040013564,
+      "overlap_with_walmart": 1319,
+      "explicit_same_day_rows": 100,
+      "explicit_same_day_zips": 62
+    }
+  ],
+  "key_findings": {
+    "aldi_standard_each_gap": -0.04,
+    "aldi_standard_per_lb_gap": -0.01,
+    "aldi_plantain_gap": 0.07,
+    "amazon_standard_each_matches": 485,
+    "amazon_standard_each_walmart_lower_rate": 0.5628865979381443,
+    "amazon_standard_each_amazon_lower_rate": 0.43711340206185567,
+    "amazon_standard_each_median_gap": 0.01,
+    "amazon_standard_bunch_matches": 811,
+    "amazon_standard_bunch_per_each_range": [
+      0.198,
+      0.2475
+    ],
+    "amazon_organic_bunch_matches": 741,
+    "amazon_organic_bunch_package_gap": -0.25,
+    "amazon_organic_bunch_midpoint_gap": 0.041111111111111154,
+    "amazon_organic_bunch_walmart_midpoint_lower_rate": 0.9581646423751687,
+    "amazon_organic_weight_matches": 26,
+    "amazon_organic_weight_gap": 0.24
+  }
+}

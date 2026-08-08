@@ -1,0 +1,27 @@
+{
+  "name": "retail-competitive-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": "24.18.0",
+    "pnpm": "11.20.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "contracts:generate": "pnpm --filter @rci/contracts generate",
+    "contracts:check": "pnpm --filter @rci/contracts check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm --filter @rci/web test:e2e",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.13",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

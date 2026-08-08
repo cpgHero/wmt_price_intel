@@ -1,0 +1,5 @@
+﻿segment,matches,aldi_stores,walmart_stores,walmart_lower,aldi_lower,parity,walmart_lower_rate,aldi_lower_rate,parity_rate,median_gap,median_distance_miles
+All validated ALDI store-segment matches within 10 miles,5237,2476,1873,5236,1,0,0.9998090509833875,0.00019094901661256445,0.0,0.52,1.4141048784781725
+Conventional whole strawberries — 1 lb,2413,2413,1690,2412,1,0,0.9995855781185247,0.0004144218814753419,0.0,0.16999999999999993,1.340246293712767
+Organic whole strawberries — 1 lb,2291,2291,1543,2291,0,0,1.0,0.0,0.0,0.52,1.5483236138935217
+Conventional whole strawberries — 2 lb,533,533,349,533,0,0,1.0,0.0,0.0,1.4700000000000006,1.2662175366503161

@@ -1,0 +1,4 @@
+﻿retailer,raw_rows,collected_zips,collected_stores,fresh_offer_rows,fresh_zips,fresh_stores,fresh_products,fresh_zip_rate,positive_price_rate,conventional_1lb_zips,conventional_2lb_zips,organic_1lb_zips,organic_any_zips,walmart_fresh_overlap_zips,explicit_same_day_rows,explicit_same_day_zips,collection_start,collection_end
+Walmart,192681,4146,4596,14951,3688,4074,9,0.8895320791123975,1.0,3318,3222,3055,3055,3688,0,0,2026-08-07T02:36:08.670331,2026-08-07T03:40:01.512923
+ALDI,37940,2473,2596,5767,2472,2595,4,0.9995956328346138,1.0,2472,548,2471,2471,1435,0,0,2026-08-07T04:25:40.403917,2026-08-07T05:12:25.058762
+Amazon,66822,4167,0,2527,1266,0,10,0.30381569474442044,1.0,811,650,999,1006,1099,66,29,2026-08-07T11:57:25.257Z,2026-08-07T15:20:43.622Z

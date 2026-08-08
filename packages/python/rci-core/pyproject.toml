@@ -1,0 +1,10 @@
+[project]
+name = "rci-core"
+version = "0.1.0"
+description = "Shared runtime primitives for Retail Competitive Intelligence."
+requires-python = ">=3.12,<3.15"
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+

@@ -1,0 +1,34 @@
+{
+  "id": "amazon-1lb-pressure",
+  "name": "Amazon becomes materially lower on conventional 1 lb",
+  "enabled": true,
+  "scope": {
+    "product_pack_ids": [
+      "fresh_strawberries"
+    ],
+    "collection_definition_ids": [
+      "strawberries_aug2026"
+    ]
+  },
+  "metric": {
+    "path": [
+      "comparisons"
+    ],
+    "where": {
+      "competitor_id": "amazon_us_same_day",
+      "segment_id": "conventional_1lb"
+    },
+    "field": "competitor_lower_rate"
+  },
+  "condition": {
+    "operator": "gt",
+    "threshold": 0.5,
+    "change_mode": "absolute"
+  },
+  "cooldown_minutes": 1440,
+  "delivery": {
+    "email_recipients": [
+      "pricing-leadership@example.com"
+    ]
+  }
+}

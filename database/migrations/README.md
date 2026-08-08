@@ -1,0 +1,14 @@
+# Database migrations
+
+Alembic owns the executable migration history. The supplied `database/001_control_plane.sql`,
+`002_seed_retailers.sql`, and `003_queue_claim_reference.sql` remain immutable design references.
+Later phases translate those references into reviewable, reversible Alembic revisions.
+
+The foundation revision intentionally creates no domain tables. `0002_location_master` implements
+the retailer, alias, location, and import-status portion of the supplied control-plane reference.
+`0003_collection_control_plane` adds versioned collection definitions, collection runs, and the
+durable leased task queue. `0004_metricscart_data_plane` adds shared provider-limit state and
+immutable object-artifact metadata. Later gated phases translate the remaining tables in dependency
+order. `0005_product_packs` adds immutable, schema-validated Product Pack versions.
+`0006_results_delivery` adds immutable AnalysisResult records, validation issues, report
+artifact links, and audit events.

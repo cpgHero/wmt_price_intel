@@ -1,0 +1,20 @@
+[project]
+name = "rci-providers"
+version = "0.1.0"
+description = "MetricsCart client, retailer adapters, shared limiting, and raw evidence storage."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "boto3==1.43.53",
+  "httpx==0.28.1",
+  "rci-collections",
+  "rci-db",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-collections = { workspace = true }
+rci-db = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

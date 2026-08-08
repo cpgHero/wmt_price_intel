@@ -1,0 +1,68 @@
+﻿retailer,segment,count,size,color,grade,organic,housing,matches,walmart_lower,competitor_lower,parity,walmart_lower_rate,competitor_lower_rate,median_unit_gap,mean_unit_gap
+albertsons.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,157,157,0,0,1.0,0.0,4.329999999999999,4.145286624203821
+albertsons.com,Conventional/Unspecified | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Conventional/Unspecified,138,138,0,0,1.0,0.0,0.02999999999999936,0.6821739130434779
+albertsons.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 18 count,18,Large,Brown,Unknown,0,Cage-Free,115,115,0,0,1.0,0.0,4.04,3.9704347826086956
+albertsons.com,Cage-Free | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Cage-Free,100,100,0,0,1.0,0.0,5.52,5.011699999999999
+albertsons.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Conventional/Unspecified,58,58,0,0,1.0,0.0,2.5200000000000005,2.5200000000000005
+albertsons.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Conventional/Unspecified,56,56,0,0,1.0,0.0,2.546666666666667,2.546666666666667
+albertsons.com,Cage-Free | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Cage-Free,40,40,0,0,1.0,0.0,4.213333333333334,3.7000000000000006
+albertsons.com,Free-Range | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Free-Range,32,0,32,0,0.0,1.0,-2.2700000000000005,-2.645625
+albertsons.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 24 count,24,Large,White,Unknown,0,Conventional/Unspecified,26,0,26,0,0.0,1.0,-0.23500000000000032,-0.23500000000000032
+albertsons.com,Conventional/Unspecified | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Conventional/Unspecified,24,24,0,0,1.0,0.0,6.15,6.15
+albertsons.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 12 count,12,Extra Large,White,Unknown,0,Conventional/Unspecified,16,16,0,0,1.0,0.0,2.33,2.0425
+albertsons.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 18 count,18,Extra Large,White,Unknown,0,Conventional/Unspecified,12,12,0,0,1.0,0.0,2.5733333333333333,2.5733333333333333
+albertsons.com,Conventional/Unspecified | Conventional | Large | Unknown | Grade Unknown | 60 count,60,Large,Unknown,Unknown,0,Conventional/Unspecified,2,0,2,0,0.0,1.0,-0.13600000000000034,-0.13600000000000034
+albertsons.com,Conventional/Unspecified | Conventional | Jumbo | Unknown | Grade A | 12 count,12,Jumbo,Unknown,A,0,Conventional/Unspecified,1,1,0,0,1.0,0.0,0.1499999999999999,0.1499999999999999
+aldi.us,Pasture-Raised | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Pasture-Raised,1140,554,586,0,0.48596491228070177,0.5140350877192983,-3.5099999999999993,-1.702210526315789
+aldi.us,Free-Range | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Free-Range,74,0,74,0,0.0,1.0,-0.8699999999999997,-0.8699999999999997
+aldi.us,Conventional/Unspecified | Conventional | Large | Unknown | Grade A | 12 count,12,Large,Unknown,A,0,Conventional/Unspecified,24,0,24,0,0.0,1.0,-0.020000000000000018,-0.020000000000000018
+amazon.com,Pasture-Raised | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Pasture-Raised,551,249,246,56,0.4519056261343013,0.44646098003629764,0.0,-0.8270598911070781
+amazon.com,Free-Range | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Free-Range,84,84,0,0,1.0,0.0,0.8499999999999996,0.8302380952380949
+amazon.com,Cage-Free | Conventional | Large | White | Grade AA | 6 count,6,Large,White,AA,0,Cage-Free,82,82,0,0,1.0,0.0,0.8600000000000001,0.8497560975609757
+amazon.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,78,78,0,0,1.0,0.0,2.33,2.601794871794872
+amazon.com,Free-Range | Organic | Large | Brown | Grade Unknown | 18 count,18,Large,Brown,Unknown,1,Free-Range,34,34,0,0,1.0,0.0,0.11333333333333329,0.13294117647058817
+amazon.com,Conventional/Unspecified | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Conventional/Unspecified,32,28,4,0,0.875,0.125,1.0299999999999994,0.6524999999999994
+amazon.com,Free-Range | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Free-Range,31,0,31,0,0.0,1.0,-0.33000000000000007,-0.33000000000000007
+amazon.com,Conventional/Unspecified | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Conventional/Unspecified,3,2,1,0,0.6666666666666666,0.3333333333333333,1.46,0.7933333333333333
+gianteagle.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Conventional/Unspecified,56,56,0,0,1.0,0.0,0.020000000000000018,0.020000000000000018
+gianteagle.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Conventional/Unspecified,55,55,0,0,1.0,0.0,0.01333333333333342,0.050909090909090994
+gianteagle.com,Conventional/Unspecified | Conventional | Jumbo | White | Grade Unknown | 12 count,12,Jumbo,White,Unknown,0,Conventional/Unspecified,54,54,0,0,1.0,0.0,0.24999999999999978,0.24999999999999978
+gianteagle.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,52,52,0,0,1.0,0.0,2.13,2.0607692307692305
+gianteagle.com,Conventional/Unspecified | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Conventional/Unspecified,51,0,51,0,0.0,1.0,-0.2699999999999996,-0.2699999999999996
+gianteagle.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 12 count,12,Extra Large,White,Unknown,0,Conventional/Unspecified,48,46,2,0,0.9583333333333334,0.041666666666666664,2.130000000000001,2.0341666666666676
+gianteagle.com,Free-Range | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Free-Range,6,0,6,0,0.0,1.0,-0.7700000000000014,-0.7700000000000014
+heb.com,Free-Range | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Free-Range,59,59,0,0,1.0,0.0,0.5800000000000001,0.5800000000000001
+kroger.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,21,21,0,0,1.0,0.0,3.13,3.13
+kroger.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Conventional/Unspecified,19,19,0,0,1.0,0.0,2.8200000000000003,2.8200000000000003
+kroger.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 12 count,12,Extra Large,White,Unknown,0,Conventional/Unspecified,9,9,0,0,1.0,0.0,3.13,3.13
+kroger.com,Conventional/Unspecified | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Conventional/Unspecified,8,8,0,0,1.0,0.0,0.02999999999999936,0.02999999999999936
+meijer.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,143,143,0,0,1.0,0.0,3.63,3.63
+meijer.com,Cage-Free | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Cage-Free,54,54,0,0,1.0,0.0,3.2200000000000006,3.2200000000000006
+meijer.com,Conventional/Unspecified | Conventional | Large | Unknown | Grade A | 12 count,12,Large,Unknown,A,0,Conventional/Unspecified,2,0,2,0,0.0,1.0,-0.08000000000000007,-0.08000000000000007
+safeway.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,233,233,0,0,1.0,0.0,2.829999999999999,2.829999999999999
+safeway.com,Cage-Free | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Cage-Free,210,210,0,0,1.0,0.0,4.02,3.4077619047619043
+safeway.com,Conventional/Unspecified | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Conventional/Unspecified,136,131,5,0,0.9632352941176471,0.03676470588235294,0.02999999999999936,-0.0097058823529418
+safeway.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 18 count,18,Large,Brown,Unknown,0,Cage-Free,128,128,0,0,1.0,0.0,2.706666666666666,2.706666666666666
+safeway.com,Cage-Free | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Cage-Free,122,122,0,0,1.0,0.0,3.546666666666667,3.330273224043716
+safeway.com,Free-Range | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Free-Range,107,0,107,0,0.0,1.0,-1.6499999999999995,-2.0322429906542054
+safeway.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Conventional/Unspecified,27,27,0,0,1.0,0.0,3.12,3.12
+safeway.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Conventional/Unspecified,26,26,0,0,1.0,0.0,3.080000000000001,3.080000000000001
+safeway.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 12 count,12,Extra Large,White,Unknown,0,Conventional/Unspecified,23,23,0,0,1.0,0.0,3.13,2.73
+safeway.com,Conventional/Unspecified | Conventional | Jumbo | White | Grade Unknown | 12 count,12,Jumbo,White,Unknown,0,Conventional/Unspecified,19,19,0,0,1.0,0.0,3.6499999999999995,3.6499999999999995
+safeway.com,Cage-Free | Conventional | Large | Unknown | Grade Unknown | 12 count,12,Large,Unknown,Unknown,0,Cage-Free,8,8,0,0,1.0,0.0,1.3100000000000005,1.3100000000000005
+safeway.com,Conventional/Unspecified | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Conventional/Unspecified,3,3,0,0,1.0,0.0,5.6499999999999995,5.6499999999999995
+shoprite.com,Cage-Free | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Cage-Free,70,70,0,0,1.0,0.0,1.83,1.83
+shoprite.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 18 count,18,Extra Large,White,Unknown,0,Conventional/Unspecified,58,58,0,0,1.0,0.0,2.5733333333333333,1.9854022988505746
+shoprite.com,Conventional/Unspecified | Conventional | Extra Large | White | Grade Unknown | 12 count,12,Extra Large,White,Unknown,0,Conventional/Unspecified,56,56,0,0,1.0,0.0,2.63,1.9317857142857144
+shoprite.com,Conventional/Unspecified | Conventional | Jumbo | White | Grade Unknown | 12 count,12,Jumbo,White,Unknown,0,Conventional/Unspecified,54,54,0,0,1.0,0.0,2.95,2.95
+shoprite.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Conventional/Unspecified,51,51,0,0,1.0,0.0,0.52,0.52
+shoprite.com,Free-Range | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Free-Range,50,50,0,0,1.0,0.0,0.049999999999998934,0.049999999999998934
+shoprite.com,Free-Range | Conventional | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,0,Free-Range,45,1,44,0,0.022222222222222223,0.9777777777777777,-0.7700000000000014,-0.736666666666668
+shoprite.com,Conventional/Unspecified | Conventional | Large | White | Grade Unknown | 18 count,18,Large,White,Unknown,0,Conventional/Unspecified,35,35,0,0,1.0,0.0,2.546666666666667,2.546666666666667
+shoprite.com,Cage-Free | Conventional | Large | White | Grade Unknown | 12 count,12,Large,White,Unknown,0,Cage-Free,11,11,0,0,1.0,0.0,4.02,4.02
+target.com,Free-Range | Conventional | Large | Brown | Grade A | 12 count,12,Large,Brown,A,0,Free-Range,26,26,0,0,1.0,0.0,1.4700000000000006,1.4700000000000006
+target.com,Cage-Free | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Cage-Free,7,7,0,0,1.0,0.0,5.02,5.02
+target.com,Cage-Free | Conventional | Large | White | Grade A | 12 count,12,Large,White,A,0,Cage-Free,1,1,0,0,1.0,0.0,1.31,1.31
+wegmans.com,Cage-Free | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Cage-Free,50,50,0,0,1.0,0.0,1.02,1.02
+wegmans.com,Free-Range | Organic | Large | Brown | Grade Unknown | 12 count,12,Large,Brown,Unknown,1,Free-Range,44,44,0,0,1.0,0.0,0.049999999999998934,0.0636363636363626
+wegmans.com,Conventional/Unspecified | Conventional | Large | Unknown | Grade AA | 18 count,18,Large,Unknown,AA,0,Conventional/Unspecified,8,2,6,0,0.25,0.75,-0.7600000000000002,-0.5333333333333335

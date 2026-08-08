@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/normalized-offer.schema.json",
+  "title": "Normalized Retail Offer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "collection_run_id",
+    "task_id",
+    "provider",
+    "retailer_id",
+    "page",
+    "result_position",
+    "product",
+    "price",
+    "availability",
+    "location",
+    "collected_at"
+  ],
+  "properties": {
+    "collection_run_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "retailer_id": {
+      "type": "string"
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "result_position": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "collected_at": {
+      "type": "string"
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zipcode"
+      ],
+      "properties": {
+        "retailer_location_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "store_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zipcode": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "longitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "country": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "retailer_product_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "brand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retailer_product_id": {
+          "type": "string"
+        },
+        "identifiers": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_primary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_sponsored": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rating": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rating_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reviews_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current",
+        "currency"
+      ],
+      "properties": {
+        "raw": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "regular": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "discounted": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": "string",
+          "default": "USD"
+        }
+      }
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stock_available": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pickup_available": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "pickup_store_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup_zipcode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup_address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shipping_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shipping_delivery_zipcode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shipping_expected_delivery_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup_extras": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "shipping_extras": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "raw_extra": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

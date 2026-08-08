@@ -1,0 +1,136 @@
+{
+  "source_rows_total": 348980,
+  "retailer_stats": {
+    "Walmart": {
+      "raw_rows": 240779,
+      "collected_zips": 4146,
+      "collected_stores": 4596,
+      "qual_rows": 191061,
+      "fresh_zips": 4146,
+      "fresh_stores": 4596,
+      "fresh_products": 654,
+      "structured_rows": 185178,
+      "price_capture": 1.0,
+      "explicit_same_day_rows": 0,
+      "explicit_same_day_zips": 0
+    },
+    "ALDI": {
+      "raw_rows": 41321,
+      "collected_zips": 2472,
+      "collected_stores": 2595,
+      "qual_rows": 41321,
+      "fresh_zips": 2472,
+      "fresh_stores": 2595,
+      "fresh_products": 18,
+      "structured_rows": 38596,
+      "price_capture": 1.0,
+      "explicit_same_day_rows": 0,
+      "explicit_same_day_zips": 0
+    },
+    "Amazon": {
+      "raw_rows": 66880,
+      "collected_zips": 4166,
+      "collected_stores": 0,
+      "qual_rows": 29390,
+      "fresh_zips": 3411,
+      "fresh_stores": 0,
+      "fresh_products": 224,
+      "structured_rows": 29140,
+      "price_capture": 0.9011568560734944,
+      "explicit_same_day_rows": 1408,
+      "explicit_same_day_zips": 174
+    }
+  },
+  "fresh_zip_overlap": {
+    "ALDI": 1572,
+    "Amazon": 3379
+  },
+  "comparisons": {
+    "ALDI_same_brand": {
+      "competitor": "ALDI",
+      "comparison_mode": "same_brand",
+      "matches": 0,
+      "unique_zips": 0,
+      "walmart_lower": 0,
+      "competitor_lower": 0,
+      "parity": 0,
+      "walmart_lower_rate": null,
+      "competitor_lower_rate": null,
+      "parity_rate": null,
+      "median_gap_per_gallon": null,
+      "mean_gap_per_gallon": null
+    },
+    "ALDI_private_label": {
+      "competitor": "ALDI",
+      "comparison_mode": "private_label",
+      "matches": 16353,
+      "unique_zips": 1568,
+      "walmart_lower": 9750,
+      "competitor_lower": 6603,
+      "parity": 0,
+      "walmart_lower_rate": 0.5962208769033205,
+      "competitor_lower_rate": 0.4037791230966795,
+      "parity_rate": 0.0,
+      "median_gap_per_gallon": 0.7599999999999998,
+      "mean_gap_per_gallon": 0.43721090931327594
+    },
+    "ALDI_equivalent": {
+      "competitor": "ALDI",
+      "comparison_mode": "equivalent",
+      "matches": 18028,
+      "unique_zips": 1568,
+      "walmart_lower": 9763,
+      "competitor_lower": 8265,
+      "parity": 0,
+      "walmart_lower_rate": 0.5415464832482805,
+      "competitor_lower_rate": 0.4584535167517195,
+      "parity_rate": 0.0,
+      "median_gap_per_gallon": 0.7599999999999998,
+      "mean_gap_per_gallon": 0.026763368094075944
+    },
+    "Amazon_same_brand": {
+      "competitor": "Amazon",
+      "comparison_mode": "same_brand",
+      "matches": 7917,
+      "unique_zips": 1720,
+      "walmart_lower": 2943,
+      "competitor_lower": 2168,
+      "parity": 2806,
+      "walmart_lower_rate": 0.37173171655930276,
+      "competitor_lower_rate": 0.27384110142730833,
+      "parity_rate": 0.3544271820133889,
+      "median_gap_per_gallon": 0.0,
+      "mean_gap_per_gallon": 0.11946632261472903
+    },
+    "Amazon_private_label": {
+      "competitor": "Amazon",
+      "comparison_mode": "private_label",
+      "matches": 7402,
+      "unique_zips": 1657,
+      "walmart_lower": 3360,
+      "competitor_lower": 3916,
+      "parity": 126,
+      "walmart_lower_rate": 0.453931369900027,
+      "competitor_lower_rate": 0.529046203728722,
+      "parity_rate": 0.017022426371251013,
+      "median_gap_per_gallon": -0.17999999999999972,
+      "mean_gap_per_gallon": 0.23366657660091877
+    },
+    "Amazon_equivalent": {
+      "competitor": "Amazon",
+      "comparison_mode": "equivalent",
+      "matches": 16529,
+      "unique_zips": 1816,
+      "walmart_lower": 8709,
+      "competitor_lower": 5622,
+      "parity": 2198,
+      "walmart_lower_rate": 0.5268921289854196,
+      "competitor_lower_rate": 0.34012946941738764,
+      "parity_rate": 0.13297840159719282,
+      "median_gap_per_gallon": 0.1200000000000001,
+      "mean_gap_per_gallon": 0.8926944709322473
+    }
+  },
+  "geography_source": "https://github.com/ReadyAPIs-com/curated-us-zips",
+  "scope": "Fresh/refrigerated single-container cow's milk. Shelf-stable multipacks, plant-based beverages, powders/formula, evaporated/condensed milk, creamers/cream, buttermilk, and other search noise are excluded from the primary comparison."
+}

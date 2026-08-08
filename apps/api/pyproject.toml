@@ -1,0 +1,27 @@
+[project]
+name = "rci-api"
+version = "0.1.0"
+description = "FastAPI control-plane service for Retail Competitive Intelligence."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi==0.139.2",
+  "rci-automation",
+  "rci-core",
+  "rci-collections",
+  "rci-db",
+  "rci-locations",
+  "rci-results",
+  "uvicorn[standard]==0.51.0",
+]
+
+[tool.uv.sources]
+rci-automation = { workspace = true }
+rci-core = { workspace = true }
+rci-collections = { workspace = true }
+rci-db = { workspace = true }
+rci-locations = { workspace = true }
+rci-results = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

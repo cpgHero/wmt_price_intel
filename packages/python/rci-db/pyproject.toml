@@ -1,0 +1,18 @@
+[project]
+name = "rci-db"
+version = "0.1.0"
+description = "Postgres connectivity for Retail Competitive Intelligence services."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "alembic==1.18.5",
+  "psycopg[binary,pool]==3.3.4",
+  "rci-core",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

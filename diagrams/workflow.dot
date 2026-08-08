@@ -1,0 +1,17 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.2, nodesep=0.25, ranksep=0.4];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=9, color="#9AA8B5", fillcolor="#F8FAFC"];
+  edge [color="#7B8794", arrowsize=0.6];
+  a [label="Collection\nDefinition", fillcolor="#EAF4FB", color="#0071CE"];
+  b [label="Cost\nEstimate"];
+  c [label="Durable\nTasks"];
+  d [label="MetricsCart\nCollection"];
+  e [label="Raw Page\nSnapshots"];
+  f [label="Canonical\nOffers"];
+  g [label="Product Pack\nClassification"];
+  h [label="Match +\nAnalytics"];
+  i [label="Validation\n+ QA"];
+  j [label="AnalysisResult", fillcolor="#E7F8EF", color="#2E8B57"];
+  k [label="Web / HTML /\nExcel / Email / Alerts", fillcolor="#FFF6D6", color="#D39E00"];
+  a->b->c->d->e->f->g->h->i->j->k;
+}

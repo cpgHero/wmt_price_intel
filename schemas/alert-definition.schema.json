@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/alert-definition.schema.json",
+  "title": "Retail Competitive Intelligence Alert Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "enabled",
+    "scope",
+    "metric",
+    "condition",
+    "delivery"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product_pack_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "collection_definition_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "field"
+      ],
+      "properties": {
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          }
+        },
+        "where": {
+          "type": "object"
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "threshold"
+      ],
+      "properties": {
+        "operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "change_gt",
+            "change_gte",
+            "change_lt",
+            "change_lte",
+            "absolute_change_gte"
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "change_mode": {
+          "enum": [
+            "absolute",
+            "percentage_points",
+            "percent_change"
+          ],
+          "default": "absolute"
+        }
+      }
+    },
+    "cooldown_minutes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "email_recipients"
+      ],
+      "properties": {
+        "email_recipients": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      }
+    }
+  }
+}

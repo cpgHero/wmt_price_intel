@@ -1,0 +1,1 @@
+Implement Collection Definitions, versioning, cost estimation, Collection Runs, task expansion, Postgres durable queue with `FOR UPDATE SKIP LOCKED`, worker leases/reclaim, retries, cancellation, and actual/estimated credit accounting. No live MetricsCart calls yet; use a fake provider. Add concurrency tests with multiple simulated workers and prove no duplicate task claims.

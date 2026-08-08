@@ -1,0 +1,34 @@
+{
+  "query": {
+    "keyword": "choco chips",
+    "zipcode": "90020",
+    "retailer_store_id": "2464",
+    "sort": "Best Match",
+    "retailer": "walmart"
+  },
+  "results": [
+    {
+      "result_position": 1,
+      "name": "Great Value Semi-Sweet Chocolate Chips, 12 oz",
+      "brand": "Great Value",
+      "price": "$2.48",
+      "price_regular": "$2.48",
+      "rating": "4.6",
+      "rating_count": "1842",
+      "reviews_count": "1842",
+      "is_sponsored": false,
+      "retailer": "walmart",
+      "retailer_product_id": "123456789",
+      "product_identifiers": {
+        "product_id": "123456789"
+      },
+      "url": "https://www.walmart.com/ip/123456789",
+      "image_primary": "https://i5.walmartimages.com/example.jpeg",
+      "stock_availability": true,
+      "pickup_available": true,
+      "pickup_store_id": "2464",
+      "pickup_zipcode": "90020",
+      "pickup_address": "Walmart Store #2464"
+    }
+  ]
+}

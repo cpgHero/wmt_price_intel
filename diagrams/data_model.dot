@@ -1,0 +1,32 @@
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad=0.2, nodesep=0.35, ranksep=0.45];
+  node [shape=record, style="rounded,filled", fontname="Arial", fontsize=9, color="#9AA8B5", fillcolor="#F8FAFC", fontcolor="#1F2937"];
+  edge [color="#8090A0", arrowsize=0.6];
+
+  retailer [label="{retailer|id\ldisplay_name\lcountry\l}"];
+  loc [label="{retailer_location|id\lretailer_id\lprovider_location_id\lstore_number TEXT\lzipcode TEXT\llat/lon\l}"];
+  pack [label="{product_pack_version|product_pack_id\lversion\lconfig JSONB\lchecksum\l}"];
+  def [label="{collection_definition_version|id\ldefinition_id\lversion\lconfig JSONB\lchecksum\l}"];
+  run [label="{collection_run|id\ldefinition_version_id\lstatus\lestimated_credits\lactual_credits\l}"];
+  task [label="{collection_task|id\lrun_id\lretailer_id\llocation_scope_key\lpage\lstatus / lease\l}"];
+  rate [label="{provider_rate_limit_state|provider + budget_key\lrps/rpm counters\lpaused_until\l}"];
+  art [label="{dataset_artifact|id\lrun_id\ltype\lstorage_uri\lchecksum\lrow_count\l}"];
+  arun [label="{analysis_run|id\lcollection_run_id\lpack id/version\lcode_version\lstatus\l}"];
+  result [label="{analysis_result|id\lanalysis_run_id\lresult JSONB\lchecksum\l}"];
+  issue [label="{validation_issue|analysis_run_id\lseverity\lissue_type\levidence\lstatus\l}"];
+  report [label="{report_artifact|analysis_run_id\ltype\ldataset_artifact_id\lstatus\l}"];
+
+  retailer -> loc;
+  def -> run -> task;
+  retailer -> task;
+  loc -> task;
+  task -> art;
+  run -> art;
+  run -> arun;
+  pack -> arun;
+  arun -> result;
+  arun -> issue;
+  arun -> report;
+  report -> art;
+  rate -> task [style=dashed, label="permits"];
+}

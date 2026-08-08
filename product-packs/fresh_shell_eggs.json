@@ -1,0 +1,355 @@
+{
+  "id": "fresh_shell_eggs",
+  "name": "Fresh Shell Eggs",
+  "version": "1.0.0",
+  "category_family": "dairy_eggs",
+  "scope": {
+    "target_terms": [
+      "egg",
+      "eggs"
+    ],
+    "include": [
+      "fresh chicken shell eggs"
+    ],
+    "exclude": [
+      "liquid eggs",
+      "egg whites",
+      "hard-boiled/deviled/prepared eggs",
+      "powdered eggs",
+      "vegan substitutes",
+      "duck/quail/goose eggs",
+      "hatching/fertile eggs",
+      "accessories/cartons/nonfood"
+    ],
+    "hard_exclusion_patterns": [
+      "liquid egg",
+      "egg white",
+      "hard boiled",
+      "deviled",
+      "prepared egg",
+      "powdered egg",
+      "vegan",
+      "duck egg",
+      "quail egg",
+      "goose egg",
+      "hatching egg",
+      "fertile egg",
+      "egg carton",
+      "egg accessory",
+      "plastic egg",
+      "chocolate egg"
+    ],
+    "availability_policy": "retailer_specific"
+  },
+  "attributes": [
+    {
+      "name": "count",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "each",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "cross_product_inference",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "measurement",
+          "units": {
+            "count": 1,
+            "ct": 1,
+            "pack": 1,
+            "each": 1,
+            "dozen": 12,
+            "doz": 12
+          }
+        },
+        {
+          "type": "term_map",
+          "values": {
+            "12": [
+              "dozen"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "size",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Small",
+        "Medium",
+        "Large",
+        "Extra Large",
+        "Jumbo",
+        "Unknown"
+      ],
+      "unknown_values": [
+        "Unknown"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Small": ["small"],
+            "Medium": ["medium"],
+            "Large": ["large"],
+            "Extra Large": ["extra large", "x large", "xl"],
+            "Jumbo": ["jumbo"]
+          },
+          "default": "Unknown"
+        }
+      ]
+    },
+    {
+      "name": "shell_color",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "White",
+        "Brown",
+        "Specialty/Mixed",
+        "Unknown"
+      ],
+      "unknown_values": [
+        "Unknown"
+      ],
+      "unknown_policy": "allow_compatible",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "White": ["white"],
+            "Brown": ["brown"],
+            "Specialty/Mixed": ["mixed color", "blue egg", "olive egg"]
+          },
+          "default": "Unknown"
+        }
+      ]
+    },
+    {
+      "name": "grade",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "A",
+        "AA",
+        "Ungraded",
+        "Unknown"
+      ],
+      "unknown_values": [
+        "Unknown"
+      ],
+      "unknown_policy": "allow_compatible",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "AA": ["grade aa", "usda aa"],
+            "A": ["grade a", "usda a"],
+            "Ungraded": ["ungraded"]
+          },
+          "default": "Unknown"
+        }
+      ]
+    },
+    {
+      "name": "organic",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["organic", "usda organic"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "housing",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Conventional/Unspecified",
+        "Cage-Free",
+        "Free-Range",
+        "Pasture-Raised"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Cage-Free": ["cage free", "cage-free"],
+            "Free-Range": ["free range", "free-range"],
+            "Pasture-Raised": ["pasture raised", "pasture-raised"]
+          },
+          "default": "Conventional/Unspecified"
+        }
+      ]
+    },
+    {
+      "name": "brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "retailer_field",
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": ["brand"]
+        }
+      ]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "package_price",
+    "secondary_metrics": [
+      "price_per_dozen"
+    ],
+    "conversion_rules": [
+      {
+        "from": "count",
+        "to": "price_per_dozen",
+        "formula": "price * 12 / count"
+      }
+    ],
+    "forbidden_metrics": [],
+    "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_profiles": [
+    {
+      "id": "strict",
+      "label": "Strict exact-spec",
+      "geography": "exact_zip",
+      "dimensions": [
+        "count",
+        "size",
+        "shell_color",
+        "grade",
+        "organic",
+        "housing"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "price_per_dozen"
+    },
+    {
+      "id": "compatible",
+      "label": "Compatible-spec",
+      "geography": "exact_zip",
+      "dimensions": [
+        "count",
+        "size",
+        "shell_color",
+        "grade",
+        "organic",
+        "housing"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "wildcard_if_one_unknown",
+      "wildcard_dimensions": [
+        "shell_color",
+        "grade"
+      ],
+      "price_selection": "lowest_positive",
+      "comparison_metric": "price_per_dozen"
+    }
+  ],
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "suspicious_gap_pct": 100,
+    "human_review_conditions": [
+      "missing package count in material retailer",
+      "unusually large price gap",
+      "title/URL conflict"
+    ],
+    "sensitivity_checks": []
+  },
+  "reporting": {
+    "headline_segments": [
+      "count",
+      "size",
+      "organic",
+      "housing"
+    ],
+    "required_caveats": [
+      "strict vs compatible results must remain separate",
+      "missing package attributes reduce exact-match coverage"
+    ],
+    "recommended_charts": [
+      "footprint",
+      "price_outcome",
+      "segment_table"
+    ],
+    "alertable_metrics": [
+      "walmart_lower_rate",
+      "median_gap_per_dozen",
+      "coverage_change"
+    ]
+  },
+  "regression": {
+    "golden_dataset_ids": [
+      "egg_aug2026_full_retailer"
+    ],
+    "expected_headlines": [
+      {
+        "metric": "strict_matches",
+        "value": 5155
+      },
+      {
+        "metric": "walmart_lower_rate",
+        "value": 0.746848
+      },
+      {
+        "metric": "aldi_competitor_lower_rate",
+        "value": 0.553
+      }
+    ],
+    "tolerances": {
+      "rate_abs": 0.001,
+      "count_abs": 5
+    }
+  }
+}

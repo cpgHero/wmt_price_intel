@@ -1,0 +1,24 @@
+[project]
+name = "rci-collections"
+version = "0.1.0"
+description = "Versioned collection control plane and durable Postgres task queue."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "jsonschema[format-nongpl]==4.26.0",
+  "rci-contracts",
+  "rci-core",
+  "rci-db",
+  "rci-locations",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+rci-core = { workspace = true }
+rci-db = { workspace = true }
+rci-locations = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+

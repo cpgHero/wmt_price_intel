@@ -1,0 +1,430 @@
+{
+  "id": "fresh_strawberries",
+  "name": "Fresh Strawberries",
+  "version": "1.0.0",
+  "category_family": "produce",
+  "scope": {
+    "target_terms": [
+      "strawberry",
+      "strawberries"
+    ],
+    "include": [
+      "fresh raw whole strawberries sold as produce"
+    ],
+    "exclude": [
+      "frozen strawberries",
+      "dried/freeze-dried strawberries",
+      "chocolate-covered/snack products",
+      "preserves/jams",
+      "beverages",
+      "powders",
+      "plants/seeds",
+      "nonfood/search noise"
+    ],
+    "hard_exclusion_patterns": [
+      "frozen",
+      "frz",
+      "dried",
+      "freeze dried",
+      "chocolate covered",
+      "snack",
+      "candy",
+      "gummy",
+      "wafer",
+      "cake",
+      "preserve",
+      "jam",
+      "jelly",
+      "spread",
+      "syrup",
+      "beverage",
+      "drink",
+      "juice",
+      "smoothie",
+      "refresher",
+      "concentrate",
+      "powder",
+      "plant",
+      "seed",
+      "growing",
+      "garden",
+      "artificial",
+      "fake",
+      "plastic",
+      "decor",
+      "book",
+      "guide",
+      "huller"
+    ],
+    "availability_policy": "in_stock_only"
+  },
+  "attributes": [
+    {
+      "name": "weight_oz",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "oz",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "measurement",
+          "units": {
+            "oz": 1,
+            "ounce": 1,
+            "ounces": 1,
+            "lb": 16,
+            "lbs": 16,
+            "pound": 16,
+            "pounds": 16,
+            "g": 0.03527396195,
+            "gram": 0.03527396195,
+            "grams": 0.03527396195,
+            "kg": 35.27396195
+          }
+        }
+      ]
+    },
+    {
+      "name": "organic",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": [
+            "organic",
+            "usda organic"
+          ],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "form",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Fresh Whole"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "constant",
+          "value": "Fresh Whole"
+        }
+      ]
+    },
+    {
+      "name": "specialty_claim",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "None",
+        "Hydroponic",
+        "Greenhouse",
+        "Other"
+      ],
+      "unknown_policy": "allow_compatible",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Hydroponic": [
+              "hydroponic"
+            ],
+            "Greenhouse": [
+              "greenhouse"
+            ],
+            "Other": [
+              "long stem",
+              "jumbo",
+              "sweetest batch"
+            ]
+          },
+          "default": "None"
+        }
+      ]
+    },
+    {
+      "name": "count_each",
+      "data_type": "number",
+      "role": "normalization",
+      "required_for_strict": false,
+      "unit": "each",
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "measurement",
+          "units": {
+            "count": 1,
+            "ct": 1,
+            "each": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "retailer_field",
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": [
+            "brand"
+          ]
+        }
+      ]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "package_price",
+    "secondary_metrics": [
+      "price_per_lb"
+    ],
+    "conversion_rules": [
+      {
+        "from": "weight_oz",
+        "to": "price_per_lb",
+        "formula": "price * 16 / weight_oz"
+      }
+    ],
+    "forbidden_metrics": [
+      "price_per_strawberry_without_explicit_count"
+    ],
+    "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_profiles": [
+    {
+      "id": "strict",
+      "label": "Strict same-weight",
+      "geography": "exact_zip",
+      "dimensions": [
+        "weight_oz",
+        "organic",
+        "form",
+        "specialty_claim"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive"
+    },
+    {
+      "id": "unit_price",
+      "label": "Best available $/lb",
+      "geography": "exact_zip",
+      "dimensions": [
+        "organic",
+        "form"
+      ],
+      "attribute_constraints": {
+        "specialty_claim": [
+          "None"
+        ]
+      },
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "review",
+      "price_selection": "lowest_positive"
+    },
+    {
+      "id": "aldi_10mi",
+      "label": "ALDI-Walmart 10 mile sensitivity",
+      "geography": "radius",
+      "radius_miles": 10,
+      "dimensions": [
+        "weight_oz",
+        "organic",
+        "form",
+        "specialty_claim"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive"
+    }
+  ],
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "suspicious_gap_pct": 60,
+    "human_review_conditions": [
+      "ambiguous fresh vs frozen",
+      "specialty growing claim unclear"
+    ],
+    "sensitivity_checks": [
+      {
+        "id": "aldi_10mi",
+        "radius_miles": 10
+      }
+    ]
+  },
+  "retailer_overrides": {
+    "walmart_us": {
+      "catalog_policy": "allowlist",
+      "products": {
+        "44391605": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "22660282": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "1175460573": {
+          "attributes": {"weight_oz": 8.8, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "45618183": {
+          "attributes": {"weight_oz": 16, "organic": true, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "649701131": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "Hydroponic"}
+        },
+        "767905460": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "Other"}
+        },
+        "669448616": {
+          "attributes": {"organic": false, "form": "Fresh Whole", "specialty_claim": "Other", "count_each": 30}
+        },
+        "981564207": {
+          "attributes": {"weight_oz": 48, "organic": false, "form": "Fresh Whole", "specialty_claim": "Other"}
+        },
+        "12739971135": {
+          "attributes": {"weight_oz": 10, "organic": true, "form": "Fresh Whole", "specialty_claim": "Greenhouse"}
+        }
+      }
+    },
+    "aldi_us": {
+      "catalog_policy": "allowlist",
+      "products": {
+        "17330344": {
+          "attributes": {"weight_oz": 16, "organic": true, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "16383764": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "16521342": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "26266957": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        }
+      }
+    },
+    "amazon_us_same_day": {
+      "catalog_policy": "allowlist",
+      "products": {
+        "B002B8Z98W": {
+          "attributes": {"weight_oz": 16, "organic": true, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B000P6J0SM": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B08911ZP3Y": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B07PQNBKCK": {
+          "attributes": {"weight_oz": 32, "organic": true, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B09V3BZZXJ": {
+          "attributes": {"organic": true, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B0DM9HC2LY": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B07JB8Z3M3": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B07NFJYWBJ": {
+          "attributes": {"weight_oz": 32, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B00032BPEA": {
+          "attributes": {"weight_oz": 16, "organic": false, "form": "Fresh Whole", "specialty_claim": "None"}
+        },
+        "B08QJQ762X": {
+          "attributes": {"weight_oz": 14, "organic": false, "form": "Fresh Whole", "specialty_claim": "Other"}
+        }
+      }
+    }
+  },
+  "reporting": {
+    "headline_segments": [
+      "weight_oz",
+      "organic"
+    ],
+    "required_caveats": [
+      "do not invent per-berry economics without explicit counts",
+      "Amazon competitive position reverses by package size"
+    ],
+    "recommended_charts": [
+      "footprint",
+      "segment_win_rate",
+      "price_per_lb"
+    ],
+    "alertable_metrics": [
+      "1lb_conventional_gap",
+      "2lb_conventional_gap",
+      "1lb_organic_parity_rate"
+    ]
+  },
+  "regression": {
+    "golden_dataset_ids": [
+      "strawberries_aug2026_wmt_aldi_amz"
+    ],
+    "expected_headlines": [
+      {
+        "metric": "source_rows",
+        "value": 297443
+      },
+      {
+        "metric": "aldi_strict_walmart_lower_rate",
+        "value": 0.9996
+      },
+      {
+        "metric": "amazon_1lb_competitor_lower_rate",
+        "value": 0.694
+      },
+      {
+        "metric": "amazon_2lb_walmart_lower_rate",
+        "value": 0.942
+      },
+      {
+        "metric": "amazon_1lb_organic_parity_rate",
+        "value": 0.702
+      }
+    ],
+    "tolerances": {
+      "rate_abs": 0.002,
+      "count_abs": 10
+    }
+  }
+}

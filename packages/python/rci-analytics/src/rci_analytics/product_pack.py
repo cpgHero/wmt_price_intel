@@ -1,0 +1,330 @@
+"""Product Pack loading, semantic validation, and immutable persistence."""
+
+from __future__ import annotations
+
+import ast
+import hashlib
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Protocol
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from rci_contracts import ContractError, validate_instance
+
+JsonObject = dict[str, Any]
+_FORMULA_NODES = (
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.USub,
+)
+
+
+def _checksum(document: JsonObject) -> str:
+    canonical = json.dumps(
+        document, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ProductPack:
+    id: str
+    name: str
+    version: str
+    checksum: str
+    document: JsonObject
+
+    @property
+    def attributes(self) -> tuple[JsonObject, ...]:
+        return tuple(dict(value) for value in self.document["attributes"])
+
+    @property
+    def matching_profiles(self) -> tuple[JsonObject, ...]:
+        return tuple(dict(value) for value in self.document["matching_profiles"])
+
+    def profile(self, profile_id: str) -> JsonObject:
+        try:
+            return next(
+                profile for profile in self.matching_profiles if profile["id"] == profile_id
+            )
+        except StopIteration as exc:
+            raise ValueError(f"Product Pack has no profile {profile_id!r}") from exc
+
+
+class ProductPackLoader:
+    def __init__(self, repository_root: Path) -> None:
+        self._root = repository_root
+
+    def load_path(self, path: Path) -> ProductPack:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"could not read Product Pack {path}: {exc}") from exc
+        validate_instance(
+            self._root,
+            "product-pack.schema.json",
+            document,
+            label=str(path),
+        )
+        self._validate_semantics(document)
+        return ProductPack(
+            id=str(document["id"]),
+            name=str(document["name"]),
+            version=str(document["version"]),
+            checksum=_checksum(document),
+            document=document,
+        )
+
+    def load(self, pack_id: str) -> ProductPack:
+        return self.load_path(self._root / "product-packs" / f"{pack_id}.json")
+
+    @staticmethod
+    def _validate_semantics(document: JsonObject) -> None:
+        attributes = document["attributes"]
+        attribute_names = [str(value["name"]) for value in attributes]
+        if len(attribute_names) != len(set(attribute_names)):
+            raise ContractError("Product Pack attribute names must be unique")
+        profiles = document["matching_profiles"]
+        profile_ids = [str(value["id"]) for value in profiles]
+        if len(profile_ids) != len(set(profile_ids)):
+            raise ContractError("Product Pack matching profile IDs must be unique")
+        known = set(attribute_names)
+        for attribute in attributes:
+            ProductPackLoader._validate_extraction_rules(attribute)
+        for profile in profiles:
+            dimensions = set(str(value) for value in profile["dimensions"])
+            missing = dimensions - known
+            if missing:
+                raise ContractError(
+                    f"profile {profile['id']} references unknown dimensions {sorted(missing)}"
+                )
+            wildcard_dimensions = set(
+                str(value) for value in profile.get("wildcard_dimensions", [])
+            )
+            invalid_wildcards = wildcard_dimensions - dimensions
+            if invalid_wildcards:
+                raise ContractError(
+                    f"profile {profile['id']} wildcards non-matching dimensions "
+                    f"{sorted(invalid_wildcards)}"
+                )
+            if wildcard_dimensions and profile.get("unknown_policy") != "wildcard_if_one_unknown":
+                raise ContractError(
+                    f"profile {profile['id']} wildcard dimensions require "
+                    "unknown_policy='wildcard_if_one_unknown'"
+                )
+            if profile["geography"] == "radius" and not profile.get("radius_miles"):
+                raise ContractError(f"radius profile {profile['id']} requires radius_miles")
+            constraints = profile.get("attribute_constraints", {})
+            unknown_constraints = set(constraints) - known
+            if unknown_constraints:
+                raise ContractError(
+                    f"profile {profile['id']} constrains unknown attributes "
+                    f"{sorted(unknown_constraints)}"
+                )
+            if any(not isinstance(values, list) or not values for values in constraints.values()):
+                raise ContractError(
+                    f"profile {profile['id']} attribute constraints must be non-empty arrays"
+                )
+        outputs: set[str] = set()
+        for rule in document["normalization"].get("conversion_rules", []):
+            if not {"from", "to", "formula"}.issubset(rule):
+                raise ContractError("conversion rules require from, to, and formula")
+            if str(rule["from"]) not in known:
+                raise ContractError(f"conversion source {rule['from']!r} is not an attribute")
+            output = str(rule["to"])
+            if output in outputs:
+                raise ContractError(f"duplicate conversion output {output!r}")
+            outputs.add(output)
+            ProductPackLoader._validate_formula(str(rule["formula"]), known | {"price"})
+        available_metrics = {
+            "package_price",
+            str(document["normalization"]["primary_display_metric"]),
+            *outputs,
+        }
+        for profile in profiles:
+            metric = profile.get("comparison_metric")
+            if metric is not None and str(metric) not in available_metrics:
+                raise ContractError(
+                    f"profile {profile['id']} references unknown comparison metric {metric!r}"
+                )
+            if profile["brand_policy"] == "private_label_equivalent":
+                private_labels = document.get("brand_rules", {}).get("private_labels", {})
+                if not private_labels:
+                    raise ContractError(
+                        f"private-label profile {profile['id']} requires brand_rules.private_labels"
+                    )
+        for retailer_id, override in document.get("retailer_overrides", {}).items():
+            if not isinstance(override, dict):
+                raise ContractError(f"retailer override {retailer_id!r} must be an object")
+            policy = override.get("catalog_policy")
+            if policy not in {None, "allowlist", "rules_only"}:
+                raise ContractError(
+                    f"retailer override {retailer_id!r} has unknown catalog policy {policy!r}"
+                )
+            products = override.get("products", {})
+            if not isinstance(products, dict):
+                raise ContractError(f"retailer override {retailer_id!r} products must be an object")
+            for product_id, rule in products.items():
+                if not str(product_id) or not isinstance(rule, dict):
+                    raise ContractError(
+                        f"retailer override {retailer_id!r} has an invalid product rule"
+                    )
+                values = rule.get("attributes", {})
+                if not isinstance(values, dict) or not set(values).issubset(known):
+                    raise ContractError(
+                        f"product override {retailer_id!r}/{product_id!r} has unknown attributes"
+                    )
+
+    @staticmethod
+    def _validate_extraction_rules(attribute: JsonObject) -> None:
+        data_type = str(attribute["data_type"])
+        allowed_values = {str(value) for value in attribute.get("allowed_values", [])}
+        for rule in attribute.get("extraction_rules", []):
+            rule_type = str(rule["type"])
+            sources = rule.get("sources", ["text"])
+            if any(
+                source not in {"text", "raw_text", "title", "url", "brand"}
+                and not str(source).startswith("raw.")
+                for source in sources
+            ):
+                raise ContractError(
+                    f"attribute {attribute['name']} uses an unknown extraction source"
+                )
+            required = {
+                "constant": {"value"},
+                "field": {"sources"},
+                "measurement": {"units"},
+                "number_pattern": {"patterns"},
+                "term_map": {"values"},
+                "boolean_terms": set(),
+            }[rule_type]
+            missing = required - set(rule)
+            if missing:
+                raise ContractError(
+                    f"attribute {attribute['name']} extraction rule {rule_type!r} "
+                    f"requires {sorted(missing)}"
+                )
+            if rule_type in {"measurement", "number_pattern"} and data_type != "number":
+                raise ContractError(
+                    f"attribute {attribute['name']} uses numeric extraction for {data_type}"
+                )
+            if rule_type == "boolean_terms" and data_type != "boolean":
+                raise ContractError(
+                    f"attribute {attribute['name']} uses boolean extraction for {data_type}"
+                )
+            if rule_type == "number_pattern":
+                for pattern in rule["patterns"]:
+                    try:
+                        compiled = re.compile(str(pattern))
+                    except re.error as exc:
+                        raise ContractError(
+                            f"attribute {attribute['name']} has invalid extraction regex"
+                        ) from exc
+                    if int(rule.get("group", 1)) > compiled.groups:
+                        raise ContractError(
+                            f"attribute {attribute['name']} extraction group does not exist"
+                        )
+            if rule_type == "term_map" and data_type == "enum":
+                unknown = set(str(value) for value in rule["values"]) - allowed_values
+                default = rule.get("default")
+                if default is not None and str(default) not in allowed_values:
+                    unknown.add(str(default))
+                if unknown:
+                    raise ContractError(
+                        f"attribute {attribute['name']} maps unknown enum values {sorted(unknown)}"
+                    )
+
+    @staticmethod
+    def _validate_formula(formula: str, allowed_names: set[str]) -> None:
+        try:
+            tree = ast.parse(formula, mode="eval")
+        except SyntaxError as exc:
+            raise ContractError(f"invalid conversion formula {formula!r}") from exc
+        if any(not isinstance(node, _FORMULA_NODES) for node in ast.walk(tree)):
+            raise ContractError(f"conversion formula {formula!r} contains unsafe syntax")
+        names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        if not names.issubset(allowed_names):
+            raise ContractError(
+                f"conversion formula {formula!r} uses unknown names {sorted(names - allowed_names)}"
+            )
+
+
+class ProductPackRepository(Protocol):
+    async def publish(self, pack: ProductPack) -> ProductPack: ...
+
+
+class InMemoryProductPackRepository:
+    def __init__(self) -> None:
+        self._versions: dict[tuple[str, str], ProductPack] = {}
+
+    async def publish(self, pack: ProductPack) -> ProductPack:
+        key = (pack.id, pack.version)
+        existing = self._versions.get(key)
+        if existing is not None and existing.checksum != pack.checksum:
+            raise ValueError(f"Product Pack {pack.id}@{pack.version} is immutable")
+        self._versions[key] = pack
+        return pack
+
+
+class PostgresProductPackRepository:
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
+
+    async def publish(self, pack: ProductPack) -> ProductPack:
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO product_pack (id, name)
+                    VALUES (:id, :name)
+                    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+                    """
+                ),
+                {"id": pack.id, "name": pack.name},
+            )
+            existing = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT checksum FROM product_pack_version
+                        WHERE product_pack_id = :id AND version = :version
+                        FOR UPDATE
+                        """
+                    ),
+                    {"id": pack.id, "version": pack.version},
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                if str(existing) != pack.checksum:
+                    raise ValueError(f"Product Pack {pack.id}@{pack.version} is immutable")
+                return pack
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO product_pack_version (
+                      product_pack_id, version, schema_version, config, checksum
+                    ) VALUES (
+                      :id, :version, '1.0.0', CAST(:config AS jsonb), :checksum
+                    )
+                    """
+                ),
+                {
+                    "id": pack.id,
+                    "version": pack.version,
+                    "config": json.dumps(pack.document, sort_keys=True),
+                    "checksum": pack.checksum,
+                },
+            )
+        return pack

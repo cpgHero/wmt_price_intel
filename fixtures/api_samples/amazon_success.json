@@ -1,0 +1,35 @@
+{
+  "query": {
+    "zipcode": "10001",
+    "search_url": "https://www.amazon.com/s?k=eggs&i=amazonfresh",
+    "sort": "Featured",
+    "retailer": "amazon"
+  },
+  "results": [
+    {
+      "result_position": 1,
+      "name": "Happy Egg Organic Free Range Large Brown Eggs, 12 Count",
+      "brand": "Happy Egg",
+      "price": "$6.49",
+      "price_regular": "$6.49",
+      "rating": "4.7",
+      "rating_count": "1243",
+      "reviews_count": "1243",
+      "is_sponsored": false,
+      "retailer": "amazon",
+      "retailer_product_id": "B07EXAMPLE",
+      "product_identifiers": {
+        "asin": "B07EXAMPLE"
+      },
+      "url": "https://www.amazon.com/dp/B07EXAMPLE",
+      "image_primary": "https://m.media-amazon.com/images/I/example.jpg",
+      "stock_availability": true,
+      "shipping_type": "Same-Day",
+      "shipping_delivery_zipcode": "10001",
+      "shipping_expected_delivery_date": "Today",
+      "shipping_extras": {
+        "delivery_window": "Today 5 PM - 10 PM"
+      }
+    }
+  ]
+}

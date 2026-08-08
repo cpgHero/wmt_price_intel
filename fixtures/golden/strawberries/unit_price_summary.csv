@@ -1,0 +1,5 @@
+﻿competitor,segment,matches,unique_zips,walmart_lower,competitor_lower,parity,walmart_lower_rate,competitor_lower_rate,parity_rate,median_walmart_price_per_lb,median_competitor_price_per_lb,median_gap_per_lb
+ALDI,Conventional whole strawberries — best available $/lb,1416,1416,1390,26,0,0.981638418079096,0.018361581920903956,0.0,2.26,2.55,0.29000000000000004
+ALDI,Organic whole strawberries — best available $/lb,1176,1176,1176,0,0,1.0,0.0,0.0,3.33,3.85,0.52
+Amazon,Conventional whole strawberries — best available $/lb,837,837,336,501,0,0.4014336917562724,0.5985663082437276,0.0,2.26,1.99,-0.2699999999999998
+Amazon,Organic whole strawberries — best available $/lb,732,732,190,30,512,0.25956284153005466,0.040983606557377046,0.6994535519125683,3.33,3.34,0.009999999999999787

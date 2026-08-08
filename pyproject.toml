@@ -1,0 +1,79 @@
+[project]
+name = "rci-workspace"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+
+[dependency-groups]
+dev = [
+  "hypothesis==6.160.0",
+  "mypy==2.3.0",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "respx==0.23.1",
+  "ruff==0.15.22",
+  "types-jsonschema==4.26.0.20260518",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "apps/worker",
+  "apps/scheduler",
+  "packages/python/rci-core",
+  "packages/python/rci-analytics",
+  "packages/python/rci-contracts",
+  "packages/python/rci-collections",
+  "packages/python/rci-db",
+  "packages/python/rci-locations",
+  "packages/python/rci-providers",
+  "packages/python/rci-results",
+  "packages/python/rci-automation",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
+testpaths = ["apps", "packages/python"]
+pythonpath = [
+  "apps/api/src",
+  "apps/scheduler/src",
+  "apps/worker/src",
+  "packages/python/rci-automation/src",
+  "packages/python/rci-contracts/src",
+  "packages/python/rci-analytics/src",
+  "packages/python/rci-collections/src",
+  "packages/python/rci-core/src",
+  "packages/python/rci-db/src",
+  "packages/python/rci-locations/src",
+  "packages/python/rci-providers/src",
+  "packages/python/rci-results/src",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["reference_outputs", "scripts", "starter_contracts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["rci_analytics", "rci_api", "rci_automation", "rci_collections", "rci_contracts", "rci_core", "rci_db", "rci_locations", "rci_providers", "rci_results", "rci_scheduler", "rci_worker"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+exclude = ["(^|/)tests/"]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+show_error_codes = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unused_ignores = true

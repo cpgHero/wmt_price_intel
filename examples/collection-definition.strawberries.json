@@ -1,0 +1,80 @@
+{
+  "id": "fresh-strawberries-weekly",
+  "name": "Fresh Strawberries Weekly Intelligence",
+  "version": "1.0.0",
+  "enabled": true,
+  "benchmark_retailer": "walmart_us",
+  "product_pack": {
+    "id": "fresh_strawberries",
+    "version": "1.0.0"
+  },
+  "query": {
+    "keyword": "strawberries",
+    "amazon_same_day_url_template": "https://www.amazon.com/s?k={{keyword}}&i=samedaystore",
+    "notes": "Use Amazon URL context to preserve Same Day store behavior."
+  },
+  "retailers": [
+    {
+      "retailer_id": "walmart_us",
+      "adapter_id": "metricscart_walmart_search_zipcode_v2",
+      "enabled": true,
+      "sort": "Best Match",
+      "max_pages_override": 1,
+      "request_overrides": {}
+    },
+    {
+      "retailer_id": "aldi_us",
+      "adapter_id": "metricscart_new_aldi_serp_zipcode",
+      "enabled": true,
+      "sort": null,
+      "max_pages_override": 1,
+      "request_overrides": {}
+    },
+    {
+      "retailer_id": "amazon_us_same_day",
+      "adapter_id": "metricscart_amazon_same_day_zipcode",
+      "enabled": true,
+      "sort": "Featured",
+      "max_pages_override": 1,
+      "request_overrides": {}
+    }
+  ],
+  "geography": {
+    "strategy": "all_retailer_locations",
+    "benchmark_retailer": "walmart_us",
+    "country": "USA",
+    "states": [],
+    "zipcodes": [],
+    "location_ids": [],
+    "proximity_validation_miles": 10
+  },
+  "pagination": {
+    "max_pages": 1,
+    "stop_on_empty": true,
+    "stop_on_short_page": false
+  },
+  "schedule": {
+    "type": "manual",
+    "cron": null,
+    "timezone": "America/Chicago"
+  },
+  "analysis": {
+    "comparison_profiles": [
+      "strict",
+      "unit_price",
+      "proximity_validation"
+    ],
+    "enable_ai_fallback": true,
+    "enable_proximity_validation": true
+  },
+  "delivery": {
+    "web_report": true,
+    "excel": true,
+    "leadership_email": true,
+    "audit_package": true
+  },
+  "budget": {
+    "max_credits_per_run": null,
+    "block_if_estimate_exceeds_budget": true
+  }
+}

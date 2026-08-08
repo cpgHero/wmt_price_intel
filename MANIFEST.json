@@ -1,0 +1,522 @@
+{
+  "package": "Standalone Retail Competitive Intelligence Codex Implementation Handoff",
+  "manifest_version": "1.0.0",
+  "generated_at_utc": "2026-08-07T18:29:30.736037+00:00",
+  "manifest_excludes": [
+    "MANIFEST.json"
+  ],
+  "file_count": 102,
+  "total_bytes_excluding_manifest": 40179327,
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 606,
+      "sha256": "355b4e5b224d13121fb2f30f999def0e9492161e64e1b31fba26c48019d8fe2b"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 3587,
+      "sha256": "70a00e5b0599bbb1b2fe384ae6c8793fe2d2a68116f007040c27ce061302cd57"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3386,
+      "sha256": "8cc33912df980918b54772d37a365537467a7eb0b5bc833d2f0537dd0ca01c23"
+    },
+    {
+      "path": "START_HERE.md",
+      "bytes": 893,
+      "sha256": "eb1bd3abfea63544b68496a1d7fd43053288edff91f5dc0ab9e4cd3ab60aa69c"
+    },
+    {
+      "path": "Standalone_Retail_Competitive_Intelligence_Implementation_Blueprint.docx",
+      "bytes": 278290,
+      "sha256": "28dae6def576edc8e3f54c55ae183caa2231c10cf4a7d4998cd212de9b86ed47"
+    },
+    {
+      "path": "VALIDATION_RECEIPT.txt",
+      "bytes": 2292,
+      "sha256": "110dedb64d7fb703d29fd42d08b55aeaa089ec799be17826d43fad1d2a6c2382"
+    },
+    {
+      "path": "config/provider-limits.example.json",
+      "bytes": 250,
+      "sha256": "06b1e972e1c7359a428973f3d8aa01f26b8cdc508b1fd16efcf6444bcacbafc8"
+    },
+    {
+      "path": "config/retailer-catalog.json",
+      "bytes": 4845,
+      "sha256": "0bdebfa4cc524b95d3b970eb7e066120af3715a19299cd7c0f9cad999f96883f"
+    },
+    {
+      "path": "database/001_control_plane.sql",
+      "bytes": 7605,
+      "sha256": "cdb061fc49f3d408bf477daed6522fc631ea8c68804376ae30b850dcbe2e6575"
+    },
+    {
+      "path": "database/002_seed_retailers.sql",
+      "bytes": 922,
+      "sha256": "ae10a89d99a8bc89df2e327aa60524968f5f5ccf205c6e4044f4bf2f791835a1"
+    },
+    {
+      "path": "database/003_queue_claim_reference.sql",
+      "bytes": 587,
+      "sha256": "19f54fa546a9cea44381db6fe86b7f02ac6437d30d6bb8ff449d906c1845a130"
+    },
+    {
+      "path": "diagrams/architecture.dot",
+      "bytes": 2023,
+      "sha256": "c1f70d4ace558d1f753f57e7a612a0e9d47604a0665f272a9625b4dc193ae62b"
+    },
+    {
+      "path": "diagrams/architecture.png",
+      "bytes": 105051,
+      "sha256": "960e8d255a289912b8d76f3fa1588ca42b186aa29052f539718bfa78913ab8c9"
+    },
+    {
+      "path": "diagrams/architecture.svg",
+      "bytes": 12136,
+      "sha256": "b21b1101985c05278a32795cda4eaad109f33d06b65415450f88805b5ae45b16"
+    },
+    {
+      "path": "diagrams/data_model.dot",
+      "bytes": 1664,
+      "sha256": "eff360c8fef9e4b9db59b8dbc5c49a592e13b3c95bc0b1d3fe91b9cb557b8a57"
+    },
+    {
+      "path": "diagrams/data_model.png",
+      "bytes": 106210,
+      "sha256": "4620f9cf6191cfe29cf18da36a79918a6e7e37631942bf1dc89b330752cabc45"
+    },
+    {
+      "path": "diagrams/data_model.svg",
+      "bytes": 18724,
+      "sha256": "fcbbbf41b5cf99e8dfeded727137fbaf98e565274abe4f1fee83b1ae1150cbe7"
+    },
+    {
+      "path": "diagrams/workflow.dot",
+      "bytes": 788,
+      "sha256": "d35d1ee89ba67476bbef3340139d65b8e2d0158793fa712a79e182acafbe4f80"
+    },
+    {
+      "path": "diagrams/workflow.png",
+      "bytes": 27108,
+      "sha256": "3afa0b04b17a4811b8170d1ef468d46afb934d5955fb0302cdb666f4dd713a44"
+    },
+    {
+      "path": "diagrams/workflow.svg",
+      "bytes": 8555,
+      "sha256": "f636538c85d97ea8ad2f355197d48c1ab6ab326cd86f35c4afdee7cafa8771b5"
+    },
+    {
+      "path": "docs/00_EXECUTIVE_OVERVIEW.md",
+      "bytes": 1508,
+      "sha256": "a3daa6d8e20efff1828cdf2b53a0c6299dd493755b3f68c07b0df4e5002d89a8"
+    },
+    {
+      "path": "docs/01_PRODUCT_PRD.md",
+      "bytes": 4597,
+      "sha256": "baaddaf378178a30ee3b684de1edac0a47eeaa4c7e6cef157ba142baa2fa3bb1"
+    },
+    {
+      "path": "docs/02_SYSTEM_ARCHITECTURE.md",
+      "bytes": 2406,
+      "sha256": "3f7bacb86ae44e7c7dbe69f76f71e6e5333e859287765779fb4e6d528ded5733"
+    },
+    {
+      "path": "docs/03_COLLECTION_ENGINE.md",
+      "bytes": 2072,
+      "sha256": "40edca35c9d0e9506fdc4aa311f31275fd8c1d8a57eb5070bbb10c632c499c12"
+    },
+    {
+      "path": "docs/04_RETAILER_ADAPTERS.md",
+      "bytes": 2169,
+      "sha256": "bf7efb12d97b4071b742e61e10666a4e9fd7545165552c347da994efac8788fa"
+    },
+    {
+      "path": "docs/05_ANALYTICS_ENGINE.md",
+      "bytes": 2096,
+      "sha256": "d8a3282628e082e318aaca80d96dca65882f9b8a0caf70182204cf1dd8c01cf1"
+    },
+    {
+      "path": "docs/06_AGENT_ARCHITECTURE.md",
+      "bytes": 1570,
+      "sha256": "b1de625e5997bb10f2ae9ef49f0b3b19c3d361f9a6ad01a6dd684863ccc49700"
+    },
+    {
+      "path": "docs/07_DATA_MODEL.md",
+      "bytes": 1111,
+      "sha256": "ea5fbf1412d829eb21d6e8cdf3a70766900b353bda9a721043caf77c2b57d6d6"
+    },
+    {
+      "path": "docs/08_UI_UX_SPEC.md",
+      "bytes": 1536,
+      "sha256": "e2e01d864d9d80b1a2eed84743f180e60d3e5ba4b0890fcf7e4290d52974115c"
+    },
+    {
+      "path": "docs/09_RAILWAY_DEPLOYMENT.md",
+      "bytes": 1270,
+      "sha256": "ca6e250fcff64084447a405cd5a7ae3aa9b9a5504cf60b02da826a414e538be5"
+    },
+    {
+      "path": "docs/10_SECURITY_OBSERVABILITY.md",
+      "bytes": 1351,
+      "sha256": "e54c756dfaeaa887c83f969dd1ddf4ddc0e2f76307876976b1b1bd4f5d7cd573"
+    },
+    {
+      "path": "docs/11_TEST_AND_GOLDEN_STRATEGY.md",
+      "bytes": 1323,
+      "sha256": "173921d30e4abb82922a9a61a2805fbf3c8039e534ebb6b334958023d9ca8218"
+    },
+    {
+      "path": "docs/12_IMPLEMENTATION_ROADMAP.md",
+      "bytes": 1619,
+      "sha256": "2a5ac24a398014b6c2bea28f155e4cfa5efd7296bd286ef7d24ecc3156df82c6"
+    },
+    {
+      "path": "docs/13_API_CONTRACTS.md",
+      "bytes": 1299,
+      "sha256": "de7a9c2d738044b63d2239931c70252dffd379ba10f8ebb6f6ad1158d3c18f2c"
+    },
+    {
+      "path": "docs/14_DATA_SOURCE_AND_ASSUMPTIONS.md",
+      "bytes": 1408,
+      "sha256": "e5acbd5e1ba01af1b01c773f1268a3d28e4209de79dacb1f720cfa86b83ec8c4"
+    },
+    {
+      "path": "examples/analysis-result.strawberries.json",
+      "bytes": 3223,
+      "sha256": "11827bfcd389453e02494e0bc45b5157d8ad5358560f5892e9f09be3d68a6a48"
+    },
+    {
+      "path": "examples/collection-cost-estimate.strawberries.json",
+      "bytes": 935,
+      "sha256": "2a4b750b3d4d7339643133ed011692a4899de6591f6a93dd2b7e651beb3368a8"
+    },
+    {
+      "path": "examples/collection-definition.strawberries.json",
+      "bytes": 1974,
+      "sha256": "b9449406d75cdc14cf5ba5854a1d66449232b65f3a1cadb673ba01a6f632cbb1"
+    },
+    {
+      "path": "fixtures/api_samples/aldi_success.json",
+      "bytes": 824,
+      "sha256": "81619e19f15aed57c6ff7f3958532bc703df416cd658ed5a22df17867fc6a7de"
+    },
+    {
+      "path": "fixtures/api_samples/amazon_success.json",
+      "bytes": 1004,
+      "sha256": "c692fc990e78db06ff39d49c656cfe75f1c92a33ca84818f49f493c6c041b51f"
+    },
+    {
+      "path": "fixtures/api_samples/metricscart_429.json",
+      "bytes": 315,
+      "sha256": "f3340f886b6dbe8d4d9619726881e582c012ca2c9ccc69639b62aa02749b0d6d"
+    },
+    {
+      "path": "fixtures/api_samples/walmart_success.json",
+      "bytes": 926,
+      "sha256": "a92b766bd602faed406adbdab932581a610f5b06fb2b40626017ff9c2a5f545d"
+    },
+    {
+      "path": "fixtures/golden/bananas/availability_mix.csv",
+      "bytes": 1451,
+      "sha256": "d9f6a3c10d6c9182be7a2fa2fd5a893789d619b8d7078ed8ca10b7a93048d8e5"
+    },
+    {
+      "path": "fixtures/golden/bananas/comparison_summary.csv",
+      "bytes": 1609,
+      "sha256": "97a04ac3f26bbd9372b0fb1fad4ebdbaea50a99a66b6d55119b0c0aef1939272"
+    },
+    {
+      "path": "fixtures/golden/bananas/retailer_scorecard.csv",
+      "bytes": 470,
+      "sha256": "04008433df02253ac39192ffdb3d4165c81b3a7207c3e0d484eb454c35480d49"
+    },
+    {
+      "path": "fixtures/golden/bananas/validated_summary.json",
+      "bytes": 2635,
+      "sha256": "82b46ec5c0d681e92689124cdafab873bcd6f555da3e6dd95611c2fb9d8918c0"
+    },
+    {
+      "path": "fixtures/golden/benchmarks.json",
+      "bytes": 8490,
+      "sha256": "02e726924735a765fd8ffb076718501498b41e8ea1a7c2676c392efad73f03a9"
+    },
+    {
+      "path": "fixtures/golden/eggs/relaxed_price_summary.csv",
+      "bytes": 1654,
+      "sha256": "dc731f10ffacbc7dd2b8109d67867d26da9441e820f08c21a5fec6139f39f82c"
+    },
+    {
+      "path": "fixtures/golden/eggs/retailer_scorecard.csv",
+      "bytes": 3608,
+      "sha256": "9536aeda50f6bfa090d2752c977e7407fd89f557fc03f1f933c0419d721fb90b"
+    },
+    {
+      "path": "fixtures/golden/eggs/strict_price_summary.csv",
+      "bytes": 1616,
+      "sha256": "e09de5fbee590dd3ba34f14fe7ee52266897fd70f0cd76f70725fa2d08344df6"
+    },
+    {
+      "path": "fixtures/golden/eggs/strict_segment_summary.csv",
+      "bytes": 12408,
+      "sha256": "48912c55af653c96c760a6099c4463196a8f6d4ef73cb343bb947cca783a1da6"
+    },
+    {
+      "path": "fixtures/golden/eggs/validated_summary.json",
+      "bytes": 29332,
+      "sha256": "d8729ce6e8b4faabfa6bfbcdf8d138e60eefbbd03ca6d2621ade40bc423a46b0"
+    },
+    {
+      "path": "fixtures/golden/milk/comparison_summary.csv",
+      "bytes": 875,
+      "sha256": "445692bab5612bac152521b28e0358f37ea8ab36cb72799cae8b24843a6a7737"
+    },
+    {
+      "path": "fixtures/golden/milk/retailer_scorecard.csv",
+      "bytes": 461,
+      "sha256": "66172115cb4a255dac145b88a22afb4013c61a502853b80cb22d9d3cecb845b5"
+    },
+    {
+      "path": "fixtures/golden/milk/same_brand_summary.csv",
+      "bytes": 1051,
+      "sha256": "2af19c6ce1ccf04655498554f7e61f13191c4abbc15cc409085671161806df21"
+    },
+    {
+      "path": "fixtures/golden/milk/segment_summary.csv",
+      "bytes": 12966,
+      "sha256": "f80ea6cf36c0d8a2f592c624a42dd118b29023800bca327649b1d1a47bc5a9ef"
+    },
+    {
+      "path": "fixtures/golden/milk/validated_summary.json",
+      "bytes": 4257,
+      "sha256": "d844cc98243d5b484b0c9321c938c9eec57959635e746331811c8f74de6b4b1b"
+    },
+    {
+      "path": "fixtures/golden/strawberries/aldi.sample.csv",
+      "bytes": 232297,
+      "sha256": "7a0f684824dd8bfb853062042082499305d82b97589d29a0562ed629dffffd0c"
+    },
+    {
+      "path": "fixtures/golden/strawberries/aldi_10mi_validation_summary.csv",
+      "bytes": 669,
+      "sha256": "1918e5e71723acd67ee3f6e7dafcdae65eb731007123855f75a231e9f3438f67"
+    },
+    {
+      "path": "fixtures/golden/strawberries/amazon.sample.csv",
+      "bytes": 539089,
+      "sha256": "90021b9d2c3a34990629b7b5545546e2dbc1f05883f6c45a4532e6b3242ea648"
+    },
+    {
+      "path": "fixtures/golden/strawberries/retailer_scorecard.csv",
+      "bytes": 760,
+      "sha256": "fdd73a1ea9001020bf0db44a3daf7889ba10ae4bfc2e454bd7659fab6ec8a084"
+    },
+    {
+      "path": "fixtures/golden/strawberries/strict_price_summary.csv",
+      "bytes": 1563,
+      "sha256": "c971451cfa8fe994c9982915ff560aeab61b732795cf1a90eb11cc2e776502f3"
+    },
+    {
+      "path": "fixtures/golden/strawberries/unit_price_summary.csv",
+      "bytes": 792,
+      "sha256": "8a1f9d2f59de4e30ff29ce6f22b6c1fe56c1f9bfe9dd7d24647bccaaa413b7f7"
+    },
+    {
+      "path": "fixtures/golden/strawberries/validated_summary.json",
+      "bytes": 10776,
+      "sha256": "026d29b42180acca9cbad7b73186e8717af7025c8267dcc5c24e9e89348bcbec"
+    },
+    {
+      "path": "fixtures/golden/strawberries/walmart.sample.csv",
+      "bytes": 308958,
+      "sha256": "f374ac60f1db68c52adbdad1d2a3e46c56c67112b38827856c7329b1c94bb760"
+    },
+    {
+      "path": "fixtures/location_master/locations.csv",
+      "bytes": 34499701,
+      "sha256": "618e1c5bfb277a5f2f9d2ce35d31e740b9faf234c9e052b2a6e6b38ab43bcd14"
+    },
+    {
+      "path": "fixtures/location_master/locations.profile.json",
+      "bytes": 20069,
+      "sha256": "e70326dc1003aec32cc2cd7aab4911daee50ce01724334d6b7fbd5246e56023b"
+    },
+    {
+      "path": "fixtures/location_master/locations.sample.csv",
+      "bytes": 40048,
+      "sha256": "9f00de53ec3d8ad772e6cfd123f8387dc39f5eac015745f94654dd24fad53deb"
+    },
+    {
+      "path": "product-packs/fresh_bananas.json",
+      "bytes": 5923,
+      "sha256": "becb47240affcc71e823aed3085284af31c04a7307edc5efbb05e2d4249fd3fd"
+    },
+    {
+      "path": "product-packs/fresh_fluid_milk.json",
+      "bytes": 5828,
+      "sha256": "2cee54735a1b0ceb16e62f0e4b477b95070df66b6c7421b2d3b7f8845ca4bed1"
+    },
+    {
+      "path": "product-packs/fresh_shell_eggs.json",
+      "bytes": 5163,
+      "sha256": "14732a2dc80be51b5c79b2400df151dd3cf7dd8d4f686ca39345f1bc19928114"
+    },
+    {
+      "path": "product-packs/fresh_strawberries.json",
+      "bytes": 5155,
+      "sha256": "d20b8e8470b40c805fe67d215292f238eaed232891f1cad48e8237ae14979811"
+    },
+    {
+      "path": "product-packs/index.json",
+      "bytes": 628,
+      "sha256": "89b7a8ee6eee459fbcf4eb69c1f06c45de30ed6c222723a945c0bf23b925278e"
+    },
+    {
+      "path": "prompts/00_CODEX_MASTER_PLANNING_PROMPT.md",
+      "bytes": 2176,
+      "sha256": "05b7357f1999005c0fd66d177d12936b748b56305af41366ff2dec9e776ed026"
+    },
+    {
+      "path": "prompts/01_PHASE_FOUNDATION.md",
+      "bytes": 390,
+      "sha256": "bbbea040e5c5408192f7fbd4ca6f16e22fa690aadc10f8a0064aaaf318d15b94"
+    },
+    {
+      "path": "prompts/02_PHASE_LOCATION_MASTER.md",
+      "bytes": 458,
+      "sha256": "dc61cabeac00f27f19bbfab2ba0f888398d02050272a0e819c7bdbff84d8d7ce"
+    },
+    {
+      "path": "prompts/03_PHASE_COLLECTION_CONTROL_PLANE.md",
+      "bytes": 378,
+      "sha256": "6d2a5183e7efc5718f8412a6a76a8bbbad802c7d91a4871e71fdc619d7ead45b"
+    },
+    {
+      "path": "prompts/04_PHASE_METRICSCART_ADAPTERS.md",
+      "bytes": 512,
+      "sha256": "27783c6c4ee9b859d2d1e84bfbfe6c56c86848829d55bafe38127fe357b2dd29"
+    },
+    {
+      "path": "prompts/05_PHASE_STRAWBERRY_ANALYTICS.md",
+      "bytes": 534,
+      "sha256": "3765d44c8a86d31823614679a9857fca071a7b7832d8b4da696839702b658a0b"
+    },
+    {
+      "path": "prompts/06_PHASE_RESULTS_AND_DELIVERY.md",
+      "bytes": 395,
+      "sha256": "7e4e76d49c5915a66f5d6f9c19bd9c9a1fc82d40e18162863cfd2e8211557ea2"
+    },
+    {
+      "path": "prompts/07_PHASE_RAILWAY_DEPLOYMENT.md",
+      "bytes": 375,
+      "sha256": "02f0a248f8e5cfdd17f3776a7c84c471b72da5c32db81ea827a2388891d084e2"
+    },
+    {
+      "path": "prompts/08_PHASE_PROVE_ABSTRACTION.md",
+      "bytes": 405,
+      "sha256": "aba1eba3dad7a2113892f78ca1a6079308e9b96795fdecb25b40183861e00ad8"
+    },
+    {
+      "path": "prompts/09_PHASE_SCHEDULING_ALERTS.md",
+      "bytes": 347,
+      "sha256": "dc6e595643b15d44f98c7ad23603048cefb7bb093a58f8a59451a3564d9d3cec"
+    },
+    {
+      "path": "reference_outputs/bananas_analysis.xlsx",
+      "bytes": 612409,
+      "sha256": "3f54448525e5933324fff86001dcdd3acc5c9ffdef228619a2f1f90d80e69aee"
+    },
+    {
+      "path": "reference_outputs/bananas_report.html",
+      "bytes": 186305,
+      "sha256": "af4431db240acea3e6ff684e951198ec6ede467706f117dc131fe68a1fceb036"
+    },
+    {
+      "path": "reference_outputs/eggs_analysis.xlsx",
+      "bytes": 538244,
+      "sha256": "b1073480c447e2d086e2a3f532f434ada5bb5c0deb0e04acc72e0d4403e97a40"
+    },
+    {
+      "path": "reference_outputs/eggs_report.html",
+      "bytes": 315248,
+      "sha256": "598bade89a4a72667ad4ba06a73cc0fbbc8c50fed77882d8f8d3c93b8a74fcb8"
+    },
+    {
+      "path": "reference_outputs/milk_analysis.xlsx",
+      "bytes": 247485,
+      "sha256": "ca165e27ab309f23520254f023444dc3568db0f0b040aa5b88ab8ff542264d88"
+    },
+    {
+      "path": "reference_outputs/milk_report.html",
+      "bytes": 223443,
+      "sha256": "f4ed8b3e048dea9f255a46c4021f4aa7d54c787de454b640217965c342c59016"
+    },
+    {
+      "path": "reference_outputs/strawberries_analysis.xlsx",
+      "bytes": 1444202,
+      "sha256": "d0f7c1975f290ae9806ba3a33181d95c111595e18f121ee9e963421ee88ee7a3"
+    },
+    {
+      "path": "reference_outputs/strawberries_report.html",
+      "bytes": 178782,
+      "sha256": "02819c59b59bce27f2b1ab8deef2fd2c0af685278c9c94dce54f5b09269ed24f"
+    },
+    {
+      "path": "schemas/analysis-result.schema.json",
+      "bytes": 2365,
+      "sha256": "2b8d2bd9b45892535ad5bc7fb58755fa0d83bb3043883aa91a9297d6b7998b50"
+    },
+    {
+      "path": "schemas/collection-definition.schema.json",
+      "bytes": 5887,
+      "sha256": "85c7532f0f2e9471170c063867ce1d30165c685cd327842863f741233a84b67f"
+    },
+    {
+      "path": "schemas/golden-benchmarks.schema.json",
+      "bytes": 4427,
+      "sha256": "600486eaa529c20dbce99b67a2922dd7a964c5aba5e8ee7b9ee74de38ec8bff5"
+    },
+    {
+      "path": "schemas/normalized-offer.schema.json",
+      "bytes": 4927,
+      "sha256": "5b5efaad1b138ee7bf8a374bdc7421d6bac371b8926fcc2c847f4c878436b0ea"
+    },
+    {
+      "path": "schemas/product-pack.schema.json",
+      "bytes": 7040,
+      "sha256": "be1fc50c33d5f3364e7e1c6dedda4ee09846ffeae62426119e420d875f2f561f"
+    },
+    {
+      "path": "schemas/provider-error.schema.json",
+      "bytes": 1074,
+      "sha256": "da5f7a1138292b6f046c644ccf0006409dd8ef9dc57d3a3aa2529c8f6331b91c"
+    },
+    {
+      "path": "scripts/validate_handoff.py",
+      "bytes": 5149,
+      "sha256": "a4d10df742a1e51ddb6c802b25a1791cbb5d1c63df7e3062752d7ae6b23a5764"
+    },
+    {
+      "path": "source_material/metricscart_notes.md",
+      "bytes": 11493,
+      "sha256": "ce93f5a4e5d887aad6cdf2b592f46c345098c236a191037287cf4ef609d16863"
+    },
+    {
+      "path": "starter_contracts/python/location_normalization.py",
+      "bytes": 539,
+      "sha256": "62da375830a02d4e49067d87035a9e4bcf90a9281eed11ac7b777dae8d8e90fd"
+    },
+    {
+      "path": "starter_contracts/python/result_array_extractor.py",
+      "bytes": 799,
+      "sha256": "c6bce27aa02c8594e08f22dda537b5370b8d548ccd6f96623977c6baea3a254b"
+    },
+    {
+      "path": "starter_contracts/python/retailer_adapter.py",
+      "bytes": 1179,
+      "sha256": "dc89f5a21a77bf94e7215525b353489625f248b542b685c5530801ae9d2574e7"
+    }
+  ]
+}

@@ -1,0 +1,319 @@
+{
+  "id": "fresh_bananas",
+  "name": "Fresh Bananas & Plantains",
+  "version": "1.0.0",
+  "category_family": "produce",
+  "scope": {
+    "target_terms": ["banana", "bananas", "plantain", "plantains"],
+    "include": ["fresh edible bananas", "fresh plantains"],
+    "exclude": [
+      "dried/freeze-dried bananas",
+      "banana chips",
+      "frozen banana products",
+      "snacks",
+      "powders",
+      "banana-flavored products",
+      "nonfood/search noise"
+    ],
+    "hard_exclusion_patterns": [
+      "dried banana",
+      "freeze dried banana",
+      "banana chip",
+      "frozen banana",
+      "banana snack",
+      "banana powder",
+      "banana flavor",
+      "banana costume",
+      "banana toy",
+      "banana plant",
+      "banana hanger"
+    ],
+    "availability_policy": "in_stock_only"
+  },
+  "attributes": [
+    {
+      "name": "variety",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Standard Yellow",
+        "Plantain",
+        "Green/Cooking",
+        "Manzano/Apple",
+        "Burro",
+        "Red",
+        "Mini/Baby"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "url_rule", "ai_fallback"],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Plantain": ["plantain", "plantains"],
+            "Green/Cooking": [
+              "green banana",
+              "cooking banana",
+              "guineos verdes"
+            ],
+            "Manzano/Apple": ["manzano", "apple banana"],
+            "Burro": ["burro"],
+            "Red": ["red banana"],
+            "Mini/Baby": ["mini banana", "baby banana"]
+          },
+          "default": "Standard Yellow"
+        }
+      ]
+    },
+    {
+      "name": "organic",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "url_rule"],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["organic", "usda organic"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "selling_unit",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": ["each", "bunch", "lb", "fixed_weight_package"],
+      "unknown_policy": "review",
+      "extractors": ["retailer_field", "title_rule", "url_rule", "ai_fallback"],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "sources": ["raw.selling_unit", "raw.unit", "raw.unit_of_measure"],
+          "values": {
+            "each": ["each", "ea"],
+            "bunch": ["bunch"],
+            "lb": ["lb", "pound", "per lb"],
+            "fixed_weight_package": ["fixed weight", "package", "bag"]
+          }
+        },
+        {
+          "type": "term_map",
+          "values": {
+            "fixed_weight_package": [
+              "fixed weight package",
+              "fixed weight",
+              "package",
+              "bag"
+            ],
+            "bunch": ["bunch"],
+            "each": ["each", "ea"],
+            "lb": ["per lb", "pound", "lb"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "weight_lb",
+      "data_type": "number",
+      "role": "normalization",
+      "required_for_strict": false,
+      "unit": "lb",
+      "unknown_policy": "allow_compatible",
+      "extractors": ["retailer_field", "title_rule", "url_rule", "manual"],
+      "extraction_rules": [
+        {
+          "type": "measurement",
+          "units": {
+            "lb": 1,
+            "lbs": 1,
+            "pound": 1,
+            "pounds": 1,
+            "oz": 0.0625,
+            "ounce": 0.0625,
+            "ounces": 0.0625,
+            "kg": 2.2046226218,
+            "g": 0.0022046226218,
+            "gram": 0.0022046226218,
+            "grams": 0.0022046226218
+          }
+        }
+      ]
+    },
+    {
+      "name": "count_min",
+      "data_type": "number",
+      "role": "normalization",
+      "required_for_strict": false,
+      "unit": "each",
+      "unknown_policy": "allow_compatible",
+      "extractors": ["title_rule", "url_rule", "manual"],
+      "extraction_rules": [
+        {
+          "type": "number_pattern",
+          "sources": ["raw_text"],
+          "patterns": ["(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"],
+          "group": 1
+        },
+        {
+          "type": "measurement",
+          "units": { "count": 1, "ct": 1, "each": 1 }
+        }
+      ]
+    },
+    {
+      "name": "count_max",
+      "data_type": "number",
+      "role": "normalization",
+      "required_for_strict": false,
+      "unit": "each",
+      "unknown_policy": "allow_compatible",
+      "extractors": ["title_rule", "url_rule", "manual"],
+      "extraction_rules": [
+        {
+          "type": "number_pattern",
+          "sources": ["raw_text"],
+          "patterns": ["(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"],
+          "group": 2
+        },
+        {
+          "type": "measurement",
+          "units": { "count": 1, "ct": 1, "each": 1 }
+        }
+      ]
+    },
+    {
+      "name": "brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": ["retailer_field", "title_rule"],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": ["brand"]
+        }
+      ]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "selling_unit_price",
+    "secondary_metrics": [
+      "price_per_each",
+      "price_per_lb",
+      "estimated_price_per_banana"
+    ],
+    "conversion_rules": [
+      {
+        "from": "weight_lb",
+        "to": "price_per_lb",
+        "formula": "price / weight_lb"
+      },
+      {
+        "from": "count_min",
+        "to": "midpoint_price_per_each",
+        "formula": "price / ((count_min + count_max)/2)"
+      }
+    ],
+    "forbidden_metrics": [
+      "estimated_price_per_each_without_count_or_weight_evidence"
+    ],
+    "package_equivalence_policy": "category_specific"
+  },
+  "matching_profiles": [
+    {
+      "id": "strict_each",
+      "label": "Strict each-to-each",
+      "geography": "exact_zip",
+      "dimensions": ["variety", "organic", "selling_unit"],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "package_price"
+    },
+    {
+      "id": "weight_normalized",
+      "label": "Weight-normalized",
+      "geography": "exact_zip",
+      "dimensions": ["variety", "organic"],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "review",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "price_per_lb"
+    },
+    {
+      "id": "count_compatible",
+      "label": "Count-compatible bunch",
+      "geography": "exact_zip",
+      "dimensions": ["variety", "organic"],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "review",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "midpoint_price_per_each"
+    }
+  ],
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "suspicious_gap_pct": 50,
+    "require_unit_confirmation_when": [
+      "each price differs materially but expected piece weight differs",
+      "bunch count range missing"
+    ],
+    "human_review_conditions": [
+      "unit semantics ambiguous",
+      "package price suggests extreme gap"
+    ],
+    "sensitivity_checks": []
+  },
+  "reporting": {
+    "headline_segments": ["variety", "organic", "selling_unit"],
+    "required_caveats": [
+      "each price and $/lb can tell different stories",
+      "bunch price must be normalized by count before declaring a winner"
+    ],
+    "recommended_charts": [
+      "footprint",
+      "market_price_distribution",
+      "unit_comparison"
+    ],
+    "alertable_metrics": ["each_gap", "price_per_lb_gap", "bunch_midpoint_gap"]
+  },
+  "regression": {
+    "golden_dataset_ids": ["bananas_aug2026_wmt_aldi_amz"],
+    "expected_headlines": [
+      {
+        "metric": "source_rows",
+        "value": 168440
+      },
+      {
+        "metric": "aldi_standard_each_price",
+        "value": 0.16
+      },
+      {
+        "metric": "walmart_standard_each_price",
+        "value": 0.2
+      },
+      {
+        "metric": "aldi_standard_price_per_lb",
+        "value": 0.49
+      },
+      {
+        "metric": "walmart_standard_price_per_lb",
+        "value": 0.5
+      },
+      {
+        "metric": "amazon_each_walmart_lower_rate",
+        "value": 0.563
+      }
+    ],
+    "tolerances": {
+      "rate_abs": 0.002,
+      "price_abs": 0.01,
+      "count_abs": 5
+    }
+  }
+}

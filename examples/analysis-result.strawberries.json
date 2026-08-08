@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "strawberries-2026-08-07-example",
+  "collection_run_id": "run-example",
+  "generated_at": "2026-08-07T16:00:00-05:00",
+  "benchmark_retailer": "walmart_us",
+  "competitors": [
+    "aldi_us",
+    "amazon_us_same_day"
+  ],
+  "product_pack": {
+    "id": "fresh_strawberries",
+    "version": "1.0.0"
+  },
+  "source_summary": {
+    "total_rows": 297443,
+    "sampling": false,
+    "raw_dataset_ids": [
+      "walmart",
+      "aldi",
+      "amazon"
+    ]
+  },
+  "coverage": [
+    {
+      "retailer_id": "walmart_us",
+      "fresh_zips": 3688,
+      "fresh_stores": 4074
+    },
+    {
+      "retailer_id": "aldi_us",
+      "fresh_zips": 2472,
+      "fresh_stores": 2595
+    },
+    {
+      "retailer_id": "amazon_us_same_day",
+      "fresh_zips": 1266,
+      "fresh_stores": 0
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "conventional_1lb",
+      "attributes": {
+        "weight_oz": 16,
+        "organic": false
+      }
+    },
+    {
+      "segment_id": "conventional_2lb",
+      "attributes": {
+        "weight_oz": 32,
+        "organic": false
+      }
+    },
+    {
+      "segment_id": "organic_1lb",
+      "attributes": {
+        "weight_oz": 16,
+        "organic": true
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "competitor_id": "aldi_us",
+      "segment_id": "all_strict",
+      "matches": 2776,
+      "walmart_lower": 2775,
+      "competitor_lower": 1,
+      "parity": 0,
+      "walmart_lower_rate": 0.9996397695
+    },
+    {
+      "competitor_id": "amazon_us_same_day",
+      "segment_id": "conventional_1lb",
+      "matches": 630,
+      "walmart_lower_rate": 0.3063492063,
+      "competitor_lower_rate": 0.6936507937,
+      "median_gap_per_lb": -0.39
+    },
+    {
+      "competitor_id": "amazon_us_same_day",
+      "segment_id": "conventional_2lb",
+      "matches": 497,
+      "walmart_lower_rate": 0.9416498994,
+      "competitor_lower_rate": 0.0583501006,
+      "median_walmart_price": 4.52,
+      "median_competitor_price": 5.32
+    },
+    {
+      "competitor_id": "amazon_us_same_day",
+      "segment_id": "organic_1lb",
+      "matches": 729,
+      "parity_rate": 0.702
+    }
+  ],
+  "data_quality": {
+    "classification_scope": "fresh raw whole strawberries",
+    "zero_price_used_in_comparisons": false,
+    "per_strawberry_metric_imputed": false
+  },
+  "validation": {
+    "status": "ready_to_share",
+    "checks": [
+      {
+        "type": "aldi_10mi_proximity",
+        "matches": 5237,
+        "walmart_lower": 5236,
+        "competitor_lower": 1
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "amazon-1lb-pressure",
+      "severity": "high",
+      "text": "Amazon is the main 1 lb conventional pressure point."
+    },
+    {
+      "id": "walmart-2lb-strength",
+      "severity": "positive",
+      "text": "Walmart holds a strong 2 lb conventional advantage."
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "text": "Create a dedicated Amazon 1 lb conventional alert."
+    },
+    {
+      "priority": 2,
+      "text": "Protect the Walmart 2 lb conventional value position."
+    }
+  ],
+  "artifacts": [],
+  "provenance": {
+    "golden_dataset_id": "strawberries_aug2026_wmt_aldi_amz",
+    "product_pack_version": "1.0.0"
+  }
+}

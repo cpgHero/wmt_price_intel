@@ -1,0 +1,381 @@
+{
+  "id": "fresh_fluid_milk",
+  "name": "Fresh Fluid Milk",
+  "version": "1.0.0",
+  "category_family": "dairy",
+  "scope": {
+    "target_terms": [
+      "milk"
+    ],
+    "include": [
+      "fresh/refrigerated single-container cow milk"
+    ],
+    "exclude": [
+      "plant-based beverages",
+      "powder/formula",
+      "evaporated/condensed milk",
+      "cream/creamer",
+      "buttermilk",
+      "shelf-stable multipacks",
+      "search noise"
+    ],
+    "hard_exclusion_patterns": [
+      "almond milk",
+      "oat milk",
+      "soy milk",
+      "coconut milk",
+      "cashew milk",
+      "plant based",
+      "powdered milk",
+      "milk powder",
+      "infant formula",
+      "evaporated milk",
+      "condensed milk",
+      "cream",
+      "creamer",
+      "buttermilk",
+      "shelf stable multipack"
+    ],
+    "availability_policy": "retailer_specific"
+  },
+  "attributes": [
+    {
+      "name": "volume_oz",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "fl_oz",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "64": ["half gallon", "1/2 gallon"],
+            "128": ["gallon"]
+          }
+        },
+        {
+          "type": "measurement",
+          "units": {
+            "fl oz": 1,
+            "fluid ounce": 1,
+            "fluid ounces": 1,
+            "gallon": 128,
+            "gal": 128,
+            "quart": 32,
+            "qt": 32,
+            "pint": 16,
+            "pt": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "fat_type",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Whole",
+        "2%",
+        "1%",
+        "Skim/Fat-Free",
+        "Other"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Whole": ["whole milk", "whole"],
+            "2%": ["2%", "2 percent", "reduced fat"],
+            "1%": ["1%", "1 percent", "low fat"],
+            "Skim/Fat-Free": ["skim", "fat free", "nonfat"]
+          },
+          "default": "Other"
+        }
+      ]
+    },
+    {
+      "name": "flavor",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "Plain",
+        "Chocolate",
+        "Other"
+      ],
+      "unknown_policy": "allow_compatible",
+      "extractors": [
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Chocolate": ["chocolate"],
+            "Other": ["strawberry flavor", "vanilla flavor"]
+          },
+          "default": "Plain"
+        }
+      ]
+    },
+    {
+      "name": "organic",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["organic", "usda organic"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "lactose_free",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["lactose free", "lactose-free"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "ultrafiltered",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["ultrafiltered", "ultra filtered", "ultra-filtered"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "a2",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["a2 milk", "a2 protein", "a2"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "grass_fed",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": ["grass fed", "grass-fed"],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "retailer_field",
+        "title_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": ["brand"]
+        }
+      ]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "package_price",
+    "secondary_metrics": [
+      "price_per_gallon"
+    ],
+    "conversion_rules": [
+      {
+        "from": "volume_oz",
+        "to": "price_per_gallon",
+        "formula": "price * 128 / volume_oz"
+      }
+    ],
+    "forbidden_metrics": [],
+    "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_profiles": [
+    {
+      "id": "same_brand_exact",
+      "label": "Same-brand exact",
+      "geography": "exact_zip",
+      "dimensions": [
+        "volume_oz",
+        "fat_type",
+        "flavor",
+        "organic",
+        "lactose_free",
+        "ultrafiltered",
+        "a2",
+        "grass_fed"
+      ],
+      "brand_policy": "same_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive"
+    },
+    {
+      "id": "private_label",
+      "label": "Private-label equivalent",
+      "geography": "exact_zip",
+      "dimensions": [
+        "volume_oz",
+        "fat_type",
+        "flavor",
+        "organic",
+        "lactose_free",
+        "ultrafiltered",
+        "a2",
+        "grass_fed"
+      ],
+      "brand_policy": "private_label_equivalent",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive"
+    },
+    {
+      "id": "all_brand",
+      "label": "All-brand equivalent",
+      "geography": "exact_zip",
+      "dimensions": [
+        "volume_oz",
+        "fat_type",
+        "flavor",
+        "organic",
+        "lactose_free",
+        "ultrafiltered",
+        "a2",
+        "grass_fed"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive"
+    }
+  ],
+  "brand_rules": {
+    "aliases": {
+      "fairlife": ["fair life"],
+      "a2 milk": ["the a2 milk company", "a2milk"],
+      "lactaid": [],
+      "organic valley": [],
+      "horizon organic": ["horizon"]
+    },
+    "private_labels": {
+      "walmart_us": ["Great Value"],
+      "aldi_us": ["Friendly Farms", "Simply Nature"],
+      "amazon_us_same_day": ["Amazon Fresh", "365 by Whole Foods Market", "Happy Belly"]
+    }
+  },
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "suspicious_gap_pct": 75,
+    "human_review_conditions": [
+      "shelf-stable ambiguity",
+      "size missing",
+      "national-brand identity conflict"
+    ],
+    "sensitivity_checks": []
+  },
+  "reporting": {
+    "headline_segments": [
+      "volume_oz",
+      "fat_type",
+      "organic",
+      "lactose_free"
+    ],
+    "required_caveats": [
+      "same-brand and private-label results must remain separate",
+      "search presence is not fulfillment confirmation"
+    ],
+    "recommended_charts": [
+      "footprint",
+      "segment_outcome",
+      "brand_table"
+    ],
+    "alertable_metrics": [
+      "price_gap_per_gallon",
+      "same_brand_parity_rate",
+      "private_label_win_rate"
+    ]
+  },
+  "regression": {
+    "golden_dataset_ids": [
+      "milk_aug2026_wmt_aldi_amz"
+    ],
+    "expected_headlines": [
+      {
+        "metric": "source_rows",
+        "value": 348980
+      },
+      {
+        "metric": "aldi_private_label_walmart_lower_rate",
+        "value": 0.596
+      },
+      {
+        "metric": "amazon_same_brand_parity_rate",
+        "value": 0.354
+      },
+      {
+        "metric": "amazon_private_label_competitor_lower_rate",
+        "value": 0.529
+      }
+    ],
+    "tolerances": {
+      "rate_abs": 0.002,
+      "count_abs": 10
+    }
+  }
+}

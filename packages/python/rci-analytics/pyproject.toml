@@ -1,0 +1,28 @@
+[project]
+name = "rci-analytics"
+version = "0.1.0"
+description = "Configuration-driven offer normalization, classification, matching, and analytics."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "boto3==1.43.53",
+  "polars==1.43.2",
+  "pyarrow==25.0.0",
+  "rci-collections",
+  "rci-contracts",
+  "rci-db",
+  "rci-locations",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[project.scripts]
+rci-analytics-compact = "rci_analytics.cli:main"
+
+[tool.uv.sources]
+rci-collections = { workspace = true }
+rci-contracts = { workspace = true }
+rci-db = { workspace = true }
+rci-locations = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

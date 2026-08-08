@@ -1,0 +1,18 @@
+[project]
+name = "rci-results"
+version = "0.1.0"
+description = "Immutable AnalysisResult persistence, reading, and delivery artifacts."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "boto3==1.43.53",
+  "rci-contracts",
+  "sqlalchemy[asyncio]==2.0.51",
+  "xlsxwriter==3.2.9",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

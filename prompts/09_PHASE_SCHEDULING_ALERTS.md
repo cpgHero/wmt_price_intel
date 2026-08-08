@@ -1,0 +1,1 @@
+Implement scheduled collection definitions, historical run comparison, alert definitions/events, email delivery, and run budgets. Alerts operate on validated AnalysisResult metrics and must carry evidence references. Include conditions such as competitor becomes >X% lower, coverage expands, parity changes, or data quality drops below threshold.

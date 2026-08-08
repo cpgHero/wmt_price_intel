@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/collection-definition.schema.json",
+  "title": "Retail Competitive Intelligence Collection Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "version",
+    "benchmark_retailer",
+    "product_pack",
+    "query",
+    "retailers",
+    "geography",
+    "pagination",
+    "delivery"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3
+    },
+    "version": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "benchmark_retailer": {
+      "type": "string"
+    },
+    "product_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyword"
+      ],
+      "properties": {
+        "keyword": {
+          "type": "string",
+          "minLength": 1
+        },
+        "amazon_same_day_url_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "retailers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "retailer_id",
+          "adapter_id",
+          "enabled"
+        ],
+        "properties": {
+          "retailer_id": {
+            "type": "string"
+          },
+          "adapter_id": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_pages_override": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10
+          },
+          "request_overrides": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "geography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy"
+      ],
+      "properties": {
+        "strategy": {
+          "enum": [
+            "all_retailer_locations",
+            "benchmark_retailer_zips",
+            "union_retailer_zips",
+            "custom_zips",
+            "custom_locations",
+            "states"
+          ]
+        },
+        "benchmark_retailer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "country": {
+          "type": "string",
+          "default": "USA"
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "zipcodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "location_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "proximity_validation_miles": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "pagination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_pages",
+        "stop_on_empty"
+      ],
+      "properties": {
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "stop_on_empty": {
+          "type": "boolean"
+        },
+        "stop_on_short_page": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "schedule": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "timezone"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "manual",
+            "cron"
+          ]
+        },
+        "cron": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone": {
+          "type": "string",
+          "default": "America/Chicago"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "cron"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "cron"
+            ],
+            "properties": {
+              "cron": {
+                "type": "string",
+                "minLength": 9
+              }
+            }
+          }
+        }
+      ]
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "comparison_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enable_ai_fallback": {
+          "type": "boolean",
+          "default": true
+        },
+        "enable_proximity_validation": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "web_report",
+        "excel",
+        "leadership_email"
+      ],
+      "properties": {
+        "web_report": {
+          "type": "boolean"
+        },
+        "excel": {
+          "type": "boolean"
+        },
+        "leadership_email": {
+          "type": "boolean"
+        },
+        "audit_package": {
+          "type": "boolean",
+          "default": true
+        },
+        "email_recipients": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "email"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "budget": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_credits_per_run": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "block_if_estimate_exceeds_budget": {
+          "type": "boolean",
+          "default": true
+        },
+        "max_credits_per_day": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "max_credits_per_month": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

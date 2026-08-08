@@ -1,0 +1,31 @@
+{
+  "definition_id": "fresh-strawberries-weekly",
+  "max_pages": 1,
+  "estimate_basis": "current supplied location master; Amazon uses unique normalized Walmart US ZIPs",
+  "retailers": [
+    {
+      "retailer_id": "walmart_us",
+      "location_units": 4683,
+      "credits_per_page": 1,
+      "estimated_pages": 4683,
+      "estimated_credits": 4683
+    },
+    {
+      "retailer_id": "aldi_us",
+      "location_units": 2627,
+      "credits_per_page": 2,
+      "estimated_pages": 2627,
+      "estimated_credits": 5254
+    },
+    {
+      "retailer_id": "amazon_us_same_day",
+      "location_units": 4190,
+      "credits_per_page": 2,
+      "estimated_pages": 4190,
+      "estimated_credits": 8380
+    }
+  ],
+  "estimated_total_pages": 11500,
+  "estimated_total_credits": 18317,
+  "note": "Actual billable credits can be lower only when pagination stops before configured maximum; successful 2xx pages are the supplied billing event."
+}

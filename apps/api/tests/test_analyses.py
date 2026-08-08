@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from httpx import ASGITransport, AsyncClient
+
+from rci_api.analyses import get_analysis_service
+from rci_api.main import create_app
+from rci_results import (
+    AnalysisResultService,
+    AnalysisResultValidator,
+    InMemoryReportObjectStore,
+    InMemoryResultsRepository,
+)
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _document() -> dict[str, object]:
+    return json.loads(
+        (REPOSITORY_ROOT / "examples" / "analysis-result.strawberries.json").read_text()
+    )
+
+
+def _service() -> AnalysisResultService:
+    return AnalysisResultService(
+        InMemoryResultsRepository(),
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        InMemoryReportObjectStore(),
+    )
+
+
+async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
+    service = _service()
+    app = create_app()
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        document = _document()
+        published = await client.post("/api/v1/collection-runs/run-example/analysis", json=document)
+        assert published.status_code == 201
+        analysis_id = published.json()["analysis_id"]
+
+        listing = await client.get("/api/v1/analyses")
+        assert [row["analysis_id"] for row in listing.json()] == [analysis_id]
+        fetched = await client.get(f"/api/v1/analyses/{analysis_id}")
+        assert fetched.json()["result"] == document
+        matches = await client.get(f"/api/v1/analyses/{analysis_id}/matches")
+        assert len(matches.json()["comparisons"]) == 4
+        quality = await client.get(f"/api/v1/analyses/{analysis_id}/quality")
+        assert quality.json()["validation"]["status"] == "ready_to_share"
+
+        generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
+        assert generated.status_code == 201
+        artifact_id = generated.json()["id"]
+        artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")
+        assert [row["id"] for row in artifacts.json()] == [artifact_id]
+        download = await client.get(f"/api/v1/artifacts/{artifact_id}/download")
+        assert download.status_code == 200
+        assert download.json()["expires_in_seconds"] == 300
+
+
+async def test_analysis_api_rejects_contract_mismatch_and_mutation() -> None:
+    service = _service()
+    app = create_app()
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        document = _document()
+        mismatch = await client.post("/api/v1/collection-runs/wrong/analysis", json=document)
+        assert mismatch.status_code == 409
+
+        assert (
+            await client.post("/api/v1/collection-runs/run-example/analysis", json=document)
+        ).status_code == 201
+        document["comparisons"][0]["matches"] = 1  # type: ignore[index]
+        mutation = await client.post("/api/v1/collection-runs/run-example/analysis", json=document)
+        assert mutation.status_code == 409
+
+        invalid = await client.post(
+            "/api/v1/collection-runs/run-example/analysis",
+            json={"analysis_id": "invalid"},
+        )
+        assert invalid.status_code == 422

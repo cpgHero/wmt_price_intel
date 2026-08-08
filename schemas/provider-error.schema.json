@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/provider-error.schema.json",
+  "title": "Normalized Provider Error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "success",
+    "provider",
+    "failure_class",
+    "should_retry"
+  ],
+  "properties": {
+    "success": {
+      "const": false
+    },
+    "provider": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "failure_class": {
+      "enum": [
+        "rate_limit",
+        "authentication",
+        "invalid_request",
+        "not_found",
+        "provider_5xx",
+        "network",
+        "timeout",
+        "parse_error",
+        "unknown"
+      ]
+    },
+    "http_status": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "should_retry": {
+      "type": "boolean"
+    },
+    "backoff_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "raw_body_excerpt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

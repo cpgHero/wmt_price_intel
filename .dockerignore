@@ -1,0 +1,11 @@
+.git
+.env
+.venv
+node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+reference_outputs
+source_material
+Standalone_Retail_Competitive_Intelligence_Implementation_Blueprint.docx
+

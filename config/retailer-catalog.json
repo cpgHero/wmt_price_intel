@@ -1,0 +1,252 @@
+{
+  "schema_version": "1.0.0",
+  "provider": "metricscart",
+  "base_url": "https://api.metricscart.com",
+  "auth": {
+    "type": "query_parameter",
+    "parameter": "x-api-key",
+    "environment_variable": "METRICSCART_API_KEY",
+    "client_exposure_forbidden": true
+  },
+  "provider_limits": {
+    "documented_cap_rps": 3,
+    "documented_cap_rpm": 180,
+    "default_global_rps": 2,
+    "default_global_rpm": 108,
+    "shared_budget_key": "metricscart_api_key"
+  },
+  "billing_policy": {
+    "charge_event": "successful_2xx_page",
+    "estimate_type": "maximum_pages_x_locations_x_credits"
+  },
+  "result_array_paths": [
+    "results",
+    "items",
+    "products",
+    "result.results",
+    "result.items",
+    "data.results",
+    "data.items",
+    "data"
+  ],
+  "retailers": [
+    {
+      "id": "walmart_us",
+      "display_name": "Walmart (US)",
+      "location_provider": "Walmart",
+      "api_retailer_aliases": [
+        "walmart",
+        "walmart.com",
+        "Walmart (US)"
+      ],
+      "endpoint": "/mc/walmart/search/zipcode/v2",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "required_params": [
+        "zipcode",
+        "store",
+        "page"
+      ],
+      "search_inputs": [
+        "keyword",
+        "url"
+      ],
+      "default_sort": "Best Match",
+      "status": "enabled",
+      "quirks": [
+        "store selection materially affects price and availability",
+        "store IDs must remain strings"
+      ]
+    },
+    {
+      "id": "aldi_us",
+      "display_name": "ALDI",
+      "location_provider": "ALDI",
+      "api_retailer_aliases": [
+        "aldi",
+        "aldi.us",
+        "new_aldi",
+        "ALDI"
+      ],
+      "endpoint": "/mc/new_aldi/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "required_params": [
+        "keyword",
+        "zipcode",
+        "store",
+        "page"
+      ],
+      "status": "enabled",
+      "quirks": [
+        "provider path slug is new_aldi while normalized response may say aldi"
+      ]
+    },
+    {
+      "id": "amazon_us_same_day",
+      "display_name": "Amazon Same Day (US)",
+      "location_provider": null,
+      "api_retailer_aliases": [
+        "amazon",
+        "amazon.com",
+        "Amazon (US)"
+      ],
+      "endpoint": "/mc/amazon/search/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "zipcode",
+      "required_params": [
+        "url",
+        "zipcode",
+        "page"
+      ],
+      "default_sort": "Featured",
+      "status": "enabled",
+      "quirks": [
+        "use URL context to preserve Same Day/Amazon Fresh search; plain keyword can return general Amazon results"
+      ]
+    },
+    {
+      "id": "albertsons_us",
+      "display_name": "Albertsons",
+      "location_provider": "Albertsons",
+      "api_retailer_aliases": [
+        "albertsons",
+        "albertsons.com"
+      ],
+      "endpoint": "/mc/albertsons/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "status": "catalogued"
+    },
+    {
+      "id": "heb_us",
+      "display_name": "H-E-B",
+      "location_provider": "H-E-B",
+      "api_retailer_aliases": [
+        "h-e-b",
+        "heb",
+        "heb.com"
+      ],
+      "endpoint": "/mc/heb/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "status": "catalogued"
+    },
+    {
+      "id": "kroger_us",
+      "display_name": "Kroger",
+      "location_provider": "kroger",
+      "api_retailer_aliases": [
+        "kroger",
+        "kroger.com"
+      ],
+      "endpoint": "/mc/kroger/search/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 3,
+      "location_dimension": "store_zip",
+      "status": "catalogued",
+      "quirks": [
+        "store IDs may contain leading zeros; always strings"
+      ]
+    },
+    {
+      "id": "safeway_us",
+      "display_name": "Safeway",
+      "location_provider": "Safeway",
+      "api_retailer_aliases": [
+        "safeway",
+        "safeway.com"
+      ],
+      "endpoint": "/mc/safeway/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "status": "catalogued"
+    },
+    {
+      "id": "target_us",
+      "display_name": "Target",
+      "location_provider": "Target",
+      "api_retailer_aliases": [
+        "target",
+        "target.com"
+      ],
+      "endpoint": "/mc/target/search/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 4,
+      "location_dimension": "zipcode_or_store_pending_verification",
+      "status": "needs_verification",
+      "quirks": [
+        "new catalog lists ZIP endpoint; older snapshot showed non-ZIP /target/search",
+        "filter location master to Country=USA because provider also contains Australia"
+      ]
+    },
+    {
+      "id": "walmart_mx",
+      "display_name": "Walmart (Mexico)",
+      "location_provider": null,
+      "endpoint": "/mc/walmart_mx/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "zipcode",
+      "status": "catalogued"
+    }
+  ],
+  "normalization_only_retailers": [
+    {
+      "id": "giant_eagle_us",
+      "display_name": "Giant Eagle",
+      "api_retailer_aliases": [
+        "giant eagle",
+        "gianteagle.com"
+      ]
+    },
+    {
+      "id": "meijer_us",
+      "display_name": "Meijer",
+      "api_retailer_aliases": [
+        "meijer",
+        "meijer.com"
+      ]
+    },
+    {
+      "id": "sams_club_us",
+      "display_name": "Sam's Club",
+      "api_retailer_aliases": [
+        "sam's club",
+        "sams club",
+        "samsclub.com"
+      ]
+    },
+    {
+      "id": "shoprite_us",
+      "display_name": "ShopRite",
+      "api_retailer_aliases": [
+        "shoprite",
+        "shoprite.com"
+      ]
+    },
+    {
+      "id": "trader_joes_us",
+      "display_name": "Trader Joe's",
+      "api_retailer_aliases": [
+        "trader joe's",
+        "trader joes",
+        "traderjoes.com"
+      ]
+    },
+    {
+      "id": "wegmans_us",
+      "display_name": "Wegmans",
+      "api_retailer_aliases": [
+        "wegmans",
+        "wegmans.com"
+      ]
+    }
+  ]
+}

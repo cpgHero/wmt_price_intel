@@ -1,0 +1,22 @@
+[project]
+name = "rci-locations"
+version = "0.1.0"
+description = "Country-aware Retail Competitive Intelligence location master."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-core",
+  "rci-db",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[project.scripts]
+rci-locations = "rci_locations.cli:main"
+
+[tool.uv.sources]
+rci-core = { workspace = true }
+rci-db = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+

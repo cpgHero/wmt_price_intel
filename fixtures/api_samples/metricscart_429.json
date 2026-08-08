@@ -1,0 +1,15 @@
+{
+  "http_status": 429,
+  "body": {
+    "error": "Too Many Requests",
+    "message": "Rate limit exceeded"
+  },
+  "normalized": {
+    "success": false,
+    "error": "MetricsCart rate limit (429)",
+    "failure_class": "rate_limit",
+    "http_status": 429,
+    "should_retry": true,
+    "backoff_seconds": 120
+  }
+}
