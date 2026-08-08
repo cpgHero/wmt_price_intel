@@ -74,7 +74,7 @@ async def test_mocked_provider_paginates_until_empty_or_configured_maximum(
         results = [] if empty_page is not None and page >= empty_page else [{"id": page}]
         return httpx.Response(200, json={"data": {"items": results}})
 
-    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2").mock(side_effect=response)
+    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(side_effect=response)
     repository, run = await _run()
     object_store = InMemoryRawObjectStore()
     provider = MetricsCartClient(
@@ -120,7 +120,7 @@ async def test_each_billable_2xx_attempt_is_accounted_even_when_json_parse_retri
             httpx.Response(200, json={"results": []}),
         ]
     )
-    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2").mock(
+    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
         side_effect=lambda _request: next(responses)
     )
     repository, run = await _run(max_pages=1)
@@ -162,3 +162,49 @@ async def test_each_billable_2xx_attempt_is_accounted_even_when_json_parse_retri
     assert usage.actual_credits == 2
     assert task.billable_credits == 2
     assert len(object_store.objects) == 2
+
+
+@respx.mock
+async def test_billable_404_records_credits_without_counting_a_success_page() -> None:
+    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
+        return_value=httpx.Response(
+            404,
+            json={"error": "Page not found", "message": "retailer page unavailable"},
+        )
+    )
+    repository, run = await _run(max_pages=1)
+    object_store = InMemoryRawObjectStore()
+    provider = MetricsCartClient(
+        MetricsCartSettings(
+            api_key="test-key",
+            base_url=BASE_URL,
+            retry_policy=RetryPolicy(jitter=False),
+        ),
+        MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH),
+        InMemoryProviderLimiter(rps=100, rpm=1000),
+        object_store,
+    )
+    worker = QueueWorker(
+        repository,
+        provider,
+        worker_id="metricscart-worker",
+        claim_limit=1,
+        lease_seconds=30,
+    )
+
+    try:
+        assert await worker.drain() == 1
+    finally:
+        await provider.close()
+
+    usage = await repository.usage(run.id)
+    task = (await repository.list_tasks(run.id))[0]
+    assert usage is not None
+    assert route.call_count == 1
+    assert usage.failed_tasks == 1
+    assert usage.actual_success_pages == 0
+    assert usage.actual_credits == 1
+    assert task.http_status == 404
+    assert task.billable_credits == 1
+    assert task.raw_artifact_id is not None
+    assert len(object_store.objects) == 1

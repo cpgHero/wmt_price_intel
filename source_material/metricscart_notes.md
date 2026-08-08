@@ -21,7 +21,8 @@ Rate limits:
 
 Billing:
 
-- Search Monitor charges catalog credits only on successful `2xx` pages.
+- Product-owner correction on 2026-08-08: direct MetricsCart collection charges catalog credits on
+  `2xx` and `404` pages. Other status codes are not billable.
 - Current Amazon Search Monitor catalog fixture shows `2` credits/page.
 - Other retailer credit values should be confirmed from the MetricsCart/API catalog.
 
@@ -77,10 +78,10 @@ Example successful response shape:
 
 **Walmart SERP by store/ZIP**
 
-- Endpoint: `GET https://api.metricscart.com/mc/walmart/search/zipcode/v2`
+- Endpoint: `GET https://api.metricscart.com/mc/walmart/search/zipcode/v2/`
 - Purpose: Walmart product SERP by keyword or URL, ZIP, and store.
 - Params: `keyword` or `url`, `zipcode`, `store`, `page`, `sort`, `x-api-key`
-- Example: `GET https://api.metricscart.com/mc/walmart/search/zipcode/v2?keyword=choco%20chips&zipcode=90020&store=2464&page=1&sort=Best%20Match&x-api-key=YOUR_METRICSCART_API_KEY`
+- Example: `GET https://api.metricscart.com/mc/walmart/search/zipcode/v2/?keyword=choco%20chips&zipcode=90020&store=2464&page=1&sort=Best%20Match&x-api-key=YOUR_METRICSCART_API_KEY`
 - Location: ZIP plus Walmart store number.
 - Quirk: Walmart has a legacy `/zipcode/v2` path; store selection matters for pricing and availability.
 

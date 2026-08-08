@@ -504,7 +504,10 @@ class InMemoryCollectionRepository:
             if billed_credits:
                 self._runs[run.id] = replace(
                     run,
-                    actual_success_pages=run.actual_success_pages + 1,
+                    actual_success_pages=(
+                        run.actual_success_pages
+                        + int(http_status is not None and 200 <= http_status < 300)
+                    ),
                     actual_credits=run.actual_credits + billed_credits,
                 )
             self._reconcile_run(run.id, now)

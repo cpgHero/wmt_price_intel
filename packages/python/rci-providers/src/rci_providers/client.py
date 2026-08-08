@@ -16,6 +16,12 @@ from rci_providers.models import RetryPolicy
 from rci_providers.storage import RawObjectStore
 
 
+def is_billable_http_status(status: int) -> bool:
+    """MetricsCart bills every 2xx and 404 response page."""
+
+    return 200 <= status < 300 or status == 404
+
+
 def credential_budget_key(api_key: str) -> str:
     return f"credential-{hashlib.sha256(api_key.encode()).hexdigest()[:24]}"
 
@@ -84,6 +90,10 @@ class MetricsCartClient:
                 request.method,
                 request.path,
                 params={**request.params, "x-api-key": self._settings.api_key},
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
             )
         except httpx.TimeoutException as exc:
             self._raise_transport("timeout", "MetricsCart request timed out", task, exc)
@@ -112,7 +122,7 @@ class MetricsCartClient:
                     "object_storage", task.attempt_count
                 ),
                 http_status=response.status_code,
-                billable=200 <= response.status_code < 300,
+                billable=is_billable_http_status(response.status_code),
             ) from exc
 
         await self._raise_for_status(response, task, artifact)
@@ -180,6 +190,7 @@ class MetricsCartClient:
             ),
             http_status=status,
             raw_artifact=artifact,
+            billable=is_billable_http_status(status),
         )
 
     @staticmethod

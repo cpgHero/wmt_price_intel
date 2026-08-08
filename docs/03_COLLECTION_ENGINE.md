@@ -8,14 +8,16 @@
 - Existing Search Monitor caps `max_pages` to 1..10.
 - Provider cap observed/documented: 3 RPS / 180 RPM.
 - Conservative application defaults: 2 RPS / 108 RPM globally per credential.
-- Catalog credits are charged on successful 2xx pages.
+- Catalog credits are charged on every 2xx or 404 response page. A 404 remains a failed/unavailable
+  retailer page for task status and result counts, but its configured retailer credits are recorded.
 
 ## Cost estimate
 
 For each retailer:
 `eligible_location_units * max_pages * credits_per_successful_page`
 
-The estimate is a maximum if pagination may stop early. Actual credits are recorded only for successful billable pages.
+The estimate is a maximum if pagination may stop early. Actual credits are recorded for billable 2xx
+and 404 response pages; successful-page counts remain limited to 2xx responses.
 
 ## Location expansion
 

@@ -51,7 +51,7 @@ async def test_s3_storage_uses_immutable_attempt_scoped_gzip_keys() -> None:
     store = S3RawObjectStore(bucket="raw-bucket", client=client)
     artifact = await store.put_response(
         _task(),
-        ProviderRequest(method="GET", path="/mc/walmart/search/zipcode/v2", params={}),
+        ProviderRequest(method="GET", path="/mc/walmart/search/zipcode/v2/", params={}),
         http_status=200,
         body=b'{"results":[]}',
         response_content_type="application/json",

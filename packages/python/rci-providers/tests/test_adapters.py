@@ -90,11 +90,11 @@ def test_walmart_and_aldi_requests_preserve_string_store_ids() -> None:
         _task(
             retailer_id="aldi_us",
             adapter_id="metricscart_new_aldi_serp_zipcode",
-            store_number="473-103",
+            store_number="36873",
         )
     )
 
-    assert walmart.path == "/mc/walmart/search/zipcode/v2"
+    assert walmart.path == "/mc/walmart/search/zipcode/v2/"
     assert walmart.params == {
         "zipcode": "00123",
         "page": 2,
@@ -103,7 +103,7 @@ def test_walmart_and_aldi_requests_preserve_string_store_ids() -> None:
         "sort": "Best Match",
     }
     assert aldi.path == "/mc/new_aldi/serp/zipcode"
-    assert aldi.params["store"] == "473-103"
+    assert aldi.params["store"] == "36873"
 
 
 def test_amazon_requires_and_renders_same_day_url_context() -> None:

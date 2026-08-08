@@ -914,12 +914,18 @@ class PostgresCollectionRepository:
                     text(
                         """
                         UPDATE collection_run
-                        SET actual_success_pages = actual_success_pages + 1,
+                        SET actual_success_pages = actual_success_pages + :successful_page,
                             actual_credits = actual_credits + :credits
                         WHERE id::text = :run_id
                         """
                     ),
-                    {"run_id": run_id, "credits": billed_credits},
+                    {
+                        "run_id": run_id,
+                        "credits": billed_credits,
+                        "successful_page": int(
+                            http_status is not None and 200 <= http_status < 300
+                        ),
+                    },
                 )
             await self._reconcile_run(connection, run_id)
             return True

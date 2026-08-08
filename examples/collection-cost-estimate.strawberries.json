@@ -27,5 +27,5 @@
   ],
   "estimated_total_pages": 11500,
   "estimated_total_credits": 18317,
-  "note": "Actual billable credits can be lower only when pagination stops before configured maximum; successful 2xx pages are the supplied billing event."
+  "note": "Actual billable credits can be lower only when pagination stops before configured maximum; MetricsCart bills 2xx and 404 response pages while successful-page counts remain 2xx-only."
 }

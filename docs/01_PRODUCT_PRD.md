@@ -58,7 +58,7 @@ ALDI US and Amazon Same Day US.
 - Shared cooldown after 429.
 - Retry classification by failure class.
 - Stop pagination on empty results when configured.
-- Actual credits tracked on successful 2xx pages.
+- Actual credits tracked on billable 2xx and 404 pages; successful-page counts remain 2xx-only.
 
 ### Location master
 - Import/sync provider geography.

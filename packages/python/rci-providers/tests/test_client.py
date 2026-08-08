@@ -88,7 +88,7 @@ def _client(store: InMemoryRawObjectStore, limiter=None) -> MetricsCartClient:
             "metricscart_walmart_search_zipcode_v2",
             "walmart_us",
             "walmart_success.json",
-            "/mc/walmart/search/zipcode/v2",
+            "/mc/walmart/search/zipcode/v2/",
             "2464",
         ),
         (
@@ -131,6 +131,8 @@ async def test_mocked_retailer_requests_persist_raw_pages_before_success(
     request = route.calls.last.request
     assert request.url.params["x-api-key"] == "test-secret-key"
     assert request.url.params["page"] == "1"
+    assert request.headers["accept"] == "application/json"
+    assert request.headers["content-type"] == "application/json"
     raw = next(iter(object_store.objects.values()))
     assert json.loads(gzip.decompress(raw)) == payload
     assert "test-secret-key" not in json.dumps(page.raw_artifact.metadata)
@@ -140,14 +142,19 @@ async def test_mocked_retailer_requests_persist_raw_pages_before_success(
 
 
 @pytest.mark.parametrize(
-    ("status", "failure_class", "retryable"),
-    [(400, "invalid_request", False), (401, "authentication", False), (503, "provider_5xx", True)],
+    ("status", "failure_class", "retryable", "billable"),
+    [
+        (400, "invalid_request", False, False),
+        (401, "authentication", False, False),
+        (404, "invalid_request", False, True),
+        (503, "provider_5xx", True, False),
+    ],
 )
 @respx.mock
 async def test_http_failures_are_normalized_and_raw_evidence_is_retained(
-    status: int, failure_class: str, retryable: bool
+    status: int, failure_class: str, retryable: bool, billable: bool
 ) -> None:
-    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2").mock(
+    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
         return_value=httpx.Response(status, json={"error": "fixture"})
     )
     object_store = InMemoryRawObjectStore()
@@ -161,6 +168,7 @@ async def test_http_failures_are_normalized_and_raw_evidence_is_retained(
 
     assert captured.value.failure_class == failure_class
     assert captured.value.retryable is retryable
+    assert captured.value.billable is billable
     assert captured.value.http_status == status
     assert captured.value.raw_artifact is not None
     assert len(object_store.objects) == 1
@@ -171,7 +179,7 @@ async def test_429_applies_shared_120_second_cooldown_and_retry_policy() -> None
     fixture = json.loads(
         (REPOSITORY_ROOT / "fixtures" / "api_samples" / "metricscart_429.json").read_text()
     )
-    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2").mock(
+    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
         return_value=httpx.Response(fixture["http_status"], json=fixture["body"])
     )
     now = 0.0
@@ -202,7 +210,7 @@ async def test_429_applies_shared_120_second_cooldown_and_retry_policy() -> None
 
 @respx.mock
 async def test_parse_error_is_retried_once_after_preserving_body() -> None:
-    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2").mock(
+    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
         return_value=httpx.Response(200, content=b"not-json")
     )
     object_store = InMemoryRawObjectStore()

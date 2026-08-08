@@ -24,11 +24,12 @@ class RetailerAdapter(Protocol):
 ## Enabled V1 adapters
 
 ### Walmart US
-`GET /mc/walmart/search/zipcode/v2`
+`GET /mc/walmart/search/zipcode/v2/`
 - Params: keyword or url, zipcode, store, page, sort, x-api-key.
 - Location grain: store + ZIP.
 - Credit: 1/page.
 - Store selection matters for price/availability.
+- The trailing slash is part of the verified direct API route.
 
 ### ALDI US
 `GET /mc/new_aldi/serp/zipcode`
@@ -36,6 +37,10 @@ class RetailerAdapter(Protocol):
 - Location grain: store + ZIP.
 - Credit: 2/page.
 - Normalize aliases `new_aldi`, `aldi`, `aldi.us`, `ALDI` -> `aldi_us`.
+
+For every enabled adapter, HTTP 2xx and 404 pages are billable. A 404 is retained as immutable raw
+evidence and classified as a nonretryable unavailable/invalid request; it does not become a successful
+result page merely because it incurred credits.
 
 ### Amazon Same Day US
 `GET /mc/amazon/search/zipcode/`

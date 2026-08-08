@@ -16,7 +16,11 @@
     "shared_budget_key": "metricscart_api_key"
   },
   "billing_policy": {
-    "charge_event": "successful_2xx_page",
+    "charge_event": "http_2xx_or_404_page",
+    "billable_http_statuses": [
+      "2xx",
+      404
+    ],
     "estimate_type": "maximum_pages_x_locations_x_credits"
   },
   "result_array_paths": [
@@ -39,7 +43,7 @@
         "walmart.com",
         "Walmart (US)"
       ],
-      "endpoint": "/mc/walmart/search/zipcode/v2",
+      "endpoint": "/mc/walmart/search/zipcode/v2/",
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
