@@ -17,6 +17,22 @@ PACK_ORDER = (
     "fresh_fluid_milk",
     "fresh_bananas",
 )
+CORE_SOURCE_ROOTS = (
+    "apps/api/src",
+    "apps/scheduler/src",
+    "apps/worker/src",
+    "apps/web/src",
+    "packages/python/rci-analytics/src",
+    "packages/python/rci-automation/src",
+    "packages/python/rci-collections/src",
+    "packages/python/rci-contracts/src",
+    "packages/python/rci-core/src",
+    "packages/python/rci-db/src",
+    "packages/python/rci-locations/src",
+    "packages/python/rci-providers/src",
+    "packages/python/rci-results/src",
+    "packages/typescript/contracts/src",
+)
 
 
 @pytest.fixture(scope="module")
@@ -271,11 +287,12 @@ def test_banana_profiles_choose_explicit_category_neutral_metrics(
 
 
 def test_core_engine_contains_no_product_specific_code_paths() -> None:
-    source_root = REPOSITORY_ROOT / "packages" / "python" / "rci-analytics" / "src"
     prohibited = ("strawberr", "egg", "milk", "banana", "plantain")
     findings = {
         str(path.relative_to(REPOSITORY_ROOT)): token
-        for path in source_root.rglob("*.py")
+        for relative_root in CORE_SOURCE_ROOTS
+        for path in (REPOSITORY_ROOT / relative_root).rglob("*")
+        if path.suffix in {".py", ".ts", ".tsx"} and ".test." not in path.name
         for token in prohibited
         if token in path.read_text(encoding="utf-8").casefold()
     }

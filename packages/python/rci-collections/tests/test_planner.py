@@ -25,6 +25,12 @@ def _strawberry_config() -> dict[str, object]:
     )
 
 
+def _egg_config() -> dict[str, object]:
+    return json.loads(
+        (REPOSITORY_ROOT / "examples" / "collection-definition.eggs.json").read_text()
+    )
+
+
 def _relevant_location_units() -> list[LocationUnit]:
     canonical_catalog = RetailerCatalog.from_path(
         REPOSITORY_ROOT / "config" / "retailer-catalog.json"
@@ -74,6 +80,25 @@ async def test_strawberry_cost_estimate_matches_supplied_contract() -> None:
         "sample_size_per_retailer": 5,
         "max_billable_404_rate": 0.5,
     }
+
+
+async def test_egg_vertical_slice_is_configuration_only_and_capped() -> None:
+    repository = InMemoryCollectionRepository(_relevant_location_units())
+    planner = CollectionPlanner(repository, _retailer_catalog())
+
+    config = _egg_config()
+    plan = await planner.plan(config)
+
+    assert config["product_pack"] == {"id": "fresh_shell_eggs", "version": "1.0.0"}
+    assert config["query"] == {
+        "keyword": "fresh eggs",
+        "amazon_same_day_url_template": "https://www.amazon.com/s?k={{keyword}}&i=samedaystore",
+        "notes": "One-ZIP, one-page abstraction proof using the validated egg keyword.",
+    }
+    assert plan.estimate.estimated_total_pages == 3
+    assert plan.estimate.estimated_total_credits == 5
+    assert {task.request_payload["keyword"] for task in plan.initial_tasks} == {"fresh eggs"}
+    assert len([task for task in plan.initial_tasks if task.is_preflight]) == 1
 
 
 async def test_definition_publication_is_checksum_idempotent_and_versioned() -> None:

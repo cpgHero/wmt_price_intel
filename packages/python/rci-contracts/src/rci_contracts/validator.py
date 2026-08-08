@@ -60,14 +60,10 @@ def validate_instance(
 
 
 def _targets(root: Path) -> Iterable[ContractTarget]:
-    yield ContractTarget(
-        "collection-definition.schema.json",
-        root / "examples" / "collection-definition.strawberries.json",
-    )
-    yield ContractTarget(
-        "analysis-result.schema.json",
-        root / "examples" / "analysis-result.strawberries.json",
-    )
+    for definition in sorted((root / "examples").glob("collection-definition.*.json")):
+        yield ContractTarget("collection-definition.schema.json", definition)
+    for result in sorted((root / "examples").glob("analysis-result.*.json")):
+        yield ContractTarget("analysis-result.schema.json", result)
     yield ContractTarget(
         "alert-definition.schema.json",
         root / "examples" / "alert-definition.amazon-pressure.json",

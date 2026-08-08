@@ -56,13 +56,13 @@ describe("collection definition builder", () => {
     const config = buildCollectionDefinition({
       ...values,
       productPackId: "fresh_shell_eggs",
-      keyword: "eggs",
+      keyword: "fresh eggs",
       retailerIds: [...values.retailerIds],
     });
     expect(config.product_pack).toEqual({
       id: "fresh_shell_eggs",
       version: "1.0.0",
     });
-    expect(config.query).toMatchObject({ keyword: "eggs" });
+    expect(config.query).toMatchObject({ keyword: "fresh eggs" });
   });
 });

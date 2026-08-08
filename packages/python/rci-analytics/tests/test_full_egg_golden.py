@@ -85,7 +85,14 @@ def test_full_egg_consolidated_source_profile() -> None:
     fresh_products: dict[str, set[str]] = defaultdict(set)
     normalized_retailers: dict[str, str] = {}
     seen: set[tuple[str, str, str, str, str]] = set()
+    all_seen: set[tuple[str, str, str, str, str]] = set()
+    keyword_counts: Counter[str] = Counter()
+    stock_counts: Counter[str] = Counter()
     short_zip_rows = 0
+    duplicate_grain_rows = 0
+    nonpositive_price_rows = 0
+    scientific_timestamp_rows = 0
+    required_blank_rows = 0
 
     with Path(INPUT).open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
@@ -121,6 +128,19 @@ def test_full_egg_consolidated_source_profile() -> None:
         for row in reader:
             retailer = row["Retailer"]
             raw_counts[retailer] += 1
+            keyword_counts[row["Keyword"]] += 1
+            stock_counts[row["Stock Availability"].strip().casefold() or "blank"] += 1
+            required_blank_rows += any(
+                not row[column].strip()
+                for column in (
+                    "Date",
+                    "Retailer",
+                    "Keyword",
+                    "Zipcode",
+                    "Product Name",
+                    "Retailer Product Id",
+                )
+            )
             if retailer not in normalized_retailers:
                 normalized_retailers[retailer] = normalizer.normalize(dict(row)).retailer_id
 
@@ -129,6 +149,17 @@ def test_full_egg_consolidated_source_profile() -> None:
             zipcode = normalize_zipcode(raw_zipcode, "USA")
             product_id = row["Retailer Product Id"]
             title = row["Product Name"]
+            source_key = (
+                retailer,
+                zipcode,
+                row["Retailer Store Id"],
+                product_id,
+                title.casefold(),
+            )
+            duplicate_grain_rows += source_key in all_seen
+            all_seen.add(source_key)
+            nonpositive_price_rows += Decimal(row["Price"]) <= 0
+            scientific_timestamp_rows += "e+" in row["Date"].casefold()
             if (retailer, product_id, title) not in catalog:
                 continue
             if retailer == "amazon.com" and row["Stock Availability"].strip().casefold() == "false":
@@ -147,7 +178,14 @@ def test_full_egg_consolidated_source_profile() -> None:
     assert sum(raw_counts.values()) == expected["raw_rows"] == 386_889
     assert len(raw_counts) == expected["retailer_domains"] == 14
     assert normalized_retailers == DOMAIN_TO_ID
-    assert short_zip_rows > 0
+    quality = expected["source_quality"]
+    assert keyword_counts == quality["keyword_rows"]
+    assert short_zip_rows == quality["short_zip_rows"]
+    assert duplicate_grain_rows == quality["duplicate_candidate_grain_rows"]
+    assert nonpositive_price_rows == quality["nonpositive_price_rows"]
+    assert scientific_timestamp_rows == quality["scientific_timestamp_rows"]
+    assert stock_counts == quality["stock_availability_rows"]
+    assert required_blank_rows == quality["required_identity_blank_rows"]
     assert all(len(zipcode) == 5 for values in fresh_zips.values() for zipcode in values)
 
     for row in expected["retailer_scorecard"]:

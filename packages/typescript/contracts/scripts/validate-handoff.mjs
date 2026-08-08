@@ -45,16 +45,32 @@ await assertValid(
   await loadJson("examples", "alert-definition.amazon-pressure.json"),
   "alert definition",
 );
-await assertValid(
-  collectionValidator,
-  await loadJson("examples", "collection-definition.strawberries.json"),
-  "collection definition",
-);
-await assertValid(
-  analysisValidator,
-  await loadJson("examples", "analysis-result.strawberries.json"),
-  "analysis result",
-);
+const exampleFiles = await readdir(join(repositoryRoot, "examples"));
+const collectionDefinitionFiles = exampleFiles
+  .filter(
+    (name) =>
+      name.startsWith("collection-definition.") && name.endsWith(".json"),
+  )
+  .sort();
+for (const definitionFile of collectionDefinitionFiles) {
+  await assertValid(
+    collectionValidator,
+    await loadJson("examples", definitionFile),
+    definitionFile,
+  );
+}
+const analysisResultFiles = exampleFiles
+  .filter(
+    (name) => name.startsWith("analysis-result.") && name.endsWith(".json"),
+  )
+  .sort();
+for (const resultFile of analysisResultFiles) {
+  await assertValid(
+    analysisValidator,
+    await loadJson("examples", resultFile),
+    resultFile,
+  );
+}
 await assertValid(
   benchmarkValidator,
   await loadJson("fixtures", "golden", "benchmarks.json"),
@@ -89,5 +105,10 @@ if (profile.rows !== 157806) {
 }
 
 console.log(
-  `Validated ${productPackFiles.length + 5} normative JSON documents.`,
+  `Validated ${
+    productPackFiles.length +
+    collectionDefinitionFiles.length +
+    analysisResultFiles.length +
+    3
+  } normative JSON documents.`,
 );

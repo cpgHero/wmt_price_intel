@@ -19,6 +19,22 @@
     "Walmart",
     "Wegmans"
   ],
+  "source_quality": {
+    "keyword_rows": {
+      "fresh eggs": 385893,
+      "eggs": 996
+    },
+    "short_zip_rows": 31416,
+    "duplicate_candidate_grain_rows": 43846,
+    "nonpositive_price_rows": 30895,
+    "scientific_timestamp_rows": 63153,
+    "stock_availability_rows": {
+      "blank": 323736,
+      "true": 62877,
+      "false": 276
+    },
+    "required_identity_blank_rows": 0
+  },
   "walmart": {
     "retailer": "walmart.com",
     "name": "Walmart",
