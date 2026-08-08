@@ -134,6 +134,34 @@ async def test_postgres_schedule_and_email_claims_are_exclusive_and_idempotent()
             automation.claim_emails("scheduler-b", limit=1, lease_seconds=30),
         )
         assert sum(len(rows) for rows in email_claims) == 1
+        claimed_email = next(rows[0] for rows in email_claims if rows)
+        email_claim_owner = "scheduler-a" if claimed_email in email_claims[0] else "scheduler-b"
+        await automation.complete_email(
+            claimed_email.id,
+            email_claim_owner,
+            provider_message_id="fake-postgres-message-id",
+            error=None,
+            retry_delay_seconds=60,
+        )
+        async with database.engine.connect() as connection:
+            completed_email = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT status, provider_message_id, last_error, sent_at, locked_by "
+                            "FROM email_delivery WHERE id::text = :id"
+                        ),
+                        {"id": claimed_email.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        assert completed_email["status"] == "sent"
+        assert completed_email["provider_message_id"] == "fake-postgres-message-id"
+        assert completed_email["last_error"] is None
+        assert completed_email["sent_at"] is not None
+        assert completed_email["locked_by"] is None
     finally:
         async with database.engine.begin() as connection:
             await connection.execute(

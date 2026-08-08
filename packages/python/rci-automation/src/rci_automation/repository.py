@@ -750,12 +750,13 @@ class PostgresAutomationRepository:
                 text(
                     """
                     UPDATE email_delivery SET
-                      status = CASE WHEN :error IS NULL THEN 'sent'
+                      status = CASE WHEN CAST(:error AS text) IS NULL THEN 'sent'
                         WHEN attempt_count >= max_attempts THEN 'failed' ELSE 'pending' END,
                       available_at = now() + make_interval(secs => :retry_delay),
                       locked_by = NULL, lease_expires_at = NULL,
-                      provider_message_id = :message_id, last_error = :error,
-                      sent_at = CASE WHEN :error IS NULL THEN now() ELSE NULL END
+                      provider_message_id = CAST(:message_id AS text),
+                      last_error = CAST(:error AS text),
+                      sent_at = CASE WHEN CAST(:error AS text) IS NULL THEN now() ELSE NULL END
                     WHERE id::text = :id AND locked_by = :worker_id
                     """
                 ),
