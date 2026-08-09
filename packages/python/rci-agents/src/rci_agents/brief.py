@@ -91,6 +91,68 @@ def _display_identifier(value: object) -> str:
     return str(value).replace("_", " ").replace("-", " ").strip().title()
 
 
+def _display_number(value: int | float) -> str:
+    return f"{float(value):g}"
+
+
+def _attribute_label(attribute: JsonObject, name: str) -> str:
+    label = str(attribute.get("label") or _display_identifier(name)).strip()
+    if str(attribute.get("unit", "")).casefold() == "percent":
+        label = re.sub(r"\s+percentage$", "", label, flags=re.IGNORECASE)
+    return label.casefold()
+
+
+def _segment_display_label(segment: JsonObject, product_pack: JsonObject) -> str:
+    """Render Product Pack segment attributes as a compact merchant-facing label."""
+
+    if str(segment.get("segment_id", "")).casefold() == "all":
+        return "all comparable items"
+    values = segment.get("attributes")
+    if not isinstance(values, dict) or not values:
+        return str(segment.get("label") or "comparable items")
+    definitions = {
+        str(attribute.get("name")): attribute
+        for attribute in _rows(product_pack.get("attributes"))
+        if attribute.get("name")
+    }
+    names = [name for name in definitions if name in values]
+    names.extend(sorted(str(name) for name in values if str(name) not in definitions))
+    percentages: list[str] = []
+    measurements: list[str] = []
+    descriptors: list[str] = []
+    baseline_values = {"", "default", "none", "not applicable", "standard", "unknown"}
+    for name in names:
+        value = values.get(name)
+        if value is None:
+            continue
+        definition = definitions.get(name, {})
+        label = _attribute_label(definition, name)
+        unit = str(definition.get("unit", "")).strip().casefold()
+        if not unit and name.casefold().endswith("_pct"):
+            unit = "percent"
+            label = name.removesuffix("_pct").replace("_", " ")
+        if not unit and (name.casefold().endswith("_lb") or "weight" in name.casefold()):
+            unit = "lb"
+        if isinstance(value, bool):
+            descriptors.append(label if value else f"non-{label.replace(' ', '-')}")
+        elif isinstance(value, int | float):
+            rendered = _display_number(value)
+            if unit == "percent":
+                percentages.append(f"{rendered}% {label}")
+            else:
+                measurements.append(f"{rendered} {unit or label}".strip())
+        else:
+            rendered = str(value).replace("_", " ").strip().casefold()
+            if rendered not in baseline_values:
+                descriptors.append(rendered)
+    parts: list[str] = []
+    if percentages:
+        parts.append(" / ".join(percentages))
+    parts.extend(measurements)
+    parts.extend(descriptors)
+    return " · ".join(parts) or str(segment.get("label") or "comparable items")
+
+
 class AnalysisBriefBuilder:
     """Create a bounded, evidence-linked business-fact packet without category branches."""
 
@@ -99,6 +161,16 @@ class AnalysisBriefBuilder:
             raise ValueError("analysis brief requires at least 24 metrics")
         self._root = repository_root
         self._max_metrics = max_metrics
+        catalog = json.loads((repository_root / "config/retailer-catalog.json").read_text())
+        catalog_rows = [
+            *_rows(catalog.get("retailers")),
+            *_rows(catalog.get("normalization_only_retailers")),
+        ]
+        self._retailer_names = {
+            str(row["id"]): str(row["display_name"])
+            for row in catalog_rows
+            if row.get("id") and row.get("display_name")
+        }
 
     def build(
         self,
@@ -120,6 +192,7 @@ class AnalysisBriefBuilder:
         comparison_facts = self._comparison_facts(
             result,
             metric_index,
+            product_pack=product_pack,
             small_sample_threshold=small_sample_threshold,
         )
         facts.extend(self._bounded_comparisons(comparison_facts, facts))
@@ -207,8 +280,8 @@ class AnalysisBriefBuilder:
         )
         return document
 
-    @staticmethod
     def _base_facts(
+        self,
         result: JsonObject,
         metric_index: dict[str, JsonObject],
     ) -> list[JsonObject]:
@@ -247,7 +320,7 @@ class AnalysisBriefBuilder:
                 {
                     "id": f"fact.coverage.{_slug(row.get('retailer_id'))}",
                     "kind": "coverage",
-                    "label": f"{_display_identifier(row.get('retailer_id'))} qualifying footprint",
+                    "label": f"{self._retailer_name(row.get('retailer_id'))} qualifying footprint",
                     "significance": "context",
                     "metric_refs": refs,
                     "evidence_refs": AnalysisBriefBuilder._evidence_for(refs, metric_index),
@@ -256,11 +329,12 @@ class AnalysisBriefBuilder:
             )
         return facts
 
-    @staticmethod
     def _comparison_facts(
+        self,
         result: JsonObject,
         metric_index: dict[str, JsonObject],
         *,
+        product_pack: JsonObject,
         small_sample_threshold: int,
     ) -> list[JsonObject]:
         mode_index = {str(row["profile_id"]): row for row in _rows(result.get("comparison_modes"))}
@@ -305,7 +379,8 @@ class AnalysisBriefBuilder:
             segment = segment_index.get(segment_id, {})
             mode = mode_index.get(str(comparison.get("profile_id")), {})
             competitor_id = str(comparison.get("competitor_id", "unknown"))
-            label = str(segment.get("label") or "All comparable items")
+            label = _segment_display_label(segment, product_pack)
+            competitor_name = self._retailer_name(competitor_id)
             facts.append(
                 {
                     "id": f"fact.comparison.{_slug(comparison.get('comparison_id'))}",
@@ -314,12 +389,13 @@ class AnalysisBriefBuilder:
                         if mode.get("geography") == "radius"
                         else ("comparison_overall" if segment_id == "all" else "comparison_segment")
                     ),
-                    "label": f"{_display_identifier(competitor_id)} — {label}",
+                    "label": f"{competitor_name} — {label}",
                     "significance": significance,
                     "metric_refs": key_refs,
                     "evidence_refs": AnalysisBriefBuilder._evidence_for(key_refs, metric_index),
                     "context": {
                         "competitor_id": competitor_id,
+                        "competitor_name": competitor_name,
                         "profile_id": str(comparison.get("profile_id", "unknown")),
                         "profile_label": str(mode.get("label", "Comparison")),
                         "segment_id": segment_id,
@@ -388,8 +464,8 @@ class AnalysisBriefBuilder:
             }
         ]
 
-    @staticmethod
     def _storylines(
+        self,
         result: JsonObject,
         facts: list[JsonObject],
         *,
@@ -406,7 +482,7 @@ class AnalysisBriefBuilder:
                 AnalysisBriefBuilder._storyline(
                     "story.scope",
                     "scope",
-                    "The analysis uses the complete contracted source scope.",
+                    "complete contracted source scope",
                     "Lead with the observed retailer footprint and disclose whether "
                     "sampling occurred before interpreting price outcomes.",
                     ["data_scope", "footprint"],
@@ -435,28 +511,32 @@ class AnalysisBriefBuilder:
                 continue
             seen.add(fact_id)
             context = fact["context"]
-            competitor = _display_identifier(context["competitor_id"])
+            competitor = str(
+                context.get("competitor_name") or _display_identifier(context["competitor_id"])
+            )
             segment = str(context["segment_label"])
             profile = str(context["profile_label"])
+            article = "an" if profile[:1].casefold() in "aeiou" else "a"
             if fact["significance"] == "risk":
                 kind = "competitive_pressure"
-                headline = f"{competitor} creates price pressure in {segment}."
+                headline = f"{competitor} price pressure in {segment}"
                 interpretation = (
-                    f"Treat this as a {profile} watchlist and keep the action within the "
+                    f"Treat this as {article} {profile.casefold()} watchlist and keep the action "
+                    "within the "
                     "matched product specification."
                 )
             elif fact["significance"] == "strength":
                 kind = "benchmark_strength"
                 headline = (
-                    f"{_display_identifier(benchmark_retailer)} holds a strong position against "
-                    f"{competitor} in {segment}."
+                    f"{self._retailer_name(benchmark_retailer)} value strength against "
+                    f"{competitor} in {segment}"
                 )
                 interpretation = (
                     f"Protect this {profile} value position while monitoring localized exceptions."
                 )
             else:
                 kind = "mixed_position"
-                headline = f"The {competitor} result is mixed in {segment}."
+                headline = f"mixed price position against {competitor} in {segment}"
                 interpretation = (
                     f"Avoid a broad price conclusion; use the {profile} evidence and matched "
                     "denominator to guide monitoring."
@@ -496,12 +576,13 @@ class AnalysisBriefBuilder:
             if not ({"risk", "strength"}.issubset(directions) and len(metrics) > 1):
                 continue
             segment = str(grouped[0]["context"]["segment_label"])
+            competitor_name = grouped[0]["context"].get("competitor_name")
+            competitor_name = competitor_name or _display_identifier(competitor_id)
             storylines.append(
                 AnalysisBriefBuilder._storyline(
                     f"story.reversal.{_slug(competitor_id)}.{_slug(grouped[0]['context']['segment_id'])}",
                     "segment_reversal",
-                    f"The price winner changes by comparison lens for {segment} "
-                    f"against {_display_identifier(competitor_id)}.",
+                    f"price-winner reversal against {competitor_name!s} in {segment}",
                     "Present the exact-package and normalized-unit conclusions separately; "
                     "both can be valid for different merchant decisions.",
                     ["segment_reversals", "exact_price", "normalized_price"],
@@ -511,13 +592,13 @@ class AnalysisBriefBuilder:
 
         for fact in [fact for fact in facts if fact["kind"] == "geographic_validation"][:3]:
             context = fact["context"]
+            competitor_name = context.get("competitor_name")
+            competitor_name = competitor_name or _display_identifier(context["competitor_id"])
             storylines.append(
                 AnalysisBriefBuilder._storyline(
                     f"story.geography.{_slug(fact['id'])}",
                     "geographic_validation",
-                    "Nearby-store evidence tests the "
-                    f"{_display_identifier(context['competitor_id'])} conclusion beyond "
-                    "exact ZIP matching.",
+                    f"{competitor_name!s} nearby-store validation",
                     "State whether the directional result is consistent with the primary "
                     "comparison and keep the radius analysis labeled as a sensitivity test.",
                     ["geography"],
@@ -531,7 +612,7 @@ class AnalysisBriefBuilder:
                 AnalysisBriefBuilder._storyline(
                     "story.quality",
                     "quality_limitation",
-                    "Observed data-quality issues constrain at least one conclusion.",
+                    "observed data-quality limitations",
                     "Disclose the affected metric and avoid turning incomplete product or "
                     "unit evidence into an automated alert.",
                     ["caveats"],
@@ -549,11 +630,19 @@ class AnalysisBriefBuilder:
             ][:2]
             if not linked:
                 continue
+            primary_context = linked[0].get("context", {})
+            if not isinstance(primary_context, dict):
+                primary_context = {}
+            competitor = str(
+                primary_context.get("competitor_name")
+                or self._retailer_name(primary_context.get("competitor_id"))
+            )
+            segment = str(primary_context.get("segment_label") or "the cited opportunity")
             storylines.append(
                 AnalysisBriefBuilder._storyline(
                     f"story.action.{index}",
                     "action",
-                    str(recommendation.get("action", "Review the evidence-backed opportunity.")),
+                    f"{competitor} response for {segment}",
                     str(
                         recommendation.get(
                             "rationale",
@@ -568,6 +657,10 @@ class AnalysisBriefBuilder:
             {**storyline, "priority": index}
             for index, storyline in enumerate(storylines[:20], start=1)
         ]
+
+    def _retailer_name(self, retailer_id: object) -> str:
+        key = str(retailer_id or "unknown")
+        return self._retailer_names.get(key, _display_identifier(key))
 
     @staticmethod
     def _storyline(

@@ -20,6 +20,11 @@ _STORYLINE_PLACEHOLDER = re.compile(r"\{\{storyline:([A-Za-z0-9_.-]+)\|headline\
 _NUMERIC_LITERAL = re.compile(
     r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?"
 )
+_MACHINE_PROSE = re.compile(
+    r"\b[a-z][a-z0-9]*_us(?:_[a-z0-9]+)*\b|"
+    r"\b(?:lean pct|fat pct|weight lb|organic|grass fed|premium tier)\s*:",
+    flags=re.IGNORECASE,
+)
 
 
 class AgentGovernanceError(ValueError):
@@ -56,12 +61,22 @@ class NarrativeQualityCritic:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} is too thin for leadership use"
                 )
+            self.validate_prose(body)
             covered_topics.update(topics)
             required_topics.update(required)
         if not required_topics.issubset(covered_topics):
             raise AgentGovernanceError(
                 "narrative does not cover the complete requested leadership brief"
             )
+
+    @staticmethod
+    def validate_prose(*values: str) -> None:
+        for value in values:
+            match = _MACHINE_PROSE.search(value)
+            if match:
+                raise AgentGovernanceError(
+                    f"leadership prose exposes machine-oriented label {match.group(0)!r}"
+                )
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -239,6 +254,7 @@ class GovernedOutputBuilder:
             )
             if not title or not summary or not impact:
                 raise AgentGovernanceError("AI insight text fields cannot be empty")
+            self._critic.validate_prose(title, summary, impact)
             selected.append(
                 {
                     "id": insight_id,
@@ -316,6 +332,7 @@ class GovernedOutputBuilder:
             )
             if not body:
                 raise AgentGovernanceError("AI narrative body cannot be empty")
+            self._critic.validate_prose(body)
             sections.append(
                 {
                     "id": section_id,

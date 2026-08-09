@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.1.0"
+RENDERER_VERSION = "2.2.0"
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -99,6 +99,9 @@ text-transform:uppercase}
 .metric strong{display:block;font-size:24px;margin-top:16px}.table-wrap{overflow:auto}
 .decision-card{background:var(--surface);box-shadow:none}.decision-card h3{font-size:17px;
 line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:14px}
+.evidence{border-top:1px solid var(--line);margin-top:20px;padding-top:14px}
+.evidence summary{color:var(--accent);cursor:pointer;font-weight:750}
+.evidence .table-wrap{margin-top:12px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);
 padding:10px;text-align:left;vertical-align:top}th{color:var(--muted);font-size:11px;letter-spacing:.06em;
 text-transform:uppercase}tbody tr:nth-child(even){background:var(--surface)}li{margin:10px 0}
@@ -137,6 +140,23 @@ def _table(title: str, rows: list[JsonObject]) -> str:
     return (
         f"<section><h2>{escape(title)}</h2><div class=table-wrap><table>"
         f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></section>"
+    )
+
+
+def _collapsed_table(title: str, rows: list[JsonObject]) -> str:
+    if not rows:
+        return ""
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    header = "".join(f"<th>{escape(column.replace('_', ' ').title())}</th>" for column in columns)
+    body = "".join(
+        "<tr>"
+        + "".join(f"<td>{escape(_display(row.get(column)))}</td>" for column in columns)
+        + "</tr>"
+        for row in rows
+    )
+    return (
+        f"<details class=evidence><summary>{escape(title)}</summary><div class=table-wrap>"
+        f"<table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></details>"
     )
 
 
@@ -217,7 +237,7 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         narrative_html = (
             _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""
         )
-        metrics = _rows(section, "metrics")
+        metrics = _rows(section, "metrics")[:6]
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
             f"<strong>{escape(_metric_display(metric.get('value'), metric.get('unit')))}</strong>"
@@ -228,11 +248,12 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         records = _rows(section, "records")
         if section.get("visualization") == "ranked_cards":
             cards = "".join(
-                LeadershipHtmlRenderer._record_card(row, index) for index, row in enumerate(records)
+                LeadershipHtmlRenderer._record_card(row, index)
+                for index, row in enumerate(records[:5])
             )
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
         else:
-            detail = _table("Evidence-backed detail", records) if records else ""
+            detail = _collapsed_table("View evidence-backed detail", records)
         empty = (
             f"<p class=empty>{escape(_display(section.get('empty_state')))}</p>"
             if section.get("empty")
@@ -247,13 +268,17 @@ Generated {escape(_display(result.get("generated_at")))}</div>
     def _record_card(row: JsonObject, index: int) -> str:
         rank = row.get("priority") or row.get("severity") or index + 1
         headline = (
-            row.get("summary")
+            row.get("title")
             or row.get("action")
-            or row.get("title")
+            or row.get("summary")
             or row.get("text")
             or "Decision signal"
         )
-        detail = row.get("detail") or row.get("rationale") or row.get("description")
+        detail = (
+            row.get("summary")
+            if row.get("title") and row.get("summary") != row.get("title")
+            else row.get("detail") or row.get("rationale") or row.get("description")
+        )
         detail_html = f"<p>{escape(_display(detail))}</p>" if detail is not None else ""
         return (
             f"<article class=decision-card><span>{escape(_display(rank))}</span>"

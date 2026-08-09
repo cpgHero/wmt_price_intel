@@ -131,6 +131,7 @@ async def run() -> None:
                 timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "60")),
                 max_output_tokens=int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "8000")),
                 max_request_cost_usd=float(os.getenv("OPENAI_MAX_REQUEST_COST_USD", "1.00")),
+                reasoning_effort=os.getenv("OPENAI_REASONING_EFFORT", "high"),
             ),
             repository=PostgresAgentTaskRepository(database.engine),
             worker_id=f"{worker_id}-agent",

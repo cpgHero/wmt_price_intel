@@ -83,11 +83,16 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--insight-model",
-        default=os.getenv("OPENAI_MODEL_INSIGHT", "gpt-5.4-mini-2026-03-17"),
+        default=os.getenv("OPENAI_MODEL_INSIGHT", "gpt-5.6-sol"),
     )
     parser.add_argument(
         "--narrative-model",
-        default=os.getenv("OPENAI_MODEL_NARRATIVE", "gpt-5.4-2026-03-05"),
+        default=os.getenv("OPENAI_MODEL_NARRATIVE", "gpt-5.6-sol"),
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=("none", "low", "medium", "high", "xhigh", "max"),
+        default=os.getenv("OPENAI_REASONING_EFFORT", "high"),
     )
     parser.add_argument(
         "--max-request-cost-usd",
@@ -134,6 +139,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "60")),
                 max_output_tokens=args.max_output_tokens,
                 max_request_cost_usd=args.max_request_cost_usd,
+                reasoning_effort=args.reasoning_effort,
             )
         )
         assistant = GovernedAnalysisAssistant(

@@ -323,6 +323,43 @@ def test_analysis_brief_is_deterministic_complete_and_evidence_bounded() -> None
     assert set(first["required_topics"]) <= covered_topics
 
 
+def test_analysis_brief_uses_merchant_facing_retailer_and_segment_names() -> None:
+    result = _document("examples/analysis-result-v2.ground-beef.json")
+    result["comparisons"].append(
+        {
+            **result["comparisons"][0],
+            "comparison_id": "aldi-organic-segment",
+            "segment_id": "organic_grass_fed_85_15_1lb",
+        }
+    )
+    product_pack = _document("product-packs/fresh_ground_beef.json")
+    blueprint = _document("report-blueprints/fresh_ground_beef_leadership.json")
+    brief = AnalysisBriefBuilder(REPOSITORY_ROOT).build(
+        result,
+        product_pack=product_pack,
+        report_blueprint=blueprint,
+    )
+
+    text = " ".join(
+        f"{storyline['headline']} {storyline['interpretation']}"
+        for storyline in brief["storylines"]
+    )
+    assert "aldi_us" not in text
+    assert "amazon_us_same_day" not in text
+    assert "ALDI" in text
+    comparison_labels = [
+        str(fact["label"]) for fact in brief["facts"] if str(fact["kind"]).startswith("comparison")
+    ]
+    assert any("85% lean · 1 lb · organic · grass fed" in label for label in comparison_labels)
+
+
+def test_narrative_critic_rejects_machine_oriented_labels() -> None:
+    with pytest.raises(AgentGovernanceError, match="machine-oriented"):
+        NarrativeQualityCritic.validate_prose(
+            "Prioritize aldi_us losses in Lean Pct: eighty and Organic: False."
+        )
+
+
 def test_narrative_critic_rejects_omitted_required_topic() -> None:
     requested = {
         "executive_summary": {
@@ -444,6 +481,8 @@ async def test_openai_provider_uses_strict_ephemeral_structured_output() -> None
     assert endpoint.kwargs["model"] == "explicit-test-model"
     assert endpoint.kwargs["store"] is False
     assert endpoint.kwargs["max_output_tokens"] == 321
+    assert endpoint.kwargs["reasoning"] == {"effort": "high"}
+    assert endpoint.kwargs["text"]["verbosity"] == "high"
     response_format = endpoint.kwargs["text"]["format"]
     assert response_format["type"] == "json_schema"
     assert response_format["strict"] is True
@@ -538,6 +577,13 @@ async def test_openai_provider_records_pinned_cost_and_rejects_over_budget_reque
     )
 
     assert response.estimated_cost_usd == pytest.approx(0.00005325)
+
+    sol_response = await provider.generate(
+        prompt,
+        {"analysis_id": "analysis-1"},
+        model_id="gpt-5.6-sol",
+    )
+    assert sol_response.estimated_cost_usd == pytest.approx(0.000355)
 
     blocked_endpoint = FakeResponsesEndpoint()
     blocked = OpenAIResponsesProvider(

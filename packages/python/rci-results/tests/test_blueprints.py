@@ -104,6 +104,31 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         assert json.loads(archive.read("analysis-result.json")) == result
 
 
+def test_leadership_html_prioritizes_titles_and_collapses_supporting_detail() -> None:
+    result = _result()
+    result["insights"] = [
+        {
+            "id": f"insight-{index}",
+            "title": f"Decision title {index}",
+            "summary": f"Long supporting summary {index}",
+            "severity": "medium",
+            "business_impact": "Act on the governed signal.",
+            "metric_refs": ["aldi-exact-matches"],
+            "evidence_refs": ["evidence-exact-aldi"],
+            "confidence": "high",
+            "generated_by": "deterministic",
+        }
+        for index in range(7)
+    ]
+
+    html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body.decode()
+
+    assert "Decision title 0" in html
+    assert "Long supporting summary 0" in html
+    assert "Decision title 5" not in html
+    assert "<details class=evidence>" in html
+
+
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
     result = _result()
     renderer = ArtifactRenderer(REPOSITORY_ROOT)

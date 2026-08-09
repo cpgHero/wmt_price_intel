@@ -33,6 +33,10 @@ class ModelPricing:
 
 
 PINNED_MODEL_PRICING: dict[str, ModelPricing] = {
+    "gpt-5.6-sol": ModelPricing(
+        input_usd_per_million_tokens=5.00,
+        output_usd_per_million_tokens=30.00,
+    ),
     "gpt-5.4-2026-03-05": ModelPricing(
         input_usd_per_million_tokens=2.50,
         output_usd_per_million_tokens=15.00,
@@ -199,6 +203,8 @@ class OpenAIResponsesProvider:
         max_output_tokens: int,
         max_request_cost_usd: float | None = None,
         model_pricing: Mapping[str, ModelPricing] | None = None,
+        reasoning_effort: str = "high",
+        text_verbosity: str = "high",
     ) -> None:
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is required when AI is enabled")
@@ -206,6 +212,10 @@ class OpenAIResponsesProvider:
             raise ValueError("OpenAI timeout and output-token limit must be positive")
         if max_request_cost_usd is not None and max_request_cost_usd <= 0:
             raise ValueError("OpenAI request cost limit must be positive")
+        if reasoning_effort not in {"none", "low", "medium", "high", "xhigh", "max"}:
+            raise ValueError("unsupported OpenAI reasoning effort")
+        if text_verbosity not in {"low", "medium", "high"}:
+            raise ValueError("unsupported OpenAI text verbosity")
         self._client = AsyncOpenAI(
             api_key=api_key,
             timeout=timeout_seconds,
@@ -214,6 +224,8 @@ class OpenAIResponsesProvider:
         self._max_output_tokens = max_output_tokens
         self._max_request_cost_usd = max_request_cost_usd
         self._model_pricing = dict(model_pricing or PINNED_MODEL_PRICING)
+        self._reasoning_effort = reasoning_effort
+        self._text_verbosity = text_verbosity
 
     async def generate(
         self,
@@ -246,13 +258,15 @@ class OpenAIResponsesProvider:
             input=json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
             max_output_tokens=self._max_output_tokens,
             store=False,
+            reasoning={"effort": self._reasoning_effort},
             text={
+                "verbosity": self._text_verbosity,
                 "format": {
                     "type": "json_schema",
                     "name": f"rci_{prompt.role}_result",
                     "strict": True,
                     "schema": response_schema,
-                }
+                },
             },
         )
         result = json.loads(str(response.output_text))
