@@ -16,6 +16,7 @@ PACK_ORDER = (
     "fresh_shell_eggs",
     "fresh_fluid_milk",
     "fresh_bananas",
+    "fresh_ground_beef",
 )
 CORE_SOURCE_ROOTS = (
     "apps/api/src",
@@ -132,6 +133,25 @@ def test_product_packs_load_in_required_expansion_order() -> None:
             },
             "price_per_lb",
             Decimal("0.50"),
+        ),
+        (
+            "fresh_ground_beef",
+            _row(
+                "walmart_us",
+                "15136795",
+                "73% Lean / 27% Fat Ground Beef, 5 lb Roll, Fresh, All Natural",
+                "24.95",
+            ),
+            {
+                "lean_pct": 73,
+                "fat_pct": 27,
+                "weight_lb": 5.0,
+                "organic": False,
+                "grass_fed": False,
+                "premium_tier": "standard",
+            },
+            "price_per_lb",
+            Decimal("4.99"),
         ),
     ],
 )
@@ -287,7 +307,15 @@ def test_banana_profiles_choose_explicit_category_neutral_metrics(
 
 
 def test_core_engine_contains_no_product_specific_code_paths() -> None:
-    prohibited = ("strawberr", "egg", "milk", "banana", "plantain")
+    prohibited = (
+        "strawberr",
+        "egg",
+        "milk",
+        "banana",
+        "plantain",
+        "ground_beef",
+        "ground beef",
+    )
     findings = {
         str(path.relative_to(REPOSITORY_ROOT)): token
         for relative_root in CORE_SOURCE_ROOTS

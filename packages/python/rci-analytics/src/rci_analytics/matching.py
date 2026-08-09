@@ -148,6 +148,19 @@ class ComparisonEngine:
         value = item.offer.price if metric == "package_price" else item.metrics.get(metric)
         return value if value is not None and value > 0 else None
 
+    def _available_for_matching(self, item: ClassifiedOffer, profile: JsonObject) -> bool:
+        policy = str(profile.get("availability_policy", "search_presence"))
+        if policy == "retailer_specific":
+            retailer = self.pack.document.get("retailer_overrides", {}).get(
+                item.offer.retailer_id, {}
+            )
+            policy = str(retailer.get("matching_availability_policy", "search_presence"))
+        if policy == "search_presence":
+            return True
+        if policy == "in_stock_only":
+            return item.offer.in_stock is True
+        raise ValueError(f"matching availability policy {policy!r} is not implemented")
+
     def _selected(
         self,
         offers: list[ClassifiedOffer],
@@ -164,6 +177,7 @@ class ComparisonEngine:
                 not item.in_scope
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
+                or not self._available_for_matching(item, profile)
                 or not self._satisfies_constraints(item, profile)
             ):
                 continue
@@ -302,6 +316,7 @@ class ComparisonEngine:
                 item.in_scope
                 and item.offer.retailer_id == retailer_id
                 and item.offer.zipcode is not None
+                and self._available_for_matching(item, profile)
                 and self._satisfies_constraints(item, profile)
                 and value is not None
             ):
@@ -367,6 +382,24 @@ class ComparisonEngine:
         by_dimensions: dict[tuple[Any, ...], list[tuple[ClassifiedOffer, Decimal]]] = {}
         for (_, dimension_key), value in benchmark.items():
             by_dimensions.setdefault(dimension_key, []).append(value)
+        cell_degrees = max(radius / 69.0, 0.01)
+        spatial_by_dimensions: dict[
+            tuple[Any, ...],
+            dict[tuple[int, int], list[tuple[ClassifiedOffer, Decimal]]],
+        ] = {}
+        for dimension_key, values in by_dimensions.items():
+            cells: dict[tuple[int, int], list[tuple[ClassifiedOffer, Decimal]]] = {}
+            for benchmark_offer, benchmark_value in values:
+                latitude = benchmark_offer.offer.latitude
+                longitude = benchmark_offer.offer.longitude
+                if latitude is None or longitude is None:
+                    continue
+                cell = (
+                    math.floor(latitude / cell_degrees),
+                    math.floor(longitude / cell_degrees),
+                )
+                cells.setdefault(cell, []).append((benchmark_offer, benchmark_value))
+            spatial_by_dimensions[dimension_key] = cells
         matches: list[MatchRecord] = []
         for (store_key, dimension_key), (competitor_offer, competitor_value) in sorted(
             competitors.items(), key=lambda item: str(item[0])
@@ -375,8 +408,33 @@ class ComparisonEngine:
             longitude = competitor_offer.offer.longitude
             if latitude is None or longitude is None:
                 continue
+            latitude_delta = radius / 69.0
+            longitude_scale = abs(math.cos(math.radians(latitude)))
+            longitude_delta = 180.0 if longitude_scale < 0.05 else radius / (69.0 * longitude_scale)
+            latitude_cells = range(
+                math.floor((latitude - latitude_delta) / cell_degrees),
+                math.floor((latitude + latitude_delta) / cell_degrees) + 1,
+            )
+            longitude_cells = range(
+                math.floor((longitude - longitude_delta) / cell_degrees),
+                math.floor((longitude + longitude_delta) / cell_degrees) + 1,
+            )
+            nearby = spatial_by_dimensions.get(dimension_key, {})
+            if (
+                longitude_scale < 0.05
+                or longitude - longitude_delta < -180
+                or longitude + longitude_delta > 180
+            ):
+                potential_candidates = by_dimensions.get(dimension_key, [])
+            else:
+                potential_candidates = [
+                    candidate
+                    for latitude_cell in latitude_cells
+                    for longitude_cell in longitude_cells
+                    for candidate in nearby.get((latitude_cell, longitude_cell), ())
+                ]
             candidates: list[tuple[float, ClassifiedOffer, Decimal]] = []
-            for benchmark_offer, benchmark_value in by_dimensions.get(dimension_key, []):
+            for benchmark_offer, benchmark_value in potential_candidates:
                 benchmark_lat = benchmark_offer.offer.latitude
                 benchmark_lon = benchmark_offer.offer.longitude
                 if benchmark_lat is None or benchmark_lon is None:
@@ -425,6 +483,7 @@ class ComparisonEngine:
             if (
                 not item.in_scope
                 or item.offer.retailer_id != retailer_id
+                or not self._available_for_matching(item, profile)
                 or not self._satisfies_constraints(item, profile)
             ):
                 continue
@@ -500,3 +559,104 @@ class ComparisonEngine:
             parity_rate=parity / total,
             median_gap=float(statistics.median(item.gap for item in matches)),
         )
+
+
+class ComparisonInputReducer:
+    """Retain only offers that can affect configured comparison outcomes.
+
+    The reducer is category-neutral: selection keys, metrics, availability, constraints,
+    brand policy, and geography all come from the Product Pack. It lets historical and
+    live inputs be classified as a stream while preserving the existing comparison
+    engine's lowest-positive selection semantics.
+    """
+
+    def __init__(
+        self,
+        pack: ProductPack,
+        *,
+        profile_ids: Iterable[str] | None = None,
+    ) -> None:
+        self._engine = ComparisonEngine(pack)
+        requested = set(profile_ids or ())
+        available = {str(profile["id"]) for profile in pack.matching_profiles}
+        unknown = requested - available
+        if unknown:
+            raise ValueError(f"Product Pack has no comparison profiles {sorted(unknown)}")
+        self._profiles = tuple(
+            profile
+            for profile in pack.matching_profiles
+            if not requested or str(profile["id"]) in requested
+        )
+        self._selected: dict[
+            tuple[str, str, str, tuple[Any, ...]],
+            tuple[ClassifiedOffer, Decimal],
+        ] = {}
+        self.input_offers = 0
+
+    def add(self, item: ClassifiedOffer) -> None:
+        self.input_offers += 1
+        if not item.in_scope:
+            return
+        for profile in self._profiles:
+            if not self._engine._available_for_matching(
+                item, profile
+            ) or not self._engine._satisfies_constraints(item, profile):
+                continue
+            metric = self._engine._comparison_metric(profile)
+            value = self._engine._metric_value(item, metric)
+            if value is None:
+                continue
+            dimensions = tuple(str(name) for name in profile["dimensions"])
+            brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+            dimension_key: tuple[Any, ...] | None
+            if profile.get("unknown_policy") == "wildcard_if_one_unknown":
+                brand = self._engine._brand_component(item, brand_policy)
+                if brand is None:
+                    continue
+                dimension_key = (
+                    *(item.attributes.get(name) for name in dimensions),
+                    *brand,
+                )
+            else:
+                dimension_key = self._engine._dimension_key(
+                    item,
+                    dimensions,
+                    str(profile.get("unknown_policy", "reject")),
+                    brand_policy,
+                )
+                if dimension_key is None:
+                    continue
+            geography = str(profile["geography"])
+            if geography == "exact_zip":
+                geography_key = item.offer.zipcode
+            elif geography == "radius":
+                geography_key = item.offer.store_number or item.offer.zipcode
+            else:
+                raise ValueError(
+                    f"geography {geography!r} is not implemented for the comparison reducer"
+                )
+            if geography_key is None:
+                continue
+            key = (
+                str(profile["id"]),
+                item.offer.retailer_id,
+                geography_key,
+                dimension_key,
+            )
+            previous = self._selected.get(key)
+            if previous is None or value < previous[1]:
+                self._selected[key] = (item, value)
+
+    def extend(self, items: Iterable[ClassifiedOffer]) -> None:
+        for item in items:
+            self.add(item)
+
+    def offers(self) -> list[ClassifiedOffer]:
+        retained: dict[str, ClassifiedOffer] = {}
+        for item, _ in self._selected.values():
+            retained[item.offer.offer_id] = item
+        return list(retained.values())
+
+    @property
+    def retained_offers(self) -> int:
+        return len({item.offer.offer_id for item, _ in self._selected.values()})

@@ -137,6 +137,16 @@ class ProductPackLoader:
                 raise ContractError(
                     f"profile {profile['id']} attribute constraints must be non-empty arrays"
                 )
+            availability_policy = profile.get("availability_policy", "search_presence")
+            if availability_policy not in {
+                "search_presence",
+                "in_stock_only",
+                "retailer_specific",
+            }:
+                raise ContractError(
+                    f"profile {profile['id']} has unknown availability policy "
+                    f"{availability_policy!r}"
+                )
         outputs: set[str] = set()
         for rule in document["normalization"].get("conversion_rules", []):
             if not {"from", "to", "formula"}.issubset(rule):
@@ -173,6 +183,12 @@ class ProductPackLoader:
                 raise ContractError(
                     f"retailer override {retailer_id!r} has unknown catalog policy {policy!r}"
                 )
+            matching_availability = override.get("matching_availability_policy")
+            if matching_availability not in {None, "search_presence", "in_stock_only"}:
+                raise ContractError(
+                    f"retailer override {retailer_id!r} has unknown matching availability "
+                    f"policy {matching_availability!r}"
+                )
             products = override.get("products", {})
             if not isinstance(products, dict):
                 raise ContractError(f"retailer override {retailer_id!r} products must be an object")
@@ -180,6 +196,10 @@ class ProductPackLoader:
                 if not str(product_id) or not isinstance(rule, dict):
                     raise ContractError(
                         f"retailer override {retailer_id!r} has an invalid product rule"
+                    )
+                if rule.get("scope") not in {None, "include", "exclude"}:
+                    raise ContractError(
+                        f"product override {retailer_id!r}/{product_id!r} has invalid scope"
                     )
                 values = rule.get("attributes", {})
                 if not isinstance(values, dict) or not set(values).issubset(known):

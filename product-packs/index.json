@@ -29,6 +29,13 @@
       "version": "1.0.0",
       "default_keyword": "strawberries",
       "file": "fresh_strawberries.json"
+    },
+    {
+      "id": "fresh_ground_beef",
+      "name": "Fresh Ground Beef",
+      "version": "1.0.0",
+      "default_keyword": "ground beef",
+      "file": "fresh_ground_beef.json"
     }
   ]
 }

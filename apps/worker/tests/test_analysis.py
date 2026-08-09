@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,7 @@ from rci_worker.analysis import (
     AnalysisProcessor,
     CollectedPage,
     HistoricalSource,
+    S3HistoricalCSVReader,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -312,3 +315,32 @@ def test_analysis_orchestrator_has_no_product_category_branches() -> None:
     source = (REPOSITORY_ROOT / "apps/worker/src/rci_worker/analysis.py").read_text()
     assert "fresh_strawberries" not in source
     assert "fresh_shell_eggs" not in source
+    assert "fresh_ground_beef" not in source
+
+
+async def test_historical_reader_yields_checksum_verified_bounded_batches() -> None:
+    body = b"Retailer Product Id,Product Name,Price\n1,One,1.00\n2,Two,2.00\n3,Three,3.00\n"
+
+    class Client:
+        def get_object(self, **kwargs: object) -> dict[str, BytesIO]:
+            assert kwargs == {"Bucket": "raw", "Key": "history.csv"}
+            return {"Body": BytesIO(body)}
+
+    source = HistoricalSource(
+        dataset_artifact_id="artifact-1",
+        input_set_id="input-1",
+        ordinal=0,
+        retailer_id="walmart_us",
+        adapter_id="historical_metricscart_search_monitor_csv",
+        source_name="history.csv",
+        source_format="metricscart_search_monitor_csv",
+        storage_uri="s3://raw/history.csv",
+        checksum=hashlib.sha256(body).hexdigest(),
+        row_count=3,
+    )
+    reader = S3HistoricalCSVReader(bucket="raw", client=Client())
+
+    batches = [batch async for batch in reader.iter_batches(source, batch_size=2)]
+
+    assert [len(batch) for batch in batches] == [2, 1]
+    assert batches[1][0]["Retailer Product Id"] == "3"

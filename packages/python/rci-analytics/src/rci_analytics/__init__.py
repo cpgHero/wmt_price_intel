@@ -10,7 +10,7 @@ from rci_analytics.historical import (
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
 from rci_analytics.historical_storage import S3HistoricalObjectStore
-from rci_analytics.matching import ComparisonEngine
+from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
 from rci_analytics.normalization import CanonicalOfferNormalizer
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
 from rci_analytics.product_pack import ProductPackLoader
@@ -18,6 +18,7 @@ from rci_analytics.product_pack import ProductPackLoader
 __all__ = [
     "CanonicalOfferNormalizer",
     "ComparisonEngine",
+    "ComparisonInputReducer",
     "HistoricalImportService",
     "HistoricalInputManifestLoader",
     "InMemoryDatasetStore",

@@ -137,11 +137,20 @@ class OfferClassifier:
             return False, "retailer product is explicitly excluded"
         title = _normalized_text(offer.title)
         text = self._source_text(offer)
-        if not any(re.search(rf"\b{re.escape(term)}\b", title) for term in self._targets):
+        explicit_include = (
+            product_override is not None and product_override.get("scope") == "include"
+        )
+        if not explicit_include and not any(
+            re.search(rf"\b{re.escape(term)}\b", title) for term in self._targets
+        ):
             return False, "target product term absent"
         for pattern in self._exclusions:
             if _contains_pattern(text, pattern):
                 return False, f"excluded scope pattern: {pattern}"
+        if self.pack.document["scope"].get("require_positive_price") and (
+            offer.price is None or offer.price <= 0
+        ):
+            return False, "positive USD price is required"
         availability_policy = self.pack.document["scope"].get("availability_policy")
         if availability_policy == "in_stock_only" and offer.in_stock is False:
             return False, "explicitly out of stock"

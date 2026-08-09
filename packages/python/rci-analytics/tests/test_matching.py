@@ -5,7 +5,11 @@ from decimal import Decimal
 from pathlib import Path
 
 from rci_analytics.classification import OfferClassifier
-from rci_analytics.matching import ComparisonEngine, geographic_overlap
+from rci_analytics.matching import (
+    ComparisonEngine,
+    ComparisonInputReducer,
+    geographic_overlap,
+)
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPackLoader
 
@@ -154,3 +158,65 @@ def test_geographic_overlap_and_optional_radius_validation() -> None:
     assert matches[0].winner == "benchmark_lower"
     assert matches[0].distance_miles is not None
     assert matches[0].distance_miles < 10
+
+
+def test_streaming_reducer_preserves_generic_profile_results() -> None:
+    offers, engine = _classified()
+    reducer = ComparisonInputReducer(engine.pack)
+    reducer.extend(offers)
+    retained = reducer.offers()
+
+    for competitor_id in ("aldi_us", "amazon_us_same_day"):
+        for profile_id in ("strict", "unit_price"):
+            expected = engine.compare(
+                offers,
+                benchmark_id="walmart_us",
+                competitor_id=competitor_id,
+                profile_id=profile_id,
+            )
+            actual = engine.compare(
+                retained,
+                benchmark_id="walmart_us",
+                competitor_id=competitor_id,
+                profile_id=profile_id,
+            )
+            assert actual == expected
+
+    assert reducer.input_offers == len(offers)
+    assert reducer.retained_offers <= len(offers)
+
+
+def test_retailer_specific_match_availability_does_not_change_scope_counts() -> None:
+    offers, original = _classified()
+    amazon = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "amazon_us_same_day"
+        and item.attributes["weight_oz"] == 16.0
+        and item.attributes["organic"] is False
+    )
+    unavailable = replace(amazon, offer=replace(amazon.offer, in_stock=False))
+    scoped_offers = [item for item in offers if item is not amazon]
+    scoped_offers.append(unavailable)
+
+    document = dict(original.pack.document)
+    document["matching_profiles"] = [
+        {
+            **profile,
+            "availability_policy": "retailer_specific",
+        }
+        for profile in original.pack.document["matching_profiles"]
+    ]
+    document["retailer_overrides"] = {
+        "amazon_us_same_day": {"matching_availability_policy": "in_stock_only"}
+    }
+    engine = ComparisonEngine(replace(original.pack, document=document))
+
+    assert unavailable.in_scope
+    matches = engine.compare(
+        scoped_offers,
+        benchmark_id="walmart_us",
+        competitor_id="amazon_us_same_day",
+        profile_id="strict",
+    )
+    assert all(match.competitor_offer_id != unavailable.offer.offer_id for match in matches)

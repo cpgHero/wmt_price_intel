@@ -1,0 +1,1302 @@
+{
+  "id": "fresh_ground_beef",
+  "name": "Fresh Ground Beef",
+  "version": "1.0.0",
+  "category_family": "fresh_meat",
+  "description": "Raw fresh ground beef segmented by lean/fat ratio, package weight, production claims, and premium tier.",
+  "scope": {
+    "target_terms": [
+      "ground beef",
+      "beef ground"
+    ],
+    "include": [
+      "raw fresh ground beef with a defensible lean/fat ratio, package weight, and positive observed price"
+    ],
+    "exclude": [
+      "patties and burgers",
+      "frozen or prepared beef",
+      "canned or freeze-dried beef",
+      "plant-based products",
+      "mixed meats and organ blends",
+      "nonfood search noise"
+    ],
+    "hard_exclusion_patterns": [
+      "patty",
+      "patties",
+      "burger",
+      "burgers",
+      "frozen",
+      "freeze dried",
+      "canned",
+      "plant based",
+      "beef and pork",
+      "liver",
+      "heart",
+      "seasoned"
+    ],
+    "availability_policy": "search_presence",
+    "require_positive_price": true
+  },
+  "attributes": [
+    {
+      "name": "lean_pct",
+      "label": "Lean percentage",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "percent",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field",
+        "manual"
+      ],
+      "extraction_rules": [
+        {
+          "type": "number_pattern",
+          "sources": [
+            "text"
+          ],
+          "patterns": [
+            "\\b(\\d{2,3})\\s+(?:lean\\s+)?\\d{1,2}\\b",
+            "\\b(\\d{2,3})\\s+lean\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fat_pct",
+      "label": "Fat percentage",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "percent",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field",
+        "manual"
+      ],
+      "extraction_rules": [
+        {
+          "type": "number_pattern",
+          "sources": [
+            "text"
+          ],
+          "patterns": [
+            "\\b\\d{2,3}\\s+(?:lean\\s+)?(\\d{1,2})\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "weight_lb",
+      "label": "Package weight",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "lb",
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field",
+        "ai_fallback",
+        "manual"
+      ],
+      "extraction_rules": [
+        {
+          "type": "measurement",
+          "sources": [
+            "text"
+          ],
+          "units": {
+            "lb": 1,
+            "lbs": 1,
+            "pound": 1,
+            "pounds": 1,
+            "oz": 0.0625,
+            "ounce": 0.0625,
+            "ounces": 0.0625
+          }
+        }
+      ]
+    },
+    {
+      "name": "organic",
+      "label": "Organic",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": [
+            "organic",
+            "usda organic"
+          ],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "grass_fed",
+      "label": "Grass fed",
+      "data_type": "boolean",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field"
+      ],
+      "extraction_rules": [
+        {
+          "type": "boolean_terms",
+          "true_terms": [
+            "grass fed",
+            "grassfed",
+            "grass finished"
+          ],
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "premium_tier",
+      "label": "Premium tier",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": [
+        "standard",
+        "angus",
+        "wagyu"
+      ],
+      "unknown_policy": "reject_strict",
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "retailer_field"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "wagyu": [
+              "wagyu"
+            ],
+            "angus": [
+              "angus"
+            ]
+          },
+          "default": "standard"
+        }
+      ]
+    },
+    {
+      "name": "package_format",
+      "label": "Package format",
+      "data_type": "enum",
+      "role": "reporting",
+      "required_for_strict": false,
+      "allowed_values": [
+        "standard",
+        "roll_or_chub",
+        "tray_or_value_pack",
+        "multipack"
+      ],
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "roll_or_chub": [
+              "roll",
+              "chub",
+              "brick"
+            ],
+            "tray_or_value_pack": [
+              "tray",
+              "value pack"
+            ],
+            "multipack": [
+              "pack of",
+              "packages"
+            ]
+          },
+          "default": "standard"
+        }
+      ]
+    },
+    {
+      "name": "brand",
+      "label": "Brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "retailer_field"
+      ],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": [
+            "brand"
+          ]
+        }
+      ]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "package_price",
+    "secondary_metrics": [
+      "price_per_lb"
+    ],
+    "conversion_rules": [
+      {
+        "from": "weight_lb",
+        "to": "price_per_lb",
+        "formula": "price / weight_lb"
+      }
+    ],
+    "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_profiles": [
+    {
+      "id": "strict",
+      "label": "Strict same-ZIP and exact-package comparison",
+      "geography": "exact_zip",
+      "dimensions": [
+        "lean_pct",
+        "fat_pct",
+        "weight_lb",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "package_price",
+      "availability_policy": "retailer_specific"
+    },
+    {
+      "id": "unit_price",
+      "label": "Best available price per pound",
+      "geography": "exact_zip",
+      "dimensions": [
+        "lean_pct",
+        "fat_pct",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "price_per_lb",
+      "availability_policy": "retailer_specific"
+    },
+    {
+      "id": "aldi_10mi",
+      "label": "ALDI-Walmart 10 mile exact-package sensitivity",
+      "geography": "radius",
+      "radius_miles": 10,
+      "dimensions": [
+        "lean_pct",
+        "fat_pct",
+        "weight_lb",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "package_price",
+      "availability_policy": "retailer_specific"
+    }
+  ],
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "min_price": 0.01,
+    "suspicious_gap_pct": 60,
+    "require_unit_confirmation_when": [
+      "variable-weight listing",
+      "multipack unit versus total package"
+    ],
+    "human_review_conditions": [
+      "lean/fat ratio unresolved",
+      "package weight unresolved",
+      "fresh versus frozen ambiguity",
+      "physical weight conflicts with labeled unit count"
+    ],
+    "sensitivity_checks": [
+      {
+        "id": "aldi_10mi",
+        "radius_miles": 10
+      }
+    ]
+  },
+  "retailer_overrides": {
+    "walmart_us": {
+      "catalog_policy": "allowlist",
+      "matching_availability_policy": "search_presence",
+      "products": {
+        "1120348": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "133893542": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "147307377": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "15136790": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136791": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136792": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136793": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136794": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136795": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "15136796": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "16322759490": {
+          "attributes": {
+            "lean_pct": 96,
+            "fat_pct": 4,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "16621315217": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "18404362076": {
+          "attributes": {
+            "lean_pct": 96,
+            "fat_pct": 4,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "18696652972": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "18851421183": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 2.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "18889363492": {
+          "attributes": {
+            "lean_pct": 96,
+            "fat_pct": 4,
+            "weight_lb": 2.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "18892154161": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "241171257": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "270540708": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "424346823": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "43999646": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 4.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "43999648": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 4.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "44001563": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "47183723": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "479601462": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "49769689": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "512398950": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "51259088": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 4.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "519269784": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 4.5,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "529260602": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "angus"
+          }
+        },
+        "602862459": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 4.5,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "663293906": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "665894623": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "754924129": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 4.5,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "824841960": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "959024059": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        }
+      }
+    },
+    "aldi_us": {
+      "catalog_policy": "allowlist",
+      "matching_availability_policy": "search_presence",
+      "products": {
+        "109867335": {
+          "attributes": {
+            "lean_pct": 75,
+            "fat_pct": 25,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "wagyu"
+          }
+        },
+        "17499083": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "17679850": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "17771077": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19115465": {
+          "attributes": {
+            "lean_pct": 96,
+            "fat_pct": 4,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19115486": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 2.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19119422": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19473448": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "19507513": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19763195": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "19856829": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "25320555": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        }
+      }
+    },
+    "amazon_us_same_day": {
+      "catalog_policy": "allowlist",
+      "matching_availability_policy": "in_stock_only",
+      "products": {
+        "B00NUHY9ZW": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B01MS49EXF": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B01N4KVZ7G": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B01NCSZ6ZH": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B07NS2RKBX": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 0.5,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B084TV7YQ9": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B084WP7XTT": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B084X5YHF8": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B08GYKDK4P": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B08LJN248R": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B08LJVNW82": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B08LJVQSL2": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B08Y963V14": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.25,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          },
+          "scope": "include"
+        },
+        "B09431KDP8": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B09439SKW3": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B0974FCX1V": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B099G3845W": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B0C5BRZWVH": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBCX2FSM": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBCX4THF": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBCXDLVK": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBD2GVZP": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBD4C7YJ": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CBD4L447": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0CKGXR75N": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0D92QBPL2": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B0DVLWVNNN": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0DW92D7MD": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0DW94BHD4": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0F7HXM1Q6": {
+          "attributes": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0FB45D2PM": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0FJRPJXSL": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B0FJRRHCBN": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0FK5GCRVX": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 1.0,
+            "organic": true,
+            "grass_fed": true,
+            "premium_tier": "standard"
+          }
+        },
+        "B0FPXFZM11": {
+          "attributes": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0G1V897HL": {
+          "attributes": {
+            "lean_pct": 90,
+            "fat_pct": 10,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0H6B8PV1X": {
+          "attributes": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "weight_lb": 5.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        },
+        "B0H6BBRV2N": {
+          "attributes": {
+            "lean_pct": 93,
+            "fat_pct": 7,
+            "weight_lb": 3.0,
+            "organic": false,
+            "grass_fed": false,
+            "premium_tier": "standard"
+          }
+        }
+      }
+    }
+  },
+  "reporting": {
+    "headline_segments": [
+      "lean_pct",
+      "fat_pct",
+      "weight_lb",
+      "organic",
+      "grass_fed",
+      "premium_tier"
+    ],
+    "required_caveats": [
+      "SERP price and availability remain authoritative for the captured observation",
+      "ALDI variable-weight source prices are captured package totals and are not overwritten by PDP data",
+      "Amazon Same-Day search presence does not guarantee immediate checkout delivery",
+      "multipacks compare on configured labeled-unit semantics only when validated"
+    ],
+    "recommended_charts": [
+      "footprint",
+      "segment_win_rate",
+      "package_price_gap",
+      "price_per_lb",
+      "radius_sensitivity"
+    ],
+    "alertable_metrics": [
+      "organic_85_15_gap_per_lb",
+      "aldi_80_20_2_25lb_gap",
+      "walmart_73_27_5lb_win_rate",
+      "amazon_exception_rate"
+    ]
+  },
+  "regression": {
+    "golden_dataset_ids": [
+      "ground_beef_aug2026_wmt_aldi_amz"
+    ],
+    "expected_headlines": [
+      {
+        "metric": "source_rows",
+        "value": 225791
+      },
+      {
+        "metric": "walmart_qualifying_zips",
+        "value": 3823
+      },
+      {
+        "metric": "aldi_exact_matches",
+        "value": 9049
+      },
+      {
+        "metric": "amazon_exact_matches",
+        "value": 6713
+      },
+      {
+        "metric": "aldi_10mi_matches",
+        "value": 16985
+      },
+      {
+        "metric": "organic_85_15_gap_per_lb",
+        "value": -1.48
+      }
+    ],
+    "tolerances": {
+      "rate_abs": 0.0005,
+      "count_abs": 0,
+      "currency_abs": 0.01
+    }
+  }
+}

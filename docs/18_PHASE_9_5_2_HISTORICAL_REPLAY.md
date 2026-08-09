@@ -91,4 +91,5 @@ covered by tests.
   a claim exposing `source_kind=historical_import`.
 - Migration upgrade SQL is generated through `0010_analysis_input_sets` and downgrade is defined.
 
-Phase 9.5.3 remains responsible for the ground-beef Product Pack and full golden analytical parity.
+Phase 9.5.3 fulfills the ground-beef Product Pack and full golden analytical parity gate; see
+`docs/19_PHASE_9_5_3_GENERIC_ANALYTICS_GROUND_BEEF.md`.

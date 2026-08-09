@@ -9,7 +9,9 @@ import hashlib
 import io
 import json
 import logging
+import tempfile
 from collections import defaultdict
+from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from rci_analytics import (
     CanonicalOfferNormalizer,
     ComparisonEngine,
+    ComparisonInputReducer,
     OfferClassifier,
     ParquetDatasetWriter,
     ProductPackLoader,
@@ -391,6 +394,67 @@ class S3HistoricalCSVReader:
 
         return await asyncio.to_thread(get)
 
+    async def iter_batches(
+        self,
+        source: HistoricalSource,
+        *,
+        batch_size: int = 5_000,
+    ) -> AsyncIterator[list[dict[str, str]]]:
+        """Download with checksum verification, then yield bounded CSV row batches."""
+
+        if batch_size < 1:
+            raise ValueError("historical CSV batch size must be positive")
+        prefix = f"s3://{self._bucket}/"
+        if not source.storage_uri.startswith(prefix):
+            raise ValueError("historical source object belongs to a different bucket")
+        key = source.storage_uri.removeprefix(prefix)
+
+        def download() -> Path:
+            response = self._client.get_object(Bucket=self._bucket, Key=key)
+            digest = hashlib.sha256()
+            path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", prefix="rci-historical-", suffix=".csv", delete=False
+                ) as target:
+                    path = Path(target.name)
+                    body = response["Body"]
+                    while chunk := body.read(1024 * 1024):
+                        digest.update(chunk)
+                        target.write(chunk)
+            except Exception:
+                if path is not None:
+                    path.unlink(missing_ok=True)
+                raise
+            assert path is not None
+            if digest.hexdigest() != source.checksum:
+                path.unlink(missing_ok=True)
+                raise ValueError(f"historical source checksum mismatch for {source.source_name}")
+            return path
+
+        path = await asyncio.to_thread(download)
+        row_count = 0
+        try:
+            with path.open(newline="", encoding="utf-8-sig") as handle:
+                reader = csv.DictReader(handle)
+                batch: list[dict[str, str]] = []
+                for row in reader:
+                    batch.append(dict(row))
+                    row_count += 1
+                    if len(batch) >= batch_size:
+                        yield batch
+                        batch = []
+                        await asyncio.sleep(0)
+                if batch:
+                    yield batch
+            if row_count != source.row_count:
+                raise ValueError(
+                    f"historical source row count mismatch for {source.source_name}: "
+                    f"expected {source.row_count}, found {row_count}"
+                )
+        finally:
+            path.unlink(missing_ok=True)
+
 
 class AnalysisProcessor:
     def __init__(
@@ -423,49 +487,6 @@ class AnalysisProcessor:
                 f"Product Pack version mismatch: requested {job.product_pack_version}, "
                 f"loaded {pack.version}"
             )
-        provider_rows: list[dict[str, Any]] = []
-        raw_artifact_ids: list[str] = []
-        source_artifact_count = 0
-        if job.source_kind == "live_collection":
-            pages = await self._queue.pages(job.collection_run_id)
-            if not pages:
-                raise ValueError("completed collection has no successful raw provider pages")
-            source_artifact_count = len(pages)
-            for page in pages:
-                payload = await self._raw_reader.read(page)
-                adapter = self._adapters.get(page.task.adapter_id)
-                for result in adapter.extract_result_array(payload):
-                    provider_rows.append(
-                        {
-                            **result,
-                            **adapter.normalize_result(result, page.task),
-                            "latitude": page.latitude,
-                            "longitude": page.longitude,
-                            "collected_at": page.collected_at.isoformat(),
-                        }
-                    )
-                if page.task.raw_artifact_id is not None:
-                    raw_artifact_ids.append(page.task.raw_artifact_id)
-        elif job.source_kind == "historical_import":
-            if self._historical_reader is None:
-                raise ValueError("historical input reader is not configured")
-            sources = await self._queue.historical_sources(job.input_set_id)
-            if not sources:
-                raise ValueError("historical input set has no source artifacts")
-            source_artifact_count = len(sources)
-            for source in sources:
-                rows = await self._historical_reader.read(source)
-                provider_rows.extend({**row, "retailer_id": source.retailer_id} for row in rows)
-                raw_artifact_ids.append(source.dataset_artifact_id)
-        else:
-            raise ValueError(f"unsupported analysis input kind {job.source_kind!r}")
-
-        normalizer = CanonicalOfferNormalizer(
-            RetailerIdentityMap.from_catalog(self._root / "config" / "retailer-catalog.json")
-        )
-        normalized = normalizer.normalize_many(provider_rows)
-        classified = OfferClassifier(pack).classify_many(normalized)
-        engine = ComparisonEngine(pack)
         benchmark = str(job.definition_config["benchmark_retailer"])
         analysis_options = job.definition_config.get("analysis", {})
         configured_profiles = (
@@ -492,23 +513,46 @@ class AnalysisProcessor:
         ]
         competitors = [value for value in configured_retailers if value != benchmark]
 
+        normalizer = CanonicalOfferNormalizer(
+            RetailerIdentityMap.from_catalog(self._root / "config" / "retailer-catalog.json")
+        )
+        classifier = OfferClassifier(pack)
+        engine = ComparisonEngine(pack)
+        reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
+        raw_artifact_ids: list[str] = []
+        source_artifact_count = 0
+        provider_rows_count = 0
+        normalized_count = 0
+        review_offer_count = 0
+        zero_or_missing_price_count = 0
+        seen_offer_ids: set[str] = set()
+        offer_counts: dict[str, int] = defaultdict(int)
+        in_scope_counts: dict[str, int] = defaultdict(int)
+        in_scope_zips: dict[str, set[str]] = defaultdict(set)
+        in_scope_stores: dict[str, set[str]] = defaultdict(set)
         derived_artifact_ids: list[str] = []
-        by_retailer: dict[str, list[Any]] = defaultdict(list)
-        classified_by_retailer: dict[str, list[Any]] = defaultdict(list)
-        for normalized_offer in normalized:
-            by_retailer[normalized_offer.retailer_id].append(normalized_offer)
-        for classified_offer in classified:
-            classified_by_retailer[classified_offer.offer.retailer_id].append(classified_offer)
-        for retailer_id in sorted(by_retailer):
+        normalized_batches: dict[str, list[Any]] = defaultdict(list)
+        classified_batches: dict[str, list[Any]] = defaultdict(list)
+        partitions: dict[str, int] = defaultdict(int)
+        batch_size = 5_000
+
+        async def flush(retailer_id: str) -> None:
+            normalized_batch = normalized_batches[retailer_id]
+            if not normalized_batch:
+                return
+            classified_batch = classified_batches[retailer_id]
+            partition = partitions[retailer_id]
             normalized_artifact = await self._dataset_writer.write_normalized(
-                by_retailer[retailer_id],
+                normalized_batch,
                 run_id=job.collection_run_id,
                 retailer_id=retailer_id,
+                partition=partition,
             )
             classified_artifact = await self._dataset_writer.write_classified(
-                classified_by_retailer[retailer_id],
+                classified_batch,
                 run_id=job.collection_run_id,
                 retailer_id=retailer_id,
+                partition=partition,
             )
             derived_artifact_ids.extend(
                 [
@@ -520,6 +564,88 @@ class AnalysisProcessor:
                     ),
                 ]
             )
+            normalized_batch.clear()
+            classified_batch.clear()
+            partitions[retailer_id] += 1
+
+        async def consume(row: dict[str, Any]) -> None:
+            nonlocal provider_rows_count
+            nonlocal normalized_count
+            nonlocal review_offer_count
+            nonlocal zero_or_missing_price_count
+            provider_rows_count += 1
+            try:
+                normalized_offer = normalizer.normalize(row)
+            except ValueError:
+                return
+            if normalized_offer.offer_id in seen_offer_ids:
+                return
+            seen_offer_ids.add(normalized_offer.offer_id)
+            normalized_count += 1
+            retailer_id = normalized_offer.retailer_id
+            offer_counts[retailer_id] += 1
+            classified_offer = classifier.classify(normalized_offer)
+            review_offer_count += bool(classified_offer.review_reasons)
+            zero_or_missing_price_count += (
+                normalized_offer.price is None or normalized_offer.price <= 0
+            )
+            if classified_offer.in_scope:
+                in_scope_counts[retailer_id] += 1
+                if normalized_offer.zipcode is not None:
+                    in_scope_zips[retailer_id].add(normalized_offer.zipcode)
+                if normalized_offer.store_number is not None:
+                    in_scope_stores[retailer_id].add(normalized_offer.store_number)
+            reducer.add(classified_offer)
+            normalized_batches[retailer_id].append(normalized_offer)
+            classified_batches[retailer_id].append(classified_offer)
+            if len(normalized_batches[retailer_id]) >= batch_size:
+                await flush(retailer_id)
+
+        if job.source_kind == "live_collection":
+            pages = await self._queue.pages(job.collection_run_id)
+            if not pages:
+                raise ValueError("completed collection has no successful raw provider pages")
+            source_artifact_count = len(pages)
+            for page in pages:
+                payload = await self._raw_reader.read(page)
+                adapter = self._adapters.get(page.task.adapter_id)
+                for result in adapter.extract_result_array(payload):
+                    await consume(
+                        {
+                            **result,
+                            **adapter.normalize_result(result, page.task),
+                            "latitude": page.latitude,
+                            "longitude": page.longitude,
+                            "collected_at": page.collected_at.isoformat(),
+                        }
+                    )
+                if page.task.raw_artifact_id is not None:
+                    raw_artifact_ids.append(page.task.raw_artifact_id)
+        elif job.source_kind == "historical_import":
+            if self._historical_reader is None:
+                raise ValueError("historical input reader is not configured")
+            sources = await self._queue.historical_sources(job.input_set_id)
+            if not sources:
+                raise ValueError("historical input set has no source artifacts")
+            source_artifact_count = len(sources)
+            for source in sources:
+                iter_batches = getattr(self._historical_reader, "iter_batches", None)
+                if callable(iter_batches):
+                    async for rows in iter_batches(source, batch_size=batch_size):
+                        for row in rows:
+                            await consume({**row, "retailer_id": source.retailer_id})
+                else:
+                    rows = await self._historical_reader.read(source)
+                    for row in rows:
+                        await consume({**row, "retailer_id": source.retailer_id})
+                raw_artifact_ids.append(source.dataset_artifact_id)
+        else:
+            raise ValueError(f"unsupported analysis input kind {job.source_kind!r}")
+
+        for retailer_id in sorted(normalized_batches):
+            await flush(retailer_id)
+
+        comparison_offers = reducer.offers()
 
         summaries: list[dict[str, Any]] = []
         match_evidence: list[dict[str, Any]] = []
@@ -527,7 +653,7 @@ class AnalysisProcessor:
             competitor_matches = []
             for profile in selected_profiles:
                 matches = engine.compare(
-                    classified,
+                    comparison_offers,
                     benchmark_id=benchmark,
                     competitor_id=competitor,
                     profile_id=str(profile["id"]),
@@ -557,26 +683,12 @@ class AnalysisProcessor:
         coverage = [
             {
                 "retailer_id": retailer_id,
-                "offers": len(offers),
-                "in_scope_offers": sum(
-                    value.in_scope for value in classified_by_retailer[retailer_id]
-                ),
-                "in_scope_zips": len(
-                    {
-                        value.offer.zipcode
-                        for value in classified_by_retailer[retailer_id]
-                        if value.in_scope and value.offer.zipcode is not None
-                    }
-                ),
-                "in_scope_stores": len(
-                    {
-                        value.offer.store_number
-                        for value in classified_by_retailer[retailer_id]
-                        if value.in_scope and value.offer.store_number is not None
-                    }
-                ),
+                "offers": offers,
+                "in_scope_offers": in_scope_counts[retailer_id],
+                "in_scope_zips": len(in_scope_zips[retailer_id]),
+                "in_scope_stores": len(in_scope_stores[retailer_id]),
             }
-            for retailer_id, offers in sorted(by_retailer.items())
+            for retailer_id, offers in sorted(offer_counts.items())
         ]
         generated_at = datetime.now(UTC)
         analysis_id = f"{pack.id}-{job.collection_run_id}"
@@ -595,19 +707,18 @@ class AnalysisProcessor:
                 "source_kind": job.source_kind,
                 "input_set_id": job.input_set_id,
                 "raw_pages": source_artifact_count,
-                "provider_rows": len(provider_rows),
-                "normalized_offers": len(normalized),
-                "classified_offers": len(classified),
+                "provider_rows": provider_rows_count,
+                "normalized_offers": normalized_count,
+                "classified_offers": normalized_count,
+                "retained_comparison_offers": reducer.retained_offers,
                 "raw_dataset_ids": sorted(set(raw_artifact_ids)),
             },
             "coverage": coverage,
             "comparisons": summaries,
             "data_quality": {
-                "normalization_rejections": len(provider_rows) - len(normalized),
-                "review_offers": sum(bool(value.review_reasons) for value in classified),
-                "zero_or_missing_price_offers": sum(
-                    value.offer.price is None or value.offer.price <= 0 for value in classified
-                ),
+                "normalization_rejections": provider_rows_count - normalized_count,
+                "review_offers": review_offer_count,
+                "zero_or_missing_price_offers": zero_or_missing_price_count,
             },
             "validation": {
                 "status": "ready_to_share" if ready_to_share else "needs_review",

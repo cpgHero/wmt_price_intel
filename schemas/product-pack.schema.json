@@ -71,6 +71,9 @@
             "in_stock_only",
             "retailer_specific"
           ]
+        },
+        "require_positive_price": {
+          "type": "boolean"
         }
       }
     },
@@ -333,6 +336,13 @@
           "comparison_metric": {
             "type": "string",
             "minLength": 1
+          },
+          "availability_policy": {
+            "enum": [
+              "search_presence",
+              "in_stock_only",
+              "retailer_specific"
+            ]
           }
         }
       }

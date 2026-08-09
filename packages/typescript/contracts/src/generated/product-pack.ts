@@ -15,6 +15,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
      */
     target_terms?: [string, ...string[]];
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
+    require_positive_price?: boolean;
     [k: string]: unknown;
   };
   attributes: {
@@ -87,6 +88,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
     wildcard_dimensions?: string[];
     price_selection?: "lowest_positive" | "median" | "retailer_primary_offer";
     comparison_metric?: string;
+    availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     [k: string]: unknown;
   }[];
   brand_rules?: {
