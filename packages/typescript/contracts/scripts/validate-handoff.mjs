@@ -44,6 +44,7 @@ const productDetailSnapshotValidator = await validator(
   "product-detail-snapshot.schema.json",
 );
 const agentOutputValidator = await validator("agent-output.schema.json");
+const agentPromptValidator = await validator("agent-prompt.schema.json");
 const reportBlueprintValidator = await validator(
   "report-blueprint.schema.json",
 );
@@ -169,6 +170,17 @@ for (const reportBlueprintFile of reportBlueprintFiles) {
   );
 }
 
+const agentPromptFiles = (await readdir(join(repositoryRoot, "agent-prompts")))
+  .filter((name) => name.endsWith(".json"))
+  .sort();
+for (const agentPromptFile of agentPromptFiles) {
+  await assertValid(
+    agentPromptValidator,
+    await loadJson("agent-prompts", agentPromptFile),
+    agentPromptFile,
+  );
+}
+
 const profile = await loadJson(
   "fixtures",
   "location_master",
@@ -187,6 +199,7 @@ console.log(
     analysisResultFiles.length +
     historicalInputManifestFiles.length +
     reportBlueprintFiles.length +
+    agentPromptFiles.length +
     9
   } normative JSON documents.`,
 );

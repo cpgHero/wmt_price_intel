@@ -4,16 +4,16 @@
   "analysis_id": "ground-beef-2026-08-07-example",
   "role": "insight",
   "prompt_template": {
-    "id": "segment-insight",
+    "id": "governed_insight",
     "version": "1.0.0",
-    "checksum_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+    "checksum_sha256": "49fefe79c446f7cf1b93e5997b180c05b3be3d750da07bb795c8a8b13f79907e"
   },
   "model": {
     "provider": "openai",
     "model_id": "configured-at-runtime"
   },
   "input_checksum_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
-  "output_checksum_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+  "output_checksum_sha256": "bbe23413658676cbf4ff3e60bab0f4f017d46069c4f097e8eceb603dfc5b72e2",
   "evidence_refs": ["evidence-ground-beef-exact-aldi"],
   "generated_at": "2026-08-08T12:00:00Z",
   "authoritative_metrics_computed": false,
@@ -32,7 +32,8 @@
         "business_impact": "A focused response can address the pressure without disturbing Walmart's stronger conventional value segments.",
         "metric_refs": ["metric-aldi-organic-85-15-gap-per-lb"],
         "evidence_refs": ["evidence-ground-beef-exact-aldi"],
-        "confidence": 0.99
+        "confidence": 0.99,
+        "numeric_claims": []
       }
     ]
   },

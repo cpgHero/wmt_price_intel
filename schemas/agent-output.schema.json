@@ -104,6 +104,10 @@
           "type": "integer",
           "minimum": 0
         },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
         "estimated_cost_usd": {
           "type": "number",
           "minimum": 0
@@ -286,7 +290,8 @@
         "business_impact",
         "metric_refs",
         "evidence_refs",
-        "confidence"
+        "confidence",
+        "numeric_claims"
       ],
       "properties": {
         "id": {
@@ -318,6 +323,12 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "numeric_claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/numeric_claim"
+          }
         }
       }
     },
@@ -332,7 +343,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "heading", "body", "metric_refs", "evidence_refs"],
+            "required": [
+              "id",
+              "heading",
+              "body",
+              "metric_refs",
+              "evidence_refs",
+              "numeric_claims"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -351,6 +369,12 @@
               },
               "evidence_refs": {
                 "$ref": "#/$defs/nonempty_refs"
+              },
+              "numeric_claims": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/numeric_claim"
+                }
               }
             }
           }
@@ -364,6 +388,31 @@
       "items": {
         "type": "string",
         "minLength": 1
+      }
+    },
+    "numeric_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_ref", "rendered_value", "format"],
+      "properties": {
+        "metric_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rendered_value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "enum": [
+            "integer",
+            "decimal_1",
+            "decimal_2",
+            "percent_1",
+            "percent_2",
+            "currency_2"
+          ]
+        }
       }
     }
   }

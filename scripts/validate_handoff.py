@@ -151,6 +151,8 @@ for p in sorted((ROOT / "product-packs").glob("fresh_*.json")):
     ok &= validate("schemas/product-pack.schema.json", str(p.relative_to(ROOT)))
 for p in sorted((ROOT / "report-blueprints").glob("*.json")):
     ok &= validate("schemas/report-blueprint.schema.json", str(p.relative_to(ROOT)))
+for p in sorted((ROOT / "agent-prompts").glob("*.json")):
+    ok &= validate("schemas/agent-prompt.schema.json", str(p.relative_to(ROOT)))
 
 # Fixture presence and known location-profile checks.
 prof = load_json("fixtures/location_master/locations.profile.json")

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/agent-prompt.schema.json",
+  "title": "Retail Competitive Intelligence Governed Agent Prompt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "role", "instructions"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "version": { "type": "string", "minLength": 1 },
+    "role": { "enum": ["insight", "narrative"] },
+    "instructions": { "type": "string", "minLength": 1 }
+  }
+}

@@ -81,6 +81,14 @@ PRODUCT_DETAIL_RPM=180
 PRODUCT_DETAIL_CLAIM_LIMIT=1
 PRODUCT_DETAIL_LEASE_SECONDS=300
 PRODUCT_DETAIL_CACHE_TTL_SECONDS=604800
+AI_ENABLED=false
+OPENAI_MODEL_INSIGHT=<explicit model ID; required only when AI_ENABLED=true>
+OPENAI_MODEL_NARRATIVE=<explicit model ID; required only when AI_ENABLED=true>
+OPENAI_TIMEOUT_SECONDS=60
+OPENAI_MAX_OUTPUT_TOKENS=3000
+AI_MAX_METRICS=160
+AI_MAX_ATTEMPTS=2
+AI_LEASE_SECONDS=180
 OBJECT_STORAGE_ENDPOINT=${{artifacts.ENDPOINT}}
 OBJECT_STORAGE_REGION=${{artifacts.REGION}}
 OBJECT_STORAGE_BUCKET=${{artifacts.BUCKET}}
@@ -89,8 +97,10 @@ OBJECT_STORAGE_SECRET_ACCESS_KEY=${{artifacts.SECRET_ACCESS_KEY}}
 OBJECT_STORAGE_FORCE_PATH_STYLE=false
 ```
 
-Set `METRICSCART_API_KEY` as a sealed worker secret. Do not share it with `web`. Add OpenAI secrets
-only when `AI_ENABLED=true`; they are not required for the deterministic strawberry pipeline.
+Set `METRICSCART_API_KEY` as a sealed worker secret. Do not share it with `web`. When governed AI
+is accepted for production, set `OPENAI_API_KEY` as a sealed worker-only secret, choose both model
+IDs explicitly, and then set `AI_ENABLED=true`. OpenAI credentials and models are not required for
+the deterministic pipeline.
 
 ### scheduler
 
@@ -160,7 +170,7 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at `0012_product_details`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at `0013_governed_ai`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and

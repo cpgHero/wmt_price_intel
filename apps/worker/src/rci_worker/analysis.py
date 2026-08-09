@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from rci_agents import GovernedAnalysisAssistant
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -37,7 +38,7 @@ from rci_analytics.normalization import RetailerIdentityMap
 from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
 from rci_providers import MetricsCartAdapterRegistry
-from rci_results import AnalysisResultService
+from rci_results import AnalysisResultService, ReportBlueprintLoader
 
 logger = logging.getLogger(__name__)
 
@@ -472,6 +473,7 @@ class AnalysisProcessor:
         results: AnalysisResultService,
         code_version: str,
         historical_reader: S3HistoricalCSVReader | None = None,
+        assistant: GovernedAnalysisAssistant | None = None,
     ) -> None:
         self._root = repository_root
         self._queue = queue
@@ -482,6 +484,7 @@ class AnalysisProcessor:
         self._collections = collections
         self._results = results
         self._code_version = code_version
+        self._assistant = assistant
 
     async def process(self, job: AnalysisJob) -> str:
         pack = ProductPackLoader(self._root).load(job.product_pack_id)
@@ -830,6 +833,17 @@ class AnalysisProcessor:
             evidence_sets=evidence_sets,
             raw_source_artifact_ids=raw_artifact_ids,
         )
+        if (
+            self._assistant is not None
+            and isinstance(analysis_options, dict)
+            and bool(analysis_options.get("enable_ai_fallback", True))
+        ):
+            blueprint = ReportBlueprintLoader(self._root).load(str(pack.report_blueprint["id"]))
+            document = await self._assistant.enrich(
+                document,
+                product_pack=pack.document,
+                report_blueprint=blueprint.document,
+            )
         record = await self._results.publish(document, collection_run_id=job.collection_run_id)
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id

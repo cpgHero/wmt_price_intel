@@ -12,4 +12,5 @@ export type { RetailCompetitiveIntelligenceProductPack } from "./generated/produ
 export type { NormalizedProviderError } from "./generated/provider-error";
 export type { RetailCompetitiveIntelligenceAlertDefinition } from "./generated/alert-definition";
 export type { RetailCompetitiveIntelligenceGovernedAgentOutput } from "./generated/agent-output";
+export type { RetailCompetitiveIntelligenceGovernedAgentPrompt } from "./generated/agent-prompt";
 export type { RetailCompetitiveIntelligenceReportBlueprint } from "./generated/report-blueprint";

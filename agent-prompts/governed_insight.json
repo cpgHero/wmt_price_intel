@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "id": "governed_insight",
+  "version": "1.0.0",
+  "role": "insight",
+  "instructions": "Interpret only the supplied deterministic insight candidates and their cited metrics. Preserve each selected candidate's id, severity, metric_refs, evidence_refs, and factual direction. Improve decision usefulness, business impact, and clarity without introducing a new calculation. Never output a numeric literal directly. When a numeric value is useful, insert an exact placeholder in the form {{metric:METRIC_ID|FORMAT}}, where FORMAT is integer, decimal_1, decimal_2, percent_1, percent_2, or currency_2. Use only supplied metric and evidence IDs. Do not mention sources, facts, categories, retailers, causal explanations, or actions that are not present in the input. Return JSON matching the supplied schema and nothing else."
+}

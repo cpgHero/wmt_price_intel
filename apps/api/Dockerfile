@@ -14,6 +14,7 @@ COPY --chown=rci:rci apps/api/pyproject.toml apps/api/pyproject.toml
 COPY --chown=rci:rci apps/worker/pyproject.toml apps/worker/pyproject.toml
 COPY --chown=rci:rci apps/scheduler/pyproject.toml apps/scheduler/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-core/pyproject.toml packages/python/rci-core/pyproject.toml
+COPY --chown=rci:rci packages/python/rci-agents/pyproject.toml packages/python/rci-agents/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-analytics/pyproject.toml packages/python/rci-analytics/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-automation/pyproject.toml packages/python/rci-automation/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-contracts/pyproject.toml packages/python/rci-contracts/pyproject.toml

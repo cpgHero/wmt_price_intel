@@ -16,4 +16,5 @@ artifact links, and audit events.
 MetricsCart 404 billing, `0009` adds analysis orchestration, and `0010`/`0011` add immutable
 historical/live input sets with safe artifact cascades. `0012_product_details` adds canonical
 product identity, contextual provenance, separately budgeted PDP runs, a leased `SKIP LOCKED` PDP
-queue, and immutable cached PDP snapshots.
+queue, and immutable cached PDP snapshots. `0013_governed_ai` adds idempotent, leased, auditable
+insight and narrative tasks without granting model output authority over analytical metrics.

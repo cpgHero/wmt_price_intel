@@ -27,6 +27,7 @@ export type RetailCompetitiveIntelligenceGovernedAgentOutput = {
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
+    latency_ms?: number;
     estimated_cost_usd?: number;
   };
   result: {

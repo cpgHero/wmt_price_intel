@@ -5,6 +5,7 @@
     "dockerfilePath": "apps/worker/Dockerfile",
     "watchPatterns": [
       "/apps/worker/**",
+      "/agent-prompts/**",
       "/packages/python/**",
       "/config/**",
       "/product-packs/**",

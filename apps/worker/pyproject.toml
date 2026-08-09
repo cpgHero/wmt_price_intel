@@ -9,6 +9,7 @@ dependencies = [
   "httpx==0.28.1",
   "polars==1.43.2",
   "pyarrow==25.0.0",
+  "rci-agents",
   "rci-contracts",
   "rci-analytics",
   "rci-collections",
@@ -24,6 +25,7 @@ rci-worker = "rci_worker.main:main"
 rci-import-historical = "rci_worker.historical_cli:main"
 
 [tool.uv.sources]
+rci-agents = { workspace = true }
 rci-contracts = { workspace = true }
 rci-analytics = { workspace = true }
 rci-collections = { workspace = true }

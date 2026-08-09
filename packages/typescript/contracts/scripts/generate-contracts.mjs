@@ -9,6 +9,7 @@ const outputDirectory = join(packageRoot, "src/generated");
 const contracts = [
   ["alert-definition.schema.json", "alert-definition.ts"],
   ["agent-output.schema.json", "agent-output.ts"],
+  ["agent-prompt.schema.json", "agent-prompt.ts"],
   ["analysis-evidence.schema.json", "analysis-evidence.ts"],
   ["analysis-result.schema.json", "analysis-result.ts"],
   ["analysis-result-v2.schema.json", "analysis-result-v2.ts"],

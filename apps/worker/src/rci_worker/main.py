@@ -11,6 +11,12 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import uuid4
 
+from rci_agents import (
+    GovernedAnalysisAssistant,
+    OpenAIResponsesProvider,
+    PostgresAgentTaskRepository,
+)
+
 from rci_analytics import ParquetDatasetWriter
 from rci_analytics.parquet import S3DatasetStore
 from rci_collections import FakeProvider, PostgresCollectionRepository, QueueWorker
@@ -116,6 +122,23 @@ async def run() -> None:
         claim_limit=int(os.getenv("WORKER_CLAIM_LIMIT", "10")),
         lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
     )
+    assistant: GovernedAnalysisAssistant | None = None
+    if _enabled(os.getenv("AI_ENABLED")):
+        assistant = GovernedAnalysisAssistant(
+            repository_root=repository_root,
+            provider=OpenAIResponsesProvider(
+                api_key=os.environ["OPENAI_API_KEY"],
+                timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "60")),
+                max_output_tokens=int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "3000")),
+            ),
+            repository=PostgresAgentTaskRepository(database.engine),
+            worker_id=f"{worker_id}-agent",
+            insight_model=os.environ["OPENAI_MODEL_INSIGHT"],
+            narrative_model=os.environ["OPENAI_MODEL_NARRATIVE"],
+            max_metrics=int(os.getenv("AI_MAX_METRICS", "160")),
+            max_attempts=int(os.getenv("AI_MAX_ATTEMPTS", "2")),
+            lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "180")),
+        )
     analysis_worker: AnalysisWorker | None = None
     if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
         "OBJECT_STORAGE_BUCKET"
@@ -160,6 +183,7 @@ async def run() -> None:
                     ArtifactRenderer(repository_root),
                 ),
                 code_version=settings.app_version or APP_VERSION,
+                assistant=assistant,
             ),
             worker_id=f"{worker_id}-analysis",
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),

@@ -240,6 +240,40 @@ CREATE TABLE analysis_result (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE agent_task (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  idempotency_key text NOT NULL UNIQUE,
+  analysis_run_id uuid NOT NULL REFERENCES analysis_run(id) ON DELETE CASCADE,
+  analysis_id text NOT NULL,
+  role text NOT NULL CHECK(role IN ('insight','narrative')),
+  status text NOT NULL CHECK(status IN ('running','succeeded','needs_review')),
+  prompt_template_id text NOT NULL,
+  prompt_template_version text NOT NULL,
+  prompt_template_checksum text NOT NULL,
+  model_provider text NOT NULL,
+  model_id text NOT NULL,
+  input_checksum text NOT NULL,
+  input_document jsonb NOT NULL,
+  output_checksum text,
+  output_document jsonb,
+  validation jsonb NOT NULL DEFAULT '{}',
+  usage jsonb NOT NULL DEFAULT '{}',
+  attempt_count integer NOT NULL DEFAULT 0,
+  max_attempts integer NOT NULL DEFAULT 2,
+  locked_by text,
+  locked_at timestamptz,
+  lease_expires_at timestamptz,
+  last_error_type text,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK(attempt_count >= 0 AND max_attempts BETWEEN 1 AND 5)
+);
+CREATE INDEX agent_task_analysis_idx
+  ON agent_task(analysis_run_id, role, created_at);
+CREATE INDEX agent_task_lease_idx
+  ON agent_task(status, lease_expires_at);
+
 CREATE TABLE validation_issue (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   analysis_run_id uuid NOT NULL REFERENCES analysis_run(id),
