@@ -395,6 +395,11 @@ def test_narrative_critic_rejects_machine_oriented_labels() -> None:
         NarrativeQualityCritic.validate_prose(
             "Prioritize aldi_us losses in Lean Pct: eighty and Organic: False."
         )
+    NarrativeQualityCritic.validate_prose(
+        "ALDI is lower in "
+        "{{metric:comparison.aldi_us.exact.package_price.lower_rate|percent_1}} "
+        "of governed comparisons."
+    )
 
 
 def test_narrative_critic_rejects_omitted_required_topic() -> None:

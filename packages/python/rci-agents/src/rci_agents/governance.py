@@ -77,7 +77,8 @@ class NarrativeQualityCritic:
     @staticmethod
     def validate_prose(*values: str) -> None:
         for value in values:
-            match = _MACHINE_PROSE.search(value)
+            prose = _STORYLINE_PLACEHOLDER.sub("", _PLACEHOLDER.sub("", value))
+            match = _MACHINE_PROSE.search(prose)
             if match:
                 raise AgentGovernanceError(
                     f"leadership prose exposes machine-oriented label {match.group(0)!r}"
