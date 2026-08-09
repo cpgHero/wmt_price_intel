@@ -100,11 +100,29 @@ make check
 
 ## Railway operating gate
 
-Deploy the code and Product Pack before enabling historical claims. Keep
-`ANALYSIS_HISTORICAL_REPLAY_ENABLED=false` until the new worker deployment is healthy. Then enable
-the flag on the worker, allow the already queued immutable ground-beef input to run, verify the
-analysis and derived-artifact records, and return the flag to `false` if later Phase 9.5 work should
-not claim other historical inputs automatically.
+Production acceptance completed against Railway Postgres and the Railway bucket. The importer
+registered manifest checksum
+`baa44b8ee3fddf4d68e64ffb1c3c6234683641e71491a0e6a8aff940f4b7745a` exactly once with three raw
+artifacts and 225,791 rows. The private-network integration suite passed all five Postgres tests:
+queue leasing, shared rate limiting, immutable results, scheduler/email idempotency, and historical
+input replay.
+
+The successful production run reproduced the headline golden comparisons exactly:
+
+| Profile | Matches | Benchmark lower | Competitor lower | Parity |
+|---|---:|---:|---:|---:|
+| ALDI strict | 9,049 | 1,435 | 7,614 | 0 |
+| Amazon strict | 6,713 | 6,286 | 386 | 41 |
+| ALDI 10-mile | 16,985 | 2,820 | 14,165 | 0 |
+
+The run published 45 normalized Parquet partitions, 45 classified partitions, two match-detail
+artifacts, and ready HTML, XLSX, leadership-email, and audit-ZIP artifacts. Result validation is
+`ready_to_share`. Runtime `coverage.offers` and `coverage.in_scope_offers` count deduplicated
+canonical offers; the qualifying-row table above intentionally counts source-row occurrences.
+Both representations agree on distinct qualifying ZIP and store counts.
+
+`ANALYSIS_HISTORICAL_REPLAY_ENABLED` was returned to `false` after acceptance so later historical
+inputs cannot be claimed accidentally.
 
 Phase 9.5.4 remains responsible for durable product identity and reusable PDP enrichment. This
 checkpoint uses only the minimum PDP validations needed to establish the Product Pack golden.
