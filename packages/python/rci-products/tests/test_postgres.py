@@ -117,14 +117,36 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
 
         budget_run = await repository.create_run(max_credits=2)
         cleanup_run_ids.append(budget_run.id)
+        uncached_contexts = [
+            ProductDetailRequestContext(
+                product_id=retailer_product_id,
+                zipcode=zipcode,
+                store=store,
+                fulfillment_type="pickup",
+            )
+            for zipcode, store in (("00502", "3464"), ("90021", "3465"))
+        ]
         budget_results = await asyncio.gather(
-            *(repository.enqueue(budget_run.id, product, endpoint, value) for value in contexts),
+            *(
+                repository.enqueue(budget_run.id, product, endpoint, value)
+                for value in uncached_contexts
+            ),
             return_exceptions=True,
         )
         assert sum(not isinstance(value, Exception) for value in budget_results) == 1
         assert sum(isinstance(value, ProductDetailBudgetExceeded) for value in budget_results) == 1
     finally:
         async with database.engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "DELETE FROM audit_event "
+                    "WHERE entity_type = 'product_detail_snapshot' AND entity_id IN ("
+                    "SELECT snapshot.id::text FROM product_detail_snapshot snapshot "
+                    "JOIN product_detail_job job ON job.id = snapshot.product_detail_job_id "
+                    "WHERE job.enrichment_run_id = ANY(CAST(:run_ids AS uuid[])))"
+                ),
+                {"run_ids": cleanup_run_ids},
+            )
             await connection.execute(
                 text("DELETE FROM audit_event WHERE entity_id = ANY(CAST(:entity_ids AS text[]))"),
                 {"entity_ids": cleanup_run_ids},
