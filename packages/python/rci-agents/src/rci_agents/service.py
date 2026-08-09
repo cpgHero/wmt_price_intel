@@ -235,12 +235,15 @@ class GovernedAnalysisAssistant:
             return envelope
         except Exception as exc:
             error_type = type(exc).__name__
+            issue = str(exc).strip()[:1_000] or (
+                "governed output was rejected; deterministic fallback retained"
+            )
             try:
                 await self._repository.fail(
                     reservation.task_id,
                     self._worker_id,
                     error_type,
-                    ["governed output was rejected; deterministic fallback retained"],
+                    [issue],
                 )
             except RuntimeError:
                 logger.warning(

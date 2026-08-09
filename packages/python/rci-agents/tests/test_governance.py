@@ -371,7 +371,10 @@ async def test_openai_provider_uses_strict_ephemeral_structured_output() -> None
 
     response = await provider.generate(
         prompt,
-        {"analysis_id": "analysis-1"},
+        {
+            "analysis_id": "analysis-1",
+            "deterministic_insights": [{"id": "known-insight"}],
+        },
         model_id="explicit-test-model",
     )
 
@@ -382,8 +385,53 @@ async def test_openai_provider_uses_strict_ephemeral_structured_output() -> None
     assert response_format["type"] == "json_schema"
     assert response_format["strict"] is True
     assert response_format["schema"]["additionalProperties"] is False
+    insight_id = response_format["schema"]["properties"]["insights"]["items"]["properties"]["id"]
+    assert insight_id["enum"] == ["known-insight"]
     assert response.input_tokens == 17
     assert response.output_tokens == 9
+
+
+async def test_narrative_response_schema_uses_supported_keywords_and_known_section_ids() -> None:
+    endpoint = FakeResponsesEndpoint()
+    endpoint_output = {
+        "sections": [
+            {
+                "id": "executive_summary",
+                "body_template": "Evidence-backed leadership narrative.",
+                "topic_refs": ["data_scope"],
+                "storyline_refs": ["story.scope"],
+                "metric_refs": ["source.total_rows"],
+                "evidence_refs": ["evidence.source"],
+            }
+        ]
+    }
+
+    async def create(**kwargs: Any) -> object:
+        endpoint.kwargs = kwargs
+        return SimpleNamespace(
+            output_text=json.dumps(endpoint_output),
+            usage=SimpleNamespace(input_tokens=17, output_tokens=9),
+        )
+
+    endpoint.create = create  # type: ignore[method-assign]
+    provider = OpenAIResponsesProvider(
+        api_key="test-only-key",
+        timeout_seconds=10,
+        max_output_tokens=321,
+    )
+    provider._client = SimpleNamespace(responses=endpoint)  # type: ignore[attr-defined]
+    prompt = PromptTemplateLoader(REPOSITORY_ROOT).load("governed_narrative")
+
+    await provider.generate(
+        prompt,
+        {"analysis_id": "analysis-1", "requested_sections": [{"id": "executive_summary"}]},
+        model_id="explicit-test-model",
+    )
+
+    schema = endpoint.kwargs["text"]["format"]["schema"]
+    item_schema = schema["properties"]["sections"]["items"]
+    assert item_schema["properties"]["id"]["enum"] == ["executive_summary"]
+    assert "uniqueItems" not in json.dumps(schema)
 
 
 async def test_openai_provider_records_pinned_cost_and_rejects_over_budget_request() -> None:

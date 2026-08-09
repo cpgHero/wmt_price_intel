@@ -59,13 +59,17 @@ def _refs() -> JsonObject:
     return {
         "type": "array",
         "minItems": 1,
-        "uniqueItems": True,
         "items": {"type": "string", "minLength": 1},
     }
 
 
-def _result_schema(role: AgentRole) -> JsonObject:
+def _result_schema(role: AgentRole, payload: JsonObject) -> JsonObject:
     if role == "insight":
+        candidate_ids = [
+            str(row["id"])
+            for row in payload.get("deterministic_insights", [])
+            if isinstance(row, dict) and row.get("id")
+        ]
         return {
             "type": "object",
             "additionalProperties": False,
@@ -79,7 +83,11 @@ def _result_schema(role: AgentRole) -> JsonObject:
                         "additionalProperties": False,
                         "required": ["id", "title", "summary", "business_impact"],
                         "properties": {
-                            "id": {"type": "string", "minLength": 1},
+                            "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                **({"enum": candidate_ids} if candidate_ids else {}),
+                            },
                             "title": {"type": "string", "minLength": 1},
                             "summary": {"type": "string", "minLength": 1},
                             "business_impact": {"type": "string", "minLength": 1},
@@ -88,6 +96,11 @@ def _result_schema(role: AgentRole) -> JsonObject:
                 }
             },
         }
+    section_ids = [
+        str(row["id"])
+        for row in payload.get("requested_sections", [])
+        if isinstance(row, dict) and row.get("id")
+    ]
     return {
         "type": "object",
         "additionalProperties": False,
@@ -108,12 +121,15 @@ def _result_schema(role: AgentRole) -> JsonObject:
                         "evidence_refs",
                     ],
                     "properties": {
-                        "id": {"type": "string", "minLength": 1},
+                        "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            **({"enum": section_ids} if section_ids else {}),
+                        },
                         "body_template": {"type": "string", "minLength": 1},
                         "topic_refs": {
                             "type": "array",
                             "minItems": 1,
-                            "uniqueItems": True,
                             "items": {
                                 "type": "string",
                                 "enum": [
@@ -178,7 +194,7 @@ class OpenAIResponsesProvider:
         model_id: str,
     ) -> ProviderResponse:
         client: Any = self._client
-        response_schema = _result_schema(prompt.role)
+        response_schema = _result_schema(prompt.role, payload)
         pricing = self._model_pricing.get(model_id)
         if self._max_request_cost_usd is not None:
             if pricing is None:
