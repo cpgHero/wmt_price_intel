@@ -383,6 +383,12 @@ def test_analysis_brief_uses_merchant_facing_retailer_and_segment_names() -> Non
     ]
     assert any("85% lean · 1 lb · organic · grass fed" in label for label in comparison_labels)
 
+    model_view = AnalysisBriefBuilder(REPOSITORY_ROOT).model_view(brief)
+    model_text = json.dumps(model_view, ensure_ascii=False)
+    assert "aldi_us" not in model_text
+    assert "amazon_us_same_day" not in model_text
+    assert '"fact_refs"' not in model_text
+
 
 def test_narrative_critic_rejects_machine_oriented_labels() -> None:
     with pytest.raises(AgentGovernanceError, match="machine-oriented"):

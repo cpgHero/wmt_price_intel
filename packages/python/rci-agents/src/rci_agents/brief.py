@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections import defaultdict
+from copy import deepcopy
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -279,6 +280,34 @@ class AnalysisBriefBuilder:
             label="analysis brief",
         )
         return document
+
+    def model_view(self, document: JsonObject) -> JsonObject:
+        """Return the same governed brief without machine identifiers irrelevant to prose."""
+
+        view = deepcopy(document)
+        view["benchmark_retailer"] = self._retailer_name(view.get("benchmark_retailer"))
+        view["competitors"] = [
+            self._retailer_name(retailer_id) for retailer_id in view.get("competitors", [])
+        ]
+        for fact in view.get("facts", []):
+            if not isinstance(fact, dict):
+                continue
+            fact.pop("id", None)
+            context = fact.get("context")
+            if not isinstance(context, dict):
+                continue
+            for identifier_key in ("competitor_id", "retailer_id"):
+                identifier = context.pop(identifier_key, None)
+                if identifier is not None:
+                    context.setdefault(
+                        identifier_key.removesuffix("_id") + "_name",
+                        self._retailer_name(identifier),
+                    )
+        for storyline in view.get("storylines", []):
+            if not isinstance(storyline, dict):
+                continue
+            storyline.pop("fact_refs", None)
+        return view
 
     def _base_facts(
         self,

@@ -136,7 +136,7 @@ class GovernedAnalysisAssistant:
             narrative_payload: JsonObject = {
                 "analysis_id": result["analysis_id"],
                 "product_pack": _product_pack_context(product_pack),
-                "analysis_brief": analysis_brief,
+                "analysis_brief": self._briefs.model_view(analysis_brief),
                 "requested_sections": narrative_sections,
                 "required_questions": report_blueprint.get("narrative_policy", {}).get(
                     "required_questions", []
