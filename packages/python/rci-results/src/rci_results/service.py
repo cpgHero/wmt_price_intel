@@ -110,6 +110,7 @@ class AnalysisResultService:
                 artifact
                 for artifact in await self._repository.list_artifacts(analysis.analysis_id)
                 if artifact.artifact_type == artifact_type
+                and artifact.renderer_version == self._renderer.version
             ),
             None,
         )

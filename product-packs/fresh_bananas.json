@@ -1,11 +1,19 @@
 {
   "id": "fresh_bananas",
   "name": "Fresh Bananas & Plantains",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category_family": "produce",
   "scope": {
-    "target_terms": ["banana", "bananas", "plantain", "plantains"],
-    "include": ["fresh edible bananas", "fresh plantains"],
+    "target_terms": [
+      "banana",
+      "bananas",
+      "plantain",
+      "plantains"
+    ],
+    "include": [
+      "fresh edible bananas",
+      "fresh plantains"
+    ],
     "exclude": [
       "dried/freeze-dried bananas",
       "banana chips",
@@ -46,21 +54,38 @@
         "Mini/Baby"
       ],
       "unknown_policy": "reject_strict",
-      "extractors": ["title_rule", "url_rule", "ai_fallback"],
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
       "extraction_rules": [
         {
           "type": "term_map",
           "values": {
-            "Plantain": ["plantain", "plantains"],
+            "Plantain": [
+              "plantain",
+              "plantains"
+            ],
             "Green/Cooking": [
               "green banana",
               "cooking banana",
               "guineos verdes"
             ],
-            "Manzano/Apple": ["manzano", "apple banana"],
-            "Burro": ["burro"],
-            "Red": ["red banana"],
-            "Mini/Baby": ["mini banana", "baby banana"]
+            "Manzano/Apple": [
+              "manzano",
+              "apple banana"
+            ],
+            "Burro": [
+              "burro"
+            ],
+            "Red": [
+              "red banana"
+            ],
+            "Mini/Baby": [
+              "mini banana",
+              "baby banana"
+            ]
           },
           "default": "Standard Yellow"
         }
@@ -72,11 +97,17 @@
       "role": "matching",
       "required_for_strict": true,
       "unknown_policy": "reject_strict",
-      "extractors": ["title_rule", "url_rule"],
+      "extractors": [
+        "title_rule",
+        "url_rule"
+      ],
       "extraction_rules": [
         {
           "type": "boolean_terms",
-          "true_terms": ["organic", "usda organic"],
+          "true_terms": [
+            "organic",
+            "usda organic"
+          ],
           "default": false
         }
       ]
@@ -86,18 +117,45 @@
       "data_type": "enum",
       "role": "matching",
       "required_for_strict": true,
-      "allowed_values": ["each", "bunch", "lb", "fixed_weight_package"],
+      "allowed_values": [
+        "each",
+        "bunch",
+        "lb",
+        "fixed_weight_package"
+      ],
       "unknown_policy": "review",
-      "extractors": ["retailer_field", "title_rule", "url_rule", "ai_fallback"],
+      "extractors": [
+        "retailer_field",
+        "title_rule",
+        "url_rule",
+        "ai_fallback"
+      ],
       "extraction_rules": [
         {
           "type": "term_map",
-          "sources": ["raw.selling_unit", "raw.unit", "raw.unit_of_measure"],
+          "sources": [
+            "raw.selling_unit",
+            "raw.unit",
+            "raw.unit_of_measure"
+          ],
           "values": {
-            "each": ["each", "ea"],
-            "bunch": ["bunch"],
-            "lb": ["lb", "pound", "per lb"],
-            "fixed_weight_package": ["fixed weight", "package", "bag"]
+            "each": [
+              "each",
+              "ea"
+            ],
+            "bunch": [
+              "bunch"
+            ],
+            "lb": [
+              "lb",
+              "pound",
+              "per lb"
+            ],
+            "fixed_weight_package": [
+              "fixed weight",
+              "package",
+              "bag"
+            ]
           }
         },
         {
@@ -109,9 +167,18 @@
               "package",
               "bag"
             ],
-            "bunch": ["bunch"],
-            "each": ["each", "ea"],
-            "lb": ["per lb", "pound", "lb"]
+            "bunch": [
+              "bunch"
+            ],
+            "each": [
+              "each",
+              "ea"
+            ],
+            "lb": [
+              "per lb",
+              "pound",
+              "lb"
+            ]
           }
         }
       ]
@@ -123,7 +190,12 @@
       "required_for_strict": false,
       "unit": "lb",
       "unknown_policy": "allow_compatible",
-      "extractors": ["retailer_field", "title_rule", "url_rule", "manual"],
+      "extractors": [
+        "retailer_field",
+        "title_rule",
+        "url_rule",
+        "manual"
+      ],
       "extraction_rules": [
         {
           "type": "measurement",
@@ -150,17 +222,29 @@
       "required_for_strict": false,
       "unit": "each",
       "unknown_policy": "allow_compatible",
-      "extractors": ["title_rule", "url_rule", "manual"],
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "manual"
+      ],
       "extraction_rules": [
         {
           "type": "number_pattern",
-          "sources": ["raw_text"],
-          "patterns": ["(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"],
+          "sources": [
+            "raw_text"
+          ],
+          "patterns": [
+            "(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"
+          ],
           "group": 1
         },
         {
           "type": "measurement",
-          "units": { "count": 1, "ct": 1, "each": 1 }
+          "units": {
+            "count": 1,
+            "ct": 1,
+            "each": 1
+          }
         }
       ]
     },
@@ -171,17 +255,47 @@
       "required_for_strict": false,
       "unit": "each",
       "unknown_policy": "allow_compatible",
-      "extractors": ["title_rule", "url_rule", "manual"],
+      "extractors": [
+        "title_rule",
+        "url_rule",
+        "manual"
+      ],
       "extraction_rules": [
         {
           "type": "number_pattern",
-          "sources": ["raw_text"],
-          "patterns": ["(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"],
+          "sources": [
+            "raw_text"
+          ],
+          "patterns": [
+            "(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*(?:count|ct)"
+          ],
           "group": 2
         },
         {
           "type": "measurement",
-          "units": { "count": 1, "ct": 1, "each": 1 }
+          "units": {
+            "count": 1,
+            "ct": 1,
+            "each": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "retailer_product_id",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": [
+        "retailer_field"
+      ],
+      "extraction_rules": [
+        {
+          "type": "field",
+          "sources": [
+            "retailer_product_id"
+          ]
         }
       ]
     },
@@ -191,11 +305,16 @@
       "role": "identity",
       "required_for_strict": false,
       "unknown_policy": "not_applicable",
-      "extractors": ["retailer_field", "title_rule"],
+      "extractors": [
+        "retailer_field",
+        "title_rule"
+      ],
       "extraction_rules": [
         {
           "type": "field",
-          "sources": ["brand"]
+          "sources": [
+            "brand"
+          ]
         }
       ]
     }
@@ -205,7 +324,10 @@
     "secondary_metrics": [
       "price_per_each",
       "price_per_lb",
-      "estimated_price_per_banana"
+      "midpoint_price_per_each",
+      "price_per_each_low",
+      "price_per_each_high",
+      "range_midpoint_price_per_each"
     ],
     "conversion_rules": [
       {
@@ -217,6 +339,21 @@
         "from": "count_min",
         "to": "midpoint_price_per_each",
         "formula": "price / ((count_min + count_max)/2)"
+      },
+      {
+        "from": "count_min",
+        "to": "price_per_each_low",
+        "formula": "price / count_max"
+      },
+      {
+        "from": "count_max",
+        "to": "price_per_each_high",
+        "formula": "price / count_min"
+      },
+      {
+        "from": "count_min",
+        "to": "range_midpoint_price_per_each",
+        "formula": "price * (count_min + count_max) / (2 * count_min * count_max)"
       }
     ],
     "forbidden_metrics": [
@@ -229,17 +366,29 @@
       "id": "strict_each",
       "label": "Strict each-to-each",
       "geography": "exact_zip",
-      "dimensions": ["variety", "organic", "selling_unit"],
+      "dimensions": [
+        "variety",
+        "organic",
+        "selling_unit"
+      ],
       "brand_policy": "ignore_brand",
       "unknown_policy": "reject",
       "price_selection": "lowest_positive",
-      "comparison_metric": "package_price"
+      "comparison_metric": "package_price",
+      "attribute_constraints": {
+        "selling_unit": [
+          "each"
+        ]
+      }
     },
     {
       "id": "weight_normalized",
       "label": "Weight-normalized",
       "geography": "exact_zip",
-      "dimensions": ["variety", "organic"],
+      "dimensions": [
+        "variety",
+        "organic"
+      ],
       "brand_policy": "ignore_brand",
       "unknown_policy": "review",
       "price_selection": "lowest_positive",
@@ -249,15 +398,118 @@
       "id": "count_compatible",
       "label": "Count-compatible bunch",
       "geography": "exact_zip",
-      "dimensions": ["variety", "organic"],
+      "dimensions": [
+        "variety",
+        "organic"
+      ],
       "brand_policy": "ignore_brand",
       "unknown_policy": "review",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "midpoint_price_per_each"
+    },
+    {
+      "id": "conventional_bunch_range",
+      "label": "Conventional bunch range vs benchmark each",
+      "geography": "exact_zip",
+      "dimensions": [
+        "variety",
+        "organic"
+      ],
+      "attribute_constraints": {
+        "variety": [
+          "Standard Yellow"
+        ],
+        "organic": [
+          false
+        ]
+      },
+      "benchmark_attribute_constraints": {
+        "retailer_product_id": [
+          "44390948"
+        ]
+      },
+      "competitor_attribute_constraints": {
+        "retailer_product_id": [
+          "B07ZLF9WQ5",
+          "B07ZLFPXHC"
+        ]
+      },
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "range_midpoint_price_per_each",
+      "comparison_interval": {
+        "low_metric": "price_per_each_low",
+        "high_metric": "price_per_each_high"
+      }
+    },
+    {
+      "id": "organic_bunch_package",
+      "label": "Organic bunch package price",
+      "geography": "exact_zip",
+      "dimensions": [
+        "variety",
+        "organic"
+      ],
+      "attribute_constraints": {
+        "variety": [
+          "Standard Yellow"
+        ],
+        "organic": [
+          true
+        ]
+      },
+      "benchmark_attribute_constraints": {
+        "retailer_product_id": [
+          "51259338"
+        ]
+      },
+      "competitor_attribute_constraints": {
+        "retailer_product_id": [
+          "B07ZLF9G83",
+          "B07ZLFKBFD"
+        ]
+      },
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "package_price"
+    },
+    {
+      "id": "organic_bunch_midpoint",
+      "label": "Organic bunch midpoint price per banana",
+      "geography": "exact_zip",
+      "dimensions": [
+        "variety",
+        "organic"
+      ],
+      "attribute_constraints": {
+        "variety": [
+          "Standard Yellow"
+        ],
+        "organic": [
+          true
+        ]
+      },
+      "benchmark_attribute_constraints": {
+        "retailer_product_id": [
+          "51259338"
+        ]
+      },
+      "competitor_attribute_constraints": {
+        "retailer_product_id": [
+          "B07ZLF9G83",
+          "B07ZLFKBFD"
+        ]
+      },
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
       "price_selection": "lowest_positive",
       "comparison_metric": "midpoint_price_per_each"
     }
   ],
   "qa_rules": {
-    "parity_tolerance_dollars": 0.01,
+    "parity_tolerance_dollars": 0.001,
     "suspicious_gap_pct": 50,
     "require_unit_confirmation_when": [
       "each price differs materially but expected piece weight differs",
@@ -270,7 +522,11 @@
     "sensitivity_checks": []
   },
   "reporting": {
-    "headline_segments": ["variety", "organic", "selling_unit"],
+    "headline_segments": [
+      "variety",
+      "organic",
+      "selling_unit"
+    ],
     "required_caveats": [
       "each price and $/lb can tell different stories",
       "bunch price must be normalized by count before declaring a winner"
@@ -280,7 +536,11 @@
       "market_price_distribution",
       "unit_comparison"
     ],
-    "alertable_metrics": ["each_gap", "price_per_lb_gap", "bunch_midpoint_gap"],
+    "alertable_metrics": [
+      "each_gap",
+      "price_per_lb_gap",
+      "bunch_midpoint_gap"
+    ],
     "report_blueprint": {
       "id": "fresh_bananas_leadership",
       "version": "1.0.0"
@@ -343,7 +603,9 @@
     ]
   },
   "regression": {
-    "golden_dataset_ids": ["bananas_aug2026_wmt_aldi_amz"],
+    "golden_dataset_ids": [
+      "bananas_aug2026_wmt_aldi_amz"
+    ],
     "expected_headlines": [
       {
         "metric": "source_rows",
@@ -374,6 +636,1204 @@
       "rate_abs": 0.002,
       "price_abs": 0.01,
       "count_abs": 5
+    }
+  },
+  "retailer_overrides": {
+    "walmart_us": {
+      "catalog_policy": "rules_only",
+      "products": {
+        "8503156285": {
+          "scope": "exclude"
+        },
+        "20640356289": {
+          "scope": "exclude"
+        },
+        "18646324176": {
+          "scope": "exclude"
+        },
+        "543786099": {
+          "scope": "exclude"
+        },
+        "20103620612": {
+          "scope": "exclude"
+        },
+        "340870665": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Red",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "340870665",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "842931823": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Manzano/Apple",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "842931823",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "8954912707": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Plantain",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "8954912707",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "14336395": {
+          "scope": "exclude"
+        },
+        "15153517499": {
+          "scope": "exclude"
+        },
+        "623057263": {
+          "scope": "exclude"
+        },
+        "3050515211": {
+          "scope": "exclude"
+        },
+        "5447213213": {
+          "scope": "exclude"
+        },
+        "193164902": {
+          "scope": "exclude"
+        },
+        "20619017149": {
+          "scope": "exclude"
+        },
+        "561709964": {
+          "scope": "exclude"
+        },
+        "34143814": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Plantain",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "34143814",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "418846131": {
+          "scope": "exclude"
+        },
+        "744073813": {
+          "scope": "exclude"
+        },
+        "118627077": {
+          "scope": "exclude"
+        },
+        "697623223": {
+          "scope": "exclude"
+        },
+        "152993731": {
+          "scope": "exclude"
+        },
+        "133275367": {
+          "scope": "exclude"
+        },
+        "163092222": {
+          "scope": "exclude"
+        },
+        "8865016050": {
+          "scope": "exclude"
+        },
+        "735596417": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Burro",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "735596417",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "19635823825": {
+          "scope": "exclude"
+        },
+        "659261813": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Green/Cooking",
+            "organic": false,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "659261813",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "5232421834": {
+          "scope": "exclude"
+        },
+        "613718350": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Green/Cooking",
+            "organic": false,
+            "selling_unit": null,
+            "weight_lb": 3,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "613718350",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "44390948": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": 0.4,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "44390948",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "1302368569": {
+          "scope": "exclude"
+        },
+        "17325021088": {
+          "scope": "exclude"
+        },
+        "51259339": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Mini/Baby",
+            "organic": false,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "51259339",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "931570970": {
+          "scope": "exclude"
+        },
+        "2664639940": {
+          "scope": "exclude"
+        },
+        "20587770291": {
+          "scope": "exclude"
+        },
+        "251237660": {
+          "scope": "exclude"
+        },
+        "5048601316": {
+          "scope": "exclude"
+        },
+        "17914561906": {
+          "scope": "exclude"
+        },
+        "51259338": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "bunch",
+            "weight_lb": 2.3513513513513513,
+            "count_min": 5,
+            "count_max": 7,
+            "retailer_product_id": "51259338",
+            "brand": "Marketside"
+          }
+        },
+        "346561833": {
+          "scope": "exclude"
+        },
+        "9031061887": {
+          "scope": "exclude"
+        },
+        "20633208851": {
+          "scope": "exclude"
+        },
+        "19745706131": {
+          "scope": "exclude"
+        },
+        "20464453707": {
+          "scope": "exclude"
+        },
+        "19271353019": {
+          "scope": "exclude"
+        },
+        "20648052692": {
+          "scope": "exclude"
+        },
+        "20620721382": {
+          "scope": "exclude"
+        },
+        "19666414415": {
+          "scope": "exclude"
+        },
+        "20123965691": {
+          "scope": "exclude"
+        },
+        "1046933289": {
+          "scope": "exclude"
+        },
+        "5649163115": {
+          "scope": "exclude"
+        },
+        "3535412570": {
+          "scope": "exclude"
+        },
+        "14985168245": {
+          "scope": "exclude"
+        },
+        "20593608432": {
+          "scope": "exclude"
+        },
+        "9617018708": {
+          "scope": "exclude"
+        },
+        "186590709": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Green/Cooking",
+            "organic": false,
+            "selling_unit": "fixed_weight_package",
+            "weight_lb": 1,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "186590709",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        },
+        "10785157294": {
+          "scope": "exclude"
+        },
+        "507312518": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Manzano/Apple",
+            "organic": false,
+            "selling_unit": "fixed_weight_package",
+            "weight_lb": 3,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "507312518",
+            "brand": "Unbranded / Fresh Produce"
+          }
+        }
+      }
+    },
+    "aldi_us": {
+      "catalog_policy": "rules_only",
+      "products": {
+        "3255474": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "3255474",
+            "brand": "Unbranded / ALDI Produce"
+          }
+        },
+        "25901190": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "fixed_weight_package",
+            "weight_lb": 1,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "25901190",
+            "brand": "Unbranded / ALDI Produce"
+          }
+        },
+        "23974682": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Plantain",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "23974682",
+            "brand": "Unbranded / ALDI Produce"
+          }
+        },
+        "25720157": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": 0.326530612244898,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "25720157",
+            "brand": "Unbranded / ALDI Produce"
+          }
+        }
+      }
+    },
+    "amazon_us_same_day": {
+      "catalog_policy": "rules_only",
+      "products": {
+        "B0787Y4V6T": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B0787Y4V6T",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B0D83DD86Z": {
+          "scope": "exclude"
+        },
+        "B07FRNZFKM": {
+          "scope": "exclude"
+        },
+        "B0FYG2TPNX": {
+          "scope": "exclude"
+        },
+        "B0GG8VP8NG": {
+          "scope": "exclude"
+        },
+        "B07XW19QBH": {
+          "scope": "exclude"
+        },
+        "B01FW4A79M": {
+          "scope": "exclude"
+        },
+        "B078Q5G9PC": {
+          "scope": "exclude"
+        },
+        "B08331PQ7Y": {
+          "scope": "exclude"
+        },
+        "B0DKMD5PC7": {
+          "scope": "exclude"
+        },
+        "B0B6CPXFRY": {
+          "scope": "exclude"
+        },
+        "B01M1OABSV": {
+          "scope": "exclude"
+        },
+        "B0876L9G1D": {
+          "scope": "exclude"
+        },
+        "B07ZLF9G83": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": 4,
+            "count_max": 5,
+            "retailer_product_id": "B07ZLF9G83",
+            "brand": "Dole"
+          }
+        },
+        "B07XK7D4T3": {
+          "scope": "exclude"
+        },
+        "B0GR97FKGV": {
+          "scope": "exclude"
+        },
+        "B08YJ7Z16W": {
+          "scope": "exclude"
+        },
+        "B0FLM9GFRR": {
+          "scope": "exclude"
+        },
+        "B00JYE0S64": {
+          "scope": "exclude"
+        },
+        "B0019415ZU": {
+          "scope": "exclude"
+        },
+        "B0B7KB4RCY": {
+          "scope": "exclude"
+        },
+        "B0CT5ZBNK3": {
+          "scope": "exclude"
+        },
+        "B0FNNCZ18K": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0FNNCZ18K",
+            "brand": "Winn-Dixie / Fresh Produce"
+          }
+        },
+        "B0GYPHC24L": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": null,
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0GYPHC24L",
+            "brand": "Bashas'"
+          }
+        },
+        "B07NQCGBD2": {
+          "scope": "exclude"
+        },
+        "B077N7TR5G": {
+          "scope": "exclude"
+        },
+        "B0H2LXF9MS": {
+          "scope": "exclude"
+        },
+        "B07XLV5S5M": {
+          "scope": "exclude"
+        },
+        "B0787WRV9V": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Manzano/Apple",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B0787WRV9V",
+            "brand": "Unbranded / Other"
+          }
+        },
+        "B015OA6G8A": {
+          "scope": "exclude"
+        },
+        "B07TXQ4Z15": {
+          "scope": "exclude"
+        },
+        "B0GWGZ8WVJ": {
+          "scope": "exclude"
+        },
+        "B09JTSDWC4": {
+          "scope": "exclude"
+        },
+        "B09XK615VZ": {
+          "scope": "exclude"
+        },
+        "B0832ZV76S": {
+          "scope": "exclude"
+        },
+        "B0GVMWHXRS": {
+          "scope": "exclude"
+        },
+        "B0BVGSVBD2": {
+          "scope": "exclude"
+        },
+        "B002GIUGVM": {
+          "scope": "exclude"
+        },
+        "B091B9YD24": {
+          "scope": "exclude"
+        },
+        "B0GZDJVWJ1": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "fixed_weight_package",
+            "weight_lb": 1,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0GZDJVWJ1",
+            "brand": "Bashas'"
+          }
+        },
+        "B0D37NWNC2": {
+          "scope": "exclude"
+        },
+        "B010OWF92W": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B010OWF92W",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "0452290082": {
+          "scope": "exclude"
+        },
+        "B09SW1M4SH": {
+          "scope": "exclude"
+        },
+        "B0H2LY7JY7": {
+          "scope": "exclude"
+        },
+        "B07Q3VRZVZ": {
+          "scope": "exclude"
+        },
+        "B0B9RYTWWV": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": null,
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0B9RYTWWV",
+            "brand": "Dole"
+          }
+        },
+        "B0CJC1P7XH": {
+          "scope": "exclude"
+        },
+        "B0DHY886KW": {
+          "scope": "exclude"
+        },
+        "B09F716W32": {
+          "scope": "exclude"
+        },
+        "B0FJXYP24K": {
+          "scope": "exclude"
+        },
+        "B07HK9J7P8": {
+          "scope": "exclude"
+        },
+        "B074J5WZV2": {
+          "scope": "exclude"
+        },
+        "B0FD7KKZ3H": {
+          "scope": "exclude"
+        },
+        "B0CWSDQGXH": {
+          "scope": "exclude"
+        },
+        "B0GGVB1LZZ": {
+          "scope": "exclude"
+        },
+        "B0D37VKCX5": {
+          "scope": "exclude"
+        },
+        "B0GXZ7GZVL": {
+          "scope": "exclude"
+        },
+        "B083318PX6": {
+          "scope": "exclude"
+        },
+        "B0DR38R95P": {
+          "scope": "exclude"
+        },
+        "B00HT7U55W": {
+          "scope": "exclude"
+        },
+        "B01CT4GBCK": {
+          "scope": "exclude"
+        },
+        "B0DHY9J6TL": {
+          "scope": "exclude"
+        },
+        "B06XTHNCHY": {
+          "scope": "exclude"
+        },
+        "B000SE7Y7U": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Plantain",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B000SE7Y7U",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B0CVJT92F2": {
+          "scope": "exclude"
+        },
+        "B0F8D2LGXN": {
+          "scope": "exclude"
+        },
+        "B07VMK49QZ": {
+          "scope": "exclude"
+        },
+        "B0H5T78P49": {
+          "scope": "exclude"
+        },
+        "B0D6YQKH88": {
+          "scope": "exclude"
+        },
+        "B0H2Q7FHNS": {
+          "scope": "exclude"
+        },
+        "B0G62DCFVV": {
+          "scope": "exclude"
+        },
+        "B086JD4634": {
+          "scope": "exclude"
+        },
+        "B0H4QMGXMZ": {
+          "scope": "exclude"
+        },
+        "B0FJ8CM8G2": {
+          "scope": "exclude"
+        },
+        "B0DKQ7K4NH": {
+          "scope": "exclude"
+        },
+        "B0DNGNFBYH": {
+          "scope": "exclude"
+        },
+        "B0BSP1W4CT": {
+          "scope": "exclude"
+        },
+        "B00JXM4EVW": {
+          "scope": "exclude"
+        },
+        "B0GXKYTKWX": {
+          "scope": "exclude"
+        },
+        "B001GIP2A8": {
+          "scope": "exclude"
+        },
+        "B01B6PB89O": {
+          "scope": "exclude"
+        },
+        "B00AR0WECA": {
+          "scope": "exclude"
+        },
+        "B09PGP7LSD": {
+          "scope": "exclude"
+        },
+        "B00VK3HN60": {
+          "scope": "exclude"
+        },
+        "B07BR5JP85": {
+          "scope": "exclude"
+        },
+        "B08BHS62FR": {
+          "scope": "exclude"
+        },
+        "B01N7J2PW7": {
+          "scope": "exclude"
+        },
+        "B01M4RU1G2": {
+          "scope": "exclude"
+        },
+        "B0829QQHCS": {
+          "scope": "exclude"
+        },
+        "B0B7P3T7ZB": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": null,
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0B7P3T7ZB",
+            "brand": "Cardenas Markets"
+          }
+        },
+        "B0H12GCM66": {
+          "scope": "exclude"
+        },
+        "B06XTF7N69": {
+          "scope": "exclude"
+        },
+        "B07XW1R4VL": {
+          "scope": "exclude"
+        },
+        "B081LV2T86": {
+          "scope": "exclude"
+        },
+        "B0147RRUJA": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B0147RRUJA",
+            "brand": "Bristol Farms"
+          }
+        },
+        "B06XTYRPM6": {
+          "scope": "exclude"
+        },
+        "B0G7Y73CPF": {
+          "scope": "exclude"
+        },
+        "B08FP6YJZL": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": null,
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B08FP6YJZL",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B07ZLF9WQ5": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": 4,
+            "count_max": 5,
+            "retailer_product_id": "B07ZLF9WQ5",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B002RL9CSG": {
+          "scope": "exclude"
+        },
+        "B0DRKBLVK8": {
+          "scope": "exclude"
+        },
+        "B084TT7NT5": {
+          "scope": "exclude"
+        },
+        "B0019412IK": {
+          "scope": "exclude"
+        },
+        "B09XNCLSPX": {
+          "scope": "exclude"
+        },
+        "B09ZJBSGGW": {
+          "scope": "exclude"
+        },
+        "B08BHSYHDH": {
+          "scope": "exclude"
+        },
+        "B0BB8WF85S": {
+          "scope": "exclude"
+        },
+        "B0F6L9GVKT": {
+          "scope": "exclude"
+        },
+        "B08X99TN76": {
+          "scope": "exclude"
+        },
+        "B0F21FJ56K": {
+          "scope": "exclude"
+        },
+        "B0DJ82H15X": {
+          "scope": "exclude"
+        },
+        "B0CVJGGMG9": {
+          "scope": "exclude"
+        },
+        "B001942GAI": {
+          "scope": "exclude"
+        },
+        "B0FX7XQJBJ": {
+          "scope": "exclude"
+        },
+        "B0FFK5N1WZ": {
+          "scope": "exclude"
+        },
+        "B0DGXBPRQT": {
+          "scope": "exclude"
+        },
+        "B0CJ3S2BWX": {
+          "scope": "exclude"
+        },
+        "B08CPSCLSW": {
+          "scope": "exclude"
+        },
+        "B002HQLWSO": {
+          "scope": "exclude"
+        },
+        "B00YCY32QY": {
+          "scope": "exclude"
+        },
+        "B084TSQ42W": {
+          "scope": "exclude"
+        },
+        "B01MXCSA2I": {
+          "scope": "exclude"
+        },
+        "B09XP394BZ": {
+          "scope": "exclude"
+        },
+        "B01N6O8P9J": {
+          "scope": "exclude"
+        },
+        "B07G39778K": {
+          "scope": "exclude"
+        },
+        "B00MJW4HYW": {
+          "scope": "exclude"
+        },
+        "B098MRHJ5M": {
+          "scope": "exclude"
+        },
+        "B0DBQKKMHM": {
+          "scope": "exclude"
+        },
+        "B0G499TZBW": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Manzano/Apple",
+            "organic": false,
+            "selling_unit": null,
+            "weight_lb": null,
+            "count_min": null,
+            "count_max": null,
+            "retailer_product_id": "B0G499TZBW",
+            "brand": "Winn-Dixie / Fresh Produce"
+          }
+        },
+        "B0BQRW8N3T": {
+          "scope": "exclude"
+        },
+        "B0FGBDSMYP": {
+          "scope": "exclude"
+        },
+        "B07XW1BZR5": {
+          "scope": "exclude"
+        },
+        "B093ZJM1CC": {
+          "scope": "exclude"
+        },
+        "B00E3JM7UU": {
+          "scope": "exclude"
+        },
+        "B0DJNPLHV8": {
+          "scope": "exclude"
+        },
+        "B071JZHQ76": {
+          "scope": "exclude"
+        },
+        "B072151Q32": {
+          "scope": "exclude"
+        },
+        "B09YQ2W3LN": {
+          "scope": "exclude"
+        },
+        "B0BXB3NTDC": {
+          "scope": "exclude"
+        },
+        "B09T4PLCKX": {
+          "scope": "exclude"
+        },
+        "B0H2M1BCY6": {
+          "scope": "exclude"
+        },
+        "B0DW44JM4H": {
+          "scope": "exclude"
+        },
+        "B0CV4J1F15": {
+          "scope": "exclude"
+        },
+        "B0CJ3XWJRY": {
+          "scope": "exclude"
+        },
+        "B077XK5VV7": {
+          "scope": "exclude"
+        },
+        "B0FX9WLBYK": {
+          "scope": "exclude"
+        },
+        "B082VZ7VVP": {
+          "scope": "exclude"
+        },
+        "B0FV31F8WW": {
+          "scope": "exclude"
+        },
+        "B07FZ159ZB": {
+          "scope": "exclude"
+        },
+        "B0959C57WF": {
+          "scope": "exclude"
+        },
+        "B0GYGBZZWZ": {
+          "scope": "exclude"
+        },
+        "B08TYQ5KF8": {
+          "scope": "exclude"
+        },
+        "B0G62VFGX6": {
+          "scope": "exclude"
+        },
+        "0593473418": {
+          "scope": "exclude"
+        },
+        "B0F9H5FN35": {
+          "scope": "exclude"
+        },
+        "B0FJ8BR6F9": {
+          "scope": "exclude"
+        },
+        "B0DNV6NQJ9": {
+          "scope": "exclude"
+        },
+        "B07P9VV3D2": {
+          "scope": "exclude"
+        },
+        "B0FG8NJHS9": {
+          "scope": "exclude"
+        },
+        "B0GY2D4P4W": {
+          "scope": "exclude"
+        },
+        "B09MDTP3L8": {
+          "scope": "exclude"
+        },
+        "B08332J6N5": {
+          "scope": "exclude"
+        },
+        "1623176050": {
+          "scope": "exclude"
+        },
+        "B07ZLFPXHC": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": 4,
+            "count_max": 5,
+            "retailer_product_id": "B07ZLFPXHC",
+            "brand": "Dole"
+          }
+        },
+        "B00Q1SHCQ0": {
+          "scope": "exclude"
+        },
+        "B00V1OX6F0": {
+          "scope": "exclude"
+        },
+        "B0BHT8FWBJ": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B0BHT8FWBJ",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B0791LVW1Y": {
+          "scope": "exclude"
+        },
+        "B086RF5657": {
+          "scope": "exclude"
+        },
+        "B089P2XZQG": {
+          "scope": "exclude"
+        },
+        "B0CVJVP66T": {
+          "scope": "exclude"
+        },
+        "B01MXLYY18": {
+          "scope": "exclude"
+        },
+        "B0GG4LXF72": {
+          "scope": "exclude"
+        },
+        "B07YZNLH5Z": {
+          "scope": "exclude"
+        },
+        "B0CVJRJCJY": {
+          "scope": "exclude"
+        },
+        "B0F98YPD7X": {
+          "scope": "exclude"
+        },
+        "B00WM6BIGA": {
+          "scope": "exclude"
+        },
+        "B0BTMX12NV": {
+          "scope": "exclude"
+        },
+        "B0CB5BN4PX": {
+          "scope": "exclude"
+        },
+        "B07JK3N8CN": {
+          "scope": "exclude"
+        },
+        "B002B8Z98W": {
+          "scope": "exclude"
+        },
+        "B0D6DKSHY9": {
+          "scope": "exclude"
+        },
+        "B00AJ9CQK4": {
+          "scope": "exclude"
+        },
+        "B01CXMHTZ6": {
+          "scope": "exclude"
+        },
+        "B081LW6MWQ": {
+          "scope": "exclude"
+        },
+        "B00CDRJN7E": {
+          "scope": "exclude"
+        },
+        "B00YF2KARC": {
+          "scope": "exclude"
+        },
+        "B0FNND1QMS": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B0FNND1QMS",
+            "brand": "Winn-Dixie / Fresh Produce"
+          }
+        },
+        "B0GKG1X7XD": {
+          "scope": "exclude"
+        },
+        "B08NJKQHLN": {
+          "scope": "exclude"
+        },
+        "B0F6L6X4XT": {
+          "scope": "exclude"
+        },
+        "B0014GLSE6": {
+          "scope": "exclude"
+        },
+        "B005K5GQ9O": {
+          "scope": "exclude"
+        },
+        "B07ZLFKBFD": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": true,
+            "selling_unit": "bunch",
+            "weight_lb": null,
+            "count_min": 4,
+            "count_max": 5,
+            "retailer_product_id": "B07ZLFKBFD",
+            "brand": "Unbranded / Other"
+          }
+        },
+        "B0040MYC3K": {
+          "scope": "exclude"
+        },
+        "B00IOUD68Q": {
+          "scope": "exclude"
+        },
+        "B08BCDD189": {
+          "scope": "exclude"
+        },
+        "B0GHRJ9981": {
+          "scope": "exclude"
+        },
+        "B0CCV23FD8": {
+          "scope": "exclude"
+        },
+        "B01M2VFYCN": {
+          "scope": "exclude"
+        },
+        "B0DQ1ZJVDS": {
+          "scope": "exclude"
+        },
+        "B0H3P5X6F9": {
+          "scope": "exclude"
+        },
+        "B07FYYKKQK": {
+          "scope": "include",
+          "attributes": {
+            "variety": "Standard Yellow",
+            "organic": false,
+            "selling_unit": "each",
+            "weight_lb": null,
+            "count_min": 1,
+            "count_max": 1,
+            "retailer_product_id": "B07FYYKKQK",
+            "brand": "Brands Vary / Fresh Produce"
+          }
+        },
+        "B000P6J0SM": {
+          "scope": "exclude"
+        },
+        "B0F79VHJTK": {
+          "scope": "exclude"
+        },
+        "B0FL2LBP8G": {
+          "scope": "exclude"
+        },
+        "B0H2LZW9SS": {
+          "scope": "exclude"
+        },
+        "B00CQMTG7I": {
+          "scope": "exclude"
+        },
+        "B0DHY6M2SD": {
+          "scope": "exclude"
+        },
+        "B079YXD4H2": {
+          "scope": "exclude"
+        },
+        "B092N23YL1": {
+          "scope": "exclude"
+        },
+        "B01LASWK7G": {
+          "scope": "exclude"
+        }
+      }
     }
   }
 }

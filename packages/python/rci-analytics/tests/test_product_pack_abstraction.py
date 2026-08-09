@@ -191,6 +191,55 @@ def test_scope_exclusions_remain_product_pack_data(
     assert not result.in_scope
 
 
+def test_curated_product_include_overrides_broad_scope_patterns(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    document = dict(pack.document)
+    document["retailer_overrides"] = {
+        "walmart_us": {
+            "catalog_policy": "rules_only",
+            "products": {
+                "creamline-1": {
+                    "scope": "include",
+                    "attributes": {
+                        "volume_oz": 64,
+                        "fat_type": "Whole",
+                        "flavor": "Plain",
+                        "organic": False,
+                        "lactose_free": False,
+                        "ultrafiltered": False,
+                        "a2": False,
+                        "grass_fed": False,
+                        "brand": "Example Dairy",
+                    },
+                }
+            },
+        }
+    }
+    curated = type(pack)(
+        id=pack.id,
+        name=pack.name,
+        version=pack.version,
+        checksum=pack.checksum,
+        document=document,
+    )
+
+    result = OfferClassifier(curated).classify(
+        normalizer.normalize(
+            _row(
+                "walmart_us",
+                "creamline-1",
+                "Example Dairy Creamline Whole Milk, Half Gallon",
+                "4.00",
+            )
+        )
+    )
+
+    assert result.in_scope
+    assert result.attributes["volume_oz"] == 64
+
+
 def test_egg_compatible_profile_supports_one_sided_unknown_wildcards(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
@@ -304,6 +353,50 @@ def test_banana_profiles_choose_explicit_category_neutral_metrics(
     assert weight[0].benchmark_value == Decimal("0.50")
     assert count[0].comparison_metric == "midpoint_price_per_each"
     assert count[0].benchmark_value == Decimal("1") / Decimal("4.5")
+
+
+def test_profiles_support_asymmetric_retailer_role_constraints(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas")
+    document = dict(pack.document)
+    document["matching_profiles"] = [
+        {
+            "id": "each_to_bunch",
+            "label": "Each-to-bunch midpoint",
+            "geography": "exact_zip",
+            "dimensions": ["variety", "organic"],
+            "benchmark_attribute_constraints": {"selling_unit": ["each"]},
+            "competitor_attribute_constraints": {"selling_unit": ["bunch"]},
+            "brand_policy": "ignore_brand",
+            "unknown_policy": "reject",
+            "price_selection": "lowest_positive",
+            "comparison_metric": "midpoint_price_per_each",
+        }
+    ]
+    configured = type(pack)(
+        id=pack.id,
+        name=pack.name,
+        version=pack.version,
+        checksum=pack.checksum,
+        document=document,
+    )
+    rows = [
+        _row("walmart_us", "w-each", "Banana, 1 Each", "0.20"),
+        _row("aldi_us", "a-bunch", "Banana Bunch (4-5 Count)", "0.90"),
+        _row("aldi_us", "a-each", "Banana, 1 Each", "0.15"),
+    ]
+    offers = OfferClassifier(configured).classify_many(normalizer.normalize_many(rows))
+
+    matches = ComparisonEngine(configured).compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="each_to_bunch",
+    )
+
+    assert len(matches) == 1
+    assert matches[0].competitor_value == Decimal("0.90") / Decimal("4.5")
 
 
 def test_core_engine_contains_no_product_specific_code_paths() -> None:

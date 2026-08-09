@@ -303,6 +303,20 @@
               "minItems": 1
             }
           },
+          "benchmark_attribute_constraints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1
+            }
+          },
+          "competitor_attribute_constraints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1
+            }
+          },
           "brand_policy": {
             "enum": [
               "same_brand",
@@ -336,6 +350,21 @@
           "comparison_metric": {
             "type": "string",
             "minLength": 1
+          },
+          "comparison_interval": {
+            "type": "object",
+            "required": ["low_metric", "high_metric"],
+            "properties": {
+              "low_metric": {
+                "type": "string",
+                "minLength": 1
+              },
+              "high_metric": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
           },
           "availability_policy": {
             "enum": [

@@ -154,6 +154,26 @@ class ParquetDatasetWriter:
                 "gap": float(match.gap),
                 "winner": match.winner,
                 "distance_miles": match.distance_miles,
+                "benchmark_interval_low": (
+                    float(match.benchmark_interval_low)
+                    if match.benchmark_interval_low is not None
+                    else None
+                ),
+                "benchmark_interval_high": (
+                    float(match.benchmark_interval_high)
+                    if match.benchmark_interval_high is not None
+                    else None
+                ),
+                "competitor_interval_low": (
+                    float(match.competitor_interval_low)
+                    if match.competitor_interval_low is not None
+                    else None
+                ),
+                "competitor_interval_high": (
+                    float(match.competitor_interval_high)
+                    if match.competitor_interval_high is not None
+                    else None
+                ),
             }
             for match in matches
         ]

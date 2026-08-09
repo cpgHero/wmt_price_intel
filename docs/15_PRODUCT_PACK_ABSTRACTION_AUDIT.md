@@ -28,7 +28,7 @@ executable instead of relying on code review alone.
 | `rci_collections`, `rci_providers`, `rci_results`, `rci_automation` | 0 | Queueing, adapters, immutable results/delivery, and automation |
 | `rci_contracts`, `rci_core`, `rci_db`, `rci_locations` | 0 | Generic contracts, settings, persistence, and geography |
 
-## Generic capabilities added in Phase 8
+## Generic capabilities added through Phase 9.5.8
 
 1. Explicit `scope.target_terms` and `scope.hard_exclusion_patterns`.
 2. Ordered declarative extraction rules:
@@ -44,6 +44,11 @@ executable instead of relying on code review alone.
 6. Enforced same-brand and private-label-equivalent policies with configured aliases/retailer sets.
 7. Profile-scoped, one-sided unknown wildcard matching using configured attribute unknown values;
    unknown-to-unknown remains non-comparable.
+8. Curated product-catalog scope decisions with deterministic rule fallback for unseen products.
+9. Benchmark- and competitor-specific attribute constraints for asymmetric but explicit parity
+   definitions.
+10. Evidence-preserving comparison intervals for count/range products; the interval endpoints are
+    retained on every match record and serialized to Parquet.
 
 Every capability is exercised without inspecting a category ID, Product Pack ID, product name, or
 category-specific attribute name.
@@ -100,8 +105,11 @@ tests.
 - Full eggs: passed the 386,889-row, 14-retailer source/coverage profile and all 5,155 classified
   strict price matches. Walmart-lower rate reconciles exactly to 0.7468477206595538 and ALDI's
   competitor-lower rate to 0.5525040387722132.
-- Milk and bananas: compact benchmark selectors pass; full raw regressions remain pending because
-  their source files are intentionally absent from the implementation package.
+- Full milk: passed all exact source, retailer, product, ZIP/store coverage, and six comparison-mode
+  assertions over 348,980 attached rows.
+- Full bananas: passed all exact source, retailer, product, ZIP/store coverage, and ten comparison
+  assertions over 168,440 attached rows, including 811 interval-supported conventional bunch
+  matches.
 
 The egg source is a consolidated export, not a collection of direct MetricsCart API payloads. The
 full gate therefore keeps two explicit evidence boundaries: `product_catalog.csv` reconciles
@@ -109,12 +117,6 @@ scope/coverage against every source row, while `strict_matches.csv` supplies the
 classified offers consumed by the generic comparison engine. Retailer-specific live adapter tests
 continue to use API response fixtures.
 
-To enable full reconciliation, attach these exact validated keyword versions:
-
-1. Milk: `Milk___Walmart_All_Stores_20260807_012630.csv`,
-   `Milk___Aldi_All_Stores_20260807_012605.csv`, and `milk_amazon.csv` (348,980 rows total).
-2. Bananas: `Bananas___Walmart_All_Stores_20260807_051626.csv`,
-   `Bananas___Aldi_All_Stores_20260807_051549.csv`, and `bananas_amazon(1).csv` (168,440 rows total).
-
-Newer collections may be tested separately, but they are not substitutes for these versions when
-reconciling the supplied August 2026 headline benchmarks.
+The exact validated August 2026 source versions remain external test inputs rather than repository
+fixtures. Newer collections may be tested separately, but they are not substitutes for those
+versions when reconciling the supplied headline benchmarks.

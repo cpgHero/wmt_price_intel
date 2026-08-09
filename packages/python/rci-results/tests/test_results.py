@@ -80,6 +80,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     renderer = ArtifactRenderer()
 
     html = renderer.render(result, "html")
+    assert html.renderer_version == renderer.version == "2.0.0"
     assert html.body.startswith(b"<!doctype html>")
     assert b"0.99964" in html.body
 
@@ -110,6 +111,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
         assert json.loads(archive.read("analysis-result.json")) == result
         manifest = json.loads(archive.read("manifest.json"))
         assert len(manifest["files"]) == 4
+        assert manifest["renderer_version"] == renderer.version
 
     assert result == original
 
@@ -139,6 +141,42 @@ async def test_artifact_generation_is_immutable_and_uses_short_lived_downloads()
     download = await service.download_link(artifacts[0].id)
     assert download.expires_in_seconds == 300
     assert download.url.startswith("https://download.test/")
+
+
+async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None:
+    class NextArtifactRenderer(ArtifactRenderer):
+        @property
+        def version(self) -> str:
+            return "2.1.0"
+
+    repository = InMemoryResultsRepository()
+    store = InMemoryReportObjectStore()
+    current = AnalysisResultService(
+        repository,
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        store,
+        ArtifactRenderer(),
+    )
+    analysis = await current.publish(_result())
+    first = await current.generate_artifact(analysis.analysis_id, "html")
+    upgraded = AnalysisResultService(
+        repository,
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        store,
+        NextArtifactRenderer(),
+    )
+
+    second = await upgraded.generate_artifact(analysis.analysis_id, "html")
+
+    assert first.id != second.id
+    assert first.renderer_version == "2.0.0"
+    assert second.renderer_version == "2.1.0"
+    assert len(store.objects) == 2
+    listed = await upgraded.list_artifacts(analysis.analysis_id)
+    assert {artifact.renderer_version for artifact in listed} == {
+        "2.0.0",
+        "2.1.0",
+    }
 
 
 def test_renderer_module_has_no_analytics_engine_dependency() -> None:

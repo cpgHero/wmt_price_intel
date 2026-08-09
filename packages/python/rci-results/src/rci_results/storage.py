@@ -35,9 +35,12 @@ class UnavailableReportObjectStore:
 def artifact_key(analysis_id: str, payload: ArtifactPayload) -> str:
     if not _SAFE_COMPONENT.fullmatch(analysis_id):
         raise ValueError(f"unsafe analysis ID {analysis_id!r}")
+    if not _SAFE_COMPONENT.fullmatch(payload.renderer_version):
+        raise ValueError(f"unsafe renderer version {payload.renderer_version!r}")
     checksum = hashlib.sha256(payload.body).hexdigest()
     return (
         f"reports/analysis_id={analysis_id}/type={payload.artifact_type}/"
+        f"renderer_version={payload.renderer_version}/"
         f"{checksum[:16]}-{payload.filename}"
     )
 

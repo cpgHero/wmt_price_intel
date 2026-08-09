@@ -136,17 +136,24 @@ class ProductPackLoader:
                 )
             if profile["geography"] == "radius" and not profile.get("radius_miles"):
                 raise ContractError(f"radius profile {profile['id']} requires radius_miles")
-            constraints = profile.get("attribute_constraints", {})
-            unknown_constraints = set(constraints) - known
-            if unknown_constraints:
-                raise ContractError(
-                    f"profile {profile['id']} constrains unknown attributes "
-                    f"{sorted(unknown_constraints)}"
-                )
-            if any(not isinstance(values, list) or not values for values in constraints.values()):
-                raise ContractError(
-                    f"profile {profile['id']} attribute constraints must be non-empty arrays"
-                )
+            for constraint_name in (
+                "attribute_constraints",
+                "benchmark_attribute_constraints",
+                "competitor_attribute_constraints",
+            ):
+                constraints = profile.get(constraint_name, {})
+                unknown_constraints = set(constraints) - known
+                if unknown_constraints:
+                    raise ContractError(
+                        f"profile {profile['id']} constrains unknown attributes "
+                        f"{sorted(unknown_constraints)}"
+                    )
+                if any(
+                    not isinstance(values, list) or not values for values in constraints.values()
+                ):
+                    raise ContractError(
+                        f"profile {profile['id']} {constraint_name} values must be non-empty arrays"
+                    )
             availability_policy = profile.get("availability_policy", "search_presence")
             if availability_policy not in {
                 "search_presence",
@@ -179,6 +186,18 @@ class ProductPackLoader:
                 raise ContractError(
                     f"profile {profile['id']} references unknown comparison metric {metric!r}"
                 )
+            interval = profile.get("comparison_interval")
+            if interval is not None:
+                interval_metrics = {
+                    str(interval["low_metric"]),
+                    str(interval["high_metric"]),
+                }
+                unknown_interval_metrics = interval_metrics - available_metrics
+                if unknown_interval_metrics:
+                    raise ContractError(
+                        f"profile {profile['id']} references unknown interval metrics "
+                        f"{sorted(unknown_interval_metrics)}"
+                    )
             if profile["brand_policy"] == "private_label_equivalent":
                 private_labels = document.get("brand_rules", {}).get("private_labels", {})
                 if not private_labels:
@@ -297,7 +316,15 @@ class ProductPackLoader:
             rule_type = str(rule["type"])
             sources = rule.get("sources", ["text"])
             if any(
-                source not in {"text", "raw_text", "title", "url", "brand"}
+                source
+                not in {
+                    "text",
+                    "raw_text",
+                    "title",
+                    "url",
+                    "brand",
+                    "retailer_product_id",
+                }
                 and not str(source).startswith("raw.")
                 for source in sources
             ):

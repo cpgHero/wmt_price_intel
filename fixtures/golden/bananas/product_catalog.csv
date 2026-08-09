@@ -1,0 +1,36 @@
+Retailer,Product ID,Product Title,Brand,Variety,Organic,Selling Unit,Rows,Covered ZIPs,Covered Stores,Min Price,Median Price,Max Price,Median $/Each,Median $/Lb,Median Weight Lb,Count Min,Count Max
+Walmart,186590709,"Green Banana, 1 Lb Individual Unit",Unbranded / Fresh Produce,Green / Cooking Banana,False,Fixed Weight,6,5,5,0.97,0.97,0.97,,0.97,1,,
+Walmart,340870665,"Fresh Red Banana, Each",Unbranded / Fresh Produce,Red Banana,False,Each,124,113,122,1.58,1.58,1.58,1.58,,,,
+Walmart,34143814,"Fresh Plantain, Each",Unbranded / Fresh Produce,Plantain,False,Each,4240,3697,4103,0.58,0.58,0.58,0.58,,,,
+Walmart,44390948,"Fresh Banana, Each",Unbranded / Fresh Produce,Standard Yellow Banana,False,Each (weighted),4433,3866,4294,0.2,0.2,0.2,0.2,0.5,0.4,,
+Walmart,507312518,"Fresh Apple Banana, 3 lb Package",Unbranded / Fresh Produce,Manzano / Apple Banana,False,Fixed Weight,8,8,8,6.98,6.98,6.98,,2.3266666666666667,3,,
+Walmart,51259338,"Marketside Fresh Organic Bananas, Bunch",Marketside,Standard Yellow Banana,True,Bunch (weighted),4149,3640,4027,1.74,1.74,1.74,,0.74,2.3513513513513513,5,7
+Walmart,51259339,"Fresh Mini Bananas, Bunch, Sweet",Unbranded / Fresh Produce,Mini / Baby Banana,False,Bunch,4,3,3,1.11,1.11,1.11,,,,,
+Walmart,613718350,"Fresh Banana, Guineos Maduros 3lbs Package",Unbranded / Fresh Produce,Green / Cooking Banana,False,Unknown,10,5,5,3.57,3.57,3.57,,,3,,
+Walmart,659261813,"Fresh Green Bananas, Bunch, Sweet",Unbranded / Fresh Produce,Green / Cooking Banana,False,Bunch,177,146,152,1.08,1.08,1.08,,,,,
+Walmart,735596417,"Fresh Burro Banana, Each",Unbranded / Fresh Produce,Burro Banana,False,Each,138,123,138,1.58,1.58,1.58,1.58,,,,
+Walmart,842931823,"Fresh Manzano Banana, Each",Unbranded / Fresh Produce,Manzano / Apple Banana,False,Each,112,99,109,1.24,1.24,1.24,1.24,,,,
+Walmart,8954912707,"Fresh Hawaiian Plantains, each",Unbranded / Fresh Produce,Plantain,False,Each,24,16,16,0.97,0.97,0.97,0.97,,,,
+ALDI,23974682,"Plantain, each",Unbranded / ALDI Produce,Plantain,False,Each,1740,1525,1599,0.65,0.65,0.65,0.65,,,,
+ALDI,25720157,Bananas,Unbranded / ALDI Produce,Standard Yellow Banana,False,Each (weighted),2676,2416,2535,0.16,0.16,0.16,0.16,0.49,0.326530612244898,,
+ALDI,25901190,Organic Bananas,Unbranded / ALDI Produce,Standard Yellow Banana,True,By Weight (~1 lb est.),2,2,2,0.59,0.59,0.59,0.59,0.59,1,,
+ALDI,3255474,Organic Organic Bananas,Unbranded / ALDI Produce,Standard Yellow Banana,True,Each,11,11,11,0.24,0.24,0.24,0.24,,,,
+Amazon,B000SE7Y7U,"Plantain, 1 Each",Brands Vary / Fresh Produce,Plantain,False,Each,11,11,1,0.76,0.92,1.11,0.92,,,1,1
+Amazon,B010OWF92W,"Organic Banana, 1 Each",Brands Vary / Fresh Produce,Standard Yellow Banana,True,Each,43,43,1,0.39,0.4,0.52,0.4,,,1,1
+Amazon,B0147RRUJA,"Bristol Farms Yellow Banana, 1 Each",Bristol Farms,Standard Yellow Banana,False,Each,11,11,1,0.42,0.58,0.58,0.58,,,1,1
+Amazon,B0787WRV9V,"Manzano Banana Conventional, 1 Each",Unbranded / Other,Manzano / Apple Banana,False,Each,5,5,1,0.7,0.7,0.7,0.7,,,1,1
+Amazon,B0787Y4V6T,"Organic Banana, 1 Each",Brands Vary / Fresh Produce,Standard Yellow Banana,True,Each,484,484,1,0.25,0.33,0.74,0.33,,,1,1
+Amazon,B07FYYKKQK,"Banana Conventional, 1 Each",Brands Vary / Fresh Produce,Standard Yellow Banana,False,Each,496,496,1,0.12,0.21,0.45,0.21,,,1,1
+Amazon,B07ZLF9G83,Organic Banana Bunch (4-5 Count),Dole,Standard Yellow Banana,True,Bunch,643,643,1,0,1.49,1.49,,,,4,5
+Amazon,B07ZLF9WQ5,Banana Bunch (4-5 Count),Brands Vary / Fresh Produce,Standard Yellow Banana,False,Bunch,236,236,1,0.99,0.99,0.99,,,,4,5
+Amazon,B07ZLFKBFD,Organic Banana Bunch (4-5 Count),Unbranded / Other,Standard Yellow Banana,True,Bunch,210,210,1,1.49,1.49,1.49,,,,4,5
+Amazon,B07ZLFPXHC,Banana Bunch (4-5 Count),Dole,Standard Yellow Banana,False,Bunch,647,647,1,0,0.99,0.99,,,,4,5
+Amazon,B08FP6YJZL,Bananas,Brands Vary / Fresh Produce,Standard Yellow Banana,False,Unknown,7,7,1,0.21,0.52,0.52,,,,,
+Amazon,B0B7P3T7ZB,"Cardenas Markets, Banana",Cardenas Markets,Standard Yellow Banana,False,Unknown,11,11,1,0.26,0.26,0.3,,,,,
+Amazon,B0B9RYTWWV,Organic Banana,Dole,Standard Yellow Banana,True,Unknown,11,11,1,0.38,0.38,0.38,,,,,
+Amazon,B0BHT8FWBJ,"Banana, 1 Each",Brands Vary / Fresh Produce,Standard Yellow Banana,False,Each,54,54,1,0.26,0.4,0.4,0.4,,,1,1
+Amazon,B0FNNCZ18K,Organic Bananas Bunch,Winn-Dixie / Fresh Produce,Standard Yellow Banana,True,Bunch,13,13,1,2,2,2,,,,,
+Amazon,B0FNND1QMS,"Bananas, Each",Winn-Dixie / Fresh Produce,Standard Yellow Banana,False,Each,10,10,1,0.3,0.3,0.3,0.3,,,,
+Amazon,B0G499TZBW,Manzano Banana,Winn-Dixie / Fresh Produce,Manzano / Apple Banana,False,Unknown,5,5,1,1.3,1.3,1.3,,,,,
+Amazon,B0GYPHC24L,"Bashas, Bananas",Bashas',Standard Yellow Banana,False,Unknown,26,26,1,0.75,0.75,0.75,,,,,
+Amazon,B0GZDJVWJ1,"Bashas, Organic Bananas, 16 Ounce",Bashas',Standard Yellow Banana,True,Fixed Weight,26,26,1,0.98,0.98,0.98,,0.98,1,,

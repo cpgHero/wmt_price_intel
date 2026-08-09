@@ -115,6 +115,7 @@ class InMemoryResultsRepository:
                 id=str(uuid4()),
                 analysis_run_id=analysis.analysis_run_id,
                 artifact_type=payload.artifact_type,
+                renderer_version=payload.renderer_version,
                 dataset_artifact_id=str(uuid4()),
                 storage_uri=storage_uri,
                 content_type=payload.content_type,

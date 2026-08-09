@@ -83,11 +83,27 @@ export interface RetailCompetitiveIntelligenceProductPack {
        */
       [k: string]: [unknown, ...unknown[]];
     };
+    benchmark_attribute_constraints?: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [unknown, ...unknown[]];
+    };
+    competitor_attribute_constraints?: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [unknown, ...unknown[]];
+    };
     brand_policy: "same_brand" | "private_label_equivalent" | "ignore_brand" | "category_specific";
     unknown_policy?: "reject" | "wildcard_if_one_unknown" | "allow" | "review";
     wildcard_dimensions?: string[];
     price_selection?: "lowest_positive" | "median" | "retailer_primary_offer";
     comparison_metric?: string;
+    comparison_interval?: {
+      low_metric: string;
+      high_metric: string;
+    };
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     [k: string]: unknown;
   }[];

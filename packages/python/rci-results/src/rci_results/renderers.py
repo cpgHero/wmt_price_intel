@@ -17,6 +17,8 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
+RENDERER_VERSION = "2.0.0"
+
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
     value = result.get(key, [])
@@ -452,6 +454,10 @@ class ArtifactRenderer:
         )
         self._projector = ReportProjector()
 
+    @property
+    def version(self) -> str:
+        return RENDERER_VERSION
+
     def report_view(
         self,
         result: JsonObject,
@@ -500,6 +506,7 @@ class ArtifactRenderer:
                 f"{analysis_id}.html",
                 "text/html; charset=utf-8",
                 self._html.render(result, context[2] if context else None),
+                self.version,
             )
         if artifact_type == "xlsx":
             context = self._context(result, "xlsx")
@@ -512,6 +519,7 @@ class ArtifactRenderer:
                     context[0] if context else None,
                     context[1] if context else None,
                 ),
+                self.version,
             )
         if artifact_type == "leadership_email":
             context = self._context(result, "leadership_email")
@@ -520,6 +528,7 @@ class ArtifactRenderer:
                 f"{analysis_id}.eml",
                 "message/rfc822",
                 self._email.render(result, context[2] if context else None),
+                self.version,
             )
         if artifact_type == "audit_zip":
             return self._audit_package(result)
@@ -534,6 +543,7 @@ class ArtifactRenderer:
         result_body = canonical_result_bytes(result)
         manifest = {
             "analysis_id": result["analysis_id"],
+            "renderer_version": self.version,
             "result_checksum_sha256": _result_checksum(result),
             "files": [
                 {
@@ -566,4 +576,5 @@ class ArtifactRenderer:
             f"{analysis_id}-audit.zip",
             "application/zip",
             output.getvalue(),
+            self.version,
         )

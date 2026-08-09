@@ -31,6 +31,7 @@ class ArtifactPayload:
     filename: str
     content_type: str
     body: bytes
+    renderer_version: str = "legacy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +39,7 @@ class ReportArtifactRecord:
     id: str
     analysis_run_id: str
     artifact_type: ArtifactType
+    renderer_version: str
     dataset_artifact_id: str
     storage_uri: str
     content_type: str

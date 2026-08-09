@@ -293,9 +293,11 @@ CREATE TABLE report_artifact (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   analysis_run_id uuid NOT NULL REFERENCES analysis_run(id),
   artifact_type text NOT NULL CHECK(artifact_type IN ('html','xlsx','leadership_email','audit_zip','csv','parquet')),
+  renderer_version text NOT NULL DEFAULT 'legacy',
   dataset_artifact_id uuid REFERENCES dataset_artifact(id),
   status text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (analysis_run_id, artifact_type, renderer_version)
 );
 
 CREATE TABLE audit_event (

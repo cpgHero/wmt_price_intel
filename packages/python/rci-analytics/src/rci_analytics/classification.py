@@ -144,9 +144,10 @@ class OfferClassifier:
             re.search(rf"\b{re.escape(term)}\b", title) for term in self._targets
         ):
             return False, "target product term absent"
-        for pattern in self._exclusions:
-            if _contains_pattern(text, pattern):
-                return False, f"excluded scope pattern: {pattern}"
+        if not explicit_include:
+            for pattern in self._exclusions:
+                if _contains_pattern(text, pattern):
+                    return False, f"excluded scope pattern: {pattern}"
         if self.pack.document["scope"].get("require_positive_price") and (
             offer.price is None or offer.price <= 0
         ):
@@ -243,6 +244,8 @@ class OfferClassifier:
                 values.append(urlsplit(offer.product_url).path if offer.product_url else None)
             elif source_name == "brand":
                 values.append(offer.brand)
+            elif source_name == "retailer_product_id":
+                values.append(offer.retailer_product_id)
             elif source_name.startswith("raw."):
                 values.append(raw_keys.get(_normalized_text(source_name[4:])))
             else:

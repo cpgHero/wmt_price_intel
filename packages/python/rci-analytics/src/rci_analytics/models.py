@@ -90,6 +90,10 @@ class MatchRecord:
     gap: Decimal
     winner: str
     distance_miles: float | None = None
+    benchmark_interval_low: Decimal | None = None
+    benchmark_interval_high: Decimal | None = None
+    competitor_interval_low: Decimal | None = None
+    competitor_interval_high: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

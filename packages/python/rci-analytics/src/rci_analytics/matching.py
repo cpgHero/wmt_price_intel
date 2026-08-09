@@ -167,6 +167,7 @@ class ComparisonEngine:
         retailer_id: str,
         profile: JsonObject,
         metric: str,
+        role: str,
     ) -> dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]]:
         dimensions = tuple(str(value) for value in profile["dimensions"])
         unknown_policy = str(profile.get("unknown_policy", "reject"))
@@ -178,7 +179,7 @@ class ComparisonEngine:
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
                 or not self._available_for_matching(item, profile)
-                or not self._satisfies_constraints(item, profile)
+                or not self._satisfies_constraints(item, profile, role)
             ):
                 continue
             dimension_key = self._dimension_key(item, dimensions, unknown_policy, brand_policy)
@@ -192,10 +193,16 @@ class ComparisonEngine:
         return selected
 
     @staticmethod
-    def _satisfies_constraints(item: ClassifiedOffer, profile: JsonObject) -> bool:
+    def _satisfies_constraints(
+        item: ClassifiedOffer, profile: JsonObject, role: str | None = None
+    ) -> bool:
+        constraint_groups = [profile.get("attribute_constraints", {})]
+        if role is not None:
+            constraint_groups.append(profile.get(f"{role}_attribute_constraints", {}))
         return all(
             item.attributes.get(name) in allowed
-            for name, allowed in profile.get("attribute_constraints", {}).items()
+            for constraints in constraint_groups
+            for name, allowed in constraints.items()
         )
 
     def _exact_zip_matches(
@@ -208,8 +215,8 @@ class ComparisonEngine:
         if profile.get("unknown_policy") == "wildcard_if_one_unknown":
             return self._wildcard_exact_zip_matches(offers, benchmark_id, competitor_id, profile)
         metric = self._comparison_metric(profile)
-        benchmark = self._selected(offers, benchmark_id, profile, metric)
-        competitor = self._selected(offers, competitor_id, profile, metric)
+        benchmark = self._selected(offers, benchmark_id, profile, metric, "benchmark")
+        competitor = self._selected(offers, competitor_id, profile, metric, "competitor")
         dimensions = tuple(str(value) for value in profile["dimensions"])
         matches: list[MatchRecord] = []
         for key in sorted(benchmark.keys() & competitor.keys(), key=str):
@@ -217,7 +224,7 @@ class ComparisonEngine:
             competitor_offer, competitor_value = competitor[key]
             matches.append(
                 self._match(
-                    profile_id=str(profile["id"]),
+                    profile=profile,
                     competitor_id=competitor_id,
                     geography_key=key[0],
                     benchmark=benchmark_offer,
@@ -243,8 +250,8 @@ class ComparisonEngine:
             str(value) for value in profile.get("wildcard_dimensions", dimensions)
         )
         brand_policy = str(profile.get("brand_policy", "ignore_brand"))
-        benchmark = self._eligible_by_zip(offers, benchmark_id, profile, metric)
-        competitor = self._eligible_by_zip(offers, competitor_id, profile, metric)
+        benchmark = self._eligible_by_zip(offers, benchmark_id, profile, metric, "benchmark")
+        competitor = self._eligible_by_zip(offers, competitor_id, profile, metric, "competitor")
         selected: dict[
             tuple[str, tuple[Any, ...]],
             tuple[ClassifiedOffer, Decimal, ClassifiedOffer, Decimal],
@@ -283,7 +290,7 @@ class ComparisonEngine:
                         selected[key] = candidate
         return [
             self._match(
-                profile_id=str(profile["id"]),
+                profile=profile,
                 competitor_id=competitor_id,
                 geography_key=zipcode,
                 benchmark=benchmark_offer,
@@ -308,6 +315,7 @@ class ComparisonEngine:
         retailer_id: str,
         profile: JsonObject,
         metric: str,
+        role: str,
     ) -> dict[str, list[tuple[ClassifiedOffer, Decimal]]]:
         selected: dict[str, list[tuple[ClassifiedOffer, Decimal]]] = {}
         for item in offers:
@@ -317,7 +325,7 @@ class ComparisonEngine:
                 and item.offer.retailer_id == retailer_id
                 and item.offer.zipcode is not None
                 and self._available_for_matching(item, profile)
-                and self._satisfies_constraints(item, profile)
+                and self._satisfies_constraints(item, profile, role)
                 and value is not None
             ):
                 selected.setdefault(item.offer.zipcode, []).append((item, value))
@@ -374,10 +382,10 @@ class ComparisonEngine:
         dimensions = tuple(str(value) for value in profile["dimensions"])
         unknown_policy = str(profile.get("unknown_policy", "reject"))
         benchmark = self._selected_stores(
-            offers, benchmark_id, dimensions, unknown_policy, metric, profile
+            offers, benchmark_id, dimensions, unknown_policy, metric, profile, "benchmark"
         )
         competitors = self._selected_stores(
-            offers, competitor_id, dimensions, unknown_policy, metric, profile
+            offers, competitor_id, dimensions, unknown_policy, metric, profile, "competitor"
         )
         by_dimensions: dict[tuple[Any, ...], list[tuple[ClassifiedOffer, Decimal]]] = {}
         for (_, dimension_key), value in benchmark.items():
@@ -449,7 +457,7 @@ class ComparisonEngine:
             )
             matches.append(
                 self._match(
-                    profile_id=str(profile["id"]),
+                    profile=profile,
                     competitor_id=competitor_id,
                     geography_key=self._proximity_key(store_key, benchmark_offer),
                     benchmark=benchmark_offer,
@@ -476,6 +484,7 @@ class ComparisonEngine:
         unknown_policy: str,
         metric: str,
         profile: JsonObject,
+        role: str,
     ) -> dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]]:
         selected: dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
         brand_policy = str(profile.get("brand_policy", "ignore_brand"))
@@ -484,7 +493,7 @@ class ComparisonEngine:
                 not item.in_scope
                 or item.offer.retailer_id != retailer_id
                 or not self._available_for_matching(item, profile)
-                or not self._satisfies_constraints(item, profile)
+                or not self._satisfies_constraints(item, profile, role)
             ):
                 continue
             dimension_key = self._dimension_key(item, dimensions, unknown_policy, brand_policy)
@@ -503,7 +512,7 @@ class ComparisonEngine:
     def _match(
         self,
         *,
-        profile_id: str,
+        profile: JsonObject,
         competitor_id: str,
         geography_key: str,
         benchmark: ClassifiedOffer,
@@ -516,14 +525,22 @@ class ComparisonEngine:
         matched_attributes: JsonObject | None = None,
     ) -> MatchRecord:
         gap = competitor_value - benchmark_value
-        if abs(gap) <= self._tolerance:
+        benchmark_interval = self._interval(benchmark, profile)
+        competitor_interval = self._interval(competitor, profile)
+        intervals_overlap = (
+            benchmark_interval is not None
+            and competitor_interval is not None
+            and max(benchmark_interval[0], competitor_interval[0])
+            <= min(benchmark_interval[1], competitor_interval[1])
+        )
+        if intervals_overlap or abs(gap) <= self._tolerance:
             winner = "parity"
         elif gap > 0:
             winner = "benchmark_lower"
         else:
             winner = "competitor_lower"
         return MatchRecord(
-            profile_id=profile_id,
+            profile_id=str(profile["id"]),
             competitor_id=competitor_id,
             geography_key=geography_key,
             benchmark_offer_id=benchmark.offer.offer_id,
@@ -536,7 +553,31 @@ class ComparisonEngine:
             gap=gap,
             winner=winner,
             distance_miles=distance_miles,
+            benchmark_interval_low=(
+                benchmark_interval[0] if benchmark_interval is not None else None
+            ),
+            benchmark_interval_high=(
+                benchmark_interval[1] if benchmark_interval is not None else None
+            ),
+            competitor_interval_low=(
+                competitor_interval[0] if competitor_interval is not None else None
+            ),
+            competitor_interval_high=(
+                competitor_interval[1] if competitor_interval is not None else None
+            ),
         )
+
+    def _interval(
+        self, item: ClassifiedOffer, profile: JsonObject
+    ) -> tuple[Decimal, Decimal] | None:
+        configured = profile.get("comparison_interval")
+        if not isinstance(configured, dict):
+            return None
+        low = self._metric_value(item, str(configured["low_metric"]))
+        high = self._metric_value(item, str(configured["high_metric"]))
+        if low is None or high is None:
+            return None
+        return min(low, high), max(low, high)
 
     @staticmethod
     def summarize(matches: list[MatchRecord]) -> ComparisonSummary:
@@ -598,9 +639,10 @@ class ComparisonInputReducer:
         if not item.in_scope:
             return
         for profile in self._profiles:
-            if not self._engine._available_for_matching(
-                item, profile
-            ) or not self._engine._satisfies_constraints(item, profile):
+            satisfies_either_role = self._engine._satisfies_constraints(
+                item, profile, "benchmark"
+            ) or self._engine._satisfies_constraints(item, profile, "competitor")
+            if not self._engine._available_for_matching(item, profile) or not satisfies_either_role:
                 continue
             metric = self._engine._comparison_metric(profile)
             value = self._engine._metric_value(item, metric)

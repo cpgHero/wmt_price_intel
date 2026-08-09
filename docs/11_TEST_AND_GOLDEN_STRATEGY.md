@@ -70,9 +70,27 @@ human-validated catalog, then replays all 5,155 validated strict matches through
 comparison engine. The export's common columns are deliberately not used as MetricsCart API
 adapter fixtures.
 
-The full milk and banana datasets are not bundled. Their compact validated summaries remain
-mandatory gates; their raw-data regressions become mandatory as soon as the source files listed in
-the abstraction audit are attached.
+Run the attached full milk baseline:
+
+```bash
+RCI_GOLDEN_MILK_WALMART_CSV=/path/to/Milk___Walmart_All_Stores_20260807_012630.csv \
+RCI_GOLDEN_MILK_ALDI_CSV=/path/to/Milk___Aldi_All_Stores_20260807_012605.csv \
+RCI_GOLDEN_MILK_AMAZON_CSV=/path/to/milk_amazon.csv \
+uv run pytest packages/python/rci-analytics/tests/test_full_milk_golden.py
+```
+
+Run the attached full banana baseline:
+
+```bash
+RCI_GOLDEN_BANANAS_WALMART_CSV=/path/to/Bananas___Walmart_All_Stores_20260807_051626.csv \
+RCI_GOLDEN_BANANAS_ALDI_CSV=/path/to/Bananas___Aldi_All_Stores_20260807_051549.csv \
+RCI_GOLDEN_BANANAS_AMAZON_CSV=/path/to/bananas_amazon.csv \
+uv run pytest packages/python/rci-analytics/tests/test_full_banana_golden.py
+```
+
+The milk gate reconciles all 348,980 rows, source/retailer coverage, and six comparison modes. The
+banana gate reconciles all 168,440 rows, source/retailer coverage, and ten comparison rows,
+including an evidence-preserving range comparison for 4–5 count bunches.
 
 ## Phase 9 executable gates
 

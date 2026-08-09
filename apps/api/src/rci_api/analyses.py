@@ -47,6 +47,7 @@ class ArtifactResponse(BaseModel):
     id: str
     analysis_run_id: str
     artifact_type: str
+    renderer_version: str
     content_type: str
     byte_size: int
     checksum: str

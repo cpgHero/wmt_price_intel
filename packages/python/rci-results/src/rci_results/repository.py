@@ -46,6 +46,7 @@ def _artifact(row: RowMapping) -> ReportArtifactRecord:
         id=str(row["id"]),
         analysis_run_id=str(row["analysis_run_id"]),
         artifact_type=cast(ArtifactType, str(row["artifact_type"])),
+        renderer_version=str(row["renderer_version"]),
         dataset_artifact_id=str(row["dataset_artifact_id"]),
         storage_uri=str(row["storage_uri"]),
         content_type=str(row["content_type"]),
@@ -67,7 +68,8 @@ JOIN analysis_run ar ON ar.id = r.analysis_run_id
 
 _ARTIFACT_SELECT = """
 SELECT ra.id::text AS id, ra.analysis_run_id::text AS analysis_run_id,
-       ra.artifact_type, ra.dataset_artifact_id::text AS dataset_artifact_id,
+       ra.artifact_type, ra.renderer_version,
+       ra.dataset_artifact_id::text AS dataset_artifact_id,
        da.storage_uri, da.content_type, da.byte_size, da.checksum,
        ra.status, ra.created_at
 FROM report_artifact ra
@@ -316,6 +318,7 @@ class PostgresResultsRepository:
                             {
                                 "analysis_id": analysis.analysis_id,
                                 "filename": payload.filename,
+                                "renderer_version": payload.renderer_version,
                             }
                         ),
                     },
@@ -330,18 +333,20 @@ class PostgresResultsRepository:
                             """
                             WITH inserted AS (
                               INSERT INTO report_artifact (
-                                analysis_run_id, artifact_type, dataset_artifact_id, status
+                                analysis_run_id, artifact_type, renderer_version,
+                                dataset_artifact_id, status
                               ) VALUES (
-                                CAST(:analysis_run_id AS uuid), :artifact_type,
+                                CAST(:analysis_run_id AS uuid), :artifact_type, :renderer_version,
                                 CAST(:dataset_id AS uuid), 'ready'
                               )
                               ON CONFLICT (
-                                analysis_run_id, artifact_type, dataset_artifact_id
+                                analysis_run_id, artifact_type, renderer_version
                               ) DO UPDATE SET status = report_artifact.status
                               RETURNING *
                             )
                             SELECT i.id::text AS id, i.analysis_run_id::text AS analysis_run_id,
-                              i.artifact_type, i.dataset_artifact_id::text AS dataset_artifact_id,
+                              i.artifact_type, i.renderer_version,
+                              i.dataset_artifact_id::text AS dataset_artifact_id,
                               da.storage_uri, da.content_type, da.byte_size, da.checksum,
                               i.status, i.created_at
                             FROM inserted i
@@ -351,6 +356,7 @@ class PostgresResultsRepository:
                         {
                             "analysis_run_id": analysis.analysis_run_id,
                             "artifact_type": payload.artifact_type,
+                            "renderer_version": payload.renderer_version,
                             "dataset_id": dataset_id,
                         },
                     )
@@ -373,7 +379,11 @@ class PostgresResultsRepository:
                     "organization_id": DEFAULT_ORGANIZATION_ID,
                     "entity_id": analysis.analysis_id,
                     "details": _json(
-                        {"artifact_type": payload.artifact_type, "checksum": checksum}
+                        {
+                            "artifact_type": payload.artifact_type,
+                            "renderer_version": payload.renderer_version,
+                            "checksum": checksum,
+                        }
                     ),
                 },
             )
