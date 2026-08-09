@@ -1,0 +1,44 @@
+{
+  "name": "Lay's Classic Potato Chips, Party Size, 13 oz Bag",
+  "category_path": "Food > Snacks, Cookies & Chips > Chips > Lay's Potato Chips",
+  "brand": "Lay's",
+  "description_short": "Includes 1 (13 oz) bag of Lay's Classic Potato Snack Chips",
+  "description_full": "Farm-grown potatoes cooked and seasoned to a crisp finish.",
+  "specification": {
+    "flavor": "Original",
+    "product_net_content_parent": "13 Ounces",
+    "container_type": "Bag"
+  },
+  "price": 4.77,
+  "price_currency": "USD",
+  "image_primary": "https://i5.walmartimages.com/seo/lays-classic.jpeg",
+  "images": ["https://i5.walmartimages.com/seo/lays-classic.jpeg"],
+  "retailer_product_id": "677669806",
+  "product_identifiers": {
+    "upc": "028400310413",
+    "gtin13": "028400310413",
+    "item_id": "677669806"
+  },
+  "physical_properties": {},
+  "variant_configuration": {},
+  "retailer_store_id": "2464",
+  "stock_availability": true,
+  "stock_quantity": 12,
+  "pickup_store_id": "2464",
+  "pickup_available": true,
+  "shipping_type": "FC",
+  "url": "https://www.walmart.com/ip/677669806",
+  "zipcode": "90020",
+  "retailer": "walmart.com",
+  "source": "pdp",
+  "videos": [
+    {
+      "poster_url": null,
+      "video_url": "https://content.syndigo.com/asset/example/videos/1080.mp4"
+    }
+  ],
+  "extras": {
+    "retailer_stores": ["2464"],
+    "fulfillment_channel": "ONLINE_AND_STORE"
+  }
+}

@@ -29,6 +29,6 @@ by retailer-specific API fixtures and endpoint contracts.
 - Target: newer catalog lists `/target/search/zipcode`; older snapshot had `/target/search`. Adapter remains disabled/needs verification until a live request confirms parameters.
 - Exact provider page-size/has-more semantics are not documented in supplied material. V1 relies on max-pages and stop-on-empty, not guessed short-page pagination.
 - The cost catalog gives credits/page but not a dollar conversion; store credits now and add dollar cost only when authoritative credit-to-dollar mapping is provided.
-- Product Details by ZIP enrichment remains disabled until retailer response fixtures are supplied;
-  the endpoint parameters and credit schedule are now captured in the validated product-detail
-  catalog.
+- Product Details by ZIP remains operationally disabled by default, but the supplied Walmart,
+  ALDI, and Amazon fixtures now govern the V1 normalizers. Enabling work requires an explicit,
+  separately capped enrichment run; no CI test calls the live provider.

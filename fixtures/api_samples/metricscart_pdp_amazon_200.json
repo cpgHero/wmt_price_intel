@@ -1,0 +1,43 @@
+{
+  "name": "HP 14 Inch Laptop Computer",
+  "brand": "Hp",
+  "retailer_product_id": "B0DN1ZTN12",
+  "description_short": "14 inch laptop with Windows 11 Pro and 16 GB RAM.",
+  "description_full": "A lightweight 14 inch laptop configured for school and business use.",
+  "specification": {
+    "operating_system": "Windows 11 Pro",
+    "ram_memory_installed": "16 GB",
+    "upc": "197961562446"
+  },
+  "price": 0,
+  "price_currency": "USD",
+  "image_primary": "https://m.media-amazon.com/images/I/example.jpg",
+  "images": ["https://m.media-amazon.com/images/I/example.jpg"],
+  "model_number": "HP Stream",
+  "variant_configuration": {},
+  "physical_properties": {"color": "Silver", "weight": "3.2 pounds"},
+  "stock_availability": false,
+  "stock_quantity": null,
+  "retailer_store_id": null,
+  "shipping_type": null,
+  "pickup_available": false,
+  "pickup_store_id": null,
+  "extras": {
+    "category": [
+      {"level": 1, "name": "Electronics"},
+      {"level": 2, "name": "Computers & Accessories"},
+      {"level": 3, "name": "Computers & Tablets"}
+    ],
+    "parent_asin": "B0DN1ZTN12"
+  },
+  "product_identifiers": {
+    "asin": "B0DN1ZTN12",
+    "upc": "197961562446",
+    "model": "HP Stream"
+  },
+  "zipcode": "90001",
+  "url": "https://www.amazon.com/-/dp/B0DN1ZTN12",
+  "retailer": "amazon.com",
+  "source": "pdp",
+  "videos": []
+}

@@ -29,6 +29,7 @@ members = [
   "packages/python/rci-db",
   "packages/python/rci-locations",
   "packages/python/rci-providers",
+  "packages/python/rci-products",
   "packages/python/rci-results",
   "packages/python/rci-automation",
 ]
@@ -48,6 +49,7 @@ pythonpath = [
   "packages/python/rci-db/src",
   "packages/python/rci-locations/src",
   "packages/python/rci-providers/src",
+  "packages/python/rci-products/src",
   "packages/python/rci-results/src",
 ]
 asyncio_mode = "auto"
@@ -61,7 +63,7 @@ extend-exclude = ["reference_outputs", "scripts", "starter_contracts"]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["rci_analytics", "rci_api", "rci_automation", "rci_collections", "rci_contracts", "rci_core", "rci_db", "rci_locations", "rci_providers", "rci_results", "rci_scheduler", "rci_worker"]
+known-first-party = ["rci_analytics", "rci_api", "rci_automation", "rci_collections", "rci_contracts", "rci_core", "rci_db", "rci_locations", "rci_products", "rci_providers", "rci_results", "rci_scheduler", "rci_worker"]
 
 [tool.ruff.format]
 quote-style = "double"

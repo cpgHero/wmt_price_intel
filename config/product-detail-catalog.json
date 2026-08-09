@@ -2,7 +2,7 @@
   "schema_version": "1.0.0",
   "provider": "metricscart",
   "source": "source_material/metricscart_product_details_by_zipcode_apis.csv",
-  "status": "configuration_only_response_fixtures_required",
+  "status": "enabled_v1_with_fixtures",
   "endpoints": [
     {
       "retailer_id": "albertsons_us",

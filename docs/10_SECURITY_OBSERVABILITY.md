@@ -29,6 +29,8 @@ generation, and benchmark updates.
 - run duration and phase duration,
 - tasks pending/running/succeeded/failed,
 - provider response latency/status,
+- PDP jobs pending/running/succeeded/failed and cache-hit rate,
+- PDP planned vs actual billable credits by retailer,
 - 429 count and cooldown seconds,
 - estimated vs actual credits,
 - normalized offers/page,
@@ -44,4 +46,6 @@ generation, and benchmark updates.
 
 ## Structured logs
 
-Include run_id, task_id, retailer_id, location key, page, worker_id, attempt, status, latency. Redact API key query parameter before logs.
+Include run_id, task_id/job_id, retailer_id, location key, page, worker_id, attempt, status, latency.
+PDP raw-object metadata records parameter names, never values or the API key. Redact the API-key
+query parameter before logs.

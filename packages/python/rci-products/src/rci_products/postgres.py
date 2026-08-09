@@ -1,0 +1,913 @@
+"""Postgres canonical-product store and durable Product Details queue."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import cast
+from uuid import uuid4
+
+from sqlalchemy import text
+from sqlalchemy.engine import RowMapping
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from rci_contracts import validate_instance
+from rci_products.documents import canonical_product_document, serp_identity, snapshot_document
+from rci_products.models import (
+    CanonicalProductRecord,
+    EnqueueProductDetailResult,
+    JsonObject,
+    ProductDetailEndpoint,
+    ProductDetailFetchResult,
+    ProductDetailJob,
+    ProductDetailRequestContext,
+    ProductDetailRun,
+    ProductDetailSnapshotRecord,
+    ProductDetailStatus,
+    sha256_document,
+)
+from rci_products.repository import ProductDetailBudgetExceeded, require_positive_budget
+
+DEFAULT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def _json(value: JsonObject) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _product(row: RowMapping) -> CanonicalProductRecord:
+    return CanonicalProductRecord(
+        id=str(row["id"]),
+        canonical_product_id=str(row["canonical_product_id"]),
+        retailer_id=str(row["retailer_id"]),
+        retailer_product_id=str(row["retailer_product_id"]),
+        identifiers=dict(row["identifiers"]),
+        identity=dict(row["identity"]),
+        identity_checksum=str(row["identity_checksum"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _run(row: RowMapping) -> ProductDetailRun:
+    return ProductDetailRun(
+        id=str(row["id"]),
+        max_credits=int(row["max_credits"]),
+        planned_credits=int(row["planned_credits"]),
+        actual_credits=int(row["actual_credits"]),
+        status=str(row["status"]),
+    )
+
+
+def _endpoint_document(endpoint: ProductDetailEndpoint) -> JsonObject:
+    return {
+        "retailer_id": endpoint.retailer_id,
+        "provider_retailer": endpoint.provider_retailer,
+        "domain": endpoint.domain,
+        "endpoint_id": endpoint.endpoint_id,
+        "method": endpoint.method,
+        "path": endpoint.path,
+        "credits_per_successful_page": endpoint.credits_per_successful_page,
+        "required_params": list(endpoint.required_params),
+        "supported_params": list(endpoint.supported_params),
+        "contract_version": endpoint.contract_version,
+    }
+
+
+def _endpoint(value: object) -> ProductDetailEndpoint:
+    document = cast(JsonObject, value)
+    return ProductDetailEndpoint(
+        retailer_id=str(document["retailer_id"]),
+        provider_retailer=str(document["provider_retailer"]),
+        domain=str(document["domain"]),
+        endpoint_id=str(document["endpoint_id"]),
+        method=str(document["method"]),
+        path=str(document["path"]),
+        credits_per_successful_page=int(document["credits_per_successful_page"]),
+        required_params=tuple(str(item) for item in document["required_params"]),
+        supported_params=tuple(str(item) for item in document["supported_params"]),
+        contract_version=str(document["contract_version"]),
+    )
+
+
+def _context_document(context: ProductDetailRequestContext) -> JsonObject:
+    return {
+        "product_id": context.product_id,
+        "zipcode": context.zipcode,
+        "store": context.store,
+        "fulfillment_type": context.fulfillment_type,
+        "url": context.url,
+    }
+
+
+def _context(value: object) -> ProductDetailRequestContext:
+    document = cast(JsonObject, value)
+    return ProductDetailRequestContext(
+        product_id=str(document["product_id"]),
+        zipcode=str(document["zipcode"]) if document.get("zipcode") is not None else None,
+        store=str(document["store"]) if document.get("store") is not None else None,
+        fulfillment_type=(
+            str(document["fulfillment_type"])
+            if document.get("fulfillment_type") is not None
+            else None
+        ),
+        url=str(document["url"]) if document.get("url") is not None else None,
+    )
+
+
+def _job(row: RowMapping) -> ProductDetailJob:
+    return ProductDetailJob(
+        id=str(row["id"]),
+        run_id=str(row["enrichment_run_id"]),
+        canonical_product_db_id=str(row["canonical_product_id"]),
+        canonical_product_id=str(row["canonical_product_stable_id"]),
+        retailer_id=str(row["retailer_id"]),
+        endpoint=_endpoint(row["endpoint"]),
+        context=_context(row["request_context"]),
+        request_checksum=str(row["request_checksum"]),
+        credits_per_call=int(row["credits_per_call"]),
+        status=cast(ProductDetailStatus, str(row["status"])),
+        attempt_count=int(row["attempt_count"]),
+        max_attempts=int(row["max_attempts"]),
+    )
+
+
+def _snapshot(row: RowMapping) -> ProductDetailSnapshotRecord:
+    return ProductDetailSnapshotRecord(
+        id=str(row["id"]),
+        canonical_product_db_id=str(row["canonical_product_id"]),
+        canonical_product_id=str(row["canonical_product_stable_id"]),
+        request_checksum=str(row["request_checksum"]),
+        document=dict(row["document"]),
+        cache_expires_at=row["cache_expires_at"],
+    )
+
+
+class PostgresProductDetailRepository:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        repository_root: Path,
+        *,
+        organization_id: str = DEFAULT_ORGANIZATION_ID,
+    ) -> None:
+        self._engine = engine
+        self._root = repository_root
+        self._organization_id = organization_id
+
+    async def upsert_serp_product(
+        self,
+        *,
+        retailer_id: str,
+        retailer_product_id: str,
+        name: str,
+        brand: str | None,
+        url: str,
+        image_primary: str | None,
+        identifiers: JsonObject,
+        context: JsonObject,
+    ) -> CanonicalProductRecord:
+        identity, checksum = serp_identity(
+            name=name,
+            brand=brand,
+            url=url,
+            image_primary=image_primary,
+        )
+        all_identifiers = {"retailer_product_id": retailer_product_id, **identifiers}
+        context_checksum = sha256_document(context)
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO canonical_product (
+                              organization_id, canonical_product_id, retailer_id,
+                              retailer_product_id, identifiers, identity, identity_checksum
+                            ) VALUES (
+                              CAST(:organization_id AS uuid), :stable_id, :retailer_id,
+                              :retailer_product_id, CAST(:identifiers AS jsonb),
+                              CAST(:identity AS jsonb), :identity_checksum
+                            )
+                            ON CONFLICT ON CONSTRAINT canonical_product_retailer_product_uq
+                            DO UPDATE SET identifiers = canonical_product.identifiers
+                              || EXCLUDED.identifiers
+                            RETURNING *
+                            """
+                        ),
+                        {
+                            "organization_id": self._organization_id,
+                            "stable_id": f"{retailer_id}:{retailer_product_id}",
+                            "retailer_id": retailer_id,
+                            "retailer_product_id": retailer_product_id,
+                            "identifiers": _json(all_identifiers),
+                            "identity": _json(identity),
+                            "identity_checksum": checksum,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO canonical_product_context (
+                      canonical_product_id, context_checksum, context
+                    ) VALUES (
+                      CAST(:product_id AS uuid), :checksum, CAST(:context AS jsonb)
+                    )
+                    ON CONFLICT ON CONSTRAINT canonical_product_context_uq DO NOTHING
+                    """
+                ),
+                {
+                    "product_id": str(row["id"]),
+                    "checksum": context_checksum,
+                    "context": _json(context),
+                },
+            )
+            return _product(row)
+
+    async def create_run(self, *, max_credits: int) -> ProductDetailRun:
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO product_detail_enrichment_run (
+                              organization_id, max_credits
+                            ) VALUES (CAST(:organization_id AS uuid), :max_credits)
+                            RETURNING *
+                            """
+                        ),
+                        {
+                            "organization_id": self._organization_id,
+                            "max_credits": require_positive_budget(max_credits),
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await self._audit(
+                connection,
+                "product_detail_run_created",
+                "product_detail_enrichment_run",
+                str(row["id"]),
+                {"max_credits": int(row["max_credits"])},
+            )
+            return _run(row)
+
+    async def enqueue(
+        self,
+        run_id: str,
+        product: CanonicalProductRecord,
+        endpoint: ProductDetailEndpoint,
+        context: ProductDetailRequestContext,
+        *,
+        max_attempts: int = 3,
+    ) -> EnqueueProductDetailResult:
+        if not 1 <= max_attempts <= 10:
+            raise ValueError("Product Details max_attempts must be between 1 and 10")
+        checksum = context.checksum(endpoint)
+        async with self._engine.begin() as connection:
+            run_row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM product_detail_enrichment_run "
+                            "WHERE id::text = :run_id FOR UPDATE"
+                        ),
+                        {"run_id": run_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if str(run_row["status"]) != "active":
+                raise ValueError("Product Details run is not active")
+            cached = (
+                await connection.execute(
+                    text(
+                        """
+                            SELECT s.id::text
+                            FROM product_detail_snapshot s
+                            WHERE s.canonical_product_id::text = :product_id
+                              AND s.request_checksum = :checksum
+                              AND s.normalized
+                              AND s.cache_expires_at > now()
+                            ORDER BY s.observed_at DESC, s.id DESC LIMIT 1
+                            """
+                    ),
+                    {"product_id": product.id, "checksum": checksum},
+                )
+            ).scalar_one_or_none()
+            if cached is not None:
+                return EnqueueProductDetailResult(
+                    job_id=None,
+                    snapshot_id=str(cached),
+                    request_checksum=checksum,
+                    cached=True,
+                    created=False,
+                )
+            existing = (
+                await connection.execute(
+                    text(
+                        """
+                            SELECT id::text FROM product_detail_job
+                            WHERE enrichment_run_id::text = :run_id
+                              AND request_checksum = :checksum
+                            """
+                    ),
+                    {"run_id": run_id, "checksum": checksum},
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                return EnqueueProductDetailResult(
+                    job_id=str(existing),
+                    snapshot_id=None,
+                    request_checksum=checksum,
+                    cached=False,
+                    created=False,
+                )
+            planned = int(run_row["planned_credits"]) + endpoint.credits_per_successful_page
+            if planned > int(run_row["max_credits"]):
+                raise ProductDetailBudgetExceeded(
+                    f"Product Details credit ceiling {run_row['max_credits']} would be exceeded"
+                )
+            await connection.execute(
+                text(
+                    "UPDATE product_detail_enrichment_run SET planned_credits = :planned "
+                    "WHERE id::text = :run_id"
+                ),
+                {"planned": planned, "run_id": run_id},
+            )
+            job_id = str(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO product_detail_job (
+                              enrichment_run_id, canonical_product_id, retailer_id,
+                              endpoint, request_context, request_checksum, credits_per_call,
+                              max_attempts
+                            ) VALUES (
+                              CAST(:run_id AS uuid), CAST(:product_id AS uuid), :retailer_id,
+                              CAST(:endpoint AS jsonb), CAST(:context AS jsonb), :checksum,
+                              :credits, :max_attempts
+                            ) RETURNING id::text
+                            """
+                        ),
+                        {
+                            "run_id": run_id,
+                            "product_id": product.id,
+                            "retailer_id": product.retailer_id,
+                            "endpoint": _json(_endpoint_document(endpoint)),
+                            "context": _json(_context_document(context)),
+                            "checksum": checksum,
+                            "credits": endpoint.credits_per_successful_page,
+                            "max_attempts": max_attempts,
+                        },
+                    )
+                ).scalar_one()
+            )
+            return EnqueueProductDetailResult(
+                job_id=job_id,
+                snapshot_id=None,
+                request_checksum=checksum,
+                cached=False,
+                created=True,
+            )
+
+    async def claim(
+        self,
+        worker_id: str,
+        *,
+        limit: int,
+        lease_seconds: int,
+    ) -> list[ProductDetailJob]:
+        if limit < 1 or lease_seconds < 1:
+            raise ValueError("Product Details claim limits must be positive")
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job j
+                    SET status = 'failed', last_error = 'Lease expired after maximum attempts',
+                        locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                        completed_at = now()
+                    FROM product_detail_enrichment_run r
+                    WHERE r.id = j.enrichment_run_id AND r.status = 'active'
+                      AND j.status = 'running' AND j.lease_expires_at <= now()
+                      AND j.attempt_count >= j.max_attempts
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job j
+                    SET status = 'canceled', locked_by = NULL, locked_at = NULL,
+                        lease_expires_at = NULL, completed_at = now()
+                    FROM product_detail_enrichment_run r
+                    WHERE r.id = j.enrichment_run_id AND r.status = 'canceled'
+                      AND j.status = 'running' AND j.lease_expires_at <= now()
+                    """
+                )
+            )
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH candidates AS (
+                              SELECT j.id
+                              FROM product_detail_job j
+                              JOIN product_detail_enrichment_run r
+                                ON r.id = j.enrichment_run_id
+                              WHERE r.status = 'active' AND (
+                                (j.status = 'queued' AND j.available_at <= now()) OR
+                                (j.status = 'running' AND j.lease_expires_at <= now())
+                              ) AND j.attempt_count < j.max_attempts
+                              ORDER BY j.priority, j.created_at, j.id
+                              FOR UPDATE OF j SKIP LOCKED
+                              LIMIT :limit
+                            ), updated AS (
+                              UPDATE product_detail_job j
+                              SET status = 'running', locked_by = :worker_id, locked_at = now(),
+                                  lease_expires_at = now()
+                                    + make_interval(secs => :lease_seconds),
+                                  attempt_count = j.attempt_count + 1
+                              FROM candidates c WHERE j.id = c.id RETURNING j.*
+                            )
+                            SELECT u.*, p.canonical_product_id AS canonical_product_stable_id
+                            FROM updated u JOIN canonical_product p
+                              ON p.id = u.canonical_product_id
+                            """
+                        ),
+                        {
+                            "worker_id": worker_id,
+                            "limit": limit,
+                            "lease_seconds": lease_seconds,
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            return [_job(row) for row in rows]
+
+    async def record_fetch(
+        self,
+        job: ProductDetailJob,
+        worker_id: str,
+        result: ProductDetailFetchResult,
+        *,
+        cache_ttl_seconds: int,
+    ) -> ProductDetailSnapshotRecord:
+        if cache_ttl_seconds < 1:
+            raise ValueError("Product Details cache TTL must be positive")
+        snapshot_id = str(uuid4())
+        document = snapshot_document(job, result, snapshot_id=snapshot_id)
+        validate_instance(
+            self._root,
+            "product-detail-snapshot.schema.json",
+            document,
+            label=f"snapshot:{snapshot_id}",
+        )
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT j.*, p.canonical_product_id AS canonical_product_stable_id,
+                              p.identifiers AS product_identifiers, p.identity AS product_identity,
+                              j.lease_expires_at > now() AS lease_valid
+                            FROM product_detail_job j JOIN canonical_product p
+                              ON p.id = j.canonical_product_id
+                            WHERE j.id::text = :job_id FOR UPDATE OF j
+                            """
+                        ),
+                        {"job_id": job.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                str(row["status"]) != "running"
+                or str(row["locked_by"]) != worker_id
+                or not bool(row["lease_valid"])
+                or int(row["attempt_count"]) != job.attempt_count
+            ):
+                raise ValueError("Product Details job lease is not owned by this worker")
+            cache_expires_at = (
+                datetime.now(UTC) + timedelta(seconds=cache_ttl_seconds)
+                if result.normalized is not None
+                else None
+            )
+            snapshot_row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO product_detail_snapshot (
+                              id, canonical_product_id, product_detail_job_id, attempt_number,
+                              request_checksum, document, http_status, billable_credits,
+                              raw_storage_uri, raw_checksum, normalized, observed_at,
+                              cache_expires_at
+                            ) VALUES (
+                              CAST(:snapshot_id AS uuid), CAST(:product_id AS uuid),
+                              CAST(:job_id AS uuid), :attempt_number, :request_checksum,
+                              CAST(:document AS jsonb), :http_status, :credits,
+                              :raw_storage_uri, :raw_checksum, :normalized, :observed_at,
+                              :cache_expires_at
+                            ) RETURNING *, :stable_id AS canonical_product_stable_id
+                            """
+                        ),
+                        {
+                            "snapshot_id": snapshot_id,
+                            "product_id": job.canonical_product_db_id,
+                            "job_id": job.id,
+                            "attempt_number": job.attempt_count,
+                            "request_checksum": job.request_checksum,
+                            "document": _json(document),
+                            "http_status": result.http_status,
+                            "credits": result.credits,
+                            "raw_storage_uri": result.raw_artifact.storage_uri,
+                            "raw_checksum": result.raw_artifact.checksum,
+                            "normalized": result.normalized is not None,
+                            "observed_at": result.observed_at,
+                            "cache_expires_at": cache_expires_at,
+                            "stable_id": job.canonical_product_id,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_enrichment_run
+                    SET actual_credits = actual_credits + :credits
+                    WHERE id::text = :run_id
+                    """
+                ),
+                {"credits": result.credits, "run_id": job.run_id},
+            )
+            next_status: ProductDetailStatus
+            last_error: str | None
+            if result.normalized is not None:
+                current_identity = dict(row["product_identity"])
+                pdp_identity = result.normalized.identity_document()
+                current_identity.update(
+                    {key: value for key, value in pdp_identity.items() if value is not None}
+                )
+                identifiers = {
+                    **dict(row["product_identifiers"]),
+                    **result.normalized.identifiers,
+                }
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE canonical_product SET identifiers = CAST(:identifiers AS jsonb),
+                          identity = CAST(:identity AS jsonb), identity_checksum = :checksum,
+                          updated_at = now()
+                        WHERE id::text = :product_id
+                        """
+                    ),
+                    {
+                        "identifiers": _json(identifiers),
+                        "identity": _json(current_identity),
+                        "checksum": sha256_document(current_identity),
+                        "product_id": job.canonical_product_db_id,
+                    },
+                )
+                next_status, last_error = "succeeded", None
+            elif result.should_retry and job.attempt_count < job.max_attempts:
+                next_status = "queued"
+                last_error = result.failure_message
+            else:
+                next_status = "failed"
+                last_error = result.failure_message
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job
+                    SET status = :status,
+                        available_at = CASE WHEN :status = 'queued'
+                          THEN now() + make_interval(secs => :retry_delay)
+                          ELSE available_at END,
+                        locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                        last_http_status = :http_status, last_error = :last_error,
+                        billable_credits = billable_credits + :credits,
+                        completed_at = CASE WHEN :status IN ('succeeded', 'failed')
+                          THEN now() ELSE NULL END
+                    WHERE id::text = :job_id
+                    """
+                ),
+                {
+                    "status": next_status,
+                    "retry_delay": max(result.retry_delay_seconds, 0),
+                    "http_status": result.http_status,
+                    "last_error": last_error,
+                    "credits": result.credits,
+                    "job_id": job.id,
+                },
+            )
+            await self._reconcile_run(connection, job.run_id)
+            await self._audit(
+                connection,
+                "product_detail_snapshot_recorded",
+                "product_detail_snapshot",
+                snapshot_id,
+                {
+                    "retailer_id": job.retailer_id,
+                    "http_status": result.http_status,
+                    "billable_credits": result.credits,
+                    "normalized": result.normalized is not None,
+                },
+            )
+            return _snapshot(snapshot_row)
+
+    async def fail_transport(
+        self,
+        job: ProductDetailJob,
+        worker_id: str,
+        message: str,
+        *,
+        retry_delay_seconds: float,
+    ) -> None:
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT j.*, r.status AS run_status,
+                              j.lease_expires_at > now() AS lease_valid
+                            FROM product_detail_job j JOIN product_detail_enrichment_run r
+                              ON r.id = j.enrichment_run_id
+                            WHERE j.id::text = :job_id FOR UPDATE OF j
+                            """
+                        ),
+                        {"job_id": job.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                str(row["status"]) != "running"
+                or str(row["locked_by"]) != worker_id
+                or not bool(row["lease_valid"])
+            ):
+                raise ValueError("Product Details job lease is not owned by this worker")
+            if str(row["run_status"]) == "canceled":
+                next_status: ProductDetailStatus = "canceled"
+            elif job.attempt_count < job.max_attempts:
+                next_status = "queued"
+            else:
+                next_status = "failed"
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job
+                    SET status = :status,
+                        available_at = now() + make_interval(secs => :retry_delay),
+                        locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                        last_error = :message,
+                        completed_at = CASE WHEN :status IN ('failed', 'canceled')
+                          THEN now() ELSE NULL END
+                    WHERE id::text = :job_id
+                    """
+                ),
+                {
+                    "status": next_status,
+                    "retry_delay": max(retry_delay_seconds, 0),
+                    "message": message,
+                    "job_id": job.id,
+                },
+            )
+            await self._reconcile_run(connection, job.run_id)
+
+    async def extend_lease(
+        self,
+        job_id: str,
+        worker_id: str,
+        lease_seconds: int,
+    ) -> bool:
+        async with self._engine.begin() as connection:
+            result = await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job
+                    SET lease_expires_at = now() + make_interval(secs => :lease_seconds)
+                    WHERE id::text = :job_id AND status = 'running'
+                      AND locked_by = :worker_id AND lease_expires_at > now()
+                    RETURNING id
+                    """
+                ),
+                {
+                    "job_id": job_id,
+                    "worker_id": worker_id,
+                    "lease_seconds": lease_seconds,
+                },
+            )
+            return result.first() is not None
+
+    async def cancel_run(self, run_id: str) -> int:
+        async with self._engine.begin() as connection:
+            run = (
+                await connection.execute(
+                    text(
+                        """
+                            UPDATE product_detail_enrichment_run
+                            SET status = 'canceled', cancel_requested_at = now(),
+                                completed_at = now()
+                            WHERE id::text = :run_id AND status = 'active'
+                            RETURNING id
+                            """
+                    ),
+                    {"run_id": run_id},
+                )
+            ).first()
+            if run is None:
+                return 0
+            result = await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_job
+                    SET status = 'canceled', completed_at = now()
+                    WHERE enrichment_run_id::text = :run_id AND status = 'queued'
+                    RETURNING id
+                    """
+                ),
+                {"run_id": run_id},
+            )
+            canceled = len(result.all())
+            await self._audit(
+                connection,
+                "product_detail_run_canceled",
+                "product_detail_enrichment_run",
+                run_id,
+                {"queued_jobs_canceled": canceled},
+            )
+            return canceled
+
+    async def get_snapshot(self, snapshot_id: str) -> ProductDetailSnapshotRecord | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT s.*, p.canonical_product_id AS canonical_product_stable_id
+                            FROM product_detail_snapshot s JOIN canonical_product p
+                              ON p.id = s.canonical_product_id
+                            WHERE s.id::text = :snapshot_id
+                            """
+                        ),
+                        {"snapshot_id": snapshot_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _snapshot(row) if row is not None else None
+
+    async def product_document(self, canonical_product_db_id: str) -> JsonObject:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text("SELECT * FROM canonical_product WHERE id::text = :product_id"),
+                        {"product_id": canonical_product_db_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            contexts = [
+                dict(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT context FROM canonical_product_context
+                            WHERE canonical_product_id::text = :product_id
+                            ORDER BY created_at, id
+                            """
+                        ),
+                        {"product_id": canonical_product_db_id},
+                    )
+                ).scalars()
+            ]
+            snapshot_ids = [
+                str(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT id::text FROM product_detail_snapshot
+                            WHERE canonical_product_id::text = :product_id
+                            ORDER BY observed_at, id
+                            """
+                        ),
+                        {"product_id": canonical_product_db_id},
+                    )
+                ).scalars()
+            ]
+        document = canonical_product_document(
+            _product(row),
+            source_contexts=contexts,
+            snapshot_ids=snapshot_ids,
+        )
+        validate_instance(
+            self._root,
+            "canonical-product.schema.json",
+            document,
+            label=f"canonical-product:{document['canonical_product_id']}",
+        )
+        return document
+
+    async def get_run(self, run_id: str) -> ProductDetailRun | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM product_detail_enrichment_run WHERE id::text = :run_id"
+                        ),
+                        {"run_id": run_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _run(row) if row is not None else None
+
+    async def _reconcile_run(self, connection: AsyncConnection, run_id: str) -> None:
+        counts = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT count(*) FILTER (
+                                 WHERE status IN ('queued', 'running')
+                               )::integer AS active_jobs,
+                               count(*) FILTER (WHERE status = 'failed')::integer AS failed_jobs
+                        FROM product_detail_job WHERE enrichment_run_id::text = :run_id
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if int(counts["active_jobs"]) == 0:
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_enrichment_run
+                    SET status = CASE WHEN :failed_jobs > 0
+                          THEN 'completed_with_errors' ELSE 'completed' END,
+                        completed_at = now()
+                    WHERE id::text = :run_id AND status = 'active'
+                    """
+                ),
+                {"failed_jobs": int(counts["failed_jobs"]), "run_id": run_id},
+            )
+
+    async def _audit(
+        self,
+        connection: AsyncConnection,
+        event_type: str,
+        entity_type: str,
+        entity_id: str,
+        details: JsonObject,
+    ) -> None:
+        await connection.execute(
+            text(
+                """
+                INSERT INTO audit_event (
+                  organization_id, event_type, entity_type, entity_id, details
+                ) VALUES (
+                  CAST(:organization_id AS uuid), :event_type, :entity_type,
+                  :entity_id, CAST(:details AS jsonb)
+                )
+                """
+            ),
+            {
+                "organization_id": self._organization_id,
+                "event_type": event_type,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "details": _json(details),
+            },
+        )

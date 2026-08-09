@@ -4,7 +4,7 @@ export interface MetricsCartProductDetailCatalog {
   schema_version: string;
   provider: "metricscart";
   source: string;
-  status: "configuration_only_response_fixtures_required";
+  status: "configuration_only_response_fixtures_required" | "enabled_v1_with_fixtures";
   /**
    * @minItems 1
    */

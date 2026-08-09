@@ -17,6 +17,14 @@ from rci_collections import FakeProvider, PostgresCollectionRepository, QueueWor
 from rci_collections.worker import CollectionProvider
 from rci_core import APP_VERSION, AppSettings, AsyncHealthServer, configure_logging
 from rci_db import DatabaseProbe
+from rci_products import (
+    MetricsCartProductDetailClient,
+    PostgresProductDetailLimiterRegistry,
+    PostgresProductDetailRepository,
+    ProductDetailCatalog,
+    ProductDetailWorker,
+    S3ProductDetailRawObjectStore,
+)
 from rci_providers import (
     MetricsCartAdapterRegistry,
     MetricsCartClient,
@@ -155,6 +163,38 @@ async def run() -> None:
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),
             lease_seconds=int(os.getenv("ANALYSIS_LEASE_SECONDS", "600")),
         )
+    product_detail_client: MetricsCartProductDetailClient | None = None
+    product_detail_worker: ProductDetailWorker | None = None
+    if _enabled(os.getenv("PRODUCT_DETAIL_ENRICHMENT_ENABLED")):
+        metricscart_settings = MetricsCartSettings.from_env()
+        product_detail_client = MetricsCartProductDetailClient(
+            metricscart_settings,
+            ProductDetailCatalog.from_path(repository_root),
+            PostgresProductDetailLimiterRegistry(
+                database.engine,
+                api_key=metricscart_settings.api_key,
+                rps=int(os.getenv("PRODUCT_DETAIL_RPS", "3")),
+                rpm=int(os.getenv("PRODUCT_DETAIL_RPM", "180")),
+            ),
+            S3ProductDetailRawObjectStore.create(
+                bucket=os.environ["OBJECT_STORAGE_BUCKET"],
+                endpoint_url=os.getenv("OBJECT_STORAGE_ENDPOINT"),
+                region_name=os.getenv("OBJECT_STORAGE_REGION"),
+                access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY_ID"),
+                secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+                force_path_style=_enabled(
+                    os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE"), default=True
+                ),
+            ),
+        )
+        product_detail_worker = ProductDetailWorker(
+            PostgresProductDetailRepository(database.engine, repository_root),
+            product_detail_client,
+            worker_id=f"{worker_id}-pdp",
+            claim_limit=int(os.getenv("PRODUCT_DETAIL_CLAIM_LIMIT", "1")),
+            lease_seconds=int(os.getenv("PRODUCT_DETAIL_LEASE_SECONDS", "300")),
+            cache_ttl_seconds=int(os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")),
+        )
     health_server = AsyncHealthServer(
         "worker",
         database.is_ready,
@@ -174,7 +214,10 @@ async def run() -> None:
         while not stop.is_set():
             claimed = await worker.run_once()
             analyses = await analysis_worker.run_once() if analysis_worker is not None else 0
-            if claimed + analyses == 0:
+            product_details = (
+                await product_detail_worker.run_once() if product_detail_worker is not None else 0
+            )
+            if claimed + analyses + product_details == 0:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=1)
     finally:
@@ -185,6 +228,8 @@ async def run() -> None:
         await health_server.close()
         if metricscart_client is not None:
             await metricscart_client.close()
+        if product_detail_client is not None:
+            await product_detail_client.close()
         await database.dispose()
 
 

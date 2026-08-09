@@ -75,6 +75,12 @@ ANALYSIS_HISTORICAL_REPLAY_ENABLED=false
 ANALYSIS_CLAIM_LIMIT=1
 ANALYSIS_LEASE_SECONDS=600
 ANALYSIS_MAX_ATTEMPTS=3
+PRODUCT_DETAIL_ENRICHMENT_ENABLED=false
+PRODUCT_DETAIL_RPS=3
+PRODUCT_DETAIL_RPM=180
+PRODUCT_DETAIL_CLAIM_LIMIT=1
+PRODUCT_DETAIL_LEASE_SECONDS=300
+PRODUCT_DETAIL_CACHE_TTL_SECONDS=604800
 OBJECT_STORAGE_ENDPOINT=${{artifacts.ENDPOINT}}
 OBJECT_STORAGE_REGION=${{artifacts.REGION}}
 OBJECT_STORAGE_BUCKET=${{artifacts.BUCKET}}
@@ -154,7 +160,7 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at `0010_analysis_input_sets`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at `0012_product_details`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
@@ -172,6 +178,10 @@ MetricsCart uses query-parameter authentication.
 11. Publish the compact strawberry AnalysisResult and generate HTML, XLSX, email, and audit ZIP.
     Confirm each download URL expires and no bucket object is anonymously readable.
 12. Run a backup restore drill into a non-production environment before declaring the rollout done.
+
+Keep `PRODUCT_DETAIL_ENRICHMENT_ENABLED=false` through migration and fixture acceptance. Enable it
+only after an explicit enrichment run with a reviewed credit ceiling has been queued. Search and PDP
+limits are independent per retailer/type but share their state across all worker replicas.
 
 ## Historical import job
 
@@ -207,6 +217,10 @@ check queue latency, pages/minute, aggregate permit counts, 429s and `paused_unt
 reclaims, duplicate task count, credits, database connections, CPU, and memory. Scale back immediately
 if 429 frequency or lease expiry rises without useful throughput. Never compensate for provider 429s
 by raising RPS/RPM above the contracted limit.
+
+PDP workers use the same replica-scaling discipline. Each retailer/type limiter row is keyed as
+`metricscart:pdp:<retailer_id>` plus a nonsecret credential hash, so Walmart PDP capacity does not
+consume Walmart search capacity or ALDI PDP capacity.
 
 ## Rollback
 

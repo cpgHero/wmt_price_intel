@@ -17,7 +17,10 @@
       "minLength": 1
     },
     "status": {
-      "const": "configuration_only_response_fixtures_required"
+      "enum": [
+        "configuration_only_response_fixtures_required",
+        "enabled_v1_with_fixtures"
+      ]
     },
     "endpoints": {
       "type": "array",

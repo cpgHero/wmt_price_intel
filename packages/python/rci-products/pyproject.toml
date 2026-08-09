@@ -1,0 +1,22 @@
+[project]
+name = "rci-products"
+version = "0.1.0"
+description = "Durable canonical product identity and MetricsCart PDP enrichment."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "boto3==1.43.53",
+  "httpx==0.28.1",
+  "rci-contracts",
+  "rci-db",
+  "rci-providers",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+rci-db = { workspace = true }
+rci-providers = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

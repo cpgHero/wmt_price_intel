@@ -15,6 +15,7 @@ dependencies = [
   "rci-core",
   "rci-db",
   "rci-providers",
+  "rci-products",
   "rci-results",
 ]
 
@@ -29,6 +30,7 @@ rci-collections = { workspace = true }
 rci-core = { workspace = true }
 rci-db = { workspace = true }
 rci-providers = { workspace = true }
+rci-products = { workspace = true }
 rci-results = { workspace = true }
 
 [build-system]

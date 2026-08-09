@@ -18,6 +18,8 @@ PostgreSQL is the control plane. High-volume immutable datasets are stored as ob
 - collection_task
 - provider_rate_limit_state
 - dataset_artifact
+- canonical_product / canonical_product_context
+- product_detail_enrichment_run / product_detail_job / product_detail_snapshot
 - analysis_input_set / analysis_input_artifact
 - analysis_run
 - analysis_result
@@ -39,6 +41,20 @@ Normalized offers, classified offers, candidates, match detail, and supporting r
 manifest is canonical JSON with a SHA-256, source kind, Product Pack reference, analysis config,
 and total rows. Ordered `analysis_input_artifact` rows link that manifest to immutable bucket
 objects. The same realized manifest is unique per organization and source kind.
+
+## Product identity and PDP evidence
+
+`canonical_product` has one stable record per organization, retailer, and retailer product ID.
+Alternate identifiers remain a JSON object of strings, while stable PDP identity fields are stored
+separately from `canonical_product_context` rows that preserve SERP/PDP ZIP, store, fulfillment,
+source-artifact, and observation-time provenance.
+
+`product_detail_enrichment_run` owns a hard planned-credit ceiling and separate actual-credit
+ledger. `product_detail_job` is a durable leased queue with a request checksum idempotency key;
+claims use `FOR UPDATE SKIP LOCKED`. `product_detail_snapshot` is immutable attempt evidence with a
+raw-object checksum and optional cache expiry. The cache key includes retailer, product ID, ZIP,
+store, fulfillment, and endpoint contract version. PDP identity may enrich every linked SERP
+observation, but PDP price and availability never replace the SERP snapshot fields.
 
 An analysis result records:
 - collection definition version,

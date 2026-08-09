@@ -1,0 +1,32 @@
+{
+  "name": "Jumbo Raw Peeled & Deveined Tail-Off Shrimp",
+  "brand": null,
+  "retailer_product_id": "0000000000008696",
+  "description_short": null,
+  "description_full": "Fresh jumbo raw peeled and deveined tail-off shrimp.",
+  "specification": {},
+  "price": 6.59,
+  "price_currency": "USD",
+  "image_primary": "https://dm.cms.aldi.cx/example-shrimp/1000",
+  "images": ["https://dm.cms.aldi.cx/example-shrimp/1000"],
+  "videos": [],
+  "variant_configuration": {},
+  "physical_properties": {},
+  "stock_availability": true,
+  "stock_quantity": null,
+  "retailer_store_id": "479-149",
+  "pickup_available": null,
+  "pickup_store_id": null,
+  "shipping_type": null,
+  "extras": {
+    "category": [
+      {"name": "Fresh Meat & Seafood", "level": 1},
+      {"name": "Fresh Seafood", "level": 2}
+    ]
+  },
+  "product_identifiers": {"product_id": "0000000000008696"},
+  "url": "https://new.aldi.us/product/jumbo-raw-peeled-deveined-tail-off-shrimp-0000000000008696",
+  "zipcode": "90001",
+  "retailer": "new.aldi.us",
+  "source": "pdp"
+}

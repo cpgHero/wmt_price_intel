@@ -12,3 +12,8 @@ immutable object-artifact metadata. Later gated phases translate the remaining t
 order. `0005_product_packs` adds immutable, schema-validated Product Pack versions.
 `0006_results_delivery` adds immutable AnalysisResult records, validation issues, report
 artifact links, and audit events.
+`0007_automation` adds durable schedules, alert evaluation, and email delivery. `0008` corrects
+MetricsCart 404 billing, `0009` adds analysis orchestration, and `0010`/`0011` add immutable
+historical/live input sets with safe artifact cascades. `0012_product_details` adds canonical
+product identity, contextual provenance, separately budgeted PDP runs, a leased `SKIP LOCKED` PDP
+queue, and immutable cached PDP snapshots.

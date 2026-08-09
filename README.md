@@ -60,3 +60,7 @@ through the same durable analysis queue used by live collections. See
 Phase 9.5.3 adds bounded historical execution, generic retailer-aware comparison availability,
 indexed proximity matching, and the full-source fresh-ground-beef Product Pack. See
 `docs/19_PHASE_9_5_3_GENERIC_ANALYTICS_GROUND_BEEF.md`.
+
+Phase 9.5.4 adds canonical retailer product identity and default-off, separately budgeted PDP
+enrichment with durable leases, immutable cached snapshots, and replica-safe per-retailer/type rate
+limits. See `docs/20_PHASE_9_5_4_PRODUCT_IDENTITY_PDP.md`.
