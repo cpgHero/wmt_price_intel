@@ -109,6 +109,12 @@ def _arguments() -> argparse.Namespace:
         type=int,
         default=int(os.getenv("AI_MAX_METRICS", "160")),
     )
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=1,
+        help="Maximum attempts for the same governed task (between one and five).",
+    )
     parser.add_argument("--expires-in-seconds", type=int, default=86_400)
     parser.add_argument(
         "--confirm-paid-call",
@@ -150,7 +156,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             insight_model=args.insight_model,
             narrative_model=args.narrative_model,
             max_metrics=args.max_metrics,
-            max_attempts=1,
+            max_attempts=args.max_attempts,
             lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "180")),
         )
         enriched = await assistant.enrich(
@@ -222,6 +228,8 @@ def main() -> None:
         raise ValueError("--max-request-cost-usd must be positive")
     if args.max_output_tokens <= 0 or args.max_metrics <= 0:
         raise ValueError("token and metric limits must be positive")
+    if not 1 <= args.max_attempts <= 5:
+        raise ValueError("--max-attempts must be between 1 and 5")
     if not 60 <= args.expires_in_seconds <= 604_800:
         raise ValueError("--expires-in-seconds must be between 60 and 604800")
     print(json.dumps(asyncio.run(_run(args)), indent=2, sort_keys=True))
