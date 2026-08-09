@@ -8,6 +8,7 @@
       "/packages/python/**",
       "/config/**",
       "/product-packs/**",
+      "/report-blueprints/**",
       "/database/**",
       "/schemas/**",
       "/pyproject.toml",

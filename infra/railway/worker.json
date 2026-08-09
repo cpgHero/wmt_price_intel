@@ -8,6 +8,7 @@
       "/packages/python/**",
       "/config/**",
       "/product-packs/**",
+      "/report-blueprints/**",
       "/schemas/**",
       "/pyproject.toml",
       "/uv.lock"

@@ -49,3 +49,14 @@ def test_production_images_drop_root_and_pin_runtimes() -> None:
     for service in ("api", "worker", "scheduler"):
         assert "FROM python:3.14.6-slim" in dockerfiles[service]
         assert "USER rci" in dockerfiles[service]
+
+
+def test_report_catalog_is_packaged_and_watched_by_runtime_consumers() -> None:
+    api_dockerfile = (REPOSITORY_ROOT / "apps/api/Dockerfile").read_text()
+    assert "COPY --chown=rci:rci report-blueprints report-blueprints" in api_dockerfile
+
+    for service in ("api", "worker", "scheduler"):
+        config = json.loads((REPOSITORY_ROOT / f"infra/railway/{service}.json").read_text())
+        watch_patterns = set(config["build"]["watchPatterns"])
+        assert "/product-packs/**" in watch_patterns
+        assert "/report-blueprints/**" in watch_patterns
