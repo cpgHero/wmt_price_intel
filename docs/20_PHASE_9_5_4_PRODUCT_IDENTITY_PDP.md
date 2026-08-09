@@ -2,8 +2,10 @@
 
 ## Status
 
-Implementation complete pending the final Railway migration and replica-safe Postgres acceptance
-run. Live Product Details collection remains disabled by default.
+Complete. Railway production is migrated through `0012_product_details`, and the deployed worker
+passed the replica-safe Product Details queue/cache/budget/identity test together with the shared
+Postgres rate-limiter test on 2026-08-08. Live Product Details collection remains disabled by
+default pending owner acceptance.
 
 ## Runtime boundary
 
@@ -61,3 +63,13 @@ uv run alembic -c database/alembic.ini upgrade head --sql
 
 The Postgres tests require `RCI_TEST_DATABASE_URL`. No acceptance command performs a live
 MetricsCart call, and no billable development credit was consumed by this subphase.
+
+## Railway acceptance evidence
+
+- Commit `01a52c2` deployed successfully to `api`, `worker`, and `scheduler`; the unaffected `web`
+  service remained healthy on the prior compatible build.
+- Alembic reports `0012_product_details (head)` in production.
+- The two production-backed Postgres suites completed with `2 passed`.
+- Public `/health` returned `ok`; `/health/ready` returned `ready` with the API dependency `ok`.
+- The temporary Railway SSH credential was removed immediately after the acceptance run.
+- Product Details remained disabled, so the run made no MetricsCart request and spent zero credits.
