@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.2.0"
+RENDERER_VERSION = "2.3.0"
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -241,14 +241,23 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
             f"<strong>{escape(_metric_display(metric.get('value'), metric.get('unit')))}</strong>"
-            f"<small>{escape(_display(metric.get('method')))}</small></div>"
+            "</div>"
             for metric in metrics
         )
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
         if section.get("visualization") == "ranked_cards":
+            repeated_detail = (
+                len({str(row.get("summary") or row.get("rationale") or "") for row in records[:5]})
+                == 1
+                and len(records[:5]) > 1
+            )
             cards = "".join(
-                LeadershipHtmlRenderer._record_card(row, index)
+                LeadershipHtmlRenderer._record_card(
+                    row,
+                    index,
+                    include_detail=not repeated_detail,
+                )
                 for index, row in enumerate(records[:5])
             )
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
@@ -265,7 +274,7 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         )
 
     @staticmethod
-    def _record_card(row: JsonObject, index: int) -> str:
+    def _record_card(row: JsonObject, index: int, *, include_detail: bool = True) -> str:
         rank = row.get("priority") or row.get("severity") or index + 1
         headline = (
             row.get("title")
@@ -279,7 +288,9 @@ Generated {escape(_display(result.get("generated_at")))}</div>
             if row.get("title") and row.get("summary") != row.get("title")
             else row.get("detail") or row.get("rationale") or row.get("description")
         )
-        detail_html = f"<p>{escape(_display(detail))}</p>" if detail is not None else ""
+        detail_html = (
+            f"<p>{escape(_display(detail))}</p>" if include_detail and detail is not None else ""
+        )
         return (
             f"<article class=decision-card><span>{escape(_display(rank))}</span>"
             f"<h3>{escape(_display(headline))}</h3>{detail_html}</article>"
@@ -513,12 +524,25 @@ class ArtifactRenderer:
         self._xlsx = ExcelAuditRenderer()
         self._email = LeadershipEmailRenderer()
         inferred_root = repository_root or Path.cwd()
+        retailer_names: dict[str, str] = {}
+        retailer_catalog = inferred_root / "config/retailer-catalog.json"
+        if retailer_catalog.is_file():
+            catalog = json.loads(retailer_catalog.read_text(encoding="utf-8"))
+            catalog_rows = [
+                *_rows(catalog, "retailers"),
+                *_rows(catalog, "normalization_only_retailers"),
+            ]
+            retailer_names = {
+                str(row["id"]): str(row["display_name"])
+                for row in catalog_rows
+                if row.get("id") and row.get("display_name")
+            }
         self._blueprints = (
             ReportBlueprintLoader(inferred_root)
             if (inferred_root / "report-blueprints").is_dir()
             else None
         )
-        self._projector = ReportProjector()
+        self._projector = ReportProjector(retailer_names)
 
     @property
     def version(self) -> str:

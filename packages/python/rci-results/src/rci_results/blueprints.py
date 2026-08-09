@@ -3,12 +3,96 @@
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
 
 from rci_contracts import ContractError, validate_instance
 from rci_results.models import ArtifactType, JsonObject
+
+
+def _attribute_aliases(attribute: JsonObject) -> set[str]:
+    name = str(attribute.get("name", "")).replace("_", " ").strip()
+    label = str(attribute.get("label", "")).strip()
+    aliases = {value.casefold() for value in (name, label) if value}
+    aliases.update(value.replace("percentage", "pct") for value in tuple(aliases))
+    return aliases
+
+
+def _attribute_pattern(attribute: JsonObject, alias: str) -> re.Pattern[str]:
+    data_type = str(attribute.get("data_type", "string"))
+    if data_type == "number":
+        value_pattern = r"-?(?:\d+(?:\.\d+)?|\.\d+)"
+    elif data_type == "boolean":
+        value_pattern = r"(?:true|false)"
+    elif data_type == "enum":
+        allowed = sorted(
+            (
+                re.escape(str(value).replace("_", " "))
+                for value in attribute.get("allowed_values", [])
+            ),
+            key=len,
+            reverse=True,
+        )
+        value_pattern = rf"(?:{'|'.join(allowed)})" if allowed else r"[^/]+"
+    else:
+        value_pattern = r"[^/]+"
+    return re.compile(rf"\b{re.escape(alias)}\s*:\s*({value_pattern})", flags=re.IGNORECASE)
+
+
+def _format_attribute(attribute: JsonObject, raw_value: str) -> str:
+    value = raw_value.strip()
+    label = str(attribute.get("label") or attribute.get("name") or "attribute").casefold()
+    unit = str(attribute.get("unit", "")).casefold()
+    data_type = str(attribute.get("data_type", "string"))
+    if data_type == "boolean":
+        return label if value.casefold() == "true" else f"non-{label.replace(' ', '-')}"
+    if data_type == "number":
+        rendered = f"{float(value):g}"
+        if unit == "percent":
+            return f"{rendered}% {label.removesuffix(' percentage')}"
+        return f"{rendered} {unit or label}".strip()
+    return value.replace("_", " ").casefold()
+
+
+def _merchant_text(
+    value: object,
+    retailer_names: Mapping[str, str],
+    product_pack: JsonObject,
+) -> object:
+    if not isinstance(value, str):
+        return value
+    rendered = value
+    for retailer_id, display_name in sorted(retailer_names.items(), key=lambda row: -len(row[0])):
+        rendered = rendered.replace(retailer_id, display_name)
+    for attribute in product_pack.get("attributes", []):
+        if not isinstance(attribute, dict):
+            continue
+        for alias in sorted(_attribute_aliases(attribute), key=len, reverse=True):
+            pattern = _attribute_pattern(attribute, alias)
+
+            def replace_attribute(match: re.Match[str], definition: JsonObject = attribute) -> str:
+                return _format_attribute(definition, match.group(1))
+
+            rendered = pattern.sub(replace_attribute, rendered)
+    return re.sub(r"\s+", " ", rendered).strip()
+
+
+def _merchant_record(
+    row: JsonObject,
+    retailer_names: Mapping[str, str],
+    product_pack: JsonObject,
+) -> JsonObject:
+    def merchant_value(value: object) -> object:
+        if isinstance(value, dict):
+            return {key: merchant_value(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [merchant_value(item) for item in value]
+        return _merchant_text(value, retailer_names, product_pack)
+
+    return {key: merchant_value(value) for key, value in row.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +198,9 @@ class ReportBlueprintLoader:
 class ReportProjector:
     """Resolve references into display records without computing analytical facts."""
 
+    def __init__(self, retailer_names: Mapping[str, str] | None = None) -> None:
+        self._retailer_names = dict(retailer_names or {})
+
     def project(
         self,
         result: JsonObject,
@@ -190,7 +277,10 @@ class ReportProjector:
     ) -> JsonObject:
         selectors = [str(value) for value in section["metric_selectors"]]
         selected_metrics = [
-            metric
+            {
+                **metric,
+                "name": _merchant_text(metric.get("name"), self._retailer_names, product_pack),
+            }
             for metric_id, metric in metric_index.items()
             if any(fnmatchcase(metric_id, selector) for selector in selectors)
         ]
@@ -202,6 +292,7 @@ class ReportProjector:
         records = self._records_for_kind(
             result, kind, {str(m["metric_id"]) for m in selected_metrics}
         )
+        records = [_merchant_record(row, self._retailer_names, product_pack) for row in records]
         narrative = None
         narrative_id = section.get("narrative_section_id")
         narratives = result.get("narratives", {})

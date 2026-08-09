@@ -74,7 +74,7 @@ IDs.
 
 HTML, leadership email, XLSX, audit ZIP, and the web analysis workspace all project the same stored
 narratives and metrics. The renderer does not recalculate analytical facts. Renderer version
-`2.2.0` creates new immutable artifact keys while preserving prior artifacts.
+`2.3.0` creates new immutable artifact keys while preserving prior artifacts.
 
 Leadership email now carries the complete decision story rather than only an executive-summary
 stub. XLSX adds a Leadership Narrative worksheet. The web workspace renders paragraph structure
