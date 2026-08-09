@@ -74,3 +74,19 @@ MetricsCart calls and no billable credits were used for this phase.
 - Phase 9.5.8 runs full-source, Postgres, browser, concurrency, and Railway acceptance gates.
 
 Product Details enrichment remains disabled until its separate acceptance decision.
+
+## Railway acceptance evidence
+
+- Commit `3f0e563` deployed the deterministic insight/reporting engine to web, API, worker, and
+  scheduler.
+- Production verification identified that the API image did not yet package the new blueprint
+  catalog. Commit `da14ccf` added that catalog to the API image and added Product Pack/report
+  blueprint watch paths for every Python runtime consumer.
+- API, worker, and scheduler deployed `da14ccf` successfully; the compatible web build remained
+  healthy on `3f0e563`.
+- The production-backed result-persistence and worker-analysis suites completed with `5 passed`.
+- The deployed API loaded `fresh_ground_beef_leadership` version `1.0.0` with all 10 configured
+  sections.
+- Public `/health/ready` returned `ready` with the API dependency `ok`.
+- The temporary Railway SSH credential and all local temporary key material were removed after the
+  acceptance run.
