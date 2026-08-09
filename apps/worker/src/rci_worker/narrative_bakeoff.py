@@ -157,7 +157,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             narrative_model=args.narrative_model,
             max_metrics=args.max_metrics,
             max_attempts=args.max_attempts,
-            lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "180")),
+            lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
         )
         enriched = await assistant.enrich(
             deepcopy(deterministic_result),

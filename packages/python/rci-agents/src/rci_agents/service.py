@@ -34,7 +34,7 @@ class GovernedAnalysisAssistant:
         narrative_model: str,
         max_metrics: int = 360,
         max_attempts: int = 2,
-        lease_seconds: int = 180,
+        lease_seconds: int = 900,
     ) -> None:
         if not insight_model.strip() or not narrative_model.strip():
             raise ValueError("explicit insight and narrative model IDs are required")

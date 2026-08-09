@@ -139,7 +139,7 @@ async def run() -> None:
             narrative_model=os.environ["OPENAI_MODEL_NARRATIVE"],
             max_metrics=int(os.getenv("AI_MAX_METRICS", "360")),
             max_attempts=int(os.getenv("AI_MAX_ATTEMPTS", "2")),
-            lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "180")),
+            lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
         )
     analysis_worker: AnalysisWorker | None = None
     if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
