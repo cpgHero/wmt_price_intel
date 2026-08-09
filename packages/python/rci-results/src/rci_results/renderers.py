@@ -17,7 +17,20 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.4.0"
+RENDERER_VERSION = "2.5.0"
+
+_SECTION_EYEBROWS = {
+    "executive_summary": "Leadership answer",
+    "kpi_strip": "Decision scorecard",
+    "coverage": "Market coverage",
+    "price_position": "Package-price lens",
+    "segment_analysis": "Normalized-value lens",
+    "geographic_sensitivity": "Proximity validation",
+    "product_table": "Assortment implications",
+    "recommendations": "Decision agenda",
+    "data_quality": "Quality controls",
+    "methodology": "Methodology",
+}
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -121,6 +134,12 @@ def _generated_at(result: JsonObject) -> datetime:
     return parsed
 
 
+def _display_generated_at(result: JsonObject) -> str:
+    generated_at = _generated_at(result)
+    clock = generated_at.strftime("%I:%M %p").lstrip("0")
+    return f"{generated_at.strftime('%B')} {generated_at.day}, {generated_at.year} at {clock} UTC"
+
+
 def _zip_entry(filename: str) -> ZipInfo:
     entry = ZipInfo(filename, date_time=(1980, 1, 1, 0, 0, 0))
     entry.compress_type = ZIP_DEFLATED
@@ -192,7 +211,7 @@ class LeadershipHtmlRenderer:
         product_pack = _mapping(result, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         analysis_id = escape(_display(result.get("analysis_id")))
-        generated_at = escape(_display(result.get("generated_at")))
+        generated_at = escape(_display_generated_at(result))
         result_checksum = escape(_result_checksum(result))
         findings = _rows(result, "findings")
         recommendations = _rows(result, "recommendations")
@@ -244,7 +263,7 @@ class LeadershipHtmlRenderer:
 <h1>{pack_name}</h1><p class="deck">Where the price war is being won, where it is being lost,
 and which targeted moves matter most.</p><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
-Generated {escape(_display(result.get("generated_at")))}</div>
+Generated {escape(_display_generated_at(result))}</div>
 </header>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
 <code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
@@ -253,7 +272,7 @@ Generated {escape(_display(result.get("generated_at")))}</div>
     def _section(section: JsonObject) -> str:
         title = escape(_display(section.get("title")))
         section_kind = str(section.get("kind", ""))
-        kind = escape(_display(section_kind))
+        kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
         narrative_html = (
             _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""

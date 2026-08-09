@@ -80,7 +80,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     renderer = ArtifactRenderer()
 
     html = renderer.render(result, "html")
-    assert html.renderer_version == renderer.version == "2.4.0"
+    assert html.renderer_version == renderer.version == "2.5.0"
     assert html.body.startswith(b"<!doctype html>")
     assert b"0.99964" in html.body
 
@@ -125,6 +125,9 @@ def test_blueprint_html_preserves_narrative_paragraphs() -> None:
     html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body
 
     assert b"<p>Answer first.</p><p>Decision implication.</p>" in html
+    assert b"Leadership answer" in html
+    assert b">executive_summary<" not in html
+    assert b"Generated August 8, 2026 at 12:00 PM UTC" in html
 
 
 async def test_artifact_generation_is_immutable_and_uses_short_lived_downloads() -> None:
@@ -158,7 +161,7 @@ async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None
     class NextArtifactRenderer(ArtifactRenderer):
         @property
         def version(self) -> str:
-            return "2.5.0"
+            return "2.6.0"
 
     repository = InMemoryResultsRepository()
     store = InMemoryReportObjectStore()
@@ -180,13 +183,13 @@ async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None
     second = await upgraded.generate_artifact(analysis.analysis_id, "html")
 
     assert first.id != second.id
-    assert first.renderer_version == "2.4.0"
-    assert second.renderer_version == "2.5.0"
+    assert first.renderer_version == "2.5.0"
+    assert second.renderer_version == "2.6.0"
     assert len(store.objects) == 2
     listed = await upgraded.list_artifacts(analysis.analysis_id)
     assert {artifact.renderer_version for artifact in listed} == {
-        "2.4.0",
         "2.5.0",
+        "2.6.0",
     }
 
 
