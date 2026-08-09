@@ -93,3 +93,38 @@ pnpm test:e2e
 
 A paid live Search/PDP smoke test remains separately governed. It is not an implicit deployment or
 phase-acceptance step.
+
+## Production acceptance — 2026-08-09
+
+Railway deployed implementation commit `5d28f41` and historical timestamp-normalization commit
+`3a7a1c4`. The API pre-deploy command upgraded production from migration `0013` through
+`0014_report_renderer_versions`; the web, API, worker, and scheduler deployments completed
+successfully.
+
+The approved, zero-credit historical replay processed the complete August 7 ground-beef source set:
+
+- Analysis ID:
+  `fresh_ground_beef-940c8d6a-7990-4a5d-a58f-c0fd02fb872f`
+- Analysis run ID: `524f8850-37f4-4bc2-ac5f-7af15dcd18f8`
+- Collection run ID: `940c8d6a-7990-4a5d-a58f-c0fd02fb872f`
+- Input set ID: `810c2791-aa78-4c16-85ab-c5fe31b1d308`
+- Source rows: 225,791
+- Analysis contract: `2.0.0`
+- Validation: `ready_to_share`
+- Result contents: 457 metrics, 49 comparisons, 10 insights, and 10 recommendations
+- Final result checksum:
+  `c32f5d1c70a539fb39590c82966fc7757005fe46659f1957cd90e33f4c28be1a`
+
+The first replay exposed two source timestamp encodings that were valid historical evidence but
+not valid JSON Schema `date-time` strings. The category-neutral normalizer documented above was
+added and fully regression-tested before the successful replay. No source row, analytical rule, or
+Product Pack exception was introduced to work around the issue.
+
+Production generated HTML, XLSX, leadership-email, and audit-ZIP artifacts with renderer version
+`2.0.0`. Browser acceptance covered every analysis workspace section, all four export controls, and
+light/dark theme switching at:
+
+<https://web-production-ee2a4.up.railway.app/analyses/fresh_ground_beef-940c8d6a-7990-4a5d-a58f-c0fd02fb872f>
+
+Historical replay was returned to disabled after completion. No live Search or PDP request was made,
+so this acceptance consumed zero billable MetricsCart credits.
