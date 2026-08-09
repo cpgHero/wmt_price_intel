@@ -526,6 +526,12 @@ def test_narrative_critic_rejects_machine_oriented_labels() -> None:
         "{{metric:comparison.aldi_us.exact.package_price.lower_rate|percent_1}} "
         "of governed comparisons."
     )
+    NarrativeQualityCritic.validate_prose(
+        "The merchant decision differs for grass fed: protect the premium tier while "
+        "monitoring conventional value."
+    )
+    with pytest.raises(AgentGovernanceError, match="machine-oriented"):
+        NarrativeQualityCritic.validate_prose("The raw flag is Grass Fed: True.")
 
 
 def test_narrative_critic_rejects_omitted_required_topic() -> None:

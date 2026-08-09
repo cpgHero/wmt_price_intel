@@ -27,7 +27,9 @@ _PERCENT_DESCRIPTOR = re.compile(
 )
 _MACHINE_PROSE = re.compile(
     r"\b[a-z][a-z0-9]*_us(?:_[a-z0-9]+)*\b|"
-    r"\b(?:lean pct|fat pct|weight lb|organic|grass fed|premium tier)\s*:",
+    r"\b(?:lean pct|fat pct|weight lb)\s*:|"
+    r"\b(?:organic|grass fed)\s*:\s*(?:true|false)\b|"
+    r"\bpremium tier\s*:\s*[a-z][a-z0-9_]*\b",
     flags=re.IGNORECASE,
 )
 
