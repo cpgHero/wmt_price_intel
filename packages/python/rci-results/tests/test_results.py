@@ -80,7 +80,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     renderer = ArtifactRenderer()
 
     html = renderer.render(result, "html")
-    assert html.renderer_version == renderer.version == "2.6.0"
+    assert html.renderer_version == renderer.version == "2.6.1"
     assert html.body.startswith(b"<!doctype html>")
     assert b"0.99964" in html.body
 
@@ -102,6 +102,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
         "strawberries-2026-08-07-example-report.html"
     ]
     assert attachments[0].get_content().startswith("<!doctype html>")
+    assert attachments[0].get_payload(decode=True) == html.body
 
     audit = renderer.render(result, "audit_zip")
     assert renderer.render(result, "audit_zip").body == audit.body
@@ -239,12 +240,12 @@ async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None
     second = await upgraded.generate_artifact(analysis.analysis_id, "html")
 
     assert first.id != second.id
-    assert first.renderer_version == "2.6.0"
+    assert first.renderer_version == "2.6.1"
     assert second.renderer_version == "2.7.0"
     assert len(store.objects) == 2
     listed = await upgraded.list_artifacts(analysis.analysis_id)
     assert {artifact.renderer_version for artifact in listed} == {
-        "2.6.0",
+        "2.6.1",
         "2.7.0",
     }
 

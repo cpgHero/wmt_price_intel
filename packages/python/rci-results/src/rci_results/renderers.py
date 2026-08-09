@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.6.0"
+RENDERER_VERSION = "2.6.1"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -805,6 +805,7 @@ class ArtifactRenderer:
             )
         if artifact_type == "leadership_email":
             context = self._context(result, "leadership_email")
+            html_context = self._context(result, "html")
             view = context[2] if context else None
             return ArtifactPayload(
                 "leadership_email",
@@ -815,7 +816,7 @@ class ArtifactRenderer:
                     view,
                     report_html=self._html.render(
                         result,
-                        view,
+                        html_context[2] if html_context else None,
                         presentation_context=presentation_context,
                     ),
                 ),

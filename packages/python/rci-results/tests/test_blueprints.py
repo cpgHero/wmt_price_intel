@@ -97,10 +97,11 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     )
     assert "Fresh Ground Beef" in str(email["Subject"])
     assert "Prioritize" in email.get_body(preferencelist=("plain",)).get_content()
-    assert any(
-        attachment.get_filename() == "ground-beef-2026-08-07-example-report.html"
-        for attachment in email.iter_attachments()
-    )
+    attachments = list(email.iter_attachments())
+    assert [attachment.get_filename() for attachment in attachments] == [
+        "ground-beef-2026-08-07-example-report.html"
+    ]
+    assert attachments[0].get_payload(decode=True) == html.body
 
     audit = renderer.render(result, "audit_zip")
     with ZipFile(BytesIO(audit.body)) as archive:
