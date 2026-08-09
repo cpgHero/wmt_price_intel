@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import replace
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
 
+from rci_analytics.matching import ComparisonEngine
 from rci_analytics.product_pack import (
     InMemoryProductPackRepository,
     ProductPackLoader,
@@ -31,6 +34,50 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
         "id": "fresh_strawberries_leadership",
         "version": "1.0.0",
     }
+
+
+def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
+    narrative_benchmarks = json.loads(
+        (REPOSITORY_ROOT / "fixtures/golden/narrative-benchmarks.json").read_text()
+    )
+
+    for pack_id, benchmark in narrative_benchmarks["categories"].items():
+        pack = ProductPackLoader(REPOSITORY_ROOT).load(pack_id)
+        assert benchmark["product_pack_id"] == pack.id
+        assert (
+            benchmark["required_topics"] == pack.reporting["narrative_playbook"]["required_topics"]
+        )
+
+
+def test_narrative_decision_lenses_resolve_runtime_metric_names() -> None:
+    benchmark_categories = json.loads(
+        (REPOSITORY_ROOT / "fixtures/golden/narrative-benchmarks.json").read_text()
+    )["categories"]
+
+    for pack_id in benchmark_categories:
+        pack = ProductPackLoader(REPOSITORY_ROOT).load(pack_id)
+        engine = ComparisonEngine(pack)
+        possible_metric_ids = {"coverage.retailer.qualifying_zips", "quality.review_offers"}
+        for profile in pack.matching_profiles:
+            possible_metric_ids.add(
+                ".".join(
+                    (
+                        "comparison",
+                        "competitor",
+                        str(profile["geography"]),
+                        engine._comparison_metric(profile),
+                        str(profile["id"]),
+                        "segment",
+                        "matches",
+                    )
+                )
+            )
+        for lens in pack.reporting["narrative_playbook"]["decision_lenses"]:
+            assert any(
+                fnmatchcase(metric_id, str(selector))
+                for selector in lens["metric_selectors"]
+                for metric_id in possible_metric_ids
+            ), f"{pack_id}/{lens['id']} has no resolvable runtime metric selector"
 
 
 def test_semantic_validation_rejects_unknown_dimensions() -> None:

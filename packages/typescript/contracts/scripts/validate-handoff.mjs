@@ -37,6 +37,7 @@ const analysisV2Validator = await validator("analysis-result-v2.schema.json");
 const analysisEvidenceValidator = await validator(
   "analysis-evidence.schema.json",
 );
+const analysisBriefValidator = await validator("analysis-brief.schema.json");
 const canonicalProductValidator = await validator(
   "canonical-product.schema.json",
 );
@@ -54,6 +55,9 @@ const historicalInputManifestValidator = await validator(
 const alertValidator = await validator("alert-definition.schema.json");
 const productPackValidator = await validator("product-pack.schema.json");
 const benchmarkValidator = await validator("golden-benchmarks.schema.json");
+const narrativeBenchmarkValidator = await validator(
+  "narrative-benchmarks.schema.json",
+);
 const productDetailCatalogValidator = await validator(
   "product-detail-catalog.schema.json",
 );
@@ -103,6 +107,11 @@ await assertValid(
   "analysis evidence",
 );
 await assertValid(
+  analysisBriefValidator,
+  await loadJson("examples", "analysis-brief.ground-beef.json"),
+  "analysis brief",
+);
+await assertValid(
   canonicalProductValidator,
   await loadJson("examples", "canonical-product.ground-beef.json"),
   "canonical product",
@@ -139,6 +148,11 @@ await assertValid(
   benchmarkValidator,
   await loadJson("fixtures", "golden", "benchmarks.json"),
   "golden benchmarks",
+);
+await assertValid(
+  narrativeBenchmarkValidator,
+  await loadJson("fixtures", "golden", "narrative-benchmarks.json"),
+  "narrative benchmarks",
 );
 await assertValid(
   productDetailCatalogValidator,
@@ -200,6 +214,6 @@ console.log(
     historicalInputManifestFiles.length +
     reportBlueprintFiles.length +
     agentPromptFiles.length +
-    9
+    11
   } normative JSON documents.`,
 );

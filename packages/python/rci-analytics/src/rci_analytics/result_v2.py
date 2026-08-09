@@ -12,6 +12,20 @@ from rci_analytics.models import JsonObject
 from rci_analytics.product_pack import ProductPack
 
 _SAFE_ID = re.compile(r"[^a-z0-9_.-]+")
+_SUMMARY_FIELDS = (
+    "matches",
+    "unique_geographies",
+    "benchmark_lower",
+    "competitor_lower",
+    "parity",
+    "benchmark_lower_rate",
+    "competitor_lower_rate",
+    "parity_rate",
+    "benchmark_median",
+    "competitor_median",
+    "median_gap",
+    "mean_gap",
+)
 
 
 def _id(value: object) -> str:
@@ -21,6 +35,38 @@ def _id(value: object) -> str:
 def _checksum(value: object) -> str:
     body = json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(body.encode()).hexdigest()
+
+
+def _display_id(value: object) -> str:
+    return str(value).replace("_", " ").replace("-", " ").strip().title()
+
+
+def _metric_field(metric_id: str) -> str | None:
+    normalized = metric_id.replace("-", "_").casefold()
+    return next(
+        (
+            field
+            for field in sorted(_SUMMARY_FIELDS, key=len, reverse=True)
+            if normalized.endswith(field)
+        ),
+        None,
+    )
+
+
+def _metric_display(metric: JsonObject) -> str:
+    value = metric["value"]
+    unit = str(metric["unit"])
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return str(value)
+    if unit == "rate":
+        return f"{float(value):.1%}"
+    if unit.startswith("USD"):
+        amount = f"-${abs(float(value)):,.2f}" if float(value) < 0 else f"${float(value):,.2f}"
+        suffix = unit.removeprefix("USD_per_").replace("_", " ")
+        return f"{amount} per {suffix}" if unit.startswith("USD_per_") else amount
+    if isinstance(value, int) or float(value).is_integer():
+        return f"{int(value):,}"
+    return f"{float(value):,.2f}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +179,15 @@ class AnalysisResultV2Builder:
             recommendations,
             fallback_refs,
             fallback_evidence,
+            source=source,
+            benchmark_retailer=benchmark_retailer,
+            coverage=coverage,
+            comparison_modes=comparison_modes,
+            comparisons=comparisons,
+            segments=segments,
+            geographic_sensitivity=geography,
+            metrics=registry.documents,
+            data_quality_facts=data_quality_facts,
         )
         matched_competitors = {
             fact.competitor_id for fact in comparison_facts if fact.segment_id == "all"
@@ -312,7 +367,12 @@ class AnalysisResultV2Builder:
                     numerator = values.get(numerator_name)
                     unit = "rate"
                     denominator = matches
-                elif field == "median_gap":
+                elif field in {
+                    "benchmark_median",
+                    "competitor_median",
+                    "median_gap",
+                    "mean_gap",
+                }:
                     numerator = denominator = None
                     unit = "USD" if fact.comparison_metric == "package_price" else "USD_per_unit"
                 elif field == "unique_geographies":
@@ -402,20 +462,222 @@ class AnalysisResultV2Builder:
             for key, value in facts.items()
         ]
 
-    @staticmethod
     def _deterministic_narratives(
+        self,
         insights: list[JsonObject],
         recommendations: list[JsonObject],
         fallback_refs: list[str],
         fallback_evidence: list[str],
+        *,
+        source: JsonObject,
+        benchmark_retailer: str,
+        coverage: list[JsonObject],
+        comparison_modes: list[JsonObject],
+        comparisons: list[JsonObject],
+        segments: list[JsonObject],
+        geographic_sensitivity: list[JsonObject],
+        metrics: list[JsonObject],
+        data_quality_facts: JsonObject,
     ) -> JsonObject:
-        summary_body = (
-            " ".join(str(value["summary"]) for value in insights[:3])
-            if insights
-            else "No comparison signal met the configured deterministic insight threshold."
+        metric_index = {str(metric["metric_id"]): metric for metric in metrics}
+        mode_index = {str(mode["profile_id"]): mode for mode in comparison_modes}
+        segment_index = {str(segment["segment_id"]): segment for segment in segments}
+
+        def refs_for(rows: list[JsonObject]) -> tuple[list[str], list[str]]:
+            metric_refs = (
+                list(dict.fromkeys(str(ref) for row in rows for ref in row.get("metric_refs", [])))
+                or fallback_refs
+            )
+            evidence_refs = (
+                list(
+                    dict.fromkeys(
+                        str(ref)
+                        for metric_ref in metric_refs
+                        for ref in metric_index.get(metric_ref, {}).get("evidence_refs", [])
+                    )
+                )
+                or fallback_evidence
+            )
+            return metric_refs, evidence_refs
+
+        def values_for(row: JsonObject) -> dict[str, JsonObject]:
+            return {
+                field: metric_index[str(ref)]
+                for ref in row.get("metric_refs", [])
+                if str(ref) in metric_index and (field := _metric_field(str(ref))) is not None
+            }
+
+        def comparison_sentence(row: JsonObject) -> str:
+            values = values_for(row)
+            competitor = _display_id(row["competitor_id"])
+            mode = mode_index.get(str(row["profile_id"]), {})
+            profile = str(mode.get("label", "validated comparison"))
+            segment = segment_index.get(str(row["segment_id"]), {})
+            segment_label = str(segment.get("label", "all comparable items"))
+            benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
+            competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
+            if benchmark_rate >= competitor_rate:
+                winner = _display_id(benchmark_retailer)
+                rate = values.get("benchmark_lower_rate")
+            else:
+                winner = competitor
+                rate = values.get("competitor_lower_rate")
+            matches = values.get("matches")
+            if rate is None or matches is None:
+                return f"{profile} evidence is available for {competitor} in {segment_label}."
+            sentence = (
+                f"{winner} is lower in {_metric_display(rate)} of "
+                f"{_metric_display(matches)} {profile.lower()} matches for {segment_label}."
+            )
+            median_gap = values.get("median_gap")
+            if median_gap is not None:
+                sentence += (
+                    f" The median competitor-minus-benchmark gap is {_metric_display(median_gap)}."
+                )
+            return sentence
+
+        overall = [row for row in comparisons if str(row["segment_id"]) == "all"]
+        segment_rows = [row for row in comparisons if str(row["segment_id"]) != "all"]
+
+        def row_score(row: JsonObject) -> tuple[float, float, str]:
+            values = values_for(row)
+            matches = float(values.get("matches", {}).get("value", 0))
+            benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
+            competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
+            return matches, abs(benchmark_rate - competitor_rate), str(row["comparison_id"])
+
+        overall_by_competitor: dict[str, list[JsonObject]] = {}
+        for competitor in sorted({str(row["competitor_id"]) for row in overall}):
+            rows = [row for row in overall if str(row["competitor_id"]) == competitor]
+            overall_by_competitor[competitor] = sorted(rows, key=row_score, reverse=True)
+        headline_rows = [rows[0] for rows in overall_by_competitor.values() if rows]
+        ranked_segments = sorted(segment_rows, key=row_score, reverse=True)
+        high_signal_segments = ranked_segments[:4]
+
+        source_metric = metric_index.get("source.total_rows")
+        source_sentence = (
+            f"The analysis processed {_metric_display(source_metric)} source rows"
+            if source_metric is not None
+            else "The analysis processed the complete contracted source set"
         )
+        source_sentence += (
+            " without intentional sampling."
+            if not bool(source.get("sampling"))
+            else " using the explicitly recorded sampling configuration."
+        )
+        summary_parts = [source_sentence]
+        summary_parts.extend(comparison_sentence(row) for row in headline_rows[:3])
+        if high_signal_segments:
+            summary_parts.append(
+                "The most decision-relevant segment evidence includes "
+                + "; ".join(comparison_sentence(row) for row in high_signal_segments[:2])
+            )
+        elif insights:
+            summary_parts.extend(str(value["summary"]) for value in insights[:2])
+        summary_rows = [*headline_rows[:3], *high_signal_segments[:2]]
+        summary_refs, summary_evidence = refs_for(summary_rows)
+        if source_metric is not None:
+            summary_refs = list(dict.fromkeys(["source.total_rows", *summary_refs]))
+            summary_evidence = list(
+                dict.fromkeys([*source_metric.get("evidence_refs", []), *summary_evidence])
+            )
+
+        coverage_parts = [source_sentence]
+        for row in coverage:
+            retailer = _display_id(row["retailer_id"])
+            selected = [
+                metric_index[str(ref)]
+                for ref in row["metric_refs"]
+                if str(ref) in metric_index
+                and (str(ref).endswith("qualifying_zips") or str(ref).endswith("qualifying_stores"))
+            ]
+            if selected:
+                details = ", ".join(
+                    f"{_metric_display(metric)} {str(metric['unit']).replace('zipcodes', 'ZIPs')}"
+                    for metric in selected
+                )
+                coverage_parts.append(
+                    f"{retailer} contributes {details} to the qualifying footprint."
+                )
+        coverage_refs, coverage_evidence = refs_for(coverage)
+
+        exact_rows = [
+            row
+            for row in comparisons
+            if mode_index.get(str(row["profile_id"]), {}).get("comparison_metric")
+            == "package_price"
+            and mode_index.get(str(row["profile_id"]), {}).get("geography") != "radius"
+        ]
+        normalized_rows = [
+            row
+            for row in comparisons
+            if mode_index.get(str(row["profile_id"]), {}).get("comparison_metric")
+            != "package_price"
+            and mode_index.get(str(row["profile_id"]), {}).get("geography") != "radius"
+        ]
+        exact_selected = sorted(exact_rows, key=row_score, reverse=True)[:5]
+        normalized_selected = sorted(normalized_rows, key=row_score, reverse=True)[:5]
+        exact_body = " ".join(comparison_sentence(row) for row in exact_selected) or (
+            "No exact-package comparison met the configured reporting requirements."
+        )
+        normalized_body = (
+            " ".join(comparison_sentence(row) for row in normalized_selected)
+            or "No defensible normalized-unit comparison was available."
+        )
+        exact_refs, exact_evidence = refs_for(exact_selected)
+        normalized_refs, normalized_evidence = refs_for(normalized_selected)
+
+        reversal_parts: list[str] = []
+        reversal_rows: list[JsonObject] = []
+        grouped: dict[tuple[str, str], list[JsonObject]] = {}
+        for row in segment_rows:
+            grouped.setdefault((str(row["competitor_id"]), str(row["segment_id"])), []).append(row)
+        for (competitor, segment_id), rows in grouped.items():
+            directions = set()
+            metrics_seen = set()
+            for row in rows:
+                values = values_for(row)
+                benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
+                competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
+                directions.add("benchmark" if benchmark_rate >= competitor_rate else "competitor")
+                metrics_seen.add(
+                    str(
+                        mode_index.get(str(row["profile_id"]), {}).get(
+                            "comparison_metric", "unknown"
+                        )
+                    )
+                )
+            if len(directions) > 1 and len(metrics_seen) > 1:
+                segment = str(segment_index.get(segment_id, {}).get("label", segment_id))
+                reversal_parts.append(
+                    f"The price winner changes by comparison lens for {segment} against "
+                    f"{_display_id(competitor)}; keep package and normalized conclusions separate."
+                )
+                reversal_rows.extend(rows)
+        segment_body = (
+            " ".join(
+                [
+                    *(comparison_sentence(row) for row in high_signal_segments),
+                    *reversal_parts[:3],
+                ]
+            )
+            or "No segment-specific signal met the configured reporting threshold."
+        )
+        segment_refs, segment_evidence = refs_for([*high_signal_segments, *reversal_rows[:6]])
+
+        proximity_ids = {str(row["id"]) for row in geographic_sensitivity}
+        proximity_rows = [row for row in comparisons if str(row["comparison_id"]) in proximity_ids]
+        proximity_body = (
+            " ".join(comparison_sentence(row) for row in proximity_rows[:4])
+            or "No configured proximity sensitivity result was available."
+        )
+        proximity_refs, proximity_evidence = refs_for(proximity_rows[:4])
+
         recommendation_body = (
-            " ".join(str(value["action"]) for value in recommendations[:3])
+            " ".join(
+                f"{index}. {value['action']} {value.get('rationale', '')}".strip()
+                for index, value in enumerate(recommendations[:5], start=1)
+            )
             if recommendations
             else (
                 "Continue monitoring until an evidence-backed action meets the "
@@ -430,32 +692,165 @@ class AnalysisResultV2Builder:
             list(dict.fromkeys(ref for row in recommendations for ref in row["evidence_refs"]))
             or fallback_evidence
         )
-        insight_refs = (
-            list(dict.fromkeys(ref for row in insights[:3] for ref in row["metric_refs"]))
-            or fallback_refs
-        )
-        insight_evidence = (
-            list(dict.fromkeys(ref for row in insights[:3] for ref in row["evidence_refs"]))
+        quality_refs = [metric_id for metric_id in metric_index if metric_id.startswith("quality.")]
+        quality_evidence = (
+            list(
+                dict.fromkeys(
+                    str(ref)
+                    for metric_id in quality_refs
+                    for ref in metric_index[metric_id]["evidence_refs"]
+                )
+            )
             or fallback_evidence
         )
+        issue_total = sum(int(value) for value in data_quality_facts.values())
+        quality_body = (
+            "The deterministic quality checks recorded no normalization, review, or price-capture "
+            "exceptions in the configured issue set."
+            if issue_total == 0
+            else (
+                "The deterministic quality checks recorded "
+                f"{issue_total:,} issues across the configured validation categories. "
+                "Review the cited issue metrics before acting on affected segments."
+            )
+        )
+        headline_attributes = [
+            str(value).replace("_", " ")
+            for value in self._pack.reporting.get("headline_segments", [])
+        ]
+        products_body = (
+            "Product interpretation preserves "
+            + ", ".join(headline_attributes)
+            + " so unlike items are not blended into a category average."
+            if headline_attributes
+            else (
+                "Product interpretation follows the Product Pack's configured comparison "
+                "attributes."
+            )
+        )
+        methodology_body = (
+            source_sentence
+            + " Comparison modes remain separate: "
+            + "; ".join(
+                f"{mode['label']} ({str(mode['comparison_metric']).replace('_', ' ')}, "
+                f"{str(mode['geography']).replace('_', ' ')})"
+                for mode in comparison_modes
+            )
+            + ". Required caveats: "
+            + "; ".join(str(value) for value in self._pack.reporting["required_caveats"])
+            + "."
+        )
+
+        def section(
+            section_id: str,
+            heading: str,
+            body: str,
+            metric_refs: list[str],
+            evidence_refs: list[str],
+            topics: list[str],
+        ) -> JsonObject:
+            return {
+                "id": section_id,
+                "heading": heading,
+                "body": body,
+                "topic_refs": topics,
+                "storyline_refs": [f"deterministic.{section_id}"],
+                "metric_refs": metric_refs or fallback_refs,
+                "evidence_refs": evidence_refs or fallback_evidence,
+            }
+
         return {
             "generation_mode": "deterministic",
             "agent_task_ids": [],
             "sections": [
-                {
-                    "id": "executive_summary",
-                    "heading": "Executive Summary",
-                    "body": summary_body,
-                    "metric_refs": insight_refs,
-                    "evidence_refs": insight_evidence,
-                },
-                {
-                    "id": "recommendations",
-                    "heading": "Recommended Actions",
-                    "body": recommendation_body,
-                    "metric_refs": recommendation_refs,
-                    "evidence_refs": recommendation_evidence,
-                },
+                section(
+                    "executive_summary",
+                    "Executive Summary",
+                    " ".join(summary_parts),
+                    summary_refs,
+                    summary_evidence,
+                    ["data_scope", "exact_price", "normalized_price", "segment_drivers"],
+                ),
+                section(
+                    "coverage",
+                    "Geographic Footprint",
+                    " ".join(coverage_parts),
+                    coverage_refs,
+                    coverage_evidence,
+                    ["data_scope", "footprint", "geography", "fulfillment"],
+                ),
+                section(
+                    "exact_price",
+                    "Exact Package Price Position",
+                    exact_body,
+                    exact_refs,
+                    exact_evidence,
+                    ["exact_price", "segment_drivers"],
+                ),
+                section(
+                    "price_position",
+                    "Price Position",
+                    exact_body,
+                    exact_refs,
+                    exact_evidence,
+                    ["exact_price", "segment_drivers"],
+                ),
+                section(
+                    "normalized_price",
+                    "Normalized Unit-Price Position",
+                    normalized_body,
+                    normalized_refs,
+                    normalized_evidence,
+                    ["normalized_price", "segment_drivers", "segment_reversals"],
+                ),
+                section(
+                    "segments",
+                    "Segment Drivers and Reversals",
+                    segment_body,
+                    segment_refs,
+                    segment_evidence,
+                    ["normalized_price", "segment_drivers", "segment_reversals"],
+                ),
+                section(
+                    "proximity",
+                    "Geographic Sensitivity",
+                    proximity_body,
+                    proximity_refs,
+                    proximity_evidence,
+                    ["geography"],
+                ),
+                section(
+                    "products",
+                    "Products and Assortment",
+                    products_body,
+                    coverage_refs,
+                    coverage_evidence,
+                    ["brand_assortment", "segment_drivers"],
+                ),
+                section(
+                    "recommendations",
+                    "Recommended Actions",
+                    recommendation_body,
+                    recommendation_refs,
+                    recommendation_evidence,
+                    ["actions"],
+                ),
+                section(
+                    "quality",
+                    "Data Quality",
+                    quality_body,
+                    quality_refs,
+                    quality_evidence,
+                    ["caveats"],
+                ),
+                section(
+                    "methodology",
+                    "Methodology and Required Caveats",
+                    methodology_body,
+                    list(dict.fromkeys([*fallback_refs, *quality_refs])),
+                    list(dict.fromkeys([*fallback_evidence, *quality_evidence])),
+                    ["data_scope", "caveats"],
+                ),
             ],
         }
 

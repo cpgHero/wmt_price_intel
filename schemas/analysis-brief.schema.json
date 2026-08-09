@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/analysis-brief.schema.json",
+  "title": "Retail Competitive Intelligence Analysis Brief",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "analysis_result_checksum_sha256",
+    "benchmark_retailer",
+    "competitors",
+    "product_pack",
+    "leadership_objective",
+    "required_topics",
+    "decision_lenses",
+    "facts",
+    "storylines",
+    "requested_sections",
+    "guardrails"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "analysis_result_checksum_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "benchmark_retailer": { "type": "string", "minLength": 1 },
+    "competitors": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "product_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "leadership_objective": { "type": "string", "minLength": 1 },
+    "required_topics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/topic" }
+    },
+    "decision_lenses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/lens" }
+    },
+    "facts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/fact" }
+    },
+    "storylines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/storyline" }
+    },
+    "requested_sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_caveats",
+        "forbidden_claims",
+        "action_principles",
+        "small_sample_threshold",
+        "numeric_claim_policy"
+      ],
+      "properties": {
+        "required_caveats": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "forbidden_claims": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "action_principles": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "small_sample_threshold": { "type": "integer", "minimum": 1 },
+        "numeric_claim_policy": { "const": "metric_placeholders_only" }
+      }
+    }
+  },
+  "$defs": {
+    "topic": {
+      "enum": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ]
+    },
+    "refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "significance",
+        "metric_refs",
+        "evidence_refs",
+        "context"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "kind": {
+          "enum": [
+            "source_scope",
+            "coverage",
+            "comparison_overall",
+            "comparison_segment",
+            "geographic_validation",
+            "data_quality"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "significance": { "enum": ["context", "strength", "watch", "risk", "caveat"] },
+        "metric_refs": { "$ref": "#/$defs/refs" },
+        "evidence_refs": { "$ref": "#/$defs/refs" },
+        "context": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "boolean", "null"] }
+        }
+      }
+    },
+    "lens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "question", "metric_refs", "evidence_refs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "label": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "metric_refs": { "$ref": "#/$defs/refs" },
+        "evidence_refs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "storyline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "headline",
+        "interpretation",
+        "priority",
+        "topic_refs",
+        "fact_refs",
+        "metric_refs",
+        "evidence_refs"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_.-]+$" },
+        "kind": {
+          "enum": [
+            "scope",
+            "competitive_pressure",
+            "benchmark_strength",
+            "mixed_position",
+            "segment_reversal",
+            "geographic_validation",
+            "quality_limitation",
+            "action"
+          ]
+        },
+        "headline": { "type": "string", "minLength": 1 },
+        "interpretation": { "type": "string", "minLength": 1 },
+        "priority": { "type": "integer", "minimum": 1 },
+        "topic_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/topic" }
+        },
+        "fact_refs": { "$ref": "#/$defs/refs" },
+        "metric_refs": { "$ref": "#/$defs/refs" },
+        "evidence_refs": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "heading",
+        "objective",
+        "required_topics",
+        "storyline_refs",
+        "allowed_metric_refs",
+        "allowed_evidence_refs"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "heading": { "type": "string", "minLength": 1 },
+        "objective": { "type": "string", "minLength": 1 },
+        "required_topics": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/topic" }
+        },
+        "storyline_refs": { "$ref": "#/$defs/refs" },
+        "allowed_metric_refs": { "$ref": "#/$defs/refs" },
+        "allowed_evidence_refs": { "$ref": "#/$defs/refs" }
+      }
+    }
+  }
+}

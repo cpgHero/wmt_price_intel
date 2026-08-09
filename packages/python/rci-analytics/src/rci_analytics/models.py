@@ -108,4 +108,7 @@ class ComparisonSummary:
     benchmark_lower_rate: float
     competitor_lower_rate: float
     parity_rate: float
+    benchmark_median: float
+    competitor_median: float
     median_gap: float | None
+    mean_gap: float

@@ -332,6 +332,51 @@
       "id": "fresh_shell_eggs_leadership",
       "version": "1.0.0"
     },
+    "narrative_playbook": {
+      "leadership_objective": "Identify Walmart's broad fresh-shell-egg price position, the retailer and product segments that create material risk, and the regional or data-quality distinctions that should shape monitoring.",
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "geography",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ],
+      "decision_lenses": [
+        {
+          "id": "strict_spec",
+          "label": "Strict egg specification",
+          "question": "Which retailers and count, size, grade, color, organic, or housing segments win defensible exact-spec comparisons?",
+          "metric_selectors": ["comparison.*.price_per_dozen.*strict*"]
+        },
+        {
+          "id": "compatible_dozen",
+          "label": "Compatible price per dozen",
+          "question": "What changes when compatible package attributes are compared on price per dozen?",
+          "metric_selectors": ["comparison.*.price_per_dozen.*"]
+        },
+        {
+          "id": "retailer_footprint",
+          "label": "Retailer and regional footprint",
+          "question": "Which competitor findings are broad, regional, or limited by price and package-attribute capture?",
+          "metric_selectors": ["coverage.*", "quality.*"]
+        }
+      ],
+      "action_principles": [
+        "Use retailer-, segment-, and market-level watchlists instead of one blended egg-category index.",
+        "Keep strict and compatible comparison results separate.",
+        "Require complete package attributes before automating price-gap alerts."
+      ],
+      "forbidden_claims": [
+        "Do not compare egg prices without preserving count and the configured required specifications.",
+        "Do not treat product presence with an unconfirmed price as a valid price comparison."
+      ],
+      "small_sample_threshold": 25
+    },
     "insight_ranking": {
       "weights": {
         "breadth": 0.3,

@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.0.0"
+RENDERER_VERSION = "2.1.0"
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -413,29 +413,67 @@ class LeadershipEmailRenderer:
             view_product_pack.get("name") or product_pack.get("name") or product_pack.get("id")
         )
         message = EmailMessage()
-        message["Subject"] = f"Retail competitive intelligence: {subject_name}"
+        benchmark = _display(result.get("benchmark_retailer")).replace("_", " ").title()
+        competitors = ", ".join(
+            _display(value).replace("_", " ").title() for value in result.get("competitors", [])
+        )
+        message["Subject"] = (
+            f"{subject_name} Competitive Intelligence: {benchmark} vs. {competitors}"
+        )
         message["To"] = "Leadership distribution list"
         message["From"] = "CPGHero Retail Competitive Intelligence"
         message["X-RCI-Result-Checksum"] = _result_checksum(result)
         lines = [
             "CPGHero Retail Competitive Intelligence",
-            "Decision-ready brief from immutable deterministic metrics",
+            "Decision-ready brief from immutable, evidence-linked metrics",
+            "",
+            "Leadership team,",
             "",
             f"Analysis: {_display(result.get('analysis_id'))}",
             f"Generated: {_display(result.get('generated_at'))}",
             f"Result checksum: {_result_checksum(result)}",
-            "",
-            "Key findings",
         ]
-        findings = _rows(result, "insights") if view is not None else _rows(result, "findings")
-        lines.extend(f"- {_display(row.get('summary') or row.get('text'))}" for row in findings)
-        lines.extend(("", "Recommended actions"))
+        if view is not None:
+            for section in _rows(view, "sections"):
+                lines.extend(("", _display(section.get("title")), ""))
+                narrative = section.get("narrative")
+                if isinstance(narrative, dict) and narrative.get("body"):
+                    lines.append(_display(narrative["body"]))
+                metrics = _rows(section, "metrics")
+                if metrics:
+                    lines.extend(
+                        f"- {_display(metric.get('name'))}: "
+                        f"{_metric_display(metric.get('value'), metric.get('unit'))}"
+                        for metric in metrics[:6]
+                    )
+            lines.extend(("", "Prioritized actions", ""))
+            lines.extend(
+                f"{_display(row.get('priority'))}. {_display(row.get('action'))} "
+                f"{_display(row.get('rationale'))}"
+                for row in _rows(result, "recommendations")
+            )
+        else:
+            lines.extend(("", "Key findings", ""))
+            lines.extend(
+                f"- {_display(row.get('summary') or row.get('text'))}"
+                for row in _rows(result, "findings")
+            )
+            lines.extend(("", "Recommended actions", ""))
+            lines.extend(
+                f"- {_display(row.get('priority'))}: "
+                f"{_display(row.get('action') or row.get('text'))}"
+                for row in _rows(result, "recommendations")
+            )
         lines.extend(
-            f"- {_display(row.get('priority'))}: {_display(row.get('action') or row.get('text'))}"
-            for row in _rows(result, "recommendations")
-        )
-        lines.extend(
-            ("", "The attached report contains the canonical stored metrics and evidence.")
+            (
+                "",
+                "The attached report contains the canonical stored metrics, evidence, and "
+                "methodology.",
+                "",
+                "Thank you,",
+                "",
+                "Brian",
+            )
         )
         message.set_content("\n".join(lines))
         return message.as_bytes()

@@ -545,6 +545,51 @@
       "id": "fresh_bananas_leadership",
       "version": "1.0.0"
     },
+    "narrative_playbook": {
+      "leadership_objective": "Separate banana shelf-price perception from underlying unit economics and identify conclusions that change across each, weight, package, and count-compatible comparisons.",
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "decision_lenses": [
+        {
+          "id": "each_price",
+          "label": "Displayed each price",
+          "question": "Where does the displayed each price create a meaningful price-perception advantage?",
+          "metric_selectors": ["comparison.*.package_price.strict_each.*"]
+        },
+        {
+          "id": "weight_value",
+          "label": "Weight-normalized value",
+          "question": "Does price per pound confirm or materially narrow the each-price conclusion?",
+          "metric_selectors": ["comparison.*.price_per_lb.*"]
+        },
+        {
+          "id": "bunch_count",
+          "label": "Bunch and count economics",
+          "question": "Does the package-price winner change after defensible count-range or midpoint normalization?",
+          "metric_selectors": ["comparison.*.package_price.*", "comparison.*.midpoint_price_per_each.*", "comparison.*.range_midpoint_price_per_each.*"]
+        }
+      ],
+      "action_principles": [
+        "Monitor both displayed each price and validated unit economics.",
+        "Keep plantains, organic bananas, and specialty varieties separate.",
+        "Create market-level watchlists for material Amazon price variation."
+      ],
+      "forbidden_claims": [
+        "Do not infer a bunch count or weight that is not supported by product evidence.",
+        "Do not declare a package-price winner to be the per-banana winner without count normalization."
+      ],
+      "small_sample_threshold": 25
+    },
     "insight_ranking": {
       "weights": {
         "breadth": 0.3,

@@ -156,11 +156,9 @@ class ReportProjector:
         source: str,
         product_pack: JsonObject,
     ) -> list[JsonObject]:
-        value = result.get(source)
-        if isinstance(value, list):
-            return self._rows(value)
-        if isinstance(value, dict):
-            return [dict(value)]
+        if source == "narratives":
+            narratives = result.get("narratives", {})
+            return self._rows(narratives.get("sections")) if isinstance(narratives, dict) else []
         if source == "methodology":
             return [
                 {
@@ -171,6 +169,11 @@ class ReportProjector:
                     ),
                 }
             ]
+        value = result.get(source)
+        if isinstance(value, list):
+            return self._rows(value)
+        if isinstance(value, dict):
+            return [dict(value)]
         return [
             evidence
             for evidence in self._rows(result.get("evidence_sets"))

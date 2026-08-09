@@ -16,11 +16,50 @@ _PLACEHOLDER = re.compile(
     r"\{\{metric:([A-Za-z0-9_.-]+)\|"
     r"(integer|decimal_1|decimal_2|percent_1|percent_2|currency_2)\}\}"
 )
+_STORYLINE_PLACEHOLDER = re.compile(r"\{\{storyline:([A-Za-z0-9_.-]+)\|headline\}\}")
 _NUMERIC_LITERAL = re.compile(r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?\d[\d,]*(?:\.\d+)?%?")
 
 
 class AgentGovernanceError(ValueError):
     """Raised when model output crosses the configured authority boundary."""
+
+
+class NarrativeQualityCritic:
+    """Reject structurally thin or semantically ungrounded leadership prose."""
+
+    def validate(
+        self,
+        rows: list[JsonObject],
+        requested: dict[str, JsonObject],
+    ) -> None:
+        covered_topics: set[str] = set()
+        required_topics: set[str] = set()
+        for raw in rows:
+            section_id = str(raw["id"])
+            request = requested[section_id]
+            topics = {str(value) for value in raw.get("topic_refs", [])}
+            required = {str(value) for value in request.get("required_topics", [])}
+            if not required.issubset(topics):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} omits required topics {sorted(required - topics)}"
+                )
+            storylines = {str(value) for value in raw.get("storyline_refs", [])}
+            allowed_storylines = {str(value) for value in request.get("storyline_refs", [])}
+            if not storylines or not storylines.issubset(allowed_storylines):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} has missing or undeclared storylines"
+                )
+            body = str(raw.get("body_template", "")).strip()
+            if len(body) < 48:
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} is too thin for leadership use"
+                )
+            covered_topics.update(topics)
+            required_topics.update(required)
+        if not required_topics.issubset(covered_topics):
+            raise AgentGovernanceError(
+                "narrative does not cover the complete requested leadership brief"
+            )
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -45,8 +84,13 @@ class MetricCitationRenderer:
         template: str,
         *,
         allowed_metric_refs: set[str],
+        allowed_storyline_refs: set[str] | None = None,
+        storylines: dict[str, JsonObject] | None = None,
     ) -> tuple[str, list[JsonObject]]:
-        without_placeholders = _PLACEHOLDER.sub("", template)
+        without_placeholders = _STORYLINE_PLACEHOLDER.sub(
+            "",
+            _PLACEHOLDER.sub("", template),
+        )
         unsupported = _NUMERIC_LITERAL.findall(without_placeholders)
         if unsupported:
             raise AgentGovernanceError(
@@ -76,8 +120,33 @@ class MetricCitationRenderer:
             return rendered
 
         rendered = _PLACEHOLDER.sub(substitute, template)
+        trusted_storyline_numbers: list[str] = []
+
+        def substitute_storyline(match: re.Match[str]) -> str:
+            storyline_ref = match.group(1)
+            if storyline_ref not in (allowed_storyline_refs or set()):
+                raise AgentGovernanceError(
+                    f"narrative placeholder references undeclared storyline {storyline_ref!r}"
+                )
+            storyline = (storylines or {}).get(storyline_ref)
+            if storyline is None:
+                raise AgentGovernanceError(
+                    f"narrative placeholder references unknown storyline {storyline_ref!r}"
+                )
+            headline = str(storyline.get("headline", "")).strip()
+            if not headline:
+                raise AgentGovernanceError(
+                    f"narrative placeholder references an empty storyline {storyline_ref!r}"
+                )
+            trusted_storyline_numbers.extend(_NUMERIC_LITERAL.findall(headline))
+            return headline
+
+        rendered = _STORYLINE_PLACEHOLDER.sub(substitute_storyline, rendered)
         remaining = _NUMERIC_LITERAL.findall(rendered)
-        claim_values = [str(claim["rendered_value"]) for claim in claims]
+        claim_values = [
+            *[str(claim["rendered_value"]) for claim in claims],
+            *trusted_storyline_numbers,
+        ]
         for value in remaining:
             if value not in claim_values:
                 raise AgentGovernanceError(f"unresolved numeric claim {value!r}")
@@ -112,6 +181,7 @@ class MetricCitationRenderer:
 class GovernedOutputBuilder:
     def __init__(self, repository_root: Path) -> None:
         self._root = repository_root
+        self._critic = NarrativeQualityCritic()
 
     def insight_result(
         self,
@@ -169,6 +239,7 @@ class GovernedOutputBuilder:
         requested_sections: list[JsonObject],
         metrics: list[JsonObject],
         evidence_ids: set[str],
+        storylines: list[JsonObject],
     ) -> JsonObject:
         requested = {str(section["id"]): section for section in requested_sections}
         rows = provider_result.get("sections")
@@ -180,7 +251,10 @@ class GovernedOutputBuilder:
             or {str(row.get("id")) for row in rows if isinstance(row, dict)} != set(requested)
         ):
             raise AgentGovernanceError("narrative output must return every requested section once")
+        typed_rows = [dict(row) for row in rows if isinstance(row, dict)]
+        self._critic.validate(typed_rows, requested)
         metric_index = {str(metric["metric_id"]): metric for metric in metrics}
+        storyline_index = {str(storyline["id"]): storyline for storyline in storylines}
         renderer = MetricCitationRenderer(metrics)
         sections: list[JsonObject] = []
         for raw in rows:
@@ -188,6 +262,22 @@ class GovernedOutputBuilder:
             section_id = str(raw["id"])
             metric_refs = [str(value) for value in raw.get("metric_refs", [])]
             referenced_evidence = [str(value) for value in raw.get("evidence_refs", [])]
+            topic_refs = [str(value) for value in raw.get("topic_refs", [])]
+            storyline_refs = [str(value) for value in raw.get("storyline_refs", [])]
+            allowed_metrics = {
+                str(value) for value in requested[section_id].get("allowed_metric_refs", [])
+            }
+            allowed_evidence = {
+                str(value) for value in requested[section_id].get("allowed_evidence_refs", [])
+            }
+            if not set(metric_refs).issubset(allowed_metrics):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} cites metrics outside its governed brief"
+                )
+            if not set(referenced_evidence).issubset(allowed_evidence):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} cites evidence outside its governed brief"
+                )
             if not metric_refs or set(metric_refs) - set(metric_index):
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} references unknown or empty metrics"
@@ -208,6 +298,8 @@ class GovernedOutputBuilder:
             body, claims = renderer.render(
                 str(raw.get("body_template", "")),
                 allowed_metric_refs=set(metric_refs),
+                allowed_storyline_refs=set(storyline_refs),
+                storylines=storyline_index,
             )
             if not body:
                 raise AgentGovernanceError("AI narrative body cannot be empty")
@@ -216,6 +308,8 @@ class GovernedOutputBuilder:
                     "id": section_id,
                     "heading": requested[section_id]["heading"],
                     "body": body,
+                    "topic_refs": topic_refs,
+                    "storyline_refs": storyline_refs,
                     "metric_refs": metric_refs,
                     "evidence_refs": referenced_evidence,
                     "numeric_claims": claims,

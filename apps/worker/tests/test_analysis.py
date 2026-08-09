@@ -220,6 +220,10 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
         "amazon_us_same_day",
     }
     assert analysis.result["comparisons"]
+    assert {mode["comparison_metric"] for mode in analysis.result["comparison_modes"]} == {
+        "package_price",
+        "price_per_lb",
+    }
     assert len(artifact_recorder.artifacts) >= 7
     assert all(uri.endswith(".parquet") for uri in dataset_store.objects)
 

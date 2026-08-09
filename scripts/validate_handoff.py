@@ -133,6 +133,7 @@ ok &= validate(
 ok &= validate(
     "schemas/analysis-evidence.schema.json", "examples/analysis-evidence.ground-beef.json"
 )
+ok &= validate("schemas/analysis-brief.schema.json", "examples/analysis-brief.ground-beef.json")
 ok &= validate(
     "schemas/canonical-product.schema.json", "examples/canonical-product.ground-beef.json"
 )
@@ -141,6 +142,10 @@ ok &= validate(
 )
 ok &= validate("schemas/agent-output.schema.json", "examples/agent-output.ground-beef-insight.json")
 ok &= validate("schemas/report-blueprint.schema.json", "examples/report-blueprint.ground-beef.json")
+ok &= validate(
+    "schemas/narrative-benchmarks.schema.json",
+    "fixtures/golden/narrative-benchmarks.json",
+)
 for p in sorted((ROOT / "examples").glob("historical-input-manifest.*.json")):
     ok &= validate("schemas/historical-input-manifest.schema.json", str(p.relative_to(ROOT)))
 ok &= validate(

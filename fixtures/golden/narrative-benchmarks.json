@@ -1,0 +1,299 @@
+{
+  "schema_version": "1.0.0",
+  "methodology_source": {
+    "filename": "Walmart Competitive Price Intelligence — Master Analysis Prompt.md",
+    "sha256": "2d58e6cb106e5ed41090cbdbb7d0f7bb7d5a8342ba2b734fedc3aa844b409daf"
+  },
+  "categories": {
+    "fresh_ground_beef": {
+      "product_pack_id": "fresh_ground_beef",
+      "sources": [
+        {
+          "kind": "xlsx",
+          "filename": "Walmart_Ground_Beef_Competitive_Intelligence_Analysis(1).xlsx",
+          "sha256": "3c39684b9b8be7a90b083adaebafac7687d180e94707d61d15444f5c81080acd"
+        },
+        {
+          "kind": "html",
+          "filename": "Walmart_Ground_Beef_Competitive_Intelligence_Report(1).html",
+          "sha256": "35c132a23772946482ae110b7d7f4b4551df80d2a39bba7ffc1fae569c04cbf8"
+        },
+        {
+          "kind": "email",
+          "filename": "Ground_Beef_Competitive_Intelligence_email.txt",
+          "sha256": "0d94c9c7e65d1bd3aeb188b65aa0ceb019eeeea9b419d5b990b63d733224bf6e"
+        }
+      ],
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "required_story_patterns": [
+        {
+          "id": "aldi_segment_pressure",
+          "description": "Explain that ALDI pressure is concentrated by lean ratio, package size, and production claim rather than presenting one blended category conclusion."
+        },
+        {
+          "id": "normalized_reversal",
+          "description": "Explain where exact-package and normalized price-per-pound conclusions differ."
+        },
+        {
+          "id": "organic_85_15_priority",
+          "description": "Identify organic grass-fed 85/15 as a priority vulnerability when supported by the result."
+        },
+        {
+          "id": "amazon_strength",
+          "description": "Separate Walmart's broad Amazon strength from the ALDI risk story."
+        },
+        {
+          "id": "proximity_confirmation",
+          "description": "State whether the radius sensitivity test confirms or changes the exact-ZIP conclusion."
+        }
+      ]
+    },
+    "fresh_shell_eggs": {
+      "product_pack_id": "fresh_shell_eggs",
+      "sources": [
+        {
+          "kind": "xlsx",
+          "filename": "Walmart_Fresh_Egg_Competitive_Intelligence_Analysis.xlsx",
+          "sha256": "b1073480c447e2d086e2a3f532f434ada5bb5c0deb0e04acc72e0d4403e97a40"
+        },
+        {
+          "kind": "html",
+          "filename": "Walmart_Fresh_Egg_Competitive_Intelligence_Report.html",
+          "sha256": "598bade89a4a72667ad4ba06a73cc0fbbc8c50fed77882d8f8d3c93b8a74fcb8"
+        },
+        {
+          "kind": "email",
+          "filename": "Fresh_Egg_Competitive_Intelligence_email.txt",
+          "sha256": "7613d5c921bb32b293d90aef17dec3f49cbe6817c6e1df9a4274f75fc5fbc253"
+        }
+      ],
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "geography",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ],
+      "required_story_patterns": [
+        {
+          "id": "aldi_primary_watchlist",
+          "description": "Identify ALDI as the primary value-price watchlist when supported by strict segment evidence."
+        },
+        {
+          "id": "retailer_specific_lenses",
+          "description": "Use retailer- and region-specific interpretations instead of one national competitor average."
+        },
+        {
+          "id": "strict_compatible_separation",
+          "description": "Keep strict and compatible egg comparisons separate."
+        },
+        {
+          "id": "package_attribute_quality",
+          "description": "Explain how count, size, grade, color, organic status, and housing claims affect match quality."
+        }
+      ]
+    },
+    "fresh_fluid_milk": {
+      "product_pack_id": "fresh_fluid_milk",
+      "sources": [
+        {
+          "kind": "xlsx",
+          "filename": "Walmart_Milk_Competitive_Intelligence_Analysis.xlsx",
+          "sha256": "ca165e27ab309f23520254f023444dc3568db0f0b040aa5b88ab8ff542264d88"
+        },
+        {
+          "kind": "html",
+          "filename": "Walmart_Milk_Competitive_Intelligence_Report.html",
+          "sha256": "f4ed8b3e048dea9f255a46c4021f4aa7d54c787de454b640217965c342c59016"
+        },
+        {
+          "kind": "email",
+          "filename": "Competitive_Milk_Analysis_email.md",
+          "sha256": "1508eb9c31e5bef0c374b1b8a03475ff414483b2dc74044ab858e4382d80d696"
+        }
+      ],
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ],
+      "required_story_patterns": [
+        {
+          "id": "conventional_aldi_strength",
+          "description": "Protect Walmart's conventional gallon and half-gallon advantage against ALDI."
+        },
+        {
+          "id": "specialty_aldi_pressure",
+          "description": "Separate ALDI organic, lactose-free, and other specialty vulnerabilities."
+        },
+        {
+          "id": "amazon_brand_split",
+          "description": "Separate Amazon same-brand, private-label, and specification-equivalent findings."
+        },
+        {
+          "id": "package_size_guardrail",
+          "description": "Use price per gallon as supporting evidence without substituting package sizes in exact matches."
+        }
+      ]
+    },
+    "fresh_bananas": {
+      "product_pack_id": "fresh_bananas",
+      "sources": [
+        {
+          "kind": "xlsx",
+          "filename": "Walmart_Banana_Competitive_Intelligence_Analysis.xlsx",
+          "sha256": "3f54448525e5933324fff86001dcdd3acc5c9ffdef228619a2f1f90d80e69aee"
+        },
+        {
+          "kind": "html",
+          "filename": "Walmart_Banana_Competitive_Intelligence_Report.html",
+          "sha256": "af4431db240acea3e6ff684e951198ec6ede467706f117dc131fe68a1fceb036"
+        },
+        {
+          "kind": "email",
+          "filename": "Competitive_Banana_Analysis_email.md",
+          "sha256": "3325da7726750e20c0e8067454ad8a74a58ea0f4f033b40383bd913a4b29fd79"
+        }
+      ],
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "required_story_patterns": [
+        {
+          "id": "each_weight_reversal",
+          "description": "Explain the difference between displayed each-price perception and normalized weight economics."
+        },
+        {
+          "id": "plantain_strength",
+          "description": "Keep plantains separate and identify Walmart's advantage when supported."
+        },
+        {
+          "id": "organic_bunch_reversal",
+          "description": "Explain where package-price and estimated per-banana conclusions differ."
+        },
+        {
+          "id": "amazon_market_variation",
+          "description": "Treat Amazon conventional banana price variation as a market-level watchlist."
+        }
+      ]
+    },
+    "fresh_strawberries": {
+      "product_pack_id": "fresh_strawberries",
+      "sources": [
+        {
+          "kind": "xlsx",
+          "filename": "Walmart_Strawberry_Competitive_Intelligence_Analysis.xlsx",
+          "sha256": "d0f7c1975f290ae9806ba3a33181d95c111595e18f121ee9e963421ee88ee7a3"
+        },
+        {
+          "kind": "html",
+          "filename": "Walmart_Strawberry_Competitive_Intelligence_Report.html",
+          "sha256": "02819c59b59bce27f2b1ab8deef2fd2c0af685278c9c94dce54f5b09269ed24f"
+        },
+        {
+          "kind": "email",
+          "filename": "Competitive_Strawberry_Analysis_email.md",
+          "sha256": "176662b6751db79ac6510fce6345957089ab8230e431f8e791f47ae2d6c41184"
+        }
+      ],
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "required_story_patterns": [
+        {
+          "id": "broad_aldi_advantage",
+          "description": "Explain Walmart's broad exact-package strength against ALDI when supported."
+        },
+        {
+          "id": "amazon_pack_reversal",
+          "description": "Separate the Amazon 1 lb and 2 lb conventional conclusions."
+        },
+        {
+          "id": "organic_parity",
+          "description": "Treat organic 1 lb as parity-sensitive when supported."
+        },
+        {
+          "id": "proximity_confirmation",
+          "description": "State whether the 10-mile sensitivity check confirms the exact-ZIP ALDI conclusion."
+        },
+        {
+          "id": "no_per_berry",
+          "description": "Never infer per-berry economics without observed counts."
+        }
+      ]
+    }
+  },
+  "quality_rubric": [
+    {
+      "id": "numerical_fidelity",
+      "description": "Every quantitative statement resolves to an authoritative deterministic metric and denominator.",
+      "weight": 0.25
+    },
+    {
+      "id": "competitive_story",
+      "description": "The report distinguishes competitor, package, attribute, brand, and geography stories instead of relying on a blended average.",
+      "weight": 0.2
+    },
+    {
+      "id": "segment_reversals",
+      "description": "The report explicitly identifies conclusions that change across exact, normalized, package, or segment lenses.",
+      "weight": 0.15
+    },
+    {
+      "id": "actionability",
+      "description": "Recommendations name the watchlist, segment, or operating response justified by the evidence.",
+      "weight": 0.2
+    },
+    {
+      "id": "methodological_credibility",
+      "description": "Scope, matching rules, unit assumptions, fulfillment distinctions, small samples, and limitations are visible.",
+      "weight": 0.15
+    },
+    {
+      "id": "leadership_readability",
+      "description": "The narrative is answer-first, concise, specific, and avoids raw metric dumps.",
+      "weight": 0.05
+    }
+  ]
+}

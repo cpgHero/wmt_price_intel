@@ -1,5 +1,6 @@
 """Governed AI interpretation without analytical authority."""
 
+from rci_agents.brief import AnalysisBriefBuilder
 from rci_agents.governance import (
     AgentGovernanceError,
     GovernedOutputBuilder,
@@ -22,6 +23,7 @@ __all__ = [
     "AgentTaskRepository",
     "AgentTaskReservation",
     "AgentTaskSpec",
+    "AnalysisBriefBuilder",
     "GovernedAnalysisAssistant",
     "GovernedOutputBuilder",
     "InMemoryAgentTaskRepository",

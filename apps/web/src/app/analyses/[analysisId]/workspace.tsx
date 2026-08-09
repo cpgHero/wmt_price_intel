@@ -285,7 +285,13 @@ function BlueprintSection({
       note={`${displayLabel(section.kind)} · ${displayLabel(section.visualization)}`}
     >
       {narrative.body ? (
-        <p className="section-narrative">{displayValue(narrative.body)}</p>
+        <div className="section-narrative">
+          {displayValue(narrative.body)
+            .split(/\n{2,}/)
+            .map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+        </div>
       ) : null}
       {section.metrics.length > 0 && section.visualization === "bar" ? (
         <div className="metric-bars" aria-label={`${section.title} metrics`}>

@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "ground-beef-2026-08-07-example",
+  "analysis_result_checksum_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "benchmark_retailer": "walmart_us",
+  "competitors": ["aldi_us", "amazon_us_same_day"],
+  "product_pack": {
+    "id": "fresh_ground_beef",
+    "name": "Fresh Ground Beef",
+    "version": "1.0.0"
+  },
+  "leadership_objective": "Separate broad Walmart strengths from competitor pressure by package, lean ratio, normalized unit value, and geography.",
+  "required_topics": [
+    "data_scope",
+    "footprint",
+    "exact_price",
+    "normalized_price",
+    "segment_drivers",
+    "segment_reversals",
+    "geography",
+    "fulfillment",
+    "actions",
+    "caveats"
+  ],
+  "decision_lenses": [
+    {
+      "id": "exact_package",
+      "label": "Exact package position",
+      "question": "Which exact-package segments create the broadest Walmart wins or losses?",
+      "metric_refs": ["aldi-exact-matches", "aldi-competitor-lower-rate"],
+      "evidence_refs": ["evidence-exact-aldi"]
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact.source.scope",
+      "kind": "source_scope",
+      "label": "Complete source scope",
+      "significance": "context",
+      "metric_refs": ["source-total-rows"],
+      "evidence_refs": ["evidence-source-manifest"],
+      "context": {
+        "sampling": false,
+        "source_kind": "historical_import"
+      }
+    },
+    {
+      "id": "fact.comparison.aldi-all-exact",
+      "kind": "comparison_overall",
+      "label": "ALDI — all comparable items",
+      "significance": "risk",
+      "metric_refs": ["aldi-exact-matches", "aldi-competitor-lower-rate"],
+      "evidence_refs": ["evidence-exact-aldi"],
+      "context": {
+        "competitor_id": "aldi_us",
+        "profile_id": "strict_exact_package",
+        "profile_label": "Exact package",
+        "segment_id": "all",
+        "segment_label": "All comparable items",
+        "geography": "exact_zip",
+        "comparison_metric": "package_price",
+        "sample_warning": false
+      }
+    }
+  ],
+  "storylines": [
+    {
+      "id": "story.scope",
+      "kind": "scope",
+      "headline": "The analysis uses the complete contracted source scope.",
+      "interpretation": "Lead with the complete observed footprint before interpreting price outcomes.",
+      "priority": 1,
+      "topic_refs": ["data_scope", "footprint"],
+      "fact_refs": ["fact.source.scope"],
+      "metric_refs": ["source-total-rows"],
+      "evidence_refs": ["evidence-source-manifest"]
+    },
+    {
+      "id": "story.aldi-pressure",
+      "kind": "competitive_pressure",
+      "headline": "ALDI creates broad exact-package pressure.",
+      "interpretation": "Keep the response within the matched specification and test normalized value separately.",
+      "priority": 2,
+      "topic_refs": ["exact_price", "segment_drivers"],
+      "fact_refs": ["fact.comparison.aldi-all-exact"],
+      "metric_refs": ["aldi-exact-matches", "aldi-competitor-lower-rate"],
+      "evidence_refs": ["evidence-exact-aldi"]
+    }
+  ],
+  "requested_sections": [
+    {
+      "id": "executive_summary",
+      "heading": "Executive Summary",
+      "objective": "State the answer first and distinguish the competitor story by comparison lens.",
+      "required_topics": ["data_scope", "exact_price"],
+      "storyline_refs": ["story.scope", "story.aldi-pressure"],
+      "allowed_metric_refs": [
+        "source-total-rows",
+        "aldi-exact-matches",
+        "aldi-competitor-lower-rate"
+      ],
+      "allowed_evidence_refs": ["evidence-source-manifest", "evidence-exact-aldi"]
+    },
+    {
+      "id": "recommendations",
+      "heading": "Recommended Actions",
+      "objective": "Translate the evidence into a bounded merchant or pricing action.",
+      "required_topics": ["actions"],
+      "storyline_refs": ["story.aldi-pressure"],
+      "allowed_metric_refs": ["aldi-exact-matches", "aldi-competitor-lower-rate"],
+      "allowed_evidence_refs": ["evidence-exact-aldi"]
+    }
+  ],
+  "guardrails": {
+    "required_caveats": [
+      "SERP price and availability remain authoritative for the captured observation"
+    ],
+    "forbidden_claims": [
+      "Do not treat Amazon search presence as guaranteed immediate delivery."
+    ],
+    "action_principles": [
+      "Keep exact-package and normalized price-per-pound actions separate."
+    ],
+    "small_sample_threshold": 25,
+    "numeric_claim_policy": "metric_placeholders_only"
+  }
+}

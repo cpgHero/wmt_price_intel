@@ -1266,6 +1266,51 @@
       "id": "fresh_ground_beef_leadership",
       "version": "1.0.0"
     },
+    "narrative_playbook": {
+      "leadership_objective": "Show where Walmart's ground-beef price position is structurally strong, where ALDI or Amazon creates segment-specific pressure, and whether exact-package conclusions change after price-per-pound or proximity normalization.",
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "decision_lenses": [
+        {
+          "id": "exact_package",
+          "label": "Exact package position",
+          "question": "Which lean ratio, package size, and production-claim combinations create the broadest exact-package wins or losses?",
+          "metric_selectors": ["comparison.*.exact_zip.package_price.*"]
+        },
+        {
+          "id": "normalized_value",
+          "label": "Normalized price-per-pound position",
+          "question": "Where does price per pound confirm or reverse the package-price conclusion?",
+          "metric_selectors": ["comparison.*.exact_zip.price_per_lb.*"]
+        },
+        {
+          "id": "proximity",
+          "label": "Nearby-store validation",
+          "question": "Does the nearest comparable Walmart within the configured radius confirm the exact-ZIP conclusion?",
+          "metric_selectors": ["comparison.*.radius.*"]
+        }
+      ],
+      "action_principles": [
+        "Prioritize repeatable competitor losses by lean ratio, package size, and production claim.",
+        "Protect broad Walmart strengths while monitoring localized exceptions.",
+        "Keep exact-package and normalized price-per-pound actions separate."
+      ],
+      "forbidden_claims": [
+        "Do not treat an ALDI variable-weight source price as a per-pound price unless the configured package semantics support that conversion.",
+        "Do not treat Amazon search presence as guaranteed immediate delivery."
+      ],
+      "small_sample_threshold": 25
+    },
     "insight_ranking": {
       "weights": {
         "breadth": 0.3,

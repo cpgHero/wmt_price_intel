@@ -598,7 +598,10 @@ class ComparisonEngine:
             benchmark_lower_rate=benchmark_lower / total,
             competitor_lower_rate=competitor_lower / total,
             parity_rate=parity / total,
+            benchmark_median=float(statistics.median(item.benchmark_value for item in matches)),
+            competitor_median=float(statistics.median(item.competitor_value for item in matches)),
             median_gap=float(statistics.median(item.gap for item in matches)),
+            mean_gap=float(statistics.fmean(item.gap for item in matches)),
         )
 
 

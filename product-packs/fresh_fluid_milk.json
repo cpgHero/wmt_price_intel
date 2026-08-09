@@ -523,6 +523,51 @@
       "id": "fresh_fluid_milk_leadership",
       "version": "1.0.0"
     },
+    "narrative_playbook": {
+      "leadership_objective": "Separate Walmart's conventional milk strengths from specialty vulnerabilities and distinguish Amazon same-brand, private-label, and broader equivalent-product economics.",
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ],
+      "decision_lenses": [
+        {
+          "id": "package_spec",
+          "label": "Package and milk specification",
+          "question": "Where does Walmart win or lose within the same volume, fat level, organic, lactose-free, and other specialty attributes?",
+          "metric_selectors": ["comparison.*.price_per_gallon.*"]
+        },
+        {
+          "id": "brand_mode",
+          "label": "Brand comparison mode",
+          "question": "How do same-brand, private-label, and specification-equivalent conclusions differ by competitor?",
+          "metric_selectors": ["comparison.*same_brand*", "comparison.*private_label*", "comparison.*all_brand*"]
+        },
+        {
+          "id": "gallon_equivalent",
+          "label": "Supporting gallon-equivalent economics",
+          "question": "Does price per gallon reinforce a package-matched conclusion without substituting package sizes?",
+          "metric_selectors": ["comparison.*.price_per_gallon.*"]
+        }
+      ],
+      "action_principles": [
+        "Protect conventional whole and reduced-fat package advantages.",
+        "Create alerts for evidence-backed specialty-milk vulnerabilities.",
+        "Maintain separate Amazon same-brand and private-label scorecards."
+      ],
+      "forbidden_claims": [
+        "Do not treat different package sizes as exact matches merely because price per gallon is available.",
+        "Do not combine same-brand and private-label findings into one conclusion."
+      ],
+      "small_sample_threshold": 25
+    },
     "insight_ranking": {
       "weights": {
         "breadth": 0.3,

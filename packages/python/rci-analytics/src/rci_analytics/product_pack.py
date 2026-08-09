@@ -247,6 +247,10 @@ class ProductPackLoader:
         rule_ids = [str(rule["id"]) for rule in rules]
         if len(rule_ids) != len(set(rule_ids)):
             raise ContractError("Product Pack insight rule IDs must be unique")
+        playbook = reporting["narrative_playbook"]
+        lens_ids = [str(lens["id"]) for lens in playbook["decision_lenses"]]
+        if len(lens_ids) != len(set(lens_ids)):
+            raise ContractError("Product Pack narrative decision-lens IDs must be unique")
         allowed_fields = {
             "matches",
             "unique_geographies",
@@ -256,7 +260,10 @@ class ProductPackLoader:
             "benchmark_lower_rate",
             "competitor_lower_rate",
             "parity_rate",
+            "benchmark_median",
+            "competitor_median",
             "median_gap",
+            "mean_gap",
         }
         allowed_template_fields = {"benchmark", "competitor", "profile", "segment"}
         formatter = Formatter()

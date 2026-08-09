@@ -690,7 +690,7 @@ class AnalysisProcessor:
                 profile_id = str(profile["id"])
                 evidence_ref = f"evidence.matches.{competitor}.{profile_id}"
                 geography = str(profile["geography"])
-                comparison_metric = str(profile.get("comparison_metric", "package_price"))
+                comparison_metric = matches[0].comparison_metric
                 if geography == "radius":
                     evidence_kind = "proximity_matches"
                 elif comparison_metric != "package_price":

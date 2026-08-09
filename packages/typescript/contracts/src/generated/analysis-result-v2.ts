@@ -225,6 +225,41 @@ export interface NarrativeSection {
   id: string;
   heading: string;
   body: string;
+  /**
+   * @minItems 1
+   */
+  topic_refs?: [
+    (
+      | "data_scope"
+      | "footprint"
+      | "exact_price"
+      | "normalized_price"
+      | "segment_drivers"
+      | "segment_reversals"
+      | "geography"
+      | "fulfillment"
+      | "brand_assortment"
+      | "actions"
+      | "caveats"
+    ),
+    ...(
+      | "data_scope"
+      | "footprint"
+      | "exact_price"
+      | "normalized_price"
+      | "segment_drivers"
+      | "segment_reversals"
+      | "geography"
+      | "fulfillment"
+      | "brand_assortment"
+      | "actions"
+      | "caveats"
+    )[]
+  ];
+  /**
+   * @minItems 1
+   */
+  storyline_refs?: [string, ...string[]];
   metric_refs: NonemptyRefs;
   evidence_refs: NonemptyRefs;
 }

@@ -399,6 +399,51 @@
       "id": "fresh_strawberries_leadership",
       "version": "1.0.0"
     },
+    "narrative_playbook": {
+      "leadership_objective": "Explain Walmart's strawberry position by exact package weight, organic status, and competitor, with explicit attention to Amazon package-size reversals and geographic sensitivity.",
+      "required_topics": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "actions",
+        "caveats"
+      ],
+      "decision_lenses": [
+        {
+          "id": "exact_weight",
+          "label": "Exact package weight",
+          "question": "Where does Walmart win or lose within the same weight, organic status, form, and specialty claim?",
+          "metric_selectors": ["comparison.*.package_price.*"]
+        },
+        {
+          "id": "package_reversal",
+          "label": "Package-size reversal",
+          "question": "Does the winner differ between conventional one-pound and two-pound packages or organic one-pound packages?",
+          "metric_selectors": ["comparison.*.package_price.*", "comparison.*.price_per_lb.*"]
+        },
+        {
+          "id": "proximity",
+          "label": "Nearby-store validation",
+          "question": "Does the configured radius comparison confirm the exact-ZIP ALDI result?",
+          "metric_selectors": ["comparison.*.radius.*"]
+        }
+      ],
+      "action_principles": [
+        "Protect broad Walmart strengths against ALDI.",
+        "Use separate Amazon alerts for one-pound conventional, two-pound conventional, and organic packages.",
+        "Preserve exact package weight and organic status in automated matching."
+      ],
+      "forbidden_claims": [
+        "Do not infer per-berry economics without observed berry counts.",
+        "Do not blend one-pound and two-pound Amazon results into one price index."
+      ],
+      "small_sample_threshold": 25
+    },
     "insight_ranking": {
       "weights": {
         "breadth": 0.3,

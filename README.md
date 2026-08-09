@@ -64,3 +64,12 @@ indexed proximity matching, and the full-source fresh-ground-beef Product Pack. 
 Phase 9.5.4 adds canonical retailer product identity and default-off, separately budgeted PDP
 enrichment with durable leases, immutable cached snapshots, and replica-safe per-retailer/type rate
 limits. See `docs/20_PHASE_9_5_4_PRODUCT_IDENTITY_PDP.md`.
+
+Phases 9.5.5 through 9.5.8 add the generic insight/reporting engine, governed AI boundary,
+CPGHero-branded delivery surfaces, full-source goldens, and immutable renderer versioning. See
+`docs/21_PHASE_9_5_5_INSIGHT_REPORTING_ENGINE.md` through
+`docs/24_PHASE_9_5_8_FULL_GOLDENS_AND_RENDERER_VERSIONING.md`.
+
+Phase 9.6 adds the benchmark-derived semantic brief, category-configured narrative playbooks,
+deterministic claim critic, and decision-grade narrative projection shared by web, email, and
+workbook outputs. See `docs/25_PHASE_9_6_DECISION_GRADE_NARRATIVE_PARITY.md`.

@@ -113,3 +113,19 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
     assert result["recommendations"][0]["metric_refs"]
     assert result["validation"]["unsupported_numeric_claims"] == 0
     assert result["validation"]["metric_reference_coverage"] == 1
+    narrative_ids = {section["id"] for section in result["narratives"]["sections"]}
+    assert {
+        "executive_summary",
+        "coverage",
+        "exact_price",
+        "normalized_price",
+        "segments",
+        "products",
+        "recommendations",
+        "quality",
+        "methodology",
+    } <= narrative_ids
+    assert all(
+        section["metric_refs"] and section["evidence_refs"]
+        for section in result["narratives"]["sections"]
+    )

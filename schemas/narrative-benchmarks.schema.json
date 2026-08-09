@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/narrative-benchmarks.schema.json",
+  "title": "Retail Competitive Intelligence Narrative Benchmarks",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "methodology_source", "categories", "quality_rubric"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "methodology_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256"],
+      "properties": {
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "categories": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/category" }
+    },
+    "quality_rubric": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "weight"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "description": { "type": "string", "minLength": 1 },
+          "weight": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "filename", "sha256"],
+      "properties": {
+        "kind": { "enum": ["xlsx", "html", "email"] },
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_pack_id", "sources", "required_topics", "required_story_patterns"],
+      "properties": {
+        "product_pack_id": { "type": "string", "minLength": 1 },
+        "sources": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/source" }
+        },
+        "required_topics": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/topic" }
+        },
+        "required_story_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "description"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "description": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "topic": {
+      "enum": [
+        "data_scope",
+        "footprint",
+        "exact_price",
+        "normalized_price",
+        "segment_drivers",
+        "segment_reversals",
+        "geography",
+        "fulfillment",
+        "brand_assortment",
+        "actions",
+        "caveats"
+      ]
+    }
+  }
+}

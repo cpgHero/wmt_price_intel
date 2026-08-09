@@ -142,6 +142,69 @@ export interface RetailCompetitiveIntelligenceProductPack {
       id: string;
       version: string;
     };
+    narrative_playbook: {
+      leadership_objective: string;
+      /**
+       * @minItems 1
+       */
+      required_topics: [
+        (
+          | "data_scope"
+          | "footprint"
+          | "exact_price"
+          | "normalized_price"
+          | "segment_drivers"
+          | "segment_reversals"
+          | "geography"
+          | "fulfillment"
+          | "brand_assortment"
+          | "actions"
+          | "caveats"
+        ),
+        ...(
+          | "data_scope"
+          | "footprint"
+          | "exact_price"
+          | "normalized_price"
+          | "segment_drivers"
+          | "segment_reversals"
+          | "geography"
+          | "fulfillment"
+          | "brand_assortment"
+          | "actions"
+          | "caveats"
+        )[]
+      ];
+      /**
+       * @minItems 1
+       */
+      decision_lenses: [
+        {
+          id: string;
+          label: string;
+          question: string;
+          /**
+           * @minItems 1
+           */
+          metric_selectors: [string, ...string[]];
+        },
+        ...{
+          id: string;
+          label: string;
+          question: string;
+          /**
+           * @minItems 1
+           */
+          metric_selectors: [string, ...string[]];
+        }[]
+      ];
+      /**
+       * @minItems 1
+       */
+      action_principles: [string, ...string[]];
+      forbidden_claims: string[];
+      small_sample_threshold: number;
+    };
     insight_ranking: {
       weights: {
         breadth: number;

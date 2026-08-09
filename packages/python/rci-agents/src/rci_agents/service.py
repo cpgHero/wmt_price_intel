@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from rci_agents.brief import AnalysisBriefBuilder
 from rci_agents.governance import (
     GovernedOutputBuilder,
     apply_governed_outputs,
@@ -56,6 +57,7 @@ class GovernedAnalysisAssistant:
         self._lease_seconds = lease_seconds
         self._prompts = PromptTemplateLoader(repository_root)
         self._builder = GovernedOutputBuilder(repository_root)
+        self._briefs = AnalysisBriefBuilder(repository_root, max_metrics=max_metrics)
 
     async def enrich(
         self,
@@ -67,9 +69,22 @@ class GovernedAnalysisAssistant:
         deterministic_insights = _rows(result.get("insights"))
         recommendations = _rows(result.get("recommendations"))
         all_metrics = _rows(result.get("metrics"))
+        analysis_brief = self._briefs.build(
+            result,
+            product_pack=product_pack,
+            report_blueprint=report_blueprint,
+        )
+        brief_metric_refs = list(
+            dict.fromkeys(
+                str(ref)
+                for section in _rows(analysis_brief.get("requested_sections"))
+                for ref in section.get("allowed_metric_refs", [])
+            )
+        )
         selected_metrics = self._select_metrics(
             all_metrics,
             [*deterministic_insights, *recommendations],
+            priority_refs=brief_metric_refs,
         )
         selected_metric_ids = {str(metric["metric_id"]) for metric in selected_metrics}
         deterministic_insights = _eligible_rows(deterministic_insights, selected_metric_ids)
@@ -91,6 +106,7 @@ class GovernedAnalysisAssistant:
             insight_payload: JsonObject = {
                 "analysis_id": result["analysis_id"],
                 "product_pack": _product_pack_context(product_pack),
+                "analysis_brief": analysis_brief,
                 "deterministic_insights": deterministic_insights,
                 "metrics": selected_metrics,
                 "evidence_sets": evidence_sets,
@@ -109,14 +125,7 @@ class GovernedAnalysisAssistant:
             if insight_output is not None:
                 task_ids.append(str(insight_output["task_id"]))
 
-        narrative_sections = [
-            {
-                "id": str(section["narrative_section_id"]),
-                "heading": str(section["title"]),
-            }
-            for section in _rows(report_blueprint.get("sections"))
-            if section.get("narrative_section_id")
-        ]
+        narrative_sections = _rows(analysis_brief.get("requested_sections"))
         narrative_output: JsonObject | None = None
         if narrative_sections:
             interpreted_insights = (
@@ -127,6 +136,7 @@ class GovernedAnalysisAssistant:
             narrative_payload: JsonObject = {
                 "analysis_id": result["analysis_id"],
                 "product_pack": _product_pack_context(product_pack),
+                "analysis_brief": analysis_brief,
                 "requested_sections": narrative_sections,
                 "required_questions": report_blueprint.get("narrative_policy", {}).get(
                     "required_questions", []
@@ -146,6 +156,7 @@ class GovernedAnalysisAssistant:
                     narrative_sections,
                     selected_metrics,
                     evidence_ids,
+                    _rows(analysis_brief.get("storylines")),
                 ),
             )
             if narrative_output is not None:
@@ -255,10 +266,15 @@ class GovernedAnalysisAssistant:
         self,
         metrics: list[JsonObject],
         interpreted_rows: list[JsonObject],
+        *,
+        priority_refs: list[str] | None = None,
     ) -> list[JsonObject]:
         priority = list(
             dict.fromkeys(
-                str(ref) for row in interpreted_rows for ref in row.get("metric_refs", [])
+                [
+                    *(priority_refs or []),
+                    *(str(ref) for row in interpreted_rows for ref in row.get("metric_refs", [])),
+                ]
             )
         )
         metric_index = {str(metric["metric_id"]): metric for metric in metrics}

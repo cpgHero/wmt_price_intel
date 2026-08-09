@@ -1,11 +1,13 @@
 export type { RetailCompetitiveIntelligenceAnalysisResult } from "./generated/analysis-result";
 export type { RetailCompetitiveIntelligenceAnalysisResultV2 } from "./generated/analysis-result-v2";
 export type { RetailCompetitiveIntelligenceAnalysisEvidenceSet } from "./generated/analysis-evidence";
+export type { RetailCompetitiveIntelligenceAnalysisBrief } from "./generated/analysis-brief";
 export type { RetailCompetitiveIntelligenceCanonicalProduct } from "./generated/canonical-product";
 export type { RetailCompetitiveIntelligenceCollectionDefinition } from "./generated/collection-definition";
 export type { RetailCompetitiveIntelligenceGoldenBenchmarks } from "./generated/golden-benchmarks";
 export type { RetailCompetitiveIntelligenceHistoricalInputManifest } from "./generated/historical-input-manifest";
 export type { NormalizedRetailOffer } from "./generated/normalized-offer";
+export type { RetailCompetitiveIntelligenceNarrativeBenchmarks } from "./generated/narrative-benchmarks";
 export type { MetricsCartProductDetailCatalog } from "./generated/product-detail-catalog";
 export type { RetailCompetitiveIntelligenceProductDetailSnapshot } from "./generated/product-detail-snapshot";
 export type { RetailCompetitiveIntelligenceProductPack } from "./generated/product-pack";

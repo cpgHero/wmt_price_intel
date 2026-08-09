@@ -80,6 +80,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         workbook_xml = archive.read("xl/workbook.xml")
         for name in (
             b"Executive Summary",
+            b"Leadership Narrative",
             b"Metrics",
             b"Retailer Scorecard",
             b"Price Comparisons",
@@ -139,6 +140,12 @@ def test_artifact_specific_report_view_uses_blueprint_section_profile() -> None:
 
     assert [section["id"] for section in email_view["sections"]] == [
         "executive_summary",
+        "coverage",
+        "exact_price",
+        "normalized_price",
+        "proximity",
+        "products",
         "recommendations",
+        "quality",
         "methodology",
     ]

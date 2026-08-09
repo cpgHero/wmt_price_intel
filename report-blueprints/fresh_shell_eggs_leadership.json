@@ -50,7 +50,8 @@
       "metric_selectors": ["coverage.*"],
       "evidence_kinds": ["classified_offers"],
       "visualization": "bar",
-      "empty_state": "No qualifying geographic coverage was observed."
+      "empty_state": "No qualifying geographic coverage was observed.",
+      "narrative_section_id": "coverage"
     },
     {
       "id": "price_position",
@@ -60,7 +61,8 @@
       "metric_selectors": ["comparison.*.package_price.*"],
       "evidence_kinds": ["exact_matches"],
       "visualization": "table",
-      "empty_state": "No strict package matches were available."
+      "empty_state": "No strict package matches were available.",
+      "narrative_section_id": "price_position"
     },
     {
       "id": "segments",
@@ -70,7 +72,8 @@
       "metric_selectors": ["comparison.*"],
       "evidence_kinds": ["exact_matches", "compatible_matches"],
       "visualization": "table",
-      "empty_state": "No defensible egg segments were available."
+      "empty_state": "No defensible egg segments were available.",
+      "narrative_section_id": "segments"
     },
     {
       "id": "products",
@@ -80,7 +83,8 @@
       "metric_selectors": ["assortment.*"],
       "evidence_kinds": ["product_catalog", "classified_offers"],
       "visualization": "table",
-      "empty_state": "No qualifying product evidence was produced."
+      "empty_state": "No qualifying product evidence was produced.",
+      "narrative_section_id": "products"
     },
     {
       "id": "recommendations",
@@ -101,7 +105,8 @@
       "metric_selectors": ["quality.*"],
       "evidence_kinds": ["validation_issues"],
       "visualization": "table",
-      "empty_state": "Data-quality evidence is unavailable."
+      "empty_state": "Data-quality evidence is unavailable.",
+      "narrative_section_id": "quality"
     },
     {
       "id": "methodology",
@@ -111,7 +116,8 @@
       "metric_selectors": [],
       "evidence_kinds": ["source_manifest", "validation_issues"],
       "visualization": "none",
-      "empty_state": "Methodology metadata is unavailable."
+      "empty_state": "Methodology metadata is unavailable.",
+      "narrative_section_id": "methodology"
     }
   ],
   "artifact_profiles": [
@@ -143,6 +149,7 @@
       ],
       "worksheet_definitions": [
         { "name": "Executive Summary", "source": "insights" },
+        { "name": "Leadership Narrative", "source": "narratives" },
         { "name": "Metrics", "source": "metrics" },
         { "name": "Retailer Scorecard", "source": "coverage" },
         { "name": "Price Comparisons", "source": "comparisons" },
@@ -154,7 +161,16 @@
     },
     {
       "artifact_type": "leadership_email",
-      "section_ids": ["executive_summary", "recommendations", "methodology"]
+      "section_ids": [
+        "executive_summary",
+        "coverage",
+        "price_position",
+        "segments",
+        "products",
+        "recommendations",
+        "quality",
+        "methodology"
+      ]
     },
     {
       "artifact_type": "audit_zip",
