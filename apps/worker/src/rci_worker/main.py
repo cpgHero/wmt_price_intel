@@ -137,7 +137,7 @@ async def run() -> None:
             worker_id=f"{worker_id}-agent",
             insight_model=os.environ["OPENAI_MODEL_INSIGHT"],
             narrative_model=os.environ["OPENAI_MODEL_NARRATIVE"],
-            max_metrics=int(os.getenv("AI_MAX_METRICS", "160")),
+            max_metrics=int(os.getenv("AI_MAX_METRICS", "360")),
             max_attempts=int(os.getenv("AI_MAX_ATTEMPTS", "2")),
             lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "180")),
         )

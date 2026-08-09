@@ -1309,7 +1309,135 @@
         "Do not treat an ALDI variable-weight source price as a per-pound price unless the configured package semantics support that conversion.",
         "Do not treat Amazon search presence as guaranteed immediate delivery."
       ],
-      "small_sample_threshold": 25
+      "small_sample_threshold": 25,
+      "story_priorities": [
+        {
+          "id": "aldi_organic_85_15_priority",
+          "kind": "competitive_pressure",
+          "headline": "ALDI's organic grass-fed 85% lean / 15% fat vulnerability is the highest-priority price gap",
+          "objective": "Reconcile the exact-package, normalized price-per-pound, and nearby-store evidence; explain why this premium segment warrants a targeted response rather than a category-wide move.",
+          "topic_refs": [
+            "exact_price",
+            "normalized_price",
+            "segment_drivers",
+            "geography",
+            "actions"
+          ],
+          "section_ids": [
+            "executive_summary",
+            "exact_price",
+            "normalized_price",
+            "proximity",
+            "recommendations"
+          ],
+          "competitor_ids": ["aldi_us"],
+          "profile_ids": ["strict", "unit_price", "aldi_10mi"],
+          "segment_scope": "segment",
+          "segment_attribute_constraints": {
+            "lean_pct": 85,
+            "fat_pct": 15,
+            "organic": true,
+            "grass_fed": true
+          },
+          "max_facts": 6
+        },
+        {
+          "id": "aldi_80_20_package_reversal",
+          "kind": "segment_reversal",
+          "headline": "ALDI's 80% lean / 20% fat package-price advantage reverses in Walmart's broader price-per-pound assortment",
+          "objective": "Separate the consumer-facing package gap from the normalized unit-value conclusion and identify the package configuration that creates the visible ALDI pressure.",
+          "topic_refs": [
+            "exact_price",
+            "normalized_price",
+            "segment_drivers",
+            "segment_reversals",
+            "actions"
+          ],
+          "section_ids": [
+            "executive_summary",
+            "exact_price",
+            "normalized_price",
+            "recommendations"
+          ],
+          "competitor_ids": ["aldi_us"],
+          "profile_ids": ["strict", "unit_price", "aldi_10mi"],
+          "segment_scope": "segment",
+          "segment_attribute_constraints": {
+            "lean_pct": 80,
+            "fat_pct": 20,
+            "organic": false,
+            "grass_fed": false
+          },
+          "max_facts": 7
+        },
+        {
+          "id": "walmart_73_27_value_strength",
+          "kind": "benchmark_strength",
+          "headline": "Walmart's 73% lean / 27% fat value position strengthens in the large package and normalized price-per-pound view",
+          "objective": "Show how package size changes the winner, elevate the large-pack Walmart strength, and connect that result to the broader normalized-value conclusion.",
+          "topic_refs": [
+            "exact_price",
+            "normalized_price",
+            "segment_drivers",
+            "segment_reversals",
+            "geography",
+            "actions"
+          ],
+          "section_ids": [
+            "executive_summary",
+            "exact_price",
+            "normalized_price",
+            "proximity",
+            "recommendations"
+          ],
+          "competitor_ids": ["aldi_us"],
+          "profile_ids": ["strict", "unit_price", "aldi_10mi"],
+          "segment_scope": "segment",
+          "segment_attribute_constraints": {
+            "lean_pct": 73,
+            "fat_pct": 27,
+            "organic": false,
+            "grass_fed": false
+          },
+          "max_facts": 7
+        },
+        {
+          "id": "amazon_broad_value_strength",
+          "kind": "benchmark_strength",
+          "headline": "Walmart's broad Amazon Same Day advantage calls for exception monitoring, not a broad price response",
+          "objective": "Distinguish Amazon from the ALDI risk story, quantify Walmart's aggregate strength, and surface the most important conventional and premium segments that support it.",
+          "topic_refs": [
+            "exact_price",
+            "normalized_price",
+            "segment_drivers",
+            "actions",
+            "fulfillment"
+          ],
+          "section_ids": [
+            "executive_summary",
+            "exact_price",
+            "normalized_price",
+            "products",
+            "recommendations"
+          ],
+          "competitor_ids": ["amazon_us_same_day"],
+          "profile_ids": ["strict", "unit_price"],
+          "segment_scope": "any",
+          "max_facts": 7
+        },
+        {
+          "id": "aldi_proximity_confirmation",
+          "kind": "geographic_validation",
+          "headline": "The nearby-store sensitivity confirms that the major ALDI segment findings are not artifacts of ZIP boundaries",
+          "objective": "Compare the radius evidence with the strict same-ZIP direction, naming both the Walmart large-pack strength and the most material ALDI vulnerabilities.",
+          "topic_refs": ["geography", "segment_drivers", "actions"],
+          "section_ids": ["executive_summary", "proximity", "recommendations"],
+          "competitor_ids": ["aldi_us"],
+          "profile_ids": ["aldi_10mi"],
+          "segment_scope": "any",
+          "max_facts": 7
+        }
+      ]
     },
     "insight_ranking": {
       "weights": {

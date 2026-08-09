@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections import defaultdict
 from copy import deepcopy
@@ -29,6 +30,7 @@ _KEY_FIELDS = (
     "median_gap",
     "mean_gap",
 )
+_BRIEF_FIELDS = tuple(field for field in _KEY_FIELDS if field not in {"parity_rate", "mean_gap"})
 _SECTION_TOPICS: dict[str, tuple[str, ...]] = {
     "executive_summary": (
         "data_scope",
@@ -157,7 +159,7 @@ def _segment_display_label(segment: JsonObject, product_pack: JsonObject) -> str
 class AnalysisBriefBuilder:
     """Create a bounded, evidence-linked business-fact packet without category branches."""
 
-    def __init__(self, repository_root: Path, *, max_metrics: int = 160) -> None:
+    def __init__(self, repository_root: Path, *, max_metrics: int = 360) -> None:
         if max_metrics < 24:
             raise ValueError("analysis brief requires at least 24 metrics")
         self._root = repository_root
@@ -196,7 +198,7 @@ class AnalysisBriefBuilder:
             product_pack=product_pack,
             small_sample_threshold=small_sample_threshold,
         )
-        facts.extend(self._bounded_comparisons(comparison_facts, facts))
+        facts.extend(self._bounded_comparisons(comparison_facts, facts, playbook))
         facts.extend(self._quality_facts(result, metric_index))
         fact_index = {str(fact["id"]): fact for fact in facts}
         selected_metric_refs = list(
@@ -217,6 +219,7 @@ class AnalysisBriefBuilder:
         storylines = self._storylines(
             result,
             facts,
+            playbook=playbook,
             benchmark_retailer=str(result["benchmark_retailer"]),
             small_sample_threshold=small_sample_threshold,
         )
@@ -260,8 +263,8 @@ class AnalysisBriefBuilder:
             "leadership_objective": playbook["leadership_objective"],
             "required_topics": required_topics,
             "decision_lenses": lenses,
-            "facts": facts,
-            "storylines": storylines,
+            "facts": [self._public_row(fact) for fact in facts],
+            "storylines": [self._public_row(storyline) for storyline in storylines],
             "requested_sections": sections,
             "guardrails": {
                 "required_caveats": list(
@@ -308,6 +311,12 @@ class AnalysisBriefBuilder:
                 continue
             storyline.pop("fact_refs", None)
         return view
+
+    @staticmethod
+    def _public_row(row: JsonObject) -> JsonObject:
+        """Remove builder-only selection metadata before contract validation or prompting."""
+
+        return {key: value for key, value in row.items() if not key.startswith("_")}
 
     def _base_facts(
         self,
@@ -386,7 +395,7 @@ class AnalysisBriefBuilder:
                     is not None
                 )
             }
-            key_refs = [fields[field] for field in _KEY_FIELDS if field in fields]
+            key_refs = [fields[field] for field in _BRIEF_FIELDS if field in fields]
             if not key_refs:
                 continue
             matches = AnalysisBriefBuilder._number(fields.get("matches"), metric_index)
@@ -435,6 +444,12 @@ class AnalysisBriefBuilder:
                             matches is not None and matches < small_sample_threshold
                         ),
                     },
+                    "_attributes": dict(segment.get("attributes", {})),
+                    "_dimensions": tuple(str(value) for value in mode.get("dimensions", [])),
+                    "_values": {
+                        field: AnalysisBriefBuilder._number(ref, metric_index)
+                        for field, ref in fields.items()
+                    },
                 }
             )
         return facts
@@ -443,31 +458,158 @@ class AnalysisBriefBuilder:
         self,
         comparison_facts: list[JsonObject],
         base_facts: list[JsonObject],
+        playbook: JsonObject,
     ) -> list[JsonObject]:
         metric_budget = self._max_metrics - len(
             {str(ref) for fact in base_facts for ref in fact["metric_refs"]}
         )
         selected: list[JsonObject] = []
         used: set[str] = set()
-        ordered = sorted(
-            comparison_facts,
-            key=lambda fact: (
-                fact["kind"] != "comparison_overall",
-                fact["significance"] == "caveat",
-                0 if fact["significance"] == "risk" else 1,
-                str(fact["id"]),
-            ),
-        )
-        for fact in ordered:
+
+        def add(fact: JsonObject) -> bool:
+            nonlocal metric_budget
+            fact_id = str(fact["id"])
+            if any(str(row["id"]) == fact_id for row in selected):
+                return True
             new_refs = {str(ref) for ref in fact["metric_refs"]} - used
             if len(new_refs) > metric_budget:
-                continue
+                return False
             selected.append(fact)
             used.update(new_refs)
             metric_budget -= len(new_refs)
-            if len(selected) >= 28:
+            return True
+
+        overall = sorted(
+            (fact for fact in comparison_facts if fact["kind"] == "comparison_overall"),
+            key=lambda fact: (
+                str(fact["context"].get("competitor_id")),
+                str(fact["context"].get("geography")) == "radius",
+                str(fact["context"].get("comparison_metric")),
+                str(fact["id"]),
+            ),
+        )
+        for fact in overall:
+            if not add(fact):
+                break
+
+        priority_rules = _rows(playbook.get("story_priorities"))
+        for rule in priority_rules:
+            matched = [fact for fact in comparison_facts if self._matches_story_rule(fact, rule)]
+            for fact in self._diverse_facts(matched, int(rule.get("max_facts", 4))):
+                if not add(fact):
+                    break
+
+        groups: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
+        for fact in comparison_facts:
+            if fact["kind"] == "comparison_overall":
+                continue
+            groups[
+                (
+                    str(fact["context"].get("competitor_id")),
+                    str(fact["context"].get("profile_id")),
+                )
+            ].append(fact)
+        for key in sorted(groups):
+            if len(selected) >= 40:
+                break
+            for fact in self._diverse_facts(groups[key], 5):
+                if not add(fact):
+                    break
+
+        for fact in sorted(comparison_facts, key=self._fact_priority, reverse=True):
+            if len(selected) >= 40:
+                break
+            if not add(fact) and metric_budget < len(fact["metric_refs"]):
                 break
         return selected
+
+    @staticmethod
+    def _fact_priority(fact: JsonObject) -> tuple[float, float, float, str]:
+        values = fact.get("_values", {})
+        if not isinstance(values, dict):
+            values = {}
+        matches = float(values.get("matches") or 0)
+        gap = abs(float(values.get("median_gap") or 0))
+        benchmark_rate = float(values.get("benchmark_lower_rate") or 0)
+        competitor_rate = float(values.get("competitor_lower_rate") or 0)
+        direction = abs(benchmark_rate - competitor_rate)
+        impact = gap * math.sqrt(max(matches, 1.0)) * (0.5 + direction)
+        return impact, matches, direction, str(fact.get("id", ""))
+
+    @staticmethod
+    def _matches_story_rule(fact: JsonObject, rule: JsonObject) -> bool:
+        context = fact.get("context", {})
+        if not isinstance(context, dict):
+            return False
+        competitor_ids = {str(value) for value in rule.get("competitor_ids", [])}
+        if competitor_ids and str(context.get("competitor_id")) not in competitor_ids:
+            return False
+        profile_ids = {str(value) for value in rule.get("profile_ids", [])}
+        if profile_ids and str(context.get("profile_id")) not in profile_ids:
+            return False
+        significances = {str(value) for value in rule.get("significances", [])}
+        if significances and str(fact.get("significance")) not in significances:
+            return False
+        scope = str(rule.get("segment_scope", "any"))
+        segment_id = str(context.get("segment_id", "all"))
+        if scope == "overall" and segment_id != "all":
+            return False
+        if scope == "segment" and segment_id == "all":
+            return False
+        attributes = fact.get("_attributes", {})
+        if not isinstance(attributes, dict):
+            return False
+        constraints = rule.get("segment_attribute_constraints", {})
+        if not isinstance(constraints, dict):
+            return False
+        for name, expected in constraints.items():
+            actual = attributes.get(str(name))
+            if isinstance(expected, list):
+                if actual not in expected:
+                    return False
+            elif actual != expected:
+                return False
+        return True
+
+    @classmethod
+    def _diverse_facts(cls, facts: list[JsonObject], limit: int) -> list[JsonObject]:
+        """Choose material facts while preserving comparison-lens and direction diversity."""
+
+        buckets: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
+        for fact in facts:
+            context = fact.get("context", {})
+            if not isinstance(context, dict):
+                context = {}
+            buckets[
+                (
+                    str(context.get("profile_id", "unknown")),
+                    cls._fact_direction(fact),
+                )
+            ].append(fact)
+        for rows in buckets.values():
+            rows.sort(key=cls._fact_priority, reverse=True)
+        chosen: list[JsonObject] = []
+        while len(chosen) < limit and any(buckets.values()):
+            for key in sorted(buckets):
+                rows = buckets[key]
+                if rows:
+                    chosen.append(rows.pop(0))
+                    if len(chosen) >= limit:
+                        break
+        return chosen
+
+    @staticmethod
+    def _fact_direction(fact: JsonObject) -> str:
+        values = fact.get("_values", {})
+        if not isinstance(values, dict):
+            return "mixed"
+        benchmark_rate = float(values.get("benchmark_lower_rate") or 0)
+        competitor_rate = float(values.get("competitor_lower_rate") or 0)
+        if benchmark_rate > competitor_rate:
+            return "benchmark"
+        if competitor_rate > benchmark_rate:
+            return "competitor"
+        return "mixed"
 
     @staticmethod
     def _quality_facts(
@@ -498,6 +640,7 @@ class AnalysisBriefBuilder:
         result: JsonObject,
         facts: list[JsonObject],
         *,
+        playbook: JsonObject,
         benchmark_retailer: str,
         small_sample_threshold: int,
     ) -> list[JsonObject]:
@@ -519,6 +662,27 @@ class AnalysisBriefBuilder:
                 )
             )
 
+        for rule in _rows(playbook.get("story_priorities")):
+            linked = [fact for fact in facts if self._matches_story_rule(fact, rule)]
+            linked = self._diverse_facts(linked, int(rule.get("max_facts", 4)))
+            if not linked:
+                continue
+            storylines.append(
+                {
+                    **AnalysisBriefBuilder._storyline(
+                        f"story.priority.{_slug(rule['id'])}",
+                        str(rule["kind"]),
+                        str(rule["headline"]),
+                        str(rule["objective"]),
+                        [str(value) for value in rule["topic_refs"]],
+                        linked,
+                    ),
+                    "_required_section_ids": tuple(
+                        str(value) for value in rule.get("section_ids", [])
+                    ),
+                }
+            )
+
         comparison_facts = [
             fact for fact in facts if fact["kind"] in {"comparison_overall", "comparison_segment"}
         ]
@@ -527,12 +691,19 @@ class AnalysisBriefBuilder:
         for fact in comparison_facts:
             by_competitor[str(fact["context"]["competitor_id"])].append(fact)
         for competitor_facts in by_competitor.values():
+            competitor_facts = sorted(
+                competitor_facts,
+                key=self._fact_priority,
+                reverse=True,
+            )
             overall = [fact for fact in competitor_facts if fact["kind"] == "comparison_overall"]
             chosen.extend(overall[:2])
             risks = [fact for fact in competitor_facts if fact["significance"] == "risk"]
             strengths = [fact for fact in competitor_facts if fact["significance"] == "strength"]
-            chosen.extend(risks[:2])
-            chosen.extend(strengths[:2])
+            watches = [fact for fact in competitor_facts if fact["significance"] == "watch"]
+            chosen.extend(risks[:3])
+            chosen.extend(strengths[:3])
+            chosen.extend(watches[:1])
         seen: set[str] = set()
         for fact in chosen:
             fact_id = str(fact["id"])
@@ -593,31 +764,7 @@ class AnalysisBriefBuilder:
                 )
             )
 
-        groups: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
-        for fact in comparison_facts:
-            context = fact["context"]
-            if context["segment_id"] == "all":
-                continue
-            groups[(str(context["competitor_id"]), str(context["segment_id"]))].append(fact)
-        for (competitor_id, _), grouped in groups.items():
-            directions = {str(fact["significance"]) for fact in grouped}
-            metrics = {str(fact["context"]["comparison_metric"]) for fact in grouped}
-            if not ({"risk", "strength"}.issubset(directions) and len(metrics) > 1):
-                continue
-            segment = str(grouped[0]["context"]["segment_label"])
-            competitor_name = grouped[0]["context"].get("competitor_name")
-            competitor_name = competitor_name or _display_identifier(competitor_id)
-            storylines.append(
-                AnalysisBriefBuilder._storyline(
-                    f"story.reversal.{_slug(competitor_id)}.{_slug(grouped[0]['context']['segment_id'])}",
-                    "segment_reversal",
-                    f"price-winner reversal against {competitor_name!s} in {segment}",
-                    "Present the exact-package and normalized-unit conclusions separately; "
-                    "both can be valid for different merchant decisions.",
-                    ["segment_reversals", "exact_price", "normalized_price"],
-                    grouped,
-                )
-            )
+        storylines.extend(self._reversal_storylines(comparison_facts))
 
         for fact in [fact for fact in facts if fact["kind"] == "geographic_validation"][:3]:
             context = fact["context"]
@@ -684,8 +831,79 @@ class AnalysisBriefBuilder:
             )
         return [
             {**storyline, "priority": index}
-            for index, storyline in enumerate(storylines[:20], start=1)
+            for index, storyline in enumerate(storylines[:36], start=1)
         ]
+
+    def _reversal_storylines(self, comparison_facts: list[JsonObject]) -> list[JsonObject]:
+        """Pair exact-package and normalized facts even when their segment IDs differ."""
+
+        exact_facts = [
+            fact
+            for fact in comparison_facts
+            if fact.get("kind") == "comparison_segment"
+            and fact.get("context", {}).get("geography") != "radius"
+            and fact.get("context", {}).get("comparison_metric") == "package_price"
+        ]
+        normalized_facts = [
+            fact
+            for fact in comparison_facts
+            if fact.get("kind") == "comparison_segment"
+            and fact.get("context", {}).get("geography") != "radius"
+            and fact.get("context", {}).get("comparison_metric") != "package_price"
+        ]
+        storylines: list[JsonObject] = []
+        seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+        for normalized in sorted(normalized_facts, key=self._fact_priority, reverse=True):
+            context = normalized.get("context", {})
+            if not isinstance(context, dict):
+                continue
+            competitor_id = str(context.get("competitor_id", "unknown"))
+            dimensions = tuple(str(value) for value in normalized.get("_dimensions", ()))
+            attributes = normalized.get("_attributes", {})
+            if not dimensions or not isinstance(attributes, dict):
+                continue
+            signature = tuple((name, str(attributes.get(name))) for name in dimensions)
+            key = (competitor_id, signature)
+            if key in seen:
+                continue
+            opposite = [
+                fact
+                for fact in exact_facts
+                if str(fact.get("context", {}).get("competitor_id")) == competitor_id
+                and self._attributes_match_on_dimensions(fact, attributes, dimensions)
+                and self._fact_direction(fact) != self._fact_direction(normalized)
+                and "mixed" not in {self._fact_direction(fact), self._fact_direction(normalized)}
+            ]
+            if not opposite:
+                continue
+            exact = max(opposite, key=self._fact_priority)
+            seen.add(key)
+            competitor = str(context.get("competitor_name") or self._retailer_name(competitor_id))
+            normalized_label = str(context.get("segment_label") or "the matched segment")
+            storylines.append(
+                self._storyline(
+                    f"story.reversal.{_slug(competitor_id)}.{_slug(normalized_label)}",
+                    "segment_reversal",
+                    f"price-winner reversal against {competitor} in {normalized_label}",
+                    "Explain that the exact package customers see and the normalized unit-value "
+                    "comparison answer different questions, then identify the package "
+                    "configuration driving the reversal.",
+                    ["exact_price", "normalized_price", "segment_reversals"],
+                    [exact, normalized],
+                )
+            )
+        return storylines
+
+    @staticmethod
+    def _attributes_match_on_dimensions(
+        fact: JsonObject,
+        attributes: JsonObject,
+        dimensions: tuple[str, ...],
+    ) -> bool:
+        candidate = fact.get("_attributes", {})
+        if not isinstance(candidate, dict):
+            return False
+        return all(candidate.get(name) == attributes.get(name) for name in dimensions)
 
     def _retailer_name(self, retailer_id: object) -> str:
         key = str(retailer_id or "unknown")
@@ -779,6 +997,16 @@ class AnalysisBriefBuilder:
                 for storyline in storylines
                 if set(topics).intersection(str(value) for value in storyline["topic_refs"])
             ]
+            required_storylines = [
+                storyline
+                for storyline in storylines
+                if str(narrative_id) in storyline.get("_required_section_ids", ())
+            ]
+            linked = list(
+                {
+                    str(storyline["id"]): storyline for storyline in [*required_storylines, *linked]
+                }.values()
+            )
             if not linked:
                 linked = storylines[:1]
             metric_refs = (
@@ -790,6 +1018,11 @@ class AnalysisBriefBuilder:
                 or all_evidence_refs[:1]
             )
             objective = f"Answer the section's required leadership topics: {', '.join(topics)}."
+            if required_storylines:
+                objective = (
+                    f"{objective} The configured merchant priorities are mandatory and must be "
+                    "reconciled rather than merely listed."
+                )
             if lens_questions and kind in {
                 "executive_summary",
                 "price_position",
@@ -805,6 +1038,7 @@ class AnalysisBriefBuilder:
                     "objective": objective,
                     "required_topics": topics,
                     "storyline_refs": [str(row["id"]) for row in linked],
+                    "required_storyline_refs": [str(row["id"]) for row in required_storylines],
                     "allowed_metric_refs": metric_refs,
                     "allowed_evidence_refs": evidence_refs,
                 }

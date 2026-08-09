@@ -58,7 +58,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
 
         generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
         assert generated.status_code == 201
-        assert generated.json()["renderer_version"] == "2.3.0"
+        assert generated.json()["renderer_version"] == "2.4.0"
         artifact_id = generated.json()["id"]
         artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")
         assert [row["id"] for row in artifacts.json()] == [artifact_id]

@@ -217,6 +217,7 @@
         "objective",
         "required_topics",
         "storyline_refs",
+        "required_storyline_refs",
         "allowed_metric_refs",
         "allowed_evidence_refs"
       ],
@@ -231,6 +232,11 @@
           "items": { "$ref": "#/$defs/topic" }
         },
         "storyline_refs": { "$ref": "#/$defs/refs" },
+        "required_storyline_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "allowed_metric_refs": { "$ref": "#/$defs/refs" },
         "allowed_evidence_refs": { "$ref": "#/$defs/refs" }
       }

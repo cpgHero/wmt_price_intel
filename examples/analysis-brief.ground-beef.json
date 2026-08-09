@@ -94,6 +94,7 @@
       "objective": "State the answer first and distinguish the competitor story by comparison lens.",
       "required_topics": ["data_scope", "exact_price"],
       "storyline_refs": ["story.scope", "story.aldi-pressure"],
+      "required_storyline_refs": [],
       "allowed_metric_refs": [
         "source-total-rows",
         "aldi-exact-matches",
@@ -107,6 +108,7 @@
       "objective": "Translate the evidence into a bounded merchant or pricing action.",
       "required_topics": ["actions"],
       "storyline_refs": ["story.aldi-pressure"],
+      "required_storyline_refs": [],
       "allowed_metric_refs": ["aldi-exact-matches", "aldi-competitor-lower-rate"],
       "allowed_evidence_refs": ["evidence-exact-aldi"]
     }

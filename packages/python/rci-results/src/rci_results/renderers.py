@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.3.0"
+RENDERER_VERSION = "2.4.0"
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -81,12 +81,14 @@ def _leadership_styles() -> str:
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);
 font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 main{max-width:1180px;margin:auto;padding:48px 28px 64px}
-header{border-bottom:1px solid var(--line);padding-bottom:28px}
+header{background:linear-gradient(135deg,rgba(0,130,200,.12),transparent 58%);
+border-bottom:1px solid var(--line);border-radius:22px;padding:34px}
 .brand{font-size:17px;font-weight:850;letter-spacing:-.04em}.brand b{color:var(--accent)}
 .eyebrow,.kind{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.12em;
 text-transform:uppercase}h1{font-size:clamp(38px,7vw,72px);font-weight:800;letter-spacing:-.055em;
 line-height:.94;margin:12px 0 18px;max-width:13ch}h2{margin:0 0 12px;letter-spacing:-.025em}
-.meta,.empty,small{color:var(--muted)}.checksum{background:rgba(88,210,248,.12);
+.meta,.empty,small{color:var(--muted)}.deck{color:var(--muted);font-size:18px;max-width:720px}
+.checksum{background:rgba(88,210,248,.12);
 border:1px solid rgba(88,210,248,.35);border-radius:999px;color:var(--accent);display:inline-block;
 font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:16px;padding:7px 10px}
 .findings,.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
@@ -96,7 +98,7 @@ box-shadow:var(--shadow);padding:22px;margin-top:18px}article p{font-size:17px;m
 article span{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.1em;
 text-transform:uppercase}
 .metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
-.metric strong{display:block;font-size:24px;margin-top:16px}.table-wrap{overflow:auto}
+.metric strong{display:block;font-size:24px;margin-top:12px}.table-wrap{overflow:auto}
 .decision-card{background:var(--surface);box-shadow:none}.decision-card h3{font-size:17px;
 line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:14px}
 .evidence{border-top:1px solid var(--line);margin-top:20px;padding-top:14px}
@@ -105,6 +107,7 @@ line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:1
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);
 padding:10px;text-align:left;vertical-align:top}th{color:var(--muted);font-size:11px;letter-spacing:.06em;
 text-transform:uppercase}tbody tr:nth-child(even){background:var(--surface)}li{margin:10px 0}
+.comparison-table{margin-top:18px}.comparison-table td:first-child{font-weight:750}
 footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;margin-top:34px;
 padding-top:18px}footer code{overflow-wrap:anywhere}
 """
@@ -157,6 +160,23 @@ def _collapsed_table(title: str, rows: list[JsonObject]) -> str:
     return (
         f"<details class=evidence><summary>{escape(title)}</summary><div class=table-wrap>"
         f"<table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></details>"
+    )
+
+
+def _inline_table(rows: list[JsonObject]) -> str:
+    if not rows:
+        return ""
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    header = "".join(f"<th>{escape(column.replace('_', ' ').title())}</th>" for column in columns)
+    body = "".join(
+        "<tr>"
+        + "".join(f"<td>{escape(_display(row.get(column)))}</td>" for column in columns)
+        + "</tr>"
+        for row in rows
+    )
+    return (
+        '<div class="table-wrap comparison-table"><table><thead><tr>'
+        f"{header}</tr></thead><tbody>{body}</tbody></table></div>"
     )
 
 
@@ -221,10 +241,10 @@ class LeadershipHtmlRenderer:
 <style>{_leadership_styles()}</style></head><body><main data-result-checksum="{result_checksum}">
 <header><div class="brand">CPG<b>Hero</b></div>
 <div class="eyebrow">Leadership intelligence brief</div>
-<h1>{pack_name}</h1><div class="meta">
+<h1>{pack_name}</h1><p class="deck">Where the price war is being won, where it is being lost,
+and which targeted moves matter most.</p><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
 Generated {escape(_display(result.get("generated_at")))}</div>
-<div class="checksum">Result checksum · {result_checksum}</div>
 </header>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
 <code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
@@ -232,12 +252,13 @@ Generated {escape(_display(result.get("generated_at")))}</div>
     @staticmethod
     def _section(section: JsonObject) -> str:
         title = escape(_display(section.get("title")))
-        kind = escape(_display(section.get("kind")))
+        section_kind = str(section.get("kind", ""))
+        kind = escape(_display(section_kind))
         narrative = section.get("narrative")
         narrative_html = (
             _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""
         )
-        metrics = _rows(section, "metrics")[:6]
+        metrics = _rows(section, "metrics")[:6] if section_kind in {"kpi_strip", "coverage"} else []
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
             f"<strong>{escape(_metric_display(metric.get('value'), metric.get('unit')))}</strong>"
@@ -246,7 +267,13 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         )
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
-        if section.get("visualization") == "ranked_cards":
+        if section_kind in {
+            "price_position",
+            "segment_analysis",
+            "geographic_sensitivity",
+        }:
+            detail = _inline_table(records)
+        elif section.get("visualization") == "ranked_cards" and not narrative_html:
             repeated_detail = (
                 len({str(row.get("summary") or row.get("rationale") or "") for row in records[:5]})
                 == 1
@@ -261,6 +288,8 @@ Generated {escape(_display(result.get("generated_at")))}</div>
                 for index, row in enumerate(records[:5])
             )
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
+        elif section_kind in {"executive_summary", "recommendations", "data_quality"}:
+            detail = ""
         else:
             detail = _collapsed_table("View evidence-backed detail", records)
         empty = (
@@ -452,9 +481,20 @@ class LeadershipEmailRenderer:
             view_product_pack.get("name") or product_pack.get("name") or product_pack.get("id")
         )
         message = EmailMessage()
-        benchmark = _display(result.get("benchmark_retailer")).replace("_", " ").title()
+        benchmark = (
+            _display(
+                view.get("benchmark_retailer")
+                if view is not None
+                else result.get("benchmark_retailer")
+            )
+            .replace("_", " ")
+            .title()
+        )
         competitors = ", ".join(
-            _display(value).replace("_", " ").title() for value in result.get("competitors", [])
+            _display(value).replace("_", " ").title()
+            for value in (
+                view.get("competitors", []) if view is not None else result.get("competitors", [])
+            )
         )
         message["Subject"] = (
             f"{subject_name} Competitive Intelligence: {benchmark} vs. {competitors}"
@@ -479,18 +519,12 @@ class LeadershipEmailRenderer:
                 if isinstance(narrative, dict) and narrative.get("body"):
                     lines.append(_display(narrative["body"]))
                 metrics = _rows(section, "metrics")
-                if metrics:
+                if metrics and not (isinstance(narrative, dict) and narrative.get("body")):
                     lines.extend(
                         f"- {_display(metric.get('name'))}: "
                         f"{_metric_display(metric.get('value'), metric.get('unit'))}"
                         for metric in metrics[:6]
                     )
-            lines.extend(("", "Prioritized actions", ""))
-            lines.extend(
-                f"{_display(row.get('priority'))}. {_display(row.get('action'))} "
-                f"{_display(row.get('rationale'))}"
-                for row in _rows(result, "recommendations")
-            )
         else:
             lines.extend(("", "Key findings", ""))
             lines.extend(

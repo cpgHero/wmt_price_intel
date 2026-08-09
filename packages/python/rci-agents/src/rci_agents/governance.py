@@ -61,8 +61,17 @@ class NarrativeQualityCritic:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} has missing or undeclared storylines"
                 )
+            required_storylines = {
+                str(value) for value in request.get("required_storyline_refs", [])
+            }
+            if not required_storylines.issubset(storylines):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} omits required storylines "
+                    f"{sorted(required_storylines - storylines)}"
+                )
             body = str(raw.get("body_template", "")).strip()
-            if len(body) < 48:
+            minimum_length = 220 if required_storylines else 80
+            if len(body) < minimum_length:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} is too thin for leadership use"
                 )

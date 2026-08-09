@@ -350,8 +350,134 @@ def test_analysis_brief_is_deterministic_complete_and_evidence_bounded() -> None
     }
     assert brief_metric_ids <= metric_ids
     assert brief_evidence_ids <= evidence_ids
-    assert len(brief_metric_ids) <= 160
+    assert len(brief_metric_ids) <= 360
     assert set(first["required_topics"]) <= covered_topics
+
+
+def test_analysis_brief_preserves_configured_priorities_and_cross_profile_reversals() -> None:
+    result = _document("examples/analysis-result-v2.ground-beef.json")
+    result["comparison_modes"].extend(
+        [
+            {
+                "profile_id": "strict",
+                "label": "Strict same-ZIP and exact-package comparison",
+                "geography": "exact_zip",
+                "comparison_metric": "package_price",
+                "dimensions": [
+                    "lean_pct",
+                    "fat_pct",
+                    "weight_lb",
+                    "organic",
+                    "grass_fed",
+                    "premium_tier",
+                ],
+            },
+            {
+                "profile_id": "unit_price",
+                "label": "Best available price per pound",
+                "geography": "exact_zip",
+                "comparison_metric": "price_per_lb",
+                "dimensions": [
+                    "lean_pct",
+                    "fat_pct",
+                    "organic",
+                    "grass_fed",
+                    "premium_tier",
+                ],
+            },
+        ]
+    )
+    result["segments"].extend(
+        [
+            {
+                "segment_id": "exact-80-20-225",
+                "label": "80/20 conventional — 2.25 lb",
+                "attributes": {
+                    "lean_pct": 80,
+                    "fat_pct": 20,
+                    "weight_lb": 2.25,
+                    "organic": False,
+                    "grass_fed": False,
+                    "premium_tier": "standard",
+                },
+                "metric_refs": [],
+                "evidence_refs": ["evidence-exact-aldi"],
+            },
+            {
+                "segment_id": "normalized-80-20",
+                "label": "80/20 conventional",
+                "attributes": {
+                    "lean_pct": 80,
+                    "fat_pct": 20,
+                    "organic": False,
+                    "grass_fed": False,
+                    "premium_tier": "standard",
+                },
+                "metric_refs": [],
+                "evidence_refs": ["evidence-exact-aldi"],
+            },
+        ]
+    )
+
+    def add_comparison(
+        comparison_id: str,
+        profile_id: str,
+        segment_id: str,
+        values: dict[str, float],
+    ) -> None:
+        refs = []
+        for field, value in values.items():
+            metric_id = f"comparison.aldi_us.{profile_id}.{segment_id}.{field}"
+            result["metrics"].append(
+                {
+                    "metric_id": metric_id,
+                    "name": f"ALDI {field}",
+                    "value": value,
+                    "unit": "rate" if field.endswith("_rate") else "matches",
+                    "method": "deterministic test fixture",
+                    "source": "deterministic",
+                    "evidence_refs": ["evidence-exact-aldi"],
+                }
+            )
+            refs.append(metric_id)
+        result["comparisons"].append(
+            {
+                "comparison_id": comparison_id,
+                "competitor_id": "aldi_us",
+                "profile_id": profile_id,
+                "segment_id": segment_id,
+                "metric_refs": refs,
+                "evidence_refs": ["evidence-exact-aldi"],
+            }
+        )
+
+    add_comparison(
+        "aldi-exact-80-20-225",
+        "strict",
+        "exact-80-20-225",
+        {"matches": 1456, "benchmark_lower_rate": 0.0, "competitor_lower_rate": 1.0},
+    )
+    add_comparison(
+        "aldi-normalized-80-20",
+        "unit_price",
+        "normalized-80-20",
+        {"matches": 1438, "benchmark_lower_rate": 0.861, "competitor_lower_rate": 0.139},
+    )
+    product_pack = _document("product-packs/fresh_ground_beef.json")
+    blueprint = _document("report-blueprints/fresh_ground_beef_leadership.json")
+
+    brief = AnalysisBriefBuilder(REPOSITORY_ROOT).build(
+        result,
+        product_pack=product_pack,
+        report_blueprint=blueprint,
+    )
+
+    storyline_ids = {str(row["id"]) for row in brief["storylines"]}
+    assert "story.priority.aldi_80_20_package_reversal" in storyline_ids
+    assert any(value.startswith("story.reversal.aldi_us") for value in storyline_ids)
+    executive = next(row for row in brief["requested_sections"] if row["id"] == "executive_summary")
+    assert "story.priority.aldi_80_20_package_reversal" in executive["required_storyline_refs"]
+    assert "_attributes" not in json.dumps(brief)
 
 
 def test_analysis_brief_uses_merchant_facing_retailer_and_segment_names() -> None:
@@ -422,6 +548,32 @@ def test_narrative_critic_rejects_omitted_required_topic() -> None:
     ]
 
     with pytest.raises(AgentGovernanceError, match="omits required topics"):
+        NarrativeQualityCritic().validate(rows, requested)
+
+
+def test_narrative_critic_rejects_omitted_configured_priority() -> None:
+    requested = {
+        "executive_summary": {
+            "required_topics": ["data_scope"],
+            "storyline_refs": ["story.scope", "story.priority"],
+            "required_storyline_refs": ["story.priority"],
+        }
+    }
+    rows = [
+        {
+            "id": "executive_summary",
+            "body_template": (
+                "The governed scope is complete, but this intentionally long leadership "
+                "summary omits the configured merchant-priority storyline. It remains long "
+                "enough to prove that required strategic coverage, rather than character "
+                "count alone, controls acceptance of the result."
+            ),
+            "topic_refs": ["data_scope"],
+            "storyline_refs": ["story.scope"],
+        }
+    ]
+
+    with pytest.raises(AgentGovernanceError, match="omits required storylines"):
         NarrativeQualityCritic().validate(rows, requested)
 
 

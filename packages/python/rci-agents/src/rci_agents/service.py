@@ -32,7 +32,7 @@ class GovernedAnalysisAssistant:
         worker_id: str,
         insight_model: str,
         narrative_model: str,
-        max_metrics: int = 160,
+        max_metrics: int = 360,
         max_attempts: int = 2,
         lease_seconds: int = 180,
     ) -> None:

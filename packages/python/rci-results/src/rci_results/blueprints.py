@@ -95,6 +95,41 @@ def _merchant_record(
     return {key: merchant_value(value) for key, value in row.items()}
 
 
+_COMPARISON_FIELDS = (
+    "matches",
+    "benchmark_lower_rate",
+    "competitor_lower_rate",
+    "benchmark_median",
+    "competitor_median",
+    "median_gap",
+)
+
+
+def _metric_field(metric_id: str) -> str | None:
+    normalized = metric_id.replace("-", "_").casefold()
+    for field in sorted(_COMPARISON_FIELDS, key=len, reverse=True):
+        if normalized.endswith(field):
+            return field
+    return None
+
+
+def _formatted_metric(metric: JsonObject | None) -> str:
+    if metric is None:
+        return "—"
+    value = metric.get("value")
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return "—"
+    unit = str(metric.get("unit", ""))
+    if unit == "rate":
+        return f"{value:.1%}"
+    if unit.startswith("USD"):
+        rendered = f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
+        return rendered
+    if float(value).is_integer():
+        return f"{int(value):,}"
+    return f"{value:,.2f}"
+
+
 @dataclass(frozen=True, slots=True)
 class ReportBlueprint:
     id: str
@@ -226,8 +261,14 @@ class ReportProjector:
         return {
             "analysis_id": result["analysis_id"],
             "generated_at": result["generated_at"],
-            "benchmark_retailer": result["benchmark_retailer"],
-            "competitors": result["competitors"],
+            "benchmark_retailer": self._retailer_names.get(
+                str(result["benchmark_retailer"]),
+                str(result["benchmark_retailer"]).replace("_", " ").title(),
+            ),
+            "competitors": [
+                self._retailer_names.get(str(value), str(value).replace("_", " ").title())
+                for value in result["competitors"]
+            ],
             "product_pack": {
                 "id": product_pack["id"],
                 "name": product_pack["name"],
@@ -292,7 +333,15 @@ class ReportProjector:
         records = self._records_for_kind(
             result, kind, {str(m["metric_id"]) for m in selected_metrics}
         )
-        records = [_merchant_record(row, self._retailer_names, product_pack) for row in records]
+        if kind in {"price_position", "segment_analysis", "geographic_sensitivity"}:
+            records = self._comparison_records(
+                result,
+                records,
+                metric_index,
+                product_pack,
+            )
+        else:
+            records = [_merchant_record(row, self._retailer_names, product_pack) for row in records]
         narrative = None
         narrative_id = section.get("narrative_section_id")
         narratives = result.get("narratives", {})
@@ -341,8 +390,8 @@ class ReportProjector:
             "kpi_strip": "metrics",
             "coverage": "coverage",
             "price_position": "comparisons",
-            "segment_analysis": "segments",
-            "geographic_sensitivity": "geographic_sensitivity",
+            "segment_analysis": "comparisons",
+            "geographic_sensitivity": "comparisons",
             "assortment": "assortment",
             "product_table": "evidence_sets",
             "recommendations": "recommendations",
@@ -360,7 +409,16 @@ class ReportProjector:
         rows = self._rows(result.get(source))
         if kind == "kpi_strip":
             return [row for row in rows if str(row.get("metric_id")) in selected_metric_ids]
-        if kind in {"price_position", "segment_analysis", "coverage"} and selected_metric_ids:
+        if (
+            kind
+            in {
+                "price_position",
+                "segment_analysis",
+                "geographic_sensitivity",
+                "coverage",
+            }
+            and selected_metric_ids
+        ):
             return [
                 row
                 for row in rows
@@ -369,6 +427,71 @@ class ReportProjector:
                 )
             ]
         return rows
+
+    def _comparison_records(
+        self,
+        result: JsonObject,
+        comparisons: list[JsonObject],
+        metric_index: dict[str, JsonObject],
+        product_pack: JsonObject,
+    ) -> list[JsonObject]:
+        """Project stored comparison metrics into a merchant-facing table."""
+
+        mode_index = {
+            str(row.get("profile_id")): row for row in self._rows(result.get("comparison_modes"))
+        }
+        segment_index = {
+            str(row.get("segment_id")): row for row in self._rows(result.get("segments"))
+        }
+        rows: list[JsonObject] = []
+        for comparison in comparisons:
+            values = {
+                field: metric_index[str(ref)]
+                for ref in comparison.get("metric_refs", [])
+                if str(ref) in metric_index and (field := _metric_field(str(ref))) is not None
+            }
+            if not values:
+                continue
+            competitor_id = str(comparison.get("competitor_id", "unknown"))
+            competitor = self._retailer_names.get(
+                competitor_id,
+                competitor_id.replace("_", " ").title(),
+            )
+            mode = mode_index.get(str(comparison.get("profile_id")), {})
+            segment_id = str(comparison.get("segment_id", "all"))
+            segment = segment_index.get(segment_id, {})
+            segment_label = (
+                "All comparable items" if segment_id == "all" else segment.get("label", segment_id)
+            )
+            rows.append(
+                {
+                    "competitor": competitor,
+                    "comparison lens": _merchant_text(
+                        mode.get("label", comparison.get("profile_id", "Comparison")),
+                        self._retailer_names,
+                        product_pack,
+                    ),
+                    "segment": _merchant_text(
+                        segment_label,
+                        self._retailer_names,
+                        product_pack,
+                    ),
+                    "matches": _formatted_metric(values.get("matches")),
+                    "benchmark lower": _formatted_metric(values.get("benchmark_lower_rate")),
+                    "competitor lower": _formatted_metric(values.get("competitor_lower_rate")),
+                    "benchmark median": _formatted_metric(values.get("benchmark_median")),
+                    "competitor median": _formatted_metric(values.get("competitor_median")),
+                    "competitor - benchmark gap": _formatted_metric(values.get("median_gap")),
+                }
+            )
+        return sorted(
+            rows,
+            key=lambda row: (
+                str(row["competitor"]),
+                str(row["segment"]) != "All comparable items",
+                str(row["segment"]),
+            ),
+        )
 
     @staticmethod
     def _rows(value: object) -> list[JsonObject]:

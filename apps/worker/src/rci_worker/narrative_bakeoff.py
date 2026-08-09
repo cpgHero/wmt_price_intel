@@ -107,7 +107,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--max-metrics",
         type=int,
-        default=int(os.getenv("AI_MAX_METRICS", "160")),
+        default=int(os.getenv("AI_MAX_METRICS", "360")),
     )
     parser.add_argument(
         "--max-attempts",

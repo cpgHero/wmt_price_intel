@@ -104,7 +104,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         assert json.loads(archive.read("analysis-result.json")) == result
 
 
-def test_leadership_html_prioritizes_titles_and_collapses_supporting_detail() -> None:
+def test_leadership_html_prioritizes_governed_narrative_and_visible_comparisons() -> None:
     result = _result()
     result["insights"] = [
         {
@@ -123,31 +123,30 @@ def test_leadership_html_prioritizes_titles_and_collapses_supporting_detail() ->
 
     html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body.decode()
 
-    assert "Decision title 0" in html
-    assert "Long supporting summary 0" in html
-    assert "Decision title 5" not in html
-    assert "<details class=evidence>" in html
+    assert "Decision title 0" not in html
+    assert "ALDI pressure is concentrated" in html
+    assert '<div class="table-wrap comparison-table">' in html
+    assert "All comparable items" in html
 
 
 def test_leadership_html_humanizes_catalog_and_product_pack_labels() -> None:
     result = _result()
-    result["metrics"][0]["name"] = (
-        "aldi_us Lean Pct: 80 / Fat Pct: 20 / Weight Lb: 2.25 / "
-        "Organic: False / Grass Fed: False / Premium Tier: standard matches"
-    )
-    result["recommendations"][0]["action"] = (
-        "Prioritize aldi_us losses in Lean Pct: 80 / Fat Pct: 20 / Weight Lb: 2.25 / "
-        "Organic: False / Grass Fed: False / Premium Tier: standard."
+    result["metrics"].append(
+        {
+            **result["metrics"][0],
+            "metric_id": "source.total_rows",
+            "name": (
+                "aldi_us Lean Pct: 80 / Fat Pct: 20 / Weight Lb: 2.25 / "
+                "Organic: False / Grass Fed: False / Premium Tier: standard matches"
+            ),
+        }
     )
 
     html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body.decode()
 
     assert "aldi_us" not in html
     assert "Lean Pct:" not in html
-    assert (
-        "Prioritize ALDI losses in 80% lean / 20% fat / 2.25 lb / "
-        "non-organic / non-grass-fed" in html
-    )
+    assert "ALDI 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed" in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
