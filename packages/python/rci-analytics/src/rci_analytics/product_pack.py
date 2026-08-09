@@ -8,6 +8,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from string import Formatter
 from typing import Any, Protocol
 
 from sqlalchemy import text
@@ -54,6 +55,14 @@ class ProductPack:
     def matching_profiles(self) -> tuple[JsonObject, ...]:
         return tuple(dict(value) for value in self.document["matching_profiles"])
 
+    @property
+    def reporting(self) -> JsonObject:
+        return dict(self.document["reporting"])
+
+    @property
+    def report_blueprint(self) -> JsonObject:
+        return dict(self.reporting["report_blueprint"])
+
     def profile(self, profile_id: str) -> JsonObject:
         try:
             return next(
@@ -79,6 +88,7 @@ class ProductPackLoader:
             label=str(path),
         )
         self._validate_semantics(document)
+        self._validate_report_blueprint(document)
         return ProductPack(
             id=str(document["id"]),
             name=str(document["name"]),
@@ -206,6 +216,78 @@ class ProductPackLoader:
                     raise ContractError(
                         f"product override {retailer_id!r}/{product_id!r} has unknown attributes"
                     )
+        ProductPackLoader._validate_reporting(document)
+
+    @staticmethod
+    def _validate_reporting(document: JsonObject) -> None:
+        reporting = document["reporting"]
+        weights = reporting["insight_ranking"]["weights"]
+        if sum(float(value) for value in weights.values()) <= 0:
+            raise ContractError("insight ranking weights must have a positive total")
+        rules = reporting["insight_rules"]
+        rule_ids = [str(rule["id"]) for rule in rules]
+        if len(rule_ids) != len(set(rule_ids)):
+            raise ContractError("Product Pack insight rule IDs must be unique")
+        allowed_fields = {
+            "matches",
+            "unique_geographies",
+            "benchmark_lower",
+            "competitor_lower",
+            "parity",
+            "benchmark_lower_rate",
+            "competitor_lower_rate",
+            "parity_rate",
+            "median_gap",
+        }
+        allowed_template_fields = {"benchmark", "competitor", "profile", "segment"}
+        formatter = Formatter()
+        for rule in rules:
+            field = str(rule["condition"]["field"])
+            if field not in allowed_fields:
+                raise ContractError(
+                    f"insight rule {rule['id']} references unknown summary field {field!r}"
+                )
+            for key in ("title_template", "summary_template"):
+                fields = {
+                    field_name
+                    for _, field_name, _, _ in formatter.parse(str(rule[key]))
+                    if field_name
+                }
+                unknown = fields - allowed_template_fields
+                if unknown:
+                    raise ContractError(
+                        f"insight rule {rule['id']} has unknown template fields {sorted(unknown)}"
+                    )
+            recommendation = rule.get("recommendation")
+            if recommendation:
+                for key in ("action_template", "rationale_template"):
+                    fields = {
+                        field_name
+                        for _, field_name, _, _ in formatter.parse(str(recommendation[key]))
+                        if field_name
+                    }
+                    unknown = fields - allowed_template_fields
+                    if unknown:
+                        raise ContractError(
+                            f"insight rule {rule['id']} has unknown recommendation fields "
+                            f"{sorted(unknown)}"
+                        )
+
+    def _validate_report_blueprint(self, document: JsonObject) -> None:
+        reference = document["reporting"]["report_blueprint"]
+        path = self._root / "report-blueprints" / f"{reference['id']}.json"
+        try:
+            blueprint = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"could not read report blueprint {path}: {exc}") from exc
+        validate_instance(self._root, "report-blueprint.schema.json", blueprint, label=str(path))
+        if blueprint["id"] != reference["id"] or blueprint["version"] != reference["version"]:
+            raise ContractError("Product Pack report blueprint reference does not match the file")
+        if blueprint["product_pack"] != {
+            "id": document["id"],
+            "version": document["version"],
+        }:
+            raise ContractError("report blueprint Product Pack reference does not match")
 
     @staticmethod
     def _validate_extraction_rules(attribute: JsonObject) -> None:

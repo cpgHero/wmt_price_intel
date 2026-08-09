@@ -42,9 +42,28 @@ class AnalysisResultService:
         self, document: dict[str, Any], *, collection_run_id: str | None = None
     ) -> AnalysisRecord:
         result = self._validator.validate(document)
-        if collection_run_id is not None and str(result["collection_run_id"]) != collection_run_id:
+        embedded_run_id: str | None
+        if result["schema_version"] == "2.0.0":
+            source = result["source"]
+            assert isinstance(source, dict)
+            embedded = source.get("collection_run_id")
+            embedded_run_id = str(embedded) if embedded is not None else None
+        else:
+            embedded_run_id = str(result["collection_run_id"])
+        if (
+            collection_run_id is not None
+            and embedded_run_id is not None
+            and embedded_run_id != collection_run_id
+        ):
             raise ValueError("AnalysisResult collection_run_id does not match the request path")
-        return await self._repository.publish(result, result_checksum(result))
+        resolved_run_id = collection_run_id or embedded_run_id
+        if resolved_run_id is None:
+            raise ValueError("historical AnalysisResult publication requires a collection run")
+        return await self._repository.publish(
+            result,
+            result_checksum(result),
+            collection_run_id=resolved_run_id,
+        )
 
     async def list_analyses(self, limit: int = 50) -> list[AnalysisRecord]:
         return await self._repository.list_analyses(limit)
@@ -77,6 +96,10 @@ class AnalysisResultService:
             "data_quality": record.result["data_quality"],
             "validation": record.result["validation"],
         }
+
+    async def report_view(self, identifier: str) -> JsonObject:
+        record = await self.get(identifier)
+        return self._renderer.report_view(record.result)
 
     async def generate_artifact(
         self, identifier: str, artifact_type: ArtifactType

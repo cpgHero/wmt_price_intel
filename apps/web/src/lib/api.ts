@@ -1,4 +1,7 @@
-import type { RetailCompetitiveIntelligenceAnalysisResult } from "@rci/contracts";
+import type {
+  RetailCompetitiveIntelligenceAnalysisResult,
+  RetailCompetitiveIntelligenceAnalysisResultV2,
+} from "@rci/contracts";
 
 import { loadServerConfig } from "./config";
 
@@ -14,8 +17,34 @@ export interface AnalysisRecord {
   product_pack_version: string;
   schema_version: string;
   checksum: string;
-  result: RetailCompetitiveIntelligenceAnalysisResult;
+  result:
+    | RetailCompetitiveIntelligenceAnalysisResult
+    | RetailCompetitiveIntelligenceAnalysisResultV2;
   created_at: string;
+}
+
+export interface ReportSectionView {
+  id: string;
+  title: string;
+  kind: string;
+  visualization: string;
+  required: boolean;
+  empty: boolean;
+  empty_state?: string;
+  metrics: JsonObject[];
+  records: JsonObject[];
+  evidence_sets: JsonObject[];
+  narrative: JsonObject | null;
+}
+
+export interface AnalysisReportView {
+  analysis_id: string;
+  generated_at: string;
+  benchmark_retailer: string;
+  competitors: string[];
+  product_pack: { id: string; name: string; version: string };
+  blueprint: { id: string; version: string };
+  sections: ReportSectionView[];
 }
 
 export interface RunRecord {

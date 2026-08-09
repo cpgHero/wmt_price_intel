@@ -3,7 +3,12 @@
 import { useState } from "react";
 
 import { DataTable } from "@/app/components/data-table";
-import type { AnalysisRecord, JsonObject } from "@/lib/api";
+import type {
+  AnalysisRecord,
+  AnalysisReportView,
+  JsonObject,
+  ReportSectionView,
+} from "@/lib/api";
 import {
   asObject,
   asRows,
@@ -28,9 +33,23 @@ type Tab = (typeof tabs)[number];
 
 export function AnalysisWorkspace({
   analysis,
+  reportView,
+}: Readonly<{
+  analysis: AnalysisRecord;
+  reportView: AnalysisReportView | null;
+}>) {
+  return reportView ? (
+    <BlueprintAnalysisWorkspace analysis={analysis} reportView={reportView} />
+  ) : (
+    <LegacyAnalysisWorkspace analysis={analysis} />
+  );
+}
+
+function LegacyAnalysisWorkspace({
+  analysis,
 }: Readonly<{ analysis: AnalysisRecord }>) {
   const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
-  const result = analysis.result;
+  const result = analysis.result as unknown as JsonObject;
   const productPack = asObject(result.product_pack);
   const validation = asObject(result.validation);
   return (
@@ -43,7 +62,7 @@ export function AnalysisWorkspace({
           </h1>
           <p className="workspace-meta">
             {analysis.analysis_id} · Generated{" "}
-            {displayDate(result.generated_at)}
+            {displayDate(String(result.generated_at))}
           </p>
         </div>
         <div className="workspace-status">
@@ -69,10 +88,7 @@ export function AnalysisWorkspace({
       </div>
       <section className="workspace-panel" role="tabpanel">
         {activeTab === "Executive Summary" && (
-          <ExecutiveSummary
-            result={result as unknown as JsonObject}
-            validation={validation}
-          />
+          <ExecutiveSummary result={result} validation={validation} />
         )}
         {activeTab === "Geographic Coverage" && (
           <Section
@@ -159,6 +175,117 @@ export function AnalysisWorkspace({
         )}
       </section>
     </>
+  );
+}
+
+function BlueprintAnalysisWorkspace({
+  analysis,
+  reportView,
+}: Readonly<{
+  analysis: AnalysisRecord;
+  reportView: AnalysisReportView;
+}>) {
+  const [activeSection, setActiveSection] = useState(
+    reportView.sections[0]?.id ?? "exports",
+  );
+  const selected = reportView.sections.find(
+    (section) => section.id === activeSection,
+  );
+  return (
+    <>
+      <header className="workspace-header">
+        <div>
+          <p className="eyebrow">Analysis workspace</p>
+          <h1>{reportView.product_pack.name}</h1>
+          <p className="workspace-meta">
+            {analysis.analysis_id} · Generated{" "}
+            {displayDate(reportView.generated_at)}
+          </p>
+        </div>
+        <div className="workspace-status">
+          <span className={`status-badge ${analysis.status}`}>
+            {displayLabel(analysis.status)}
+          </span>
+          <small>
+            Blueprint {reportView.blueprint.id} · {reportView.blueprint.version}
+          </small>
+        </div>
+      </header>
+      <div className="tab-list" role="tablist" aria-label="Analysis sections">
+        {reportView.sections.map((section) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSection === section.id}
+            className={activeSection === section.id ? "active" : ""}
+            onClick={() => setActiveSection(section.id)}
+            key={section.id}
+          >
+            {section.title}
+          </button>
+        ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSection === "exports"}
+          className={activeSection === "exports" ? "active" : ""}
+          onClick={() => setActiveSection("exports")}
+        >
+          Exports
+        </button>
+      </div>
+      <section className="workspace-panel" role="tabpanel">
+        {selected ? (
+          <BlueprintSection section={selected} />
+        ) : (
+          <Section
+            title="Delivery artifacts"
+            note="Generated from this immutable AnalysisResult; renderers only present blueprint-selected facts."
+          >
+            <ArtifactActions analysisId={analysis.analysis_id} />
+          </Section>
+        )}
+      </section>
+    </>
+  );
+}
+
+function BlueprintSection({
+  section,
+}: Readonly<{ section: ReportSectionView }>) {
+  const narrative = asObject(section.narrative);
+  return (
+    <Section
+      title={section.title}
+      note={`${displayLabel(section.kind)} · ${displayLabel(section.visualization)}`}
+    >
+      {narrative.body ? (
+        <p className="section-narrative">{displayValue(narrative.body)}</p>
+      ) : null}
+      {section.metrics.length > 0 ? (
+        <div className="metric-grid">
+          {section.metrics.map((metric) => (
+            <Metric
+              key={String(metric.metric_id)}
+              label={String(metric.name)}
+              value={`${displayValue(metric.value)} ${displayValue(metric.unit)}`}
+            />
+          ))}
+        </div>
+      ) : null}
+      {section.records.length > 0 ? <DataTable rows={section.records} /> : null}
+      {section.evidence_sets.length > 0 ? (
+        <details className="evidence-disclosure">
+          <summary>Evidence manifests</summary>
+          <DataTable rows={section.evidence_sets} />
+        </details>
+      ) : null}
+      {section.empty ? (
+        <p className="empty-copy">
+          {section.empty_state ?? "No records were supplied for this section."}
+        </p>
+      ) : null}
+    </Section>
   );
 }
 

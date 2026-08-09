@@ -50,7 +50,7 @@ class AutomationService:
         self.schema_root = schema_root
         self._alerts = AlertEvaluator()
         self._history = HistoricalComparator()
-        self._renderer = ArtifactRenderer()
+        self._renderer = ArtifactRenderer(schema_root)
 
     async def publish_alert(self, config: JsonObject) -> AlertDefinitionRecord:
         validate_instance(

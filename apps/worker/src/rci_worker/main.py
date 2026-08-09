@@ -36,6 +36,7 @@ from rci_providers.client import credential_budget_key
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
+    ArtifactRenderer,
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
@@ -156,6 +157,7 @@ async def run() -> None:
                     PostgresResultsRepository(database.engine),
                     AnalysisResultValidator(repository_root),
                     S3ReportObjectStore(bucket=bucket, client=s3_client),
+                    ArtifactRenderer(repository_root),
                 ),
                 code_version=settings.app_version or APP_VERSION,
             ),

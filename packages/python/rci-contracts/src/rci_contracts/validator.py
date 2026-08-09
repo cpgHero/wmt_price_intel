@@ -104,6 +104,8 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
     )
     for product_pack in sorted((root / "product-packs").glob("fresh_*.json")):
         yield ContractTarget("product-pack.schema.json", product_pack)
+    for blueprint in sorted((root / "report-blueprints").glob("*.json")):
+        yield ContractTarget("report-blueprint.schema.json", blueprint)
 
 
 def _validate_json_parseability(root: Path) -> int:
@@ -113,6 +115,7 @@ def _validate_json_parseability(root: Path) -> int:
         *sorted((root / "fixtures" / "api_samples").glob("*.json")),
         root / "fixtures" / "location_master" / "locations.profile.json",
         root / "product-packs" / "index.json",
+        *sorted((root / "report-blueprints").glob("*.json")),
     ]
     for path in paths:
         _load_json(path)

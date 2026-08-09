@@ -1,0 +1,183 @@
+{
+  "schema_version": "1.0.0",
+  "id": "fresh_bananas_leadership",
+  "version": "1.0.0",
+  "product_pack": { "id": "fresh_bananas", "version": "1.0.0" },
+  "brand_profile": {
+    "id": "cpghero_rci",
+    "version": "1.0.0",
+    "supports_light_mode": true,
+    "supports_dark_mode": true
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "kind": "executive_summary",
+      "required": true,
+      "metric_selectors": [
+        "comparison.*.lower_rate",
+        "comparison.*.median_gap"
+      ],
+      "evidence_kinds": ["exact_matches", "normalized_matches"],
+      "visualization": "ranked_cards",
+      "empty_state": "The analysis did not produce sufficient validated comparisons.",
+      "narrative_section_id": "executive_summary"
+    },
+    {
+      "id": "kpis",
+      "title": "Decision KPIs",
+      "kind": "kpi_strip",
+      "required": true,
+      "metric_selectors": [
+        "source.total_rows",
+        "coverage.*.qualifying_zips",
+        "comparison.*.matches"
+      ],
+      "evidence_kinds": [
+        "source_manifest",
+        "classified_offers",
+        "exact_matches"
+      ],
+      "visualization": "kpi_cards",
+      "empty_state": "No validated KPI values were produced."
+    },
+    {
+      "id": "coverage",
+      "title": "Fresh Banana and Plantain Footprint",
+      "kind": "coverage",
+      "required": true,
+      "metric_selectors": ["coverage.*"],
+      "evidence_kinds": ["classified_offers"],
+      "visualization": "bar",
+      "empty_state": "No qualifying geographic coverage was observed."
+    },
+    {
+      "id": "price_position",
+      "title": "Shelf-Price and Unit-Normalized Position",
+      "kind": "price_position",
+      "required": true,
+      "metric_selectors": ["comparison.*"],
+      "evidence_kinds": ["exact_matches", "normalized_matches"],
+      "visualization": "table",
+      "empty_state": "No valid banana comparisons were available."
+    },
+    {
+      "id": "segments",
+      "title": "Variety, Organic, and Selling-Unit Segments",
+      "kind": "segment_analysis",
+      "required": true,
+      "metric_selectors": ["comparison.*"],
+      "evidence_kinds": ["exact_matches", "normalized_matches"],
+      "visualization": "table",
+      "empty_state": "No defensible banana segments were available."
+    },
+    {
+      "id": "products",
+      "title": "Assortment and Brand Structure",
+      "kind": "product_table",
+      "required": true,
+      "metric_selectors": ["assortment.*"],
+      "evidence_kinds": ["product_catalog", "classified_offers"],
+      "visualization": "table",
+      "empty_state": "No qualifying product evidence was produced."
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommended Actions",
+      "kind": "recommendations",
+      "required": true,
+      "metric_selectors": ["comparison.*"],
+      "evidence_kinds": ["exact_matches", "normalized_matches"],
+      "visualization": "ranked_cards",
+      "empty_state": "No evidence-backed action met the reporting threshold.",
+      "narrative_section_id": "recommendations"
+    },
+    {
+      "id": "quality",
+      "title": "Data Quality",
+      "kind": "data_quality",
+      "required": true,
+      "metric_selectors": ["quality.*"],
+      "evidence_kinds": ["validation_issues"],
+      "visualization": "table",
+      "empty_state": "Data-quality evidence is unavailable."
+    },
+    {
+      "id": "methodology",
+      "title": "Methodology and Caveats",
+      "kind": "methodology",
+      "required": true,
+      "metric_selectors": [],
+      "evidence_kinds": ["source_manifest", "validation_issues"],
+      "visualization": "none",
+      "empty_state": "Methodology metadata is unavailable."
+    }
+  ],
+  "artifact_profiles": [
+    {
+      "artifact_type": "html",
+      "section_ids": [
+        "executive_summary",
+        "kpis",
+        "coverage",
+        "price_position",
+        "segments",
+        "products",
+        "recommendations",
+        "quality",
+        "methodology"
+      ]
+    },
+    {
+      "artifact_type": "xlsx",
+      "section_ids": [
+        "executive_summary",
+        "kpis",
+        "coverage",
+        "price_position",
+        "segments",
+        "products",
+        "quality",
+        "methodology"
+      ],
+      "worksheet_definitions": [
+        { "name": "Executive Summary", "source": "insights" },
+        { "name": "Metrics", "source": "metrics" },
+        { "name": "Retailer Scorecard", "source": "coverage" },
+        { "name": "Price Comparisons", "source": "comparisons" },
+        { "name": "Segment Analysis", "source": "segments" },
+        { "name": "Product Catalog", "source": "evidence_sets" },
+        { "name": "Data Quality", "source": "data_quality" },
+        { "name": "Methodology", "source": "provenance" }
+      ]
+    },
+    {
+      "artifact_type": "leadership_email",
+      "section_ids": ["executive_summary", "recommendations", "methodology"]
+    },
+    {
+      "artifact_type": "audit_zip",
+      "section_ids": [
+        "coverage",
+        "price_position",
+        "segments",
+        "products",
+        "quality",
+        "methodology"
+      ]
+    }
+  ],
+  "narrative_policy": {
+    "require_metric_refs": true,
+    "require_evidence_refs": true,
+    "allow_unreferenced_numbers": false,
+    "required_questions": [
+      "what_changed",
+      "why_it_matters",
+      "who_is_affected",
+      "what_to_do_next",
+      "what_is_the_evidence"
+    ]
+  }
+}

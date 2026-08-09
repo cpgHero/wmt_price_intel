@@ -13,7 +13,13 @@ from rci_results.models import (
 
 
 class ResultsRepository(Protocol):
-    async def publish(self, result: JsonObject, checksum: str) -> AnalysisRecord: ...
+    async def publish(
+        self,
+        result: JsonObject,
+        checksum: str,
+        *,
+        collection_run_id: str,
+    ) -> AnalysisRecord: ...
 
     async def list_analyses(self, limit: int = 50) -> list[AnalysisRecord]: ...
 

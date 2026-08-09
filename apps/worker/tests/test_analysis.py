@@ -212,7 +212,8 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
 
     analysis = await result_service.get_by_collection_run(RUN_ID)
     assert analysis.analysis_id == analysis_id
-    assert analysis.result["source_summary"]["normalized_offers"] == 3
+    assert analysis.result["schema_version"] == "2.0.0"
+    assert analysis.result["source"]["total_rows"] == 3
     assert {row["retailer_id"] for row in analysis.result["coverage"]} == {
         "walmart_us",
         "aldi_us",
@@ -303,9 +304,9 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
 
     analysis = await result_service.get_by_collection_run(RUN_ID)
     assert analysis.analysis_id == analysis_id
-    assert analysis.result["source_summary"]["source_kind"] == "historical_import"
-    assert analysis.result["source_summary"]["provider_rows"] == 3
-    assert analysis.result["source_summary"]["raw_dataset_ids"] == sorted(
+    assert analysis.result["source"]["kind"] == "historical_import"
+    assert analysis.result["source"]["total_rows"] == 3
+    assert analysis.result["source"]["source_artifact_ids"] == sorted(
         source.dataset_artifact_id for source in sources
     )
     assert analysis.result["comparisons"]

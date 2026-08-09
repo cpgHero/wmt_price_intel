@@ -14,6 +14,7 @@ from rci_contracts import ContractError
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
+    ArtifactRenderer,
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
@@ -86,6 +87,7 @@ def get_analysis_service(request: Request) -> AnalysisResultService:
         PostgresResultsRepository(request.app.state.database_probe.engine),
         AnalysisResultValidator(repository_root),
         object_store,
+        ArtifactRenderer(repository_root),
     )
 
 
@@ -174,6 +176,19 @@ async def get_quality(
         return await service.quality(analysis_id)
     except AnalysisNotFoundError as exc:
         raise _analysis_not_found(exc) from exc
+
+
+@router.get("/analyses/{analysis_id}/report", tags=["analyses"])
+async def get_report_view(
+    analysis_id: str,
+    service: AnalysisServiceDependency,
+) -> dict[str, Any]:
+    try:
+        return await service.report_view(analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get(

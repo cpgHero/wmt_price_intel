@@ -191,6 +191,15 @@ class HistoricalComparator:
         )
 
     def _numeric_values(self, document: dict[str, Any]) -> dict[str, tuple[Decimal, str]]:
+        if document.get("schema_version") == "2.0.0":
+            return {
+                str(metric["metric_id"]): (
+                    _decimal(metric["value"]),
+                    f"/metrics/{index}/value",
+                )
+                for index, metric in enumerate(document.get("metrics", []))
+                if isinstance(metric, dict) and "metric_id" in metric and "value" in metric
+            }
         values: dict[str, tuple[Decimal, str]] = {}
         for section in self._sections:
             if section in document:

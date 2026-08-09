@@ -394,6 +394,66 @@
       "1lb_conventional_gap",
       "2lb_conventional_gap",
       "1lb_organic_parity_rate"
+    ],
+    "report_blueprint": {
+      "id": "fresh_strawberries_leadership",
+      "version": "1.0.0"
+    },
+    "insight_ranking": {
+      "weights": {
+        "breadth": 0.3,
+        "magnitude": 0.3,
+        "confidence": 0.2,
+        "actionability": 0.2
+      },
+      "minimum_score": 0.3,
+      "max_candidates": 8
+    },
+    "insight_rules": [
+      {
+        "id": "competitive_pressure",
+        "scope": "both",
+        "condition": {
+          "field": "competitor_lower_rate",
+          "operator": "gt",
+          "threshold": 0.5
+        },
+        "title_template": "{competitor} pressure in {segment}",
+        "summary_template": "{competitor} is lower more often than {benchmark} for the selected {profile} comparison.",
+        "business_impact": "Package size can reverse the price winner, so action should stay segment-specific.",
+        "severity": "high",
+        "breadth_scale": 500,
+        "magnitude_scale": 0.5,
+        "confidence_scale": 250,
+        "actionability": 0.95,
+        "minimum_matches": 25,
+        "limitations": [
+          "No per-berry economics are inferred without explicit counts."
+        ],
+        "recommendation": {
+          "action_template": "Review {competitor} losses in {segment} without blending package sizes.",
+          "owner": "Category Pricing",
+          "rationale_template": "The ranked signal combines repeated market breadth with material observed price pressure."
+        }
+      },
+      {
+        "id": "benchmark_strength",
+        "scope": "both",
+        "condition": {
+          "field": "benchmark_lower_rate",
+          "operator": "gte",
+          "threshold": 0.75
+        },
+        "title_template": "{benchmark} strength in {segment}",
+        "summary_template": "{benchmark} is lower across most validated {profile} comparisons in this segment.",
+        "business_impact": "Protect the current package-specific value position while monitoring exceptions.",
+        "severity": "positive",
+        "breadth_scale": 500,
+        "magnitude_scale": 0.25,
+        "confidence_scale": 250,
+        "actionability": 0.65,
+        "minimum_matches": 25
+      }
     ]
   },
   "regression": {

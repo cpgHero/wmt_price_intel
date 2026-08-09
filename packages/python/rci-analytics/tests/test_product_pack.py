@@ -27,6 +27,10 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
         "form",
         "specialty_claim",
     ]
+    assert pack.report_blueprint == {
+        "id": "fresh_strawberries_leadership",
+        "version": "1.0.0",
+    }
 
 
 def test_semantic_validation_rejects_unknown_dimensions() -> None:
@@ -68,6 +72,16 @@ def test_semantic_validation_rejects_unknown_override_attributes() -> None:
     ] = "bad"
 
     with pytest.raises(ContractError, match="unknown attributes"):
+        loader._validate_semantics(invalid)
+
+
+def test_semantic_validation_rejects_unknown_insight_template_fields() -> None:
+    loader = ProductPackLoader(REPOSITORY_ROOT)
+    pack = loader.load("fresh_strawberries")
+    invalid = copy.deepcopy(pack.document)
+    invalid["reporting"]["insight_rules"][0]["title_template"] = "{category} pressure"
+
+    with pytest.raises(ContractError, match="unknown template fields"):
         loader._validate_semantics(invalid)
 
 

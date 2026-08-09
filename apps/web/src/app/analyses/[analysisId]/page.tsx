@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/app/components/empty-state";
-import { getApi, type AnalysisRecord } from "@/lib/api";
+import {
+  getApi,
+  type AnalysisRecord,
+  type AnalysisReportView,
+} from "@/lib/api";
 
 import { AnalysisWorkspace } from "./workspace";
 
@@ -28,9 +32,18 @@ export default async function AnalysisPage({
       </main>
     );
   }
+  const reportResponse =
+    response.data.schema_version === "2.0.0"
+      ? await getApi<AnalysisReportView>(
+          `/api/v1/analyses/${encodeURIComponent(analysisId)}/report`,
+        )
+      : null;
   return (
     <main className="analysis-page">
-      <AnalysisWorkspace analysis={response.data} />
+      <AnalysisWorkspace
+        analysis={response.data}
+        reportView={reportResponse?.data ?? null}
+      />
     </main>
   );
 }

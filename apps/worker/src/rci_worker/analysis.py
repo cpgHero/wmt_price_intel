@@ -22,12 +22,15 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_analytics import (
+    AnalysisResultV2Builder,
     CanonicalOfferNormalizer,
     ComparisonEngine,
+    ComparisonFact,
     ComparisonInputReducer,
     OfferClassifier,
     ParquetDatasetWriter,
     ProductPackLoader,
+    evidence_set,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
 from rci_analytics.normalization import RetailerIdentityMap
@@ -520,7 +523,7 @@ class AnalysisProcessor:
         engine = ComparisonEngine(pack)
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
         raw_artifact_ids: list[str] = []
-        source_artifact_count = 0
+        source_evidence_artifacts: list[tuple[str, str, int]] = []
         provider_rows_count = 0
         normalized_count = 0
         review_offer_count = 0
@@ -530,7 +533,8 @@ class AnalysisProcessor:
         in_scope_counts: dict[str, int] = defaultdict(int)
         in_scope_zips: dict[str, set[str]] = defaultdict(set)
         in_scope_stores: dict[str, set[str]] = defaultdict(set)
-        derived_artifact_ids: list[str] = []
+        classified_evidence_artifacts: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+        observed_values: list[str] = []
         normalized_batches: dict[str, list[Any]] = defaultdict(list)
         classified_batches: dict[str, list[Any]] = defaultdict(list)
         partitions: dict[str, int] = defaultdict(int)
@@ -554,15 +558,16 @@ class AnalysisProcessor:
                 retailer_id=retailer_id,
                 partition=partition,
             )
-            derived_artifact_ids.extend(
-                [
-                    await self._collections.record_artifact(
-                        job.collection_run_id, normalized_artifact
-                    ),
-                    await self._collections.record_artifact(
-                        job.collection_run_id, classified_artifact
-                    ),
-                ]
+            await self._collections.record_artifact(job.collection_run_id, normalized_artifact)
+            classified_artifact_id = await self._collections.record_artifact(
+                job.collection_run_id, classified_artifact
+            )
+            classified_evidence_artifacts[retailer_id].append(
+                (
+                    classified_artifact_id,
+                    classified_artifact.checksum,
+                    int(classified_artifact.row_count or 0),
+                )
             )
             normalized_batch.clear()
             classified_batch.clear()
@@ -582,6 +587,8 @@ class AnalysisProcessor:
                 return
             seen_offer_ids.add(normalized_offer.offer_id)
             normalized_count += 1
+            if normalized_offer.collected_at:
+                observed_values.append(normalized_offer.collected_at)
             retailer_id = normalized_offer.retailer_id
             offer_counts[retailer_id] += 1
             classified_offer = classifier.classify(normalized_offer)
@@ -605,7 +612,6 @@ class AnalysisProcessor:
             pages = await self._queue.pages(job.collection_run_id)
             if not pages:
                 raise ValueError("completed collection has no successful raw provider pages")
-            source_artifact_count = len(pages)
             for page in pages:
                 payload = await self._raw_reader.read(page)
                 adapter = self._adapters.get(page.task.adapter_id)
@@ -621,13 +627,19 @@ class AnalysisProcessor:
                     )
                 if page.task.raw_artifact_id is not None:
                     raw_artifact_ids.append(page.task.raw_artifact_id)
+                    source_evidence_artifacts.append(
+                        (
+                            page.task.raw_artifact_id,
+                            page.checksum,
+                            int(page.task.result_count or 0),
+                        )
+                    )
         elif job.source_kind == "historical_import":
             if self._historical_reader is None:
                 raise ValueError("historical input reader is not configured")
             sources = await self._queue.historical_sources(job.input_set_id)
             if not sources:
                 raise ValueError("historical input set has no source artifacts")
-            source_artifact_count = len(sources)
             for source in sources:
                 iter_batches = getattr(self._historical_reader, "iter_batches", None)
                 if callable(iter_batches):
@@ -639,6 +651,9 @@ class AnalysisProcessor:
                     for row in rows:
                         await consume({**row, "retailer_id": source.retailer_id})
                 raw_artifact_ids.append(source.dataset_artifact_id)
+                source_evidence_artifacts.append(
+                    (source.dataset_artifact_id, source.checksum, source.row_count)
+                )
         else:
             raise ValueError(f"unsupported analysis input kind {job.source_kind!r}")
 
@@ -647,11 +662,11 @@ class AnalysisProcessor:
 
         comparison_offers = reducer.offers()
 
-        summaries: list[dict[str, Any]] = []
-        match_evidence: list[dict[str, Any]] = []
+        comparison_facts: list[ComparisonFact] = []
+        comparison_evidence_sets: list[dict[str, Any]] = []
+        headline_segments = tuple(str(value) for value in pack.reporting["headline_segments"])
         for competitor in competitors:
-            competitor_matches = []
-            for profile in selected_profiles:
+            for profile_index, profile in enumerate(selected_profiles):
                 matches = engine.compare(
                     comparison_offers,
                     benchmark_id=benchmark,
@@ -660,25 +675,101 @@ class AnalysisProcessor:
                 )
                 if not matches:
                     continue
-                competitor_matches.extend(matches)
-                summary = asdict(engine.summarize(matches))
-                summaries.append(summary)
-                match_evidence.append(
-                    {
-                        "competitor_id": competitor,
-                        "profile_id": str(profile["id"]),
-                        "matches": len(matches),
-                    }
-                )
-            if competitor_matches:
                 artifact = await self._dataset_writer.write_matches(
-                    competitor_matches,
+                    matches,
                     run_id=job.collection_run_id,
                     retailer_id=competitor,
+                    partition=profile_index,
                 )
-                derived_artifact_ids.append(
-                    await self._collections.record_artifact(job.collection_run_id, artifact)
+                artifact_id = await self._collections.record_artifact(
+                    job.collection_run_id, artifact
                 )
+                profile_id = str(profile["id"])
+                evidence_ref = f"evidence.matches.{competitor}.{profile_id}"
+                geography = str(profile["geography"])
+                comparison_metric = str(profile.get("comparison_metric", "package_price"))
+                if geography == "radius":
+                    evidence_kind = "proximity_matches"
+                elif comparison_metric != "package_price":
+                    evidence_kind = "normalized_matches"
+                elif str(profile.get("unknown_policy", "reject")) == "reject":
+                    evidence_kind = "exact_matches"
+                else:
+                    evidence_kind = "compatible_matches"
+                comparison_evidence_sets.append(
+                    evidence_set(
+                        evidence_ref,
+                        evidence_kind,
+                        [(artifact_id, artifact.checksum, int(artifact.row_count or 0))],
+                    )
+                )
+                summary = asdict(engine.summarize(matches))
+                summary_values = {
+                    key: value
+                    for key, value in summary.items()
+                    if key not in {"profile_id", "competitor_id"}
+                }
+                profile_label = str(profile["label"])
+                dimensions = tuple(str(value) for value in profile["dimensions"])
+                radius_miles = float(profile["radius_miles"]) if geography == "radius" else None
+                comparison_facts.append(
+                    ComparisonFact(
+                        values=summary_values,
+                        competitor_id=competitor,
+                        profile_id=profile_id,
+                        profile_label=profile_label,
+                        geography=geography,
+                        comparison_metric=comparison_metric,
+                        dimensions=dimensions,
+                        evidence_ref=evidence_ref,
+                        radius_miles=radius_miles,
+                    )
+                )
+                segment_groups: dict[str, list[Any]] = defaultdict(list)
+                segment_attributes: dict[str, dict[str, Any]] = {}
+                for match in matches:
+                    attributes = {
+                        name: match.attributes.get(name)
+                        for name in headline_segments
+                        if name in match.attributes
+                    }
+                    if not attributes:
+                        continue
+                    key = json.dumps(attributes, ensure_ascii=False, sort_keys=True)
+                    segment_groups[key].append(match)
+                    segment_attributes[key] = attributes
+                for segment_key, segment_matches in sorted(
+                    segment_groups.items(),
+                    key=lambda item: (-len(item[1]), item[0]),
+                ):
+                    attributes = segment_attributes[segment_key]
+                    segment_id = f"segment-{hashlib.sha256(segment_key.encode()).hexdigest()[:16]}"
+                    segment_label = " / ".join(
+                        f"{name.replace('_', ' ').title()}: {value}"
+                        for name, value in attributes.items()
+                    )
+                    segment_summary = asdict(engine.summarize(segment_matches))
+                    segment_values = {
+                        key: value
+                        for key, value in segment_summary.items()
+                        if key not in {"profile_id", "competitor_id"}
+                    }
+                    comparison_facts.append(
+                        ComparisonFact(
+                            values=segment_values,
+                            segment_id=segment_id,
+                            segment_label=segment_label,
+                            attributes=attributes,
+                            competitor_id=competitor,
+                            profile_id=profile_id,
+                            profile_label=profile_label,
+                            geography=geography,
+                            comparison_metric=comparison_metric,
+                            dimensions=dimensions,
+                            evidence_ref=evidence_ref,
+                            radius_miles=radius_miles,
+                        )
+                    )
 
         coverage = [
             {
@@ -687,53 +778,58 @@ class AnalysisProcessor:
                 "in_scope_offers": in_scope_counts[retailer_id],
                 "in_scope_zips": len(in_scope_zips[retailer_id]),
                 "in_scope_stores": len(in_scope_stores[retailer_id]),
+                "evidence_ref": f"evidence.classified.{retailer_id}",
             }
             for retailer_id, offers in sorted(offer_counts.items())
         ]
         generated_at = datetime.now(UTC)
         analysis_id = f"{pack.id}-{job.collection_run_id}"
-        findings, recommendations = self._narrative(summaries, benchmark)
-        matched_competitors = {str(summary["competitor_id"]) for summary in summaries}
-        ready_to_share = bool(summaries) and matched_competitors == set(competitors)
-        document: dict[str, Any] = {
-            "schema_version": "1.0.0",
-            "analysis_id": analysis_id,
-            "collection_run_id": job.collection_run_id,
-            "generated_at": generated_at.isoformat(),
-            "benchmark_retailer": benchmark,
-            "competitors": competitors,
-            "product_pack": {"id": pack.id, "version": pack.version},
-            "source_summary": {
-                "source_kind": job.source_kind,
+        if not source_evidence_artifacts:
+            raise ValueError("analysis input has no immutable source-artifact evidence")
+        evidence_sets = [
+            evidence_set("evidence.source", "source_manifest", source_evidence_artifacts),
+            *[
+                evidence_set(
+                    f"evidence.classified.{retailer_id}",
+                    "classified_offers",
+                    artifacts,
+                )
+                for retailer_id, artifacts in sorted(classified_evidence_artifacts.items())
+            ],
+            *comparison_evidence_sets,
+        ]
+        document = AnalysisResultV2Builder(pack, code_version=self._code_version).build(
+            analysis_id=analysis_id,
+            analysis_run_id=job.id,
+            generated_at=generated_at.isoformat(),
+            source={
                 "input_set_id": job.input_set_id,
-                "raw_pages": source_artifact_count,
-                "provider_rows": provider_rows_count,
-                "normalized_offers": normalized_count,
-                "classified_offers": normalized_count,
-                "retained_comparison_offers": reducer.retained_offers,
-                "raw_dataset_ids": sorted(set(raw_artifact_ids)),
+                "kind": job.source_kind,
+                "collection_run_id": (
+                    job.collection_run_id if job.source_kind == "live_collection" else None
+                ),
+                "observed_start": min(observed_values) if observed_values else None,
+                "observed_end": max(observed_values) if observed_values else None,
+                "sampling": bool(
+                    analysis_options.get("sampling", False)
+                    if isinstance(analysis_options, dict)
+                    else False
+                ),
+                "total_rows": provider_rows_count,
+                "source_artifact_ids": sorted(set(raw_artifact_ids)),
             },
-            "coverage": coverage,
-            "comparisons": summaries,
-            "data_quality": {
+            benchmark_retailer=benchmark,
+            competitors=competitors,
+            coverage_facts=coverage,
+            comparison_facts=comparison_facts,
+            data_quality_facts={
                 "normalization_rejections": provider_rows_count - normalized_count,
                 "review_offers": review_offer_count,
                 "zero_or_missing_price_offers": zero_or_missing_price_count,
             },
-            "validation": {
-                "status": "ready_to_share" if ready_to_share else "needs_review",
-                "checks": match_evidence,
-            },
-            "findings": findings,
-            "recommendations": recommendations,
-            "artifacts": [],
-            "provenance": {
-                "analytics_code_version": self._code_version,
-                "product_pack_checksum": pack.checksum,
-                "derived_dataset_artifact_ids": derived_artifact_ids,
-                "match_evidence": match_evidence,
-            },
-        }
+            evidence_sets=evidence_sets,
+            raw_source_artifact_ids=raw_artifact_ids,
+        )
         record = await self._results.publish(document, collection_run_id=job.collection_run_id)
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id
@@ -762,42 +858,6 @@ class AnalysisProcessor:
                         "artifact_type": artifact_type,
                     },
                 )
-
-    @staticmethod
-    def _narrative(
-        summaries: list[dict[str, Any]], benchmark: str
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        findings: list[dict[str, Any]] = []
-        recommendations: list[dict[str, Any]] = []
-        for summary in summaries:
-            competitor = str(summary["competitor_id"])
-            profile = str(summary["profile_id"])
-            competitor_rate = float(summary["competitor_lower_rate"])
-            benchmark_rate = float(summary["benchmark_lower_rate"])
-            if competitor_rate > benchmark_rate:
-                severity = "high"
-                text_value = (
-                    f"{competitor} is lower more often than {benchmark} in {profile} comparisons."
-                )
-                recommendations.append(
-                    {
-                        "priority": 1,
-                        "text": (
-                            f"Review {competitor} {profile} losses and underlying match evidence."
-                        ),
-                    }
-                )
-            else:
-                severity = "positive"
-                text_value = f"{benchmark} is lower at least as often as {competitor} in {profile}."
-            findings.append(
-                {
-                    "id": f"{competitor}-{profile}",
-                    "severity": severity,
-                    "text": text_value,
-                }
-            )
-        return findings, recommendations
 
 
 class AnalysisWorker:

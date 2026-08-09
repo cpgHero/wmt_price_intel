@@ -1,5 +1,6 @@
 """Canonical AnalysisResult persistence and delivery."""
 
+from rci_results.blueprints import ReportBlueprintLoader, ReportProjector
 from rci_results.contracts import AnalysisResultValidator
 from rci_results.memory import InMemoryResultsRepository
 from rci_results.renderers import ArtifactRenderer
@@ -14,5 +15,7 @@ __all__ = [
     "InMemoryReportObjectStore",
     "InMemoryResultsRepository",
     "PostgresResultsRepository",
+    "ReportBlueprintLoader",
+    "ReportProjector",
     "S3ReportObjectStore",
 ]

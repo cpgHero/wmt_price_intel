@@ -156,6 +156,19 @@ for (const productPackFile of productPackFiles) {
   );
 }
 
+const reportBlueprintFiles = (
+  await readdir(join(repositoryRoot, "report-blueprints"))
+)
+  .filter((name) => name.endsWith(".json"))
+  .sort();
+for (const reportBlueprintFile of reportBlueprintFiles) {
+  await assertValid(
+    reportBlueprintValidator,
+    await loadJson("report-blueprints", reportBlueprintFile),
+    reportBlueprintFile,
+  );
+}
+
 const profile = await loadJson(
   "fixtures",
   "location_master",
@@ -173,6 +186,7 @@ console.log(
     collectionDefinitionFiles.length +
     analysisResultFiles.length +
     historicalInputManifestFiles.length +
+    reportBlueprintFiles.length +
     9
   } normative JSON documents.`,
 );

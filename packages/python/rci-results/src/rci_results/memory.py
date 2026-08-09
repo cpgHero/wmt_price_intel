@@ -23,7 +23,13 @@ class InMemoryResultsRepository:
         self._analysis_ids_by_record: dict[str, str] = {}
         self._artifacts: dict[str, ReportArtifactRecord] = {}
 
-    async def publish(self, result: JsonObject, checksum: str) -> AnalysisRecord:
+    async def publish(
+        self,
+        result: JsonObject,
+        checksum: str,
+        *,
+        collection_run_id: str,
+    ) -> AnalysisRecord:
         analysis_id = str(result["analysis_id"])
         async with self._lock:
             existing = self._analyses.get(analysis_id)
@@ -37,7 +43,7 @@ class InMemoryResultsRepository:
                 (
                     record
                     for record in self._analyses.values()
-                    if record.collection_run_id == str(result["collection_run_id"])
+                    if record.collection_run_id == collection_run_id
                     and record.product_pack_id == str(product_pack["id"])
                     and record.product_pack_version == str(product_pack["version"])
                 ),
@@ -51,7 +57,7 @@ class InMemoryResultsRepository:
                 id=str(uuid4()),
                 analysis_run_id=str(uuid4()),
                 analysis_id=analysis_id,
-                collection_run_id=str(result["collection_run_id"]),
+                collection_run_id=collection_run_id,
                 status="succeeded",
                 product_pack_id=str(product_pack["id"]),
                 product_pack_version=str(product_pack["version"]),

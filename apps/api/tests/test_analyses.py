@@ -91,3 +91,32 @@ async def test_analysis_api_rejects_contract_mismatch_and_mutation() -> None:
             json={"analysis_id": "invalid"},
         )
         assert invalid.status_code == 422
+
+
+async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> None:
+    service = _service()
+    app = create_app()
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    document = json.loads(
+        (REPOSITORY_ROOT / "examples/analysis-result-v2.ground-beef.json").read_text()
+    )
+    document["source"]["collection_run_id"] = "run-v2-example"
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        published = await client.post(
+            "/api/v1/collection-runs/run-v2-example/analysis",
+            json=document,
+        )
+        assert published.status_code == 201
+
+        report = await client.get(f"/api/v1/analyses/{document['analysis_id']}/report")
+
+    assert report.status_code == 200
+    assert report.json()["blueprint"] == {
+        "id": "fresh_ground_beef_leadership",
+        "version": "1.0.0",
+    }
+    assert report.json()["sections"][0]["id"] == "executive_summary"

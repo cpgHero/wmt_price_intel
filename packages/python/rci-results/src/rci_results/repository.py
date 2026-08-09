@@ -79,9 +79,14 @@ class PostgresResultsRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
 
-    async def publish(self, result: JsonObject, checksum: str) -> AnalysisRecord:
+    async def publish(
+        self,
+        result: JsonObject,
+        checksum: str,
+        *,
+        collection_run_id: str,
+    ) -> AnalysisRecord:
         analysis_id = str(result["analysis_id"])
-        collection_run_id = str(result["collection_run_id"])
         product_pack = result["product_pack"]
         assert isinstance(product_pack, dict)
         async with self._engine.begin() as connection:

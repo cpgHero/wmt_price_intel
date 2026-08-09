@@ -122,7 +122,73 @@ export interface RetailCompetitiveIntelligenceProductPack {
     required_caveats: string[];
     recommended_charts?: string[];
     alertable_metrics?: string[];
-    [k: string]: unknown;
+    report_blueprint: {
+      id: string;
+      version: string;
+    };
+    insight_ranking: {
+      weights: {
+        breadth: number;
+        magnitude: number;
+        confidence: number;
+        actionability: number;
+      };
+      minimum_score: number;
+      max_candidates: number;
+    };
+    /**
+     * @minItems 1
+     */
+    insight_rules: [
+      {
+        id: string;
+        scope: "overall" | "segment" | "both";
+        condition: {
+          field: string;
+          operator: "gt" | "gte" | "lt" | "lte";
+          threshold: number;
+        };
+        title_template: string;
+        summary_template: string;
+        business_impact: string;
+        severity: "positive" | "info" | "watch" | "high" | "critical";
+        breadth_scale: number;
+        magnitude_scale: number;
+        confidence_scale: number;
+        actionability: number;
+        minimum_matches?: number;
+        limitations?: string[];
+        recommendation?: {
+          action_template: string;
+          owner: string;
+          rationale_template: string;
+        };
+      },
+      ...{
+        id: string;
+        scope: "overall" | "segment" | "both";
+        condition: {
+          field: string;
+          operator: "gt" | "gte" | "lt" | "lte";
+          threshold: number;
+        };
+        title_template: string;
+        summary_template: string;
+        business_impact: string;
+        severity: "positive" | "info" | "watch" | "high" | "critical";
+        breadth_scale: number;
+        magnitude_scale: number;
+        confidence_scale: number;
+        actionability: number;
+        minimum_matches?: number;
+        limitations?: string[];
+        recommendation?: {
+          action_template: string;
+          owner: string;
+          rationale_template: string;
+        };
+      }[]
+    ];
   };
   regression?: {
     golden_dataset_ids?: string[];

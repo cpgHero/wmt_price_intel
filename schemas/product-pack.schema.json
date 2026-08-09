@@ -410,13 +410,16 @@
     "retailer_overrides": {
       "type": "object"
     },
-    "reporting": {
-      "type": "object",
-      "required": [
-        "headline_segments",
-        "required_caveats"
-      ],
-      "properties": {
+        "reporting": {
+            "type": "object",
+            "required": [
+                "headline_segments",
+                "required_caveats",
+                "report_blueprint",
+                "insight_ranking",
+                "insight_rules"
+            ],
+            "properties": {
         "headline_segments": {
           "type": "array",
           "items": {
@@ -435,14 +438,213 @@
             "type": "string"
           }
         },
-        "alertable_metrics": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
+                "alertable_metrics": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "report_blueprint": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "id",
+                        "version"
+                    ],
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_]+$"
+                        },
+                        "version": {
+                            "type": "string",
+                            "minLength": 1
+                        }
+                    }
+                },
+                "insight_ranking": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "weights",
+                        "minimum_score",
+                        "max_candidates"
+                    ],
+                    "properties": {
+                        "weights": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "breadth",
+                                "magnitude",
+                                "confidence",
+                                "actionability"
+                            ],
+                            "properties": {
+                                "breadth": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "magnitude": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "confidence": {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                "actionability": {
+                                    "type": "number",
+                                    "minimum": 0
+                                }
+                            }
+                        },
+                        "minimum_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                        },
+                        "max_candidates": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25
+                        }
+                    }
+                },
+                "insight_rules": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "id",
+                            "scope",
+                            "condition",
+                            "title_template",
+                            "summary_template",
+                            "business_impact",
+                            "severity",
+                            "breadth_scale",
+                            "magnitude_scale",
+                            "confidence_scale",
+                            "actionability"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9_]+$"
+                            },
+                            "scope": {
+                                "enum": [
+                                    "overall",
+                                    "segment",
+                                    "both"
+                                ]
+                            },
+                            "condition": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                    "field",
+                                    "operator",
+                                    "threshold"
+                                ],
+                                "properties": {
+                                    "field": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "operator": {
+                                        "enum": [
+                                            "gt",
+                                            "gte",
+                                            "lt",
+                                            "lte"
+                                        ]
+                                    },
+                                    "threshold": {
+                                        "type": "number"
+                                    }
+                                }
+                            },
+                            "title_template": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "summary_template": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "business_impact": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "severity": {
+                                "enum": [
+                                    "positive",
+                                    "info",
+                                    "watch",
+                                    "high",
+                                    "critical"
+                                ]
+                            },
+                            "breadth_scale": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                            },
+                            "magnitude_scale": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                            },
+                            "confidence_scale": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                            },
+                            "actionability": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                            },
+                            "minimum_matches": {
+                                "type": "integer",
+                                "minimum": 1
+                            },
+                            "limitations": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "recommendation": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                    "action_template",
+                                    "owner",
+                                    "rationale_template"
+                                ],
+                                "properties": {
+                                    "action_template": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "owner": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "rationale_template": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
     "regression": {
       "type": "object",
       "properties": {

@@ -8,12 +8,14 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from html import escape
 from io import BytesIO
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import xlsxwriter  # type: ignore[import-untyped]
 
+from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, ReportProjector
 from rci_results.contracts import canonical_result_bytes
-from rci_results.models import ArtifactPayload, JsonObject
+from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
 
 def _rows(result: JsonObject, key: str) -> list[JsonObject]:
@@ -74,7 +76,9 @@ def _table(title: str, rows: list[JsonObject]) -> str:
 
 
 class LeadershipHtmlRenderer:
-    def render(self, result: JsonObject) -> bytes:
+    def render(self, result: JsonObject, view: JsonObject | None = None) -> bytes:
+        if view is not None:
+            return self._render_blueprint(result, view)
         product_pack = _mapping(result, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         analysis_id = escape(_display(result.get("analysis_id")))
@@ -127,6 +131,71 @@ th{{color:var(--muted)}}li{{margin:10px 0}}
 </main></body></html>"""
         return document.encode("utf-8")
 
+    def _render_blueprint(self, result: JsonObject, view: JsonObject) -> bytes:
+        product_pack = _mapping(view, "product_pack")
+        pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
+        section_html = "".join(self._section(section) for section in _rows(view, "sections"))
+        document = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>{pack_name} analysis</title>
+<style>
+:root{{--ink:#17221d;--muted:#627067;--paper:#f4f2eb;--card:#fff;--accent:#17613e;--line:#d9ddd7}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Arial,sans-serif}}
+main{{max-width:1180px;margin:auto;padding:48px 28px}}
+header{{border-bottom:1px solid var(--line);padding-bottom:28px}}
+.eyebrow,.kind{{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}}
+h1{{font-size:clamp(38px,7vw,72px);letter-spacing:-.055em;line-height:.94}}
+h1{{margin:10px 0 18px;max-width:12ch}}
+h2{{margin:0 0 12px}}
+.meta,.empty{{color:var(--muted)}}
+section{{background:var(--card);border:1px solid var(--line);border-radius:16px}}
+section{{padding:22px;margin-top:18px}}
+.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}}
+.metrics{{gap:12px;margin:16px 0}}
+.metric{{border:1px solid var(--line);border-radius:12px;padding:14px}}
+.metric strong{{display:block;font-size:24px}}
+.table-wrap{{overflow:auto}}
+table{{border-collapse:collapse;width:100%;font-size:13px}}
+th,td{{border-bottom:1px solid var(--line);padding:10px;text-align:left}}
+th,td{{vertical-align:top}}th{{color:var(--muted)}}
+</style></head><body><main><header><div class="eyebrow">Leadership intelligence brief</div>
+<h1>{pack_name}</h1><div class="meta">
+Analysis {escape(_display(result.get("analysis_id")))} ·
+Generated {escape(_display(result.get("generated_at")))}</div>
+</header>{section_html}</main></body></html>"""
+        return document.encode("utf-8")
+
+    @staticmethod
+    def _section(section: JsonObject) -> str:
+        title = escape(_display(section.get("title")))
+        kind = escape(_display(section.get("kind")))
+        narrative = section.get("narrative")
+        narrative_html = (
+            f"<p>{escape(_display(narrative.get('body')))}</p>"
+            if isinstance(narrative, dict)
+            else ""
+        )
+        metrics = _rows(section, "metrics")
+        metric_html = "".join(
+            f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
+            f"<strong>{escape(_display(metric.get('value')))}</strong>"
+            f"<small>{escape(_display(metric.get('unit')))}</small></div>"
+            for metric in metrics
+        )
+        metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
+        records = _rows(section, "records")
+        table = _table("Evidence-backed detail", records) if records else ""
+        empty = (
+            f"<p class=empty>{escape(_display(section.get('empty_state')))}</p>"
+            if section.get("empty")
+            else ""
+        )
+        return (
+            f"<section id={escape(_display(section.get('id')))}><div class=kind>{kind}</div>"
+            f"<h2>{title}</h2>{narrative_html}{metric_grid}{table}{empty}</section>"
+        )
+
 
 class ExcelAuditRenderer:
     _SECTIONS = (
@@ -159,10 +228,26 @@ class ExcelAuditRenderer:
         worksheet.autofilter(0, 0, len(rows), len(columns) - 1)
         worksheet.set_column(0, len(columns) - 1, 22)
 
-    def render(self, result: JsonObject) -> bytes:
+    def render(
+        self,
+        result: JsonObject,
+        blueprint: ReportBlueprint | None = None,
+        product_pack: JsonObject | None = None,
+    ) -> bytes:
         output = BytesIO()
         workbook = xlsxwriter.Workbook(output, {"in_memory": True})
         workbook.set_properties({"created": _generated_at(result)})
+        if blueprint is not None and product_pack is not None:
+            projector = ReportProjector()
+            profile = blueprint.artifact_profile("xlsx")
+            for worksheet in profile.get("worksheet_definitions", []):
+                self._write_rows(
+                    workbook,
+                    str(worksheet["name"]),
+                    projector.worksheet_rows(result, str(worksheet["source"]), product_pack),
+                )
+            workbook.close()
+            return output.getvalue()
         self._write_rows(
             workbook,
             "Executive Summary",
@@ -191,9 +276,12 @@ class ExcelAuditRenderer:
 
 
 class LeadershipEmailRenderer:
-    def render(self, result: JsonObject) -> bytes:
+    def render(self, result: JsonObject, view: JsonObject | None = None) -> bytes:
         product_pack = _mapping(result, "product_pack")
-        subject_name = _display(product_pack.get("name") or product_pack.get("id"))
+        view_product_pack = _mapping(view, "product_pack") if view is not None else {}
+        subject_name = _display(
+            view_product_pack.get("name") or product_pack.get("name") or product_pack.get("id")
+        )
         message = EmailMessage()
         message["Subject"] = f"Retail competitive intelligence: {subject_name}"
         message["To"] = "Leadership distribution list"
@@ -204,10 +292,11 @@ class LeadershipEmailRenderer:
             "",
             "Key findings",
         ]
-        lines.extend(f"- {_display(row.get('text'))}" for row in _rows(result, "findings"))
+        findings = _rows(result, "insights") if view is not None else _rows(result, "findings")
+        lines.extend(f"- {_display(row.get('summary') or row.get('text'))}" for row in findings)
         lines.extend(("", "Recommended actions"))
         lines.extend(
-            f"- {_display(row.get('priority'))}: {_display(row.get('text'))}"
+            f"- {_display(row.get('priority'))}: {_display(row.get('action') or row.get('text'))}"
             for row in _rows(result, "recommendations")
         )
         lines.extend(
@@ -218,30 +307,86 @@ class LeadershipEmailRenderer:
 
 
 class ArtifactRenderer:
-    def __init__(self) -> None:
+    def __init__(self, repository_root: Path | None = None) -> None:
         self._html = LeadershipHtmlRenderer()
         self._xlsx = ExcelAuditRenderer()
         self._email = LeadershipEmailRenderer()
+        inferred_root = repository_root or Path.cwd()
+        self._blueprints = (
+            ReportBlueprintLoader(inferred_root)
+            if (inferred_root / "report-blueprints").is_dir()
+            else None
+        )
+        self._projector = ReportProjector()
+
+    def report_view(
+        self,
+        result: JsonObject,
+        *,
+        artifact_type: ArtifactType | None = None,
+    ) -> JsonObject:
+        if str(result.get("schema_version")) != "2.0.0":
+            raise ValueError("report views require AnalysisResult V2")
+        if self._blueprints is None:
+            raise RuntimeError("report blueprint catalog is not configured")
+        blueprint, product_pack = self._blueprints.load_for_result(result)
+        return self._projector.project(
+            result,
+            blueprint,
+            product_pack,
+            artifact_type=artifact_type,
+        )
+
+    def _context(
+        self,
+        result: JsonObject,
+        artifact_type: ArtifactType,
+    ) -> tuple[ReportBlueprint, JsonObject, JsonObject] | None:
+        if str(result.get("schema_version")) != "2.0.0":
+            return None
+        if self._blueprints is None:
+            raise RuntimeError("report blueprint catalog is not configured")
+        blueprint, product_pack = self._blueprints.load_for_result(result)
+        return (
+            blueprint,
+            product_pack,
+            self._projector.project(
+                result,
+                blueprint,
+                product_pack,
+                artifact_type=artifact_type,
+            ),
+        )
 
     def render(self, result: JsonObject, artifact_type: str) -> ArtifactPayload:
         analysis_id = str(result["analysis_id"])
         if artifact_type == "html":
+            context = self._context(result, "html")
             return ArtifactPayload(
-                "html", f"{analysis_id}.html", "text/html; charset=utf-8", self._html.render(result)
+                "html",
+                f"{analysis_id}.html",
+                "text/html; charset=utf-8",
+                self._html.render(result, context[2] if context else None),
             )
         if artifact_type == "xlsx":
+            context = self._context(result, "xlsx")
             return ArtifactPayload(
                 "xlsx",
                 f"{analysis_id}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                self._xlsx.render(result),
+                self._xlsx.render(
+                    result,
+                    context[0] if context else None,
+                    context[1] if context else None,
+                ),
             )
         if artifact_type == "leadership_email":
+            context = self._context(result, "leadership_email")
             return ArtifactPayload(
                 "leadership_email",
                 f"{analysis_id}.eml",
                 "message/rfc822",
-                self._email.render(result),
+                self._email.render(result, context[2] if context else None),
             )
         if artifact_type == "audit_zip":
             return self._audit_package(result)
