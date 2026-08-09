@@ -1,7 +1,6 @@
 # Phase 9.5.7: Branded UI and Artifacts
 
-Status: implemented and locally accepted on 2026-08-09. Railway acceptance is recorded after the
-production deployment in this document.
+Status: implemented and Railway-accepted on 2026-08-09.
 
 ## Outcome
 
@@ -84,7 +83,15 @@ requests were made.
 
 ## Railway acceptance evidence
 
-Pending production deployment and post-deploy health/browser checks.
+- Commit `b7b9331` deployed successfully to web, API, worker, and scheduler.
+- All four Railway deployments reported `SUCCESS` for the exact commit.
+- Public `/health/ready` returned `ready` with the API dependency `ok`.
+- Production browser inspection confirmed the CPGHero wordmark, navigation, accessible theme
+  control, light and dark computed colors, and no desktop horizontal overflow.
+- Existing production analyses remain immutable V1 records and continue to use the compatible
+  legacy workspace. The V2 decision-area presentation is exercised by contract/unit tests and will
+  become visible for V2 results published during the Phase 9.5.8 full-source replay.
+- No MetricsCart credits or model tokens were used.
 
 ## Remaining acceptance work
 
