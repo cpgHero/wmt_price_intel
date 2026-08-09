@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ReportSectionView } from "./api";
 import {
+  compactMetricName,
   formatMetric,
   groupReportSections,
   metricBarWidth,
@@ -55,5 +56,26 @@ describe("report presentation", () => {
     expect(metricBarWidth(50, [100, 50])).toBe(50);
     expect(metricBarWidth(-25, [100, -25])).toBe(25);
     expect(metricBarWidth("unknown", [100])).toBe(0);
+  });
+
+  it("turns comparison metric internals into merchant-facing labels", () => {
+    expect(
+      compactMetricName(
+        {
+          name: "ALDI Strict same-ZIP and exact-package comparison All comparable items benchmark_lower_rate",
+        },
+        "Walmart (US)",
+      ),
+    ).toBe("ALDI · Walmart (US) lower rate");
+    expect(
+      compactMetricName(
+        {
+          name: "ALDI Strict same-ZIP and exact-package comparison 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed / standard median_gap",
+        },
+        "Walmart (US)",
+      ),
+    ).toBe(
+      "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Signed median gap",
+    );
   });
 });

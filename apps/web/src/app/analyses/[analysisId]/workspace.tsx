@@ -19,6 +19,7 @@ import {
   displayValue,
 } from "@/lib/presentation";
 import {
+  compactMetricName,
   formatMetric,
   groupReportSections,
   metricBarWidth,
@@ -285,6 +286,7 @@ function BlueprintAnalysisWorkspace({
               <BlueprintSection
                 section={section}
                 recommendedCharts={recommendedCharts}
+                benchmarkRetailer={reportView.benchmark_retailer}
                 key={section.id}
               />
             ))}
@@ -307,9 +309,11 @@ function BlueprintAnalysisWorkspace({
 function BlueprintSection({
   section,
   recommendedCharts,
+  benchmarkRetailer,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
+  benchmarkRetailer: string;
 }>) {
   const narrative = asObject(section.narrative);
   const visibleMetrics = section.metrics.slice(0, 6);
@@ -337,7 +341,7 @@ function BlueprintSection({
           {visibleMetrics.map((metric) => (
             <div className="metric-bar" key={String(metric.metric_id)}>
               <div>
-                <span>{String(metric.name)}</span>
+                <span>{compactMetricName(metric, benchmarkRetailer)}</span>
                 <strong>{formatMetric(metric.value, metric.unit)}</strong>
               </div>
               <i aria-hidden="true">
@@ -355,7 +359,7 @@ function BlueprintSection({
           {visibleMetrics.map((metric) => (
             <Metric
               key={String(metric.metric_id)}
-              label={String(metric.name)}
+              label={compactMetricName(metric, benchmarkRetailer)}
               value={formatMetric(metric.value, metric.unit)}
             />
           ))}

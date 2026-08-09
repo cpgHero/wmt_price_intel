@@ -80,3 +80,32 @@ export function metricBarWidth(value: unknown, values: unknown[]): number {
   );
   return maximum === 0 ? 0 : Math.max(4, (Math.abs(value) / maximum) * 100);
 }
+
+const comparisonNamePattern =
+  /^(.*?) (Strict same-ZIP and exact-package comparison|Best available price per pound|Configured nearby-store exact-package sensitivity) (.*?) (unique_geographies|benchmark_lower_rate|competitor_lower_rate|benchmark_lower|competitor_lower|median_gap|matches|parity_rate|parity)$/i;
+
+export function compactMetricName(
+  metric: Readonly<Record<string, unknown>>,
+  benchmarkRetailer: string,
+): string {
+  const name = String(metric.name ?? "Metric");
+  const match = comparisonNamePattern.exec(name);
+  if (!match) return name.replaceAll("_", " ");
+  const [, competitor, , rawSegment, rawMeasure] = match;
+  const measure = rawMeasure.toLowerCase();
+  const measureLabel: Record<string, string> = {
+    matches: "Matched observations",
+    unique_geographies: "Matched geographies",
+    benchmark_lower: `${benchmarkRetailer} lower offers`,
+    competitor_lower: `${competitor} lower offers`,
+    parity: "Price parity",
+    benchmark_lower_rate: `${benchmarkRetailer} lower rate`,
+    competitor_lower_rate: `${competitor} lower rate`,
+    parity_rate: "Parity rate",
+    median_gap: "Signed median gap",
+  };
+  const segment = rawSegment.replace(/ \/ standard$/i, "");
+  return segment === "All comparable items"
+    ? `${competitor} · ${measureLabel[measure]}`
+    : `${competitor} · ${segment} · ${measureLabel[measure]}`;
+}
