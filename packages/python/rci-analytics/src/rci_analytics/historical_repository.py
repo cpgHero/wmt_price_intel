@@ -282,7 +282,7 @@ class PostgresAnalysisInputRepository:
                                COALESCE(max(version), 0) + 1,
                                CAST(:config AS jsonb), :checksum
                         FROM collection_definition_version
-                        WHERE definition_id::text = :definition_id
+                        WHERE definition_id = CAST(:definition_id AS uuid)
                         RETURNING id::text
                         """
                     ),
