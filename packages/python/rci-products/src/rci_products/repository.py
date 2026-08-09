@@ -86,6 +86,13 @@ class ProductDetailRepository(Protocol):
 
     async def product_document(self, canonical_product_db_id: str) -> JsonObject: ...
 
+    async def publication_highlights(
+        self,
+        source_artifact_ids: list[str],
+        *,
+        limit: int = 8,
+    ) -> list[JsonObject]: ...
+
     async def get_run(self, run_id: str) -> ProductDetailRun | None: ...
 
 

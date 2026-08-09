@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from rci_results.models import (
+    AnalysisPublicationRecord,
     AnalysisRecord,
     ArtifactPayload,
     JsonObject,
@@ -22,6 +24,7 @@ class InMemoryResultsRepository:
         self._analyses: dict[str, AnalysisRecord] = {}
         self._analysis_ids_by_record: dict[str, str] = {}
         self._artifacts: dict[str, ReportArtifactRecord] = {}
+        self._publications: dict[str, list[AnalysisPublicationRecord]] = {}
 
     async def publish(
         self,
@@ -91,11 +94,56 @@ class InMemoryResultsRepository:
                 return None
             return copy.deepcopy(max(matching, key=lambda record: record.created_at))
 
+    async def publish_publication(
+        self,
+        analysis: AnalysisRecord,
+        result: JsonObject,
+        publication_checksum: str,
+        *,
+        presentation_context: JsonObject,
+    ) -> AnalysisPublicationRecord:
+        async with self._lock:
+            publications = self._publications.setdefault(analysis.analysis_id, [])
+            existing = next(
+                (
+                    publication
+                    for publication in publications
+                    if publication.publication_checksum == publication_checksum
+                ),
+                None,
+            )
+            if existing is not None:
+                return copy.deepcopy(existing)
+            publications[:] = [
+                replace(publication, status="superseded") for publication in publications
+            ]
+            record = AnalysisPublicationRecord(
+                id=str(uuid4()),
+                analysis_result_id=analysis.id,
+                analysis_id=analysis.analysis_id,
+                version=len(publications) + 1,
+                status="ready_to_share",
+                source_result_checksum=analysis.checksum,
+                publication_checksum=publication_checksum,
+                result=copy.deepcopy(result),
+                presentation_context=copy.deepcopy(presentation_context),
+                created_at=datetime.now(UTC),
+            )
+            publications.append(record)
+            return copy.deepcopy(record)
+
+    async def latest_publication(self, analysis_id: str) -> AnalysisPublicationRecord | None:
+        async with self._lock:
+            publications = self._publications.get(analysis_id, [])
+            return copy.deepcopy(publications[-1]) if publications else None
+
     async def record_artifact(
         self,
         analysis: AnalysisRecord,
         payload: ArtifactPayload,
         storage_uri: str,
+        *,
+        publication: AnalysisPublicationRecord | None = None,
     ) -> ReportArtifactRecord:
         checksum = hashlib.sha256(payload.body).hexdigest()
         async with self._lock:
@@ -114,6 +162,7 @@ class InMemoryResultsRepository:
             record = ReportArtifactRecord(
                 id=str(uuid4()),
                 analysis_run_id=analysis.analysis_run_id,
+                publication_id=publication.id if publication is not None else None,
                 artifact_type=payload.artifact_type,
                 renderer_version=payload.renderer_version,
                 dataset_artifact_id=str(uuid4()),

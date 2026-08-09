@@ -26,6 +26,20 @@ class AnalysisRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class AnalysisPublicationRecord:
+    id: str
+    analysis_result_id: str
+    analysis_id: str
+    version: int
+    status: str
+    source_result_checksum: str
+    publication_checksum: str
+    result: JsonObject
+    presentation_context: JsonObject
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class ArtifactPayload:
     artifact_type: ArtifactType
     filename: str
@@ -38,6 +52,7 @@ class ArtifactPayload:
 class ReportArtifactRecord:
     id: str
     analysis_run_id: str
+    publication_id: str | None
     artifact_type: ArtifactType
     renderer_version: str
     dataset_artifact_id: str

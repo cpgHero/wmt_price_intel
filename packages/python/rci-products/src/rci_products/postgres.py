@@ -835,6 +835,90 @@ class PostgresProductDetailRepository:
         )
         return document
 
+    async def publication_highlights(
+        self,
+        source_artifact_ids: list[str],
+        *,
+        limit: int = 8,
+    ) -> list[JsonObject]:
+        if not source_artifact_ids or limit < 1:
+            return []
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH matched AS (
+                              SELECT cp.id, cp.canonical_product_id, cp.retailer_id,
+                                cp.identity, cp.updated_at,
+                                count(DISTINCT c.id)::integer AS source_context_count
+                              FROM canonical_product cp
+                              JOIN canonical_product_context c
+                                ON c.canonical_product_id = cp.id
+                              WHERE c.context->>'source_artifact_id' = ANY(
+                                CAST(:source_artifact_ids AS text[])
+                              )
+                              GROUP BY cp.id
+                            ), enriched AS (
+                              SELECT matched.*, snapshot.document AS snapshot_document,
+                                row_number() OVER (
+                                  PARTITION BY matched.retailer_id
+                                  ORDER BY (snapshot.id IS NOT NULL) DESC,
+                                    matched.source_context_count DESC,
+                                    matched.updated_at DESC, matched.id
+                                ) AS retailer_rank
+                              FROM matched
+                              LEFT JOIN LATERAL (
+                                SELECT s.id, s.document
+                                FROM product_detail_snapshot s
+                                WHERE s.canonical_product_id = matched.id AND s.normalized
+                                ORDER BY s.observed_at DESC, s.id DESC LIMIT 1
+                              ) snapshot ON true
+                            )
+                            SELECT * FROM enriched
+                            WHERE retailer_rank <= 3
+                            ORDER BY (snapshot_document IS NOT NULL) DESC,
+                              source_context_count DESC, retailer_id, canonical_product_id
+                            LIMIT :limit
+                            """
+                        ),
+                        {
+                            "source_artifact_ids": source_artifact_ids,
+                            "limit": limit,
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        highlights: list[JsonObject] = []
+        for row in rows:
+            identity = dict(row["identity"])
+            snapshot = row["snapshot_document"]
+            normalized = dict(snapshot.get("normalized", {})) if isinstance(snapshot, dict) else {}
+            media = normalized.get("media", {})
+            highlights.append(
+                {
+                    "canonical_product_id": str(row["canonical_product_id"]),
+                    "retailer": str(row["retailer_id"]),
+                    "name": str(normalized.get("name") or identity.get("name") or "Product"),
+                    "brand": normalized.get("brand") or identity.get("brand"),
+                    "url": normalized.get("url") or identity.get("url"),
+                    "image_url": (
+                        media.get("image_primary")
+                        if isinstance(media, dict)
+                        else identity.get("image_primary")
+                    ),
+                    "role": (
+                        "PDP-enriched reference"
+                        if isinstance(snapshot, dict)
+                        else "Search identity reference"
+                    ),
+                }
+            )
+        return highlights
+
     async def get_run(self, run_id: str) -> ProductDetailRun | None:
         async with self._engine.connect() as connection:
             row = (

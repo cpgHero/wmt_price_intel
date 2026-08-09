@@ -42,9 +42,48 @@ export interface AnalysisReportView {
   generated_at: string;
   benchmark_retailer: string;
   competitors: string[];
-  product_pack: { id: string; name: string; version: string };
+  product_pack: {
+    id: string;
+    name: string;
+    version: string;
+    recommended_charts?: string[];
+  };
   blueprint: { id: string; version: string };
+  result_checksum: string;
+  publication: {
+    id: string;
+    version: number;
+    status: string;
+    source_result_checksum: string;
+    publication_checksum: string;
+    created_at: string;
+  } | null;
+  product_highlights?: ProductHighlight[];
+  map_points?: MapPoint[];
   sections: ReportSectionView[];
+}
+
+export interface ProductHighlight {
+  canonical_product_id: string;
+  retailer: string;
+  name: string;
+  brand?: string | null;
+  url?: string | null;
+  image_url?: string | null;
+  price?: number | null;
+  price_currency?: string | null;
+  role?: string | null;
+  detail?: string | null;
+}
+
+export interface MapPoint {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  value?: number | null;
+  value_label?: string | null;
+  retailer?: string | null;
 }
 
 export interface RunRecord {

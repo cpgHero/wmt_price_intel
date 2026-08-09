@@ -96,7 +96,11 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         renderer.render(result, "leadership_email").body
     )
     assert "Fresh Ground Beef" in str(email["Subject"])
-    assert "Prioritize" in email.get_content()
+    assert "Prioritize" in email.get_body(preferencelist=("plain",)).get_content()
+    assert any(
+        attachment.get_filename() == "ground-beef-2026-08-07-example-report.html"
+        for attachment in email.iter_attachments()
+    )
 
     audit = renderer.render(result, "audit_zip")
     with ZipFile(BytesIO(audit.body)) as archive:
@@ -125,7 +129,8 @@ def test_leadership_html_prioritizes_governed_narrative_and_visible_comparisons(
 
     assert "Decision title 0" not in html
     assert "ALDI pressure is concentrated" in html
-    assert '<div class="table-wrap comparison-table">' in html
+    assert "<figure class=comparison-chart>" in html
+    assert "View supporting detail" in html
     assert "All comparable items" in html
 
 
@@ -170,7 +175,7 @@ def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
         renderer.render(result, "leadership_email").body
     )
     assert str(email["X-RCI-Result-Checksum"]) == checksum
-    assert checksum in email.get_content()
+    assert checksum in email.get_body(preferencelist=("plain",)).get_content()
 
     audit = renderer.render(result, "audit_zip")
     with ZipFile(BytesIO(audit.body)) as archive:

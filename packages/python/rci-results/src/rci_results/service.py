@@ -6,6 +6,7 @@ from typing import Any
 
 from rci_results.contracts import AnalysisResultValidator, result_checksum
 from rci_results.models import (
+    AnalysisPublicationRecord,
     AnalysisRecord,
     ArtifactType,
     DownloadLink,
@@ -80,6 +81,61 @@ class AnalysisResultService:
             raise AnalysisNotFoundError(f"analysis for collection run {run_id!r} was not found")
         return record
 
+    async def publish_publication(
+        self,
+        identifier: str,
+        document: dict[str, Any],
+        *,
+        presentation_context: JsonObject | None = None,
+    ) -> AnalysisPublicationRecord:
+        analysis = await self.get(identifier)
+        result = self._validator.validate(document)
+        if str(result.get("schema_version")) != "2.0.0":
+            raise ValueError("governed publications require AnalysisResult V2")
+        if str(result.get("analysis_id")) != analysis.analysis_id:
+            raise ValueError("publication analysis_id does not match the immutable result")
+        product_pack = result.get("product_pack")
+        if not isinstance(product_pack, dict) or (
+            str(product_pack.get("id")) != analysis.product_pack_id
+            or str(product_pack.get("version")) != analysis.product_pack_version
+        ):
+            raise ValueError("publication Product Pack does not match the immutable result")
+        for field in ("source", "metrics", "evidence_sets"):
+            if result_checksum({"value": result.get(field)}) != result_checksum(
+                {"value": analysis.result.get(field)}
+            ):
+                raise ValueError(f"publication changed authoritative {field}")
+        context = dict(presentation_context or {})
+        unknown_context = set(context) - {"product_highlights", "map_points", "notes"}
+        if unknown_context:
+            raise ValueError(
+                f"publication presentation context has unsupported keys {sorted(unknown_context)}"
+            )
+        publication_checksum = result_checksum(
+            {
+                "result_checksum": result_checksum(result),
+                "presentation_context": context,
+            }
+        )
+        return await self._repository.publish_publication(
+            analysis,
+            result,
+            publication_checksum,
+            presentation_context=context,
+        )
+
+    async def latest_publication(self, identifier: str) -> AnalysisPublicationRecord | None:
+        analysis = await self.get(identifier)
+        return await self._repository.latest_publication(analysis.analysis_id)
+
+    async def _presentation_source(
+        self, identifier: str
+    ) -> tuple[AnalysisRecord, AnalysisPublicationRecord | None, JsonObject]:
+        analysis = await self.get(identifier)
+        publication = await self._repository.latest_publication(analysis.analysis_id)
+        document = publication.result if publication is not None else analysis.result
+        return analysis, publication, document
+
     async def matches(self, identifier: str) -> JsonObject:
         record = await self.get(identifier)
         return {
@@ -98,27 +154,65 @@ class AnalysisResultService:
         }
 
     async def report_view(self, identifier: str) -> JsonObject:
-        record = await self.get(identifier)
-        return self._renderer.report_view(record.result)
+        _analysis, publication, document = await self._presentation_source(identifier)
+        presentation_context = publication.presentation_context if publication is not None else None
+        view = self._renderer.report_view(
+            document,
+            presentation_context=presentation_context,
+        )
+        provenance = document.get("provenance", {})
+        governed_checksum = (
+            provenance.get("final_result_checksum_sha256") if isinstance(provenance, dict) else None
+        )
+        view["result_checksum"] = (
+            governed_checksum
+            if isinstance(governed_checksum, str) and len(governed_checksum) == 64
+            else result_checksum(document)
+        )
+        view["publication"] = (
+            {
+                "id": publication.id,
+                "version": publication.version,
+                "status": publication.status,
+                "source_result_checksum": publication.source_result_checksum,
+                "publication_checksum": publication.publication_checksum,
+                "created_at": publication.created_at.isoformat(),
+            }
+            if publication is not None
+            else None
+        )
+        return view
 
     async def generate_artifact(
         self, identifier: str, artifact_type: ArtifactType
     ) -> ReportArtifactRecord:
-        analysis = await self.get(identifier)
+        analysis, publication, document = await self._presentation_source(identifier)
         existing = next(
             (
                 artifact
                 for artifact in await self._repository.list_artifacts(analysis.analysis_id)
                 if artifact.artifact_type == artifact_type
                 and artifact.renderer_version == self._renderer.version
+                and artifact.publication_id == (publication.id if publication is not None else None)
             ),
             None,
         )
         if existing is not None:
             return existing
-        payload = self._renderer.render(analysis.result, artifact_type)
+        payload = self._renderer.render(
+            document,
+            artifact_type,
+            presentation_context=(
+                publication.presentation_context if publication is not None else None
+            ),
+        )
         storage_uri = await self._object_store.put(analysis.analysis_id, payload)
-        return await self._repository.record_artifact(analysis, payload, storage_uri)
+        return await self._repository.record_artifact(
+            analysis,
+            payload,
+            storage_uri,
+            publication=publication,
+        )
 
     async def list_artifacts(self, identifier: str) -> list[ReportArtifactRecord]:
         analysis = await self.get(identifier)

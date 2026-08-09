@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from rci_results.models import (
+    AnalysisPublicationRecord,
     AnalysisRecord,
     ArtifactPayload,
     JsonObject,
@@ -27,11 +28,24 @@ class ResultsRepository(Protocol):
 
     async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None: ...
 
+    async def publish_publication(
+        self,
+        analysis: AnalysisRecord,
+        result: JsonObject,
+        publication_checksum: str,
+        *,
+        presentation_context: JsonObject,
+    ) -> AnalysisPublicationRecord: ...
+
+    async def latest_publication(self, analysis_id: str) -> AnalysisPublicationRecord | None: ...
+
     async def record_artifact(
         self,
         analysis: AnalysisRecord,
         payload: ArtifactPayload,
         storage_uri: str,
+        *,
+        publication: AnalysisPublicationRecord | None = None,
     ) -> ReportArtifactRecord: ...
 
     async def list_artifacts(self, analysis_id: str) -> list[ReportArtifactRecord]: ...

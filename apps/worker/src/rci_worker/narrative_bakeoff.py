@@ -24,7 +24,9 @@ from rci_agents import (
 
 from rci_core import AppSettings
 from rci_db import DatabaseProbe
+from rci_products import PostgresProductDetailRepository
 from rci_results import (
+    AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
     PostgresResultsRepository,
@@ -121,6 +123,14 @@ def _arguments() -> argparse.Namespace:
         action="store_true",
         help="Required acknowledgement that up to two capped OpenAI calls may be billed.",
     )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help=(
+            "Persist the validated governed result as the next immutable publication and "
+            "make it the source for the app and normal report exports."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -170,8 +180,6 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         if not isinstance(narratives, dict) or narratives.get("generation_mode") != "ai_assisted":
             raise RuntimeError("governed narrative was rejected; no bake-off artifact was created")
         validated = AnalysisResultValidator(repository_root).validate(enriched)
-        renderer = ArtifactRenderer(repository_root)
-        payload = renderer.render(validated, "html")
         store = S3ReportObjectStore.create(
             bucket=os.environ["OBJECT_STORAGE_BUCKET"],
             endpoint_url=os.getenv("OBJECT_STORAGE_ENDPOINT"),
@@ -180,7 +188,35 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
             force_path_style=_enabled(os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE")),
         )
-        storage_uri = await store.put(f"bakeoff-{record.analysis_id}", payload)
+        renderer = ArtifactRenderer(repository_root)
+        publication = None
+        if args.publish:
+            source = validated.get("source", {})
+            source_artifact_ids = (
+                [str(value) for value in source.get("source_artifact_ids", [])]
+                if isinstance(source, dict)
+                else []
+            )
+            product_highlights = await PostgresProductDetailRepository(
+                database.engine,
+                repository_root,
+            ).publication_highlights(source_artifact_ids)
+            service = AnalysisResultService(
+                results,
+                AnalysisResultValidator(repository_root),
+                store,
+                renderer,
+            )
+            publication = await service.publish_publication(
+                record.analysis_id,
+                validated,
+                presentation_context={"product_highlights": product_highlights},
+            )
+            artifact = await service.generate_artifact(record.analysis_id, "html")
+            storage_uri = artifact.storage_uri
+        else:
+            payload = renderer.render(validated, "html")
+            storage_uri = await store.put(f"bakeoff-{record.analysis_id}", payload)
         download_url = await store.presign(
             storage_uri,
             expires_in_seconds=args.expires_in_seconds,
@@ -210,6 +246,16 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             ),
             "usage": usage,
             "validation": validated["validation"],
+            "publication": (
+                {
+                    "id": publication.id,
+                    "version": publication.version,
+                    "status": publication.status,
+                    "publication_checksum_sha256": publication.publication_checksum,
+                }
+                if publication is not None
+                else None
+            ),
             "download_url": download_url,
             "expires_in_seconds": args.expires_in_seconds,
         }

@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.5.0"
+RENDERER_VERSION = "2.6.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -112,6 +112,27 @@ article span{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.
 text-transform:uppercase}
 .metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
 .metric strong{display:block;font-size:24px;margin-top:12px}.table-wrap{overflow:auto}
+.comparison-chart{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+margin:18px 0;padding:18px}.comparison-chart figcaption strong,
+.comparison-chart figcaption span,.chart-label strong,.chart-label span{display:block}
+.comparison-chart figcaption span,.chart-label span,
+.chart-note{color:var(--muted);font-size:12px}.chart-body{display:grid;gap:15px;margin-top:16px}
+.chart-row{align-items:center;display:grid;gap:18px;grid-template-columns:minmax(170px,.8fr)
+minmax(260px,2fr)}.chart-label strong{font-size:13px}.paired{display:grid;gap:5px}.paired>div{
+align-items:center;display:grid;gap:8px;grid-template-columns:1fr 52px}
+.paired i{background:var(--card);border-radius:999px;display:block;height:9px;overflow:hidden}
+.paired b{border-radius:inherit;display:block;
+height:100%}.paired b.benchmark{background:var(--ink)}.paired b.competitor{background:var(--accent)}
+.paired>div>span{font-size:11px;text-align:right}.chart-note{border-top:1px solid var(--line);
+margin:14px 0 0;padding-top:12px}.product-intro p{color:var(--muted);font-size:13px}
+.product-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.product-card{align-items:center;background:var(--surface);box-shadow:none;display:grid;gap:14px;
+grid-template-columns:72px 1fr;margin:0;padding:12px}.product-card img,
+.product-placeholder{background:var(--card);
+border-radius:9px;height:72px;object-fit:contain;width:72px}.product-placeholder{align-items:center;
+color:var(--accent);display:flex;font-size:28px;justify-content:center}
+.product-card h3{font-size:14px;
+line-height:1.35;margin:5px 0}.product-card p{color:var(--muted);font-size:12px;margin:0}
 .decision-card{background:var(--surface);box-shadow:none}.decision-card h3{font-size:17px;
 line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:14px}
 .evidence{border-top:1px solid var(--line);margin-top:20px;padding-top:14px}
@@ -123,6 +144,8 @@ text-transform:uppercase}tbody tr:nth-child(even){background:var(--surface)}li{m
 .comparison-table{margin-top:18px}.comparison-table td:first-child{font-weight:750}
 footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;margin-top:34px;
 padding-top:18px}footer code{overflow-wrap:anywhere}
+@media(max-width:700px){main{padding:24px 14px 44px}header{padding:24px 20px}section{padding:18px}
+h1{font-size:42px}.chart-row{grid-template-columns:1fr}}
 """
 
 
@@ -204,10 +227,85 @@ def _narrative_html(value: object) -> str:
     return "".join(f"<p>{escape(paragraph)}</p>" for paragraph in paragraphs if paragraph)
 
 
+def _percent(value: object) -> float | None:
+    try:
+        parsed = float(str(value).replace("%", "").replace(",", ""))
+    except ValueError:
+        return None
+    return max(0.0, min(parsed, 100.0))
+
+
+def _comparison_chart(rows: list[JsonObject]) -> str:
+    candidates = []
+    for row in rows:
+        benchmark = _percent(row.get("benchmark lower"))
+        competitor = _percent(row.get("competitor lower"))
+        if benchmark is None and competitor is None:
+            continue
+        try:
+            matches = int(str(row.get("matches", 0)).replace(",", ""))
+        except ValueError:
+            matches = 0
+        candidates.append((matches, row, benchmark, competitor))
+    candidates.sort(key=lambda value: value[0], reverse=True)
+    chart_rows = "".join(
+        f"<div class=chart-row><div class=chart-label><strong>"
+        f"{escape(_display(row.get('segment') or row.get('competitor')))}</strong>"
+        f"<span>{escape(_display(row.get('competitor')))} · {matches:,} matches</span></div>"
+        f"<div class=paired><div><i><b class=benchmark style='width:{benchmark or 1}%'></b>"
+        f"</i><span>{'—' if benchmark is None else f'{benchmark:.1f}%'}</span></div>"
+        f"<div><i><b class=competitor style='width:{competitor or 1}%'></b></i>"
+        f"<span>{'—' if competitor is None else f'{competitor:.1f}%'}</span></div></div></div>"
+        for matches, row, benchmark, competitor in candidates[:8]
+    )
+    if not chart_rows:
+        return ""
+    return (
+        "<figure class=comparison-chart><figcaption><strong>Lower-price share</strong>"
+        "<span>Highest-sample comparisons · matched observations shown</span></figcaption>"
+        f"<div class=chart-body>{chart_rows}</div><p class=chart-note>Directional share "
+        "among matched observations; see the supporting table for definitions and caveats."
+        "</p></figure>"
+    )
+
+
+def _product_highlights(context: JsonObject) -> str:
+    products = _rows(context, "product_highlights")[:8]
+    if not products:
+        return ""
+    cards = "".join(
+        "<article class=product-card>"
+        + (
+            f"<img src='{escape(str(product['image_url']), quote=True)}' alt='' loading=lazy>"
+            if product.get("image_url")
+            else "<div class=product-placeholder aria-hidden=true>•</div>"
+        )
+        + "<div><span>"
+        + escape(_display(product.get("retailer")))
+        + "</span><h3>"
+        + escape(_display(product.get("name")))
+        + "</h3>"
+        + (f"<p>{escape(_display(product.get('brand')))}</p>" if product.get("brand") else "")
+        + "</div></article>"
+        for product in products
+    )
+    return (
+        "<div class=product-intro><h3>Products to know</h3><p>PDP-enriched identity and "
+        "imagery; search observations remain authoritative for price.</p></div>"
+        f"<div class=product-grid>{cards}</div>"
+    )
+
+
 class LeadershipHtmlRenderer:
-    def render(self, result: JsonObject, view: JsonObject | None = None) -> bytes:
+    def render(
+        self,
+        result: JsonObject,
+        view: JsonObject | None = None,
+        *,
+        presentation_context: JsonObject | None = None,
+    ) -> bytes:
         if view is not None:
-            return self._render_blueprint(result, view)
+            return self._render_blueprint(result, view, presentation_context or {})
         product_pack = _mapping(result, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         analysis_id = escape(_display(result.get("analysis_id")))
@@ -249,11 +347,18 @@ class LeadershipHtmlRenderer:
 </main></body></html>"""
         return document.encode("utf-8")
 
-    def _render_blueprint(self, result: JsonObject, view: JsonObject) -> bytes:
+    def _render_blueprint(
+        self,
+        result: JsonObject,
+        view: JsonObject,
+        presentation_context: JsonObject,
+    ) -> bytes:
         product_pack = _mapping(view, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         result_checksum = escape(_result_checksum(result))
-        section_html = "".join(self._section(section) for section in _rows(view, "sections"))
+        section_html = "".join(
+            self._section(section, presentation_context) for section in _rows(view, "sections")
+        )
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
@@ -269,7 +374,7 @@ Generated {escape(_display_generated_at(result))}</div>
         return document.encode("utf-8")
 
     @staticmethod
-    def _section(section: JsonObject) -> str:
+    def _section(section: JsonObject, presentation_context: JsonObject) -> str:
         title = escape(_display(section.get("title")))
         section_kind = str(section.get("kind", ""))
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
@@ -291,7 +396,13 @@ Generated {escape(_display_generated_at(result))}</div>
             "segment_analysis",
             "geographic_sensitivity",
         }:
-            detail = _inline_table(records)
+            chart = _comparison_chart(records)
+            detail = f"{chart}{_collapsed_table('View supporting detail', records)}"
+        elif section_kind == "product_table":
+            detail = (
+                f"{_product_highlights(presentation_context)}"
+                f"{_collapsed_table('View evidence-backed detail', records)}"
+            )
         elif section.get("visualization") == "ranked_cards" and not narrative_html:
             repeated_detail = (
                 len({str(row.get("summary") or row.get("rationale") or "") for row in records[:5]})
@@ -493,7 +604,13 @@ class ExcelAuditRenderer:
 
 
 class LeadershipEmailRenderer:
-    def render(self, result: JsonObject, view: JsonObject | None = None) -> bytes:
+    def render(
+        self,
+        result: JsonObject,
+        view: JsonObject | None = None,
+        *,
+        report_html: bytes | None = None,
+    ) -> bytes:
         product_pack = _mapping(result, "product_pack")
         view_product_pack = _mapping(view, "product_pack") if view is not None else {}
         subject_name = _display(
@@ -568,6 +685,14 @@ class LeadershipEmailRenderer:
             )
         )
         message.set_content("\n".join(lines))
+        if report_html is not None:
+            message.add_attachment(
+                report_html,
+                maintype="text",
+                subtype="html",
+                filename=f"{result['analysis_id']}-report.html",
+            )
+            message.set_boundary(f"rci-{_result_checksum(result)[:24]}")
         return message.as_bytes()
 
 
@@ -606,18 +731,22 @@ class ArtifactRenderer:
         result: JsonObject,
         *,
         artifact_type: ArtifactType | None = None,
+        presentation_context: JsonObject | None = None,
     ) -> JsonObject:
         if str(result.get("schema_version")) != "2.0.0":
             raise ValueError("report views require AnalysisResult V2")
         if self._blueprints is None:
             raise RuntimeError("report blueprint catalog is not configured")
         blueprint, product_pack = self._blueprints.load_for_result(result)
-        return self._projector.project(
+        view = self._projector.project(
             result,
             blueprint,
             product_pack,
             artifact_type=artifact_type,
         )
+        if presentation_context:
+            view.update(presentation_context)
+        return view
 
     def _context(
         self,
@@ -640,7 +769,13 @@ class ArtifactRenderer:
             ),
         )
 
-    def render(self, result: JsonObject, artifact_type: str) -> ArtifactPayload:
+    def render(
+        self,
+        result: JsonObject,
+        artifact_type: str,
+        *,
+        presentation_context: JsonObject | None = None,
+    ) -> ArtifactPayload:
         analysis_id = str(result["analysis_id"])
         if artifact_type == "html":
             context = self._context(result, "html")
@@ -648,7 +783,11 @@ class ArtifactRenderer:
                 "html",
                 f"{analysis_id}.html",
                 "text/html; charset=utf-8",
-                self._html.render(result, context[2] if context else None),
+                self._html.render(
+                    result,
+                    context[2] if context else None,
+                    presentation_context=presentation_context,
+                ),
                 self.version,
             )
         if artifact_type == "xlsx":
@@ -666,22 +805,40 @@ class ArtifactRenderer:
             )
         if artifact_type == "leadership_email":
             context = self._context(result, "leadership_email")
+            view = context[2] if context else None
             return ArtifactPayload(
                 "leadership_email",
                 f"{analysis_id}.eml",
                 "message/rfc822",
-                self._email.render(result, context[2] if context else None),
+                self._email.render(
+                    result,
+                    view,
+                    report_html=self._html.render(
+                        result,
+                        view,
+                        presentation_context=presentation_context,
+                    ),
+                ),
                 self.version,
             )
         if artifact_type == "audit_zip":
-            return self._audit_package(result)
+            return self._audit_package(result, presentation_context=presentation_context)
         raise ValueError(f"unsupported artifact type {artifact_type!r}")
 
-    def _audit_package(self, result: JsonObject) -> ArtifactPayload:
+    def _audit_package(
+        self,
+        result: JsonObject,
+        *,
+        presentation_context: JsonObject | None = None,
+    ) -> ArtifactPayload:
         children = [
-            self.render(result, "html"),
+            self.render(result, "html", presentation_context=presentation_context),
             self.render(result, "xlsx"),
-            self.render(result, "leadership_email"),
+            self.render(
+                result,
+                "leadership_email",
+                presentation_context=presentation_context,
+            ),
         ]
         result_body = canonical_result_bytes(result)
         manifest = {

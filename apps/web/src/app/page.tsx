@@ -13,7 +13,7 @@ export default function HomePage() {
           </p>
           <div className="button-row">
             <Link className="button primary" href="/analyses">
-              Open analyses
+              Open reports
             </Link>
             <Link className="button secondary" href="/collections">
               View collections

@@ -3,12 +3,14 @@
 from rci_results.blueprints import ReportBlueprintLoader, ReportProjector
 from rci_results.contracts import AnalysisResultValidator
 from rci_results.memory import InMemoryResultsRepository
+from rci_results.models import AnalysisPublicationRecord
 from rci_results.renderers import ArtifactRenderer
 from rci_results.repository import PostgresResultsRepository
 from rci_results.service import AnalysisResultService
 from rci_results.storage import InMemoryReportObjectStore, S3ReportObjectStore
 
 __all__ = [
+    "AnalysisPublicationRecord",
     "AnalysisResultService",
     "AnalysisResultValidator",
     "ArtifactRenderer",

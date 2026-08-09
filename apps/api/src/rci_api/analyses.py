@@ -46,6 +46,7 @@ class ArtifactResponse(BaseModel):
 
     id: str
     analysis_run_id: str
+    publication_id: str | None
     artifact_type: str
     renderer_version: str
     content_type: str

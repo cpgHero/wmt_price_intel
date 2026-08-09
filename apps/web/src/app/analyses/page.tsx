@@ -14,7 +14,7 @@ export default async function AnalysesPage() {
       <header className="page-header compact">
         <div>
           <p className="eyebrow">Canonical results</p>
-          <h1>Analyses</h1>
+          <h1>Reports</h1>
         </div>
         <p>
           Immutable analytical records, evidence, and delivery

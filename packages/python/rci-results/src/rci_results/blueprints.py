@@ -273,6 +273,9 @@ class ReportProjector:
                 "id": product_pack["id"],
                 "name": product_pack["name"],
                 "version": product_pack["version"],
+                "recommended_charts": product_pack.get("reporting", {}).get(
+                    "recommended_charts", []
+                ),
             },
             "blueprint": {"id": blueprint.id, "version": blueprint.version},
             "sections": sections,

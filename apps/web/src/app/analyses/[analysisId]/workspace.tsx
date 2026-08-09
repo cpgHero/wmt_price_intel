@@ -7,6 +7,8 @@ import type {
   AnalysisRecord,
   AnalysisReportView,
   JsonObject,
+  MapPoint,
+  ProductHighlight,
   ReportSectionView,
 } from "@/lib/api";
 import {
@@ -197,12 +199,18 @@ function BlueprintAnalysisWorkspace({
   const selectedGroup = groupedSections.find(
     (group) => group.id === activeGroup,
   );
+  const publication = reportView.publication;
+  const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
   return (
     <>
-      <header className="workspace-header">
+      <header className="workspace-header report-header">
         <div>
-          <p className="eyebrow">Analysis workspace</p>
+          <p className="eyebrow">Competitive intelligence report</p>
           <h1>{reportView.product_pack.name}</h1>
+          <p className="report-deck">
+            Where the price war is being won, where it is being lost, and
+            which targeted moves matter most.
+          </p>
           <p className="workspace-meta">
             {analysis.analysis_id} · Generated{" "}
             {displayDate(reportView.generated_at)}
@@ -210,15 +218,24 @@ function BlueprintAnalysisWorkspace({
           <div className="trust-strip" aria-label="Result integrity">
             <span>Deterministic metrics</span>
             <span>Evidence linked</span>
-            <span title={analysis.checksum}>
-              Checksum {analysis.checksum.slice(0, 12)}…
+            {publication ? <span>Published v{publication.version}</span> : null}
+            <span title={reportView.result_checksum}>
+              Checksum {reportView.result_checksum.slice(0, 12)}…
             </span>
           </div>
         </div>
         <div className="workspace-status">
-          <span className={`status-badge ${analysis.status}`}>
-            {displayLabel(analysis.status)}
+          <span
+            className={`status-badge ${publication?.status ?? analysis.status}`}
+          >
+            {displayLabel(publication?.status ?? analysis.status)}
           </span>
+          <ArtifactDownloadButton
+            analysisId={analysis.analysis_id}
+            artifactType="html"
+            label="Open shareable report"
+            className="button primary report-action"
+          />
           <small>
             Blueprint {reportView.blueprint.id} · {reportView.blueprint.version}
           </small>
@@ -256,9 +273,22 @@ function BlueprintAnalysisWorkspace({
             <ArtifactActions analysisId={analysis.analysis_id} />
           </Section>
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
-          selectedGroup.sections.map((section) => (
-            <BlueprintSection section={section} key={section.id} />
-          ))
+          <>
+            {activeGroup === "geography" && reportView.map_points?.length ? (
+              <AnalysisMap points={reportView.map_points} />
+            ) : null}
+            {activeGroup === "products" &&
+            reportView.product_highlights?.length ? (
+              <ProductHighlights products={reportView.product_highlights} />
+            ) : null}
+            {selectedGroup.sections.map((section) => (
+              <BlueprintSection
+                section={section}
+                recommendedCharts={recommendedCharts}
+                key={section.id}
+              />
+            ))}
+          </>
         ) : (
           <Section
             title={selectedGroup?.label ?? "Analysis section"}
@@ -276,9 +306,18 @@ function BlueprintAnalysisWorkspace({
 
 function BlueprintSection({
   section,
-}: Readonly<{ section: ReportSectionView }>) {
+  recommendedCharts,
+}: Readonly<{
+  section: ReportSectionView;
+  recommendedCharts: string[];
+}>) {
   const narrative = asObject(section.narrative);
-  const metricValues = section.metrics.map((metric) => metric.value);
+  const visibleMetrics = section.metrics.slice(0, 6);
+  const metricValues = visibleMetrics.map((metric) => metric.value);
+  const comparisonChart = shouldShowComparisonChart(section, recommendedCharts);
+  const narrativeLeads =
+    Boolean(narrative.body) &&
+    ["executive_summary", "recommendations"].includes(section.kind);
   return (
     <Section
       title={section.title}
@@ -293,9 +332,9 @@ function BlueprintSection({
             ))}
         </div>
       ) : null}
-      {section.metrics.length > 0 && section.visualization === "bar" ? (
+      {visibleMetrics.length > 0 && section.visualization === "bar" ? (
         <div className="metric-bars" aria-label={`${section.title} metrics`}>
-          {section.metrics.map((metric) => (
+          {visibleMetrics.map((metric) => (
             <div className="metric-bar" key={String(metric.metric_id)}>
               <div>
                 <span>{String(metric.name)}</span>
@@ -311,9 +350,9 @@ function BlueprintSection({
             </div>
           ))}
         </div>
-      ) : section.metrics.length > 0 ? (
+      ) : visibleMetrics.length > 0 ? (
         <div className="metric-grid">
-          {section.metrics.map((metric) => (
+          {visibleMetrics.map((metric) => (
             <Metric
               key={String(metric.metric_id)}
               label={String(metric.name)}
@@ -322,11 +361,24 @@ function BlueprintSection({
           ))}
         </div>
       ) : null}
+      {comparisonChart ? (
+        <CompetitivePositionChart rows={section.records} title={section.title} />
+      ) : null}
       {section.records.length > 0 &&
-      section.visualization === "ranked_cards" ? (
+      section.visualization === "ranked_cards" &&
+      !narrativeLeads ? (
         <DecisionCards rows={section.records} />
-      ) : section.records.length > 0 && section.kind !== "kpi_strip" ? (
+      ) : section.records.length > 0 &&
+        section.kind !== "kpi_strip" &&
+        !narrativeLeads &&
+        !comparisonChart ? (
         <DataTable rows={section.records} />
+      ) : null}
+      {comparisonChart || (narrativeLeads && section.records.length > 0) ? (
+        <details className="evidence-disclosure report-detail">
+          <summary>View supporting detail</summary>
+          <DataTable rows={section.records} />
+        </details>
       ) : null}
       {section.evidence_sets.length > 0 ? (
         <details className="evidence-disclosure">
@@ -339,6 +391,196 @@ function BlueprintSection({
           {section.empty_state ?? "No records were supplied for this section."}
         </p>
       ) : null}
+    </Section>
+  );
+}
+
+const chartCapabilityBySection: Record<string, string[]> = {
+  price_position: ["package_price_gap", "exact_match", "price_position"],
+  segment_analysis: ["price_per_lb", "normalized_price", "segment_win_rate"],
+  geographic_sensitivity: ["radius_sensitivity", "proximity"],
+};
+
+function shouldShowComparisonChart(
+  section: ReportSectionView,
+  recommendedCharts: string[],
+) {
+  const capabilities = chartCapabilityBySection[section.kind];
+  if (!capabilities || section.records.length === 0) return false;
+  return capabilities.some((capability) => recommendedCharts.includes(capability));
+}
+
+function parseRate(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value <= 1 ? value * 100 : value;
+  }
+  if (typeof value !== "string") return null;
+  const parsed = Number.parseFloat(value.replace(/[%,$]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCount(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return 0;
+  const parsed = Number.parseFloat(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function CompetitivePositionChart({
+  rows,
+  title,
+}: Readonly<{ rows: JsonObject[]; title: string }>) {
+  const chartRows = rows
+    .map((row) => ({
+      row,
+      competitorRate: parseRate(row["competitor lower"]),
+      benchmarkRate: parseRate(row["benchmark lower"]),
+      matches: parseCount(row.matches),
+    }))
+    .filter(
+      (item) => item.competitorRate !== null || item.benchmarkRate !== null,
+    )
+    .sort((left, right) => right.matches - left.matches)
+    .slice(0, 8);
+  if (chartRows.length === 0) return null;
+  return (
+    <figure className="comparison-chart" aria-label={`${title} comparison`}>
+      <figcaption>
+        <div>
+          <strong>Lower-price share</strong>
+          <span>Highest-sample comparisons · matched observations shown</span>
+        </div>
+        <div className="chart-legend" aria-label="Chart legend">
+          <span className="benchmark">Benchmark</span>
+          <span className="competitor">Competitor</span>
+        </div>
+      </figcaption>
+      <div className="comparison-chart-body">
+        {chartRows.map(({ row, benchmarkRate, competitorRate, matches }, index) => (
+          <div className="comparison-chart-row" key={String(row.id ?? index)}>
+            <div className="comparison-chart-label">
+              <strong>{displayValue(row.segment ?? row.competitor)}</strong>
+              <span>
+                {displayValue(row.competitor)} · {matches.toLocaleString()} matches
+              </span>
+            </div>
+            <div className="paired-bars">
+              <div>
+                <i>
+                  <b
+                    className="benchmark"
+                    style={{ width: `${Math.max(benchmarkRate ?? 0, 1)}%` }}
+                  />
+                </i>
+                <span>{benchmarkRate === null ? "—" : `${benchmarkRate.toFixed(1)}%`}</span>
+              </div>
+              <div>
+                <i>
+                  <b
+                    className="competitor"
+                    style={{ width: `${Math.max(competitorRate ?? 0, 1)}%` }}
+                  />
+                </i>
+                <span>{competitorRate === null ? "—" : `${competitorRate.toFixed(1)}%`}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="chart-note">
+        Directional share among matched observations; open the supporting detail
+        for exact definitions and caveats.
+      </p>
+    </figure>
+  );
+}
+
+function ProductHighlights({
+  products,
+}: Readonly<{ products: ProductHighlight[] }>) {
+  return (
+    <Section
+      title="Products to know"
+      note="PDP-enriched identity and imagery; search observations remain authoritative for price."
+    >
+      <div className="product-highlight-grid">
+        {products.slice(0, 8).map((product) => {
+          const content = (
+            <>
+              <div className="product-image" aria-hidden="true">
+                {product.image_url ? (
+                  // External retailer images are presentation-only and intentionally unoptimized.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={product.image_url} alt="" loading="lazy" />
+                ) : (
+                  <span>{product.name.slice(0, 1)}</span>
+                )}
+              </div>
+              <div>
+                <span className="product-retailer">{product.retailer}</span>
+                <h3>{product.name}</h3>
+                {product.brand ? <p>{product.brand}</p> : null}
+                {product.role ? <b>{product.role}</b> : null}
+              </div>
+            </>
+          );
+          return product.url ? (
+            <a
+              className="product-highlight"
+              href={product.url}
+              target="_blank"
+              rel="noreferrer"
+              key={product.canonical_product_id}
+            >
+              {content}
+            </a>
+          ) : (
+            <article
+              className="product-highlight"
+              key={product.canonical_product_id}
+            >
+              {content}
+            </article>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
+  const positioned = points
+    .filter(
+      (point) =>
+        Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
+    )
+    .slice(0, 500);
+  return (
+    <Section
+      title="Geographic signal map"
+      note={`${positioned.length.toLocaleString()} analysis-linked locations; dots are omitted when coordinates are unavailable.`}
+    >
+      <figure className="analysis-map">
+        <svg viewBox="0 0 960 520" role="img" aria-label="Analysis-linked geographic locations">
+          <rect width="960" height="520" rx="22" />
+          {positioned.map((point) => {
+            const x = ((point.longitude + 125) / 59) * 900 + 30;
+            const y = ((50 - point.latitude) / 26) * 460 + 30;
+            return (
+              <circle cx={x} cy={y} r="5" key={point.id}>
+                <title>
+                  {point.label}
+                  {point.value_label ? ` · ${point.value_label}` : ""}
+                </title>
+              </circle>
+            );
+          })}
+        </svg>
+        <figcaption>
+          Hover a point for its evidence label. This map is shown only for
+          coordinates carried by the analysis publication.
+        </figcaption>
+      </figure>
     </Section>
   );
 }
@@ -483,13 +725,69 @@ function ObjectGrid({ value }: Readonly<{ value: JsonObject }>) {
   );
 }
 
+function ArtifactDownloadButton({
+  analysisId,
+  artifactType,
+  label,
+  className,
+}: Readonly<{
+  analysisId: string;
+  artifactType: string;
+  label: string;
+  className?: string;
+}>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function openArtifact() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/analyses/${encodeURIComponent(analysisId)}/artifacts/${artifactType}`,
+        { method: "POST" },
+      );
+      const body = (await response.json()) as {
+        download_url?: string;
+        error?: string;
+      };
+      if (!response.ok || !body.download_url) {
+        throw new Error(body.error ?? "Report generation failed.");
+      }
+      window.open(body.download_url, "_blank", "noopener,noreferrer");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Report generation failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="report-action-wrap">
+      <button
+        type="button"
+        className={className}
+        onClick={() => void openArtifact()}
+        disabled={busy}
+      >
+        {busy ? "Preparing report…" : label}
+      </button>
+      {error ? (
+        <small className="form-error" role="alert">
+          {error}
+        </small>
+      ) : null}
+    </div>
+  );
+}
+
 function ArtifactActions({ analysisId }: Readonly<{ analysisId: string }>) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const artifacts = [
-    ["html", "Leadership HTML"],
+    ["html", "Report (HTML)"],
     ["xlsx", "Excel audit workbook"],
-    ["leadership_email", "Leadership email draft"],
+    ["leadership_email", "Email draft + attached report"],
     ["audit_zip", "Complete audit package"],
   ] as const;
   async function generate(type: string) {

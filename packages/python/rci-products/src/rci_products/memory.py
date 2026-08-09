@@ -368,5 +368,53 @@ class InMemoryProductDetailRepository:
         )
         return document
 
+    async def publication_highlights(
+        self,
+        source_artifact_ids: list[str],
+        *,
+        limit: int = 8,
+    ) -> list[JsonObject]:
+        if not source_artifact_ids or limit < 1:
+            return []
+        source_ids = set(source_artifact_ids)
+        async with self._lock:
+            products = [
+                product
+                for product_id, product in self._products.items()
+                if any(
+                    context.get("source_artifact_id") in source_ids
+                    for context in self._contexts.get(product_id, {}).values()
+                )
+            ]
+            products.sort(key=lambda product: (product.retailer_id, product.canonical_product_id))
+            highlights: list[JsonObject] = []
+            for product in products[:limit]:
+                snapshot_ids = self._snapshot_ids_by_product.get(product.id, [])
+                snapshot = self._snapshots[snapshot_ids[-1]].document if snapshot_ids else None
+                normalized = (
+                    dict(snapshot.get("normalized", {})) if isinstance(snapshot, dict) else {}
+                )
+                media = normalized.get("media", {})
+                highlights.append(
+                    {
+                        "canonical_product_id": product.canonical_product_id,
+                        "retailer": product.retailer_id,
+                        "name": str(
+                            normalized.get("name") or product.identity.get("name") or "Product"
+                        ),
+                        "brand": normalized.get("brand") or product.identity.get("brand"),
+                        "url": normalized.get("url") or product.identity.get("url"),
+                        "image_url": (
+                            media.get("image_primary")
+                            if isinstance(media, dict)
+                            else product.identity.get("image_primary")
+                        ),
+                        "role": (
+                            "PDP-enriched reference" if snapshot else "Search identity reference"
+                        ),
+                    }
+                )
+            return highlights
+
     async def get_run(self, run_id: str) -> ProductDetailRun:
         return self._runs[run_id]

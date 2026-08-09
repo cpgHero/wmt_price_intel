@@ -5,7 +5,7 @@ import { ThemeToggle } from "./theme-toggle";
 const navigation = [
   ["Dashboard", "/"],
   ["Collections", "/collections"],
-  ["Analyses", "/analyses"],
+  ["Reports", "/analyses"],
   ["Automation", "/automation"],
   ["Data Quality", "/data-quality"],
 ] as const;

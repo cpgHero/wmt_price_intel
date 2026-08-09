@@ -11,6 +11,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_results.models import (
+    AnalysisPublicationRecord,
     AnalysisRecord,
     ArtifactPayload,
     ArtifactType,
@@ -45,6 +46,7 @@ def _artifact(row: RowMapping) -> ReportArtifactRecord:
     return ReportArtifactRecord(
         id=str(row["id"]),
         analysis_run_id=str(row["analysis_run_id"]),
+        publication_id=(str(row["publication_id"]) if row["publication_id"] is not None else None),
         artifact_type=cast(ArtifactType, str(row["artifact_type"])),
         renderer_version=str(row["renderer_version"]),
         dataset_artifact_id=str(row["dataset_artifact_id"]),
@@ -53,6 +55,21 @@ def _artifact(row: RowMapping) -> ReportArtifactRecord:
         byte_size=int(row["byte_size"]),
         checksum=str(row["checksum"]),
         status=str(row["status"]),
+        created_at=row["created_at"],
+    )
+
+
+def _publication(row: RowMapping) -> AnalysisPublicationRecord:
+    return AnalysisPublicationRecord(
+        id=str(row["id"]),
+        analysis_result_id=str(row["analysis_result_id"]),
+        analysis_id=str(row["analysis_id"]),
+        version=int(row["version"]),
+        status=str(row["status"]),
+        source_result_checksum=str(row["source_result_checksum"]),
+        publication_checksum=str(row["publication_checksum"]),
+        result=dict(row["result"]),
+        presentation_context=dict(row["presentation_context"]),
         created_at=row["created_at"],
     )
 
@@ -68,12 +85,21 @@ JOIN analysis_run ar ON ar.id = r.analysis_run_id
 
 _ARTIFACT_SELECT = """
 SELECT ra.id::text AS id, ra.analysis_run_id::text AS analysis_run_id,
+       ra.publication_id::text AS publication_id,
        ra.artifact_type, ra.renderer_version,
        ra.dataset_artifact_id::text AS dataset_artifact_id,
        da.storage_uri, da.content_type, da.byte_size, da.checksum,
        ra.status, ra.created_at
 FROM report_artifact ra
 JOIN dataset_artifact da ON da.id = ra.dataset_artifact_id
+"""
+
+_PUBLICATION_SELECT = """
+SELECT p.id::text AS id, p.analysis_result_id::text AS analysis_result_id,
+       r.analysis_id, p.version, p.status, p.source_result_checksum,
+       p.publication_checksum, p.result, p.presentation_context, p.created_at
+FROM analysis_publication p
+JOIN analysis_result r ON r.id = p.analysis_result_id
 """
 
 
@@ -280,11 +306,153 @@ class PostgresResultsRepository:
             )
             return _analysis(row) if row is not None else None
 
+    async def publish_publication(
+        self,
+        analysis: AnalysisRecord,
+        result: JsonObject,
+        publication_checksum: str,
+        *,
+        presentation_context: JsonObject,
+    ) -> AnalysisPublicationRecord:
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:record_id, 0))"),
+                {"record_id": analysis.id},
+            )
+            source_checksum = (
+                await connection.execute(
+                    text("SELECT checksum FROM analysis_result WHERE id::text = :record_id"),
+                    {"record_id": analysis.id},
+                )
+            ).scalar_one_or_none()
+            if source_checksum is None:
+                raise LookupError(f"analysis {analysis.analysis_id!r} was not found")
+            if str(source_checksum) != analysis.checksum:
+                raise ValueError("AnalysisResult changed while publishing")
+            existing = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_PUBLICATION_SELECT} "
+                            "WHERE p.analysis_result_id::text = :record_id "
+                            "AND p.publication_checksum = :checksum"
+                        ),
+                        {"record_id": analysis.id, "checksum": publication_checksum},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing is not None:
+                return _publication(existing)
+            version = int(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT COALESCE(MAX(version), 0) + 1 "
+                            "FROM analysis_publication "
+                            "WHERE analysis_result_id::text = :record_id"
+                        ),
+                        {"record_id": analysis.id},
+                    )
+                ).scalar_one()
+            )
+            await connection.execute(
+                text(
+                    "UPDATE analysis_publication SET status = 'superseded' "
+                    "WHERE analysis_result_id::text = :record_id "
+                    "AND status = 'ready_to_share'"
+                ),
+                {"record_id": analysis.id},
+            )
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH inserted AS (
+                              INSERT INTO analysis_publication (
+                                analysis_result_id, version, status,
+                                source_result_checksum, publication_checksum,
+                                result, presentation_context
+                              ) VALUES (
+                                CAST(:record_id AS uuid), :version, 'ready_to_share',
+                                :source_checksum, :publication_checksum,
+                                CAST(:result AS jsonb), CAST(:presentation_context AS jsonb)
+                              ) RETURNING *
+                            )
+                            SELECT p.id::text AS id,
+                              p.analysis_result_id::text AS analysis_result_id,
+                              :analysis_id AS analysis_id, p.version, p.status,
+                              p.source_result_checksum, p.publication_checksum,
+                              p.result, p.presentation_context, p.created_at
+                            FROM inserted p
+                            """
+                        ),
+                        {
+                            "record_id": analysis.id,
+                            "analysis_id": analysis.analysis_id,
+                            "version": version,
+                            "source_checksum": analysis.checksum,
+                            "publication_checksum": publication_checksum,
+                            "result": _json(result),
+                            "presentation_context": _json(presentation_context),
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO audit_event (
+                      organization_id, event_type, entity_type, entity_id, details
+                    ) VALUES (
+                      CAST(:organization_id AS uuid), 'analysis_publication_created',
+                      'analysis_publication', :entity_id, CAST(:details AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "organization_id": DEFAULT_ORGANIZATION_ID,
+                    "entity_id": str(row["id"]),
+                    "details": _json(
+                        {
+                            "analysis_id": analysis.analysis_id,
+                            "version": version,
+                            "source_result_checksum": analysis.checksum,
+                            "publication_checksum": publication_checksum,
+                        }
+                    ),
+                },
+            )
+            return _publication(row)
+
+    async def latest_publication(self, analysis_id: str) -> AnalysisPublicationRecord | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_PUBLICATION_SELECT} WHERE r.analysis_id = :analysis_id "
+                            "ORDER BY p.version DESC LIMIT 1"
+                        ),
+                        {"analysis_id": analysis_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _publication(row) if row is not None else None
+
     async def record_artifact(
         self,
         analysis: AnalysisRecord,
         payload: ArtifactPayload,
         storage_uri: str,
+        *,
+        publication: AnalysisPublicationRecord | None = None,
     ) -> ReportArtifactRecord:
         checksum = hashlib.sha256(payload.body).hexdigest()
         async with self._engine.begin() as connection:
@@ -319,6 +487,12 @@ class PostgresResultsRepository:
                                 "analysis_id": analysis.analysis_id,
                                 "filename": payload.filename,
                                 "renderer_version": payload.renderer_version,
+                                "publication_id": (
+                                    publication.id if publication is not None else None
+                                ),
+                                "publication_version": (
+                                    publication.version if publication is not None else None
+                                ),
                             }
                         ),
                     },
@@ -334,22 +508,31 @@ class PostgresResultsRepository:
                             WITH inserted AS (
                               INSERT INTO report_artifact (
                                 analysis_run_id, artifact_type, renderer_version,
-                                dataset_artifact_id, status
+                                dataset_artifact_id, publication_id, status
                               ) VALUES (
                                 CAST(:analysis_run_id AS uuid), :artifact_type, :renderer_version,
-                                CAST(:dataset_id AS uuid), 'ready'
+                                CAST(:dataset_id AS uuid), CAST(:publication_id AS uuid), 'ready'
                               )
-                              ON CONFLICT (
-                                analysis_run_id, artifact_type, renderer_version
-                              ) DO UPDATE SET status = report_artifact.status
+                              ON CONFLICT DO NOTHING
                               RETURNING *
+                            ), selected AS (
+                              SELECT * FROM inserted
+                              UNION ALL
+                              SELECT * FROM report_artifact
+                              WHERE analysis_run_id::text = :analysis_run_id
+                                AND artifact_type = :artifact_type
+                                AND renderer_version = :renderer_version
+                                AND publication_id IS NOT DISTINCT FROM
+                                  CAST(:publication_id AS uuid)
+                              LIMIT 1
                             )
                             SELECT i.id::text AS id, i.analysis_run_id::text AS analysis_run_id,
+                              i.publication_id::text AS publication_id,
                               i.artifact_type, i.renderer_version,
                               i.dataset_artifact_id::text AS dataset_artifact_id,
                               da.storage_uri, da.content_type, da.byte_size, da.checksum,
                               i.status, i.created_at
-                            FROM inserted i
+                            FROM selected i
                             JOIN dataset_artifact da ON da.id = i.dataset_artifact_id
                             """
                         ),
@@ -358,6 +541,7 @@ class PostgresResultsRepository:
                             "artifact_type": payload.artifact_type,
                             "renderer_version": payload.renderer_version,
                             "dataset_id": dataset_id,
+                            "publication_id": (publication.id if publication is not None else None),
                         },
                     )
                 )
@@ -383,6 +567,7 @@ class PostgresResultsRepository:
                             "artifact_type": payload.artifact_type,
                             "renderer_version": payload.renderer_version,
                             "checksum": checksum,
+                            "publication_id": (publication.id if publication is not None else None),
                         }
                     ),
                 },
