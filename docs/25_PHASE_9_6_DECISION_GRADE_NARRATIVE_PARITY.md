@@ -120,6 +120,27 @@ Model selection, prompts, and maximum output tokens must be pinned through Railw
 after the capped bake-off is approved. No live collection should be triggered solely to test prose;
 persisted full-source results are the correct test inputs.
 
+The first controlled candidate uses `gpt-5.4-mini-2026-03-17` for bounded insight selection and
+`gpt-5.4-2026-03-05` for leadership narrative. `OPENAI_MAX_REQUEST_COST_USD=1.00` fails closed before
+either request when its conservative maximum would exceed policy, so the two-role run is capped at
+$2. Actual token counts and list-price estimates are retained in the governed task audit. Model
+pricing is pinned in code and an unpriced model cannot run while the cost guard is enabled.
+
+The production acceptance command operates on a previously persisted full-source result, writes a
+temporary content-addressed HTML artifact, and returns a short-lived private download URL. It does
+not publish or mutate the source result, call a retailer, or enable AI for normal worker jobs:
+
+```bash
+rci-narrative-bakeoff \
+  --analysis-id <full-source-analysis-id> \
+  --max-request-cost-usd 1.00 \
+  --confirm-paid-call
+```
+
+The explicit confirmation flag is mandatory. The command fails closed if authoritative metrics
+change, the governed critic rejects the narrative, the result contract fails, model pricing is
+unknown, or a request would breach its cap.
+
 ## Acceptance criteria
 
 Phase 9.6 is ready for production acceptance when:

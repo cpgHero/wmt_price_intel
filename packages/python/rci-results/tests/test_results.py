@@ -116,6 +116,17 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     assert result == original
 
 
+def test_blueprint_html_preserves_narrative_paragraphs() -> None:
+    result = json.loads(
+        (REPOSITORY_ROOT / "examples" / "analysis-result-v2.ground-beef.json").read_text()
+    )
+    result["narratives"]["sections"][0]["body"] = "Answer first.\n\nDecision implication."
+
+    html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body
+
+    assert b"<p>Answer first.</p><p>Decision implication.</p>" in html
+
+
 async def test_artifact_generation_is_immutable_and_uses_short_lived_downloads() -> None:
     service, store = _service()
     analysis = await service.publish(_result())

@@ -140,6 +140,11 @@ def _table(title: str, rows: list[JsonObject]) -> str:
     )
 
 
+def _narrative_html(value: object) -> str:
+    paragraphs = [paragraph.strip() for paragraph in str(value).split("\n\n")]
+    return "".join(f"<p>{escape(paragraph)}</p>" for paragraph in paragraphs if paragraph)
+
+
 class LeadershipHtmlRenderer:
     def render(self, result: JsonObject, view: JsonObject | None = None) -> bytes:
         if view is not None:
@@ -210,9 +215,7 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         kind = escape(_display(section.get("kind")))
         narrative = section.get("narrative")
         narrative_html = (
-            f"<p>{escape(_display(narrative.get('body')))}</p>"
-            if isinstance(narrative, dict)
-            else ""
+            _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""
         )
         metrics = _rows(section, "metrics")
         metric_html = "".join(

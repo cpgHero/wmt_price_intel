@@ -86,6 +86,7 @@ OPENAI_MODEL_INSIGHT=<explicit model ID; required only when AI_ENABLED=true>
 OPENAI_MODEL_NARRATIVE=<explicit model ID; required only when AI_ENABLED=true>
 OPENAI_TIMEOUT_SECONDS=60
 OPENAI_MAX_OUTPUT_TOKENS=3000
+OPENAI_MAX_REQUEST_COST_USD=1.00
 AI_MAX_METRICS=160
 AI_MAX_ATTEMPTS=2
 AI_LEASE_SECONDS=180
@@ -99,8 +100,10 @@ OBJECT_STORAGE_FORCE_PATH_STYLE=false
 
 Set `METRICSCART_API_KEY` as a sealed worker secret. Do not share it with `web`. When governed AI
 is accepted for production, set `OPENAI_API_KEY` as a sealed worker-only secret, choose both model
-IDs explicitly, and then set `AI_ENABLED=true`. OpenAI credentials and models are not required for
-the deterministic pipeline.
+IDs explicitly, and then set `AI_ENABLED=true`. The worker rejects unknown model IDs and any request
+whose conservative maximum cost exceeds `OPENAI_MAX_REQUEST_COST_USD`; with two sequential roles,
+the default maximum is $2 per analysis. OpenAI credentials and models are not required for the
+deterministic pipeline.
 
 ### scheduler
 

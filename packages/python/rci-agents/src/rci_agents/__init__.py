@@ -9,7 +9,13 @@ from rci_agents.governance import (
 )
 from rci_agents.models import AgentTaskReservation, AgentTaskSpec, PromptTemplate, ProviderResponse
 from rci_agents.prompts import PromptTemplateLoader
-from rci_agents.provider import AgentProvider, OpenAIResponsesProvider
+from rci_agents.provider import (
+    PINNED_MODEL_PRICING,
+    AgentCostLimitError,
+    AgentProvider,
+    ModelPricing,
+    OpenAIResponsesProvider,
+)
 from rci_agents.repository import (
     AgentTaskRepository,
     InMemoryAgentTaskRepository,
@@ -18,6 +24,8 @@ from rci_agents.repository import (
 from rci_agents.service import GovernedAnalysisAssistant
 
 __all__ = [
+    "PINNED_MODEL_PRICING",
+    "AgentCostLimitError",
     "AgentGovernanceError",
     "AgentProvider",
     "AgentTaskRepository",
@@ -28,6 +36,7 @@ __all__ = [
     "GovernedOutputBuilder",
     "InMemoryAgentTaskRepository",
     "MetricCitationRenderer",
+    "ModelPricing",
     "OpenAIResponsesProvider",
     "PostgresAgentTaskRepository",
     "PromptTemplate",

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from rci_agents import (
+    AgentCostLimitError,
     AgentGovernanceError,
     AnalysisBriefBuilder,
     GovernedAnalysisAssistant,
@@ -383,6 +384,42 @@ async def test_openai_provider_uses_strict_ephemeral_structured_output() -> None
     assert response_format["schema"]["additionalProperties"] is False
     assert response.input_tokens == 17
     assert response.output_tokens == 9
+
+
+async def test_openai_provider_records_pinned_cost_and_rejects_over_budget_request() -> None:
+    endpoint = FakeResponsesEndpoint()
+    provider = OpenAIResponsesProvider(
+        api_key="test-only-key",
+        timeout_seconds=10,
+        max_output_tokens=321,
+        max_request_cost_usd=1,
+    )
+    provider._client = SimpleNamespace(responses=endpoint)  # type: ignore[attr-defined]
+    prompt = PromptTemplateLoader(REPOSITORY_ROOT).load("governed_insight")
+
+    response = await provider.generate(
+        prompt,
+        {"analysis_id": "analysis-1"},
+        model_id="gpt-5.4-mini-2026-03-17",
+    )
+
+    assert response.estimated_cost_usd == pytest.approx(0.00005325)
+
+    blocked_endpoint = FakeResponsesEndpoint()
+    blocked = OpenAIResponsesProvider(
+        api_key="test-only-key",
+        timeout_seconds=10,
+        max_output_tokens=3_000,
+        max_request_cost_usd=0.000001,
+    )
+    blocked._client = SimpleNamespace(responses=blocked_endpoint)  # type: ignore[attr-defined]
+    with pytest.raises(AgentCostLimitError, match="exceeds"):
+        await blocked.generate(
+            prompt,
+            {"analysis_id": "analysis-1"},
+            model_id="gpt-5.4-mini-2026-03-17",
+        )
+    assert blocked_endpoint.kwargs == {}
 
 
 async def test_invalid_model_numbers_leave_deterministic_result_unchanged() -> None:
