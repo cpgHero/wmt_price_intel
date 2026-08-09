@@ -195,7 +195,7 @@ CREATE INDEX analysis_input_set_ready_idx
 CREATE TABLE analysis_input_artifact (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   input_set_id uuid NOT NULL REFERENCES analysis_input_set(id) ON DELETE CASCADE,
-  dataset_artifact_id uuid NOT NULL REFERENCES dataset_artifact(id),
+  dataset_artifact_id uuid NOT NULL REFERENCES dataset_artifact(id) ON DELETE CASCADE,
   ordinal integer NOT NULL CHECK(ordinal >= 0),
   retailer_id text NOT NULL REFERENCES retailer(id),
   adapter_id text NOT NULL,
