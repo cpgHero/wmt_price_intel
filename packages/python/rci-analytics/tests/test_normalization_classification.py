@@ -72,6 +72,25 @@ def test_normalizes_aliases_prices_and_leading_zero_identifiers(
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-08-07T05:03:04.869637", "2026-08-07T05:03:04.869637Z"),
+        ("2026-08-07T00:03:04-05:00", "2026-08-07T05:03:04Z"),
+        ("1.786118963679E+12", "2026-08-07T16:09:23.679000Z"),
+        ("not-a-timestamp", None),
+    ],
+)
+def test_normalizes_iso_and_epoch_timestamps_to_utc(
+    value: str,
+    expected: str | None,
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(_row("Fresh Strawberries, 1 lb", Date=value))
+
+    assert offer.collected_at == expected
+
+
+@pytest.mark.parametrize(
     ("domain", "retailer_id"),
     [
         ("albertsons.com", "albertsons_us"),

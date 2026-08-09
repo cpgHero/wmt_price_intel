@@ -28,6 +28,11 @@ The reusable core additions are retailer-product-ID extraction, role-specific at
 constraints, and optional comparison intervals. None inspects a category, Product Pack ID, title,
 or category-specific attribute name.
 
+Historical observation timestamps are normalized to UTC RFC 3339 before V2 provenance assembly.
+The same generic normalizer accepts timezone-aware or timezone-naive ISO values and Unix seconds,
+milliseconds, microseconds, or nanoseconds (including scientific notation); malformed values are
+treated as missing rather than emitted as invalid contract datetimes.
+
 ## Permanent full-data gates
 
 `test_full_milk_golden.py` streams 348,980 rows through normalization, classification, reduction,

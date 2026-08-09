@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,38 @@ def _boolean(value: Any) -> bool | None:
     if normalized in {"0", "false", "no", "n", "out of stock"}:
         return False
     return None
+
+
+def _datetime_utc(value: Any) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    raw = str(value).strip()
+    parsed: datetime
+    try:
+        numeric = Decimal(raw)
+    except InvalidOperation:
+        numeric = None
+    try:
+        if numeric is not None:
+            if not numeric.is_finite():
+                return None
+            magnitude = abs(numeric)
+            if magnitude >= Decimal("1e17"):
+                numeric /= Decimal("1e9")
+            elif magnitude >= Decimal("1e14"):
+                numeric /= Decimal("1e6")
+            elif magnitude >= Decimal("1e11"):
+                numeric /= Decimal("1e3")
+            elif magnitude < Decimal("1e9"):
+                return None
+            parsed = datetime.fromtimestamp(float(numeric), UTC)
+        else:
+            iso_value = f"{raw[:-1]}+00:00" if raw.endswith(("Z", "z")) else raw
+            parsed = datetime.fromisoformat(iso_value)
+            parsed = parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+    except (OverflowError, OSError, ValueError):
+        return None
+    return parsed.isoformat().replace("+00:00", "Z")
 
 
 class RetailerIdentityMap:
@@ -159,7 +192,7 @@ class CanonicalOfferNormalizer:
             ),
             product_url=product_url,
             image_url=_text(source, "image_url", "image_primary", "Image Url"),
-            collected_at=_text(source, "collected_at", "Date", "Time Created"),
+            collected_at=_datetime_utc(_first(source, "collected_at", "Date", "Time Created")),
             raw=dict(source),
         )
 

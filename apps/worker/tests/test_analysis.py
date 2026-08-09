@@ -247,6 +247,11 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
         "aldi_us": "16383764",
         "amazon_us_same_day": "B000P6J0SM",
     }
+    timestamps = {
+        "walmart_us": "2026-08-07T05:03:04.869637",
+        "aldi_us": "2026-08-07T05:04:05Z",
+        "amazon_us_same_day": "1.786118963679E+12",
+    }
     rows = {
         retailer_id: [
             {
@@ -256,6 +261,7 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
                 "Product Name": "Fresh Strawberries, 1 lb",
                 "Price": price,
                 "Stock Availability": "true",
+                "Date": timestamps[retailer_id],
             }
         ]
         for retailer_id, price in zip(retailer_ids, ("2.98", "2.49", "3.49"), strict=True)
@@ -306,6 +312,8 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
     assert analysis.analysis_id == analysis_id
     assert analysis.result["source"]["kind"] == "historical_import"
     assert analysis.result["source"]["total_rows"] == 3
+    assert analysis.result["source"]["observed_start"] == "2026-08-07T05:03:04.869637Z"
+    assert analysis.result["source"]["observed_end"] == "2026-08-07T16:09:23.679000Z"
     assert analysis.result["source"]["source_artifact_ids"] == sorted(
         source.dataset_artifact_id for source in sources
     )
