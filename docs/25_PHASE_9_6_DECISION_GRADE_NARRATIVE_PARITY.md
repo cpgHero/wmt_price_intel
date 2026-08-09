@@ -125,6 +125,8 @@ The first controlled candidate uses `gpt-5.4-mini-2026-03-17` for bounded insigh
 either request when its conservative maximum would exceed policy, so the two-role run is capped at
 $2. Actual token counts and list-price estimates are retained in the governed task audit. Model
 pricing is pinned in code and an unpriced model cannot run while the cost guard is enabled.
+The output ceiling is 8,000 tokens so the full multi-section leadership contract can complete; the
+cost guard evaluates that ceiling before each request and remains authoritative.
 
 The production acceptance command operates on a previously persisted full-source result, writes a
 temporary content-addressed HTML artifact, and returns a short-lived private download URL. It does

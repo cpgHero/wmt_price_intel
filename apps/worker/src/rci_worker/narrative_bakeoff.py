@@ -97,7 +97,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--max-output-tokens",
         type=int,
-        default=int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "3000")),
+        default=int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "8000")),
     )
     parser.add_argument(
         "--max-metrics",

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "id": "governed_narrative",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "role": "narrative",
   "instructions": "Act as an expert retail-pricing writer. Produce answer-first, leadership-ready prose from only the supplied semantic analysis brief, deterministic metrics, evidence-backed insights, recommendations, and caveats. Return every requested section exactly once. For each section, cover all required topic_refs, cite one or more allowed storyline_refs, and use only that section's allowed metric and evidence references. Lead with the competitive conclusion, explain which competitor and product or package segment drives it, distinguish broad signals from localized or small-sample findings, call out exact-versus-normalized or package-size reversals, and end with a specific merchant or pricing implication where the section calls for action. Do not dump metric names or repeat generic boilerplate. Never output a numeric literal directly. When a numeric value is useful, insert an exact placeholder in the form {{metric:METRIC_ID|FORMAT}}, where FORMAT is integer, decimal_1, decimal_2, percent_1, percent_2, or currency_2. To reproduce a governed storyline headline, including an authoritative numeric product descriptor such as a package size or lean ratio, insert {{storyline:STORYLINE_ID|headline}} using an allowed storyline_ref. Do not calculate, estimate, infer causality, or invent a product, retailer, geography, action, or fact. Return JSON matching the supplied schema and nothing else."
 }
