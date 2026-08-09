@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from time import perf_counter
@@ -42,6 +43,14 @@ PINNED_MODEL_PRICING: dict[str, ModelPricing] = {
     ),
 }
 
+_NUMERIC_LITERAL = re.compile(
+    r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?"
+)
+_METRIC_PLACEHOLDER_PATTERN = (
+    r"\{\{metric:[A-Za-z0-9_.-]+\|"
+    r"(?:integer|decimal_1|decimal_2|percent_1|percent_2|currency_2)\}\}"
+)
+
 
 class AgentProvider(Protocol):
     provider_id: str
@@ -71,7 +80,6 @@ def _narrative_section_schema(section: JsonObject) -> JsonObject:
     required_topics = [str(value) for value in section.get("required_topics", [])]
     storyline_refs = [str(value) for value in section.get("storyline_refs", [])]
     metric_refs = [str(value) for value in section.get("allowed_metric_refs", [])]
-    evidence_refs = [str(value) for value in section.get("allowed_evidence_refs", [])]
     return {
         "type": "object",
         "additionalProperties": False,
@@ -81,7 +89,6 @@ def _narrative_section_schema(section: JsonObject) -> JsonObject:
             "topic_refs",
             "storyline_refs",
             "metric_refs",
-            "evidence_refs",
         ],
         "properties": {
             "id": {
@@ -93,17 +100,57 @@ def _narrative_section_schema(section: JsonObject) -> JsonObject:
             "topic_refs": _refs(required_topics),
             "storyline_refs": _refs(storyline_refs),
             "metric_refs": _refs(metric_refs),
-            "evidence_refs": _refs(evidence_refs),
+        },
+    }
+
+
+def _governed_insight_text_schema(candidate: JsonObject) -> JsonObject:
+    trusted_numbers = sorted(
+        {
+            numeric_literal
+            for field in ("title", "summary", "business_impact")
+            for numeric_literal in _NUMERIC_LITERAL.findall(str(candidate.get(field, "")))
+        },
+        key=lambda value: (-len(value), value),
+    )
+    alternatives = [r"[^0-9]", _METRIC_PLACEHOLDER_PATTERN]
+    alternatives.extend(re.escape(value) for value in trusted_numbers)
+    return {
+        "type": "string",
+        "minLength": 1,
+        "pattern": rf"^(?:{'|'.join(alternatives)})+$",
+    }
+
+
+def _insight_schema(candidate: JsonObject) -> JsonObject:
+    candidate_id = str(candidate.get("id", "")).strip()
+    text_schema = _governed_insight_text_schema(candidate)
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "title", "summary", "business_impact"],
+        "properties": {
+            "id": {
+                "type": "string",
+                "minLength": 1,
+                **({"enum": [candidate_id]} if candidate_id else {}),
+            },
+            "title": dict(text_schema),
+            "summary": dict(text_schema),
+            "business_impact": dict(text_schema),
         },
     }
 
 
 def _result_schema(role: AgentRole, payload: JsonObject) -> JsonObject:
     if role == "insight":
-        candidate_ids = [
-            str(row["id"])
+        candidates = [
+            row
             for row in payload.get("deterministic_insights", [])
             if isinstance(row, dict) and row.get("id")
+        ]
+        insight_branches = [_insight_schema(candidate) for candidate in candidates] or [
+            _insight_schema({})
         ]
         return {
             "type": "object",
@@ -113,21 +160,7 @@ def _result_schema(role: AgentRole, payload: JsonObject) -> JsonObject:
                 "insights": {
                     "type": "array",
                     "minItems": 1,
-                    "items": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["id", "title", "summary", "business_impact"],
-                        "properties": {
-                            "id": {
-                                "type": "string",
-                                "minLength": 1,
-                                **({"enum": candidate_ids} if candidate_ids else {}),
-                            },
-                            "title": {"type": "string", "minLength": 1},
-                            "summary": {"type": "string", "minLength": 1},
-                            "business_impact": {"type": "string", "minLength": 1},
-                        },
-                    },
+                    "items": {"anyOf": insight_branches},
                 }
             },
         }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,11 +90,6 @@ class FakeProvider:
                     f"{{{{metric:{refs[0]}|{format_name}}}}}; interpret it only within "
                     "the cited comparison mode and Product Pack guardrails."
                 )
-            evidence_refs = list(
-                dict.fromkeys(
-                    str(evidence) for ref in refs for evidence in metrics[ref]["evidence_refs"]
-                )
-            )
             sections.append(
                 {
                     "id": requested["id"],
@@ -101,7 +97,7 @@ class FakeProvider:
                     "topic_refs": list(requested["required_topics"]),
                     "storyline_refs": list(requested["storyline_refs"][:1]),
                     "metric_refs": refs,
-                    "evidence_refs": evidence_refs[:1],
+                    "evidence_refs": ["model-cannot-select-evidence"],
                 }
             )
         return ProviderResponse(
@@ -383,6 +379,7 @@ async def test_governed_assistant_adds_interpretation_without_mutating_metrics()
         if section["id"] == "executive_summary"
     )
     assert "while Walmart is lower" in executive_summary["body"]
+    assert "model-cannot-select-evidence" not in executive_summary["evidence_refs"]
     assert len(enriched["narratives"]["agent_task_ids"]) == 2
     assert enriched["validation"]["unsupported_numeric_claims"] == 0
     assert enriched["validation"]["metric_reference_coverage"] == 1
@@ -451,8 +448,16 @@ async def test_openai_provider_uses_strict_ephemeral_structured_output() -> None
     assert response_format["type"] == "json_schema"
     assert response_format["strict"] is True
     assert response_format["schema"]["additionalProperties"] is False
-    insight_id = response_format["schema"]["properties"]["insights"]["items"]["properties"]["id"]
+    insight_schema = response_format["schema"]["properties"]["insights"]["items"]["anyOf"][0]
+    insight_id = insight_schema["properties"]["id"]
     assert insight_id["enum"] == ["known-insight"]
+    governed_pattern = insight_schema["properties"]["title"]["pattern"]
+    assert re.fullmatch(governed_pattern, "Leadership action is required")
+    assert re.fullmatch(governed_pattern, "Leadership action 3 is required") is None
+    assert re.fullmatch(
+        governed_pattern,
+        "Gap is {{metric:segment-3.median_gap|currency_2}}",
+    )
     assert response.input_tokens == 17
     assert response.output_tokens == 9
 
@@ -467,7 +472,6 @@ async def test_narrative_response_schema_uses_supported_keywords_and_known_secti
                 "topic_refs": ["data_scope"],
                 "storyline_refs": ["story.scope"],
                 "metric_refs": ["source.total_rows"],
-                "evidence_refs": ["evidence.source"],
             }
         ]
     }
@@ -511,7 +515,8 @@ async def test_narrative_response_schema_uses_supported_keywords_and_known_secti
     assert item_schema["properties"]["topic_refs"]["items"]["enum"] == ["data_scope"]
     assert item_schema["properties"]["storyline_refs"]["items"]["enum"] == ["story.scope"]
     assert item_schema["properties"]["metric_refs"]["items"]["enum"] == ["source.total_rows"]
-    assert item_schema["properties"]["evidence_refs"]["items"]["enum"] == ["evidence.source"]
+    assert "evidence_refs" not in item_schema["properties"]
+    assert "evidence_refs" not in item_schema["required"]
     assert "uniqueItems" not in json.dumps(schema)
 
 

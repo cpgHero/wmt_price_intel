@@ -282,7 +282,6 @@ class GovernedOutputBuilder:
             assert isinstance(raw, dict)
             section_id = str(raw["id"])
             metric_refs = [str(value) for value in raw.get("metric_refs", [])]
-            referenced_evidence = [str(value) for value in raw.get("evidence_refs", [])]
             topic_refs = [str(value) for value in raw.get("topic_refs", [])]
             storyline_refs = [str(value) for value in raw.get("storyline_refs", [])]
             allowed_metrics = {
@@ -295,26 +294,19 @@ class GovernedOutputBuilder:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} cites metrics outside its governed brief"
                 )
-            if not set(referenced_evidence).issubset(allowed_evidence):
-                raise AgentGovernanceError(
-                    f"narrative {section_id!r} cites evidence outside its governed brief"
-                )
             if not metric_refs or set(metric_refs) - set(metric_index):
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} references unknown or empty metrics"
-                )
-            if not referenced_evidence or set(referenced_evidence) - evidence_ids:
-                raise AgentGovernanceError(
-                    f"narrative {section_id!r} references unknown or empty evidence"
                 )
             metric_evidence = {
                 str(evidence)
                 for metric_ref in metric_refs
                 for evidence in metric_index[metric_ref]["evidence_refs"]
             }
-            if not set(referenced_evidence).issubset(metric_evidence):
+            referenced_evidence = sorted(metric_evidence & allowed_evidence & evidence_ids)
+            if not referenced_evidence:
                 raise AgentGovernanceError(
-                    f"narrative {section_id!r} evidence is not linked to its metrics"
+                    f"narrative {section_id!r} metrics have no governed evidence"
                 )
             body, claims = renderer.render(
                 str(raw.get("body_template", "")),
