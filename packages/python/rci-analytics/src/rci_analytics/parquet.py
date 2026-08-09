@@ -179,7 +179,10 @@ class ParquetDatasetWriter:
                 raise ValueError(f"unsafe dataset key component {component!r}")
         if not records:
             raise ValueError("cannot write an empty Parquet dataset without an explicit schema")
-        frame = pl.DataFrame(records, strict=False)
+        # Polars otherwise samples only the first 100 dictionaries. Sparse optional
+        # fields (for example, distance on exact matches followed by proximity
+        # matches) can therefore be inferred as Null and reject a later float.
+        frame = pl.DataFrame(records, strict=False, infer_schema_length=None)
         output = BytesIO()
         frame.write_parquet(output, compression="zstd", statistics=True)
         body = output.getvalue()

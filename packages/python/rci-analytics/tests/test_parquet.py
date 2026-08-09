@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
 
 from rci_analytics.classification import OfferClassifier
+from rci_analytics.models import MatchRecord
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
 from rci_analytics.product_pack import ProductPackLoader
@@ -102,6 +104,37 @@ async def test_dataset_artifact_can_be_registered_against_collection_run() -> No
 
     assert await repository.record_artifact(run.id, artifact) == artifact.storage_uri
     assert await repository.record_artifact(run.id, artifact) == artifact.storage_uri
+
+
+async def test_match_parquet_infers_sparse_optional_fields_across_the_full_batch() -> None:
+    store = InMemoryDatasetStore()
+    matches = [
+        MatchRecord(
+            profile_id="strict" if index < 100 else "proximity",
+            competitor_id="aldi_us",
+            geography_key=f"zip-{index:05d}",
+            benchmark_offer_id=f"benchmark-{index}",
+            competitor_offer_id=f"competitor-{index}",
+            attributes={"weight_lb": 1.0},
+            comparison_metric="price",
+            benchmark_value=Decimal("4.97"),
+            competitor_value=Decimal("4.49"),
+            gap=Decimal("0.48"),
+            winner="competitor",
+            distance_miles=None if index < 100 else 0.270174,
+        )
+        for index in range(101)
+    ]
+
+    artifact = await ParquetDatasetWriter(store).write_matches(
+        matches,
+        run_id="run-sparse-distance",
+        retailer_id="aldi_us",
+    )
+
+    frame = pl.read_parquet(store.objects[artifact.storage_uri.removeprefix("s3://test-datasets/")])
+    assert frame.height == 101
+    assert frame["distance_miles"].tail(1).item() == 0.270174
 
 
 def test_core_engine_has_no_product_pack_id_branches() -> None:
