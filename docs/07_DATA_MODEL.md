@@ -18,6 +18,7 @@ PostgreSQL is the control plane. High-volume immutable datasets are stored as ob
 - collection_task
 - provider_rate_limit_state
 - dataset_artifact
+- analysis_input_set / analysis_input_artifact
 - analysis_run
 - analysis_result
 - validation_issue
@@ -33,6 +34,11 @@ PostgreSQL is the control plane. High-volume immutable datasets are stored as ob
 Normalized offers, classified offers, candidates, match detail, and supporting row-level output should default to Parquet in object storage. Store counts/checksums/schema versions and object URIs in `dataset_artifact`.
 
 ## Historical reproducibility
+
+`analysis_input_set` is the source boundary shared by live collection and historical replay. Its
+manifest is canonical JSON with a SHA-256, source kind, Product Pack reference, analysis config,
+and total rows. Ordered `analysis_input_artifact` rows link that manifest to immutable bucket
+objects. The same realized manifest is unique per organization and source kind.
 
 An analysis result records:
 - collection definition version,

@@ -22,7 +22,7 @@ export interface RunRecord {
   id: string;
   definition_version_id: string;
   status: string;
-  trigger_type: "manual" | "scheduled";
+  trigger_type: "manual" | "scheduled" | "historical_import";
   schedule_id: string | null;
   scheduled_for: string | null;
   estimated_pages: number;

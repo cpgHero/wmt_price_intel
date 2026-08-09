@@ -71,6 +71,7 @@ METRICSCART_MAX_ATTEMPTS=5
 WORKER_CLAIM_LIMIT=10
 WORKER_LEASE_SECONDS=300
 ANALYSIS_PIPELINE_ENABLED=true
+ANALYSIS_HISTORICAL_REPLAY_ENABLED=false
 ANALYSIS_CLAIM_LIMIT=1
 ANALYSIS_LEASE_SECONDS=600
 ANALYSIS_MAX_ATTEMPTS=3
@@ -153,7 +154,7 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at `0009_vertical_slice`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at `0010_analysis_input_sets`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
@@ -171,6 +172,27 @@ MetricsCart uses query-parameter authentication.
 11. Publish the compact strawberry AnalysisResult and generate HTML, XLSX, email, and audit ZIP.
     Confirm each download URL expires and no bucket object is anonymously readable.
 12. Run a backup restore drill into a non-production environment before declaring the rollout done.
+
+## Historical import job
+
+Historical import is an explicit administrative job, not an API upload and not a MetricsCart
+collection. Run validation before granting the process database or bucket credentials:
+
+```bash
+uv run rci-import-historical \
+  --manifest examples/historical-input-manifest.strawberries.json \
+  --source-root /path/to/source/files \
+  --validate-only
+```
+
+Remove `--validate-only` only in an environment with private Postgres and bucket variables. The
+command uploads immutable source bytes, records an audit event, and enqueues a zero-credit analysis
+run. Repeating the identical command is idempotent. Do not copy source files into the Git image,
+place bucket credentials in a manifest, or expose this command through a public web route.
+
+Keep `ANALYSIS_HISTORICAL_REPLAY_ENABLED=false` through Phase 9.5.2. The durable jobs remain queued
+without consuming attempts. Phase 9.5.3 enables this flag only after the full-source columnar replay
+and memory gates pass.
 
 ## Worker scaling runbook
 

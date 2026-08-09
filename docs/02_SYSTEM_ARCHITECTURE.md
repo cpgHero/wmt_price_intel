@@ -19,6 +19,7 @@ Stores definitions, versions, locations, run/task state, summary metrics, QA/val
 ### Object-storage data plane
 Stores immutable high-volume evidence:
 - raw provider response pages (`json.gz`),
+- checksummed historical source extracts (`csv`),
 - normalized offers (`parquet`),
 - classified offers (`parquet`),
 - match detail (`parquet`),
@@ -46,4 +47,10 @@ A provider-budget row keyed by normalized credential budget key stores short-win
 
 ## Analytical execution
 
-Workers read raw pages from object storage, normalize to Parquet, then use Polars/DuckDB for high-volume transformations and joins. PostgreSQL is not the primary dataframe engine.
+Every completed live collection and historical import receives an immutable `analysis_input_set`.
+The set links ordered, checksummed source artifacts to one zero-or-more-attempt durable
+`analysis_run`. Historical imports receive a zero-credit workflow run so they use the same queue,
+lease, output namespace, and audit path as live collections.
+
+Workers read raw input artifacts from object storage, normalize to Parquet, then use Polars/DuckDB
+for high-volume transformations and joins. PostgreSQL is not the primary dataframe engine.

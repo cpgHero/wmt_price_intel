@@ -52,3 +52,7 @@ Phase 9.5 decision-grade analysis and reporting acceptance is specified in
 `docs/17_PHASE_9_5_DECISION_GRADE_PARITY.md`. V1 contracts remain active during the staged
 transition; the V2 analysis, evidence, product-detail, governed-agent, and report-blueprint
 contracts are validated alongside them.
+
+Phase 9.5.2 adds portable, checksummed historical-input manifests and a zero-credit replay path
+through the same durable analysis queue used by live collections. See
+`docs/18_PHASE_9_5_2_HISTORICAL_REPLAY.md`.

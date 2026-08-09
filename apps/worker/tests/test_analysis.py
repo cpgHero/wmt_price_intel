@@ -13,7 +13,12 @@ from rci_results import (
     InMemoryReportObjectStore,
     InMemoryResultsRepository,
 )
-from rci_worker.analysis import AnalysisJob, AnalysisProcessor, CollectedPage
+from rci_worker.analysis import (
+    AnalysisJob,
+    AnalysisProcessor,
+    CollectedPage,
+    HistoricalSource,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 RUN_ID = "00000000-0000-0000-0000-000000000701"
@@ -66,12 +71,29 @@ class PageQueue:
         return self._pages
 
 
+class HistoricalQueue:
+    def __init__(self, sources: list[HistoricalSource]) -> None:
+        self._sources = sources
+
+    async def historical_sources(self, input_set_id: str) -> list[HistoricalSource]:
+        assert input_set_id == "00000000-0000-0000-0000-000000000704"
+        return self._sources
+
+
 class RawReader:
     def __init__(self, payloads: dict[str, object]) -> None:
         self._payloads = payloads
 
     async def read(self, page: CollectedPage) -> object:
         return self._payloads[page.task.id]
+
+
+class HistoricalReader:
+    def __init__(self, rows: dict[str, list[dict[str, str]]]) -> None:
+        self._rows = rows
+
+    async def read(self, source: HistoricalSource) -> list[dict[str, str]]:
+        return self._rows[source.retailer_id]
 
 
 class ArtifactRecorder:
@@ -163,6 +185,8 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
     job = AnalysisJob(
         id="00000000-0000-0000-0000-000000000702",
         collection_run_id=RUN_ID,
+        input_set_id="00000000-0000-0000-0000-000000000703",
+        source_kind="live_collection",
         product_pack_id="fresh_strawberries",
         product_pack_version="1.0.0",
         definition_config={
@@ -194,6 +218,94 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
     assert analysis.result["comparisons"]
     assert len(artifact_recorder.artifacts) >= 7
     assert all(uri.endswith(".parquet") for uri in dataset_store.objects)
+
+
+async def test_historical_input_replays_through_same_generic_pipeline() -> None:
+    retailer_ids = ("walmart_us", "aldi_us", "amazon_us_same_day")
+    input_set_id = "00000000-0000-0000-0000-000000000704"
+    sources = [
+        HistoricalSource(
+            dataset_artifact_id=f"artifact-{retailer_id}",
+            input_set_id=input_set_id,
+            ordinal=index,
+            retailer_id=retailer_id,
+            adapter_id="historical_metricscart_search_monitor_csv",
+            source_name=f"{retailer_id}.csv",
+            source_format="metricscart_search_monitor_csv",
+            storage_uri=f"s3://raw/{retailer_id}.csv",
+            checksum=f"{index}" * 64,
+            row_count=1,
+        )
+        for index, retailer_id in enumerate(retailer_ids, start=1)
+    ]
+    product_ids = {
+        "walmart_us": "44391605",
+        "aldi_us": "16383764",
+        "amazon_us_same_day": "B000P6J0SM",
+    }
+    rows = {
+        retailer_id: [
+            {
+                "Retailer Store Id": "0007" if retailer_id != "amazon_us_same_day" else "",
+                "Zipcode": "00617",
+                "Retailer Product Id": product_ids[retailer_id],
+                "Product Name": "Fresh Strawberries, 1 lb",
+                "Price": price,
+                "Stock Availability": "true",
+            }
+        ]
+        for retailer_id, price in zip(retailer_ids, ("2.98", "2.49", "3.49"), strict=True)
+    }
+    result_repository = InMemoryResultsRepository()
+    result_service = AnalysisResultService(
+        result_repository,
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        InMemoryReportObjectStore(),
+    )
+    dataset_store = InMemoryDatasetStore()
+    artifact_recorder = ArtifactRecorder()
+    processor = AnalysisProcessor(
+        repository_root=REPOSITORY_ROOT,
+        queue=HistoricalQueue(sources),  # type: ignore[arg-type]
+        adapters=MetricsCartAdapterRegistry.from_catalog(
+            REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+        ),
+        raw_reader=RawReader({}),  # type: ignore[arg-type]
+        historical_reader=HistoricalReader(rows),  # type: ignore[arg-type]
+        dataset_writer=ParquetDatasetWriter(dataset_store),
+        collections=artifact_recorder,  # type: ignore[arg-type]
+        results=result_service,
+        code_version="test-version",
+    )
+    job = AnalysisJob(
+        id="00000000-0000-0000-0000-000000000705",
+        collection_run_id=RUN_ID,
+        input_set_id=input_set_id,
+        source_kind="historical_import",
+        product_pack_id="fresh_strawberries",
+        product_pack_version="1.0.0",
+        definition_config={
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {"retailer_id": retailer_id, "enabled": True} for retailer_id in retailer_ids
+            ],
+            "analysis": {"comparison_profiles": ["strict"]},
+            "delivery": {},
+        },
+        attempt_count=1,
+        max_attempts=3,
+    )
+
+    analysis_id = await processor.process(job)
+
+    analysis = await result_service.get_by_collection_run(RUN_ID)
+    assert analysis.analysis_id == analysis_id
+    assert analysis.result["source_summary"]["source_kind"] == "historical_import"
+    assert analysis.result["source_summary"]["provider_rows"] == 3
+    assert analysis.result["source_summary"]["raw_dataset_ids"] == sorted(
+        source.dataset_artifact_id for source in sources
+    )
+    assert analysis.result["comparisons"]
 
 
 def test_analysis_orchestrator_has_no_product_category_branches() -> None:

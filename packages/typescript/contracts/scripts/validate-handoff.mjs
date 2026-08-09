@@ -47,6 +47,9 @@ const agentOutputValidator = await validator("agent-output.schema.json");
 const reportBlueprintValidator = await validator(
   "report-blueprint.schema.json",
 );
+const historicalInputManifestValidator = await validator(
+  "historical-input-manifest.schema.json",
+);
 const alertValidator = await validator("alert-definition.schema.json");
 const productPackValidator = await validator("product-pack.schema.json");
 const benchmarkValidator = await validator("golden-benchmarks.schema.json");
@@ -118,6 +121,19 @@ await assertValid(
   await loadJson("examples", "report-blueprint.ground-beef.json"),
   "report blueprint",
 );
+const historicalInputManifestFiles = exampleFiles
+  .filter(
+    (name) =>
+      name.startsWith("historical-input-manifest.") && name.endsWith(".json"),
+  )
+  .sort();
+for (const manifestFile of historicalInputManifestFiles) {
+  await assertValid(
+    historicalInputManifestValidator,
+    await loadJson("examples", manifestFile),
+    manifestFile,
+  );
+}
 await assertValid(
   benchmarkValidator,
   await loadJson("fixtures", "golden", "benchmarks.json"),
@@ -156,6 +172,7 @@ console.log(
     productPackFiles.length +
     collectionDefinitionFiles.length +
     analysisResultFiles.length +
+    historicalInputManifestFiles.length +
     9
   } normative JSON documents.`,
 );

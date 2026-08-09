@@ -141,6 +141,8 @@ ok &= validate(
 )
 ok &= validate("schemas/agent-output.schema.json", "examples/agent-output.ground-beef-insight.json")
 ok &= validate("schemas/report-blueprint.schema.json", "examples/report-blueprint.ground-beef.json")
+for p in sorted((ROOT / "examples").glob("historical-input-manifest.*.json")):
+    ok &= validate("schemas/historical-input-manifest.schema.json", str(p.relative_to(ROOT)))
 ok &= validate(
     "schemas/alert-definition.schema.json",
     "examples/alert-definition.amazon-pressure.json",

@@ -15,6 +15,7 @@ const contracts = [
   ["canonical-product.schema.json", "canonical-product.ts"],
   ["collection-definition.schema.json", "collection-definition.ts"],
   ["golden-benchmarks.schema.json", "golden-benchmarks.ts"],
+  ["historical-input-manifest.schema.json", "historical-input-manifest.ts"],
   ["normalized-offer.schema.json", "normalized-offer.ts"],
   ["product-detail-catalog.schema.json", "product-detail-catalog.ts"],
   ["product-detail-snapshot.schema.json", "product-detail-snapshot.ts"],

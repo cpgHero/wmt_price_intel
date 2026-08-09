@@ -67,3 +67,18 @@ After a run succeeds (including a partial result with billable-404 warnings), a 
 partitioned Parquet datasets, computes comparisons, publishes one canonical `AnalysisResult`, and
 generates requested delivery artifacts. It uses the same lease/retry/`SKIP LOCKED` pattern as the
 collection queue and has no product-category branches.
+
+## Historical replay
+
+Historical source files bypass provider collection but do not bypass provenance or orchestration.
+A portable manifest pins every original CSV by source filename, retailer, source format, exact row
+count, and SHA-256. Validation completes before any object or database record is written.
+
+The importer stores the original bytes at a content-addressed immutable object key, creates a
+zero-credit `historical_import` workflow run, registers one `analysis_input_set`, and enqueues the
+same leased `analysis_run` used for live collections. Retrying the same realized manifest returns
+the existing input set and job. Local filesystem paths are never persisted.
+
+Historical format handling is source-oriented, never product-category-oriented. Both MetricsCart
+Search Monitor exports and consolidated SERP exports feed the canonical offer normalizer while
+retailer, store, ZIP, product, and ASIN identifiers remain strings.

@@ -151,6 +151,9 @@ full-location testing.
 - Import is idempotent and preserves source row counts and identifiers.
 - Strawberry and ground-beef historical inputs can reach the generic analysis queue.
 
+Implementation contract: `historical-input-manifest.schema.json`. Operational details and pinned
+full-source manifests are documented in `docs/18_PHASE_9_5_2_HISTORICAL_REPLAY.md`.
+
 ### 9.5.3 Generic analytics and ground-beef Product Pack
 
 - Ground beef passes full-source headline assertions.

@@ -35,6 +35,7 @@ from rci_worker.analysis import (
     AnalysisProcessor,
     AnalysisWorker,
     PostgresAnalysisQueue,
+    S3HistoricalCSVReader,
     S3RawPageReader,
 )
 
@@ -127,6 +128,9 @@ async def run() -> None:
             database.engine,
             code_version=settings.app_version or APP_VERSION,
             max_attempts=int(os.getenv("ANALYSIS_MAX_ATTEMPTS", "3")),
+            historical_replay_enabled=_enabled(
+                os.getenv("ANALYSIS_HISTORICAL_REPLAY_ENABLED"), default=False
+            ),
         )
         analysis_worker = AnalysisWorker(
             analysis_queue,
@@ -135,6 +139,7 @@ async def run() -> None:
                 queue=analysis_queue,
                 adapters=adapter_registry,
                 raw_reader=S3RawPageReader(bucket=bucket, client=s3_client),
+                historical_reader=S3HistoricalCSVReader(bucket=bucket, client=s3_client),
                 dataset_writer=ParquetDatasetWriter(
                     S3DatasetStore(bucket=bucket, client=s3_client)
                 ),

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/historical-input-manifest.schema.json",
+  "title": "RetailCompetitiveIntelligenceHistoricalInputManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "stable_key",
+    "name",
+    "captured_at",
+    "product_pack",
+    "analysis_config",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "stable_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{2,127}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "product_pack": {
+      "$ref": "#/$defs/productPackReference"
+    },
+    "analysis_config": {
+      "$ref": "#/$defs/analysisConfig"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "productPackReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "analysisConfig": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "name",
+        "version",
+        "benchmark_retailer",
+        "product_pack",
+        "retailers",
+        "analysis",
+        "delivery"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "benchmark_retailer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "product_pack": {
+          "$ref": "#/$defs/productPackReference"
+        },
+        "retailers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["retailer_id", "enabled"],
+            "properties": {
+              "retailer_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "enabled": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["comparison_profiles"],
+          "properties": {
+            "comparison_profiles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "delivery": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "retailer_id",
+        "adapter_id",
+        "source_name",
+        "source_format",
+        "content_type",
+        "expected_sha256",
+        "expected_rows"
+      ],
+      "properties": {
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retailer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adapter_id": {
+          "type": "string",
+          "enum": [
+            "historical_metricscart_search_monitor_csv",
+            "historical_metricscart_consolidated_serp_csv"
+          ]
+        },
+        "source_name": {
+          "type": "string",
+          "pattern": "^[^/\\\\]+\\.csv$"
+        },
+        "source_format": {
+          "type": "string",
+          "enum": [
+            "metricscart_search_monitor_csv",
+            "metricscart_consolidated_serp_csv"
+          ]
+        },
+        "content_type": {
+          "const": "text/csv"
+        },
+        "expected_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "expected_rows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

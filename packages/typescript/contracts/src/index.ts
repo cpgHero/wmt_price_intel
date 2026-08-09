@@ -4,6 +4,7 @@ export type { RetailCompetitiveIntelligenceAnalysisEvidenceSet } from "./generat
 export type { RetailCompetitiveIntelligenceCanonicalProduct } from "./generated/canonical-product";
 export type { RetailCompetitiveIntelligenceCollectionDefinition } from "./generated/collection-definition";
 export type { RetailCompetitiveIntelligenceGoldenBenchmarks } from "./generated/golden-benchmarks";
+export type { RetailCompetitiveIntelligenceHistoricalInputManifest } from "./generated/historical-input-manifest";
 export type { NormalizedRetailOffer } from "./generated/normalized-offer";
 export type { MetricsCartProductDetailCatalog } from "./generated/product-detail-catalog";
 export type { RetailCompetitiveIntelligenceProductDetailSnapshot } from "./generated/product-detail-snapshot";

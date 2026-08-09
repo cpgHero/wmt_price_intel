@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import gzip
 import hashlib
+import io
 import json
 import logging
 from collections import defaultdict
@@ -24,6 +26,7 @@ from rci_analytics import (
     ParquetDatasetWriter,
     ProductPackLoader,
 )
+from rci_analytics.historical_repository import PostgresAnalysisInputRepository
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
@@ -37,6 +40,8 @@ logger = logging.getLogger(__name__)
 class AnalysisJob:
     id: str
     collection_run_id: str
+    input_set_id: str
+    source_kind: str
     product_pack_id: str
     product_pack_version: str
     definition_config: dict[str, Any]
@@ -52,6 +57,20 @@ class CollectedPage:
     collected_at: datetime
     latitude: float | None
     longitude: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalSource:
+    dataset_artifact_id: str
+    input_set_id: str
+    ordinal: int
+    retailer_id: str
+    adapter_id: str
+    source_name: str
+    source_format: str
+    storage_uri: str
+    checksum: str
+    row_count: int
 
 
 def _task(row: RowMapping) -> QueueTask:
@@ -94,40 +113,25 @@ def _task(row: RowMapping) -> QueueTask:
 
 
 class PostgresAnalysisQueue:
-    def __init__(self, engine: AsyncEngine, *, code_version: str, max_attempts: int = 3) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        code_version: str,
+        max_attempts: int = 3,
+        historical_replay_enabled: bool = False,
+    ) -> None:
         self._engine = engine
         self._code_version = code_version
         self._max_attempts = max_attempts
+        self._historical_replay_enabled = historical_replay_enabled
+        self._inputs = PostgresAnalysisInputRepository(engine)
 
     async def materialize(self) -> int:
-        async with self._engine.begin() as connection:
-            rows = await connection.execute(
-                text(
-                    """
-                    INSERT INTO analysis_run (
-                      collection_run_id, product_pack_id, product_pack_version,
-                      status, code_version, max_attempts
-                    )
-                    SELECT r.id, v.config->'product_pack'->>'id',
-                           v.config->'product_pack'->>'version', 'queued',
-                           :code_version, :max_attempts
-                    FROM collection_run r
-                    JOIN collection_definition_version v ON v.id = r.definition_version_id
-                    WHERE r.status IN ('succeeded', 'completed_with_warnings')
-                      AND v.config->'product_pack'->>'id' IS NOT NULL
-                      AND v.config->'product_pack'->>'version' IS NOT NULL
-                      AND EXISTS (
-                        SELECT 1 FROM collection_task t
-                        WHERE t.collection_run_id = r.id AND t.status = 'succeeded'
-                          AND t.raw_artifact_id IS NOT NULL
-                      )
-                    ON CONFLICT ON CONSTRAINT analysis_run_collection_pack_uq DO NOTHING
-                    RETURNING id
-                    """
-                ),
-                {"code_version": self._code_version, "max_attempts": self._max_attempts},
-            )
-            return len(rows.all())
+        return await self._inputs.materialize_live(
+            code_version=self._code_version,
+            max_attempts=self._max_attempts,
+        )
 
     async def claim(self, worker_id: str, *, limit: int, lease_seconds: int) -> list[AnalysisJob]:
         async with self._engine.begin() as connection:
@@ -156,6 +160,14 @@ class PostgresAnalysisQueue:
                                 (ar.status = 'running' AND ar.lease_expires_at <= now())
                               )
                                 AND ar.attempt_count < ar.max_attempts
+                                AND (
+                                  :historical_replay_enabled OR
+                                  NOT EXISTS (
+                                    SELECT 1 FROM analysis_input_set source
+                                    WHERE source.id = ar.input_set_id
+                                      AND source.source_kind = 'historical_import'
+                                  )
+                                )
                               ORDER BY ar.available_at, ar.created_at, ar.id
                               FOR UPDATE OF ar SKIP LOCKED
                               LIMIT :limit
@@ -166,11 +178,14 @@ class PostgresAnalysisQueue:
                                 attempt_count = ar.attempt_count + 1,
                                 started_at = COALESCE(ar.started_at, now()), completed_at = NULL
                             FROM candidates c,
+                                 analysis_input_set i,
                                  collection_run cr,
                                  collection_definition_version v
                             WHERE ar.id = c.id AND cr.id = ar.collection_run_id
+                              AND i.id = ar.input_set_id AND i.status = 'ready'
                               AND v.id = cr.definition_version_id
                             RETURNING ar.id::text, ar.collection_run_id::text,
+                              ar.input_set_id::text, i.source_kind,
                               ar.product_pack_id, ar.product_pack_version,
                               ar.attempt_count, ar.max_attempts, v.config
                             """
@@ -179,6 +194,7 @@ class PostgresAnalysisQueue:
                             "worker_id": worker_id,
                             "limit": limit,
                             "lease_seconds": lease_seconds,
+                            "historical_replay_enabled": self._historical_replay_enabled,
                         },
                     )
                 )
@@ -189,6 +205,8 @@ class PostgresAnalysisQueue:
                 AnalysisJob(
                     id=str(row["id"]),
                     collection_run_id=str(row["collection_run_id"]),
+                    input_set_id=str(row["input_set_id"]),
+                    source_kind=str(row["source_kind"]),
                     product_pack_id=str(row["product_pack_id"]),
                     product_pack_version=str(row["product_pack_version"]),
                     definition_config=dict(row["config"]),
@@ -282,6 +300,48 @@ class PostgresAnalysisQueue:
             for row in rows
         ]
 
+    async def historical_sources(self, input_set_id: str) -> list[HistoricalSource]:
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT ia.input_set_id::text, ia.ordinal, ia.retailer_id,
+                                   ia.adapter_id, ia.source_name, ia.source_format,
+                                   ia.row_count, da.id::text AS dataset_artifact_id,
+                                   da.storage_uri, da.checksum
+                            FROM analysis_input_artifact ia
+                            JOIN dataset_artifact da ON da.id = ia.dataset_artifact_id
+                            JOIN analysis_input_set i ON i.id = ia.input_set_id
+                            WHERE ia.input_set_id::text = :input_set_id
+                              AND i.source_kind = 'historical_import'
+                              AND i.status = 'ready'
+                            ORDER BY ia.ordinal
+                            """
+                        ),
+                        {"input_set_id": input_set_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            HistoricalSource(
+                dataset_artifact_id=str(row["dataset_artifact_id"]),
+                input_set_id=str(row["input_set_id"]),
+                ordinal=int(row["ordinal"]),
+                retailer_id=str(row["retailer_id"]),
+                adapter_id=str(row["adapter_id"]),
+                source_name=str(row["source_name"]),
+                source_format=str(row["source_format"]),
+                storage_uri=str(row["storage_uri"]),
+                checksum=str(row["checksum"]),
+                row_count=int(row["row_count"]),
+            )
+            for row in rows
+        ]
+
 
 class S3RawPageReader:
     def __init__(self, *, bucket: str, client: Any) -> None:
@@ -304,6 +364,34 @@ class S3RawPageReader:
         return json.loads(gzip.decompress(compressed))
 
 
+class S3HistoricalCSVReader:
+    def __init__(self, *, bucket: str, client: Any) -> None:
+        self._bucket = bucket
+        self._client = client
+
+    async def read(self, source: HistoricalSource) -> list[dict[str, str]]:
+        prefix = f"s3://{self._bucket}/"
+        if not source.storage_uri.startswith(prefix):
+            raise ValueError("historical source object belongs to a different bucket")
+        key = source.storage_uri.removeprefix(prefix)
+
+        def get() -> list[dict[str, str]]:
+            response = self._client.get_object(Bucket=self._bucket, Key=key)
+            body = bytes(response["Body"].read())
+            if hashlib.sha256(body).hexdigest() != source.checksum:
+                raise ValueError(f"historical source checksum mismatch for {source.source_name}")
+            reader = csv.DictReader(io.StringIO(body.decode("utf-8-sig"), newline=""))
+            rows = [dict(row) for row in reader]
+            if len(rows) != source.row_count:
+                raise ValueError(
+                    f"historical source row count mismatch for {source.source_name}: "
+                    f"expected {source.row_count}, found {len(rows)}"
+                )
+            return rows
+
+        return await asyncio.to_thread(get)
+
+
 class AnalysisProcessor:
     def __init__(
         self,
@@ -316,11 +404,13 @@ class AnalysisProcessor:
         collections: PostgresCollectionRepository,
         results: AnalysisResultService,
         code_version: str,
+        historical_reader: S3HistoricalCSVReader | None = None,
     ) -> None:
         self._root = repository_root
         self._queue = queue
         self._adapters = adapters
         self._raw_reader = raw_reader
+        self._historical_reader = historical_reader
         self._dataset_writer = dataset_writer
         self._collections = collections
         self._results = results
@@ -333,26 +423,42 @@ class AnalysisProcessor:
                 f"Product Pack version mismatch: requested {job.product_pack_version}, "
                 f"loaded {pack.version}"
             )
-        pages = await self._queue.pages(job.collection_run_id)
-        if not pages:
-            raise ValueError("completed collection has no successful raw provider pages")
         provider_rows: list[dict[str, Any]] = []
         raw_artifact_ids: list[str] = []
-        for page in pages:
-            payload = await self._raw_reader.read(page)
-            adapter = self._adapters.get(page.task.adapter_id)
-            for result in adapter.extract_result_array(payload):
-                provider_rows.append(
-                    {
-                        **result,
-                        **adapter.normalize_result(result, page.task),
-                        "latitude": page.latitude,
-                        "longitude": page.longitude,
-                        "collected_at": page.collected_at.isoformat(),
-                    }
-                )
-            if page.task.raw_artifact_id is not None:
-                raw_artifact_ids.append(page.task.raw_artifact_id)
+        source_artifact_count = 0
+        if job.source_kind == "live_collection":
+            pages = await self._queue.pages(job.collection_run_id)
+            if not pages:
+                raise ValueError("completed collection has no successful raw provider pages")
+            source_artifact_count = len(pages)
+            for page in pages:
+                payload = await self._raw_reader.read(page)
+                adapter = self._adapters.get(page.task.adapter_id)
+                for result in adapter.extract_result_array(payload):
+                    provider_rows.append(
+                        {
+                            **result,
+                            **adapter.normalize_result(result, page.task),
+                            "latitude": page.latitude,
+                            "longitude": page.longitude,
+                            "collected_at": page.collected_at.isoformat(),
+                        }
+                    )
+                if page.task.raw_artifact_id is not None:
+                    raw_artifact_ids.append(page.task.raw_artifact_id)
+        elif job.source_kind == "historical_import":
+            if self._historical_reader is None:
+                raise ValueError("historical input reader is not configured")
+            sources = await self._queue.historical_sources(job.input_set_id)
+            if not sources:
+                raise ValueError("historical input set has no source artifacts")
+            source_artifact_count = len(sources)
+            for source in sources:
+                rows = await self._historical_reader.read(source)
+                provider_rows.extend({**row, "retailer_id": source.retailer_id} for row in rows)
+                raw_artifact_ids.append(source.dataset_artifact_id)
+        else:
+            raise ValueError(f"unsupported analysis input kind {job.source_kind!r}")
 
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(self._root / "config" / "retailer-catalog.json")
@@ -486,7 +592,9 @@ class AnalysisProcessor:
             "competitors": competitors,
             "product_pack": {"id": pack.id, "version": pack.version},
             "source_summary": {
-                "raw_pages": len(pages),
+                "source_kind": job.source_kind,
+                "input_set_id": job.input_set_id,
+                "raw_pages": source_artifact_count,
                 "provider_rows": len(provider_rows),
                 "normalized_offers": len(normalized),
                 "classified_offers": len(classified),

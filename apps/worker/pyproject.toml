@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 rci-worker = "rci_worker.main:main"
+rci-import-historical = "rci_worker.historical_cli:main"
 
 [tool.uv.sources]
 rci-contracts = { workspace = true }

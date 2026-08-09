@@ -102,6 +102,8 @@ CREATE TABLE collection_run (
   estimated_credits integer,
   actual_success_pages integer NOT NULL DEFAULT 0,
   actual_credits integer NOT NULL DEFAULT 0,
+  trigger_type text NOT NULL DEFAULT 'manual'
+    CHECK(trigger_type IN ('manual','scheduled','historical_import')),
   requested_by uuid REFERENCES app_user(id),
   started_at timestamptz,
   completed_at timestamptz,
@@ -154,7 +156,7 @@ CREATE TABLE provider_rate_limit_state (
 
 CREATE TABLE dataset_artifact (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  collection_run_id uuid REFERENCES collection_run(id),
+  collection_run_id uuid REFERENCES collection_run(id) ON DELETE CASCADE,
   artifact_type text NOT NULL,
   storage_uri text NOT NULL,
   content_type text,
@@ -162,24 +164,72 @@ CREATE TABLE dataset_artifact (
   byte_size bigint,
   checksum text NOT NULL,
   schema_version text,
-  metadata jsonb,
+  metadata jsonb NOT NULL DEFAULT '{}',
   immutable boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(storage_uri)
 );
 
 ALTER TABLE collection_task ADD CONSTRAINT collection_task_raw_artifact_fk FOREIGN KEY(raw_artifact_id) REFERENCES dataset_artifact(id);
 
+CREATE TABLE analysis_input_set (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organization(id),
+  source_kind text NOT NULL CHECK(source_kind IN ('live_collection','historical_import')),
+  stable_key text NOT NULL,
+  collection_run_id uuid NOT NULL UNIQUE REFERENCES collection_run(id) ON DELETE CASCADE,
+  product_pack_id text NOT NULL,
+  product_pack_version text NOT NULL,
+  analysis_config jsonb NOT NULL,
+  manifest jsonb NOT NULL,
+  manifest_checksum text NOT NULL,
+  total_rows bigint NOT NULL CHECK(total_rows >= 0),
+  status text NOT NULL CHECK(status IN ('preparing','ready','failed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  UNIQUE(organization_id, source_kind, manifest_checksum)
+);
+CREATE INDEX analysis_input_set_ready_idx
+  ON analysis_input_set(status, source_kind, created_at);
+
+CREATE TABLE analysis_input_artifact (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  input_set_id uuid NOT NULL REFERENCES analysis_input_set(id) ON DELETE CASCADE,
+  dataset_artifact_id uuid NOT NULL REFERENCES dataset_artifact(id),
+  ordinal integer NOT NULL CHECK(ordinal >= 0),
+  retailer_id text NOT NULL REFERENCES retailer(id),
+  adapter_id text NOT NULL,
+  source_name text NOT NULL,
+  source_format text NOT NULL,
+  row_count bigint NOT NULL CHECK(row_count >= 0),
+  checksum text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}',
+  UNIQUE(input_set_id, ordinal),
+  UNIQUE(input_set_id, dataset_artifact_id)
+);
+
 CREATE TABLE analysis_run (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  collection_run_id uuid NOT NULL REFERENCES collection_run(id),
+  collection_run_id uuid NOT NULL REFERENCES collection_run(id) ON DELETE CASCADE,
+  input_set_id uuid REFERENCES analysis_input_set(id),
   product_pack_id text NOT NULL,
   product_pack_version text NOT NULL,
   status text NOT NULL,
   code_version text,
+  available_at timestamptz NOT NULL DEFAULT now(),
+  locked_by text,
+  locked_at timestamptz,
+  lease_expires_at timestamptz,
+  attempt_count integer NOT NULL DEFAULT 0,
+  max_attempts integer NOT NULL DEFAULT 3,
+  last_error text,
   started_at timestamptz,
   completed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(collection_run_id, product_pack_id, product_pack_version)
 );
+CREATE INDEX analysis_run_queue_claim_idx
+  ON analysis_run(status, available_at, lease_expires_at, created_at);
 
 CREATE TABLE analysis_result (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

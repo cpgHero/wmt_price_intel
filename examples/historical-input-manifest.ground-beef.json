@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0.0",
+  "stable_key": "ground-beef-2026-08-07-full-location",
+  "name": "Ground beef — August 7, 2026 full-location replay",
+  "captured_at": "2026-08-07T05:16:43Z",
+  "product_pack": {
+    "id": "fresh_ground_beef",
+    "version": "1.0.0"
+  },
+  "analysis_config": {
+    "id": "historical-ground-beef-2026-08-07",
+    "name": "Historical Ground Beef — August 7, 2026",
+    "version": "1.0.0",
+    "enabled": true,
+    "benchmark_retailer": "walmart_us",
+    "product_pack": {
+      "id": "fresh_ground_beef",
+      "version": "1.0.0"
+    },
+    "retailers": [
+      {
+        "retailer_id": "walmart_us",
+        "enabled": true
+      },
+      {
+        "retailer_id": "aldi_us",
+        "enabled": true
+      },
+      {
+        "retailer_id": "amazon_us_same_day",
+        "enabled": true
+      }
+    ],
+    "analysis": {
+      "comparison_profiles": ["strict", "unit_price", "aldi_10mi"],
+      "enable_ai_fallback": false,
+      "enable_proximity_validation": true
+    },
+    "delivery": {
+      "web_report": true,
+      "excel": true,
+      "leadership_email": true,
+      "audit_package": true
+    }
+  },
+  "artifacts": [
+    {
+      "ordinal": 0,
+      "retailer_id": "walmart_us",
+      "adapter_id": "historical_metricscart_search_monitor_csv",
+      "source_name": "Ground_Beef___Walmart_All_Stores_20260807_051643.csv",
+      "source_format": "metricscart_search_monitor_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "dbd3c33384915496416ae29ef9467ffcf238c9f624085386fda21cad8abd4a51",
+      "expected_rows": 96398
+    },
+    {
+      "ordinal": 1,
+      "retailer_id": "aldi_us",
+      "adapter_id": "historical_metricscart_search_monitor_csv",
+      "source_name": "Ground_Beef___Aldi_All_Stores_20260807_051606.csv",
+      "source_format": "metricscart_search_monitor_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "5030f04e1b79d28f294fca4ec6a758f43972509858d5785fdb2080db1fe043bd",
+      "expected_rows": 62379
+    },
+    {
+      "ordinal": 2,
+      "retailer_id": "amazon_us_same_day",
+      "adapter_id": "historical_metricscart_consolidated_serp_csv",
+      "source_name": "ground_beef_amazon.csv",
+      "source_format": "metricscart_consolidated_serp_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "95a1a468abd43a3605410ebfd6751a841c65113c9cc60c3659ab1401494ee9ba",
+      "expected_rows": 67014
+    }
+  ],
+  "metadata": {
+    "source_rows_total": 225791,
+    "purpose": "Full-source ground-beef golden replay"
+  }
+}
