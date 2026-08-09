@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0.0",
+  "evidence_set_id": "evidence-ground-beef-exact-aldi",
+  "analysis_id": "ground-beef-2026-08-07-example",
+  "kind": "exact_matches",
+  "competitor_id": "aldi_us",
+  "profile_id": "strict_exact_package",
+  "row_count": 9049,
+  "storage": {
+    "uri": "s3://rci-private/datasets/input_set_id=ground-beef-2026-08-07/stage=matches/profile=strict_exact_package/competitor=aldi_us/part-00000.parquet",
+    "content_type": "application/vnd.apache.parquet",
+    "checksum_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "byte_size": 875321,
+    "partitioning": ["profile", "competitor"]
+  },
+  "columns": [
+    {
+      "name": "match_id",
+      "data_type": "string",
+      "semantic_role": "identifier",
+      "nullable": false
+    },
+    {
+      "name": "segment_id",
+      "data_type": "string",
+      "semantic_role": "dimension",
+      "nullable": false
+    },
+    {
+      "name": "benchmark_price",
+      "data_type": "decimal(12,2)",
+      "semantic_role": "measure",
+      "nullable": false,
+      "unit": "USD"
+    },
+    {
+      "name": "competitor_price",
+      "data_type": "decimal(12,2)",
+      "semantic_role": "measure",
+      "nullable": false,
+      "unit": "USD"
+    },
+    {
+      "name": "source_artifact_id",
+      "data_type": "string",
+      "semantic_role": "source_reference",
+      "nullable": false
+    }
+  ],
+  "lineage": {
+    "input_set_id": "ground-beef-2026-08-07",
+    "source_artifact_ids": ["raw-walmart-ground-beef", "raw-aldi-ground-beef"],
+    "product_pack": {
+      "id": "fresh_ground_beef",
+      "version": "1.0.0",
+      "checksum_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "analytics_code_version": "phase-9.5.1-contract",
+    "generated_at": "2026-08-08T12:00:00Z"
+  },
+  "access": {
+    "sensitivity": "confidential",
+    "direct_download": true,
+    "max_preview_rows": 100
+  },
+  "immutable": true
+}

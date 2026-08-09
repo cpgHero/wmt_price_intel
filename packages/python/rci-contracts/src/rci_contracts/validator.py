@@ -65,6 +65,30 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
     for result in sorted((root / "examples").glob("analysis-result.*.json")):
         yield ContractTarget("analysis-result.schema.json", result)
     yield ContractTarget(
+        "analysis-result-v2.schema.json",
+        root / "examples" / "analysis-result-v2.ground-beef.json",
+    )
+    yield ContractTarget(
+        "analysis-evidence.schema.json",
+        root / "examples" / "analysis-evidence.ground-beef.json",
+    )
+    yield ContractTarget(
+        "canonical-product.schema.json",
+        root / "examples" / "canonical-product.ground-beef.json",
+    )
+    yield ContractTarget(
+        "product-detail-snapshot.schema.json",
+        root / "examples" / "product-detail-snapshot.aldi.json",
+    )
+    yield ContractTarget(
+        "agent-output.schema.json",
+        root / "examples" / "agent-output.ground-beef-insight.json",
+    )
+    yield ContractTarget(
+        "report-blueprint.schema.json",
+        root / "examples" / "report-blueprint.ground-beef.json",
+    )
+    yield ContractTarget(
         "alert-definition.schema.json",
         root / "examples" / "alert-definition.amazon-pressure.json",
     )

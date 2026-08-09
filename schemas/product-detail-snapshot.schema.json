@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/product-detail-snapshot.schema.json",
+  "title": "Retail Competitive Intelligence Product Detail Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "provider",
+    "retailer_id",
+    "endpoint",
+    "request_context",
+    "observed_at",
+    "http_status",
+    "billing",
+    "raw_artifact",
+    "source_authority"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonical_product_id": {
+      "type": ["string", "null"]
+    },
+    "provider": {
+      "const": "metricscart"
+    },
+    "retailer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint_id", "path", "method", "contract_version"],
+      "properties": {
+        "endpoint_id": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/mc/"
+        },
+        "method": {
+          "const": "GET"
+        },
+        "contract_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "request_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "zipcode", "store", "fulfillment_type", "request_checksum_sha256"],
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "zipcode": {
+          "type": ["string", "null"]
+        },
+        "store": {
+          "type": ["string", "null"]
+        },
+        "fulfillment_type": {
+          "type": ["string", "null"]
+        },
+        "request_checksum_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "http_status": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "billing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["billable", "credits"],
+      "properties": {
+        "billable": {
+          "type": "boolean"
+        },
+        "credits": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "normalized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_product_id", "name", "identifiers", "specification", "availability"],
+      "properties": {
+        "retailer_product_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "brand": {
+          "type": ["string", "null"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "description_short": {
+          "type": ["string", "null"]
+        },
+        "description_full": {
+          "type": ["string", "null"]
+        },
+        "category_path": {
+          "type": ["string", "null"]
+        },
+        "identifiers": {
+          "type": "object"
+        },
+        "specification": {
+          "type": "object"
+        },
+        "physical_properties": {
+          "type": "object"
+        },
+        "variant_configuration": {
+          "type": "object"
+        },
+        "price": {
+          "type": ["number", "null"]
+        },
+        "price_currency": {
+          "type": ["string", "null"]
+        },
+        "availability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stock_available", "pickup_available"],
+          "properties": {
+            "stock_available": {
+              "type": ["boolean", "null"]
+            },
+            "pickup_available": {
+              "type": ["boolean", "null"]
+            },
+            "stock_quantity": {
+              "type": ["number", "null"]
+            },
+            "pickup_store_id": {
+              "type": ["string", "null"]
+            },
+            "shipping_type": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "media": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image_primary": {
+              "type": ["string", "null"],
+              "format": "uri"
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "videos": {
+              "type": "array"
+            }
+          }
+        },
+        "extras": {
+          "type": "object"
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failure_class", "should_retry"],
+      "properties": {
+        "failure_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "should_retry": {
+          "type": "boolean"
+        }
+      }
+    },
+    "raw_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "storage_uri", "checksum_sha256", "immutable"],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storage_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checksum_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "immutable": {
+          "const": true
+        }
+      }
+    },
+    "source_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serp_price_authoritative",
+        "serp_availability_authoritative",
+        "pdp_identity_authoritative",
+        "pdp_package_semantics_allowed"
+      ],
+      "properties": {
+        "serp_price_authoritative": {
+          "const": true
+        },
+        "serp_availability_authoritative": {
+          "const": true
+        },
+        "pdp_identity_authoritative": {
+          "const": true
+        },
+        "pdp_package_semantics_allowed": {
+          "const": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "http_status": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 299
+          }
+        }
+      },
+      "then": {
+        "required": ["normalized"],
+        "properties": {
+          "normalized": {}
+        }
+      },
+      "else": {
+        "required": ["failure"],
+        "properties": {
+          "failure": {}
+        }
+      }
+    }
+  ]
+}

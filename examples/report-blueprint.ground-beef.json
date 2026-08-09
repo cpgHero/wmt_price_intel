@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0.0",
+  "id": "fresh_ground_beef_leadership",
+  "version": "1.0.0",
+  "product_pack": {
+    "id": "fresh_ground_beef",
+    "version": "1.0.0"
+  },
+  "brand_profile": {
+    "id": "cpghero_rci",
+    "version": "1.0.0",
+    "supports_light_mode": true,
+    "supports_dark_mode": true
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "kind": "executive_summary",
+      "required": true,
+      "metric_selectors": ["source.total_rows", "comparison.overall_win_rate"],
+      "evidence_kinds": ["segment_metrics", "exact_matches"],
+      "visualization": "none",
+      "empty_state": "The analysis did not produce sufficient validated comparisons.",
+      "narrative_section_id": "executive_summary"
+    },
+    {
+      "id": "coverage",
+      "title": "Geographic Footprint",
+      "kind": "coverage",
+      "required": true,
+      "metric_selectors": ["coverage.qualifying_zips", "coverage.qualifying_stores"],
+      "evidence_kinds": ["classified_offers"],
+      "visualization": "bar",
+      "empty_state": "No qualifying geographic coverage was observed."
+    },
+    {
+      "id": "exact_price",
+      "title": "Exact Package Price Position",
+      "kind": "price_position",
+      "required": true,
+      "metric_selectors": ["comparison.exact"],
+      "evidence_kinds": ["exact_matches"],
+      "visualization": "table",
+      "empty_state": "No exact-package matches were available."
+    },
+    {
+      "id": "normalized_price",
+      "title": "Normalized Price-per-Pound View",
+      "kind": "segment_analysis",
+      "required": true,
+      "metric_selectors": ["comparison.usd_per_lb"],
+      "evidence_kinds": ["normalized_matches"],
+      "visualization": "table",
+      "empty_state": "No defensible price-per-pound comparisons were available."
+    },
+    {
+      "id": "proximity",
+      "title": "ALDI 10-Mile Validation",
+      "kind": "geographic_sensitivity",
+      "required": true,
+      "metric_selectors": ["comparison.radius_10mi"],
+      "evidence_kinds": ["proximity_matches"],
+      "visualization": "table",
+      "empty_state": "No qualifying retailer pairs were found within 10 miles."
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommended Actions",
+      "kind": "recommendations",
+      "required": true,
+      "metric_selectors": ["recommendations"],
+      "evidence_kinds": ["segment_metrics", "exact_matches", "normalized_matches"],
+      "visualization": "ranked_cards",
+      "empty_state": "No evidence-backed action met the reporting threshold.",
+      "narrative_section_id": "recommendations"
+    },
+    {
+      "id": "methodology",
+      "title": "Methodology & Caveats",
+      "kind": "methodology",
+      "required": true,
+      "metric_selectors": [],
+      "evidence_kinds": ["exclusions", "validation_issues"],
+      "visualization": "none",
+      "empty_state": "Methodology metadata is unavailable."
+    }
+  ],
+  "artifact_profiles": [
+    {
+      "artifact_type": "html",
+      "section_ids": [
+        "executive_summary",
+        "coverage",
+        "exact_price",
+        "normalized_price",
+        "proximity",
+        "recommendations",
+        "methodology"
+      ]
+    },
+    {
+      "artifact_type": "xlsx",
+      "section_ids": [
+        "executive_summary",
+        "coverage",
+        "exact_price",
+        "normalized_price",
+        "proximity",
+        "methodology"
+      ],
+      "worksheet_definitions": [
+        {"name": "Executive Summary", "source": "metrics"},
+        {"name": "Retailer Scorecard", "source": "coverage"},
+        {"name": "Exact Price Summary", "source": "exact_matches"},
+        {"name": "Unit Price Summary", "source": "normalized_matches"},
+        {"name": "ALDI 10mi Summary", "source": "proximity_matches"},
+        {"name": "Methodology", "source": "provenance"}
+      ]
+    },
+    {
+      "artifact_type": "leadership_email",
+      "section_ids": ["executive_summary", "recommendations", "methodology"]
+    },
+    {
+      "artifact_type": "audit_zip",
+      "section_ids": [
+        "coverage",
+        "exact_price",
+        "normalized_price",
+        "proximity",
+        "methodology"
+      ]
+    }
+  ],
+  "narrative_policy": {
+    "require_metric_refs": true,
+    "require_evidence_refs": true,
+    "allow_unreferenced_numbers": false,
+    "required_questions": [
+      "what_changed",
+      "why_it_matters",
+      "who_is_affected",
+      "what_to_do_next",
+      "what_is_the_evidence"
+    ]
+  }
+}

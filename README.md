@@ -47,3 +47,8 @@ The existing August 7, 2026 strawberry analysis is the first golden acceptance c
 - `starter_contracts/` - reference-only Python interface examples; not production architecture.
 - `prompts/` - staged Codex prompts.
 - `examples/` - canonical collection definition and analysis result examples.
+
+Phase 9.5 decision-grade analysis and reporting acceptance is specified in
+`docs/17_PHASE_9_5_DECISION_GRADE_PARITY.md`. V1 contracts remain active during the staged
+transition; the V2 analysis, evidence, product-detail, governed-agent, and report-blueprint
+contracts are validated alongside them.

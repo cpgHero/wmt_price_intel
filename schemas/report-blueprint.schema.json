@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/report-blueprint.schema.json",
+  "title": "Retail Competitive Intelligence Report Blueprint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "product_pack",
+    "brand_profile",
+    "sections",
+    "artifact_profiles",
+    "narrative_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "product_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "brand_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "supports_light_mode", "supports_dark_mode"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supports_light_mode": {
+          "type": "boolean"
+        },
+        "supports_dark_mode": {
+          "type": "boolean"
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "kind", "required", "metric_selectors", "evidence_kinds"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "executive_summary",
+              "kpi_strip",
+              "coverage",
+              "price_position",
+              "segment_analysis",
+              "geographic_sensitivity",
+              "assortment",
+              "product_table",
+              "recommendations",
+              "data_quality",
+              "methodology"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "metric_selectors": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "evidence_kinds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "visualization": {
+            "enum": [
+              "none",
+              "kpi_cards",
+              "bar",
+              "stacked_bar",
+              "line",
+              "map",
+              "table",
+              "ranked_cards"
+            ]
+          },
+          "empty_state": {
+            "type": "string"
+          },
+          "narrative_section_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "artifact_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_type", "section_ids"],
+        "properties": {
+          "artifact_type": {
+            "enum": ["html", "xlsx", "leadership_email", "audit_zip"]
+          },
+          "section_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "worksheet_definitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "source"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 31
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "narrative_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_metric_refs",
+        "require_evidence_refs",
+        "allow_unreferenced_numbers",
+        "required_questions"
+      ],
+      "properties": {
+        "require_metric_refs": {
+          "const": true
+        },
+        "require_evidence_refs": {
+          "const": true
+        },
+        "allow_unreferenced_numbers": {
+          "const": false
+        },
+        "required_questions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "what_changed",
+              "why_it_matters",
+              "who_is_affected",
+              "what_to_do_next",
+              "what_is_the_evidence"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

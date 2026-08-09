@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0.0",
+  "snapshot_id": "pdp-aldi-0000000000008696-90001-479-149",
+  "canonical_product_id": "aldi_us:0000000000008696",
+  "provider": "metricscart",
+  "retailer_id": "aldi_us",
+  "endpoint": {
+    "endpoint_id": "14",
+    "path": "/mc/new_aldi/pdp/zipcode",
+    "method": "GET",
+    "contract_version": "1.0.0"
+  },
+  "request_context": {
+    "product_id": "0000000000008696",
+    "url": "https://new.aldi.us/product/jumbo-raw-peeled-deveined-tail-off-shrimp-0000000000008696",
+    "zipcode": "90001",
+    "store": "479-149",
+    "fulfillment_type": "pickup",
+    "request_checksum_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "observed_at": "2026-08-08T12:00:00Z",
+  "http_status": 200,
+  "billing": {
+    "billable": true,
+    "credits": 1
+  },
+  "normalized": {
+    "retailer_product_id": "0000000000008696",
+    "name": "Jumbo Raw Peeled & Deveined Tail-Off Shrimp",
+    "brand": null,
+    "url": "https://new.aldi.us/product/jumbo-raw-peeled-deveined-tail-off-shrimp-0000000000008696",
+    "description_short": null,
+    "description_full": "Fresh jumbo raw peeled and deveined tail-off shrimp.",
+    "category_path": "Fresh Meat & Seafood > Fresh Seafood",
+    "identifiers": {
+      "product_id": "0000000000008696"
+    },
+    "specification": {},
+    "physical_properties": {},
+    "variant_configuration": {},
+    "price": 6.59,
+    "price_currency": "USD",
+    "availability": {
+      "stock_available": true,
+      "pickup_available": null,
+      "stock_quantity": null,
+      "pickup_store_id": null,
+      "shipping_type": null
+    },
+    "media": {
+      "image_primary": "https://dm.cms.aldi.cx/example-shrimp/1000",
+      "images": ["https://dm.cms.aldi.cx/example-shrimp/1000"],
+      "videos": []
+    },
+    "extras": {
+      "retailer_store_id": "479-149"
+    }
+  },
+  "raw_artifact": {
+    "artifact_id": "raw-pdp-aldi-0000000000008696",
+    "storage_uri": "s3://rci-private/raw/provider=metricscart/endpoint=pdp/retailer=aldi_us/date=2026-08-08/request_id=pdp-aldi-8696.json.gz",
+    "checksum_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "immutable": true
+  },
+  "source_authority": {
+    "serp_price_authoritative": true,
+    "serp_availability_authoritative": true,
+    "pdp_identity_authoritative": true,
+    "pdp_package_semantics_allowed": true
+  }
+}

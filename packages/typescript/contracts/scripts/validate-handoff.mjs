@@ -33,6 +33,20 @@ const collectionValidator = await validator(
   "collection-definition.schema.json",
 );
 const analysisValidator = await validator("analysis-result.schema.json");
+const analysisV2Validator = await validator("analysis-result-v2.schema.json");
+const analysisEvidenceValidator = await validator(
+  "analysis-evidence.schema.json",
+);
+const canonicalProductValidator = await validator(
+  "canonical-product.schema.json",
+);
+const productDetailSnapshotValidator = await validator(
+  "product-detail-snapshot.schema.json",
+);
+const agentOutputValidator = await validator("agent-output.schema.json");
+const reportBlueprintValidator = await validator(
+  "report-blueprint.schema.json",
+);
 const alertValidator = await validator("alert-definition.schema.json");
 const productPackValidator = await validator("product-pack.schema.json");
 const benchmarkValidator = await validator("golden-benchmarks.schema.json");
@@ -61,7 +75,10 @@ for (const definitionFile of collectionDefinitionFiles) {
 }
 const analysisResultFiles = exampleFiles
   .filter(
-    (name) => name.startsWith("analysis-result.") && name.endsWith(".json"),
+    (name) =>
+      name.startsWith("analysis-result.") &&
+      !name.startsWith("analysis-result-v2.") &&
+      name.endsWith(".json"),
   )
   .sort();
 for (const resultFile of analysisResultFiles) {
@@ -71,6 +88,36 @@ for (const resultFile of analysisResultFiles) {
     resultFile,
   );
 }
+await assertValid(
+  analysisV2Validator,
+  await loadJson("examples", "analysis-result-v2.ground-beef.json"),
+  "AnalysisResult V2",
+);
+await assertValid(
+  analysisEvidenceValidator,
+  await loadJson("examples", "analysis-evidence.ground-beef.json"),
+  "analysis evidence",
+);
+await assertValid(
+  canonicalProductValidator,
+  await loadJson("examples", "canonical-product.ground-beef.json"),
+  "canonical product",
+);
+await assertValid(
+  productDetailSnapshotValidator,
+  await loadJson("examples", "product-detail-snapshot.aldi.json"),
+  "product detail snapshot",
+);
+await assertValid(
+  agentOutputValidator,
+  await loadJson("examples", "agent-output.ground-beef-insight.json"),
+  "governed agent output",
+);
+await assertValid(
+  reportBlueprintValidator,
+  await loadJson("examples", "report-blueprint.ground-beef.json"),
+  "report blueprint",
+);
 await assertValid(
   benchmarkValidator,
   await loadJson("fixtures", "golden", "benchmarks.json"),
@@ -109,6 +156,6 @@ console.log(
     productPackFiles.length +
     collectionDefinitionFiles.length +
     analysisResultFiles.length +
-    3
+    9
   } normative JSON documents.`,
 );

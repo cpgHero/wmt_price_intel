@@ -128,6 +128,20 @@ ok &= validate(
 )
 ok &= validate("schemas/analysis-result.schema.json", "examples/analysis-result.strawberries.json")
 ok &= validate(
+    "schemas/analysis-result-v2.schema.json", "examples/analysis-result-v2.ground-beef.json"
+)
+ok &= validate(
+    "schemas/analysis-evidence.schema.json", "examples/analysis-evidence.ground-beef.json"
+)
+ok &= validate(
+    "schemas/canonical-product.schema.json", "examples/canonical-product.ground-beef.json"
+)
+ok &= validate(
+    "schemas/product-detail-snapshot.schema.json", "examples/product-detail-snapshot.aldi.json"
+)
+ok &= validate("schemas/agent-output.schema.json", "examples/agent-output.ground-beef-insight.json")
+ok &= validate("schemas/report-blueprint.schema.json", "examples/report-blueprint.ground-beef.json")
+ok &= validate(
     "schemas/alert-definition.schema.json",
     "examples/alert-definition.amazon-pressure.json",
 )

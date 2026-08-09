@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "canonical_product_id": "walmart_us:15136790",
+  "retailer_id": "walmart_us",
+  "retailer_product_id": "15136790",
+  "identifiers": [
+    {
+      "scheme": "retailer_product_id",
+      "value": "15136790",
+      "issuer": "walmart_us",
+      "primary": true
+    },
+    {
+      "scheme": "product_id",
+      "value": "15136790",
+      "issuer": "metricscart",
+      "primary": false
+    }
+  ],
+  "identity": {
+    "name": "73% Lean / 27% Fat Ground Beef, 1 lb Roll, Fresh, All Natural",
+    "brand": null,
+    "url": "https://www.walmart.com/ip/15136790",
+    "image_primary": "https://i5.walmartimages.com/example-ground-beef.jpeg",
+    "description_short": null,
+    "description_full": null,
+    "category_path": "Food > Meat & Seafood > Beef > Ground Beef",
+    "model_number": null,
+    "specification": {
+      "lean_pct": 73,
+      "fat_pct": 27,
+      "package_weight_lb": 1,
+      "organic": false,
+      "grass_fed": false
+    },
+    "physical_properties": {},
+    "variant_configuration": {}
+  },
+  "classification": {
+    "product_pack_id": "fresh_ground_beef",
+    "product_pack_version": "1.0.0",
+    "in_scope": true,
+    "attributes": {
+      "lean_pct": 73,
+      "fat_pct": 27,
+      "package_weight_lb": 1,
+      "organic": false,
+      "grass_fed": false,
+      "premium_tier": "standard"
+    },
+    "review_reasons": []
+  },
+  "source_contexts": [
+    {
+      "source": "historical_import",
+      "zipcode": "47906",
+      "store_number": "2339",
+      "fulfillment_type": null,
+      "source_artifact_id": "raw-walmart-ground-beef",
+      "observed_at": "2026-08-07T02:39:36.626807Z"
+    }
+  ],
+  "pdp_snapshot_ids": [],
+  "provenance": {
+    "identity_checksum_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "created_at": "2026-08-08T12:00:00Z",
+    "updated_at": "2026-08-08T12:00:00Z"
+  }
+}

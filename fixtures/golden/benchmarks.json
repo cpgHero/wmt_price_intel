@@ -1,6 +1,6 @@
 {
   "schema_version": "2.0.0",
-  "purpose": "Executable golden regression assertions derived from the four human-validated August 2026 studies. Full raw category datasets are intentionally not duplicated in this handoff bundle; attach them separately for full regression runs.",
+  "purpose": "Executable golden regression assertions derived from the five human-validated August 2026 studies. Full raw category datasets are intentionally not duplicated in this handoff bundle; attach them separately for full regression runs.",
   "categories": {
     "fresh_shell_eggs": {
       "dataset_id": "egg_aug2026_full_retailer",
@@ -277,6 +277,100 @@
           },
           "expected": 5236,
           "tolerance_abs": 0
+        }
+      ]
+    },
+    "fresh_ground_beef": {
+      "dataset_id": "ground_beef_aug2026_wmt_aldi_amz",
+      "source_rows": 225791,
+      "assertions": [
+        {
+          "name": "source_rows_total",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["source_rows_total"]
+          },
+          "expected": 225791,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "walmart_qualifying_zips",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["retailer_scorecard", "Walmart", "qualifying_zips"]
+          },
+          "expected": 3823,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_exact_matches",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["exact_summary", "ALDI", "matches"]
+          },
+          "expected": 9049,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_exact_competitor_lower_rate",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["exact_summary", "ALDI", "competitor_lower_rate"]
+          },
+          "expected": 0.8414189413194828,
+          "tolerance_abs": 0.0005
+        },
+        {
+          "name": "amazon_exact_matches",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["exact_summary", "Amazon", "matches"]
+          },
+          "expected": 6713,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "amazon_exact_walmart_lower_rate",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["exact_summary", "Amazon", "walmart_lower_rate"]
+          },
+          "expected": 0.9363920750782064,
+          "tolerance_abs": 0.0005
+        },
+        {
+          "name": "aldi_10mi_matches",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["proximity_summary", "ALDI_10mi_matches"]
+          },
+          "expected": 16985,
+          "tolerance_abs": 0
+        },
+        {
+          "name": "aldi_organic_85_15_gap_per_lb",
+          "source": "ground_beef/validated_summary.json",
+          "source_format": "json",
+          "selector": {
+            "type": "json_path",
+            "path": ["selected_segments", "ALDI_organic_85_15_1lb", "median_gap_per_lb"]
+          },
+          "expected": -1.48,
+          "tolerance_abs": 0.01
         }
       ]
     }

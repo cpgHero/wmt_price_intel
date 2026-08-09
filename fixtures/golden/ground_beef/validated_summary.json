@@ -1,0 +1,79 @@
+{
+  "analysis_date": "2026-08-07",
+  "source_rows_total": 225791,
+  "retailer_scorecard": {
+    "Walmart": {
+      "raw_rows": 96398,
+      "qualifying_rows": 71859,
+      "qualifying_zips": 3823,
+      "qualifying_stores": 4251,
+      "qualifying_products": 36
+    },
+    "ALDI": {
+      "raw_rows": 62379,
+      "qualifying_rows": 25930,
+      "qualifying_zips": 2472,
+      "qualifying_stores": 2595,
+      "qualifying_products": 12
+    },
+    "Amazon": {
+      "raw_rows": 67014,
+      "qualifying_rows": 11065,
+      "qualifying_zips": 2066,
+      "qualifying_stores": 0,
+      "qualifying_products": 38
+    }
+  },
+  "exact_summary": {
+    "ALDI": {
+      "matches": 9049,
+      "walmart_lower": 1435,
+      "competitor_lower": 7614,
+      "parity": 0,
+      "walmart_lower_rate": 0.15858105868051718,
+      "competitor_lower_rate": 0.8414189413194828,
+      "parity_rate": 0
+    },
+    "Amazon": {
+      "matches": 6713,
+      "walmart_lower": 6286,
+      "competitor_lower": 386,
+      "parity": 41,
+      "walmart_lower_rate": 0.9363920750782064,
+      "competitor_lower_rate": 0.05750037241173842,
+      "parity_rate": 0.006107552510055117
+    }
+  },
+  "proximity_summary": {
+    "ALDI_10mi_matches": 16985
+  },
+  "selected_segments": {
+    "ALDI_73_27_5lb": {
+      "matches": 1413,
+      "walmart_lower_rate": 0.9228591648973815,
+      "median_walmart_price": 24.94,
+      "median_competitor_price": 25.95,
+      "median_gap_per_lb": 0.20199999999999907
+    },
+    "ALDI_80_20_2_25lb": {
+      "matches": 1456,
+      "competitor_lower_rate": 1,
+      "median_walmart_price": 15.73,
+      "median_competitor_price": 13.93,
+      "median_gap_per_lb": -0.8000000000000007
+    },
+    "ALDI_organic_85_15_1lb": {
+      "matches": 1370,
+      "competitor_lower_rate": 1,
+      "median_walmart_price": 7.47,
+      "median_competitor_price": 5.99,
+      "median_gap_per_lb": -1.4799999999999995
+    }
+  },
+  "methodology": {
+    "scope": "Raw ground beef with a defensible lean/fat ratio, package weight and positive price.",
+    "strict_match": "Same ZIP, lean ratio, exact package weight, organic status, grass-fed status and premium tier.",
+    "normalized_match": "Same ZIP and product specification with valid package-price conversion to price per pound.",
+    "parity_tolerance": "±$0.01"
+  }
+}

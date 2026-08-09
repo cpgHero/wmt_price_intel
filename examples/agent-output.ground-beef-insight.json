@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0.0",
+  "task_id": "ai-ground-beef-insight-1",
+  "analysis_id": "ground-beef-2026-08-07-example",
+  "role": "insight",
+  "prompt_template": {
+    "id": "segment-insight",
+    "version": "1.0.0",
+    "checksum_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "model": {
+    "provider": "openai",
+    "model_id": "configured-at-runtime"
+  },
+  "input_checksum_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+  "output_checksum_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+  "evidence_refs": ["evidence-ground-beef-exact-aldi"],
+  "generated_at": "2026-08-08T12:00:00Z",
+  "authoritative_metrics_computed": false,
+  "usage": {
+    "input_tokens": 500,
+    "output_tokens": 180,
+    "estimated_cost_usd": 0
+  },
+  "result": {
+    "insights": [
+      {
+        "id": "aldi-organic-85-15-pressure",
+        "title": "ALDI creates a concentrated organic 85/15 pressure point",
+        "summary": "The ALDI advantage is concentrated in a commercially distinct organic grass-fed segment rather than spread uniformly across ground beef.",
+        "severity": "high",
+        "business_impact": "A focused response can address the pressure without disturbing Walmart's stronger conventional value segments.",
+        "metric_refs": ["metric-aldi-organic-85-15-gap-per-lb"],
+        "evidence_refs": ["evidence-ground-beef-exact-aldi"],
+        "confidence": 0.99
+      }
+    ]
+  },
+  "validation": {
+    "status": "passed",
+    "unsupported_numeric_claims": 0,
+    "metric_reference_coverage": 1,
+    "issues": []
+  }
+}
