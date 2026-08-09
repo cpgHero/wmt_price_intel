@@ -519,7 +519,7 @@ class PostgresResultsRepository:
                               SELECT * FROM inserted
                               UNION ALL
                               SELECT * FROM report_artifact
-                              WHERE analysis_run_id::text = :analysis_run_id
+                              WHERE analysis_run_id = CAST(:analysis_run_id AS uuid)
                                 AND artifact_type = :artifact_type
                                 AND renderer_version = :renderer_version
                                 AND publication_id IS NOT DISTINCT FROM
