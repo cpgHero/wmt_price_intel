@@ -16,6 +16,11 @@ import {
   displayLabel,
   displayValue,
 } from "@/lib/presentation";
+import {
+  formatMetric,
+  groupReportSections,
+  metricBarWidth,
+} from "@/lib/report-presentation";
 
 const tabs = [
   "Executive Summary",
@@ -185,11 +190,12 @@ function BlueprintAnalysisWorkspace({
   analysis: AnalysisRecord;
   reportView: AnalysisReportView;
 }>) {
-  const [activeSection, setActiveSection] = useState(
-    reportView.sections[0]?.id ?? "exports",
-  );
-  const selected = reportView.sections.find(
-    (section) => section.id === activeSection,
+  const groupedSections = groupReportSections(reportView.sections);
+  const firstPopulatedGroup =
+    groupedSections.find((group) => group.sections.length > 0)?.id ?? "summary";
+  const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);
+  const selectedGroup = groupedSections.find(
+    (group) => group.id === activeGroup,
   );
   return (
     <>
@@ -201,6 +207,13 @@ function BlueprintAnalysisWorkspace({
             {analysis.analysis_id} · Generated{" "}
             {displayDate(reportView.generated_at)}
           </p>
+          <div className="trust-strip" aria-label="Result integrity">
+            <span>Deterministic metrics</span>
+            <span>Evidence linked</span>
+            <span title={analysis.checksum}>
+              Checksum {analysis.checksum.slice(0, 12)}…
+            </span>
+          </div>
         </div>
         <div className="workspace-status">
           <span className={`status-badge ${analysis.status}`}>
@@ -212,37 +225,48 @@ function BlueprintAnalysisWorkspace({
         </div>
       </header>
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
-        {reportView.sections.map((section) => (
+        {groupedSections.map((group) => (
           <button
             type="button"
             role="tab"
-            aria-selected={activeSection === section.id}
-            className={activeSection === section.id ? "active" : ""}
-            onClick={() => setActiveSection(section.id)}
-            key={section.id}
+            aria-selected={activeGroup === group.id}
+            className={activeGroup === group.id ? "active" : ""}
+            onClick={() => setActiveGroup(group.id)}
+            key={group.id}
           >
-            {section.title}
+            {group.label}
           </button>
         ))}
         <button
           type="button"
           role="tab"
-          aria-selected={activeSection === "exports"}
-          className={activeSection === "exports" ? "active" : ""}
-          onClick={() => setActiveSection("exports")}
+          aria-selected={activeGroup === "exports"}
+          className={activeGroup === "exports" ? "active" : ""}
+          onClick={() => setActiveGroup("exports")}
         >
           Exports
         </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
-        {selected ? (
-          <BlueprintSection section={selected} />
-        ) : (
+        {activeGroup === "exports" ? (
           <Section
             title="Delivery artifacts"
-            note="Generated from this immutable AnalysisResult; renderers only present blueprint-selected facts."
+            note="Every format presents the same immutable AnalysisResult and carries its shared result checksum."
           >
             <ArtifactActions analysisId={analysis.analysis_id} />
+          </Section>
+        ) : selectedGroup && selectedGroup.sections.length > 0 ? (
+          selectedGroup.sections.map((section) => (
+            <BlueprintSection section={section} key={section.id} />
+          ))
+        ) : (
+          <Section
+            title={selectedGroup?.label ?? "Analysis section"}
+            note="This Product Pack does not define content for this workspace section."
+          >
+            <p className="empty-copy">
+              No decision-ready records were supplied for this section.
+            </p>
           </Section>
         )}
       </section>
@@ -254,6 +278,7 @@ function BlueprintSection({
   section,
 }: Readonly<{ section: ReportSectionView }>) {
   const narrative = asObject(section.narrative);
+  const metricValues = section.metrics.map((metric) => metric.value);
   return (
     <Section
       title={section.title}
@@ -262,18 +287,41 @@ function BlueprintSection({
       {narrative.body ? (
         <p className="section-narrative">{displayValue(narrative.body)}</p>
       ) : null}
-      {section.metrics.length > 0 ? (
+      {section.metrics.length > 0 && section.visualization === "bar" ? (
+        <div className="metric-bars" aria-label={`${section.title} metrics`}>
+          {section.metrics.map((metric) => (
+            <div className="metric-bar" key={String(metric.metric_id)}>
+              <div>
+                <span>{String(metric.name)}</span>
+                <strong>{formatMetric(metric.value, metric.unit)}</strong>
+              </div>
+              <i aria-hidden="true">
+                <b
+                  style={{
+                    width: `${metricBarWidth(metric.value, metricValues)}%`,
+                  }}
+                />
+              </i>
+            </div>
+          ))}
+        </div>
+      ) : section.metrics.length > 0 ? (
         <div className="metric-grid">
           {section.metrics.map((metric) => (
             <Metric
               key={String(metric.metric_id)}
               label={String(metric.name)}
-              value={`${displayValue(metric.value)} ${displayValue(metric.unit)}`}
+              value={formatMetric(metric.value, metric.unit)}
             />
           ))}
         </div>
       ) : null}
-      {section.records.length > 0 ? <DataTable rows={section.records} /> : null}
+      {section.records.length > 0 &&
+      section.visualization === "ranked_cards" ? (
+        <DecisionCards rows={section.records} />
+      ) : section.records.length > 0 && section.kind !== "kpi_strip" ? (
+        <DataTable rows={section.records} />
+      ) : null}
       {section.evidence_sets.length > 0 ? (
         <details className="evidence-disclosure">
           <summary>Evidence manifests</summary>
@@ -286,6 +334,30 @@ function BlueprintSection({
         </p>
       ) : null}
     </Section>
+  );
+}
+
+function DecisionCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  return (
+    <div className="decision-card-grid">
+      {rows.map((row, index) => {
+        const rank = row.priority ?? row.severity ?? index + 1;
+        const headline =
+          row.summary ??
+          row.action ??
+          row.title ??
+          row.text ??
+          "Decision signal";
+        const detail = row.detail ?? row.rationale ?? row.description;
+        return (
+          <article className="decision-card" key={String(row.id ?? index)}>
+            <span>{displayValue(rank)}</span>
+            <h3>{displayValue(headline)}</h3>
+            {detail ? <p>{displayValue(detail)}</p> : null}
+          </article>
+        );
+      })}
+    </div>
   );
 }
 

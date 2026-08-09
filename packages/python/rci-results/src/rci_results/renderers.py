@@ -42,6 +42,69 @@ def _display(value: object) -> str:
     return str(value)
 
 
+def _result_checksum(result: JsonObject) -> str:
+    provenance = _mapping(result, "provenance")
+    persisted = provenance.get("final_result_checksum_sha256")
+    if isinstance(persisted, str) and len(persisted) == 64:
+        return persisted
+    return hashlib.sha256(canonical_result_bytes(result)).hexdigest()
+
+
+def _metric_display(value: object, unit: object) -> str:
+    normalized_unit = unit if isinstance(unit, str) else ""
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return _display(value)
+    if normalized_unit == "rate":
+        return f"{value:.1%}"
+    if normalized_unit.startswith("USD"):
+        amount = f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
+        suffix_parts = normalized_unit.removeprefix("USD").split("_")
+        suffix_parts = [part for part in suffix_parts if part]
+        if suffix_parts and suffix_parts[0] == "per":
+            suffix_parts.pop(0)
+        suffix = " ".join(suffix_parts)
+        return f"{amount} / {suffix}" if suffix else amount
+    formatted = f"{value:,}" if isinstance(value, int) else f"{value:,.2f}"
+    return f"{formatted} {normalized_unit}".rstrip()
+
+
+def _leadership_styles() -> str:
+    return """
+:root{color-scheme:light dark;--ink:rgba(10,10,12,.95);--muted:rgba(10,10,12,.62);
+--paper:#f6f7fb;--card:#fff;--surface:#eef0f6;--accent:#0082c8;--highlight:#58d2f8;
+--line:rgba(0,0,0,.14);--shadow:0 12px 30px rgba(0,0,0,.1)}
+@media (prefers-color-scheme:dark){:root{--ink:rgba(255,255,255,.92);
+--muted:rgba(255,255,255,.62);--paper:#0b0b0d;--card:#1a1a1d;--surface:#222228;
+--accent:#58d2f8;--line:rgba(255,255,255,.1);--shadow:0 12px 30px rgba(0,0,0,.4)}}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);
+font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:1180px;margin:auto;padding:48px 28px 64px}
+header{border-bottom:1px solid var(--line);padding-bottom:28px}
+.brand{font-size:17px;font-weight:850;letter-spacing:-.04em}.brand b{color:var(--accent)}
+.eyebrow,.kind{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.12em;
+text-transform:uppercase}h1{font-size:clamp(38px,7vw,72px);font-weight:800;letter-spacing:-.055em;
+line-height:.94;margin:12px 0 18px;max-width:13ch}h2{margin:0 0 12px;letter-spacing:-.025em}
+.meta,.empty,small{color:var(--muted)}.checksum{background:rgba(88,210,248,.12);
+border:1px solid rgba(88,210,248,.35);border-radius:999px;color:var(--accent);display:inline-block;
+font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:16px;padding:7px 10px}
+.findings,.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.decision-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+article,section{background:var(--card);border:1px solid var(--line);border-radius:16px;
+box-shadow:var(--shadow);padding:22px;margin-top:18px}article p{font-size:17px;margin:10px 0}
+article span{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.1em;
+text-transform:uppercase}
+.metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.metric strong{display:block;font-size:24px;margin-top:16px}.table-wrap{overflow:auto}
+.decision-card{background:var(--surface);box-shadow:none}.decision-card h3{font-size:17px;
+line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);
+padding:10px;text-align:left;vertical-align:top}th{color:var(--muted);font-size:11px;letter-spacing:.06em;
+text-transform:uppercase}tbody tr:nth-child(even){background:var(--surface)}li{margin:10px 0}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;margin-top:34px;
+padding-top:18px}footer code{overflow-wrap:anywhere}
+"""
+
+
 def _generated_at(result: JsonObject) -> datetime:
     value = str(result.get("generated_at", "1980-01-01T00:00:00+00:00"))
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -83,6 +146,7 @@ class LeadershipHtmlRenderer:
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         analysis_id = escape(_display(result.get("analysis_id")))
         generated_at = escape(_display(result.get("generated_at")))
+        result_checksum = escape(_result_checksum(result))
         findings = _rows(result, "findings")
         recommendations = _rows(result, "recommendations")
         narrative = "".join(
@@ -98,26 +162,12 @@ class LeadershipHtmlRenderer:
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
-<style>
-:root{{--ink:#17221d;--muted:#627067;--paper:#f4f2eb;--card:#fff;--accent:#17613e;--line:#d9ddd7}}
-*{{box-sizing:border-box}}
-body{{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Arial,sans-serif}}
-main{{max-width:1180px;margin:auto;padding:48px 28px}}
-header{{border-bottom:1px solid var(--line);padding-bottom:28px}}
-.eyebrow,article span{{color:var(--accent);font-size:12px;font-weight:700}}
-.eyebrow,article span{{letter-spacing:.12em;text-transform:uppercase}}
-h1{{font-size:clamp(38px,7vw,72px);letter-spacing:-.055em;line-height:.94}}
-h1{{margin:10px 0 18px;max-width:12ch}}
-h2{{margin-top:42px}}.meta{{color:var(--muted)}}
-.findings{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}}
-article,section{{background:var(--card);border:1px solid var(--line);border-radius:16px}}
-article,section{{padding:20px;margin-top:18px}}article p{{font-size:18px;margin:10px 0}}
-.table-wrap{{overflow:auto}}table{{border-collapse:collapse;width:100%;font-size:13px}}
-th,td{{border-bottom:1px solid var(--line);padding:10px;text-align:left;vertical-align:top}}
-th{{color:var(--muted)}}li{{margin:10px 0}}
-</style></head><body><main><header><div class="eyebrow">Leadership intelligence brief</div>
+<style>{_leadership_styles()}</style></head><body><main data-result-checksum="{result_checksum}">
+<header><div class="brand">CPG<b>Hero</b></div>
+<div class="eyebrow">Leadership intelligence brief</div>
 <h1>{pack_name}</h1>
 <div class="meta">Analysis {analysis_id} · Generated {generated_at}</div>
+<div class="checksum">Result checksum · {result_checksum}</div>
 </header><h2>What matters</h2>
 <div class="findings">{narrative or "<p>No findings supplied.</p>"}</div>
 <section><h2>Recommended actions</h2>
@@ -128,42 +178,28 @@ th{{color:var(--muted)}}li{{margin:10px 0}}
 {_table("Validation", [_mapping(result, "validation")])}
 {_table("Data quality", [_mapping(result, "data_quality")])}
 {_table("Provenance", [_mapping(result, "provenance")])}
+<footer>CPGHero Retail Competitive Intelligence · Immutable result
+<code>{result_checksum}</code></footer>
 </main></body></html>"""
         return document.encode("utf-8")
 
     def _render_blueprint(self, result: JsonObject, view: JsonObject) -> bytes:
         product_pack = _mapping(view, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
+        result_checksum = escape(_result_checksum(result))
         section_html = "".join(self._section(section) for section in _rows(view, "sections"))
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
-<style>
-:root{{--ink:#17221d;--muted:#627067;--paper:#f4f2eb;--card:#fff;--accent:#17613e;--line:#d9ddd7}}
-*{{box-sizing:border-box}}
-body{{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Arial,sans-serif}}
-main{{max-width:1180px;margin:auto;padding:48px 28px}}
-header{{border-bottom:1px solid var(--line);padding-bottom:28px}}
-.eyebrow,.kind{{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}}
-h1{{font-size:clamp(38px,7vw,72px);letter-spacing:-.055em;line-height:.94}}
-h1{{margin:10px 0 18px;max-width:12ch}}
-h2{{margin:0 0 12px}}
-.meta,.empty{{color:var(--muted)}}
-section{{background:var(--card);border:1px solid var(--line);border-radius:16px}}
-section{{padding:22px;margin-top:18px}}
-.metrics{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}}
-.metrics{{gap:12px;margin:16px 0}}
-.metric{{border:1px solid var(--line);border-radius:12px;padding:14px}}
-.metric strong{{display:block;font-size:24px}}
-.table-wrap{{overflow:auto}}
-table{{border-collapse:collapse;width:100%;font-size:13px}}
-th,td{{border-bottom:1px solid var(--line);padding:10px;text-align:left}}
-th,td{{vertical-align:top}}th{{color:var(--muted)}}
-</style></head><body><main><header><div class="eyebrow">Leadership intelligence brief</div>
+<style>{_leadership_styles()}</style></head><body><main data-result-checksum="{result_checksum}">
+<header><div class="brand">CPG<b>Hero</b></div>
+<div class="eyebrow">Leadership intelligence brief</div>
 <h1>{pack_name}</h1><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
 Generated {escape(_display(result.get("generated_at")))}</div>
-</header>{section_html}</main></body></html>"""
+<div class="checksum">Result checksum · {result_checksum}</div>
+</header>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
+<code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
 
     @staticmethod
@@ -179,13 +215,19 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         metrics = _rows(section, "metrics")
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
-            f"<strong>{escape(_display(metric.get('value')))}</strong>"
-            f"<small>{escape(_display(metric.get('unit')))}</small></div>"
+            f"<strong>{escape(_metric_display(metric.get('value'), metric.get('unit')))}</strong>"
+            f"<small>{escape(_display(metric.get('method')))}</small></div>"
             for metric in metrics
         )
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
-        table = _table("Evidence-backed detail", records) if records else ""
+        if section.get("visualization") == "ranked_cards":
+            cards = "".join(
+                LeadershipHtmlRenderer._record_card(row, index) for index, row in enumerate(records)
+            )
+            detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
+        else:
+            detail = _table("Evidence-backed detail", records) if records else ""
         empty = (
             f"<p class=empty>{escape(_display(section.get('empty_state')))}</p>"
             if section.get("empty")
@@ -193,7 +235,24 @@ Generated {escape(_display(result.get("generated_at")))}</div>
         )
         return (
             f"<section id={escape(_display(section.get('id')))}><div class=kind>{kind}</div>"
-            f"<h2>{title}</h2>{narrative_html}{metric_grid}{table}{empty}</section>"
+            f"<h2>{title}</h2>{narrative_html}{metric_grid}{detail}{empty}</section>"
+        )
+
+    @staticmethod
+    def _record_card(row: JsonObject, index: int) -> str:
+        rank = row.get("priority") or row.get("severity") or index + 1
+        headline = (
+            row.get("summary")
+            or row.get("action")
+            or row.get("title")
+            or row.get("text")
+            or "Decision signal"
+        )
+        detail = row.get("detail") or row.get("rationale") or row.get("description")
+        detail_html = f"<p>{escape(_display(detail))}</p>" if detail is not None else ""
+        return (
+            f"<article class=decision-card><span>{escape(_display(rank))}</span>"
+            f"<h3>{escape(_display(headline))}</h3>{detail_html}</article>"
         )
 
 
@@ -210,23 +269,53 @@ class ExcelAuditRenderer:
     def _write_rows(workbook: object, name: str, rows: list[JsonObject]) -> None:
         worksheet = workbook.add_worksheet(name)  # type: ignore[attr-defined]
         header_format = workbook.add_format(  # type: ignore[attr-defined]
-            {"bold": True, "font_color": "#ffffff", "bg_color": "#17613e"}
+            {
+                "bold": True,
+                "font_color": "#58D2F8",
+                "bg_color": "#0F0F11",
+                "border": 0,
+                "text_wrap": True,
+                "valign": "vcenter",
+            }
         )
+        body_format = workbook.add_format(  # type: ignore[attr-defined]
+            {"font_color": "#0A0A0C", "valign": "top", "text_wrap": True}
+        )
+        alternate_format = workbook.add_format(  # type: ignore[attr-defined]
+            {
+                "font_color": "#0A0A0C",
+                "bg_color": "#F6F7FB",
+                "valign": "top",
+                "text_wrap": True,
+            }
+        )
+        empty_format = workbook.add_format(  # type: ignore[attr-defined]
+            {"font_color": "#626269", "italic": True}
+        )
+        worksheet.hide_gridlines(2)
+        worksheet.set_tab_color("#58D2F8")
         if not rows:
-            worksheet.write(0, 0, "No records supplied")
+            worksheet.write(0, 0, "No records supplied", empty_format)
+            worksheet.set_column(0, 0, 28)
             return
         columns = list(dict.fromkeys(key for row in rows for key in row))
+        widths = [len(column.replace("_", " ")) + 2 for column in columns]
+        worksheet.set_row(0, 28)
         for column_index, column in enumerate(columns):
-            worksheet.write(0, column_index, column, header_format)
+            worksheet.write(0, column_index, column.replace("_", " ").title(), header_format)
         for row_index, row in enumerate(rows, start=1):
+            row_format = alternate_format if row_index % 2 == 0 else body_format
             for column_index, column in enumerate(columns):
                 value = row.get(column)
                 if isinstance(value, list | dict):
                     value = json.dumps(value, ensure_ascii=False, sort_keys=True)
-                worksheet.write(row_index, column_index, value)
+                rendered = "" if value is None else str(value)
+                widths[column_index] = min(56, max(widths[column_index], len(rendered) + 2))
+                worksheet.write(row_index, column_index, value, row_format)
         worksheet.freeze_panes(1, 0)
         worksheet.autofilter(0, 0, len(rows), len(columns) - 1)
-        worksheet.set_column(0, len(columns) - 1, 22)
+        for column_index, width in enumerate(widths):
+            worksheet.set_column(column_index, column_index, max(12, width))
 
     def render(
         self,
@@ -235,8 +324,19 @@ class ExcelAuditRenderer:
         product_pack: JsonObject | None = None,
     ) -> bytes:
         output = BytesIO()
-        workbook = xlsxwriter.Workbook(output, {"in_memory": True})
-        workbook.set_properties({"created": _generated_at(result)})
+        workbook = xlsxwriter.Workbook(
+            output,
+            {"in_memory": True, "strings_to_formulas": False, "strings_to_urls": False},
+        )
+        workbook.set_properties(
+            {
+                "author": "CPGHero Retail Competitive Intelligence",
+                "company": "CPGHero",
+                "comments": "Generated from immutable deterministic AnalysisResult metrics.",
+                "created": _generated_at(result),
+                "title": f"Retail Competitive Intelligence — {_display(result.get('analysis_id'))}",
+            }
+        )
         if blueprint is not None and product_pack is not None:
             projector = ReportProjector()
             profile = blueprint.artifact_profile("xlsx")
@@ -246,6 +346,21 @@ class ExcelAuditRenderer:
                     str(worksheet["name"]),
                     projector.worksheet_rows(result, str(worksheet["source"]), product_pack),
                 )
+            self._write_rows(
+                workbook,
+                "Artifact Manifest",
+                [
+                    {
+                        "analysis_id": result.get("analysis_id"),
+                        "result_checksum_sha256": _result_checksum(result),
+                        "schema_version": result.get("schema_version"),
+                        "product_pack_id": product_pack.get("id"),
+                        "product_pack_version": product_pack.get("version"),
+                        "report_blueprint_id": blueprint.id,
+                        "report_blueprint_version": blueprint.version,
+                    }
+                ],
+            )
             workbook.close()
             return output.getvalue()
         self._write_rows(
@@ -271,6 +386,19 @@ class ExcelAuditRenderer:
             ("Provenance", "provenance"),
         ):
             self._write_rows(workbook, sheet_name, [_mapping(result, key)])
+        self._write_rows(
+            workbook,
+            "Artifact Manifest",
+            [
+                {
+                    "analysis_id": result.get("analysis_id"),
+                    "result_checksum_sha256": _result_checksum(result),
+                    "schema_version": result.get("schema_version"),
+                    "product_pack_id": _mapping(result, "product_pack").get("id"),
+                    "product_pack_version": _mapping(result, "product_pack").get("version"),
+                }
+            ],
+        )
         workbook.close()
         return output.getvalue()
 
@@ -285,10 +413,15 @@ class LeadershipEmailRenderer:
         message = EmailMessage()
         message["Subject"] = f"Retail competitive intelligence: {subject_name}"
         message["To"] = "Leadership distribution list"
-        message["From"] = "Retail Competitive Intelligence"
+        message["From"] = "CPGHero Retail Competitive Intelligence"
+        message["X-RCI-Result-Checksum"] = _result_checksum(result)
         lines = [
+            "CPGHero Retail Competitive Intelligence",
+            "Decision-ready brief from immutable deterministic metrics",
+            "",
             f"Analysis: {_display(result.get('analysis_id'))}",
             f"Generated: {_display(result.get('generated_at'))}",
+            f"Result checksum: {_result_checksum(result)}",
             "",
             "Key findings",
         ]
@@ -401,6 +534,7 @@ class ArtifactRenderer:
         result_body = canonical_result_bytes(result)
         manifest = {
             "analysis_id": result["analysis_id"],
+            "result_checksum_sha256": _result_checksum(result),
             "files": [
                 {
                     "filename": "analysis-result.json",

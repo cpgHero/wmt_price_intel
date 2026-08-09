@@ -26,3 +26,16 @@ test("serves the application shell, workflow routes, and health route", async ({
     service: "web",
   });
 });
+
+test("serves the branded shell and no-flash theme controls", async ({
+  request,
+}) => {
+  const response = await request.get("/");
+  const html = await response.text();
+
+  expect(response.ok()).toBe(true);
+  expect(html).toContain("CPGHero");
+  expect(html).toContain("theme-init");
+  expect(html).toContain("rci-theme");
+  expect(html).toContain("Toggle light and dark theme");
+});

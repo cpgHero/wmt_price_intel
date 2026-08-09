@@ -87,6 +87,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
             b"Geography",
             b"Data Quality",
             b"Methodology",
+            b"Artifact Manifest",
         ):
             assert name in workbook_xml
 
@@ -100,6 +101,35 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     with ZipFile(BytesIO(audit.body)) as archive:
         assert "analysis-result.json" in archive.namelist()
         assert json.loads(archive.read("analysis-result.json")) == result
+
+
+def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
+    result = _result()
+    renderer = ArtifactRenderer(REPOSITORY_ROOT)
+    checksum = str(result["provenance"]["final_result_checksum_sha256"])  # type: ignore[index]
+    checksum_bytes = checksum.encode()
+
+    html = renderer.render(result, "html")
+    assert checksum_bytes in html.body
+    assert b"data-result-checksum" in html.body
+
+    workbook = renderer.render(result, "xlsx")
+    with ZipFile(BytesIO(workbook.body)) as archive:
+        workbook_text = b"".join(
+            archive.read(name) for name in archive.namelist() if name.endswith(".xml")
+        )
+        assert checksum_bytes in workbook_text
+
+    email = BytesParser(policy=policy.default).parsebytes(
+        renderer.render(result, "leadership_email").body
+    )
+    assert str(email["X-RCI-Result-Checksum"]) == checksum
+    assert checksum in email.get_content()
+
+    audit = renderer.render(result, "audit_zip")
+    with ZipFile(BytesIO(audit.body)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["result_checksum_sha256"] == checksum
 
 
 def test_artifact_specific_report_view_uses_blueprint_section_profile() -> None:

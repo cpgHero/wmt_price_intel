@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ThemeToggle } from "./theme-toggle";
+
 const navigation = [
   ["Dashboard", "/"],
   ["Collections", "/collections"],
@@ -19,10 +21,14 @@ export function AppShell({
           href="/"
           aria-label="Retail Competitive Intelligence home"
         >
-          <span className="brand-mark">RC</span>
-          <span>
-            <strong>Retail CI</strong>
-            <small>Competitive intelligence</small>
+          <span className="brand-mark" aria-hidden="true">
+            C
+          </span>
+          <span className="brand-copy">
+            <strong>
+              CPG<span>Hero</span>
+            </strong>
+            <small>Retail Competitive Intelligence</small>
           </span>
         </Link>
         <nav aria-label="Primary navigation">
@@ -32,8 +38,11 @@ export function AppShell({
             </Link>
           ))}
         </nav>
-        <div className="environment-pill">
-          <span /> Standalone
+        <div className="shell-actions">
+          <div className="environment-pill">
+            <span /> Standalone
+          </div>
+          <ThemeToggle />
         </div>
       </header>
       <div className="page-shell">{children}</div>
