@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from openai import AsyncOpenAI
 
+from rci_agents.governance import trusted_numeric_literals
 from rci_agents.models import AgentRole, JsonObject, PromptTemplate, ProviderResponse
 
 
@@ -110,11 +111,7 @@ def _narrative_section_schema(section: JsonObject) -> JsonObject:
 
 def _governed_insight_text_schema(candidate: JsonObject) -> JsonObject:
     trusted_numbers = sorted(
-        {
-            numeric_literal
-            for field in ("title", "summary", "business_impact")
-            for numeric_literal in _NUMERIC_LITERAL.findall(str(candidate.get(field, "")))
-        },
+        trusted_numeric_literals(candidate),
         key=lambda value: (-len(value), value),
     )
     alternatives = [r"[^0-9]", _METRIC_PLACEHOLDER_PATTERN]

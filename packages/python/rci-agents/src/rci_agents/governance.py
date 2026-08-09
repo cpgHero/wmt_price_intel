@@ -20,6 +20,11 @@ _STORYLINE_PLACEHOLDER = re.compile(r"\{\{storyline:([A-Za-z0-9_.-]+)\|headline\
 _NUMERIC_LITERAL = re.compile(
     r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?"
 )
+_PERCENT_DESCRIPTOR = re.compile(
+    r"(?:pct|percent|percentage)\s*:\s*"
+    r"(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?",
+    flags=re.IGNORECASE,
+)
 _MACHINE_PROSE = re.compile(
     r"\b[a-z][a-z0-9]*_us(?:_[a-z0-9]+)*\b|"
     r"\b(?:lean pct|fat pct|weight lb|organic|grass fed|premium tier)\s*:",
@@ -77,6 +82,19 @@ class NarrativeQualityCritic:
                 raise AgentGovernanceError(
                     f"leadership prose exposes machine-oriented label {match.group(0)!r}"
                 )
+
+
+def trusted_numeric_literals(source: JsonObject) -> set[str]:
+    """Return numeric product descriptors explicitly present in governed source copy."""
+
+    trusted: set[str] = set()
+    for field in ("title", "summary", "business_impact"):
+        text = str(source.get(field, ""))
+        trusted.update(_NUMERIC_LITERAL.findall(text))
+        for match in _PERCENT_DESCRIPTOR.finditer(text):
+            integer, decimal = match.groups()
+            trusted.add(f"{integer}{f'.{decimal}' if decimal else ''}%")
+    return trusted
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -232,11 +250,7 @@ class GovernedOutputBuilder:
                 )
             seen.add(insight_id)
             metric_refs = {str(value) for value in source["metric_refs"]}
-            trusted_numbers = {
-                numeric_literal
-                for field in ("title", "summary", "business_impact")
-                for numeric_literal in _NUMERIC_LITERAL.findall(str(source.get(field, "")))
-            }
+            trusted_numbers = trusted_numeric_literals(source)
             title, title_claims = renderer.render(
                 str(raw.get("title", "")),
                 allowed_metric_refs=metric_refs,

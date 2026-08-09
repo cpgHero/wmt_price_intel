@@ -264,6 +264,37 @@ def test_insight_builder_carries_source_numeric_descriptors_into_governed_copy()
         )
 
 
+def test_insight_builder_humanizes_explicit_percent_descriptors_without_changing_digits() -> None:
+    builder = GovernedOutputBuilder(REPOSITORY_ROOT)
+    candidate = {
+        "id": "lean-ratio-segment",
+        "title": "Lean Pct: 80 / Fat Pct: 20",
+        "summary": "The source explicitly declares both fields as percentages.",
+        "severity": "high",
+        "business_impact": "Protect the governed product segment.",
+        "metric_refs": [],
+        "evidence_refs": [],
+        "confidence": "high",
+    }
+
+    result = builder.insight_result(
+        {
+            "insights": [
+                {
+                    "id": "lean-ratio-segment",
+                    "title": "The 80% lean / 20% fat segment needs attention",
+                    "summary": "Keep the governed segment on the merchant watchlist.",
+                    "business_impact": "Protect the governed product segment.",
+                }
+            ]
+        },
+        [candidate],
+        [],
+    )
+
+    assert result["insights"][0]["title"].startswith("The 80% lean / 20% fat segment")
+
+
 def test_storyline_placeholder_preserves_governed_numeric_product_descriptors() -> None:
     renderer = MetricCitationRenderer([])
 
