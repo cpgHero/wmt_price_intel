@@ -55,11 +55,46 @@ class AgentProvider(Protocol):
     ) -> ProviderResponse: ...
 
 
-def _refs() -> JsonObject:
+def _refs(allowed_values: list[str] | None = None) -> JsonObject:
+    item_schema: JsonObject = {"type": "string", "minLength": 1}
+    if allowed_values:
+        item_schema["enum"] = allowed_values
     return {
         "type": "array",
         "minItems": 1,
-        "items": {"type": "string", "minLength": 1},
+        "items": item_schema,
+    }
+
+
+def _narrative_section_schema(section: JsonObject) -> JsonObject:
+    section_id = str(section.get("id", "")).strip()
+    required_topics = [str(value) for value in section.get("required_topics", [])]
+    storyline_refs = [str(value) for value in section.get("storyline_refs", [])]
+    metric_refs = [str(value) for value in section.get("allowed_metric_refs", [])]
+    evidence_refs = [str(value) for value in section.get("allowed_evidence_refs", [])]
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "id",
+            "body_template",
+            "topic_refs",
+            "storyline_refs",
+            "metric_refs",
+            "evidence_refs",
+        ],
+        "properties": {
+            "id": {
+                "type": "string",
+                "minLength": 1,
+                **({"enum": [section_id]} if section_id else {}),
+            },
+            "body_template": {"type": "string", "minLength": 1},
+            "topic_refs": _refs(required_topics),
+            "storyline_refs": _refs(storyline_refs),
+            "metric_refs": _refs(metric_refs),
+            "evidence_refs": _refs(evidence_refs),
+        },
     }
 
 
@@ -96,10 +131,13 @@ def _result_schema(role: AgentRole, payload: JsonObject) -> JsonObject:
                 }
             },
         }
-    section_ids = [
-        str(row["id"])
+    requested_sections = [
+        row
         for row in payload.get("requested_sections", [])
         if isinstance(row, dict) and row.get("id")
+    ]
+    section_branches = [_narrative_section_schema(section) for section in requested_sections] or [
+        _narrative_section_schema({})
     ]
     return {
         "type": "object",
@@ -109,49 +147,7 @@ def _result_schema(role: AgentRole, payload: JsonObject) -> JsonObject:
             "sections": {
                 "type": "array",
                 "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": [
-                        "id",
-                        "body_template",
-                        "topic_refs",
-                        "storyline_refs",
-                        "metric_refs",
-                        "evidence_refs",
-                    ],
-                    "properties": {
-                        "id": {
-                            "type": "string",
-                            "minLength": 1,
-                            **({"enum": section_ids} if section_ids else {}),
-                        },
-                        "body_template": {"type": "string", "minLength": 1},
-                        "topic_refs": {
-                            "type": "array",
-                            "minItems": 1,
-                            "items": {
-                                "type": "string",
-                                "enum": [
-                                    "data_scope",
-                                    "footprint",
-                                    "exact_price",
-                                    "normalized_price",
-                                    "segment_drivers",
-                                    "segment_reversals",
-                                    "geography",
-                                    "fulfillment",
-                                    "brand_assortment",
-                                    "actions",
-                                    "caveats",
-                                ],
-                            },
-                        },
-                        "storyline_refs": _refs(),
-                        "metric_refs": _refs(),
-                        "evidence_refs": _refs(),
-                    },
-                },
+                "items": {"anyOf": section_branches},
             }
         },
     }

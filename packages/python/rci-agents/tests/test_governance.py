@@ -12,6 +12,7 @@ from rci_agents import (
     AgentGovernanceError,
     AnalysisBriefBuilder,
     GovernedAnalysisAssistant,
+    GovernedOutputBuilder,
     InMemoryAgentTaskRepository,
     MetricCitationRenderer,
     OpenAIResponsesProvider,
@@ -199,6 +200,71 @@ def test_metric_citations_reject_direct_numbers_and_unknown_metrics() -> None:
         renderer.render(
             "The rate is {{metric:win-rate|percent_1}}.",
             allowed_metric_refs={"another-rate"},
+        )
+
+
+def test_metric_citations_accept_only_source_backed_numeric_descriptors() -> None:
+    renderer = MetricCitationRenderer([])
+
+    body, claims = renderer.render(
+        "Keep the 80/20 segment on the merchant watchlist.",
+        allowed_metric_refs=set(),
+        trusted_numeric_literals={"80", "20"},
+    )
+
+    assert body == "Keep the 80/20 segment on the merchant watchlist."
+    assert claims == []
+    with pytest.raises(AgentGovernanceError, match=r"unsupported numeric literals.*85"):
+        renderer.render(
+            "Keep the 85/15 segment on the merchant watchlist.",
+            allowed_metric_refs=set(),
+            trusted_numeric_literals={"80", "20"},
+        )
+
+
+def test_insight_builder_carries_source_numeric_descriptors_into_governed_copy() -> None:
+    builder = GovernedOutputBuilder(REPOSITORY_ROOT)
+    candidate = {
+        "id": "lean-ratio-segment",
+        "title": "The 80/20 segment needs attention",
+        "summary": "The 80/20 segment is a governed product descriptor.",
+        "severity": "high",
+        "business_impact": "Protect the 80/20 segment.",
+        "metric_refs": [],
+        "evidence_refs": [],
+        "confidence": "high",
+    }
+
+    result = builder.insight_result(
+        {
+            "insights": [
+                {
+                    "id": "lean-ratio-segment",
+                    "title": "The 80/20 segment needs a focused response",
+                    "summary": "Keep the 80/20 segment on the merchant watchlist.",
+                    "business_impact": "Protect the 80/20 segment.",
+                }
+            ]
+        },
+        [candidate],
+        [],
+    )
+
+    assert result["insights"][0]["title"].startswith("The 80/20 segment")
+    with pytest.raises(AgentGovernanceError, match=r"unsupported numeric literals.*85"):
+        builder.insight_result(
+            {
+                "insights": [
+                    {
+                        "id": "lean-ratio-segment",
+                        "title": "The 85/15 segment needs a focused response",
+                        "summary": "Keep the cited segment on the merchant watchlist.",
+                        "business_impact": "Protect the cited segment.",
+                    }
+                ]
+            },
+            [candidate],
+            [],
         )
 
 
@@ -424,13 +490,28 @@ async def test_narrative_response_schema_uses_supported_keywords_and_known_secti
 
     await provider.generate(
         prompt,
-        {"analysis_id": "analysis-1", "requested_sections": [{"id": "executive_summary"}]},
+        {
+            "analysis_id": "analysis-1",
+            "requested_sections": [
+                {
+                    "id": "executive_summary",
+                    "required_topics": ["data_scope"],
+                    "storyline_refs": ["story.scope"],
+                    "allowed_metric_refs": ["source.total_rows"],
+                    "allowed_evidence_refs": ["evidence.source"],
+                }
+            ],
+        },
         model_id="explicit-test-model",
     )
 
     schema = endpoint.kwargs["text"]["format"]["schema"]
-    item_schema = schema["properties"]["sections"]["items"]
+    item_schema = schema["properties"]["sections"]["items"]["anyOf"][0]
     assert item_schema["properties"]["id"]["enum"] == ["executive_summary"]
+    assert item_schema["properties"]["topic_refs"]["items"]["enum"] == ["data_scope"]
+    assert item_schema["properties"]["storyline_refs"]["items"]["enum"] == ["story.scope"]
+    assert item_schema["properties"]["metric_refs"]["items"]["enum"] == ["source.total_rows"]
+    assert item_schema["properties"]["evidence_refs"]["items"]["enum"] == ["evidence.source"]
     assert "uniqueItems" not in json.dumps(schema)
 
 

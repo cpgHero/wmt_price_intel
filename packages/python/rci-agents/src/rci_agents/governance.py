@@ -17,7 +17,9 @@ _PLACEHOLDER = re.compile(
     r"(integer|decimal_1|decimal_2|percent_1|percent_2|currency_2)\}\}"
 )
 _STORYLINE_PLACEHOLDER = re.compile(r"\{\{storyline:([A-Za-z0-9_.-]+)\|headline\}\}")
-_NUMERIC_LITERAL = re.compile(r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?\d[\d,]*(?:\.\d+)?%?")
+_NUMERIC_LITERAL = re.compile(
+    r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?"
+)
 
 
 class AgentGovernanceError(ValueError):
@@ -84,14 +86,20 @@ class MetricCitationRenderer:
         template: str,
         *,
         allowed_metric_refs: set[str],
+        trusted_numeric_literals: set[str] | None = None,
         allowed_storyline_refs: set[str] | None = None,
         storylines: dict[str, JsonObject] | None = None,
     ) -> tuple[str, list[JsonObject]]:
+        trusted_numbers = trusted_numeric_literals or set()
         without_placeholders = _STORYLINE_PLACEHOLDER.sub(
             "",
             _PLACEHOLDER.sub("", template),
         )
-        unsupported = _NUMERIC_LITERAL.findall(without_placeholders)
+        unsupported = [
+            value
+            for value in _NUMERIC_LITERAL.findall(without_placeholders)
+            if value not in trusted_numbers
+        ]
         if unsupported:
             raise AgentGovernanceError(
                 f"model output contains unsupported numeric literals {unsupported}"
@@ -148,6 +156,8 @@ class MetricCitationRenderer:
             *trusted_storyline_numbers,
         ]
         for value in remaining:
+            if value in trusted_numbers:
+                continue
             if value not in claim_values:
                 raise AgentGovernanceError(f"unresolved numeric claim {value!r}")
             claim_values.remove(value)
@@ -207,14 +217,25 @@ class GovernedOutputBuilder:
                 )
             seen.add(insight_id)
             metric_refs = {str(value) for value in source["metric_refs"]}
+            trusted_numbers = {
+                numeric_literal
+                for field in ("title", "summary", "business_impact")
+                for numeric_literal in _NUMERIC_LITERAL.findall(str(source.get(field, "")))
+            }
             title, title_claims = renderer.render(
-                str(raw.get("title", "")), allowed_metric_refs=metric_refs
+                str(raw.get("title", "")),
+                allowed_metric_refs=metric_refs,
+                trusted_numeric_literals=trusted_numbers,
             )
             summary, summary_claims = renderer.render(
-                str(raw.get("summary", "")), allowed_metric_refs=metric_refs
+                str(raw.get("summary", "")),
+                allowed_metric_refs=metric_refs,
+                trusted_numeric_literals=trusted_numbers,
             )
             impact, impact_claims = renderer.render(
-                str(raw.get("business_impact", "")), allowed_metric_refs=metric_refs
+                str(raw.get("business_impact", "")),
+                allowed_metric_refs=metric_refs,
+                trusted_numeric_literals=trusted_numbers,
             )
             if not title or not summary or not impact:
                 raise AgentGovernanceError("AI insight text fields cannot be empty")
