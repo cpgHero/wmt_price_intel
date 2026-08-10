@@ -101,6 +101,8 @@ def test_pdp_fixtures_build_requests_and_normalize_to_valid_snapshots(
     document = snapshot_document(job, result, snapshot_id="snapshot-fixture")
 
     assert request.params["product_id"] == expected_id
+    if retailer_id == "amazon_us_same_day":
+        assert request.path == "/mc/amazon/pdp/zipcode/"
     assert normalized.retailer_product_id == expected_id
     assert normalized.category_path == expected_category
     validate_instance(

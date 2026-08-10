@@ -43,7 +43,7 @@
       "domain": "amazon.com",
       "endpoint_id": "41",
       "method": "GET",
-      "path": "/mc/amazon/pdp/zipcode",
+      "path": "/mc/amazon/pdp/zipcode/",
       "credits_per_successful_page": 2,
       "required_params": [],
       "supported_params": ["product_id", "url", "zipcode"]
