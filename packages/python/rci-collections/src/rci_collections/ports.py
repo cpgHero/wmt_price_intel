@@ -46,7 +46,16 @@ class CollectionRepository(LocationUniverseRepository, Protocol):
 
     async def get_run(self, run_id: str) -> RunRecord | None: ...
 
-    async def list_tasks(self, run_id: str, limit: int = 200) -> list[QueueTask]: ...
+    async def list_runs(self, limit: int = 50) -> list[RunRecord]: ...
+
+    async def list_tasks(
+        self,
+        run_id: str,
+        limit: int = 200,
+        *,
+        retailer_id: str | None = None,
+        status: str | None = None,
+    ) -> list[QueueTask]: ...
 
     async def usage(self, run_id: str) -> RunUsage | None: ...
 

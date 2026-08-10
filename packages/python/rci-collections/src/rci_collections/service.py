@@ -112,9 +112,24 @@ class CollectionService:
             raise CollectionNotFoundError(f"collection run {run_id!r} was not found")
         return run
 
-    async def list_tasks(self, run_id: str, limit: int = 200) -> list[QueueTask]:
+    async def list_runs(self, limit: int = 50) -> list[RunRecord]:
+        return await self.repository.list_runs(limit)
+
+    async def list_tasks(
+        self,
+        run_id: str,
+        limit: int = 200,
+        *,
+        retailer_id: str | None = None,
+        status: str | None = None,
+    ) -> list[QueueTask]:
         await self.get_run(run_id)
-        return await self.repository.list_tasks(run_id, limit)
+        return await self.repository.list_tasks(
+            run_id,
+            limit,
+            retailer_id=retailer_id,
+            status=status,
+        )
 
     async def usage(self, run_id: str) -> RunUsage:
         usage = await self.repository.usage(run_id)

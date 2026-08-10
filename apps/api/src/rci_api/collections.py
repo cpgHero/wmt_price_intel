@@ -300,6 +300,14 @@ async def get_run(run_id: str, service: CollectionServiceDependency) -> RunRecor
         raise _not_found(exc) from exc
 
 
+@router.get("/collection-runs", response_model=list[RunResponse], tags=["collections"])
+async def list_runs(
+    service: CollectionServiceDependency,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[RunRecord]:
+    return await service.list_runs(limit)
+
+
 @router.post("/collection-runs/{run_id}/cancel", response_model=RunResponse, tags=["collections"])
 async def cancel_run(run_id: str, service: CollectionServiceDependency) -> RunRecord:
     try:
@@ -330,9 +338,16 @@ async def list_tasks(
     run_id: str,
     service: CollectionServiceDependency,
     limit: int = Query(default=200, ge=1, le=2_000),
+    retailer_id: str | None = Query(default=None, min_length=1, max_length=100),
+    task_status: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
 ) -> list[QueueTask]:
     try:
-        return await service.list_tasks(run_id, limit)
+        return await service.list_tasks(
+            run_id,
+            limit,
+            retailer_id=retailer_id,
+            status=task_status,
+        )
     except CollectionNotFoundError as exc:
         raise _not_found(exc) from exc
 

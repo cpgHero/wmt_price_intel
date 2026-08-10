@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Breadcrumbs } from "@/app/components/breadcrumbs";
 import { EmptyState } from "@/app/components/empty-state";
-import { getApi, type AnalysisRecord, type RunMonitor } from "@/lib/api";
+import {
+  getApi,
+  type AnalysisRecord,
+  type CollectionDefinitionRecord,
+  type CollectionTask,
+  type RunMonitor,
+} from "@/lib/api";
+import { definitionForRun } from "@/lib/primary-app";
 import { displayDate, displayDuration, displayLabel } from "@/lib/presentation";
 
 import { RunActions } from "./run-actions";
@@ -16,14 +24,19 @@ export default async function RunMonitorPage({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
-  const [response, analysisResponse] = await Promise.all([
-    getApi<RunMonitor>(
-      `/api/v1/collection-runs/${encodeURIComponent(runId)}/monitor`,
-    ),
-    getApi<AnalysisRecord>(
-      `/api/v1/collection-runs/${encodeURIComponent(runId)}/analysis`,
-    ),
-  ]);
+  const [response, analysisResponse, definitionResponse, failureResponse] =
+    await Promise.all([
+      getApi<RunMonitor>(
+        `/api/v1/collection-runs/${encodeURIComponent(runId)}/monitor`,
+      ),
+      getApi<AnalysisRecord>(
+        `/api/v1/collection-runs/${encodeURIComponent(runId)}/analysis`,
+      ),
+      getApi<CollectionDefinitionRecord[]>("/api/v1/collection-definitions"),
+      getApi<CollectionTask[]>(
+        `/api/v1/collection-runs/${encodeURIComponent(runId)}/tasks?status=failed&limit=2000`,
+      ),
+    ]);
   if (response.status === 404) notFound();
   if (!response.data)
     return (
@@ -37,7 +50,10 @@ export default async function RunMonitorPage({
     );
   const monitor = response.data;
   const analysis = analysisResponse.data;
+  const definitions = definitionResponse.data ?? [];
+  const failedTasks = failureResponse.data ?? [];
   const { run, usage, provider_state: provider } = monitor;
+  const definition = definitionForRun(run, definitions);
   const terminal = [
     "succeeded",
     "completed_with_warnings",
@@ -47,16 +63,33 @@ export default async function RunMonitorPage({
   const coolingDown = provider?.paused_until
     ? new Date(provider.paused_until) > new Date()
     : false;
+  const finishedTasks =
+    usage.succeeded_tasks + usage.failed_tasks + usage.cancelled_tasks;
+  const totalTasks = finishedTasks + usage.pending_tasks + usage.running_tasks;
+  const progress =
+    totalTasks > 0 ? Math.round((finishedTasks / totalTasks) * 100) : 0;
+  const title = definition?.definition.name ?? "Collection run";
   return (
     <main>
       <RunAutoRefresh active={!terminal || (terminal && !analysis)} />
-      <header className="workspace-header">
+      <Breadcrumbs
+        items={[
+          { label: "Collections", href: "/collections" },
+          { label: title },
+        ]}
+      />
+      <header className="workspace-header run-monitor-header">
         <div>
-          <p className="eyebrow">Live collection monitor</p>
-          <h1>Run {run.id.slice(0, 8)}</h1>
+          <p className="eyebrow">Collection monitor</p>
+          <h1>{title}</h1>
           <p className="workspace-meta">
-            Created {displayDate(run.created_at)} · Definition{" "}
-            {run.definition_version_id}
+            {definition
+              ? `${displayLabel(definition.productPackId)} · ${definition.benchmarkRetailer} vs. ${definition.retailers.filter((retailer) => retailer !== definition.benchmarkRetailer).join(", ") || "configured competitors"}`
+              : "Stored collection definition"}
+          </p>
+          <p className="workspace-meta">
+            Started {displayDate(run.created_at)} ·{" "}
+            {displayLabel(run.trigger_type)} run
           </p>
         </div>
         <div className="workspace-status">
@@ -72,16 +105,29 @@ export default async function RunMonitorPage({
               className="button primary"
               href={`/analyses/${encodeURIComponent(analysis.analysis_id)}`}
             >
-              Open analysis
+              Open report
             </Link>
           )}
         </div>
       </header>
+
+      {!terminal ? (
+        <section className="run-progress" aria-label={`${progress}% complete`}>
+          <div>
+            <strong>Collection progress</strong>
+            <span>{progress}% complete</span>
+          </div>
+          <div className="run-progress-track">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </section>
+      ) : null}
+
       {coolingDown && (
         <div className="cooldown-banner">
-          <b>Shared 429 cooldown active</b>
+          <b>Provider cooldown active</b>
           <span>
-            All worker replicas are paused until{" "}
+            Collection workers are safely paused until{" "}
             {displayDate(provider!.paused_until!)}.
           </span>
         </div>
@@ -92,11 +138,12 @@ export default async function RunMonitorPage({
           data-status={run.availability_gate_status}
         >
           <b>
-            ALDI availability gate: {displayLabel(run.availability_gate_status)}
+            ALDI availability check:{" "}
+            {displayLabel(run.availability_gate_status)}
           </b>
           <span>
-            The gate runs before the remaining retailer tasks and stops the run
-            when its configured billable-404 threshold is exceeded.
+            This safeguard checks a small location sample before the remaining
+            billable ALDI work begins.
           </span>
         </div>
       )}
@@ -112,134 +159,192 @@ export default async function RunMonitorPage({
             </span>
           </div>
         )}
+
       <section className="metric-grid monitor-metrics">
         <div className="metric-card">
           <span>Successful pages</span>
           <strong>
-            {usage.actual_success_pages} / {usage.estimated_pages}
+            {usage.actual_success_pages.toLocaleString()} /{" "}
+            {usage.estimated_pages.toLocaleString()}
           </strong>
         </div>
         <div className="metric-card">
-          <span>Credits</span>
+          <span>Credits used</span>
           <strong>
-            {usage.actual_credits} / {usage.estimated_credits}
+            {usage.actual_credits.toLocaleString()} /{" "}
+            {usage.estimated_credits.toLocaleString()}
           </strong>
         </div>
         <div className="metric-card">
           <span>Retries</span>
-          <strong>{monitor.retry_attempts}</strong>
+          <strong>{monitor.retry_attempts.toLocaleString()}</strong>
         </div>
         <div className="metric-card">
           <span>Elapsed</span>
           <strong>{displayDuration(monitor.elapsed_seconds)}</strong>
         </div>
       </section>
-      <section className="workspace-section">
+
+      <section className="workspace-section retailer-progress-section">
         <header>
           <div>
-            <h2>Retailer progress</h2>
-            <p>Exact task status counts and billable provider activity.</p>
+            <span className="section-kicker">Retailer progress</span>
+            <h2>Collection status by retailer</h2>
+            <p>
+              Expand a retailer to review failures and the exact ZIP/store
+              context currently available for investigation.
+            </p>
           </div>
         </header>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Retailer</th>
-                <th>Pending</th>
-                <th>Running</th>
-                <th>Succeeded</th>
-                <th>Failed</th>
-                <th>Cancelled</th>
-                <th>Attempts</th>
-                <th>Retries</th>
-                <th>Credits</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monitor.retailers.map((row) => (
-                <tr key={row.retailer_id}>
-                  <td>
-                    <b>{displayLabel(row.retailer_id)}</b>
-                  </td>
-                  <td>{row.pending_tasks}</td>
-                  <td>{row.running_tasks}</td>
-                  <td>{row.succeeded_tasks}</td>
-                  <td>{row.failed_tasks}</td>
-                  <td>{row.cancelled_tasks}</td>
-                  <td>{row.attempts}</td>
-                  <td>{row.retries}</td>
-                  <td>{row.billable_credits}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="retailer-progress-list">
+          {monitor.retailers.map((row) => {
+            const retailerFailures = failedTasks.filter(
+              (task) => task.retailer_id === row.retailer_id,
+            );
+            const retailerTotal =
+              row.pending_tasks +
+              row.running_tasks +
+              row.succeeded_tasks +
+              row.failed_tasks +
+              row.cancelled_tasks;
+            return (
+              <details key={row.retailer_id} className="retailer-progress-card">
+                <summary>
+                  <span>
+                    <strong>{displayLabel(row.retailer_id)}</strong>
+                    <small>
+                      {row.succeeded_tasks.toLocaleString()} of{" "}
+                      {retailerTotal.toLocaleString()} tasks succeeded
+                    </small>
+                  </span>
+                  <dl>
+                    <div>
+                      <dt>Failed</dt>
+                      <dd>{row.failed_tasks.toLocaleString()}</dd>
+                    </div>
+                    <div>
+                      <dt>Retries</dt>
+                      <dd>{row.retries.toLocaleString()}</dd>
+                    </div>
+                    <div>
+                      <dt>Credits</dt>
+                      <dd>{row.billable_credits.toLocaleString()}</dd>
+                    </div>
+                  </dl>
+                </summary>
+                {retailerFailures.length > 0 ? (
+                  <div className="task-failure-list">
+                    {retailerFailures.slice(0, 100).map((task) => (
+                      <article key={task.id}>
+                        <div>
+                          <strong>ZIP {task.zipcode}</strong>
+                          <span>
+                            {task.store_number
+                              ? `Store ${task.store_number}`
+                              : "ZIP-level request"}{" "}
+                            · Page {task.page_number}
+                          </span>
+                        </div>
+                        <div>
+                          <span>
+                            {displayLabel(
+                              task.failure_class ?? "request failed",
+                            )}
+                          </span>
+                          <small>
+                            {task.http_status
+                              ? `HTTP ${task.http_status}`
+                              : "No HTTP response"}{" "}
+                            · {task.attempt_count}/{task.max_attempts} attempts
+                          </small>
+                        </div>
+                      </article>
+                    ))}
+                    {retailerFailures.length > 100 ? (
+                      <p>
+                        Showing 100 of{" "}
+                        {retailerFailures.length.toLocaleString()} failed tasks.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="empty-inline success">
+                    No failed tasks are recorded for this retailer.
+                  </div>
+                )}
+              </details>
+            );
+          })}
         </div>
       </section>
-      <div className="two-column">
-        <section className="workspace-section">
-          <header>
-            <div>
-              <h2>Global provider budget</h2>
-              <p>Shared across every worker replica.</p>
-            </div>
-          </header>
-          {provider ? (
-            <dl className="object-grid">
-              <div>
-                <dt>Provider</dt>
-                <dd>{displayLabel(provider.provider)}</dd>
-              </div>
-              <div>
-                <dt>Current second</dt>
-                <dd>
-                  {provider.second_count} / {monitor.configured_global_rps}
-                </dd>
-              </div>
-              <div>
-                <dt>Current minute</dt>
-                <dd>
-                  {provider.minute_count} / {monitor.configured_global_rpm}
-                </dd>
-              </div>
-              <div>
-                <dt>Last 429</dt>
-                <dd>
-                  {provider.last_429_at
-                    ? displayDate(provider.last_429_at)
-                    : "None"}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <div className="empty-inline">
-              No provider permits have been issued yet.
-            </div>
-          )}
-        </section>
-        <section className="workspace-section">
-          <header>
-            <div>
-              <h2>Failure classes</h2>
-              <p>Terminal and retryable task outcomes.</p>
-            </div>
-          </header>
-          {Object.keys(monitor.failure_classes).length ? (
-            <dl className="object-grid">
-              {Object.entries(monitor.failure_classes).map(([key, count]) => (
-                <div key={key}>
-                  <dt>{displayLabel(key)}</dt>
-                  <dd>{count}</dd>
+
+      <details className="technical-diagnostics">
+        <summary>Technical diagnostics and immutable identifiers</summary>
+        <div className="two-column">
+          <section>
+            <h2>Provider safeguards</h2>
+            {provider ? (
+              <dl className="object-grid">
+                <div>
+                  <dt>Provider</dt>
+                  <dd>{displayLabel(provider.provider)}</dd>
                 </div>
-              ))}
-            </dl>
-          ) : (
-            <div className="empty-inline success">
-              No task failures recorded.
-            </div>
-          )}
-        </section>
-      </div>
+                <div>
+                  <dt>Current second</dt>
+                  <dd>
+                    {provider.second_count} / {monitor.configured_global_rps}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Current minute</dt>
+                  <dd>
+                    {provider.minute_count} / {monitor.configured_global_rpm}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Last 429</dt>
+                  <dd>
+                    {provider.last_429_at
+                      ? displayDate(provider.last_429_at)
+                      : "None"}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p>No provider permits have been issued yet.</p>
+            )}
+          </section>
+          <section>
+            <h2>Failure classes</h2>
+            {Object.keys(monitor.failure_classes).length ? (
+              <dl className="object-grid">
+                {Object.entries(monitor.failure_classes).map(([key, count]) => (
+                  <div key={key}>
+                    <dt>{displayLabel(key)}</dt>
+                    <dd>{count}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p>No task failures recorded.</p>
+            )}
+          </section>
+        </div>
+        <dl className="identifier-grid">
+          <div>
+            <dt>Collection run ID</dt>
+            <dd>
+              <code>{run.id}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>Definition version ID</dt>
+            <dd>
+              <code>{run.definition_version_id}</code>
+            </dd>
+          </div>
+        </dl>
+      </details>
     </main>
   );
 }

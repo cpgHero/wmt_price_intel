@@ -21,7 +21,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm build && PORT=${port} node .next/standalone/apps/web/server.js`,
     url: `http://127.0.0.1:${port}/health`,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
     timeout: 120_000,
   },
 });

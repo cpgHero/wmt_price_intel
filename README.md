@@ -84,3 +84,8 @@ governance, and the implemented report-cohesion contract that separates comparis
 relationships, parity, readiness, and the insight-to-Match-Review workflow. See
 `docs/29_PHASE_9_9_1_MULTI_RETAILER_REPORTING.md` through
 `docs/32_PHASE_9_9_3_REPORT_COHESION_AND_MATCH_WORKFLOW.md`.
+
+Primary application navigation, operational dashboard, collection history,
+report discovery, schedules and alerts, and the decision-readiness quality
+queue are governed by `docs/33_PRIMARY_APPLICATION_UX_COHESION.md`. This phase
+does not change publication or export renderers.

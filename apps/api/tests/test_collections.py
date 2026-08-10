@@ -96,9 +96,20 @@ async def test_collection_definition_run_and_usage_apis() -> None:
         assert created.status_code == 201
         run_id = created.json()["id"]
 
+        runs = await client.get("/api/v1/collection-runs?limit=10")
+        assert runs.status_code == 200
+        assert [item["id"] for item in runs.json()] == [run_id]
+
         tasks = await client.get(f"/api/v1/collection-runs/{run_id}/tasks")
         assert len(tasks.json()) == 2
         assert all(item["status"] == "pending" for item in tasks.json())
+
+        filtered_tasks = await client.get(
+            f"/api/v1/collection-runs/{run_id}/tasks",
+            params={"retailer_id": "walmart_us", "status": "failed"},
+        )
+        assert filtered_tasks.status_code == 200
+        assert filtered_tasks.json() == []
 
         usage = await client.get(f"/api/v1/collection-runs/{run_id}/usage")
         assert usage.json()["estimated_pages"] == 2

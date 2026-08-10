@@ -227,9 +227,30 @@ class InMemoryCollectionRepository:
         async with self._lock:
             return self._runs.get(run_id)
 
-    async def list_tasks(self, run_id: str, limit: int = 200) -> list[QueueTask]:
+    async def list_runs(self, limit: int = 50) -> list[RunRecord]:
         async with self._lock:
-            tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
+            return sorted(
+                self._runs.values(),
+                key=lambda item: (item.created_at, item.id),
+                reverse=True,
+            )[:limit]
+
+    async def list_tasks(
+        self,
+        run_id: str,
+        limit: int = 200,
+        *,
+        retailer_id: str | None = None,
+        status: str | None = None,
+    ) -> list[QueueTask]:
+        async with self._lock:
+            tasks = [
+                task
+                for task in self._tasks.values()
+                if task.collection_run_id == run_id
+                and (retailer_id is None or task.retailer_id == retailer_id)
+                and (status is None or task.status == status)
+            ]
             return sorted(tasks, key=lambda item: (item.created_at, item.id))[:limit]
 
     async def usage(self, run_id: str) -> RunUsage | None:

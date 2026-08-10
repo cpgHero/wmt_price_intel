@@ -543,7 +543,30 @@ class PostgresCollectionRepository:
             )
             return _run(row) if row is not None else None
 
-    async def list_tasks(self, run_id: str, limit: int = 200) -> list[QueueTask]:
+    async def list_runs(self, limit: int = 50) -> list[RunRecord]:
+        async with self._engine.connect() as connection:
+            rows = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT * FROM collection_run
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings()
+            return [_run(row) for row in rows]
+
+    async def list_tasks(
+        self,
+        run_id: str,
+        limit: int = 200,
+        *,
+        retailer_id: str | None = None,
+        status: str | None = None,
+    ) -> list[QueueTask]:
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
@@ -551,10 +574,17 @@ class PostgresCollectionRepository:
                         """
                         SELECT * FROM collection_task
                         WHERE collection_run_id::text = :run_id
+                          AND (:retailer_id IS NULL OR retailer_id = :retailer_id)
+                          AND (:status IS NULL OR status = :status)
                         ORDER BY created_at, id LIMIT :limit
                         """
                     ),
-                    {"run_id": run_id, "limit": limit},
+                    {
+                        "run_id": run_id,
+                        "limit": limit,
+                        "retailer_id": retailer_id,
+                        "status": status,
+                    },
                 )
             ).mappings()
             return [_task(row) for row in rows]

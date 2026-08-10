@@ -308,6 +308,41 @@ export interface RunRecord {
   availability_gate_config: JsonObject;
 }
 
+export interface CollectionDefinitionRecord {
+  id: string;
+  stable_key: string;
+  name: string;
+  active: boolean;
+  version_id: string;
+  version: number;
+  checksum: string;
+  config: JsonObject;
+  created_at: string;
+}
+
+export interface CollectionTask {
+  id: string;
+  collection_run_id: string;
+  retailer_id: string;
+  retailer_location_id: string | null;
+  adapter_id: string;
+  location_scope_key: string;
+  zipcode: string;
+  store_number: string | null;
+  page_number: number;
+  max_pages: number;
+  status: string;
+  attempt_count: number;
+  max_attempts: number;
+  locked_by: string | null;
+  lease_expires_at: string | null;
+  http_status: number | null;
+  result_count: number | null;
+  failure_class: string | null;
+  billable_credits: number;
+  raw_artifact_id: string | null;
+}
+
 export interface RetailerEstimate {
   retailer_id: string;
   location_units: number;

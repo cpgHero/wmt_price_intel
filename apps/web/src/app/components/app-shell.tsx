@@ -1,14 +1,7 @@
 import Link from "next/link";
 
+import { PrimaryNavigation } from "./primary-navigation";
 import { ThemeToggle } from "./theme-toggle";
-
-const navigation = [
-  ["Dashboard", "/"],
-  ["Collections", "/collections"],
-  ["Reports", "/analyses"],
-  ["Automation", "/automation"],
-  ["Data Quality", "/data-quality"],
-] as const;
 
 export function AppShell({
   children,
@@ -31,13 +24,7 @@ export function AppShell({
             <small>Retail Competitive Intelligence</small>
           </span>
         </Link>
-        <nav aria-label="Primary navigation">
-          {navigation.map(([label, href]) => (
-            <Link href={href} key={href}>
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <PrimaryNavigation />
         <div className="shell-actions">
           <div className="environment-pill">
             <span /> Standalone

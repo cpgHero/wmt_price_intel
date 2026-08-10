@@ -5,9 +5,10 @@ test("serves the application shell, workflow routes, and health route", async ({
 }) => {
   const home = await request.get("/");
   expect(home.ok()).toBe(true);
-  expect(await home.text()).toContain(
-    "Know the shelf before the market moves.",
-  );
+  const homeHtml = await home.text();
+  expect(homeHtml).toContain("Your competitive intelligence workspace.");
+  expect(homeHtml).toContain("Schedules &amp; Alerts");
+  expect(homeHtml).toContain("Data Quality");
 
   const collections = await request.get("/collections");
   expect(collections.ok()).toBe(true);
@@ -17,7 +18,15 @@ test("serves the application shell, workflow routes, and health route", async ({
 
   const automation = await request.get("/automation");
   expect(automation.ok()).toBe(true);
-  expect(await automation.text()).toContain("Scheduled intelligence");
+  expect(await automation.text()).toContain("Schedules &amp; Alerts");
+
+  const reports = await request.get("/analyses");
+  expect(reports.ok()).toBe(true);
+  expect(await reports.text()).toContain("Competitive intelligence library");
+
+  const quality = await request.get("/data-quality");
+  expect(quality.ok()).toBe(true);
+  expect(await quality.text()).toContain("Decision readiness");
 
   const response = await request.get("/health");
   expect(response.ok()).toBe(true);

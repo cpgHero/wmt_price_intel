@@ -1,185 +1,351 @@
-import { DataTable } from "@/app/components/data-table";
+import Link from "next/link";
+
 import {
   getApi,
   type AlertDefinitionRecord,
   type AlertEventRecord,
+  type CollectionDefinitionRecord,
   type EmailDeliveryRecord,
-  type JsonObject,
   type ScheduleRecord,
 } from "@/lib/api";
+import {
+  describeAlertCondition,
+  isInternalAcceptanceRecord,
+} from "@/lib/primary-app";
 import { asObject, displayDate, displayLabel } from "@/lib/presentation";
 
 export const dynamic = "force-dynamic";
 
-function conditionSummary(alert: AlertDefinitionRecord): string {
-  const condition = asObject(alert.config.condition);
-  const change = condition.change_mode
-    ? ` (${displayLabel(String(condition.change_mode))})`
-    : "";
-  return `${String(condition.operator ?? "unknown")} ${String(condition.threshold ?? "—")}${change}`;
+function cadence(schedule: ScheduleRecord): string {
+  const [minute, hour, day, month, weekday] =
+    schedule.cron_expression.split(" ");
+  if ([minute, hour, day, month, weekday].every((value) => value === "*")) {
+    return "Every minute";
+  }
+  if (
+    minute === "0" &&
+    hour &&
+    day === "*" &&
+    month === "*" &&
+    weekday === "*"
+  ) {
+    const numericHour = Number(hour);
+    if (
+      Number.isInteger(numericHour) &&
+      numericHour >= 0 &&
+      numericHour <= 23
+    ) {
+      const period = numericHour >= 12 ? "PM" : "AM";
+      const shownHour = numericHour % 12 || 12;
+      return `Daily at ${shownHour}:00 ${period}`;
+    }
+  }
+  return "Custom schedule";
+}
+
+function alertScope(alert: AlertDefinitionRecord): string {
+  const scope = asObject(alert.config.scope);
+  const packs = Array.isArray(scope.product_pack_ids)
+    ? scope.product_pack_ids.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  return packs.length > 0
+    ? packs.map(displayLabel).join(", ")
+    : "Configured reports";
 }
 
 export default async function AutomationPage() {
-  const [scheduleResponse, alertResponse, eventResponse, deliveryResponse] =
-    await Promise.all([
-      getApi<ScheduleRecord[]>("/api/v1/collection-schedules"),
-      getApi<AlertDefinitionRecord[]>("/api/v1/alert-definitions"),
-      getApi<AlertEventRecord[]>("/api/v1/alert-events?limit=50"),
-      getApi<EmailDeliveryRecord[]>("/api/v1/email-deliveries?limit=50"),
-    ]);
-  const schedules = scheduleResponse.data ?? [];
-  const alerts = alertResponse.data ?? [];
-  const events = eventResponse.data ?? [];
-  const deliveries = deliveryResponse.data ?? [];
+  const [
+    scheduleResponse,
+    alertResponse,
+    eventResponse,
+    deliveryResponse,
+    definitionResponse,
+  ] = await Promise.all([
+    getApi<ScheduleRecord[]>("/api/v1/collection-schedules"),
+    getApi<AlertDefinitionRecord[]>("/api/v1/alert-definitions"),
+    getApi<AlertEventRecord[]>("/api/v1/alert-events?limit=100"),
+    getApi<EmailDeliveryRecord[]>("/api/v1/email-deliveries?limit=100"),
+    getApi<CollectionDefinitionRecord[]>("/api/v1/collection-definitions"),
+  ]);
+  const allSchedules = scheduleResponse.data ?? [];
+  const allAlerts = alertResponse.data ?? [];
+  const allEvents = eventResponse.data ?? [];
+  const allDeliveries = deliveryResponse.data ?? [];
+  const definitions = definitionResponse.data ?? [];
+  const schedules = allSchedules.filter(
+    (schedule) => !isInternalAcceptanceRecord(schedule.definition_key),
+  );
+  const alerts = allAlerts.filter(
+    (alert) =>
+      !isInternalAcceptanceRecord(alert.stable_key) &&
+      !isInternalAcceptanceRecord(alert.name),
+  );
+  const events = allEvents.filter(
+    (event) => !isInternalAcceptanceRecord(event.alert_key),
+  );
+  const deliveries = allDeliveries.filter(
+    (delivery) =>
+      !isInternalAcceptanceRecord(delivery.analysis_id) &&
+      !isInternalAcceptanceRecord(delivery.subject),
+  );
+  const hiddenRecords =
+    allSchedules.length -
+    schedules.length +
+    (allAlerts.length - alerts.length) +
+    (allEvents.length - events.length) +
+    (allDeliveries.length - deliveries.length);
+  const definitionNames = new Map(
+    definitions.map((definition) => [definition.stable_key, definition.name]),
+  );
   const error =
     scheduleResponse.error ??
     alertResponse.error ??
     eventResponse.error ??
-    deliveryResponse.error;
-
-  const scheduleRows: JsonObject[] = schedules.map((schedule) => ({
-    definition: schedule.definition_key,
-    cadence: schedule.cron_expression,
-    timezone: schedule.timezone,
-    enabled: schedule.enabled,
-    next_run: displayDate(schedule.next_run_at),
-    last_run_id: schedule.last_collection_run_id,
-    last_error: schedule.last_error,
-  }));
-  const alertRows: JsonObject[] = alerts.map((alert) => ({
-    alert: alert.name,
-    stable_key: alert.stable_key,
-    version: alert.version,
-    active: alert.active,
-    condition: conditionSummary(alert),
-    published: displayDate(alert.created_at),
-  }));
-  const eventRows: JsonObject[] = events.map((event) => ({
-    alert: event.alert_key,
-    analysis: event.analysis_id,
-    baseline: event.baseline_analysis_id,
-    status: event.status,
-    current: event.current_value,
-    baseline_value: event.baseline_value,
-    change: event.change_value,
-    evidence: event.evidence,
-    evaluated: displayDate(event.created_at),
-  }));
-  const deliveryRows: JsonObject[] = deliveries.map((delivery) => ({
-    type: delivery.delivery_type,
-    analysis: delivery.analysis_id,
-    recipients: delivery.recipients,
-    subject: delivery.subject,
-    status: delivery.status,
-    attempts: `${delivery.attempt_count}/${delivery.max_attempts}`,
-    provider_message_id: delivery.provider_message_id,
-    evidence: delivery.evidence,
-    last_error: delivery.last_error,
-    sent: delivery.sent_at ? displayDate(delivery.sent_at) : null,
-  }));
+    deliveryResponse.error ??
+    definitionResponse.error;
 
   return (
-    <main className="analysis-page">
+    <main className="automation-page">
       <header className="page-header compact">
         <div>
           <p className="eyebrow">Scheduled intelligence</p>
-          <h1>Automation</h1>
+          <h1>Schedules &amp; Alerts</h1>
         </div>
-        <p>
-          Durable schedules, versioned alert rules, evidence-backed events, and
-          retryable email delivery—all coordinated through Postgres.
-        </p>
+        <div className="page-header-actions">
+          <p>
+            See when intelligence will refresh, which conditions are being
+            watched, and whether scheduled delivery is healthy.
+          </p>
+          <Link className="button secondary" href="/collections">
+            Open collections
+          </Link>
+        </div>
       </header>
 
       {error ? <p className="empty-inline">{error}</p> : null}
 
-      <section className="metric-grid automation-metrics">
-        <div className="metric-card">
-          <span>Active schedules</span>
-          <strong>
-            {schedules.filter((schedule) => schedule.enabled).length}
-          </strong>
-        </div>
-        <div className="metric-card">
-          <span>Active alerts</span>
-          <strong>{alerts.filter((alert) => alert.active).length}</strong>
-        </div>
-        <div className="metric-card">
-          <span>Triggered events</span>
-          <strong>
-            {events.filter((event) => event.status === "triggered").length}
-          </strong>
-        </div>
-        <div className="metric-card">
-          <span>Pending deliveries</span>
-          <strong>
+      <section className="automation-summary" aria-label="Automation summary">
+        <span>
+          <b>{schedules.filter((schedule) => schedule.enabled).length}</b>{" "}
+          active schedules
+        </span>
+        <span>
+          <b>{alerts.filter((alert) => alert.active).length}</b> active alerts
+        </span>
+        <span>
+          <b>{events.filter((event) => event.status === "triggered").length}</b>{" "}
+          triggered events
+        </span>
+        <span>
+          <b>
             {
               deliveries.filter((delivery) => delivery.status === "pending")
                 .length
             }
-          </strong>
-        </div>
+          </b>{" "}
+          pending deliveries
+        </span>
       </section>
 
-      <section className="workspace-section">
+      <section className="workspace-section automation-workspace-section">
         <header>
           <div>
-            <h2>Collection schedules</h2>
-            <p>Cron definitions and their next idempotent scheduling slot.</p>
-          </div>
-        </header>
-        <DataTable
-          rows={scheduleRows}
-          emptyMessage="No scheduled collections are active."
-        />
-      </section>
-
-      <section className="workspace-section">
-        <header>
-          <div>
-            <h2>Alert definitions</h2>
+            <span className="section-kicker">Collection schedules</span>
+            <h2>Upcoming intelligence refreshes</h2>
             <p>
-              Versioned rules evaluated only against validated AnalysisResult
-              metrics.
+              Each schedule reuses a versioned collection definition and its
+              stored budget safeguards.
             </p>
           </div>
         </header>
-        <DataTable
-          rows={alertRows}
-          emptyMessage="No alert definitions have been published."
-        />
+        {schedules.length === 0 ? (
+          <div className="empty-state-inline-action">
+            <div>
+              <strong>No user-facing schedules are active</strong>
+              <p>
+                Scheduled definitions will appear here with their next run,
+                timezone, and latest outcome.
+              </p>
+            </div>
+            <Link className="button secondary" href="/collections">
+              Review definitions
+            </Link>
+          </div>
+        ) : (
+          <div className="automation-card-grid">
+            {schedules.map((schedule) => (
+              <article className="automation-card" key={schedule.id}>
+                <header>
+                  <span
+                    className={`status-badge ${schedule.enabled ? "succeeded" : "cancelled"}`}
+                  >
+                    {schedule.enabled ? "Active" : "Paused"}
+                  </span>
+                  <small>{cadence(schedule)}</small>
+                </header>
+                <h3>
+                  {definitionNames.get(schedule.definition_key) ??
+                    displayLabel(schedule.definition_key)}
+                </h3>
+                <p>
+                  Next run {displayDate(schedule.next_run_at)} ·{" "}
+                  {schedule.timezone}
+                </p>
+                {schedule.last_error ? (
+                  <div className="inline-warning">
+                    Last scheduling error: {schedule.last_error}
+                  </div>
+                ) : null}
+                <footer>
+                  {schedule.last_collection_run_id ? (
+                    <Link
+                      href={`/collections/runs/${schedule.last_collection_run_id}`}
+                    >
+                      Open latest run →
+                    </Link>
+                  ) : (
+                    <span>No run has been created yet.</span>
+                  )}
+                </footer>
+                <details className="audit-disclosure">
+                  <summary>Technical schedule</summary>
+                  <code>{schedule.cron_expression}</code>
+                  <span>{schedule.definition_key}</span>
+                </details>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
-      <section className="workspace-section">
+      <section className="workspace-section automation-workspace-section">
         <header>
           <div>
-            <h2>Alert events</h2>
+            <span className="section-kicker">Alert rules</span>
+            <h2>Conditions being watched</h2>
             <p>
-              Current, baseline, change, and immutable JSON evidence references.
+              Alerts evaluate stored deterministic metrics and never change a
+              price, match, or report automatically.
             </p>
           </div>
         </header>
-        <DataTable
-          rows={eventRows}
-          emptyMessage="No alert evaluations have been recorded."
-        />
+        {alerts.length === 0 ? (
+          <div className="empty-inline">
+            No user-facing alert rules have been published.
+          </div>
+        ) : (
+          <div className="automation-card-grid">
+            {alerts.map((alert) => (
+              <article className="automation-card" key={alert.id}>
+                <header>
+                  <span
+                    className={`status-badge ${alert.active ? "succeeded" : "cancelled"}`}
+                  >
+                    {alert.active ? "Active" : "Inactive"}
+                  </span>
+                  <small>Version {alert.version}</small>
+                </header>
+                <h3>{alert.name}</h3>
+                <p>{describeAlertCondition(alert)}</p>
+                <dl>
+                  <div>
+                    <dt>Scope</dt>
+                    <dd>{alertScope(alert)}</dd>
+                  </div>
+                  <div>
+                    <dt>Published</dt>
+                    <dd>{displayDate(alert.created_at)}</dd>
+                  </div>
+                </dl>
+                <details className="audit-disclosure">
+                  <summary>Audit details</summary>
+                  <code>{alert.stable_key}</code>
+                  <span>Checksum {alert.checksum.slice(0, 16)}…</span>
+                </details>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
-      <section className="workspace-section">
-        <header>
-          <div>
-            <h2>Email delivery</h2>
-            <p>
-              Leased, idempotent delivery attempts with evidence and retry
-              state.
-            </p>
+      <div className="dashboard-grid dashboard-operations-grid">
+        <section className="dashboard-panel compact-panel">
+          <header>
+            <div>
+              <span className="section-kicker">Alert activity</span>
+              <h2>Recent evaluations</h2>
+            </div>
+          </header>
+          <div className="compact-list">
+            {events.slice(0, 10).map((event) => (
+              <Link
+                href={`/analyses/${encodeURIComponent(event.analysis_id)}`}
+                key={event.id}
+              >
+                <div>
+                  <strong>{displayLabel(event.alert_key)}</strong>
+                  <small>
+                    {displayDate(event.created_at)} · Current value{" "}
+                    {String(event.current_value ?? "—")}
+                  </small>
+                </div>
+                <span
+                  className={`status-badge ${event.status === "triggered" ? "running" : "succeeded"}`}
+                >
+                  {displayLabel(event.status)}
+                </span>
+              </Link>
+            ))}
+            {events.length === 0 ? (
+              <p>No alert activity is recorded yet.</p>
+            ) : null}
           </div>
-        </header>
-        <DataTable
-          rows={deliveryRows}
-          emptyMessage="No email deliveries have been queued."
-        />
-      </section>
+        </section>
+
+        <section className="dashboard-panel compact-panel">
+          <header>
+            <div>
+              <span className="section-kicker">Delivery health</span>
+              <h2>Recent report and alert delivery</h2>
+            </div>
+          </header>
+          <div className="compact-list">
+            {deliveries.slice(0, 10).map((delivery) => (
+              <article key={delivery.id}>
+                <div>
+                  <strong>{delivery.subject}</strong>
+                  <small>
+                    {delivery.recipients.length.toLocaleString()} recipient
+                    {delivery.recipients.length === 1 ? "" : "s"} ·{" "}
+                    {delivery.sent_at
+                      ? displayDate(delivery.sent_at)
+                      : displayDate(delivery.created_at)}
+                  </small>
+                </div>
+                <span className={`status-badge ${delivery.status}`}>
+                  {displayLabel(delivery.status)}
+                </span>
+              </article>
+            ))}
+            {deliveries.length === 0 ? (
+              <p>No user-facing deliveries are recorded yet.</p>
+            ) : null}
+          </div>
+        </section>
+      </div>
+
+      {hiddenRecords > 0 ? (
+        <details className="technical-diagnostics internal-records-note">
+          <summary>Internal acceptance records</summary>
+          <p>
+            {hiddenRecords.toLocaleString()} Phase 09 acceptance record
+            {hiddenRecords === 1 ? " is" : "s are"} retained for audit but
+            hidden from the business workspace.
+          </p>
+        </details>
+      ) : null}
     </main>
   );
 }
