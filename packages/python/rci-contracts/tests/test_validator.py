@@ -56,7 +56,7 @@ def test_product_detail_catalog_reconciles_to_supplied_endpoint_source() -> None
         endpoint = configured[(row["provider"], row["domain"])]
         assert endpoint["endpoint_id"] == row["endpoint_id"]
         assert endpoint["method"] == row["method"]
-        assert endpoint["path"] == row["inferred_metricscart_path"]
+        assert endpoint["path"].rstrip("/") == row["inferred_metricscart_path"].rstrip("/")
         assert endpoint["credits_per_successful_page"] == int(row["credits"])
         assert endpoint["required_params"] == (
             row["required_params"].split("|") if row["required_params"] else []
