@@ -225,6 +225,18 @@ export interface NarrativeSection {
   id: string;
   heading: string;
   body: string;
+  subtitle?: string;
+  /**
+   * @maxItems 5
+   */
+  bullets?:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string];
+  implication?: string;
   /**
    * @minItems 1
    */
@@ -260,6 +272,7 @@ export interface NarrativeSection {
    * @minItems 1
    */
   storyline_refs?: [string, ...string[]];
+  product_refs?: string[];
   metric_refs: NonemptyRefs;
   evidence_refs: NonemptyRefs;
 }

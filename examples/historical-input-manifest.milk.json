@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0.0",
+  "stable_key": "fresh-fluid-milk-2026-08-07-full-location",
+  "name": "Fresh Fluid Milk — August 7, 2026 full-location replay",
+  "captured_at": "2026-08-07T01:26:30Z",
+  "product_pack": {
+    "id": "fresh_fluid_milk",
+    "version": "1.1.0"
+  },
+  "analysis_config": {
+    "id": "historical-fresh-fluid-milk-2026-08-07",
+    "name": "Historical Fresh Fluid Milk — August 7, 2026",
+    "version": "1.0.0",
+    "enabled": true,
+    "benchmark_retailer": "walmart_us",
+    "product_pack": {
+      "id": "fresh_fluid_milk",
+      "version": "1.1.0"
+    },
+    "retailers": [
+      { "retailer_id": "walmart_us", "enabled": true },
+      { "retailer_id": "aldi_us", "enabled": true },
+      { "retailer_id": "amazon_us_same_day", "enabled": true }
+    ],
+    "analysis": {
+      "comparison_profiles": ["same_brand_exact", "private_label", "all_brand"],
+      "enable_ai_fallback": false,
+      "enable_proximity_validation": false
+    },
+    "delivery": {
+      "web_report": true,
+      "excel": true,
+      "leadership_email": true,
+      "audit_package": true
+    }
+  },
+  "artifacts": [
+    {
+      "ordinal": 0,
+      "retailer_id": "walmart_us",
+      "adapter_id": "historical_metricscart_search_monitor_csv",
+      "source_name": "Milk___Walmart_All_Stores_20260807_012630.csv",
+      "source_format": "metricscart_search_monitor_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "5071cfe8d77dcd659491be02f88531605f8757503aad0edb83e39f70b41e1602",
+      "expected_rows": 240779
+    },
+    {
+      "ordinal": 1,
+      "retailer_id": "aldi_us",
+      "adapter_id": "historical_metricscart_search_monitor_csv",
+      "source_name": "Milk___Aldi_All_Stores_20260807_012605.csv",
+      "source_format": "metricscart_search_monitor_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "cd8c30de591eee1d83a2007eaeb72a5aa188ab084280a71e63f1962333914a7b",
+      "expected_rows": 41321
+    },
+    {
+      "ordinal": 2,
+      "retailer_id": "amazon_us_same_day",
+      "adapter_id": "historical_metricscart_consolidated_serp_csv",
+      "source_name": "milk_amazon.csv",
+      "source_format": "metricscart_consolidated_serp_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "baef860b59cf87d6ebe6d335e3165fa2439211bcad341008dbd1a612d7d143cb",
+      "expected_rows": 66880
+    }
+  ],
+  "metadata": {
+    "source_rows_total": 348980,
+    "purpose": "Full-source fresh fluid milk golden replay"
+  }
+}

@@ -1,5 +1,7 @@
 """Pure renderers that present stored AnalysisResult values without recomputing metrics."""
 
+# ruff: noqa: E501 - Embedded CSS/JavaScript is intentionally kept readable in final form.
+
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +19,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.10.0"
+RENDERER_VERSION = "2.11.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -81,6 +83,101 @@ def _metric_display(value: object, unit: object) -> str:
         return f"{amount} / {suffix}" if suffix else amount
     formatted = f"{value:,}" if isinstance(value, int) else f"{value:,.2f}"
     return f"{formatted} {normalized_unit}".rstrip()
+
+
+def _safe_external_url(value: object) -> str | None:
+    rendered = str(value or "").strip()
+    return rendered if rendered.startswith(("https://", "http://")) else None
+
+
+def _integer(value: object) -> int:
+    try:
+        return int(float(str(value or 0).replace(",", "")))
+    except ValueError:
+        return 0
+
+
+def _topology_state_paths(topology: JsonObject) -> str:
+    """Decode the same us-atlas TopoJSON used by the web workspace."""
+
+    raw_arcs = topology.get("arcs", [])
+    transform = _mapping(topology, "transform")
+    scale = transform.get("scale", [1, 1])
+    translate = transform.get("translate", [0, 0])
+    if not (
+        isinstance(raw_arcs, list)
+        and isinstance(scale, list)
+        and len(scale) == 2
+        and isinstance(translate, list)
+        and len(translate) == 2
+    ):
+        return ""
+
+    decoded: list[list[tuple[float, float]]] = []
+    for raw_arc in raw_arcs:
+        if not isinstance(raw_arc, list):
+            decoded.append([])
+            continue
+        x = y = 0.0
+        points: list[tuple[float, float]] = []
+        for raw_point in raw_arc:
+            if not isinstance(raw_point, list) or len(raw_point) < 2:
+                continue
+            x += float(raw_point[0])
+            y += float(raw_point[1])
+            points.append(
+                (
+                    x * float(scale[0]) + float(translate[0]),
+                    y * float(scale[1]) + float(translate[1]),
+                )
+            )
+        decoded.append(points)
+
+    def arc_points(index: int) -> list[tuple[float, float]]:
+        points = decoded[index if index >= 0 else ~index]
+        return points if index >= 0 else list(reversed(points))
+
+    def ring_path(indices: object) -> str:
+        if not isinstance(indices, list):
+            return ""
+        points: list[tuple[float, float]] = []
+        for index in indices:
+            if not isinstance(index, int):
+                continue
+            part = arc_points(index)
+            points.extend(part if not points else part[1:])
+        if not points:
+            return ""
+        commands = []
+        for position, (longitude, latitude) in enumerate(points):
+            x = ((longitude + 125) / 59) * 900 + 30
+            y = ((50 - latitude) / 26) * 460 + 30
+            commands.append(f"{'M' if position == 0 else 'L'}{x:.1f},{y:.1f}")
+        return " ".join(commands) + " Z"
+
+    objects = _mapping(topology, "objects")
+    states = _mapping(objects, "states")
+    geometries = states.get("geometries", [])
+    if not isinstance(geometries, list):
+        return ""
+    paths: list[str] = []
+    for geometry in geometries:
+        if not isinstance(geometry, dict):
+            continue
+        coordinates = geometry.get("arcs", [])
+        polygons = [coordinates] if geometry.get("type") == "Polygon" else coordinates
+        if not isinstance(polygons, list):
+            continue
+        path = " ".join(
+            ring_path(ring)
+            for polygon in polygons
+            if isinstance(polygon, list)
+            for ring in polygon
+            if isinstance(ring, list)
+        )
+        if path:
+            paths.append(f"<path d='{path}'/>")
+    return "".join(paths)
 
 
 def _leadership_styles() -> str:
@@ -183,6 +280,77 @@ padding-top:18px}footer code{overflow-wrap:anywhere}
 @media(max-width:700px){main{padding:24px 14px 44px}header{padding:24px 20px}section{padding:18px}
 h1{font-size:42px}.chart-row{grid-template-columns:1fr}.map-controls{align-items:stretch;
 flex-direction:column}}
+"""
+
+
+def _aligned_report_styles() -> str:
+    return """
+.report-nav{align-items:center;background:color-mix(in srgb,var(--card) 94%,transparent);
+border:1px solid var(--line);border-radius:14px;display:flex;gap:4px;margin:18px 0 4px;
+overflow-x:auto;padding:6px;position:sticky;top:8px;z-index:20;backdrop-filter:blur(16px)}
+.report-nav a{border-radius:9px;color:var(--muted);font-size:12px;font-weight:750;
+padding:8px 11px;text-decoration:none;white-space:nowrap}.report-nav a:hover,.report-nav a:focus{
+background:var(--surface);color:var(--ink);outline:none}.report-group{background:transparent;border:0;
+box-shadow:none;margin:28px 0 0;padding:0}.report-group>h2{font-size:26px;margin:0 0 4px}
+.report-group>.group-note{color:var(--muted);margin:0 0 10px}.report-section{box-shadow:var(--shadow)}
+.product-decisions{grid-template-columns:repeat(auto-fit,minmax(390px,1fr))}
+.product-decision{background:var(--card);border:1px solid var(--line);border-left:5px solid #9b6100;
+border-radius:18px;display:grid;gap:18px;grid-template-columns:142px minmax(0,1fr);margin:0;
+min-height:330px;padding:18px}.product-decision.protect{border-left-color:var(--accent)}
+.product-decision.parity{border-left-color:var(--muted)}.product-pair{align-content:start;
+display:grid;gap:9px;justify-items:center}.product-pair:after{color:var(--muted);content:'VS';
+font-size:9px;font-weight:850;grid-row:2;letter-spacing:.12em}.product-pair-image{grid-row:auto;
+height:112px;width:132px}.product-pair-image:first-child{grid-row:1}.product-pair-image:last-child{grid-row:3}
+.product-pair-image span{background:rgba(10,10,12,.88);max-width:calc(100% - 10px);overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}.product-decision h3{font-size:15px;margin:4px 0}
+.product-decision .benchmark-name{font-weight:760}.product-evidence{border-top:1px solid var(--line);
+grid-column:1/-1;padding-top:12px}.product-evidence summary{color:var(--accent);cursor:pointer;font-weight:800}
+.product-evidence-note{color:var(--muted);font-size:11px}.segment-matrix{border:1px solid var(--line);
+border-radius:14px;overflow:auto}.segment-row{align-items:center;border-top:1px solid var(--line);
+display:grid;gap:14px;grid-template-columns:minmax(240px,2fr) minmax(130px,.8fr)
+minmax(120px,.7fr) minmax(110px,.7fr);min-width:760px;padding:12px 14px}.segment-row.head{
+background:var(--surface);border:0;color:var(--muted);font-size:10px;font-weight:800;
+letter-spacing:.06em;text-transform:uppercase}.segment-row strong,.segment-row span{display:block}
+.segment-row small{color:var(--muted)}.leader{border-radius:999px;display:inline-block!important;
+font-size:10px;font-weight:800;padding:4px 7px}.leader.benchmark{background:rgba(0,130,200,.12);
+color:var(--accent)}.leader.competitor{background:rgba(155,97,0,.12);color:#9b6100}
+.quality-explainer{background:linear-gradient(135deg,rgba(0,130,200,.1),transparent);
+border:1px solid rgba(0,130,200,.25);border-radius:14px;padding:16px}.quality-explainer span{
+color:var(--accent);font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+.quality-explainer p{color:var(--muted);margin:6px 0 0}.quality-issues{display:flex;flex-wrap:wrap;
+gap:7px;margin:14px 0}.quality-issues span{background:var(--surface);border:1px solid var(--line);
+border-radius:999px;color:var(--muted);font-size:11px;padding:6px 9px}.quality-issues b{color:var(--ink)}
+.quality-product{align-items:center;display:flex;gap:8px;min-width:250px}.quality-product img{background:white;
+border:1px solid var(--line);border-radius:8px;height:44px;object-fit:contain;padding:2px;width:44px}
+.quality-product span{display:grid}.quality-product small{font-size:10px}.quality-issue{background:rgba(155,97,0,.12);
+border-radius:999px;color:#9b6100;display:inline-block;font-size:10px;font-weight:800;padding:4px 7px}
+.map-controls{align-items:end;display:grid;grid-template-columns:minmax(260px,1.4fr)
+minmax(180px,.7fr) minmax(280px,1.3fr)}.map-controls label span{display:block;margin-bottom:6px}
+.map-stage{display:grid;gap:16px;grid-template-columns:minmax(0,3fr) minmax(230px,.85fr)}
+.geo-map svg{background:linear-gradient(180deg,#edf7fb,#f8fbfc)}
+.geo-map svg>rect{fill:transparent}
+@media(prefers-color-scheme:dark){.geo-map svg{background:linear-gradient(180deg,#14242d,#11171c)}}
+.geo-map .state-layer path{fill:color-mix(in srgb,var(--card) 86%,var(--surface));
+stroke:color-mix(in srgb,var(--muted) 42%,transparent);stroke-linejoin:round;stroke-width:.85}
+.geo-map .map-point-layer circle{cursor:pointer;opacity:.82;transition:opacity 120ms ease}
+.geo-map .map-point-layer circle:hover,.geo-map .map-point-layer circle:focus{opacity:1;outline:none;
+stroke-width:3}.map-rail{align-content:start;display:grid;gap:10px}.map-rail>div{background:var(--surface);
+border:1px solid var(--line);border-radius:12px;display:grid;gap:4px;padding:12px}.map-rail .selected{
+background:#053d4c;color:white}.map-rail span{color:var(--muted);font-size:10px}.map-rail .selected span{
+color:rgba(255,255,255,.65)}.map-rail strong{font-size:19px}.map-rail .selected strong{font-size:13px}
+.map-legend{display:flex;flex-wrap:wrap;gap:10px}.map-legend span:before{border-radius:50%;content:'';
+display:inline-block;height:8px;margin-right:5px;width:8px}.map-legend .benchmark_lower:before{background:var(--ink)}
+.map-legend .competitor_lower:before{background:var(--accent)}.map-legend .parity:before{background:#9b6100}
+.key-points{display:grid}.key-point{align-items:start;border-bottom:1px solid var(--line);display:grid;
+gap:16px;grid-template-columns:40px 1fr;padding:16px 0}.key-point>span{color:var(--accent);font-size:11px;
+font-weight:850;letter-spacing:.08em}.key-point h3{font-size:15px;margin:0}.key-point p{color:var(--muted);
+font-size:13px;margin:5px 0 0}.source-link{color:var(--accent);font-weight:800;text-decoration:none}
+@media(max-width:900px){.map-stage,.map-controls{grid-template-columns:1fr}.map-rail{grid-template-columns:
+repeat(3,1fr)}.map-rail .selected{grid-column:span 3}}
+@media(max-width:700px){.report-nav{top:4px}.product-decisions{grid-template-columns:1fr}
+.product-decision{grid-template-columns:1fr}.product-pair{align-items:center;grid-template-columns:1fr auto 1fr}
+.product-pair-image:first-child,.product-pair-image:last-child,.product-pair:after{grid-row:1}.product-pair-image{
+width:100%}.map-rail{grid-template-columns:1fr 1fr}.map-rail .selected{grid-column:span 2}}
 """
 
 
@@ -302,7 +470,14 @@ def _retailer_label(value: object) -> str:
     }.get(retailer_id, retailer_id.replace("_us", "").replace("_", " ").title())
 
 
-def _product_decisions(context: JsonObject, *, limit: int) -> str:
+def _product_decisions(
+    context: JsonObject,
+    *,
+    limit: int,
+    title: str,
+    benchmark_label: str,
+    include_evidence: bool = False,
+) -> str:
     decisions = _rows(context, "product_decisions")[:limit]
     if not decisions:
         return ""
@@ -319,7 +494,7 @@ def _product_decisions(context: JsonObject, *, limit: int) -> str:
         position = (
             f"{competitor} is ${abs(gap):,.2f} lower at the median match"
             if gap < 0
-            else f"Walmart is ${abs(gap):,.2f} lower at the median match"
+            else f"{benchmark_label} is ${abs(gap):,.2f} lower at the median match"
             if gap > 0
             else "Median matched prices are tied"
         )
@@ -330,7 +505,7 @@ def _product_decisions(context: JsonObject, *, limit: int) -> str:
         }.get(priority, "Price position")
         images = []
         for label, image_url in (
-            ("Walmart", row.get("benchmark_image_url")),
+            (benchmark_label, row.get("benchmark_image_url")),
             (competitor, row.get("competitor_image_url")),
         ):
             image = (
@@ -350,23 +525,43 @@ def _product_decisions(context: JsonObject, *, limit: int) -> str:
         store_count = (
             int(summary.get("benchmark_store_observations", 0)) if isinstance(summary, dict) else 0
         )
+        zip_count = (
+            _integer(summary.get("matched_zip_markets"))
+            if isinstance(summary, dict)
+            else geographies
+        ) or geographies
         scope = (
-            f"{store_count:,} observed benchmark stores across {geographies:,} matched ZIP markets."
+            f"{store_count:,} observed benchmark stores across {zip_count:,} matched ZIP markets."
             if store_count
-            else f"{geographies:,} matched ZIP markets in the analytical comparison."
+            else f"{zip_count:,} matched ZIP markets in the analytical comparison."
         )
+        evidence_html = ""
+        product_evidence = context.get("product_evidence", {})
+        evidence = (
+            product_evidence.get(str(row.get("id"))) if isinstance(product_evidence, dict) else None
+        )
+        if include_evidence and isinstance(evidence, dict):
+            evidence_rows = _rows(evidence, "rows")
+            shown = evidence_rows[:100]
+            evidence_html = (
+                "<details class=product-evidence><summary>View exact store evidence</summary>"
+                f"<p class=product-evidence-note>{escape(_display(evidence.get('comparison_grain')))}. "
+                f"Showing {len(shown):,} of {len(evidence_rows):,} retained rows; the app provides "
+                "the complete downloadable CSV.</p>"
+                f"{_inline_table(shown)}</details>"
+            )
         cards.append(
             f"<article class='product-decision {escape(priority)}'>"
             f"<div class=product-pair>{''.join(images)}</div><div>"
             f"<span>{escape(status)}</span>"
-            f"<p>{escape(_display(row.get('benchmark_product_name')))}</p>"
+            f"<h3 class=benchmark-name>{escape(_display(row.get('benchmark_product_name')))}</h3>"
             f"<h3>{escape(_display(row.get('competitor_product_name')))}</h3>"
-            f"<div class=product-prices><b>Walmart ${benchmark_price:,.2f}</b>"
+            f"<div class=product-prices><b>{escape(benchmark_label)} ${benchmark_price:,.2f}</b>"
             f"<b>{escape(competitor)} ${competitor_price:,.2f}</b></div>"
-            f"<strong>{escape(position)}</strong><p>{escape(scope)}</p></div></article>"
+            f"<strong>{escape(position)}</strong><p>{escape(scope)}</p></div>{evidence_html}</article>"
         )
     return (
-        "<div class=product-decision-intro><h3>Products changing the competitive picture</h3>"
+        f"<div class=product-decision-intro><h3>{escape(title)}</h3>"
         "<p>Each card names the exact product pair and median matched prices. PDP data supplies "
         "identity and imagery; search evidence remains authoritative for price and location."
         "</p></div>"
@@ -421,17 +616,21 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
     )
 
 
-def _map_figure(context: JsonObject) -> str:
-    points = []
+def _map_figure(
+    context: JsonObject,
+    *,
+    state_paths: str,
+    coverage_rows: list[JsonObject],
+) -> str:
+    points: list[JsonObject] = []
     for point in _rows(context, "map_points"):
         try:
             latitude = float(point["latitude"])
             longitude = float(point["longitude"])
         except (KeyError, TypeError, ValueError):
             continue
-        if not (24 <= latitude <= 50 and -125 <= longitude <= -66):
-            continue
-        points.append((point, latitude, longitude))
+        if 24 <= latitude <= 50 and -125 <= longitude <= -66:
+            points.append(point)
     if not points:
         return ""
     products = sorted(
@@ -439,7 +638,7 @@ def _map_figure(context: JsonObject) -> str:
             str(point.get("benchmark_product_id")): str(
                 point.get("benchmark_product_name") or point.get("label") or "Product"
             )
-            for point, _latitude, _longitude in points
+            for point in points
             if point.get("benchmark_product_id")
         }.items(),
         key=lambda item: item[1],
@@ -448,67 +647,57 @@ def _map_figure(context: JsonObject) -> str:
         f"<option value='{escape(product_id, quote=True)}'>{escape(name)}</option>"
         for product_id, name in products
     )
-    outline_coordinates = (
-        (-124.7, 48.4),
-        (-123, 46),
-        (-124, 42),
-        (-122, 38),
-        (-117, 32.5),
-        (-111, 31.4),
-        (-106.5, 31.8),
-        (-103, 29.7),
-        (-97, 25.8),
-        (-90, 29),
-        (-83, 25.5),
-        (-80, 27),
-        (-80, 32),
-        (-75, 35),
-        (-75, 39),
-        (-67, 45),
-        (-71, 47),
-        (-83, 47),
-        (-95, 49),
-        (-105, 49),
-        (-116, 49),
-        (-124.7, 48.4),
+    coverage = sorted(
+        (
+            (_integer(row.get("matched geographies")), str(row.get("competitor") or "Competitor"))
+            for row in coverage_rows
+        ),
+        reverse=True,
     )
-    outline = " ".join(
-        f"{'M' if index == 0 else 'L'}{((longitude + 125) / 59) * 900 + 30:.1f},"
-        f"{((50 - latitude) / 26) * 460 + 30:.1f}"
-        for index, (longitude, latitude) in enumerate(outline_coordinates)
+    coverage_html = "".join(
+        f"<div><span>{escape(competitor)}</span>"
+        f"<strong>{geographies:,} matched ZIP markets</strong></div>"
+        for geographies, competitor in coverage[:3]
+        if geographies
     )
-    circles = "".join(
-        "<circle class='geo-point "
-        + escape(str(point.get("outcome") or "parity"), quote=True)
-        + "' data-product='"
-        + escape(str(point.get("benchmark_product_id") or ""), quote=True)
-        + f"' cx='{((longitude + 125) / 59) * 900 + 30:.1f}'"
-        + f" cy='{((50 - latitude) / 26) * 460 + 30:.1f}' r='4.5'><title>"
-        + escape(
-            " · ".join(
-                str(value)
-                for value in (
-                    point.get("benchmark_product_name") or point.get("label"),
-                    f"ZIP {point['zipcode']}" if point.get("zipcode") else None,
-                    point.get("value_label"),
-                )
-                if value
-            )
-        )
-        + "</title></circle>"
-        for point, latitude, longitude in points[:3000]
+    points_json = json.dumps(points, ensure_ascii=False, separators=(",", ":")).replace(
+        "<", "\\u003c"
     )
+    script = """
+<script>(()=>{const data=JSON.parse(document.getElementById('map-data').textContent);
+const product=document.getElementById('map-product');const outcome=document.getElementById('map-outcome');
+const layer=document.getElementById('map-point-layer');const ns='http://www.w3.org/2000/svg';
+const fmt=n=>Number(n||0).toLocaleString('en-US');const project=p=>({x:((Number(p.longitude)+125)/59)*900+30,y:((50-Number(p.latitude))/26)*460+30});
+function render(){const filtered=data.filter(p=>(product.value==='all'||String(p.benchmark_product_id)===product.value)&&(outcome.value==='all'||(p.outcome||'parity')===outcome.value));
+const counts={benchmark_lower:0,competitor_lower:0,parity:0};const clusters=new Map();
+for(const p of filtered){const keyOutcome=p.outcome||'parity';counts[keyOutcome]=(counts[keyOutcome]||0)+Number(p.matches||1);const q=project(p);const key=`${Math.round(q.x/14)}:${Math.round(q.y/14)}:${keyOutcome}`;const current=clusters.get(key);if(current)current.count+=Number(p.matches||1);else clusters.set(key,{point:p,count:Number(p.matches||1),...q});}
+layer.replaceChildren();for(const {point:p,count,x,y} of clusters.values()){const c=document.createElementNS(ns,'circle');c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',Math.min(11,4+Math.sqrt(count)));c.setAttribute('class',p.outcome||'parity');c.setAttribute('tabindex','0');c.setAttribute('role','button');const label=[p.benchmark_product_name||p.label,p.zipcode?`ZIP ${p.zipcode}`:'',p.competitor?`vs. ${p.competitor}`:'',p.value_label||'',count>1?`${count} nearby observations`:''].filter(Boolean).join(' · ');const title=document.createElementNS(ns,'title');title.textContent=label;c.append(title);const show=()=>{document.getElementById('map-detail-name').textContent=p.benchmark_product_name||p.label||'Selected product';document.getElementById('map-detail-scope').textContent=`ZIP ${p.zipcode||'—'} · vs. ${p.competitor||'competitor'}`;document.getElementById('map-detail-value').textContent=p.value_label||'Price evidence';};c.addEventListener('click',show);c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show();}});layer.append(c);}
+document.getElementById('map-current').textContent=product.value==='all'?'All mapped benchmark products':product.options[product.selectedIndex].text;document.getElementById('map-observations').textContent=fmt(filtered.length);for(const key of ['benchmark_lower','competitor_lower','parity']){for(const node of document.querySelectorAll(`[data-map-count="${key}"]`))node.textContent=fmt(counts[key]||0);}}
+product.addEventListener('change',render);outcome.addEventListener('change',render);render();})();</script>
+"""
     return (
-        "<div class=map-controls><label>Benchmark product<select "
-        "onchange=\"for(const p of document.querySelectorAll('.geo-point'))"
-        "p.style.display=!this.value||p.dataset.product===this.value?'':'none'\">"
-        f"<option value=''>All mapped benchmark products</option>{options}</select></label>"
-        "<div class=map-legend>Dark = benchmark lower · Blue = competitor lower · "
-        "Gold = parity</div></div><figure class=geo-map>"
-        f"<svg viewBox='0 0 960 520' role=img aria-label='Benchmark product price map'>"
-        f"<path class=outline d='{outline} Z'/>{circles}</svg><figcaption>"
-        "Exact comparison evidence only. PDP enrichment supplies product reference detail; "
-        "it does not drive mapped price outcomes.</figcaption></figure>"
+        "<div class=map-controls><label><span>Benchmark product</span>"
+        f"<select id=map-product><option value=all>All mapped benchmark products</option>{options}"
+        "</select></label><label><span>Price outcome</span><select id=map-outcome>"
+        "<option value=all>All outcomes</option><option value=competitor_lower>Competitor lower"
+        "</option><option value=benchmark_lower>Benchmark lower</option><option value=parity>"
+        "Price parity</option></select></label><div class=map-legend>"
+        "<span class=benchmark_lower>Benchmark lower · <b data-map-count=benchmark_lower>0</b></span>"
+        "<span class=competitor_lower>Competitor lower · <b data-map-count=competitor_lower>0</b></span>"
+        "<span class=parity>Parity · <b data-map-count=parity>0</b></span></div></div>"
+        "<div class=map-stage><figure class=geo-map><svg viewBox='0 0 960 520' role=img "
+        "aria-label='Analysis-linked geographic price outcomes'><rect width=960 height=520 rx=22/>"
+        f"<g class=state-layer>{state_paths}</g><g class=map-point-layer id=map-point-layer></g>"
+        "</svg><figcaption>Circle size reflects nearby matched observations. Select a point for "
+        "its product, ZIP, retailer, and price difference.</figcaption></figure><aside class=map-rail>"
+        "<div class=selected><span>Current view</span><strong id=map-current>All mapped benchmark "
+        "products</strong></div><div><span>Mapped observations</span><strong id=map-observations>0"
+        "</strong></div><div><span>Competitor lower</span><strong data-map-count=competitor_lower>0"
+        "</strong></div><div><span>Benchmark lower</span><strong data-map-count=benchmark_lower>0"
+        "</strong></div><div class=selected><span>Selected evidence</span><strong id=map-detail-name>"
+        "Select a point</strong><span id=map-detail-scope>ZIP and retailer detail</span><b "
+        f"id=map-detail-value>Price evidence</b></div>{coverage_html}</aside></div>"
+        f"<script type=application/json id=map-data>{points_json}</script>{script}"
     )
 
 
@@ -539,7 +728,162 @@ def _product_highlights(context: JsonObject) -> str:
     )
 
 
+def _segment_matrix(rows: list[JsonObject], *, benchmark_label: str) -> str:
+    ranked: list[tuple[int, JsonObject, float | None, float | None]] = []
+    for row in rows:
+        benchmark = _percent(row.get("benchmark lower"))
+        competitor = _percent(row.get("competitor lower"))
+        if benchmark is None and competitor is None:
+            continue
+        ranked.append((_integer(row.get("matches")), row, benchmark, competitor))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    if not ranked:
+        return ""
+    body = "".join(
+        "<div class=segment-row><div><strong>"
+        + escape(_display(row.get("segment") or "Comparable items"))
+        + "</strong><small>"
+        + escape(_display(row.get("competitor")))
+        + "</small></div><div><span class='leader "
+        + ("benchmark" if (benchmark or 0) >= (competitor or 0) else "competitor")
+        + "'>"
+        + escape(
+            benchmark_label
+            if (benchmark or 0) >= (competitor or 0)
+            else _display(row.get("competitor"))
+        )
+        + "</span><strong>"
+        + f"{max(benchmark or 0, competitor or 0):.1f}%"
+        + "</strong></div><div><strong>"
+        + f"{matches:,}"
+        + "</strong><small>matched observations</small></div><strong>"
+        + escape(_display(row.get("competitor - benchmark gap")))
+        + "</strong></div>"
+        for matches, row, benchmark, competitor in ranked[:16]
+    )
+    return (
+        "<div class=segment-matrix><div class='segment-row head'><span>Comparable product "
+        "segment</span><span>Lower-price leader</span><span>Matched evidence</span>"
+        f"<span>Typical difference</span></div>{body}</div>"
+    )
+
+
+def _quality_evidence(context: JsonObject) -> str:
+    rows = _rows(context, "quality_observations")
+    if not rows:
+        return (
+            "<p class=empty>No source search observations were retained for this publication.</p>"
+        )
+    issue_counts: dict[str, int] = {}
+    for row in rows:
+        issue = str(row.get("issue") or "Quality observation")
+        issue_counts[issue] = issue_counts.get(issue, 0) + 1
+    issues = "".join(
+        f"<span><b>{count:,}</b> {escape(issue)}</span>" for issue, count in issue_counts.items()
+    )
+    body: list[str] = []
+    for row in rows:
+        image_url = _safe_external_url(row.get("image_url"))
+        source_url = _safe_external_url(row.get("source_url"))
+        image = (
+            f"<img src='{escape(image_url, quote=True)}' alt='' loading=lazy>" if image_url else ""
+        )
+        source = (
+            f"<a class=source-link href='{escape(source_url, quote=True)}' target=_blank "
+            "rel='noreferrer'>Open result</a>"
+            if source_url
+            else "—"
+        )
+        price = row.get("price")
+        rendered_price = (
+            f"${float(price):,.2f}" if isinstance(price, int | float) else _display(price)
+        )
+        body.append(
+            "<tr><td><span class=quality-issue>"
+            + escape(_display(row.get("issue")))
+            + "</span></td><td>"
+            + escape(_retailer_label(row.get("retailer")))
+            + "</td><td><div class=quality-product>"
+            + image
+            + "<span><b>"
+            + escape(_display(row.get("product")))
+            + "</b><small>"
+            + escape(_display(row.get("product_id")))
+            + "</small></span></div></td><td>"
+            + escape(rendered_price)
+            + "</td><td>"
+            + escape(_display(row.get("zipcode")))
+            + "</td><td>"
+            + escape(_display(row.get("store")))
+            + "</td><td>"
+            + escape(_display(row.get("reason")))
+            + "</td><td>"
+            + source
+            + "</td></tr>"
+        )
+    table = (
+        "<div class='table-wrap comparison-table'><table><thead><tr><th>Issue</th><th>Retailer"
+        "</th><th>Search product</th><th>Price</th><th>ZIP</th><th>Store</th><th>Reason"
+        "</th><th>Source</th></tr></thead><tbody>" + "".join(body) + "</tbody></table></div>"
+    )
+    return (
+        "<div class=quality-explainer><span>What this section contains</span><strong>Source "
+        "search records behind the quality counts</strong><p>This is a representative, "
+        "deterministic sample of rejected or incomplete search observations—not PDP data. "
+        "Product, retailer, ZIP, store, source price, and exclusion reason stay together for "
+        f"review.</p></div><div class=quality-issues>{issues}</div>{table}<p class=chart-note>"
+        f"Showing {len(rows):,} representative source observations. Authoritative issue totals "
+        "remain in the governed narrative above.</p>"
+    )
+
+
+def _key_point_list(rows: list[JsonObject]) -> str:
+    unique: list[JsonObject] = []
+    seen: set[str] = set()
+    for row in rows:
+        identity = json.dumps(
+            [
+                row.get("summary"),
+                row.get("action"),
+                row.get("title"),
+                row.get("text"),
+                row.get("rationale"),
+            ],
+            ensure_ascii=False,
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(row)
+    rendered = "".join(
+        "<article class=key-point><span>"
+        + escape(f"{index:02d}")
+        + "</span><div><h3>"
+        + escape(
+            _display(
+                row.get("summary")
+                or row.get("action")
+                or row.get("title")
+                or row.get("text")
+                or "Decision signal"
+            )
+        )
+        + "</h3>"
+        + (
+            f"<p>{escape(_display(detail))}</p>"
+            if (detail := row.get("detail") or row.get("rationale") or row.get("description"))
+            else ""
+        )
+        + "</div></article>"
+        for index, row in enumerate(unique[:8], start=1)
+    )
+    return f"<div class=key-points>{rendered}</div>" if rendered else ""
+
+
 class LeadershipHtmlRenderer:
+    def __init__(self, *, state_paths: str = "") -> None:
+        self._state_paths = state_paths
+
     def render(
         self,
         result: JsonObject,
@@ -599,34 +943,125 @@ class LeadershipHtmlRenderer:
         product_pack = _mapping(view, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         result_checksum = escape(_result_checksum(result))
+        benchmark_label = str(view.get("benchmark_retailer") or "Benchmark")
+        sections = {str(section.get("id")): section for section in _rows(view, "sections")}
+        groups = _rows(view, "groups")
+        if not groups:
+            groups = [
+                {
+                    "id": "summary",
+                    "label": "Report",
+                    "section_ids": list(sections),
+                }
+            ]
+        populated_groups = [
+            group
+            for group in groups
+            if any(str(section_id) in sections for section_id in group.get("section_ids", []))
+        ]
+        nav = "".join(
+            f"<a href='#{escape(str(group.get('id')), quote=True)}'>"
+            f"{escape(_display(group.get('label')))}</a>"
+            for group in populated_groups
+        )
         section_html = "".join(
-            self._section(section, presentation_context) for section in _rows(view, "sections")
+            self._group(
+                group,
+                sections,
+                presentation_context,
+                benchmark_label=benchmark_label,
+            )
+            for group in populated_groups
         )
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
-<style>{_leadership_styles()}</style></head><body><main data-result-checksum="{result_checksum}">
+<style>{_leadership_styles()}{_aligned_report_styles()}</style></head><body><main data-result-checksum="{result_checksum}">
 <header><div class="brand">CPG<b>Hero</b></div>
 <div class="eyebrow">Leadership intelligence brief</div>
 <h1>{pack_name}</h1><p class="deck">Where the price war is being won, where it is being lost,
 and which targeted moves matter most.</p><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
-Generated {escape(_display_generated_at(result))}</div>
-</header>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
+Generated {escape(_display_generated_at(result))}</div><div class=checksum>Deterministic metrics ·
+Evidence linked · Result checksum {result_checksum[:12]}…</div>
+</header><nav class=report-nav aria-label='Report sections'>{nav}</nav>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
 <code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
 
-    @staticmethod
+    def _group(
+        self,
+        group: JsonObject,
+        sections: dict[str, JsonObject],
+        presentation_context: JsonObject,
+        *,
+        benchmark_label: str,
+    ) -> str:
+        group_id = str(group.get("id") or "report")
+        group_sections = [
+            sections[str(section_id)]
+            for section_id in group.get("section_ids", [])
+            if str(section_id) in sections
+        ]
+        content: list[str] = []
+        if group_id == "geography" and _rows(presentation_context, "map_points"):
+            coverage = next(
+                (
+                    _rows(section, "records")
+                    for section in group_sections
+                    if section.get("kind") == "coverage"
+                ),
+                [],
+            )
+            content.append(
+                "<section class=report-section><div class=kind>Market coverage</div>"
+                "<h2>Where benchmark products win and lose</h2><p class=group-note>Filter the "
+                "map by product or outcome. State boundaries provide geographic context; every "
+                "point is tied to retained search-price evidence.</p>"
+                + _map_figure(
+                    presentation_context,
+                    state_paths=self._state_paths,
+                    coverage_rows=coverage,
+                )
+                + "</section>"
+            )
+        if group_id == "products":
+            highlights = _product_highlights(presentation_context)
+            if highlights:
+                content.append(f"<section class=report-section>{highlights}</section>")
+            decisions = _product_decisions(
+                presentation_context,
+                limit=16,
+                title="Product-level price evidence",
+                benchmark_label=benchmark_label,
+                include_evidence=True,
+            )
+            if decisions:
+                content.append(f"<section class=report-section>{decisions}</section>")
+        for section in group_sections:
+            if section.get("kind") == "kpi_strip":
+                continue
+            content.append(
+                self._section(
+                    section,
+                    presentation_context,
+                    benchmark_label=benchmark_label,
+                )
+            )
+        return (
+            f"<section class=report-group id='{escape(group_id, quote=True)}'>"
+            f"<h2>{escape(_display(group.get('label')))}</h2>"
+            f"<p class=group-note>App and shareable-report view</p>{''.join(content)}</section>"
+        )
+
     def _section(
+        self,
         section: JsonObject,
         presentation_context: JsonObject,
+        *,
+        benchmark_label: str,
     ) -> str:
         section_kind = str(section.get("kind", ""))
-        title = escape(
-            "Competitive Scorecard"
-            if section_kind == "kpi_strip"
-            else _display(section.get("title"))
-        )
+        title = escape(_display(section.get("title")))
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
         narrative_html = _narrative_html(narrative) if isinstance(narrative, dict) else ""
@@ -639,24 +1074,18 @@ Generated {escape(_display_generated_at(result))}</div>
         )
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
-        if section_kind == "kpi_strip":
-            detail = ""
-        elif section_kind == "coverage":
-            detail = (
-                f"{_map_figure(presentation_context)}"
-                f"{_collapsed_table('View source coverage detail', records)}"
-            )
+        if section_kind == "coverage":
+            detail = _collapsed_table("View source coverage detail", records)
         elif section_kind == "price_position":
             chart = _comparison_chart(records)
             detail = f"{chart}{_collapsed_table('View supporting detail', records)}"
-        elif section_kind in {"segment_analysis", "geographic_sensitivity"}:
-            detail = _collapsed_table("View evidence-backed detail", records)
-        elif section_kind == "product_table":
+        elif section_kind == "segment_analysis":
             detail = (
-                f"{_product_decisions(presentation_context, limit=16)}"
-                f"{_product_highlights(presentation_context)}"
+                f"{_segment_matrix(records, benchmark_label=benchmark_label)}"
                 f"{_collapsed_table('View evidence-backed detail', records)}"
             )
+        elif section_kind in {"geographic_sensitivity", "product_table"}:
+            detail = _collapsed_table("View evidence-backed detail", records)
         elif section.get("visualization") == "ranked_cards" and not narrative_html:
             repeated_detail = (
                 len({str(row.get("summary") or row.get("rationale") or "") for row in records[:5]})
@@ -673,14 +1102,16 @@ Generated {escape(_display_generated_at(result))}</div>
             )
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
         elif section_kind == "executive_summary":
-            detail = _product_decisions(presentation_context, limit=6)
-        elif section_kind == "data_quality":
-            detail = _collapsed_table(
-                "View source search observations",
-                _rows(presentation_context, "quality_observations"),
+            detail = _product_decisions(
+                presentation_context,
+                limit=6,
+                title="Products changing the competitive picture",
+                benchmark_label=benchmark_label,
             )
+        elif section_kind == "data_quality":
+            detail = _quality_evidence(presentation_context)
         elif section_kind == "recommendations":
-            detail = ""
+            detail = _collapsed_table("View supporting detail", records)
         else:
             detail = _collapsed_table("View evidence-backed detail", records)
         empty = (
@@ -689,7 +1120,7 @@ Generated {escape(_display_generated_at(result))}</div>
             else ""
         )
         return (
-            f"<section id={escape(_display(section.get('id')))}><div class=kind>{kind}</div>"
+            f"<section class=report-section id={escape(_display(section.get('id')))}><div class=kind>{kind}</div>"
             f"<h2>{title}</h2>{narrative_html}{metric_grid}{detail}{empty}</section>"
         )
 
@@ -959,10 +1390,19 @@ class LeadershipEmailRenderer:
 
 class ArtifactRenderer:
     def __init__(self, repository_root: Path | None = None) -> None:
-        self._html = LeadershipHtmlRenderer()
+        inferred_root = repository_root or Path.cwd()
+        state_paths = ""
+        topology_path = inferred_root / "config" / "us-states-10m.json"
+        if topology_path.is_file():
+            try:
+                topology = json.loads(topology_path.read_text(encoding="utf-8"))
+                if isinstance(topology, dict):
+                    state_paths = _topology_state_paths(topology)
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                state_paths = ""
+        self._html = LeadershipHtmlRenderer(state_paths=state_paths)
         self._xlsx = ExcelAuditRenderer()
         self._email = LeadershipEmailRenderer()
-        inferred_root = repository_root or Path.cwd()
         retailer_names: dict[str, str] = {}
         retailer_catalog = inferred_root / "config/retailer-catalog.json"
         if retailer_catalog.is_file():

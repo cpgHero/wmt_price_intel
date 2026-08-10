@@ -204,6 +204,61 @@ export interface RetailCompetitiveIntelligenceProductPack {
       action_principles: [string, ...string[]];
       forbidden_claims: string[];
       small_sample_threshold: number;
+      story_priorities?: {
+        id: string;
+        kind:
+          | "competitive_pressure"
+          | "benchmark_strength"
+          | "mixed_position"
+          | "segment_reversal"
+          | "geographic_validation"
+          | "action";
+        headline: string;
+        objective: string;
+        /**
+         * @minItems 1
+         */
+        topic_refs: [
+          (
+            | "data_scope"
+            | "footprint"
+            | "exact_price"
+            | "normalized_price"
+            | "segment_drivers"
+            | "segment_reversals"
+            | "geography"
+            | "fulfillment"
+            | "brand_assortment"
+            | "actions"
+            | "caveats"
+          ),
+          ...(
+            | "data_scope"
+            | "footprint"
+            | "exact_price"
+            | "normalized_price"
+            | "segment_drivers"
+            | "segment_reversals"
+            | "geography"
+            | "fulfillment"
+            | "brand_assortment"
+            | "actions"
+            | "caveats"
+          )[]
+        ];
+        /**
+         * @minItems 1
+         */
+        section_ids: [string, ...string[]];
+        competitor_ids?: string[];
+        profile_ids?: string[];
+        segment_scope?: "overall" | "segment" | "any";
+        significances?: ("strength" | "watch" | "risk" | "caveat")[];
+        segment_attribute_constraints?: {
+          [k: string]: unknown;
+        };
+        max_facts: number;
+      }[];
     };
     insight_ranking: {
       weights: {

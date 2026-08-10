@@ -49,6 +49,11 @@ export interface AnalysisReportView {
     recommended_charts?: string[];
   };
   blueprint: { id: string; version: string };
+  groups?: Array<{
+    id: string;
+    label: string;
+    section_ids: string[];
+  }>;
   result_checksum: string;
   publication: {
     id: string;

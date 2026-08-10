@@ -73,3 +73,8 @@ CPGHero-branded delivery surfaces, full-source goldens, and immutable renderer v
 Phase 9.6 adds the benchmark-derived semantic brief, category-configured narrative playbooks,
 deterministic claim critic, and decision-grade narrative projection shared by web, email, and
 workbook outputs. See `docs/25_PHASE_9_6_DECISION_GRADE_NARRATIVE_PARITY.md`.
+
+Phases 9.7 through 9.9 add publication-scoped narrative evidence, selective PDP identity,
+product-led decision surfaces, and one shared presentation contract for the app, HTML export, and
+shareable report. See `docs/26_PHASE_9_7_DECISION_SURFACE_AND_ENRICHMENT.md` through
+`docs/28_PHASE_9_9_REPORT_SURFACE_PARITY.md`.

@@ -265,7 +265,10 @@ class PostgresResultsRepository:
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
-                    text(f"{_ANALYSIS_SELECT} ORDER BY r.created_at DESC LIMIT :limit"),
+                    text(
+                        f"{_ANALYSIS_SELECT} WHERE r.archived_at IS NULL "
+                        "ORDER BY r.created_at DESC LIMIT :limit"
+                    ),
                     {"limit": limit},
                 )
             ).mappings()

@@ -21,6 +21,7 @@ from rci_worker.analysis import (
     CollectedPage,
     HistoricalSource,
     S3HistoricalCSVReader,
+    historical_source_row,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -122,6 +123,40 @@ def _payload(product_id: str, price: str) -> dict[str, Any]:
             }
         ]
     }
+
+
+def test_consolidated_historical_rows_keep_their_own_retailer_identity() -> None:
+    source = HistoricalSource(
+        dataset_artifact_id="artifact-eggs",
+        input_set_id="input-eggs",
+        ordinal=0,
+        retailer_id="walmart_us",
+        adapter_id="historical_metricscart_consolidated_serp_csv",
+        source_name="eggs.csv",
+        source_format="metricscart_consolidated_serp_csv",
+        storage_uri="s3://raw/eggs.csv",
+        checksum="a" * 64,
+        row_count=1,
+    )
+
+    assert historical_source_row({"Retailer": "aldi.us"}, source) == {"Retailer": "aldi.us"}
+
+
+def test_single_retailer_historical_rows_use_the_manifest_retailer() -> None:
+    source = HistoricalSource(
+        dataset_artifact_id="artifact-walmart",
+        input_set_id="input-walmart",
+        ordinal=0,
+        retailer_id="walmart_us",
+        adapter_id="historical_metricscart_search_monitor_csv",
+        source_name="walmart.csv",
+        source_format="metricscart_search_monitor_csv",
+        storage_uri="s3://raw/walmart.csv",
+        checksum="a" * 64,
+        row_count=1,
+    )
+
+    assert historical_source_row({"Retailer": "incorrect"}, source)["retailer_id"] == ("walmart_us")
 
 
 async def test_completed_collection_runs_through_generic_product_pack_pipeline() -> None:

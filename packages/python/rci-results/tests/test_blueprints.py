@@ -69,12 +69,23 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         "Data Quality",
         "Methodology & Caveats",
     ]
+    assert [(group["id"], group["label"]) for group in view["groups"]] == [
+        ("summary", "Summary"),
+        ("geography", "Geography"),
+        ("price", "Price"),
+        ("segments", "Segments"),
+        ("products", "Products"),
+        ("opportunities", "Opportunities"),
+        ("quality", "Quality"),
+        ("methodology", "Methodology"),
+    ]
 
     html = renderer.render(result, "html")
     assert html.body.startswith(b"<!doctype html>")
     assert b"Normalized Price-per-Pound View" in html.body
     assert b"ALDI pressure is concentrated" in html.body
-    assert b"Competitive Scorecard" in html.body
+    assert b"Decision KPIs" not in html.body
+    assert b">Summary</a>" in html.body
 
     workbook = renderer.render(result, "xlsx")
     with ZipFile(BytesIO(workbook.body)) as archive:
@@ -209,10 +220,11 @@ def test_leadership_html_renders_analysis_linked_product_map() -> None:
         .body.decode()
     )
 
-    assert "Benchmark product price map" in html
+    assert "Analysis-linked geographic price outcomes" in html
     assert "All mapped benchmark products" in html
-    assert "data-product='100'" in html
-    assert "PDP enrichment supplies product reference detail" in html
+    assert '"benchmark_product_id":"100"' in html
+    assert "class=state-layer" in html
+    assert html.count("<path d=") > 40
 
 
 def test_leadership_html_links_quality_counts_to_search_observations() -> None:
@@ -239,9 +251,73 @@ def test_leadership_html_links_quality_counts_to_search_observations() -> None:
         .body.decode()
     )
 
-    assert "View source search observations" in html
+    assert "Source search records behind the quality counts" in html
     assert "Fresh Ground Beef" in html
     assert "Missing or zero search price" in html
+    assert "Open result" in html
+
+
+def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> None:
+    result = _result()
+    decision = {
+        "id": "pair-1",
+        "priority": "attention",
+        "benchmark_product_name": "Walmart 80/20 Ground Beef",
+        "benchmark_image_url": "https://example.test/walmart.jpg",
+        "competitor": "aldi_us",
+        "competitor_product_name": "ALDI 80/20 Ground Beef",
+        "competitor_image_url": "https://example.test/aldi.jpg",
+        "median_gap": -1.8,
+        "median_benchmark_price": 7.99,
+        "median_competitor_price": 6.19,
+        "geographies": 42,
+        "evidence_summary": {
+            "benchmark_store_observations": 51,
+            "matched_zip_markets": 42,
+        },
+    }
+    context = {
+        "product_decisions": [decision],
+        "product_evidence": {
+            "pair-1": {
+                "comparison_grain": "Exact package and ZIP",
+                "rows": [
+                    {
+                        "zipcode": "00501",
+                        "benchmark_store": "0042",
+                        "benchmark_price": 7.99,
+                        "competitor_store": "479-149",
+                        "competitor_price": 6.19,
+                        "outcome": "competitor_lower",
+                    }
+                ],
+            }
+        },
+    }
+
+    html = (
+        ArtifactRenderer(REPOSITORY_ROOT)
+        .render(result, "html", presentation_context=context)
+        .body.decode()
+    )
+
+    expected_groups = [
+        "Summary",
+        "Geography",
+        "Price",
+        "Segments",
+        "Products",
+        "Opportunities",
+        "Quality",
+        "Methodology",
+    ]
+    assert all(f">{label}</a>" in html for label in expected_groups)
+    assert "Product-level price evidence" in html
+    assert "Walmart 80/20 Ground Beef" in html
+    assert "ALDI 80/20 Ground Beef" in html
+    assert "ALDI is $1.80 lower at the median match" in html
+    assert "View exact store evidence" in html
+    assert "00501" in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:

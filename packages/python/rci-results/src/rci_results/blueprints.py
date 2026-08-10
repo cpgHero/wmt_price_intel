@@ -105,6 +105,17 @@ _COMPARISON_FIELDS = (
     "median_gap",
 )
 
+_REPORT_GROUPS = (
+    ("summary", "Summary", ("executive_summary", "kpi_strip")),
+    ("geography", "Geography", ("coverage", "geographic_sensitivity")),
+    ("price", "Price", ("price_position",)),
+    ("segments", "Segments", ("segment_analysis",)),
+    ("products", "Products", ("product_table", "assortment")),
+    ("opportunities", "Opportunities", ("recommendations",)),
+    ("quality", "Quality", ("data_quality",)),
+    ("methodology", "Methodology", ("methodology",)),
+)
+
 
 def _metric_field(metric_id: str) -> str | None:
     normalized = metric_id.replace("-", "_").casefold()
@@ -259,6 +270,16 @@ class ReportProjector:
             for section in blueprint.sections
             if str(section["id"]) in selected_ids
         ]
+        groups = [
+            {
+                "id": group_id,
+                "label": label,
+                "section_ids": [
+                    str(section["id"]) for section in sections if str(section["kind"]) in kinds
+                ],
+            }
+            for group_id, label, kinds in _REPORT_GROUPS
+        ]
         return {
             "analysis_id": result["analysis_id"],
             "generated_at": result["generated_at"],
@@ -279,6 +300,7 @@ class ReportProjector:
                 ),
             },
             "blueprint": {"id": blueprint.id, "version": blueprint.version},
+            "groups": groups,
             "sections": sections,
         }
 

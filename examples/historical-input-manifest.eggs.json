@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0.0",
+  "stable_key": "fresh-shell-eggs-2026-08-03-full-location",
+  "name": "Fresh Shell Eggs — August 3, 2026 full-location replay",
+  "captured_at": "2026-08-03T00:00:00Z",
+  "product_pack": {
+    "id": "fresh_shell_eggs",
+    "version": "1.0.0"
+  },
+  "analysis_config": {
+    "id": "historical-fresh-shell-eggs-2026-08-03",
+    "name": "Historical Fresh Shell Eggs — August 3, 2026",
+    "version": "1.0.0",
+    "enabled": true,
+    "benchmark_retailer": "walmart_us",
+    "product_pack": {
+      "id": "fresh_shell_eggs",
+      "version": "1.0.0"
+    },
+    "retailers": [
+      { "retailer_id": "walmart_us", "enabled": true },
+      { "retailer_id": "albertsons_us", "enabled": true },
+      { "retailer_id": "aldi_us", "enabled": true },
+      { "retailer_id": "amazon_us_same_day", "enabled": true },
+      { "retailer_id": "giant_eagle_us", "enabled": true },
+      { "retailer_id": "heb_us", "enabled": true },
+      { "retailer_id": "kroger_us", "enabled": true },
+      { "retailer_id": "meijer_us", "enabled": true },
+      { "retailer_id": "safeway_us", "enabled": true },
+      { "retailer_id": "sams_club_us", "enabled": true },
+      { "retailer_id": "shoprite_us", "enabled": true },
+      { "retailer_id": "target_us", "enabled": true },
+      { "retailer_id": "trader_joes_us", "enabled": true },
+      { "retailer_id": "wegmans_us", "enabled": true }
+    ],
+    "analysis": {
+      "comparison_profiles": ["strict", "compatible"],
+      "enable_ai_fallback": false,
+      "enable_proximity_validation": false
+    },
+    "delivery": {
+      "web_report": true,
+      "excel": true,
+      "leadership_email": true,
+      "audit_package": true
+    }
+  },
+  "artifacts": [
+    {
+      "ordinal": 0,
+      "retailer_id": "walmart_us",
+      "adapter_id": "historical_metricscart_consolidated_serp_csv",
+      "source_name": "CCF_Search_Data_08.03.2026_v2.csv",
+      "source_format": "metricscart_consolidated_serp_csv",
+      "content_type": "text/csv",
+      "expected_sha256": "094aefb5dde3d8fdc50a4499a751b65df29229e47ee498b12da9f9d2f6fd9194",
+      "expected_rows": 386889
+    }
+  ],
+  "metadata": {
+    "source_rows_total": 386889,
+    "source_retailers": 14,
+    "purpose": "Full-source fresh shell egg golden replay"
+  }
+}

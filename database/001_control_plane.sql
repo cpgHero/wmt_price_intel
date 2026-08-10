@@ -237,8 +237,11 @@ CREATE TABLE analysis_result (
   schema_version text NOT NULL,
   result jsonb NOT NULL,
   checksum text NOT NULL,
+  archived_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX analysis_result_active_created_idx
+  ON analysis_result(created_at) WHERE archived_at IS NULL;
 
 CREATE TABLE agent_task (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -83,6 +83,14 @@ class HistoricalSource:
     row_count: int
 
 
+def historical_source_row(row: dict[str, str], source: HistoricalSource) -> dict[str, str]:
+    """Preserve row retailer identity for consolidated multi-retailer exports."""
+
+    if source.source_format == "metricscart_consolidated_serp_csv":
+        return dict(row)
+    return {**row, "retailer_id": source.retailer_id}
+
+
 def _task(row: RowMapping) -> QueueTask:
     return QueueTask(
         id=str(row["id"]),
@@ -651,11 +659,11 @@ class AnalysisProcessor:
                 if callable(iter_batches):
                     async for rows in iter_batches(source, batch_size=batch_size):
                         for row in rows:
-                            await consume({**row, "retailer_id": source.retailer_id})
+                            await consume(historical_source_row(row, source))
                 else:
                     rows = await self._historical_reader.read(source)
                     for row in rows:
-                        await consume({**row, "retailer_id": source.retailer_id})
+                        await consume(historical_source_row(row, source))
                 raw_artifact_ids.append(source.dataset_artifact_id)
                 source_evidence_artifacts.append(
                     (source.dataset_artifact_id, source.checksum, source.row_count)

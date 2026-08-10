@@ -200,7 +200,10 @@ function BlueprintAnalysisWorkspace({
   analysis: AnalysisRecord;
   reportView: AnalysisReportView;
 }>) {
-  const groupedSections = groupReportSections(reportView.sections);
+  const groupedSections = groupReportSections(
+    reportView.sections,
+    reportView.groups,
+  );
   const firstPopulatedGroup =
     groupedSections.find((group) => group.sections.length > 0)?.id ?? "summary";
   const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);

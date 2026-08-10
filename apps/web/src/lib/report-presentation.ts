@@ -28,7 +28,24 @@ const groupByKind: Record<string, ReportGroupId> = {
   methodology: "methodology",
 };
 
-export function groupReportSections(sections: ReportSectionView[]) {
+export function groupReportSections(
+  sections: ReportSectionView[],
+  contractGroups?: Array<{
+    id: string;
+    label: string;
+    section_ids: string[];
+  }>,
+) {
+  if (contractGroups?.length) {
+    const byId = new Map(sections.map((section) => [section.id, section]));
+    return contractGroups.map((group) => ({
+      id: group.id as ReportGroupId,
+      label: group.label,
+      sections: group.section_ids
+        .map((id) => byId.get(id))
+        .filter((section): section is ReportSectionView => Boolean(section)),
+    }));
+  }
   const grouped = new Map<ReportGroupId, ReportSectionView[]>();
   for (const group of reportGroups) grouped.set(group.id, []);
   for (const section of sections) {

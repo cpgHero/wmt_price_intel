@@ -115,6 +115,7 @@ export interface Section {
    */
   required_topics: [Topic, ...Topic[]];
   storyline_refs: Refs;
+  required_storyline_refs: string[];
   allowed_metric_refs: Refs;
   allowed_evidence_refs: Refs;
 }
