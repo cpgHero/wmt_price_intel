@@ -163,7 +163,7 @@ class AssortmentAccumulator:
             "top_competitor_whitespace": self._rank_products(competitor, competitor_only),
             "key_points": [
                 (
-                    f"{len(pair_profiles):,} distinct one-to-one product relationships cover "
+                    f"{len(pair_profiles):,} distinct Product Pack pairings cover "
                     f"{_rate(len(matched_benchmark), len(benchmark_products)):.0%} of the "
                     "primary retailer's observed products."
                 ),
