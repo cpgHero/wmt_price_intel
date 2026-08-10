@@ -13,6 +13,7 @@ const review: MatchReview = {
   product_pack_id: "fresh_ground_beef",
   product_pack_version: "1.0.0",
   revision: 0,
+  future_application: null,
   benchmark_retailer: { id: "walmart_us", name: "Walmart" },
   competitors: [{ id: "aldi_us", name: "ALDI" }],
   profiles: [
@@ -111,5 +112,38 @@ describe("match review scope", () => {
       label: "Weight",
       value: "1 lb",
     });
+  });
+
+  it("returns rejected products to manual matching", () => {
+    const rejected = structuredClone(review);
+    rejected.connections[0].status = "rejected";
+
+    const scope = scopeMatchReview(rejected, "aldi_us", "strict");
+
+    expect(
+      scope.unmatchedBenchmarkProducts.map((row) => row.product_id),
+    ).toEqual(["w1", "w2"]);
+    expect(
+      scope.unmatchedCompetitorProducts.map((row) => row.product_id),
+    ).toEqual(["a1"]);
+  });
+
+  it("labels manual-pool products that are active in another lens", () => {
+    const otherLens = structuredClone(review);
+    otherLens.connections[0].eligible_profile_ids = ["unit"];
+
+    const scope = scopeMatchReview(otherLens, "aldi_us", "strict");
+
+    expect(
+      scope.unmatchedBenchmarkProducts.map((row) => row.product_id),
+    ).toContain("w1");
+    expect(scope.crossLensMemberships["walmart_us:w1"]).toEqual([
+      {
+        profileId: "unit",
+        profileLabel: "Price per pound",
+        status: "suggested",
+        counterpartProductId: "a1",
+      },
+    ]);
   });
 });

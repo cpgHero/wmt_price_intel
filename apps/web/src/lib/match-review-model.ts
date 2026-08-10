@@ -11,12 +11,20 @@ export interface MatchReviewScope {
   unmatchedBenchmarkProducts: MatchReviewProduct[];
   unmatchedCompetitorProducts: MatchReviewProduct[];
   confirmedOutsideProfile: MatchReviewConnection[];
+  crossLensMemberships: Record<string, CrossLensMembership[]>;
   summary: {
     suggested: number;
     confirmed: number;
     rejected: number;
     unmatched: number;
   };
+}
+
+export interface CrossLensMembership {
+  profileId: string;
+  profileLabel: string;
+  status: MatchReviewConnection["status"];
+  counterpartProductId: string;
 }
 
 export interface ProductDetailRow {
@@ -56,6 +64,32 @@ export function scopeMatchReview(
       connection.status === "confirmed" &&
       !connection.eligible_profile_ids.includes(profileId),
   );
+  const crossLensMemberships: Record<string, CrossLensMembership[]> = {};
+  for (const connection of review.connections) {
+    if (
+      connection.competitor_retailer_id !== competitorId ||
+      connection.status === "rejected" ||
+      connection.eligible_profile_ids.includes(profileId)
+    )
+      continue;
+    for (const otherProfileId of connection.eligible_profile_ids) {
+      const membership = {
+        profileId: otherProfileId,
+        profileLabel:
+          review.profiles.find((profile) => profile.id === otherProfileId)
+            ?.label || otherProfileId,
+        status: connection.status,
+        counterpartProductId: connection.competitor_product_id,
+      } satisfies CrossLensMembership;
+      const benchmarkKey = `${review.benchmark_retailer.id}:${connection.benchmark_product_id}`;
+      (crossLensMemberships[benchmarkKey] ||= []).push(membership);
+      const competitorKey = `${competitorId}:${connection.competitor_product_id}`;
+      (crossLensMemberships[competitorKey] ||= []).push({
+        ...membership,
+        counterpartProductId: connection.benchmark_product_id,
+      });
+    }
+  }
   const active = connections.filter(
     (connection) => connection.status !== "rejected",
   );
@@ -83,6 +117,7 @@ export function scopeMatchReview(
     unmatchedBenchmarkProducts,
     unmatchedCompetitorProducts,
     confirmedOutsideProfile,
+    crossLensMemberships,
     summary: {
       suggested: connections.filter(
         (connection) => connection.status === "suggested",

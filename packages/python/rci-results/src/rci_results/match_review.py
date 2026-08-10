@@ -66,6 +66,7 @@ class MatchReanalysisRecord:
     source_analysis_id: str
     match_revision_id: str
     status: str
+    applied_to_future_runs: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +93,14 @@ class MatchReviewRepository(Protocol):
 
     async def rules(self, revision_id: str) -> list[MatchRuleRecord]: ...
 
+    async def future_revision(
+        self,
+        *,
+        product_pack_id: str,
+        product_pack_version: str,
+        benchmark_retailer_id: str,
+    ) -> MatchRevisionRecord | None: ...
+
     async def save_decision(
         self,
         analysis: AnalysisRecord,
@@ -107,6 +116,9 @@ class MatchReviewRepository(Protocol):
         self,
         analysis: AnalysisRecord,
         revision: MatchRevisionRecord,
+        *,
+        apply_to_future_runs: bool,
+        actor: str,
     ) -> MatchReanalysisRecord: ...
 
 
@@ -197,6 +209,42 @@ class PostgresMatchReviewRepository:
                 )
             ).mappings()
             return [_rule(row) for row in rows]
+
+    async def future_revision(
+        self,
+        *,
+        product_pack_id: str,
+        product_pack_version: str,
+        benchmark_retailer_id: str,
+    ) -> MatchRevisionRecord | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT revision.*
+                            FROM product_match_application_policy policy
+                            JOIN product_match_revision revision
+                              ON revision.id = policy.revision_id
+                            WHERE policy.organization_id = CAST(:organization_id AS uuid)
+                              AND policy.product_pack_id = :product_pack_id
+                              AND policy.product_pack_version = :product_pack_version
+                              AND policy.benchmark_retailer_id = :benchmark_retailer_id
+                            """
+                        ),
+                        {
+                            "organization_id": DEFAULT_ORGANIZATION_ID,
+                            "product_pack_id": product_pack_id,
+                            "product_pack_version": product_pack_version,
+                            "benchmark_retailer_id": benchmark_retailer_id,
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        return _revision(row) if row is not None else None
 
     async def save_decision(
         self,
@@ -435,8 +483,39 @@ class PostgresMatchReviewRepository:
         self,
         analysis: AnalysisRecord,
         revision: MatchRevisionRecord,
+        *,
+        apply_to_future_runs: bool,
+        actor: str,
     ) -> MatchReanalysisRecord:
         async with self._engine.begin() as connection:
+            if apply_to_future_runs:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO product_match_application_policy (
+                          organization_id, product_pack_id, product_pack_version,
+                          benchmark_retailer_id, revision_id, updated_by
+                        ) VALUES (
+                          CAST(:organization_id AS uuid), :product_pack_id,
+                          :product_pack_version, :benchmark_retailer_id,
+                          CAST(:revision_id AS uuid), :updated_by
+                        )
+                        ON CONFLICT (
+                          organization_id, product_pack_id, product_pack_version,
+                          benchmark_retailer_id
+                        ) DO UPDATE SET revision_id = EXCLUDED.revision_id,
+                          updated_by = EXCLUDED.updated_by, updated_at = now()
+                        """
+                    ),
+                    {
+                        "organization_id": revision.organization_id,
+                        "product_pack_id": revision.product_pack_id,
+                        "product_pack_version": revision.product_pack_version,
+                        "benchmark_retailer_id": revision.benchmark_retailer_id,
+                        "revision_id": revision.id,
+                        "updated_by": actor,
+                    },
+                )
             row = (
                 (
                     await connection.execute(
@@ -473,6 +552,7 @@ class PostgresMatchReviewRepository:
                 source_analysis_id=analysis.analysis_id,
                 match_revision_id=revision.id,
                 status=str(row["status"]),
+                applied_to_future_runs=apply_to_future_runs,
             )
 
 
@@ -481,6 +561,7 @@ class InMemoryMatchReviewRepository:
         self._lock = asyncio.Lock()
         self._revisions: list[MatchRevisionRecord] = []
         self._rules: dict[str, list[MatchRuleRecord]] = {}
+        self._future_revision_ids: dict[tuple[str, str, str], str] = {}
 
     async def latest_revision(
         self,
@@ -503,6 +584,20 @@ class InMemoryMatchReviewRepository:
     async def rules(self, revision_id: str) -> list[MatchRuleRecord]:
         async with self._lock:
             return copy.deepcopy(self._rules.get(revision_id, []))
+
+    async def future_revision(
+        self,
+        *,
+        product_pack_id: str,
+        product_pack_version: str,
+        benchmark_retailer_id: str,
+    ) -> MatchRevisionRecord | None:
+        async with self._lock:
+            revision_id = self._future_revision_ids.get(
+                (product_pack_id, product_pack_version, benchmark_retailer_id)
+            )
+            revision = next((row for row in self._revisions if row.id == revision_id), None)
+            return copy.deepcopy(revision)
 
     async def save_decision(
         self,
@@ -588,12 +683,26 @@ class InMemoryMatchReviewRepository:
         self,
         analysis: AnalysisRecord,
         revision: MatchRevisionRecord,
+        *,
+        apply_to_future_runs: bool,
+        actor: str,
     ) -> MatchReanalysisRecord:
+        del actor
+        if apply_to_future_runs:
+            async with self._lock:
+                self._future_revision_ids[
+                    (
+                        revision.product_pack_id,
+                        revision.product_pack_version,
+                        revision.benchmark_retailer_id,
+                    )
+                ] = revision.id
         return MatchReanalysisRecord(
             analysis_run_id=str(uuid4()),
             source_analysis_id=analysis.analysis_id,
             match_revision_id=revision.id,
             status="queued",
+            applied_to_future_runs=apply_to_future_runs,
         )
 
 
@@ -617,6 +726,11 @@ class MatchReviewService:
         benchmark = str(document["benchmark_retailer"])
         competitors = [str(value) for value in document.get("competitors", [])]
         revision = await self._repository.latest_revision(
+            product_pack_id=analysis.product_pack_id,
+            product_pack_version=analysis.product_pack_version,
+            benchmark_retailer_id=benchmark,
+        )
+        future_revision = await self._repository.future_revision(
             product_pack_id=analysis.product_pack_id,
             product_pack_version=analysis.product_pack_version,
             benchmark_retailer_id=benchmark,
@@ -652,6 +766,14 @@ class MatchReviewService:
             "product_pack_version": analysis.product_pack_version,
             "revision_id": revision.id if revision is not None else None,
             "revision": revision.revision if revision is not None else 0,
+            "future_application": (
+                {
+                    "revision_id": future_revision.id,
+                    "revision": future_revision.revision,
+                }
+                if future_revision is not None
+                else None
+            ),
             "benchmark_retailer": {
                 "id": benchmark,
                 "name": self._retailer_names.get(benchmark, benchmark.replace("_", " ").title()),
@@ -734,7 +856,14 @@ class MatchReviewService:
         )
         return {"revision_id": revision.id, "revision": revision.revision, "status": "saved"}
 
-    async def recompute(self, analysis_id: str, *, expected_revision: int) -> MatchReanalysisRecord:
+    async def recompute(
+        self,
+        analysis_id: str,
+        *,
+        expected_revision: int,
+        apply_to_future_runs: bool,
+        actor: str,
+    ) -> MatchReanalysisRecord:
         analysis = await self._results.get(analysis_id)
         benchmark = str(analysis.result["benchmark_retailer"])
         revision = await self._repository.latest_revision(
@@ -748,7 +877,12 @@ class MatchReviewService:
             raise MatchRevisionConflictError(
                 f"expected revision {expected_revision}, current revision is {revision.revision}"
             )
-        return await self._repository.enqueue_reanalysis(analysis, revision)
+        return await self._repository.enqueue_reanalysis(
+            analysis,
+            revision,
+            apply_to_future_runs=apply_to_future_runs,
+            actor=actor,
+        )
 
     @staticmethod
     def _profiles(document: JsonObject) -> list[JsonObject]:

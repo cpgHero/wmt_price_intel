@@ -9,6 +9,7 @@
     "product_pack_id",
     "product_pack_version",
     "revision",
+    "future_application",
     "benchmark_retailer",
     "competitors",
     "profiles",
@@ -22,6 +23,20 @@
     "product_pack_version": { "type": "string", "minLength": 1 },
     "revision_id": { "type": ["string", "null"], "format": "uuid" },
     "revision": { "type": "integer", "minimum": 0 },
+    "future_application": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["revision_id", "revision"],
+          "properties": {
+            "revision_id": { "type": "string", "format": "uuid" },
+            "revision": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
     "benchmark_retailer": { "$ref": "#/$defs/retailer" },
     "competitors": {
       "type": "array",

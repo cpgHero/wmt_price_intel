@@ -1,5 +1,6 @@
 """Generic retail competitive analytics engine."""
 
+from rci_analytics.assortment import AssortmentAccumulator, merge_assortment_product_context
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.historical import (
     HistoricalImportService,
@@ -33,6 +34,7 @@ from rci_analytics.result_v2 import AnalysisResultV2Builder, ComparisonFact, evi
 
 __all__ = [
     "AnalysisResultV2Builder",
+    "AssortmentAccumulator",
     "CanonicalOfferNormalizer",
     "ComparisonEngine",
     "ComparisonFact",
@@ -57,6 +59,7 @@ __all__ = [
     "benchmark_product_match_candidates",
     "complete_attributes_from_pdp",
     "evidence_set",
+    "merge_assortment_product_context",
     "merge_product_decision_context",
     "merge_product_evidence_summary",
     "prepare_historical_import",

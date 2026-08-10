@@ -19,7 +19,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.12.0"
+RENDERER_VERSION = "2.13.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -29,6 +29,7 @@ _SECTION_EYEBROWS = {
     "segment_analysis": "Normalized-value lens",
     "geographic_sensitivity": "Proximity validation",
     "product_table": "Assortment implications",
+    "assortment": "Assortment intelligence",
     "recommendations": "Decision agenda",
     "data_quality": "Quality controls",
     "methodology": "Methodology",
@@ -361,13 +362,26 @@ font-size:10px;font-weight:800;padding:5px 8px}.score-status.ready{background:rg
 [data-competitor-id][hidden]{display:none!important}.retailer-scope-note{background:rgba(88,210,248,.08);
 border-left:3px solid var(--accent);color:var(--muted);display:none;font-size:12px;margin:12px 0;
 padding:10px 12px}.retailer-scope-note.visible{display:block}
+.assortment-score{display:grid;gap:14px}.assortment-score>article{border:1px solid var(--line);
+border-radius:16px;padding:16px}.assortment-score header{align-items:center;display:flex;justify-content:space-between}
+.assortment-score header span{background:var(--surface);border-radius:999px;color:var(--muted);font-size:10px;
+font-weight:800;padding:6px 9px}.assortment-kpis{display:grid;gap:8px;grid-template-columns:repeat(5,1fr);
+margin:14px 0}.assortment-kpis div{background:var(--surface);border-radius:11px;display:grid;gap:3px;padding:10px}
+.assortment-kpis small,.assortment-products small{color:var(--muted);font-size:9px}.assortment-kpis b{font-size:21px}
+.assortment-insights{display:grid;gap:12px;grid-template-columns:1fr 1fr}.assortment-insights section{border-top:1px solid var(--line);padding-top:12px}
+.assortment-insights li{color:var(--muted);font-size:12px;line-height:1.45;margin:6px 0}
+.assortment-products{display:grid;gap:8px;grid-template-columns:1fr 1fr}.assortment-products>section{background:var(--surface);border-radius:12px;padding:12px}
+.assortment-product{align-items:center;border-top:1px solid var(--line);display:grid;gap:8px;grid-template-columns:42px 1fr;padding:8px 0}
+.assortment-product img,.assortment-product .placeholder{background:white;border-radius:7px;height:42px;object-fit:contain;width:42px}
+.assortment-product .placeholder{align-items:center;display:flex;justify-content:center}.assortment-product strong{display:block;font-size:11px}
 @media(max-width:900px){.map-stage,.map-controls{grid-template-columns:1fr}.map-rail{grid-template-columns:
-repeat(3,1fr)}.map-rail .selected{grid-column:span 3}}
+repeat(3,1fr)}.map-rail .selected{grid-column:span 3}.assortment-kpis{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.report-nav{top:4px}.product-decisions{grid-template-columns:1fr}
 .product-decision{grid-template-columns:1fr}.product-pair{align-items:center;grid-template-columns:1fr auto 1fr}
 .product-pair-image:first-child,.product-pair-image:last-child,.product-pair:after{grid-row:1}.product-pair-image{
 width:100%}.map-rail{grid-template-columns:1fr 1fr}.map-rail .selected{grid-column:span 2}
-.retailer-scope{align-items:stretch;flex-direction:column}.retailer-scope select{min-width:0;width:100%}}
+.retailer-scope{align-items:stretch;flex-direction:column}.retailer-scope select{min-width:0;width:100%}
+.assortment-insights,.assortment-products{grid-template-columns:1fr}}
 """
 
 
@@ -870,6 +884,88 @@ def _product_highlights(context: JsonObject) -> str:
     )
 
 
+def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
+    assortment = _mapping(context, "assortment_analysis")
+    comparisons = _rows(assortment, "comparisons")
+    retailers = {str(row.get("retailer")): row for row in _rows(assortment, "retailers")}
+    benchmark = retailers.get(str(assortment.get("benchmark_retailer")), {})
+    if not comparisons:
+        return ""
+
+    def product_list(title: str, products: list[JsonObject]) -> str:
+        rows = "".join(
+            "<div class=assortment-product>"
+            + (
+                f"<img src='{escape(str(row['image_url']), quote=True)}' alt='' loading=lazy>"
+                if row.get("image_url")
+                else "<div class=placeholder>•</div>"
+            )
+            + "<div><strong>"
+            + escape(_display(row.get("name")))
+            + "</strong><small>"
+            + f"{_integer(row.get('observed_locations')):,} locations · "
+            + f"{_integer(row.get('observed_zipcodes')):,} ZIPs"
+            + "</small></div></div>"
+            for row in products[:8]
+        )
+        return f"<section><h4>{escape(title)}</h4>{rows or '<p class=empty>None observed.</p>'}</section>"
+
+    cards = []
+    for row in comparisons:
+        competitor_id = str(row.get("competitor") or "")
+        competitor = _retailer_label(competitor_id)
+        competitor_summary = retailers.get(competitor_id, {})
+        geography = _mapping(row, "geography")
+        kpis = (
+            (benchmark_label + " products", benchmark.get("distinct_products")),
+            (competitor + " products", competitor_summary.get("distinct_products")),
+            ("Product relationships", row.get("product_relationships")),
+            (benchmark_label + "-only", row.get("benchmark_only_products")),
+            (competitor + " whitespace", row.get("competitor_whitespace_products")),
+        )
+        kpi_html = "".join(
+            f"<div><small>{escape(label)}</small><b>{_integer(value):,}</b></div>"
+            for label, value in kpis
+        )
+        key_points = "".join(
+            f"<li>{escape(str(point))}</li>" for point in row.get("key_points", [])
+        )
+        geographic_points = (
+            f"<li>{benchmark_label} has broader observed variety in "
+            f"{_integer(geography.get('benchmark_broader_zipcodes')):,} shared ZIPs.</li>"
+            f"<li>{competitor} has broader observed variety in "
+            f"{_integer(geography.get('competitor_broader_zipcodes')):,} shared ZIPs.</li>"
+            f"<li>{_integer(geography.get('parity_zipcodes')):,} shared ZIPs have the same "
+            "distinct-product count.</li>"
+        )
+        cards.append(
+            f"<article data-competitor-id='{escape(competitor_id, quote=True)}'><header>"
+            f"<div><div class=kind>{escape(benchmark_label)} vs. {escape(competitor)}</div>"
+            "<h3>Product relationship and whitespace scorecard</h3></div>"
+            f"<span>{_integer(geography.get('shared_zipcodes')):,} shared ZIPs</span></header>"
+            f"<div class=assortment-kpis>{kpi_html}</div>"
+            "<div class=assortment-insights><section><h4>Key points</h4>"
+            f"<ul>{key_points}</ul></section><section><h4>Store-market breadth</h4>"
+            f"<ul>{geographic_points}</ul></section></div><div class=assortment-products>"
+            + product_list(
+                f"{benchmark_label}-only products",
+                _rows(row, "top_benchmark_only"),
+            )
+            + product_list(
+                f"{competitor} whitespace",
+                _rows(row, "top_competitor_whitespace"),
+            )
+            + "</div></article>"
+        )
+    return (
+        "<section class=report-section><div class=kind>Assortment intelligence</div>"
+        f"<h2>Where {escape(benchmark_label)} overlaps—and where each retailer stands alone</h2>"
+        "<p class=group-note>Search supplies store presence and observed product counts. Product "
+        "Pack rules govern matches; PDP supplies identity and imagery where available.</p>"
+        f"<div class=assortment-score>{''.join(cards)}</div></section>"
+    )
+
+
 def _segment_matrix(rows: list[JsonObject], *, benchmark_label: str) -> str:
     ranked: list[tuple[int, JsonObject, float | None, float | None]] = []
     for row in rows:
@@ -1234,8 +1330,15 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
             )
             if decisions:
                 content.append(f"<section class=report-section>{decisions}</section>")
+        if group_id == "assortment":
+            assortment = _assortment_analysis(
+                presentation_context,
+                benchmark_label=benchmark_label,
+            )
+            if assortment:
+                content.append(assortment)
         for section in group_sections:
-            if section.get("kind") == "kpi_strip":
+            if section.get("kind") in {"kpi_strip", "assortment"}:
                 continue
             content.append(
                 self._section(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from rci_analytics import (
+    AssortmentAccumulator,
     CanonicalOfferNormalizer,
     ComparisonEngine,
     ComparisonInputReducer,
@@ -21,6 +22,7 @@ from rci_analytics import (
     benchmark_product_map_points,
     benchmark_product_match_candidates,
     complete_attributes_from_pdp,
+    merge_assortment_product_context,
     merge_product_decision_context,
     merge_product_evidence_summary,
     primary_exact_profile,
@@ -245,7 +247,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         highlights = await PostgresProductDetailRepository(
             database.engine,
             repository_root,
-        ).publication_highlights(source_artifact_ids, limit=64, per_retailer_limit=32)
+        ).publication_highlights(source_artifact_ids, limit=512, per_retailer_limit=256)
         pdp_context = product_context_index(highlights)
         reader = S3HistoricalCSVReader(bucket=bucket, client=client)
         normalizer = CanonicalOfferNormalizer(
@@ -256,6 +258,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             pack,
             profile_ids={str(value["id"]) for value in review_profiles},
         )
+        assortment_accumulator = AssortmentAccumulator()
         quality_candidates: list[dict[str, object]] = []
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
@@ -301,6 +304,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                             )
                         )
                     reducer.add(classified)
+                    assortment_accumulator.add(classified)
         offers = reducer.offers()
         matches = [
             match
@@ -342,6 +346,15 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             profiles=review_profiles,
             max_rows=2_000,
             max_locations_per_row=1,
+        )
+        assortment_analysis = merge_assortment_product_context(
+            assortment_accumulator.finalize(
+                benchmark_retailer=benchmark,
+                competitors=competitors,
+                matches=review_matches,
+                profiles=review_profiles,
+            ),
+            highlights,
         )
         selected_product_keys = {
             (benchmark, str(row["benchmark_product_id"])) for row in product_decisions
@@ -405,6 +418,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             benchmark_retailer=benchmark,
         )
         context["match_candidates"] = match_candidates
+        context["assortment_analysis"] = assortment_analysis
         if highlights:
             context["product_highlights"] = highlights
         publication = await service.publish_publication(

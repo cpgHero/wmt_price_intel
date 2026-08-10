@@ -184,6 +184,7 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
         label="match-review",
     )
     assert initial["revision"] == 0
+    assert initial["future_application"] is None
     assert initial["summary"]["suggested"] == 1
     assert [row["id"] for row in initial["profiles"]] == ["strict", "unit_price"]
     assert initial["connections"][0]["eligible_profile_ids"] == ["strict", "unit_price"]
@@ -241,8 +242,38 @@ async def test_reanalysis_uses_latest_revision_without_provider_tasks() -> None:
     service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
     await service.decide("analysis", _command(revision=0, decision="rejected"), actor="reviewer")
 
-    queued = await service.recompute("analysis", expected_revision=1)
+    staged = await service.view("analysis")
+    assert staged["future_application"] is None
+
+    queued = await service.recompute(
+        "analysis",
+        expected_revision=1,
+        apply_to_future_runs=False,
+        actor="reviewer",
+    )
 
     assert queued.status == "queued"
     assert queued.source_analysis_id == "fresh-ground-beef-example"
     assert queued.match_revision_id
+    assert queued.applied_to_future_runs is False
+    assert (await service.view("analysis"))["future_application"] is None
+
+
+async def test_reanalysis_only_updates_future_policy_after_explicit_confirmation() -> None:
+    repository = InMemoryMatchReviewRepository()
+    service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
+    await service.decide("analysis", _command(revision=0), actor="reviewer")
+
+    queued = await service.recompute(
+        "analysis",
+        expected_revision=1,
+        apply_to_future_runs=True,
+        actor="reviewer",
+    )
+
+    assert queued.applied_to_future_runs is True
+    view = await service.view("analysis")
+    assert view["future_application"] == {
+        "revision_id": queued.match_revision_id,
+        "revision": 1,
+    }

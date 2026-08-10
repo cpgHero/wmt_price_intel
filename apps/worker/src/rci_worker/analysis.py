@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_analytics import (
     AnalysisResultV2Builder,
+    AssortmentAccumulator,
     CanonicalOfferNormalizer,
     ComparisonEngine,
     ComparisonFact,
@@ -574,6 +575,7 @@ class AnalysisProcessor:
                 for rule in await self._match_reviews.rules(job.match_revision_id)
             ]
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
+        assortment_accumulator = AssortmentAccumulator()
         raw_artifact_ids: list[str] = []
         source_evidence_artifacts: list[tuple[str, str, int]] = []
         provider_rows_count = 0
@@ -655,6 +657,7 @@ class AnalysisProcessor:
                 if normalized_offer.store_number is not None:
                     in_scope_stores[retailer_id].add(normalized_offer.store_number)
             reducer.add(classified_offer)
+            assortment_accumulator.add(classified_offer)
             normalized_batches[retailer_id].append(normalized_offer)
             classified_batches[retailer_id].append(classified_offer)
             if len(normalized_batches[retailer_id]) >= batch_size:
@@ -926,6 +929,12 @@ class AnalysisProcessor:
             max_rows=2_000,
             max_locations_per_row=1,
         )
+        assortment_analysis = assortment_accumulator.finalize(
+            benchmark_retailer=benchmark,
+            competitors=competitors,
+            matches=review_matches,
+            profiles=selected_profiles,
+        )
         if (
             self._assistant is not None
             and job.match_revision_id is None
@@ -948,6 +957,7 @@ class AnalysisProcessor:
                     "map_points": map_points,
                     "product_decisions": product_decisions,
                     "match_candidates": match_candidates,
+                    "assortment_analysis": assortment_analysis,
                 },
             )
         await self._generate_deliveries(record.analysis_id, job.definition_config)

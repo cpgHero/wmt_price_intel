@@ -10,6 +10,8 @@ import { MatchReviewWorkbench } from "./match-review-workbench";
 import type {
   AnalysisRecord,
   AnalysisReportView,
+  AssortmentAnalysis,
+  AssortmentProduct,
   JsonObject,
   MapPoint,
   ProductDecision,
@@ -383,6 +385,13 @@ function BlueprintAnalysisWorkspace({
           >
             <ArtifactActions analysisId={analysis.analysis_id} />
           </Section>
+        ) : activeGroup === "assortment" && reportView.assortment_analysis ? (
+          <AssortmentAnalysisPanel
+            data={reportView.assortment_analysis}
+            benchmark={reportView.retailer_scope.benchmark}
+            competitors={competitorOptions}
+            selected={selectedRetailer}
+          />
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
             {activeGroup === "summary" && selectedScorecards.length ? (
@@ -452,6 +461,263 @@ function BlueprintAnalysisWorkspace({
         )}
       </section>
     </>
+  );
+}
+
+function AssortmentProductList({
+  title,
+  note,
+  products,
+}: Readonly<{
+  title: string;
+  note: string;
+  products: AssortmentProduct[];
+}>) {
+  return (
+    <section className="assortment-product-list">
+      <header>
+        <h4>{title}</h4>
+        <p>{note}</p>
+      </header>
+      <div>
+        {products.slice(0, 8).map((product) => (
+          <article key={product.canonical_product_id}>
+            <span className="assortment-product-image">
+              {product.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={product.image_url} alt="" />
+              ) : (
+                <b>{product.name.slice(0, 1)}</b>
+              )}
+            </span>
+            <span>
+              <small>{product.brand || product.product_id}</small>
+              <strong>{product.name}</strong>
+              <em>
+                Seen at {product.observed_locations.toLocaleString()} locations
+                · {product.observed_zipcodes.toLocaleString()} ZIPs
+              </em>
+            </span>
+          </article>
+        ))}
+        {!products.length ? (
+          <p className="empty-copy">No products meet this definition.</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function AssortmentAnalysisPanel({
+  data,
+  benchmark,
+  competitors,
+  selected,
+}: Readonly<{
+  data: AssortmentAnalysis;
+  benchmark: RetailerOption;
+  competitors: RetailerOption[];
+  selected: RetailerOption | null;
+}>) {
+  const comparisons = selected
+    ? data.comparisons.filter((row) =>
+        matchesRetailer(row.competitor, selected),
+      )
+    : data.comparisons;
+  const benchmarkSummary = data.retailers.find((row) =>
+    matchesRetailer(row.retailer, benchmark),
+  );
+  return (
+    <div className="assortment-analysis">
+      <header className="assortment-hero">
+        <div>
+          <p className="eyebrow">Assortment intelligence</p>
+          <h2>
+            Where {benchmark.name} overlaps—and where each retailer stands alone
+          </h2>
+          <p>
+            Product counts come from in-scope Search results. Matches are
+            admitted by Product Pack rules across the available comparison
+            lenses; unmatched products are whitespace signals for review, not
+            assumed substitutes.
+          </p>
+        </div>
+        <aside>
+          <small>{benchmark.name} observed assortment</small>
+          <strong>
+            {benchmarkSummary?.distinct_products.toLocaleString() ?? "—"}
+          </strong>
+          <span>
+            products across{" "}
+            {benchmarkSummary?.observed_locations.toLocaleString() ?? "—"}{" "}
+            locations
+          </span>
+        </aside>
+      </header>
+      {comparisons.map((comparison) => {
+        const competitor =
+          competitors.find((row) =>
+            matchesRetailer(comparison.competitor, row),
+          ) ??
+          ({
+            id: comparison.competitor,
+            name: displayLabel(comparison.competitor),
+          } satisfies RetailerOption);
+        const competitorSummary = data.retailers.find((row) =>
+          matchesRetailer(row.retailer, competitor),
+        );
+        return (
+          <section
+            className="assortment-competitor"
+            key={comparison.competitor}
+          >
+            <header>
+              <div>
+                <p className="eyebrow">
+                  {benchmark.name} vs. {competitor.name}
+                </p>
+                <h3>Product relationship and whitespace scorecard</h3>
+              </div>
+              <span>
+                {comparison.geography.shared_zipcodes.toLocaleString()} shared
+                ZIPs
+              </span>
+            </header>
+            <div className="assortment-kpis">
+              <article>
+                <small>{benchmark.name} products</small>
+                <strong>
+                  {benchmarkSummary?.distinct_products.toLocaleString() ?? "—"}
+                </strong>
+                <span>Distinct in-scope IDs</span>
+              </article>
+              <article>
+                <small>{competitor.name} products</small>
+                <strong>
+                  {competitorSummary?.distinct_products.toLocaleString() ?? "—"}
+                </strong>
+                <span>Distinct in-scope IDs</span>
+              </article>
+              <article>
+                <small>Product relationships</small>
+                <strong>
+                  {comparison.product_relationships.toLocaleString()}
+                </strong>
+                <span>Unique pairs across all lenses</span>
+              </article>
+              <article>
+                <small>{benchmark.name}-only</small>
+                <strong>
+                  {comparison.benchmark_only_products.toLocaleString()}
+                </strong>
+                <span>Differentiated products</span>
+              </article>
+              <article>
+                <small>{competitor.name} whitespace</small>
+                <strong>
+                  {comparison.competitor_whitespace_products.toLocaleString()}
+                </strong>
+                <span>No admitted {benchmark.name} match</span>
+              </article>
+            </div>
+            <div className="assortment-middle">
+              <section className="assortment-coverage-card">
+                <h4>Match coverage by retailer</h4>
+                <p>
+                  Share of each retailer&apos;s distinct observed products in an
+                  admitted pair.
+                </p>
+                {[
+                  [benchmark.name, comparison.benchmark_match_coverage],
+                  [competitor.name, comparison.competitor_match_coverage],
+                ].map(([label, rawValue]) => {
+                  const value = Number(rawValue);
+                  return (
+                    <div
+                      className="assortment-coverage-row"
+                      key={String(label)}
+                    >
+                      <span>{label}</span>
+                      <b>
+                        <i style={{ width: `${Math.max(1, value * 100)}%` }} />
+                      </b>
+                      <strong>
+                        {new Intl.NumberFormat("en-US", {
+                          style: "percent",
+                          maximumFractionDigits: 1,
+                        }).format(value)}
+                      </strong>
+                    </div>
+                  );
+                })}
+                <div className="assortment-lenses">
+                  {comparison.profiles.map((profile) => (
+                    <span key={profile.profile_id}>
+                      <b>{profile.relationships.toLocaleString()}</b>
+                      {profile.profile_label}
+                    </span>
+                  ))}
+                </div>
+              </section>
+              <section className="assortment-geography-card">
+                <h4>Store-market breadth</h4>
+                <p>Distinct product counts compared within shared ZIPs.</p>
+                <div>
+                  <span>
+                    <b>
+                      {comparison.geography.benchmark_broader_zipcodes.toLocaleString()}
+                    </b>
+                    {benchmark.name} broader
+                  </span>
+                  <span>
+                    <b>
+                      {comparison.geography.competitor_broader_zipcodes.toLocaleString()}
+                    </b>
+                    {competitor.name} broader
+                  </span>
+                  <span>
+                    <b>
+                      {comparison.geography.parity_zipcodes.toLocaleString()}
+                    </b>
+                    Same breadth
+                  </span>
+                </div>
+                <small>
+                  Median primary-minus-competitor product-count gap:{" "}
+                  {comparison.geography.median_product_count_gap > 0 ? "+" : ""}
+                  {comparison.geography.median_product_count_gap}
+                </small>
+              </section>
+              <section className="assortment-key-points">
+                <h4>Key points</h4>
+                <ul>
+                  {comparison.key_points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+            <div className="assortment-product-columns">
+              <AssortmentProductList
+                title={`${benchmark.name}-only products`}
+                note="Broadest observed products without an admitted competitor match."
+                products={comparison.top_benchmark_only}
+              />
+              <AssortmentProductList
+                title={`${competitor.name} whitespace`}
+                note={`Broadest observed products without an admitted ${benchmark.name} match.`}
+                products={comparison.top_competitor_whitespace}
+              />
+            </div>
+          </section>
+        );
+      })}
+      <footer className="assortment-source-note">
+        <strong>Definition.</strong> {data.source}. {data.grain}. Search remains
+        the authority for store presence and price; PDP supplies identity and
+        imagery where available.
+      </footer>
+    </div>
   );
 }
 

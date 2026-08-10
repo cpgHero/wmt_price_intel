@@ -60,8 +60,31 @@ only authoritative source for store-specific price and location.
 - The manual builder is collapsed below the review queue and contains only products that have no
   suggested or confirmed relationship in the selected scope. Its alphabetical order is explicitly
   non-significant.
-- Saving a decision creates a new immutable revision. Updating the analysis reuses persisted input
-  artifacts and queues no MetricsCart Search, PDP, or OpenAI calls.
+- Rejected relationships release both products back to the manual pool unless another active
+  relationship still uses one of them.
+- Products available for manual matching carry a badge when they participate in a suggested
+  relationship in another lens. A globally confirmed pair remains locked and unavailable.
+- Saving a decision creates a staged immutable revision and never starts reanalysis. The analyst
+  must explicitly select **Re-evaluate this report only** or **Re-evaluate and use for future
+  collections**.
+- Migration `0019_match_application_policy` separates the latest editable revision from the
+  revision approved for subsequent collection runs. New collection analyses consume only the
+  explicitly approved policy revision.
+- Re-evaluation reuses persisted input artifacts and queues no MetricsCart Search, PDP, or OpenAI
+  calls.
+
+## PDP completeness and assortment reporting
+
+- Analysis-scoped enrichment plans every distinct product in governed relationships across all
+  configured exact-ZIP lenses, rather than limiting enrichment to a small leadership-card subset.
+- Calls remain deduplicated to one product/location request, except when the same stable product ID
+  has distinct observed price states. A read-only estimate and hard credit ceiling remain required
+  before paid calls are confirmed.
+- When a PDP response lacks imagery, the persisted Search image remains the display fallback.
+- The Assortment tab is deterministic and category-neutral. It reports distinct in-scope product
+  IDs, admitted relationship coverage, reference-retailer-only products, competitor whitespace,
+  lens counts, and shared-ZIP assortment breadth. Search supplies store presence and price; PDP
+  may enrich only names, attributes, URLs, and images.
 
 ## Acceptance tests
 
@@ -76,6 +99,11 @@ only authoritative source for store-specific price and location.
    uses them.
 7. The evidence drawer distinguishes Search price/location authority from PDP identity enrichment.
 8. Existing product-category abstraction tests remain unchanged; no category branch is introduced.
+9. Saving, confirming, or rejecting a relationship does not enqueue an analysis run.
+10. Applying a revision to future collections requires an explicit re-evaluation choice and a
+    durable application-policy record.
+11. Assortment metrics count distinct retailer product IDs and preserve store/ZIP grain rather than
+    treating repeated Search observations as additional products.
 
 ## Verification commands
 

@@ -8,6 +8,7 @@ import type {
   MatchReviewProduct,
 } from "@/lib/api";
 import {
+  type CrossLensMembership,
   connectionSearchText,
   evidenceForProfile,
   productDetailRows,
@@ -53,6 +54,7 @@ function MatchBuilderProduct({
   onView,
   draggable = false,
   onDropProduct,
+  crossLensMemberships = [],
 }: Readonly<{
   product: MatchReviewProduct;
   retailerName: string;
@@ -61,6 +63,7 @@ function MatchBuilderProduct({
   onView: () => void;
   draggable?: boolean;
   onDropProduct?: (productId: string) => void;
+  crossLensMemberships?: CrossLensMembership[];
 }>) {
   return (
     <article
@@ -91,6 +94,20 @@ function MatchBuilderProduct({
           <strong>{product.name}</strong>
           <em>{product.product_id}</em>
           {priceCopy(product) ? <b>{priceCopy(product)}</b> : null}
+          {crossLensMemberships.length ? (
+            <span className="match-cross-lens-badges">
+              {crossLensMemberships.map((membership) => (
+                <i
+                  key={`${membership.profileId}:${membership.counterpartProductId}`}
+                >
+                  {membership.status === "confirmed"
+                    ? "Confirmed"
+                    : "Suggested"}{" "}
+                  in {membership.profileLabel}
+                </i>
+              ))}
+            </span>
+          ) : null}
         </span>
       </button>
       <button type="button" className="match-details-link" onClick={onView}>
@@ -331,6 +348,7 @@ export function MatchReviewWorkbench({
   const [status, setStatus] = useState<StatusFilter>("all");
   const [details, setDetails] = useState<DetailSelection | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showRecompute, setShowRecompute] = useState(false);
   const [message, setMessage] = useState("Loading governed match review…");
 
   const load = useCallback(async () => {
@@ -477,11 +495,13 @@ export function MatchReviewWorkbench({
     setCompetitorProductId(null);
     setDetails(null);
     await load();
-    setMessage("Decision saved as a new immutable revision.");
+    setMessage(
+      "Decision staged in a new immutable revision. The current report has not changed.",
+    );
     setBusy(false);
   }
 
-  async function recompute() {
+  async function recompute(applyToFutureRuns: boolean) {
     if (!review || review.revision < 1) return;
     setBusy(true);
     const response = await fetch(
@@ -489,7 +509,10 @@ export function MatchReviewWorkbench({
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ expected_revision: review.revision }),
+        body: JSON.stringify({
+          expected_revision: review.revision,
+          apply_to_future_runs: applyToFutureRuns,
+        }),
       },
     );
     const body = (await response.json()) as {
@@ -498,10 +521,18 @@ export function MatchReviewWorkbench({
     };
     setMessage(
       response.ok
-        ? `Reanalysis queued (${body.analysis_run_id?.slice(0, 8)}…). Search, PDP, and AI calls: 0.`
+        ? `Report re-evaluation queued (${body.analysis_run_id?.slice(0, 8)}…). ${
+            applyToFutureRuns
+              ? "This revision will also govern subsequent collections."
+              : "The policy for subsequent collections was left unchanged."
+          } Search, PDP, and AI calls: 0.`
         : body.error || "Reanalysis could not be queued.",
     );
     setBusy(false);
+    if (response.ok) {
+      setShowRecompute(false);
+      await load();
+    }
   }
 
   if (!review || !scoped)
@@ -535,12 +566,16 @@ export function MatchReviewWorkbench({
           <strong>Revision {review.revision}</strong>
           <button
             type="button"
-            onClick={recompute}
+            onClick={() => setShowRecompute(true)}
             disabled={busy || review.revision < 1}
           >
-            Update analysis
+            Re-evaluate report
           </button>
-          <span>No Search, PDP, or AI calls</span>
+          <span>
+            {review.future_application
+              ? `Future collections use revision ${review.future_application.revision}`
+              : "No revision is applied to future collections"}
+          </span>
         </div>
       </div>
 
@@ -831,6 +866,11 @@ export function MatchReviewWorkbench({
                   selected={benchmarkId === product.product_id}
                   onSelect={() => setBenchmarkId(product.product_id)}
                   onView={() => setDetails({ benchmark: product })}
+                  crossLensMemberships={
+                    scoped.crossLensMemberships[
+                      `${review.benchmark_retailer.id}:${product.product_id}`
+                    ]
+                  }
                   onDropProduct={(productId) => {
                     setBenchmarkId(product.product_id);
                     setCompetitorProductId(productId);
@@ -877,6 +917,11 @@ export function MatchReviewWorkbench({
                   selected={competitorProductId === product.product_id}
                   onSelect={() => setCompetitorProductId(product.product_id)}
                   onView={() => setDetails({ competitor: product })}
+                  crossLensMemberships={
+                    scoped.crossLensMemberships[
+                      `${competitorId}:${product.product_id}`
+                    ]
+                  }
                   draggable
                 />
               ))}
@@ -903,6 +948,63 @@ export function MatchReviewWorkbench({
           competitorName={competitorName}
           onClose={() => setDetails(null)}
         />
+      ) : null}
+      {showRecompute ? (
+        <div
+          className="match-drawer-backdrop match-recompute-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setShowRecompute(false);
+          }}
+        >
+          <section
+            className="match-recompute-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="match-recompute-title"
+          >
+            <p className="eyebrow">Explicit re-evaluation</p>
+            <h3 id="match-recompute-title">
+              How should revision {review.revision} be applied?
+            </h3>
+            <p>
+              Saved decisions are staged and never change a report
+              automatically. Re-evaluation uses the existing Search and PDP
+              evidence and queues no new provider calls.
+            </p>
+            <div className="match-recompute-options">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => recompute(false)}
+              >
+                <strong>Re-evaluate this report only</strong>
+                <span>
+                  Leave the policy for subsequent collections unchanged.
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => recompute(true)}
+              >
+                <strong>Re-evaluate and use for future collections</strong>
+                <span>
+                  Make revision {review.revision} the governed match policy for
+                  later collection updates.
+                </span>
+              </button>
+            </div>
+            <button
+              type="button"
+              className="quiet"
+              disabled={busy}
+              onClick={() => setShowRecompute(false)}
+            >
+              Cancel
+            </button>
+          </section>
+        </div>
       ) : null}
     </section>
   );

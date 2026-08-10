@@ -6,6 +6,10 @@ export interface RetailCompetitiveIntelligenceProductMatchReview {
   product_pack_version: string;
   revision_id?: string | null;
   revision: number;
+  future_application: null | {
+    revision_id: string;
+    revision: number;
+  };
   benchmark_retailer: Retailer;
   competitors: Retailer[];
   profiles: Profile[];

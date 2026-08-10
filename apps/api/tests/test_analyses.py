@@ -58,7 +58,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
 
         generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
         assert generated.status_code == 201
-        assert generated.json()["renderer_version"] == "2.12.0"
+        assert generated.json()["renderer_version"] == "2.13.0"
         assert generated.json()["publication_id"] is None
         artifact_id = generated.json()["id"]
         artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")
@@ -104,6 +104,7 @@ async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis()
                 "product_pack_version": "1.0.0",
                 "revision_id": None,
                 "revision": 0,
+                "future_application": None,
                 "benchmark_retailer": {"id": "walmart_us", "name": "Walmart"},
                 "competitors": [{"id": "aldi_us", "name": "ALDI"}],
                 "profiles": [],
@@ -119,8 +120,17 @@ async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis()
             assert command.decision == "confirmed"
             return {"revision_id": "revision-id", "revision": 1, "status": "saved"}
 
-        async def recompute(self, _analysis_id: str, *, expected_revision: int) -> object:
+        async def recompute(
+            self,
+            _analysis_id: str,
+            *,
+            expected_revision: int,
+            apply_to_future_runs: bool,
+            actor: str,
+        ) -> object:
             assert expected_revision == 1
+            assert apply_to_future_runs is True
+            assert actor == "reviewer@example.test"
             return type(
                 "Queued",
                 (),
@@ -129,6 +139,7 @@ async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis()
                     "source_analysis_id": "analysis-id",
                     "match_revision_id": "revision-id",
                     "status": "queued",
+                    "applied_to_future_runs": True,
                 },
             )()
 
@@ -154,12 +165,14 @@ async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis()
         )
         recompute = await client.post(
             "/api/v1/analyses/analysis-id/match-review/recompute",
-            json={"expected_revision": 1},
+            json={"expected_revision": 1, "apply_to_future_runs": True},
+            headers={"X-RCI-Actor": "reviewer@example.test"},
         )
 
     assert review.status_code == 200
     assert decision.json()["revision"] == 1
     assert recompute.json()["provider_calls_queued"] == 0
+    assert recompute.json()["applied_to_future_runs"] is True
 
 
 async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> None:

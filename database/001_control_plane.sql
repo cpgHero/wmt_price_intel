@@ -289,6 +289,22 @@ CREATE UNIQUE INDEX product_match_rule_confirmed_competitor_uq
   ON product_match_rule(revision_id, competitor_retailer_id,
     competitor_product_id) WHERE decision = 'confirmed';
 
+CREATE TABLE product_match_application_policy (
+  organization_id uuid NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  product_pack_id text NOT NULL,
+  product_pack_version text NOT NULL,
+  benchmark_retailer_id text NOT NULL REFERENCES retailer(id),
+  revision_id uuid NOT NULL REFERENCES product_match_revision(id) ON DELETE CASCADE,
+  updated_by text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(organization_id, product_pack_id, product_pack_version,
+    benchmark_retailer_id),
+  FOREIGN KEY(product_pack_id, product_pack_version)
+    REFERENCES product_pack_version(product_pack_id, version)
+);
+CREATE INDEX product_match_application_policy_revision_idx
+  ON product_match_application_policy(revision_id);
+
 CREATE TABLE product_match_review_event (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   revision_id uuid NOT NULL REFERENCES product_match_revision(id) ON DELETE CASCADE,

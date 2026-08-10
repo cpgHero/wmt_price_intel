@@ -98,6 +98,20 @@
       "narrative_section_id": "products"
     },
     {
+      "id": "assortment_analysis",
+      "title": "Assortment Intelligence",
+      "kind": "assortment",
+      "required": true,
+      "metric_selectors": ["assortment.*"],
+      "evidence_kinds": [
+        "classified_offers",
+        "exact_matches",
+        "normalized_matches"
+      ],
+      "visualization": "ranked_cards",
+      "empty_state": "No qualifying assortment evidence was produced."
+    },
+    {
       "id": "recommendations",
       "title": "Recommended Actions",
       "kind": "recommendations",
@@ -146,6 +160,7 @@
         "segments",
         "proximity",
         "products",
+        "assortment_analysis",
         "recommendations",
         "quality",
         "methodology"
@@ -161,6 +176,7 @@
         "segments",
         "proximity",
         "products",
+        "assortment_analysis",
         "quality",
         "methodology"
       ],
@@ -185,6 +201,7 @@
         "segments",
         "proximity",
         "products",
+        "assortment_analysis",
         "recommendations",
         "quality",
         "methodology"
@@ -198,6 +215,7 @@
         "segments",
         "proximity",
         "products",
+        "assortment_analysis",
         "quality",
         "methodology"
       ]

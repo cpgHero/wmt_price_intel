@@ -406,9 +406,8 @@ class InMemoryProductDetailRepository:
                         "brand": normalized.get("brand") or product.identity.get("brand"),
                         "url": normalized.get("url") or product.identity.get("url"),
                         "image_url": (
-                            media.get("image_primary")
-                            if isinstance(media, dict)
-                            else product.identity.get("image_primary")
+                            (media.get("image_primary") if isinstance(media, dict) else None)
+                            or product.identity.get("image_primary")
                         ),
                         "description": normalized.get("description_short")
                         or normalized.get("description_full"),

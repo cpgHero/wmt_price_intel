@@ -87,6 +87,7 @@ class MatchDecisionRequest(BaseModel):
 
 class MatchRecomputeRequest(BaseModel):
     expected_revision: int = Field(ge=1)
+    apply_to_future_runs: bool
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -256,17 +257,21 @@ async def recompute_match_review(
     analysis_id: str,
     service: MatchReviewServiceDependency,
     command: MatchRecomputeRequest,
+    actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
 ) -> dict[str, Any]:
     try:
         result = await service.recompute(
             analysis_id,
             expected_revision=command.expected_revision,
+            apply_to_future_runs=command.apply_to_future_runs,
+            actor=actor or "interactive-user",
         )
         return {
             "analysis_run_id": result.analysis_run_id,
             "source_analysis_id": result.source_analysis_id,
             "match_revision_id": result.match_revision_id,
             "status": result.status,
+            "applied_to_future_runs": result.applied_to_future_runs,
             "provider_calls_queued": 0,
         }
     except AnalysisNotFoundError as exc:

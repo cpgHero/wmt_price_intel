@@ -92,6 +92,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         "Normalized Price-per-Pound View",
         "10-Mile Validation",
         "Products and Assortment",
+        "Assortment Intelligence",
         "Recommended Actions",
         "Data Quality",
         "Methodology & Caveats",
@@ -102,6 +103,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         ("price", "Price"),
         ("segments", "Segments"),
         ("products", "Products"),
+        ("assortment", "Assortment"),
         ("opportunities", "Opportunities"),
         ("quality", "Quality"),
         ("methodology", "Methodology"),
@@ -407,6 +409,30 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     }
     context = {
         "product_decisions": [decision],
+        "assortment_analysis": {
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {"retailer": "walmart_us", "distinct_products": 8},
+                {"retailer": "aldi_us", "distinct_products": 6},
+            ],
+            "comparisons": [
+                {
+                    "competitor": "aldi_us",
+                    "product_relationships": 4,
+                    "benchmark_only_products": 4,
+                    "competitor_whitespace_products": 2,
+                    "geography": {
+                        "shared_zipcodes": 10,
+                        "benchmark_broader_zipcodes": 6,
+                        "competitor_broader_zipcodes": 3,
+                        "parity_zipcodes": 1,
+                    },
+                    "key_points": ["Four governed product relationships were observed."],
+                    "top_benchmark_only": [],
+                    "top_competitor_whitespace": [],
+                }
+            ],
+        },
         "product_evidence": {
             "pair-1": {
                 "comparison_grain": "Exact package and ZIP",
@@ -436,6 +462,7 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
         "Price",
         "Segments",
         "Products",
+        "Assortment",
         "Opportunities",
         "Quality",
         "Methodology",
@@ -447,6 +474,8 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     assert "ALDI is $1.80 lower at the median match" in html
     assert "View exact store evidence" in html
     assert "00501" in html
+    assert "Product relationship and whitespace scorecard" in html
+    assert "Four governed product relationships were observed." in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
@@ -490,6 +519,7 @@ def test_artifact_specific_report_view_uses_blueprint_section_profile() -> None:
         "normalized_price",
         "proximity",
         "products",
+        "assortment_analysis",
         "recommendations",
         "quality",
         "methodology",

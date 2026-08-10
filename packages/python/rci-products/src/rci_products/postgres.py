@@ -908,9 +908,8 @@ class PostgresProductDetailRepository:
                     "brand": normalized.get("brand") or identity.get("brand"),
                     "url": normalized.get("url") or identity.get("url"),
                     "image_url": (
-                        media.get("image_primary")
-                        if isinstance(media, dict)
-                        else identity.get("image_primary")
+                        (media.get("image_primary") if isinstance(media, dict) else None)
+                        or identity.get("image_primary")
                     ),
                     "description": normalized.get("description_short")
                     or normalized.get("description_full"),

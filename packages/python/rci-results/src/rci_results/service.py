@@ -117,6 +117,7 @@ class AnalysisResultService:
             "product_evidence",
             "map_points",
             "quality_observations",
+            "assortment_analysis",
             "notes",
         }
         if unknown_context:

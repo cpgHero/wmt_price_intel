@@ -16,8 +16,7 @@ from rci_analytics import (
     ComparisonInputReducer,
     OfferClassifier,
     ProductPackLoader,
-    benchmark_product_decisions,
-    primary_exact_profile,
+    benchmark_product_match_candidates,
 )
 from rci_analytics.models import ClassifiedOffer
 from rci_analytics.normalization import RetailerIdentityMap
@@ -52,7 +51,12 @@ def _arguments() -> argparse.Namespace:
         type=Path,
         default=Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())),
     )
-    parser.add_argument("--max-product-pairs", type=int, default=16)
+    parser.add_argument(
+        "--max-product-pairs",
+        type=int,
+        default=2_000,
+        help="Safety ceiling for distinct governed relationships across all exact-ZIP lenses.",
+    )
     parser.add_argument("--max-credits", type=int, default=1000)
     parser.add_argument(
         "--retailer",
@@ -118,7 +122,14 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             if isinstance(value, dict)
         }
         engine = ComparisonEngine(pack)
-        profile = primary_exact_profile(pack, configured_profile_ids=configured_modes)
+        review_profiles = [
+            profile
+            for profile in pack.matching_profiles
+            if str(profile["geography"]) == "exact_zip"
+            and (not configured_modes or str(profile["id"]) in configured_modes)
+        ]
+        if not review_profiles:
+            raise ValueError("Product Pack has no configured exact-ZIP comparison profile")
         queue = PostgresAnalysisQueue(
             database.engine,
             code_version=settings.app_version or APP_VERSION,
@@ -131,7 +142,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
         )
         classifier = OfferClassifier(pack)
-        reducer = ComparisonInputReducer(pack, profile_ids={str(profile["id"])})
+        reducer = ComparisonInputReducer(
+            pack,
+            profile_ids={str(profile["id"]) for profile in review_profiles},
+        )
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
                 for row in rows:
@@ -149,6 +163,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         offer_index = {item.offer.offer_id: item for item in offers}
         matches = [
             match
+            for profile in review_profiles
             for competitor in competitors
             for match in engine.compare(
                 offers,
@@ -157,11 +172,13 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 profile_id=str(profile["id"]),
             )
         ]
-        decisions = benchmark_product_decisions(
+        relationships = benchmark_product_match_candidates(
             offers,
             matches,
             benchmark_retailer=benchmark,
+            profiles=review_profiles,
             max_rows=args.max_product_pairs,
+            max_locations_per_row=1,
         )
         selected_pairs = {
             (
@@ -169,7 +186,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 str(row["competitor"]),
                 str(row["competitor_product_id"]),
             )
-            for row in decisions
+            for row in relationships
         }
         analysis_offer_ids = {
             offer_id
@@ -212,7 +229,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         summary: dict[str, object] = {
             "status": "estimate" if not args.confirm_paid_calls else "queued",
             "analysis_id": record.analysis_id,
-            "decision_product_pairs": len(decisions),
+            "governed_product_relationships": len(selected_pairs),
             "admitted_offer_observations": len(analysis_offer_ids),
             "unique_retailer_products": len(
                 {

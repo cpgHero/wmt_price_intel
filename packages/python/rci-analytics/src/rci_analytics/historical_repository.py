@@ -129,13 +129,15 @@ class PostgresAnalysisInputRepository:
                     await connection.execute(
                         text(
                             """
-                            SELECT id::text, source_analysis_result_id::text
-                            FROM product_match_revision
-                            WHERE organization_id = CAST(:organization_id AS uuid)
-                              AND product_pack_id = :product_pack_id
-                              AND product_pack_version = :product_pack_version
-                              AND benchmark_retailer_id = :benchmark_retailer_id
-                              AND status = 'current'
+                            SELECT revision.id::text,
+                              revision.source_analysis_result_id::text
+                            FROM product_match_application_policy policy
+                            JOIN product_match_revision revision
+                              ON revision.id = policy.revision_id
+                            WHERE policy.organization_id = CAST(:organization_id AS uuid)
+                              AND policy.product_pack_id = :product_pack_id
+                              AND policy.product_pack_version = :product_pack_version
+                              AND policy.benchmark_retailer_id = :benchmark_retailer_id
                             """
                         ),
                         {
@@ -576,13 +578,14 @@ class PostgresAnalysisInputRepository:
                     FROM analysis_input_set i
                     LEFT JOIN LATERAL (
                       SELECT revision.id, revision.source_analysis_result_id
-                      FROM product_match_revision revision
-                      WHERE revision.organization_id = i.organization_id
-                        AND revision.product_pack_id = i.product_pack_id
-                        AND revision.product_pack_version = i.product_pack_version
-                        AND revision.benchmark_retailer_id =
+                      FROM product_match_application_policy policy
+                      JOIN product_match_revision revision
+                        ON revision.id = policy.revision_id
+                      WHERE policy.organization_id = i.organization_id
+                        AND policy.product_pack_id = i.product_pack_id
+                        AND policy.product_pack_version = i.product_pack_version
+                        AND policy.benchmark_retailer_id =
                           i.analysis_config->>'benchmark_retailer'
-                        AND revision.status = 'current'
                       LIMIT 1
                     ) governed ON true
                     WHERE i.source_kind = 'live_collection' AND i.status = 'ready'

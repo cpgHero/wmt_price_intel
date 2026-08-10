@@ -30,6 +30,7 @@ describe("report presentation", () => {
       section("kpis", "kpi_strip"),
       section("coverage", "coverage"),
       section("normalized", "segment_analysis"),
+      section("assortment", "assortment"),
       section("actions", "recommendations"),
     ]);
 
@@ -44,6 +45,9 @@ describe("report presentation", () => {
     ).toHaveLength(1);
     expect(
       grouped.find((group) => group.id === "opportunities")?.sections,
+    ).toHaveLength(1);
+    expect(
+      grouped.find((group) => group.id === "assortment")?.sections,
     ).toHaveLength(1);
   });
 
