@@ -287,6 +287,9 @@ function BlueprintAnalysisWorkspace({
     updateRoute({ lens: next === preferredBasis ? null : next });
   };
   const reviewDecision = (decision: ProductDecision) => {
+    const pairReference =
+      decision.relationship_id ||
+      `${decision.benchmark_product_id}::${decision.competitor_product_id}`;
     setActiveGroup("match-review");
     setSelectedCompetitor(
       competitorOptions.find((option) =>
@@ -294,7 +297,7 @@ function BlueprintAnalysisWorkspace({
       )?.id ?? selectedCompetitor,
     );
     setSelectedLens(decision.profile_id || preferredBasis);
-    setSelectedPair(decision.relationship_id || decision.id);
+    setSelectedPair(pairReference);
     updateRoute({
       tab: "match-review",
       competitor:
@@ -302,7 +305,7 @@ function BlueprintAnalysisWorkspace({
           matchesRetailer(decision.competitor, option),
         )?.id ?? null,
       lens: decision.profile_id || null,
-      pair: decision.relationship_id || decision.id,
+      pair: pairReference,
     });
   };
   const selectedRetailer =

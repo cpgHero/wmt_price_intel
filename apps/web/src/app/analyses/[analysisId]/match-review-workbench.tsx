@@ -489,10 +489,15 @@ export function MatchReviewWorkbench({
       openedFocus === focusedRelationshipId
     )
       return;
+    const [focusedBenchmarkId, focusedCompetitorId] =
+      focusedRelationshipId.split("::", 2);
     const connection = review.connections.find(
       (row) =>
         row.relationship_id === focusedRelationshipId ||
-        row.id === focusedRelationshipId,
+        row.id === focusedRelationshipId ||
+        (focusedCompetitorId !== undefined &&
+          row.benchmark_product_id === focusedBenchmarkId &&
+          row.competitor_product_id === focusedCompetitorId),
     );
     if (!connection) return;
     const nextProfile = connection.eligible_profile_ids.includes(profileId)
