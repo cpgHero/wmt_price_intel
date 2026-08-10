@@ -95,6 +95,58 @@ def _merchant_record(
     return {key: merchant_value(value) for key, value in row.items()}
 
 
+def _segment_display_label(segment: JsonObject, product_pack: JsonObject) -> str:
+    """Render segment attributes as a compact merchant-facing label."""
+
+    if str(segment.get("segment_id", "")).casefold() == "all":
+        return "All comparable items"
+    values = segment.get("attributes")
+    if not isinstance(values, dict) or not values:
+        return str(segment.get("label") or segment.get("segment_id") or "Comparable items")
+    definitions = {
+        str(attribute.get("name")): attribute
+        for attribute in product_pack.get("attributes", [])
+        if isinstance(attribute, dict) and attribute.get("name")
+    }
+    names = [name for name in definitions if name in values]
+    names.extend(sorted(str(name) for name in values if str(name) not in definitions))
+    percentages: list[str] = []
+    measurements: list[str] = []
+    descriptors: list[str] = []
+    baseline_values = {"", "default", "none", "not applicable", "standard", "unknown"}
+    for name in names:
+        value = values.get(name)
+        if value is None:
+            continue
+        definition = definitions.get(name, {})
+        label = str(definition.get("label") or name.replace("_", " ")).strip().casefold()
+        unit = str(definition.get("unit", "")).strip().casefold()
+        if not unit and name.casefold().endswith("_pct"):
+            unit = "percent"
+            label = name.removesuffix("_pct").replace("_", " ")
+        if not unit and (name.casefold().endswith("_lb") or "weight" in name.casefold()):
+            unit = "lb"
+        if isinstance(value, bool):
+            descriptors.append(label if value else f"non-{label.replace(' ', '-')}")
+        elif isinstance(value, int | float):
+            rendered = f"{float(value):g}"
+            if unit == "percent":
+                percentages.append(f"{rendered}% {label.removesuffix(' percentage')}")
+            else:
+                display_unit = unit.replace("_", " ") if unit else label
+                measurements.append(f"{rendered} {display_unit}".strip())
+        else:
+            rendered = str(value).replace("_", " ").strip().casefold()
+            if rendered not in baseline_values:
+                descriptors.append(rendered)
+    parts: list[str] = []
+    if percentages:
+        parts.append(" / ".join(percentages))
+    parts.extend(measurements)
+    parts.extend(descriptors)
+    return " · ".join(parts) or str(segment.get("label") or "Comparable items")
+
+
 _COMPARISON_FIELDS = (
     "matches",
     "unique_geographies",
@@ -491,8 +543,9 @@ class ReportProjector:
             mode = mode_index.get(str(comparison.get("profile_id")), {})
             segment_id = str(comparison.get("segment_id", "all"))
             segment = segment_index.get(segment_id, {})
-            segment_label = (
-                "All comparable items" if segment_id == "all" else segment.get("label", segment_id)
+            segment_label = _segment_display_label(
+                {**segment, "segment_id": segment_id},
+                product_pack,
             )
             rows.append(
                 {

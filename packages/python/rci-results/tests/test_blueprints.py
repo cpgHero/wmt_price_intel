@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import pytest
 
 from rci_results import AnalysisResultValidator, ArtifactRenderer, ReportBlueprintLoader
+from rci_results.blueprints import _segment_display_label
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 PACK_IDS = (
@@ -167,6 +168,26 @@ def test_report_view_humanizes_catalog_and_product_pack_labels() -> None:
     assert "aldi_us" not in rendered
     assert "Lean Pct:" not in rendered
     assert "ALDI 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed" in rendered
+
+
+def test_segment_display_label_humanizes_units_and_boolean_attributes() -> None:
+    pack = json.loads((REPOSITORY_ROOT / "product-packs/fresh_fluid_milk.json").read_text())
+
+    label = _segment_display_label(
+        {
+            "segment_id": "milk-segment",
+            "label": "128 fl_oz / 1% / non-organic / non-lactose_free",
+            "attributes": {
+                "volume_oz": 128,
+                "fat_type": "1%",
+                "organic": False,
+                "lactose_free": False,
+            },
+        },
+        pack,
+    )
+
+    assert label == "128 fl oz · 1% · non-organic · non-lactose-free"
 
 
 def test_comparison_table_projects_matched_geography_count() -> None:
