@@ -224,6 +224,7 @@ def test_leadership_html_renders_analysis_linked_product_map() -> None:
     assert "All mapped benchmark products" in html
     assert '"benchmark_product_id":"100"' in html
     assert "class=state-layer" in html
+    assert "</rect><g class=state-layer>" in html
     assert html.count("<path d=") > 40
 
 

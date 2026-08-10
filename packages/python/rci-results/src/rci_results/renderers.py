@@ -19,7 +19,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.11.0"
+RENDERER_VERSION = "2.11.1"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -686,7 +686,8 @@ product.addEventListener('change',render);outcome.addEventListener('change',rend
         "<span class=competitor_lower>Competitor lower · <b data-map-count=competitor_lower>0</b></span>"
         "<span class=parity>Parity · <b data-map-count=parity>0</b></span></div></div>"
         "<div class=map-stage><figure class=geo-map><svg viewBox='0 0 960 520' role=img "
-        "aria-label='Analysis-linked geographic price outcomes'><rect width=960 height=520 rx=22/>"
+        "aria-label='Analysis-linked geographic price outcomes'><rect width=960 height=520 rx=22>"
+        "</rect>"
         f"<g class=state-layer>{state_paths}</g><g class=map-point-layer id=map-point-layer></g>"
         "</svg><figcaption>Circle size reflects nearby matched observations. Select a point for "
         "its product, ZIP, retailer, and price difference.</figcaption></figure><aside class=map-rail>"

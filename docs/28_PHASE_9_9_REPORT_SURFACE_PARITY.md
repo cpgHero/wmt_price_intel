@@ -13,7 +13,7 @@ workspace: Summary, Geography, Price, Segments, Products, Opportunities, Quality
 The API exposes that ordering. The web workspace and HTML renderer consume it without
 recalculating analytics.
 
-Renderer `2.11.0` adds:
+Renderer `2.11.1` adds:
 
 - the product-pair decision cards used by the application, including both product identities and
   images when PDP evidence exists;
