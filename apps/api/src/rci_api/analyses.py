@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from rci_contracts import ContractError
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
+    MatchDecisionCommand,
+    MatchOneToOneConflictError,
+    MatchReviewService,
+    MatchRevisionConflictError,
+    PostgresMatchReviewRepository,
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
@@ -68,6 +74,21 @@ class DownloadResponse(BaseModel):
     expires_in_seconds: int
 
 
+class MatchDecisionRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    competitor_retailer_id: str = Field(min_length=1)
+    profile_id: str = Field(min_length=1)
+    benchmark_product_id: str = Field(min_length=1)
+    competitor_product_id: str = Field(min_length=1)
+    decision: Literal["confirmed", "rejected", "reset"]
+    replace_conflicts: bool = False
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class MatchRecomputeRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+
+
 def _enabled(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
@@ -97,7 +118,23 @@ def get_analysis_service(request: Request) -> AnalysisResultService:
     )
 
 
+def get_match_review_service(request: Request) -> MatchReviewService:
+    repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
+    catalog = json.loads((repository_root / "config" / "retailer-catalog.json").read_text())
+    names = {
+        str(row["id"]): str(row["display_name"])
+        for row in catalog.get("retailers", [])
+        if isinstance(row, dict) and row.get("id") and row.get("display_name")
+    }
+    return MatchReviewService(
+        get_analysis_service(request),
+        PostgresMatchReviewRepository(request.app.state.database_probe.engine),
+        retailer_names=names,
+    )
+
+
 AnalysisServiceDependency = Annotated[AnalysisResultService, Depends(get_analysis_service)]
+MatchReviewServiceDependency = Annotated[MatchReviewService, Depends(get_match_review_service)]
 AnalysisBody = Annotated[dict[str, Any], Body()]
 
 
@@ -171,6 +208,71 @@ async def get_matches(
         return await service.matches(analysis_id)
     except AnalysisNotFoundError as exc:
         raise _analysis_not_found(exc) from exc
+
+
+@router.get("/analyses/{analysis_id}/match-review", tags=["analyses"])
+async def get_match_review(
+    analysis_id: str,
+    service: MatchReviewServiceDependency,
+) -> dict[str, Any]:
+    try:
+        return await service.view(analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/analyses/{analysis_id}/match-review/decisions", tags=["analyses"])
+async def save_match_decision(
+    analysis_id: str,
+    service: MatchReviewServiceDependency,
+    command: MatchDecisionRequest,
+    actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
+) -> dict[str, Any]:
+    try:
+        return await service.decide(
+            analysis_id,
+            MatchDecisionCommand(**command.model_dump()),
+            actor=actor or "interactive-user",
+        )
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except MatchOneToOneConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "conflicts": exc.conflicts},
+        ) from exc
+    except MatchRevisionConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/analyses/{analysis_id}/match-review/recompute", tags=["analyses"])
+async def recompute_match_review(
+    analysis_id: str,
+    service: MatchReviewServiceDependency,
+    command: MatchRecomputeRequest,
+) -> dict[str, Any]:
+    try:
+        result = await service.recompute(
+            analysis_id,
+            expected_revision=command.expected_revision,
+        )
+        return {
+            "analysis_run_id": result.analysis_run_id,
+            "source_analysis_id": result.source_analysis_id,
+            "match_revision_id": result.match_revision_id,
+            "status": result.status,
+            "provider_calls_queued": 0,
+        }
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except (MatchRevisionConflictError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.get("/analyses/{analysis_id}/quality", tags=["analyses"])

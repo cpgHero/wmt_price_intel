@@ -1,6 +1,7 @@
 import type {
   RetailCompetitiveIntelligenceAnalysisResult,
   RetailCompetitiveIntelligenceAnalysisResultV2,
+  RetailCompetitiveIntelligenceProductMatchReview,
 } from "@rci/contracts";
 
 import { loadServerConfig } from "./config";
@@ -198,6 +199,10 @@ export interface ProductHighlight {
   role?: string | null;
   detail?: string | null;
 }
+
+export type MatchReview = RetailCompetitiveIntelligenceProductMatchReview;
+export type MatchReviewProduct = MatchReview["products"][number];
+export type MatchReviewConnection = MatchReview["connections"][number];
 
 export interface MapPoint {
   id: string;

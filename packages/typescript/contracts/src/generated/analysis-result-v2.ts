@@ -180,6 +180,8 @@ export interface Source {
   input_set_id: string;
   kind: "live_collection" | "historical_import";
   collection_run_id?: string | null;
+  match_revision_id?: string | null;
+  source_analysis_id?: string | null;
   observed_start?: string | null;
   observed_end?: string | null;
   sampling: boolean;

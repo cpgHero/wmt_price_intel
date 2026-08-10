@@ -13,6 +13,7 @@ from rci_analytics.models import (
     ComparisonSummary,
     JsonObject,
     MatchRecord,
+    ProductMatchRule,
 )
 from rci_analytics.product_pack import ProductPack
 
@@ -78,6 +79,156 @@ class ComparisonEngine:
                 f"geography {profile['geography']!r} is not implemented for this engine"
             )
         return self._exact_zip_matches(offers, benchmark_id, competitor_id, profile)
+
+    def compare_governed(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        competitor_id: str,
+        profile_id: str,
+        rules: Iterable[ProductMatchRule] = (),
+    ) -> list[MatchRecord]:
+        """Apply an immutable one-to-one decision snapshot to generic matches."""
+
+        applicable = [
+            rule
+            for rule in rules
+            if rule.competitor_id == competitor_id and rule.profile_id == profile_id
+        ]
+        confirmed = [rule for rule in applicable if rule.decision == "confirmed"]
+        rejected = {
+            (rule.benchmark_product_id, rule.competitor_product_id)
+            for rule in applicable
+            if rule.decision == "rejected"
+        }
+        benchmark_products = [rule.benchmark_product_id for rule in confirmed]
+        competitor_products = [rule.competitor_product_id for rule in confirmed]
+        if len(benchmark_products) != len(set(benchmark_products)) or len(
+            competitor_products
+        ) != len(set(competitor_products)):
+            raise ValueError("confirmed product-match rules must be one-to-one")
+
+        offer_index = {item.offer.offer_id: item.offer for item in offers}
+        locked_benchmark = set(benchmark_products)
+        locked_competitor = set(competitor_products)
+        automatic = []
+        for match in self.compare(
+            offers,
+            benchmark_id=benchmark_id,
+            competitor_id=competitor_id,
+            profile_id=profile_id,
+        ):
+            benchmark = offer_index.get(match.benchmark_offer_id)
+            competitor = offer_index.get(match.competitor_offer_id)
+            if benchmark is None or competitor is None:
+                continue
+            pair = (benchmark.retailer_product_id, competitor.retailer_product_id)
+            if pair in rejected or pair[0] in locked_benchmark or pair[1] in locked_competitor:
+                continue
+            automatic.append(match)
+
+        profile = self.pack.profile(profile_id)
+        if confirmed and profile["geography"] != "exact_zip":
+            raise ValueError("confirmed product matches currently require exact-ZIP geography")
+        governed = [
+            match
+            for rule in confirmed
+            for match in self._confirmed_exact_zip_matches(
+                offers,
+                benchmark_id=benchmark_id,
+                competitor_id=competitor_id,
+                profile=profile,
+                benchmark_product_id=rule.benchmark_product_id,
+                competitor_product_id=rule.competitor_product_id,
+            )
+        ]
+        return sorted(
+            [*governed, *automatic],
+            key=lambda match: (
+                match.geography_key,
+                match.benchmark_offer_id,
+                match.competitor_offer_id,
+            ),
+        )
+
+    def _confirmed_exact_zip_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+        benchmark_product_id: str,
+        competitor_product_id: str,
+    ) -> list[MatchRecord]:
+        metric = self._comparison_metric(profile)
+        benchmark = self._selected_product_by_zip(
+            offers,
+            retailer_id=benchmark_id,
+            product_id=benchmark_product_id,
+            profile=profile,
+            metric=metric,
+            role="benchmark",
+        )
+        competitor = self._selected_product_by_zip(
+            offers,
+            retailer_id=competitor_id,
+            product_id=competitor_product_id,
+            profile=profile,
+            metric=metric,
+            role="competitor",
+        )
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        return [
+            self._match(
+                profile=profile,
+                competitor_id=competitor_id,
+                geography_key=zipcode,
+                benchmark=benchmark[zipcode][0],
+                competitor=competitor[zipcode][0],
+                dimensions=dimensions,
+                metric=metric,
+                benchmark_value=benchmark[zipcode][1],
+                competitor_value=competitor[zipcode][1],
+                matched_attributes={
+                    **{name: benchmark[zipcode][0].attributes.get(name) for name in dimensions},
+                    "_match_origin": "user_confirmed",
+                },
+            )
+            for zipcode in sorted(benchmark.keys() & competitor.keys())
+        ]
+
+    def _selected_product_by_zip(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        retailer_id: str,
+        product_id: str,
+        profile: JsonObject,
+        metric: str,
+        role: str,
+    ) -> dict[str, tuple[ClassifiedOffer, Decimal]]:
+        selected: dict[str, tuple[ClassifiedOffer, Decimal]] = {}
+        for item in offers:
+            value = self._metric_value(item, metric)
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or item.offer.retailer_product_id != product_id
+                or item.offer.zipcode is None
+                or not self._available_for_matching(item, profile)
+                or not self._satisfies_constraints(item, profile, role)
+                or value is None
+            ):
+                continue
+            previous = selected.get(item.offer.zipcode)
+            if previous is None or (value, item.offer.offer_id) < (
+                previous[1],
+                previous[0].offer.offer_id,
+            ):
+                selected[item.offer.zipcode] = (item, value)
+        return selected
 
     def comparison_metric(self, profile_id: str) -> str:
         """Resolve a profile's configured or derived comparison metric."""

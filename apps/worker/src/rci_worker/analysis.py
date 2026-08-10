@@ -30,6 +30,7 @@ from rci_analytics import (
     ComparisonInputReducer,
     OfferClassifier,
     ParquetDatasetWriter,
+    ProductMatchRule,
     ProductPackLoader,
     benchmark_product_decisions,
     benchmark_product_map_points,
@@ -42,6 +43,7 @@ from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import AnalysisResultService, ReportBlueprintLoader
+from rci_results.match_review import MatchReviewRepository
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,8 @@ class AnalysisJob:
     definition_config: dict[str, Any]
     attempt_count: int
     max_attempts: int
+    match_revision_id: str | None = None
+    source_analysis_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +183,7 @@ class PostgresAnalysisQueue:
                               )
                                 AND ar.attempt_count < ar.max_attempts
                                 AND (
-                                  :historical_replay_enabled OR
+                                  :historical_replay_enabled OR ar.match_revision_id IS NOT NULL OR
                                   NOT EXISTS (
                                     SELECT 1 FROM analysis_input_set source
                                     WHERE source.id = ar.input_set_id
@@ -205,7 +209,13 @@ class PostgresAnalysisQueue:
                             RETURNING ar.id::text, ar.collection_run_id::text,
                               ar.input_set_id::text, i.source_kind,
                               ar.product_pack_id, ar.product_pack_version,
-                              ar.attempt_count, ar.max_attempts, v.config
+                              ar.attempt_count, ar.max_attempts, v.config,
+                              ar.match_revision_id::text,
+                              (
+                                SELECT source_result.analysis_id
+                                FROM analysis_result source_result
+                                WHERE source_result.id = ar.source_analysis_result_id
+                              ) AS source_analysis_id
                             """
                         ),
                         {
@@ -230,6 +240,16 @@ class PostgresAnalysisQueue:
                     definition_config=dict(row["config"]),
                     attempt_count=int(row["attempt_count"]),
                     max_attempts=int(row["max_attempts"]),
+                    match_revision_id=(
+                        str(row["match_revision_id"])
+                        if row["match_revision_id"] is not None
+                        else None
+                    ),
+                    source_analysis_id=(
+                        str(row["source_analysis_id"])
+                        if row["source_analysis_id"] is not None
+                        else None
+                    ),
                 )
                 for row in rows
             ]
@@ -485,6 +505,7 @@ class AnalysisProcessor:
         code_version: str,
         historical_reader: S3HistoricalCSVReader | None = None,
         assistant: GovernedAnalysisAssistant | None = None,
+        match_reviews: MatchReviewRepository | None = None,
     ) -> None:
         self._root = repository_root
         self._queue = queue
@@ -496,6 +517,7 @@ class AnalysisProcessor:
         self._results = results
         self._code_version = code_version
         self._assistant = assistant
+        self._match_reviews = match_reviews
 
     async def process(self, job: AnalysisJob) -> str:
         pack = ProductPackLoader(self._root).load(job.product_pack_id)
@@ -535,6 +557,20 @@ class AnalysisProcessor:
         )
         classifier = OfferClassifier(pack)
         engine = ComparisonEngine(pack)
+        governed_rules: list[ProductMatchRule] = []
+        if job.match_revision_id is not None:
+            if self._match_reviews is None:
+                raise ValueError("governed reanalysis requires a match-review repository")
+            governed_rules = [
+                ProductMatchRule(
+                    competitor_id=rule.competitor_retailer_id,
+                    profile_id=rule.profile_id,
+                    benchmark_product_id=rule.benchmark_product_id,
+                    competitor_product_id=rule.competitor_product_id,
+                    decision=rule.decision,
+                )
+                for rule in await self._match_reviews.rules(job.match_revision_id)
+            ]
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
         raw_artifact_ids: list[str] = []
         source_evidence_artifacts: list[tuple[str, str, int]] = []
@@ -683,11 +719,21 @@ class AnalysisProcessor:
         for competitor in competitors:
             mapped_competitor = False
             for profile_index, profile in enumerate(selected_profiles):
-                matches = engine.compare(
-                    comparison_offers,
-                    benchmark_id=benchmark,
-                    competitor_id=competitor,
-                    profile_id=str(profile["id"]),
+                matches = (
+                    engine.compare_governed(
+                        comparison_offers,
+                        benchmark_id=benchmark,
+                        competitor_id=competitor,
+                        profile_id=str(profile["id"]),
+                        rules=governed_rules,
+                    )
+                    if job.match_revision_id is not None
+                    else engine.compare(
+                        comparison_offers,
+                        benchmark_id=benchmark,
+                        competitor_id=competitor,
+                        profile_id=str(profile["id"]),
+                    )
                 )
                 if not matches:
                     continue
@@ -807,6 +853,8 @@ class AnalysisProcessor:
         ]
         generated_at = datetime.now(UTC)
         analysis_id = f"{pack.id}-{job.collection_run_id}"
+        if job.match_revision_id is not None:
+            analysis_id = f"{analysis_id}-match-{job.match_revision_id[:8]}"
         if not source_evidence_artifacts:
             raise ValueError("analysis input has no immutable source-artifact evidence")
         evidence_sets = [
@@ -831,6 +879,8 @@ class AnalysisProcessor:
                 "collection_run_id": (
                     job.collection_run_id if job.source_kind == "live_collection" else None
                 ),
+                "match_revision_id": job.match_revision_id,
+                "source_analysis_id": job.source_analysis_id,
                 "observed_start": min(observed_values) if observed_values else None,
                 "observed_end": max(observed_values) if observed_values else None,
                 "sampling": bool(
@@ -863,8 +913,16 @@ class AnalysisProcessor:
             map_matches,
             benchmark_retailer=benchmark,
         )
+        match_candidates = benchmark_product_decisions(
+            comparison_offers,
+            map_matches,
+            benchmark_retailer=benchmark,
+            max_rows=2_000,
+            max_locations_per_row=1,
+        )
         if (
             self._assistant is not None
+            and job.match_revision_id is None
             and isinstance(analysis_options, dict)
             and bool(analysis_options.get("enable_ai_fallback", True))
         ):
@@ -883,6 +941,7 @@ class AnalysisProcessor:
                 presentation_context={
                     "map_points": map_points,
                     "product_decisions": product_decisions,
+                    "match_candidates": match_candidates,
                 },
             )
         await self._generate_deliveries(record.analysis_id, job.definition_config)

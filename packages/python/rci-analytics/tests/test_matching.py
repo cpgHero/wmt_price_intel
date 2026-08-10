@@ -4,12 +4,15 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
     geographic_overlap,
 )
+from rci_analytics.models import ProductMatchRule
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPackLoader
 
@@ -113,6 +116,74 @@ def test_unit_price_profile_selects_lowest_positive_price_per_lb() -> None:
     assert amazon_by_organic[False].gap == Decimal("-0.27")
     assert amazon_by_organic[True].winner == "parity"
     assert all(match.comparison_metric == "price_per_lb" for match in [*aldi, *amazon])
+
+
+def test_governed_confirmation_replaces_conflicting_automatic_pairs() -> None:
+    offers, engine = _classified()
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=[
+            ProductMatchRule(
+                competitor_id="aldi_us",
+                profile_id="strict",
+                benchmark_product_id="w-1",
+                competitor_product_id="a-2",
+                decision="confirmed",
+            )
+        ],
+    )
+    product_ids = {item.offer.offer_id: item.offer.retailer_product_id for item in offers}
+    product_pairs = {
+        (product_ids[match.benchmark_offer_id], product_ids[match.competitor_offer_id])
+        for match in matches
+    }
+
+    assert len(matches) == 2
+    assert any(match.attributes.get("_match_origin") == "user_confirmed" for match in matches)
+    assert product_pairs == {("w-1", "a-2"), ("w-o", "a-o")}
+
+
+def test_governed_rejection_removes_only_the_rejected_pair() -> None:
+    offers, engine = _classified()
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=[
+            ProductMatchRule(
+                competitor_id="aldi_us",
+                profile_id="strict",
+                benchmark_product_id="w-1",
+                competitor_product_id="a-1",
+                decision="rejected",
+            )
+        ],
+    )
+
+    assert len(matches) == 2
+
+
+def test_governed_rules_fail_closed_when_not_one_to_one() -> None:
+    offers, engine = _classified()
+    rules = [
+        ProductMatchRule("aldi_us", "strict", "w-1", "a-1", "confirmed"),
+        ProductMatchRule("aldi_us", "strict", "w-1", "a-2", "confirmed"),
+    ]
+
+    with pytest.raises(ValueError, match="one-to-one"):
+        engine.compare_governed(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+            rules=rules,
+        )
 
 
 def test_geographic_overlap_and_optional_radius_validation() -> None:

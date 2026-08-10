@@ -115,6 +115,7 @@ class PostgresResultsRepository:
         collection_run_id: str,
     ) -> AnalysisRecord:
         analysis_id = str(result["analysis_id"])
+        embedded_analysis_run_id = result.get("analysis_run_id")
         product_pack = result["product_pack"]
         assert isinstance(product_pack, dict)
         async with self._engine.begin() as connection:
@@ -137,20 +138,29 @@ class PostgresResultsRepository:
                 if record.checksum != checksum:
                     raise ValueError(f"AnalysisResult {analysis_id!r} is immutable")
                 return record
+            source_where = (
+                "WHERE ar.id::text = :analysis_run_id"
+                if embedded_analysis_run_id is not None
+                else (
+                    "WHERE ar.collection_run_id::text = :collection_run_id "
+                    "AND ar.product_pack_id = :product_pack_id "
+                    "AND ar.product_pack_version = :product_pack_version"
+                )
+            )
+            source_parameters = (
+                {"analysis_run_id": str(embedded_analysis_run_id)}
+                if embedded_analysis_run_id is not None
+                else {
+                    "collection_run_id": collection_run_id,
+                    "product_pack_id": str(product_pack["id"]),
+                    "product_pack_version": str(product_pack["version"]),
+                }
+            )
             source_existing = (
                 (
                     await connection.execute(
-                        text(
-                            f"{_ANALYSIS_SELECT} "
-                            "WHERE ar.collection_run_id::text = :collection_run_id "
-                            "AND ar.product_pack_id = :product_pack_id "
-                            "AND ar.product_pack_version = :product_pack_version"
-                        ),
-                        {
-                            "collection_run_id": collection_run_id,
-                            "product_pack_id": str(product_pack["id"]),
-                            "product_pack_version": str(product_pack["version"]),
-                        },
+                        text(f"{_ANALYSIS_SELECT} {source_where}"),
+                        source_parameters,
                     )
                 )
                 .mappings()
@@ -161,6 +171,25 @@ class PostgresResultsRepository:
                 if record.checksum != checksum:
                     raise ValueError("AnalysisResult collection run and Product Pack are immutable")
                 return record
+            pending_run = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT id::text, collection_run_id::text AS collection_run_id,
+                              product_pack_id, product_pack_version
+                            FROM analysis_run WHERE id::text = :analysis_run_id
+                            FOR UPDATE
+                            """
+                        ),
+                        {"analysis_run_id": str(embedded_analysis_run_id)},
+                    )
+                )
+                .mappings()
+                .first()
+                if embedded_analysis_run_id is not None
+                else None
+            )
             collection_exists = bool(
                 (
                     await connection.execute(
@@ -171,11 +200,40 @@ class PostgresResultsRepository:
             )
             if not collection_exists:
                 raise LookupError(f"collection run {collection_run_id!r} does not exist")
-            analysis_run_id = str(
-                (
-                    await connection.execute(
-                        text(
-                            """
+            if pending_run is not None:
+                if (
+                    str(pending_run["collection_run_id"]) != collection_run_id
+                    or str(pending_run["product_pack_id"]) != str(product_pack["id"])
+                    or str(pending_run["product_pack_version"]) != str(product_pack["version"])
+                ):
+                    raise ValueError("embedded analysis run does not match the result source")
+                analysis_run_id = str(pending_run["id"])
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE analysis_run SET status = 'succeeded',
+                          code_version = :code_version,
+                          started_at = COALESCE(started_at, CAST(:generated_at AS timestamptz)),
+                          completed_at = CAST(:generated_at AS timestamptz),
+                          locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                          last_error = NULL
+                        WHERE id::text = :analysis_run_id
+                        """
+                    ),
+                    {
+                        "analysis_run_id": analysis_run_id,
+                        "code_version": str(
+                            result.get("provenance", {}).get("analytics_code_version", "")
+                        ),
+                        "generated_at": str(result["generated_at"]),
+                    },
+                )
+            else:
+                analysis_run_id = str(
+                    (
+                        await connection.execute(
+                            text(
+                                """
                             INSERT INTO analysis_run (
                               collection_run_id, product_pack_id, product_pack_version,
                               status, code_version, started_at, completed_at
@@ -184,7 +242,8 @@ class PostgresResultsRepository:
                               :product_pack_version, 'succeeded', :code_version,
                               CAST(:generated_at AS timestamptz), CAST(:generated_at AS timestamptz)
                             )
-                            ON CONFLICT ON CONSTRAINT analysis_run_collection_pack_uq
+                            ON CONFLICT ON CONSTRAINT
+                              analysis_run_collection_pack_match_revision_uq
                             DO UPDATE SET status = 'succeeded',
                               code_version = EXCLUDED.code_version,
                               started_at = COALESCE(analysis_run.started_at, EXCLUDED.started_at),
@@ -193,19 +252,19 @@ class PostgresResultsRepository:
                               last_error = NULL
                             RETURNING id::text
                             """
-                        ),
-                        {
-                            "collection_run_id": collection_run_id,
-                            "product_pack_id": str(product_pack["id"]),
-                            "product_pack_version": str(product_pack["version"]),
-                            "code_version": str(
-                                result.get("provenance", {}).get("analytics_code_version", "")
                             ),
-                            "generated_at": str(result["generated_at"]),
-                        },
-                    )
-                ).scalar_one()
-            )
+                            {
+                                "collection_run_id": collection_run_id,
+                                "product_pack_id": str(product_pack["id"]),
+                                "product_pack_version": str(product_pack["version"]),
+                                "code_version": str(
+                                    result.get("provenance", {}).get("analytics_code_version", "")
+                                ),
+                                "generated_at": str(result["generated_at"]),
+                            },
+                        )
+                    ).scalar_one()
+                )
             row = (
                 (
                     await connection.execute(

@@ -97,6 +97,15 @@ class MatchRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ProductMatchRule:
+    competitor_id: str
+    profile_id: str
+    benchmark_product_id: str
+    competitor_product_id: str
+    decision: str
+
+
+@dataclass(frozen=True, slots=True)
 class ComparisonSummary:
     profile_id: str
     competitor_id: str

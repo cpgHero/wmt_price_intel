@@ -22,6 +22,8 @@ const contracts = [
   ["narrative-benchmarks.schema.json", "narrative-benchmarks.ts"],
   ["product-detail-catalog.schema.json", "product-detail-catalog.ts"],
   ["product-detail-snapshot.schema.json", "product-detail-snapshot.ts"],
+  ["product-match-decision.schema.json", "product-match-decision.ts"],
+  ["product-match-review.schema.json", "product-match-review.ts"],
   ["product-pack.schema.json", "product-pack.ts"],
   ["provider-error.schema.json", "provider-error.ts"],
   ["report-blueprint.schema.json", "report-blueprint.ts"],

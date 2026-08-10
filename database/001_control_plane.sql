@@ -225,8 +225,9 @@ CREATE TABLE analysis_run (
   last_error text,
   started_at timestamptz,
   completed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(collection_run_id, product_pack_id, product_pack_version)
+  match_revision_id uuid,
+  source_analysis_result_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX analysis_run_queue_claim_idx
   ON analysis_run(status, available_at, lease_expires_at, created_at);
@@ -242,6 +243,70 @@ CREATE TABLE analysis_result (
 );
 CREATE INDEX analysis_result_active_created_idx
   ON analysis_result(created_at) WHERE archived_at IS NULL;
+
+CREATE TABLE product_match_revision (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  product_pack_id text NOT NULL,
+  product_pack_version text NOT NULL,
+  benchmark_retailer_id text NOT NULL REFERENCES retailer(id),
+  source_analysis_result_id uuid NOT NULL REFERENCES analysis_result(id),
+  revision integer NOT NULL,
+  status text NOT NULL DEFAULT 'current' CHECK (status IN ('current', 'superseded')),
+  created_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(product_pack_id, product_pack_version)
+    REFERENCES product_pack_version(product_pack_id, version),
+  UNIQUE(organization_id, product_pack_id, product_pack_version,
+    benchmark_retailer_id, revision)
+);
+CREATE UNIQUE INDEX product_match_revision_current_uq
+  ON product_match_revision(
+    organization_id, product_pack_id, product_pack_version, benchmark_retailer_id
+  ) WHERE status = 'current';
+
+CREATE TABLE product_match_rule (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  revision_id uuid NOT NULL REFERENCES product_match_revision(id) ON DELETE CASCADE,
+  competitor_retailer_id text NOT NULL REFERENCES retailer(id),
+  profile_id text NOT NULL,
+  benchmark_product_id text NOT NULL,
+  competitor_product_id text NOT NULL,
+  decision text NOT NULL CHECK (decision IN ('confirmed', 'rejected')),
+  origin text NOT NULL DEFAULT 'user' CHECK (origin IN ('user', 'automatic')),
+  reason text,
+  benchmark_snapshot jsonb NOT NULL DEFAULT '{}',
+  competitor_snapshot jsonb NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(revision_id, competitor_retailer_id, profile_id,
+    benchmark_product_id, competitor_product_id)
+);
+CREATE UNIQUE INDEX product_match_rule_confirmed_benchmark_uq
+  ON product_match_rule(revision_id, competitor_retailer_id, profile_id,
+    benchmark_product_id) WHERE decision = 'confirmed';
+CREATE UNIQUE INDEX product_match_rule_confirmed_competitor_uq
+  ON product_match_rule(revision_id, competitor_retailer_id, profile_id,
+    competitor_product_id) WHERE decision = 'confirmed';
+
+CREATE TABLE product_match_review_event (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  revision_id uuid NOT NULL REFERENCES product_match_revision(id) ON DELETE CASCADE,
+  event_type text NOT NULL,
+  actor text NOT NULL,
+  details jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE analysis_run
+  ADD CONSTRAINT analysis_run_match_revision_fk
+    FOREIGN KEY(match_revision_id) REFERENCES product_match_revision(id),
+  ADD CONSTRAINT analysis_run_source_result_fk
+    FOREIGN KEY(source_analysis_result_id) REFERENCES analysis_result(id),
+  ADD CONSTRAINT analysis_run_collection_pack_match_revision_uq
+    UNIQUE NULLS NOT DISTINCT (
+      collection_run_id, product_pack_id, product_pack_version, match_revision_id
+    );
+CREATE INDEX analysis_run_match_revision_idx ON analysis_run(match_revision_id);
 
 CREATE TABLE agent_task (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

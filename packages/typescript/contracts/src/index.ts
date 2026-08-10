@@ -10,6 +10,8 @@ export type { NormalizedRetailOffer } from "./generated/normalized-offer";
 export type { RetailCompetitiveIntelligenceNarrativeBenchmarks } from "./generated/narrative-benchmarks";
 export type { MetricsCartProductDetailCatalog } from "./generated/product-detail-catalog";
 export type { RetailCompetitiveIntelligenceProductDetailSnapshot } from "./generated/product-detail-snapshot";
+export type { RetailCompetitiveIntelligenceProductMatchDecision } from "./generated/product-match-decision";
+export type { RetailCompetitiveIntelligenceProductMatchReview } from "./generated/product-match-review";
 export type { RetailCompetitiveIntelligenceProductPack } from "./generated/product-pack";
 export type { NormalizedProviderError } from "./generated/provider-error";
 export type { RetailCompetitiveIntelligenceAlertDefinition } from "./generated/alert-definition";

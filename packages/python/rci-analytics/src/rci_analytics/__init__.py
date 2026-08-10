@@ -16,6 +16,7 @@ from rci_analytics.insights import (
     RankedInsightCandidate,
 )
 from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
+from rci_analytics.models import ProductMatchRule
 from rci_analytics.normalization import CanonicalOfferNormalizer
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp, product_context_index
@@ -45,6 +46,7 @@ __all__ = [
     "OfferClassifier",
     "ParquetDatasetWriter",
     "PostgresAnalysisInputRepository",
+    "ProductMatchRule",
     "ProductPackLoader",
     "RankedInsightCandidate",
     "S3HistoricalObjectStore",

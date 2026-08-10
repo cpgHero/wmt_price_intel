@@ -2,6 +2,15 @@
 
 from rci_results.blueprints import ReportBlueprintLoader, ReportProjector
 from rci_results.contracts import AnalysisResultValidator
+from rci_results.match_review import (
+    InMemoryMatchReviewRepository,
+    MatchDecisionCommand,
+    MatchOneToOneConflictError,
+    MatchReanalysisRecord,
+    MatchReviewService,
+    MatchRevisionConflictError,
+    PostgresMatchReviewRepository,
+)
 from rci_results.memory import InMemoryResultsRepository
 from rci_results.models import AnalysisPublicationRecord
 from rci_results.renderers import ArtifactRenderer
@@ -14,8 +23,15 @@ __all__ = [
     "AnalysisResultService",
     "AnalysisResultValidator",
     "ArtifactRenderer",
+    "InMemoryMatchReviewRepository",
     "InMemoryReportObjectStore",
     "InMemoryResultsRepository",
+    "MatchDecisionCommand",
+    "MatchOneToOneConflictError",
+    "MatchReanalysisRecord",
+    "MatchReviewService",
+    "MatchRevisionConflictError",
+    "PostgresMatchReviewRepository",
     "PostgresResultsRepository",
     "ReportBlueprintLoader",
     "ReportProjector",

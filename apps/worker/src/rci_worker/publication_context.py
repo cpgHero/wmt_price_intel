@@ -312,6 +312,13 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             matches,
             benchmark_retailer=benchmark,
         )
+        match_candidates = benchmark_product_decisions(
+            offers,
+            matches,
+            benchmark_retailer=benchmark,
+            max_rows=2_000,
+            max_locations_per_row=1,
+        )
         selected_product_keys = {
             (benchmark, str(row["benchmark_product_id"])) for row in product_decisions
         } | {
@@ -373,6 +380,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             highlights,
             benchmark_retailer=benchmark,
         )
+        context["match_candidates"] = match_candidates
         if highlights:
             context["product_highlights"] = highlights
         publication = await service.publish_publication(

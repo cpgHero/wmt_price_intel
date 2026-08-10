@@ -113,6 +113,7 @@ class AnalysisResultService:
         unknown_context = set(context) - {
             "product_highlights",
             "product_decisions",
+            "match_candidates",
             "product_evidence",
             "map_points",
             "quality_observations",

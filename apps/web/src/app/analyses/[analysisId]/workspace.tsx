@@ -6,6 +6,7 @@ import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
 
 import { DataTable } from "@/app/components/data-table";
+import { MatchReviewWorkbench } from "./match-review-workbench";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -353,6 +354,15 @@ function BlueprintAnalysisWorkspace({
         <button
           type="button"
           role="tab"
+          aria-selected={activeGroup === "match-review"}
+          className={activeGroup === "match-review" ? "active" : ""}
+          onClick={() => setActiveGroup("match-review")}
+        >
+          Match Review
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeGroup === "exports"}
           className={activeGroup === "exports" ? "active" : ""}
           onClick={() => setActiveGroup("exports")}
@@ -361,7 +371,12 @@ function BlueprintAnalysisWorkspace({
         </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
-        {activeGroup === "exports" ? (
+        {activeGroup === "match-review" ? (
+          <MatchReviewWorkbench
+            analysisId={analysis.analysis_id}
+            scopedCompetitorId={selectedRetailer?.id ?? null}
+          />
+        ) : activeGroup === "exports" ? (
           <Section
             title="Delivery artifacts"
             note="Every format presents the same immutable AnalysisResult and carries its shared result checksum."

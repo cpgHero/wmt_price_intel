@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-match-decision.schema.json",
+  "title": "Retail Competitive Intelligence Product Match Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "expected_revision",
+    "competitor_retailer_id",
+    "profile_id",
+    "benchmark_product_id",
+    "competitor_product_id",
+    "decision"
+  ],
+  "properties": {
+    "expected_revision": { "type": "integer", "minimum": 0 },
+    "competitor_retailer_id": { "type": "string", "minLength": 1 },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "benchmark_product_id": { "type": "string", "minLength": 1 },
+    "competitor_product_id": { "type": "string", "minLength": 1 },
+    "decision": { "enum": ["confirmed", "rejected", "reset"] },
+    "replace_conflicts": { "type": "boolean", "default": false },
+    "reason": { "type": ["string", "null"], "maxLength": 1000 }
+  }
+}

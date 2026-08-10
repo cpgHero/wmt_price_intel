@@ -43,6 +43,7 @@ from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
+    PostgresMatchReviewRepository,
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
@@ -186,6 +187,7 @@ async def run() -> None:
                 ),
                 code_version=settings.app_version or APP_VERSION,
                 assistant=assistant,
+                match_reviews=PostgresMatchReviewRepository(database.engine),
             ),
             worker_id=f"{worker_id}-analysis",
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),

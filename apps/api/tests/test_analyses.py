@@ -5,7 +5,7 @@ from pathlib import Path
 
 from httpx import ASGITransport, AsyncClient
 
-from rci_api.analyses import get_analysis_service
+from rci_api.analyses import get_analysis_service, get_match_review_service
 from rci_api.main import create_app
 from rci_results import (
     AnalysisResultService,
@@ -93,6 +93,73 @@ async def test_analysis_api_rejects_contract_mismatch_and_mutation() -> None:
             json={"analysis_id": "invalid"},
         )
         assert invalid.status_code == 422
+
+
+async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis() -> None:
+    class MatchService:
+        async def view(self, analysis_id: str) -> dict[str, object]:
+            return {
+                "analysis_id": analysis_id,
+                "product_pack_id": "fresh_ground_beef",
+                "product_pack_version": "1.0.0",
+                "revision_id": None,
+                "revision": 0,
+                "benchmark_retailer": {"id": "walmart_us", "name": "Walmart"},
+                "competitors": [{"id": "aldi_us", "name": "ALDI"}],
+                "profiles": [],
+                "products": [],
+                "connections": [],
+                "summary": {"suggested": 0, "confirmed": 0, "rejected": 0, "unmatched": 0},
+            }
+
+        async def decide(
+            self, _analysis_id: str, command: object, *, actor: str
+        ) -> dict[str, object]:
+            assert actor == "reviewer@example.test"
+            assert command.decision == "confirmed"
+            return {"revision_id": "revision-id", "revision": 1, "status": "saved"}
+
+        async def recompute(self, _analysis_id: str, *, expected_revision: int) -> object:
+            assert expected_revision == 1
+            return type(
+                "Queued",
+                (),
+                {
+                    "analysis_run_id": "run-id",
+                    "source_analysis_id": "analysis-id",
+                    "match_revision_id": "revision-id",
+                    "status": "queued",
+                },
+            )()
+
+    app = create_app()
+    app.dependency_overrides[get_match_review_service] = lambda: MatchService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        review = await client.get("/api/v1/analyses/analysis-id/match-review")
+        decision = await client.post(
+            "/api/v1/analyses/analysis-id/match-review/decisions",
+            headers={"X-RCI-Actor": "reviewer@example.test"},
+            json={
+                "expected_revision": 0,
+                "competitor_retailer_id": "aldi_us",
+                "profile_id": "strict",
+                "benchmark_product_id": "w1",
+                "competitor_product_id": "a1",
+                "decision": "confirmed",
+            },
+        )
+        recompute = await client.post(
+            "/api/v1/analyses/analysis-id/match-review/recompute",
+            json={"expected_revision": 1},
+        )
+
+    assert review.status_code == 200
+    assert decision.json()["revision"] == 1
+    assert recompute.json()["provider_calls_queued"] == 0
 
 
 async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> None:

@@ -496,6 +496,13 @@
         "collection_run_id": {
           "type": ["string", "null"]
         },
+        "match_revision_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "source_analysis_id": {
+          "type": ["string", "null"]
+        },
         "observed_start": {
           "type": ["string", "null"],
           "format": "date-time"

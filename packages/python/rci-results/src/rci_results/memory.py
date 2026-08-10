@@ -34,6 +34,7 @@ class InMemoryResultsRepository:
         collection_run_id: str,
     ) -> AnalysisRecord:
         analysis_id = str(result["analysis_id"])
+        embedded_analysis_run_id = result.get("analysis_run_id")
         async with self._lock:
             existing = self._analyses.get(analysis_id)
             if existing is not None:
@@ -49,6 +50,10 @@ class InMemoryResultsRepository:
                     if record.collection_run_id == collection_run_id
                     and record.product_pack_id == str(product_pack["id"])
                     and record.product_pack_version == str(product_pack["version"])
+                    and (
+                        embedded_analysis_run_id is None
+                        or record.analysis_run_id == str(embedded_analysis_run_id)
+                    )
                 ),
                 None,
             )
@@ -58,7 +63,11 @@ class InMemoryResultsRepository:
                 return copy.deepcopy(source_existing)
             record = AnalysisRecord(
                 id=str(uuid4()),
-                analysis_run_id=str(uuid4()),
+                analysis_run_id=(
+                    str(embedded_analysis_run_id)
+                    if embedded_analysis_run_id is not None
+                    else str(uuid4())
+                ),
                 analysis_id=analysis_id,
                 collection_run_id=collection_run_id,
                 status="succeeded",

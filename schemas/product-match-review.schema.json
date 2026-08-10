@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-match-review.schema.json",
+  "title": "Retail Competitive Intelligence Product Match Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "analysis_id",
+    "product_pack_id",
+    "product_pack_version",
+    "revision",
+    "benchmark_retailer",
+    "competitors",
+    "profiles",
+    "products",
+    "connections",
+    "summary"
+  ],
+  "properties": {
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "product_pack_id": { "type": "string", "minLength": 1 },
+    "product_pack_version": { "type": "string", "minLength": 1 },
+    "revision_id": { "type": ["string", "null"], "format": "uuid" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "benchmark_retailer": { "$ref": "#/$defs/retailer" },
+    "competitors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/retailer" }
+    },
+    "profiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/profile" }
+    },
+    "products": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/product" }
+    },
+    "connections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/connection" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suggested", "confirmed", "rejected", "unmatched"],
+      "properties": {
+        "suggested": { "type": "integer", "minimum": 0 },
+        "confirmed": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "unmatched": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "geography", "comparison_metric"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "geography": { "type": "string", "minLength": 1 },
+        "comparison_metric": { "type": "string", "minLength": 1 }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["retailer_id", "product_id", "canonical_product_id", "name"],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "product_id": { "type": "string", "minLength": 1 },
+        "canonical_product_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "brand": { "type": ["string", "null"] },
+        "image_url": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "price": { "type": ["number", "null"] }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "competitor_retailer_id",
+        "profile_id",
+        "benchmark_product_id",
+        "competitor_product_id",
+        "status",
+        "origin"
+      ],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "benchmark_product_id": { "type": "string", "minLength": 1 },
+        "competitor_product_id": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["suggested", "confirmed", "rejected"] },
+        "origin": { "enum": ["automatic", "user"] },
+        "reason": { "type": ["string", "null"] },
+        "matches": { "type": ["integer", "null"], "minimum": 0 },
+        "geographies": { "type": ["integer", "null"], "minimum": 0 },
+        "median_gap": { "type": ["number", "null"] }
+      }
+    }
+  }
+}
