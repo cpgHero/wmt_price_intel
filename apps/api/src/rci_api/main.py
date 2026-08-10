@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Protocol
 
 from fastapi import FastAPI, Request, status
@@ -13,7 +15,12 @@ from rci_api.analyses import router as analysis_router
 from rci_api.automation import router as automation_router
 from rci_api.collections import router as collection_router
 from rci_api.locations import router as location_router
-from rci_api.product_packs import router as product_pack_router
+from rci_api.product_packs import (
+    router as product_pack_router,
+)
+from rci_api.product_packs import (
+    synchronize_product_pack_catalog,
+)
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
 
@@ -30,8 +37,16 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.database_probe = DatabaseProbe(resolved_settings.database_url)
-        yield
-        await app.state.database_probe.dispose()
+        try:
+            if resolved_settings.is_production:
+                repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
+                await synchronize_product_pack_catalog(
+                    app.state.database_probe.engine,
+                    repository_root,
+                )
+            yield
+        finally:
+            await app.state.database_probe.dispose()
 
     app = FastAPI(
         title="Retail Competitive Intelligence API",

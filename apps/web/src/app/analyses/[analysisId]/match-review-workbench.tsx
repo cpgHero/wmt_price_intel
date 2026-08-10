@@ -227,6 +227,7 @@ function MatchEvidenceDrawer({
   competitorName,
   onClose,
   busy,
+  message,
   onDecide,
 }: Readonly<{
   selection: DetailSelection;
@@ -235,6 +236,7 @@ function MatchEvidenceDrawer({
   competitorName: string;
   onClose: () => void;
   busy: boolean;
+  message: string;
   onDecide: (decision: Decision) => void;
 }>) {
   const evidence = selection.connection
@@ -329,6 +331,11 @@ function MatchEvidenceDrawer({
           ) : null}
         </div>
         <footer className="match-drawer-footer">
+          {message ? (
+            <p className="match-drawer-message" role="status">
+              {message}
+            </p>
+          ) : null}
           <p>
             Store-specific price and location evidence comes from Search. PDP
             evidence is used for product identity, descriptions, specifications,
@@ -542,57 +549,66 @@ export function MatchReviewWorkbench({
       decision,
       replace_conflicts: replaceConflicts,
     };
-    const response = await fetch(
-      `/api/analyses/${encodeURIComponent(analysisId)}/match-review/decisions`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    if (
-      response.status === 409 &&
-      decision === "confirmed" &&
-      !replaceConflicts
-    ) {
-      const replaceExisting = window.confirm(
-        "One of these products already has a confirmed match. Replace that relationship across its eligible comparison lenses?",
-      );
-      setBusy(false);
-      if (replaceExisting)
-        await decide(
-          decision,
-          selectedBenchmarkId,
-          selectedCompetitorProductId,
-          true,
-        );
-      return;
-    }
-    const responseBody = (await response.json()) as {
-      error?: string;
-      detail?: string | { message?: string };
-    };
-    if (!response.ok) {
-      const detail =
-        typeof responseBody.detail === "string"
-          ? responseBody.detail
-          : responseBody.detail?.message;
-      setMessage(
-        responseBody.error ||
-          detail ||
-          "The match decision could not be saved.",
-      );
-      setBusy(false);
-      return;
-    }
-    setBenchmarkId(null);
-    setCompetitorProductId(null);
-    setDetails(null);
-    await load();
     setMessage(
-      "Decision staged in a new immutable revision. The current report has not changed.",
+      `${decision === "confirmed" ? "Confirming" : decision === "rejected" ? "Rejecting" : "Resetting"} relationship…`,
     );
-    setBusy(false);
+    try {
+      const response = await fetch(
+        `/api/analyses/${encodeURIComponent(analysisId)}/match-review/decisions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      if (
+        response.status === 409 &&
+        decision === "confirmed" &&
+        !replaceConflicts
+      ) {
+        const replaceExisting = window.confirm(
+          "One of these products already has a confirmed match. Replace that relationship across its eligible comparison lenses?",
+        );
+        setBusy(false);
+        if (replaceExisting)
+          await decide(
+            decision,
+            selectedBenchmarkId,
+            selectedCompetitorProductId,
+            true,
+          );
+        return;
+      }
+      const responseBody = (await response.json()) as {
+        error?: string;
+        detail?: string | { message?: string };
+      };
+      if (!response.ok) {
+        const detail =
+          typeof responseBody.detail === "string"
+            ? responseBody.detail
+            : responseBody.detail?.message;
+        setMessage(
+          responseBody.error ||
+            detail ||
+            "The match decision could not be saved.",
+        );
+        return;
+      }
+      setBenchmarkId(null);
+      setCompetitorProductId(null);
+      setDetails(null);
+      await load();
+      setMessage(
+        "Decision staged in a new immutable revision. The current report has not changed.",
+      );
+    } catch {
+      setMessage(
+        "The match decision could not be saved because the service did not return a valid response.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function recompute(applyToFutureRuns: boolean) {
@@ -672,6 +688,15 @@ export function MatchReviewWorkbench({
           </span>
         </div>
       </div>
+
+      {message ? (
+        <p
+          className="match-review-message match-review-message-top"
+          role="status"
+        >
+          {message}
+        </p>
+      ) : null}
 
       <div className="match-review-toolbar">
         <div
@@ -1036,11 +1061,6 @@ export function MatchReviewWorkbench({
         </div>
       </details>
 
-      {message ? (
-        <p className="match-review-message" role="status">
-          {message}
-        </p>
-      ) : null}
       {details ? (
         <MatchEvidenceDrawer
           selection={details}
@@ -1049,6 +1069,7 @@ export function MatchReviewWorkbench({
           competitorName={competitorName}
           onClose={() => setDetails(null)}
           busy={busy}
+          message={message}
           onDecide={(decision) => {
             if (!details.connection) return;
             void decide(

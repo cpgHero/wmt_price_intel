@@ -2190,6 +2190,25 @@ tbody tr:last-child td {
   margin: 0;
   padding: 0.8rem 1rem;
 }
+
+.match-review-message-top {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 8;
+  margin: 0 0 1rem;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 12%);
+}
+
+.match-drawer-message {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgb(2 132 199 / 24%);
+  border-radius: 0.75rem;
+  background: rgb(224 242 254 / 72%);
+  color: #075985;
+  font-weight: 700;
+}
 @media (max-width: 950px) {
   .match-builder {
     grid-template-columns: 1fr;
