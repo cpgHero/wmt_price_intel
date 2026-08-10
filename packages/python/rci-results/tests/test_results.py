@@ -80,7 +80,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     renderer = ArtifactRenderer()
 
     html = renderer.render(result, "html")
-    assert html.renderer_version == renderer.version == "2.11.1"
+    assert html.renderer_version == renderer.version == "2.12.0"
     assert html.body.startswith(b"<!doctype html>")
     assert b"0.99964" in html.body
 
@@ -240,12 +240,12 @@ async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None
     second = await upgraded.generate_artifact(analysis.analysis_id, "html")
 
     assert first.id != second.id
-    assert first.renderer_version == "2.11.1"
+    assert first.renderer_version == "2.12.0"
     assert second.renderer_version == "3.0.0"
     assert len(store.objects) == 2
     listed = await upgraded.list_artifacts(analysis.analysis_id)
     assert {artifact.renderer_version for artifact in listed} == {
-        "2.11.1",
+        "2.12.0",
         "3.0.0",
     }
 

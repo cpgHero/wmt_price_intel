@@ -148,12 +148,16 @@ def _segment_display_label(segment: JsonObject, product_pack: JsonObject) -> str
 
 
 _COMPARISON_FIELDS = (
-    "matches",
     "unique_geographies",
     "benchmark_lower_rate",
     "competitor_lower_rate",
+    "parity_rate",
+    "benchmark_lower",
+    "competitor_lower",
     "benchmark_median",
     "competitor_median",
+    "matches",
+    "parity",
     "median_gap",
 )
 
@@ -343,6 +347,17 @@ class ReportProjector:
                 self._retailer_names.get(str(value), str(value).replace("_", " ").title())
                 for value in result["competitors"]
             ],
+            "retailer_scope": {
+                "benchmark": {
+                    "id": str(result["benchmark_retailer"]),
+                    "name": self._retailer_name(result["benchmark_retailer"]),
+                },
+                "competitors": [
+                    {"id": str(value), "name": self._retailer_name(value)}
+                    for value in result["competitors"]
+                ],
+            },
+            "retailer_scorecards": self.retailer_scorecards(result, product_pack),
             "product_pack": {
                 "id": product_pack["id"],
                 "name": product_pack["name"],
@@ -362,6 +377,28 @@ class ReportProjector:
         source: str,
         product_pack: JsonObject,
     ) -> list[JsonObject]:
+        if source == "retailer_scorecards":
+            return [
+                {
+                    "reference_retailer": row.get("benchmark_retailer"),
+                    "competitor": row.get("competitor"),
+                    "comparison_lens": row.get("comparison_lens"),
+                    "matched_observations": row.get("matches"),
+                    "matched_zip_markets": row.get("matched_geographies"),
+                    "qualifying_geographies": row.get("qualifying_geographies"),
+                    "reference_lower_share": row.get("benchmark_lower_rate"),
+                    "competitor_lower_share": row.get("competitor_lower_rate"),
+                    "parity_share": row.get("parity_rate"),
+                    "reference_median_price": row.get("benchmark_median"),
+                    "competitor_median_price": row.get("competitor_median"),
+                    "competitor_minus_reference_gap": row.get("median_gap"),
+                    "typical_price_position": row.get("price_position"),
+                    "evidence_status": str(row.get("status", "limited_evidence"))
+                    .replace("_", " ")
+                    .title(),
+                }
+                for row in self.retailer_scorecards(result, product_pack)
+            ]
         if source == "narratives":
             narratives = result.get("narratives", {})
             return self._rows(narratives.get("sections")) if isinstance(narratives, dict) else []
@@ -419,7 +456,13 @@ class ReportProjector:
                 product_pack,
             )
         else:
+            source_records = records
             records = [_merchant_record(row, self._retailer_names, product_pack) for row in records]
+            if kind == "coverage":
+                for rendered, source_record in zip(records, source_records, strict=True):
+                    retailer_id = source_record.get("retailer_id")
+                    if retailer_id is not None:
+                        rendered["_retailer_id"] = str(retailer_id)
         narrative = None
         narrative_id = section.get("narrative_section_id")
         narratives = result.get("narratives", {})
@@ -528,11 +571,11 @@ class ReportProjector:
         }
         rows: list[JsonObject] = []
         for comparison in comparisons:
-            values = {
-                field: metric_index[str(ref)]
-                for ref in comparison.get("metric_refs", [])
-                if str(ref) in metric_index and (field := _metric_field(str(ref))) is not None
-            }
+            values = self._comparison_metric_values(
+                comparison,
+                metric_index,
+                benchmark_id=str(result.get("benchmark_retailer", "benchmark")),
+            )
             if not values:
                 continue
             competitor_id = str(comparison.get("competitor_id", "unknown"))
@@ -549,6 +592,9 @@ class ReportProjector:
             )
             rows.append(
                 {
+                    "_competitor_id": competitor_id,
+                    "_profile_id": str(comparison.get("profile_id", "")),
+                    "_segment_id": segment_id,
                     "competitor": competitor,
                     "comparison lens": _merchant_text(
                         mode.get("label", comparison.get("profile_id", "Comparison")),
@@ -564,6 +610,7 @@ class ReportProjector:
                     "matched geographies": _formatted_metric(values.get("unique_geographies")),
                     "benchmark lower": _formatted_metric(values.get("benchmark_lower_rate")),
                     "competitor lower": _formatted_metric(values.get("competitor_lower_rate")),
+                    "parity": _formatted_metric(values.get("parity_rate")),
                     "benchmark median": _formatted_metric(values.get("benchmark_median")),
                     "competitor median": _formatted_metric(values.get("competitor_median")),
                     "competitor - benchmark gap": _formatted_metric(values.get("median_gap")),
@@ -577,6 +624,207 @@ class ReportProjector:
                 str(row["segment"]),
             ),
         )
+
+    def retailer_scorecards(
+        self,
+        result: JsonObject,
+        product_pack: JsonObject,
+    ) -> list[JsonObject]:
+        """Project one deterministic, strict-comparison scorecard per competitor."""
+
+        metric_index = {
+            str(metric["metric_id"]): metric for metric in self._rows(result.get("metrics"))
+        }
+        modes = {
+            str(row.get("profile_id")): row for row in self._rows(result.get("comparison_modes"))
+        }
+        coverage_by_retailer = {
+            str(row.get("retailer_id")): row for row in self._rows(result.get("coverage"))
+        }
+        comparisons = self._rows(result.get("comparisons"))
+        benchmark_id = str(result.get("benchmark_retailer", "benchmark"))
+        benchmark_name = self._retailer_name(benchmark_id)
+        scorecards: list[JsonObject] = []
+        for competitor_value in result.get("competitors", []):
+            competitor_id = str(competitor_value)
+            candidates = [
+                row for row in comparisons if str(row.get("competitor_id")) == competitor_id
+            ]
+            candidates.sort(key=lambda row: self._scorecard_priority(row, modes))
+            comparison = candidates[0] if candidates else {}
+            values = self._comparison_metric_values(
+                comparison,
+                metric_index,
+                benchmark_id=benchmark_id,
+            )
+            mode = modes.get(str(comparison.get("profile_id")), {})
+            benchmark_rate = self._numeric_metric(values.get("benchmark_lower_rate"))
+            competitor_rate = self._numeric_metric(values.get("competitor_lower_rate"))
+            parity_rate = self._numeric_metric(values.get("parity_rate"))
+            if parity_rate is None and benchmark_rate is not None and competitor_rate is not None:
+                parity_rate = max(0.0, 1.0 - benchmark_rate - competitor_rate)
+            matches = self._numeric_metric(values.get("matches"))
+            matched_geographies = self._numeric_metric(values.get("unique_geographies"))
+            coverage_geographies = self._coverage_value(
+                coverage_by_retailer.get(competitor_id, {}), metric_index
+            )
+            median_gap = self._numeric_metric(values.get("median_gap"))
+            scorecards.append(
+                {
+                    "competitor_id": competitor_id,
+                    "competitor": self._retailer_name(competitor_id),
+                    "benchmark_retailer_id": benchmark_id,
+                    "benchmark_retailer": benchmark_name,
+                    "profile_id": str(comparison.get("profile_id", "")),
+                    "comparison_lens": _merchant_text(
+                        mode.get("label", comparison.get("profile_id", "Comparison")),
+                        self._retailer_names,
+                        product_pack,
+                    ),
+                    "matches": self._whole_number(matches),
+                    "matched_geographies": self._whole_number(matched_geographies),
+                    "qualifying_geographies": self._whole_number(coverage_geographies),
+                    "benchmark_lower_rate": benchmark_rate,
+                    "competitor_lower_rate": competitor_rate,
+                    "parity_rate": parity_rate,
+                    "benchmark_median": self._numeric_metric(values.get("benchmark_median")),
+                    "competitor_median": self._numeric_metric(values.get("competitor_median")),
+                    "median_gap": median_gap,
+                    "price_position": self._price_position(
+                        benchmark_name,
+                        self._retailer_name(competitor_id),
+                        median_gap,
+                    ),
+                    "status": "ready" if matches and matches > 0 else "limited_evidence",
+                }
+            )
+        return scorecards
+
+    def _retailer_name(self, value: object) -> str:
+        retailer_id = str(value)
+        return self._retailer_names.get(retailer_id, retailer_id.replace("_", " ").title())
+
+    @staticmethod
+    def _scorecard_priority(
+        comparison: JsonObject,
+        modes: Mapping[str, JsonObject],
+    ) -> tuple[int, str]:
+        mode = modes.get(str(comparison.get("profile_id")), {})
+        strict_exact = (
+            str(mode.get("geography")) == "exact_zip"
+            and str(mode.get("comparison_metric")) == "package_price"
+        )
+        exact_zip = str(mode.get("geography")) == "exact_zip"
+        overall = str(comparison.get("segment_id", "all")) == "all"
+        priority = (
+            0
+            if strict_exact and overall
+            else 1
+            if exact_zip and overall
+            else 2
+            if overall
+            else 3
+            if strict_exact
+            else 4
+        )
+        return (priority, str(comparison.get("comparison_id")))
+
+    @staticmethod
+    def _comparison_metric_values(
+        comparison: JsonObject,
+        metric_index: Mapping[str, JsonObject],
+        *,
+        benchmark_id: str,
+    ) -> dict[str, JsonObject]:
+        values: dict[str, JsonObject] = {}
+        benchmark_tokens = {
+            "benchmark",
+            benchmark_id.casefold(),
+            benchmark_id.casefold().removesuffix("_us"),
+            benchmark_id.casefold().split("_")[0],
+        }
+        competitor_id = str(comparison.get("competitor_id", "competitor")).casefold()
+        competitor_tokens = {
+            "competitor",
+            competitor_id,
+            competitor_id.removesuffix("_us"),
+            competitor_id.split("_")[0],
+        }
+        for reference in comparison.get("metric_refs", []):
+            metric = metric_index.get(str(reference))
+            if metric is None:
+                continue
+            field = _metric_field(str(reference))
+            normalized = re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                f"{reference} {metric.get('name', '')}".casefold(),
+            )
+            if field is None:
+                suffix = next(
+                    (
+                        value
+                        for value in ("lower_rate", "lower", "median")
+                        if normalized.endswith(value) or f"_{value}_" in normalized
+                    ),
+                    None,
+                )
+                if suffix and any(token and token in normalized for token in benchmark_tokens):
+                    field = f"benchmark_{suffix}"
+                elif suffix and any(token and token in normalized for token in competitor_tokens):
+                    field = f"competitor_{suffix}"
+            if field is not None:
+                values[field] = metric
+        return values
+
+    @staticmethod
+    def _numeric_metric(metric: JsonObject | None) -> float | None:
+        value = metric.get("value") if metric is not None else None
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return float(value)
+        return None
+
+    @classmethod
+    def _coverage_value(
+        cls,
+        coverage: JsonObject,
+        metric_index: Mapping[str, JsonObject],
+    ) -> float | None:
+        metrics = [
+            metric_index[str(reference)]
+            for reference in coverage.get("metric_refs", [])
+            if str(reference) in metric_index
+        ]
+        preferred = next(
+            (
+                metric
+                for metric in metrics
+                if any(
+                    token in str(metric.get("metric_id", "")).casefold()
+                    for token in ("qualifying", "zip", "geograph")
+                )
+            ),
+            metrics[0] if metrics else None,
+        )
+        return cls._numeric_metric(preferred)
+
+    @staticmethod
+    def _whole_number(value: float | None) -> int | float | None:
+        return int(value) if value is not None and value.is_integer() else value
+
+    @staticmethod
+    def _price_position(
+        benchmark: str,
+        competitor: str,
+        median_gap: float | None,
+    ) -> str:
+        if median_gap is None:
+            return "Typical price difference unavailable"
+        if median_gap < 0:
+            return f"{competitor} is ${abs(median_gap):,.2f} lower at the median match"
+        if median_gap > 0:
+            return f"{benchmark} is ${median_gap:,.2f} lower at the median match"
+        return "Median matched prices are tied"
 
     @staticmethod
     def _rows(value: object) -> list[JsonObject]:

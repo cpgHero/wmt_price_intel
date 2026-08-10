@@ -10,7 +10,7 @@ from zipfile import ZipFile
 import pytest
 
 from rci_results import AnalysisResultValidator, ArtifactRenderer, ReportBlueprintLoader
-from rci_results.blueprints import _segment_display_label
+from rci_results.blueprints import ReportProjector, _segment_display_label
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 PACK_IDS = (
@@ -80,6 +80,20 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         ("quality", "Quality"),
         ("methodology", "Methodology"),
     ]
+    assert view["retailer_scope"] == {
+        "benchmark": {"id": "walmart_us", "name": "Walmart (US)"},
+        "competitors": [
+            {"id": "aldi_us", "name": "ALDI"},
+            {"id": "amazon_us_same_day", "name": "Amazon Same Day (US)"},
+        ],
+    }
+    assert [row["competitor_id"] for row in view["retailer_scorecards"]] == [
+        "aldi_us",
+        "amazon_us_same_day",
+    ]
+    assert view["retailer_scorecards"][0]["matches"] == 9049
+    assert view["retailer_scorecards"][0]["competitor_lower_rate"] == pytest.approx(0.8414189413)
+    assert view["retailer_scorecards"][1]["benchmark_lower_rate"] == pytest.approx(0.9363920751)
 
     html = renderer.render(result, "html")
     assert html.body.startswith(b"<!doctype html>")
@@ -87,6 +101,10 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert b"ALDI pressure is concentrated" in html.body
     assert b"Decision KPIs" not in html.body
     assert b">Summary</a>" in html.body
+    assert b"Retailer scorecard" in html.body
+    assert b"id=report-competitor" in html.body
+    assert b"data-competitor-id='aldi_us'" in html.body
+    assert b"Walmart (US)" in html.body
 
     workbook = renderer.render(result, "xlsx")
     with ZipFile(BytesIO(workbook.body)) as archive:
@@ -104,12 +122,17 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
             b"Artifact Manifest",
         ):
             assert name in workbook_xml
+        shared_strings = archive.read("xl/sharedStrings.xml")
+        assert b"Reference Retailer" in shared_strings
+        assert b"Competitor Lower Share" in shared_strings
+        assert b"Typical Price Position" in shared_strings
 
     email = BytesParser(policy=policy.default).parsebytes(
         renderer.render(result, "leadership_email").body
     )
     assert "Fresh Ground Beef" in str(email["Subject"])
     assert "Prioritize" in email.get_body(preferencelist=("plain",)).get_content()
+    assert "Retailer scorecard" in email.get_body(preferencelist=("plain",)).get_content()
     attachments = list(email.iter_attachments())
     assert [attachment.get_filename() for attachment in attachments] == [
         "ground-beef-2026-08-07-example-report.html"
@@ -213,6 +236,47 @@ def test_comparison_table_projects_matched_geography_count() -> None:
     assert price_section["records"][0]["matched geographies"] == "41"
 
 
+def test_retailer_scorecard_contract_scales_to_thirteen_competitors() -> None:
+    result = _result()
+    competitors = [f"retailer_{index}_us" for index in range(13)]
+    result["competitors"] = competitors
+    result["coverage"] = []
+    result["metrics"] = []
+    result["comparisons"] = []
+    for index, competitor in enumerate(competitors):
+        matches_id = f"retailer-{index}-matches"
+        reference_rate_id = f"retailer-{index}-benchmark-lower-rate"
+        competitor_rate_id = f"retailer-{index}-competitor-lower-rate"
+        result["metrics"].extend(
+            [
+                {"metric_id": matches_id, "value": 1000 - index, "unit": "matches"},
+                {"metric_id": reference_rate_id, "value": 0.6, "unit": "rate"},
+                {"metric_id": competitor_rate_id, "value": 0.4, "unit": "rate"},
+            ]
+        )
+        result["comparisons"].append(
+            {
+                "comparison_id": f"retailer-{index}-strict",
+                "competitor_id": competitor,
+                "profile_id": "strict_exact_package",
+                "segment_id": "all",
+                "metric_refs": [matches_id, reference_rate_id, competitor_rate_id],
+                "evidence_refs": [],
+            }
+        )
+    product_pack = json.loads(
+        (REPOSITORY_ROOT / "product-packs/fresh_ground_beef.json").read_text()
+    )
+
+    scorecards = ReportProjector().retailer_scorecards(result, product_pack)
+
+    assert len(scorecards) == 13
+    assert [row["competitor_id"] for row in scorecards] == competitors
+    assert all(row["benchmark_lower_rate"] == 0.6 for row in scorecards)
+    assert all(row["competitor_lower_rate"] == 0.4 for row in scorecards)
+    assert all(row["parity_rate"] == pytest.approx(0.0) for row in scorecards)
+
+
 def test_leadership_html_renders_analysis_linked_product_map() -> None:
     result = _result()
     context = {
@@ -242,7 +306,7 @@ def test_leadership_html_renders_analysis_linked_product_map() -> None:
     )
 
     assert "Analysis-linked geographic price outcomes" in html
-    assert "All mapped benchmark products" in html
+    assert "All mapped Walmart (US) products" in html
     assert '"benchmark_product_id":"100"' in html
     assert "class=state-layer" in html
     assert "</rect><g class=state-layer>" in html

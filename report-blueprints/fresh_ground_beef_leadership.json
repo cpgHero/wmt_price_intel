@@ -168,7 +168,7 @@
         { "name": "Executive Summary", "source": "insights" },
         { "name": "Leadership Narrative", "source": "narratives" },
         { "name": "Metrics", "source": "metrics" },
-        { "name": "Retailer Scorecard", "source": "coverage" },
+        { "name": "Retailer Scorecard", "source": "retailer_scorecards" },
         { "name": "Price Comparisons", "source": "comparisons" },
         { "name": "Segment Analysis", "source": "segments" },
         { "name": "Geography", "source": "geographic_sensitivity" },

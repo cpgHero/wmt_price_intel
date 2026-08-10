@@ -16,6 +16,8 @@ import type {
   ProductHighlight,
   QualityObservation,
   ReportSectionView,
+  RetailerOption,
+  RetailerScorecard,
 } from "@/lib/api";
 import {
   asObject,
@@ -207,12 +209,83 @@ function BlueprintAnalysisWorkspace({
   const firstPopulatedGroup =
     groupedSections.find((group) => group.sections.length > 0)?.id ?? "summary";
   const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);
-  const selectedGroup = groupedSections.find(
+  const competitorOptions = reportView.retailer_scope.competitors;
+  const [selectedCompetitor, setSelectedCompetitor] = useState("all");
+  useEffect(() => {
+    const applyLocation = () => {
+      const requested = new URL(window.location.href).searchParams.get(
+        "competitor",
+      );
+      setSelectedCompetitor(
+        requested && competitorOptions.some((option) => option.id === requested)
+          ? requested
+          : "all",
+      );
+    };
+    applyLocation();
+    window.addEventListener("popstate", applyLocation);
+    return () => window.removeEventListener("popstate", applyLocation);
+  }, [competitorOptions]);
+  const selectCompetitor = (competitorId: string) => {
+    const valid =
+      competitorId === "all" ||
+      competitorOptions.some((option) => option.id === competitorId);
+    const next = valid ? competitorId : "all";
+    setSelectedCompetitor(next);
+    const url = new URL(window.location.href);
+    if (next === "all") url.searchParams.delete("competitor");
+    else url.searchParams.set("competitor", next);
+    window.history.replaceState(window.history.state, "", url);
+  };
+  const selectedRetailer =
+    competitorOptions.find((option) => option.id === selectedCompetitor) ??
+    null;
+  const scopedSections = groupedSections.map((group) => ({
+    ...group,
+    sections: group.sections.map((section) => ({
+      ...section,
+      records: scopeReportRows(
+        section,
+        selectedRetailer,
+        reportView.retailer_scope.benchmark,
+      ),
+    })),
+  }));
+  const selectedGroup = scopedSections.find(
     (group) => group.id === activeGroup,
   );
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
-  const primaryComparisons = primaryComparisonRows(reportView.sections);
+  const selectedScorecards = selectedRetailer
+    ? reportView.retailer_scorecards.filter(
+        (scorecard) => scorecard.competitor_id === selectedRetailer.id,
+      )
+    : reportView.retailer_scorecards;
+  const scopedDecisions = scopeRetailerRows(
+    reportView.product_decisions ?? [],
+    selectedRetailer,
+    (row) => row.competitor,
+  );
+  const scopedPoints = scopeRetailerRows(
+    reportView.map_points ?? [],
+    selectedRetailer,
+    (row) => row.competitor,
+  );
+  const scopedHighlights = scopeReferenceAndRetailerRows(
+    reportView.product_highlights ?? [],
+    selectedRetailer,
+    reportView.retailer_scope.benchmark,
+    (row) => row.retailer,
+  );
+  const scopedQuality = scopeReferenceAndRetailerRows(
+    reportView.quality_observations ?? [],
+    selectedRetailer,
+    reportView.retailer_scope.benchmark,
+    (row) => row.retailer,
+  );
+  const primaryComparisons = primaryComparisonRows(
+    scopedSections.flatMap((group) => group.sections),
+  );
   return (
     <>
       <header className="workspace-header report-header">
@@ -253,6 +326,12 @@ function BlueprintAnalysisWorkspace({
           </small>
         </div>
       </header>
+      <RetailerScopeControl
+        benchmark={reportView.retailer_scope.benchmark}
+        competitors={competitorOptions}
+        selected={selectedCompetitor}
+        onSelect={selectCompetitor}
+      />
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
         {groupedSections.map((group) => (
           <button
@@ -286,23 +365,29 @@ function BlueprintAnalysisWorkspace({
           </Section>
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
-            {activeGroup === "geography" && reportView.map_points?.length ? (
+            {activeGroup === "summary" && selectedScorecards.length ? (
+              <RetailerScorecardPanel
+                benchmark={reportView.retailer_scope.benchmark}
+                rows={selectedScorecards}
+                onSelect={selectCompetitor}
+              />
+            ) : null}
+            {activeGroup === "geography" && scopedPoints.length ? (
               <AnalysisMap
-                points={reportView.map_points}
-                decisions={reportView.product_decisions ?? []}
+                benchmarkRetailer={reportView.retailer_scope.benchmark.name}
+                points={scopedPoints}
+                decisions={scopedDecisions}
                 coverageRows={primaryComparisons}
               />
             ) : null}
-            {activeGroup === "products" &&
-            reportView.product_highlights?.length ? (
-              <ProductHighlights products={reportView.product_highlights} />
+            {activeGroup === "products" && scopedHighlights.length ? (
+              <ProductHighlights products={scopedHighlights} />
             ) : null}
-            {activeGroup === "products" &&
-            reportView.product_decisions?.length ? (
+            {activeGroup === "products" && scopedDecisions.length ? (
               <ProductDecisionBoard
                 analysisId={analysis.analysis_id}
                 benchmarkRetailer={reportView.benchmark_retailer}
-                rows={reportView.product_decisions}
+                rows={scopedDecisions}
                 title="Product-level price evidence"
               />
             ) : null}
@@ -314,17 +399,18 @@ function BlueprintAnalysisWorkspace({
                     section={section}
                     recommendedCharts={recommendedCharts}
                     benchmarkRetailer={reportView.benchmark_retailer}
-                    productDecisions={reportView.product_decisions ?? []}
-                    qualityObservations={reportView.quality_observations ?? []}
+                    productDecisions={scopedDecisions}
+                    qualityObservations={scopedQuality}
+                    showPortfolioNarrative={selectedRetailer === null}
                   />
                   {activeGroup === "summary" &&
                   section.kind === "executive_summary" ? (
                     <>
-                      {reportView.product_decisions?.length ? (
+                      {scopedDecisions.length ? (
                         <ProductDecisionBoard
                           analysisId={analysis.analysis_id}
                           benchmarkRetailer={reportView.benchmark_retailer}
-                          rows={reportView.product_decisions.slice(0, 6)}
+                          rows={scopedDecisions.slice(0, 6)}
                           title="Products changing the competitive picture"
                         />
                       ) : null}
@@ -348,18 +434,230 @@ function BlueprintAnalysisWorkspace({
   );
 }
 
+function retailerToken(value: unknown) {
+  return displayLabel(String(value ?? ""))
+    .toLocaleLowerCase("en-US")
+    .replace(/\(us\)/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function matchesRetailer(value: unknown, retailer: RetailerOption) {
+  const token = retailerToken(value);
+  return (
+    token === retailerToken(retailer.id) ||
+    token === retailerToken(retailer.name)
+  );
+}
+
+function scopeRetailerRows<T>(
+  rows: T[],
+  selected: RetailerOption | null,
+  retailer: (row: T) => unknown,
+) {
+  return selected
+    ? rows.filter((row) => matchesRetailer(retailer(row), selected))
+    : rows;
+}
+
+function scopeReferenceAndRetailerRows<T>(
+  rows: T[],
+  selected: RetailerOption | null,
+  benchmark: RetailerOption,
+  retailer: (row: T) => unknown,
+) {
+  if (!selected) return rows;
+  return rows.filter(
+    (row) =>
+      matchesRetailer(retailer(row), benchmark) ||
+      matchesRetailer(retailer(row), selected),
+  );
+}
+
+function scopeReportRows(
+  section: ReportSectionView,
+  selected: RetailerOption | null,
+  benchmark: RetailerOption,
+) {
+  if (!selected) return section.records;
+  return section.records.filter((row) => {
+    if (row._competitor_id)
+      return matchesRetailer(row._competitor_id, selected);
+    if (row._retailer_id) {
+      return (
+        matchesRetailer(row._retailer_id, benchmark) ||
+        matchesRetailer(row._retailer_id, selected)
+      );
+    }
+    if (
+      ["price_position", "segment_analysis", "geographic_sensitivity"].includes(
+        section.kind,
+      ) &&
+      row.competitor
+    ) {
+      return matchesRetailer(row.competitor, selected);
+    }
+    return true;
+  });
+}
+
+function RetailerScopeControl({
+  benchmark,
+  competitors,
+  selected,
+  onSelect,
+}: Readonly<{
+  benchmark: RetailerOption;
+  competitors: RetailerOption[];
+  selected: string;
+  onSelect: (retailerId: string) => void;
+}>) {
+  const current = competitors.find((option) => option.id === selected);
+  return (
+    <div className="retailer-scope-control">
+      <div>
+        <span>Competitive view</span>
+        <strong>
+          {current
+            ? `${benchmark.name} vs. ${current.name}`
+            : `${benchmark.name} vs. all ${competitors.length} competitors`}
+        </strong>
+        <p>
+          This selection follows you across every report tab and is saved in the
+          page URL.
+        </p>
+      </div>
+      <label>
+        <span>Competitor</span>
+        <select
+          value={selected}
+          onChange={(event) => onSelect(event.target.value)}
+        >
+          <option value="all">All competitors ({competitors.length})</option>
+          {competitors.map((competitor) => (
+            <option value={competitor.id} key={competitor.id}>
+              {competitor.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function formatScorecardRate(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("en-US", {
+    style: "percent",
+    maximumFractionDigits: 1,
+  });
+}
+
+function RetailerScorecardPanel({
+  benchmark,
+  rows,
+  onSelect,
+}: Readonly<{
+  benchmark: RetailerOption;
+  rows: RetailerScorecard[];
+  onSelect: (retailerId: string) => void;
+}>) {
+  const ranked = [...rows].sort(
+    (left, right) => (right.matches ?? 0) - (left.matches ?? 0),
+  );
+  return (
+    <Section
+      title={
+        rows.length === 1
+          ? `${rows[0].competitor} scorecard`
+          : "Retailer scorecard"
+      }
+      note={`One strict exact-package view per competitor. ${benchmark.name} is the named reference retailer; shares and price gaps use the same deterministic comparison contract throughout the report.`}
+    >
+      <div className="retailer-scorecard-table">
+        <div className="retailer-scorecard-head">
+          <span>Competitor</span>
+          <span>Matched evidence</span>
+          <span>Lower-price share</span>
+          <span>Typical price position</span>
+          <span>Status</span>
+        </div>
+        {ranked.map((row) => (
+          <div className="retailer-scorecard-row" key={row.competitor_id}>
+            <button type="button" onClick={() => onSelect(row.competitor_id)}>
+              <strong>{row.competitor}</strong>
+              <span>{row.comparison_lens}</span>
+            </button>
+            <div>
+              <strong>{(row.matches ?? 0).toLocaleString()}</strong>
+              <span>matched observations</span>
+              <small>
+                {row.matched_geographies === null
+                  ? "Matched ZIP count unavailable"
+                  : `${row.matched_geographies.toLocaleString()} matched ZIP markets`}
+              </small>
+            </div>
+            <div className="retailer-share-bars">
+              <span>
+                {benchmark.name}
+                <b>{formatScorecardRate(row.benchmark_lower_rate)}</b>
+              </span>
+              <i>
+                <b
+                  className="benchmark"
+                  style={{
+                    width: `${Math.max((row.benchmark_lower_rate ?? 0) * 100, 1)}%`,
+                  }}
+                />
+              </i>
+              <span>
+                {row.competitor}
+                <b>{formatScorecardRate(row.competitor_lower_rate)}</b>
+              </span>
+              <i>
+                <b
+                  className="competitor"
+                  style={{
+                    width: `${Math.max((row.competitor_lower_rate ?? 0) * 100, 1)}%`,
+                  }}
+                />
+              </i>
+            </div>
+            <strong className="retailer-price-position">
+              {row.price_position}
+            </strong>
+            <span className={`retailer-score-status ${row.status}`}>
+              {row.status === "ready" ? "Ready" : "Limited evidence"}
+            </span>
+          </div>
+        ))}
+      </div>
+      {rows.length === 1 ? (
+        <button
+          className="retailer-show-all"
+          type="button"
+          onClick={() => onSelect("all")}
+        >
+          Return to all competitors
+        </button>
+      ) : null}
+    </Section>
+  );
+}
+
 function BlueprintSection({
   section,
   recommendedCharts,
   benchmarkRetailer,
   productDecisions,
   qualityObservations,
+  showPortfolioNarrative,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
   benchmarkRetailer: string;
   productDecisions: ProductDecision[];
   qualityObservations: QualityObservation[];
+  showPortfolioNarrative: boolean;
 }>) {
   const narrative = asObject(section.narrative);
   const visibleMetrics = [
@@ -396,7 +694,14 @@ function BlueprintSection({
       title={section.title}
       note={`${displayLabel(section.kind)} · ${displayLabel(section.visualization)}`}
     >
-      {hasStructuredNarrative ? (
+      {!showPortfolioNarrative &&
+      !["data_quality", "methodology"].includes(section.kind) &&
+      (hasStructuredNarrative || narrative.body) ? (
+        <p className="retailer-scope-note">
+          Portfolio commentary is hidden in a retailer-only view. The scorecard,
+          product evidence, map, and tables below reflect the selected retailer.
+        </p>
+      ) : hasStructuredNarrative ? (
         <div className="section-narrative">
           {narrative.subtitle ? (
             <p className="narrative-subtitle">
@@ -459,11 +764,15 @@ function BlueprintSection({
         <CompetitivePositionChart
           rows={section.records}
           title={section.title}
+          benchmarkRetailer={benchmarkRetailer}
           productDecisions={productDecisions}
         />
       ) : null}
       {section.kind === "segment_analysis" && section.records.length > 0 ? (
-        <SegmentPositionMatrix rows={section.records} />
+        <SegmentPositionMatrix
+          benchmarkRetailer={benchmarkRetailer}
+          rows={section.records}
+        />
       ) : null}
       {section.kind === "data_quality" ? (
         <QualityEvidence rows={qualityObservations} />
@@ -868,10 +1177,12 @@ function parseCount(value: unknown): number {
 function CompetitivePositionChart({
   rows,
   title,
+  benchmarkRetailer,
   productDecisions,
 }: Readonly<{
   rows: JsonObject[];
   title: string;
+  benchmarkRetailer: string;
   productDecisions: ProductDecision[];
 }>) {
   const chartRows = rows
@@ -899,7 +1210,7 @@ function CompetitivePositionChart({
           </span>
         </div>
         <div className="chart-legend" aria-label="Chart legend">
-          <span className="benchmark">Benchmark</span>
+          <span className="benchmark">{displayLabel(benchmarkRetailer)}</span>
           <span className="competitor">Competitor</span>
         </div>
       </figcaption>
@@ -1074,10 +1385,12 @@ function geometryPath(geometry: { type: string; coordinates: unknown }) {
 }
 
 function AnalysisMap({
+  benchmarkRetailer,
   points,
   decisions,
   coverageRows,
 }: Readonly<{
+  benchmarkRetailer: string;
   points: MapPoint[];
   decisions: ProductDecision[];
   coverageRows: JsonObject[];
@@ -1150,17 +1463,19 @@ function AnalysisMap({
     .sort((left, right) => right.geographies - left.geographies);
   return (
     <Section
-      title="Where benchmark products win and lose"
+      title={`Where ${displayLabel(benchmarkRetailer)} products win and lose`}
       note="Filter the map by product or outcome. State boundaries provide geographic context; each plotted cluster is tied to retained search-price evidence."
     >
       <div className="map-controls">
         <label>
-          <span>Benchmark product</span>
+          <span>{displayLabel(benchmarkRetailer)} product</span>
           <select
             value={selectedProduct}
             onChange={(event) => setSelectedProduct(event.target.value)}
           >
-            <option value="all">All mapped benchmark products</option>
+            <option value="all">
+              All mapped {displayLabel(benchmarkRetailer)} products
+            </option>
             {products.map(([id, name]) => (
               <option value={id} key={id}>
                 {name}
@@ -1176,13 +1491,15 @@ function AnalysisMap({
           >
             <option value="all">All outcomes</option>
             <option value="competitor_lower">Competitor lower</option>
-            <option value="benchmark_lower">Benchmark lower</option>
+            <option value="benchmark_lower">
+              {displayLabel(benchmarkRetailer)} lower
+            </option>
             <option value="parity">Price parity</option>
           </select>
         </label>
         <div className="map-legend" aria-label="Map outcome legend">
           <span className="benchmark_lower">
-            Benchmark lower ·{" "}
+            {displayLabel(benchmarkRetailer)} lower ·{" "}
             {(outcomeCounts.benchmark_lower ?? 0).toLocaleString()}
           </span>
           <span className="competitor_lower">
@@ -1242,13 +1559,15 @@ function AnalysisMap({
           {selectedDecision ? (
             <div className="map-selected-product">
               <ProductThumbnailStack products={[selectedDecision]} />
-              <span>Selected benchmark product</span>
+              <span>Selected {displayLabel(benchmarkRetailer)} product</span>
               <strong>{selectedDecision.benchmark_product_name}</strong>
             </div>
           ) : (
             <div className="map-selected-product">
               <span>Current view</span>
-              <strong>All mapped benchmark products</strong>
+              <strong>
+                All mapped {displayLabel(benchmarkRetailer)} products
+              </strong>
             </div>
           )}
           <EvidenceStat label="Mapped observations" value={positioned.length} />
@@ -1257,7 +1576,7 @@ function AnalysisMap({
             value={outcomeCounts.competitor_lower ?? 0}
           />
           <EvidenceStat
-            label="Benchmark lower"
+            label={`${displayLabel(benchmarkRetailer)} lower`}
             value={outcomeCounts.benchmark_lower ?? 0}
           />
           {selectedPoint ? (
@@ -1285,7 +1604,10 @@ function AnalysisMap({
   );
 }
 
-function SegmentPositionMatrix({ rows }: Readonly<{ rows: JsonObject[] }>) {
+function SegmentPositionMatrix({
+  benchmarkRetailer,
+  rows,
+}: Readonly<{ benchmarkRetailer: string; rows: JsonObject[] }>) {
   const matrix = rows
     .map((row) => ({
       row,
@@ -1322,7 +1644,9 @@ function SegmentPositionMatrix({ rows }: Readonly<{ rows: JsonObject[] }>) {
                 <span
                   className={`segment-leader ${benchmarkWins ? "benchmark" : "competitor"}`}
                 >
-                  {benchmarkWins ? "Benchmark" : displayValue(row.competitor)}
+                  {benchmarkWins
+                    ? displayLabel(benchmarkRetailer)
+                    : displayValue(row.competitor)}
                 </span>
                 <b>
                   {Math.max(benchmarkRate ?? 0, competitorRate ?? 0).toFixed(1)}

@@ -8,7 +8,13 @@ export function DataTable({
 }: Readonly<{ rows: JsonObject[]; emptyMessage?: string }>) {
   if (rows.length === 0)
     return <div className="empty-inline">{emptyMessage}</div>;
-  const columns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  const columns = Array.from(
+    new Set(
+      rows
+        .flatMap((row) => Object.keys(row))
+        .filter((column) => !column.startsWith("_")),
+    ),
+  );
   return (
     <div className="table-scroll">
       <table>

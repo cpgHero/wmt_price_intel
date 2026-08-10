@@ -19,7 +19,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.11.2"
+RENDERER_VERSION = "2.12.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -345,12 +345,29 @@ display:inline-block;height:8px;margin-right:5px;width:8px}.map-legend .benchmar
 gap:16px;grid-template-columns:40px 1fr;padding:16px 0}.key-point>span{color:var(--accent);font-size:11px;
 font-weight:850;letter-spacing:.08em}.key-point h3{font-size:15px;margin:0}.key-point p{color:var(--muted);
 font-size:13px;margin:5px 0 0}.source-link{color:var(--accent);font-weight:800;text-decoration:none}
+.retailer-scope{align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;
+display:flex;gap:16px;justify-content:space-between;margin:18px 0;padding:14px 16px}.retailer-scope div{
+display:grid;gap:3px}.retailer-scope strong{font-size:14px}.retailer-scope span{color:var(--muted);
+font-size:11px}.retailer-scope label{color:var(--muted);display:grid;font-size:10px;font-weight:800;
+gap:5px;letter-spacing:.08em;text-transform:uppercase}.retailer-scope select{background:var(--surface);
+border:1px solid var(--line);border-radius:9px;color:var(--ink);min-height:40px;min-width:240px;padding:0 10px}
+.retailer-scorecard table{min-width:920px}.retailer-scorecard td:first-child small{color:var(--muted);
+display:block;font-size:10px;margin-top:3px}.score-share{display:grid;gap:4px;grid-template-columns:120px 110px}
+.score-share span{font-size:10px}.score-share span:nth-of-type(2){grid-column:1}.score-share i{background:var(--surface);
+border-radius:999px;display:block;height:7px;overflow:hidden}.score-share i b{border-radius:inherit;display:block;
+height:100%}.score-share i b.benchmark{background:var(--ink)}.score-share i b.competitor{background:var(--accent)}
+.score-status{background:rgba(98,98,105,.12);border-radius:999px;color:var(--muted);display:inline-block;
+font-size:10px;font-weight:800;padding:5px 8px}.score-status.ready{background:rgba(0,130,200,.12);color:var(--accent)}
+[data-competitor-id][hidden]{display:none!important}.retailer-scope-note{background:rgba(88,210,248,.08);
+border-left:3px solid var(--accent);color:var(--muted);display:none;font-size:12px;margin:12px 0;
+padding:10px 12px}.retailer-scope-note.visible{display:block}
 @media(max-width:900px){.map-stage,.map-controls{grid-template-columns:1fr}.map-rail{grid-template-columns:
 repeat(3,1fr)}.map-rail .selected{grid-column:span 3}}
 @media(max-width:700px){.report-nav{top:4px}.product-decisions{grid-template-columns:1fr}
 .product-decision{grid-template-columns:1fr}.product-pair{align-items:center;grid-template-columns:1fr auto 1fr}
 .product-pair-image:first-child,.product-pair-image:last-child,.product-pair:after{grid-row:1}.product-pair-image{
-width:100%}.map-rail{grid-template-columns:1fr 1fr}.map-rail .selected{grid-column:span 2}}
+width:100%}.map-rail{grid-template-columns:1fr 1fr}.map-rail .selected{grid-column:span 2}
+.retailer-scope{align-items:stretch;flex-direction:column}.retailer-scope select{min-width:0;width:100%}}
 """
 
 
@@ -379,7 +396,7 @@ def _zip_entry(filename: str) -> ZipInfo:
 def _table(title: str, rows: list[JsonObject]) -> str:
     if not rows:
         return f"<section><h2>{escape(title)}</h2><p>No records supplied.</p></section>"
-    columns = list(dict.fromkeys(key for row in rows for key in row))
+    columns = list(dict.fromkeys(key for row in rows for key in row if not key.startswith("_")))
     header = "".join(f"<th>{escape(column.replace('_', ' ').title())}</th>" for column in columns)
     body = "".join(
         "<tr>"
@@ -396,10 +413,10 @@ def _table(title: str, rows: list[JsonObject]) -> str:
 def _collapsed_table(title: str, rows: list[JsonObject]) -> str:
     if not rows:
         return ""
-    columns = list(dict.fromkeys(key for row in rows for key in row))
+    columns = list(dict.fromkeys(key for row in rows for key in row if not key.startswith("_")))
     header = "".join(f"<th>{escape(column.replace('_', ' ').title())}</th>" for column in columns)
     body = "".join(
-        "<tr>"
+        f"<tr{_competitor_scope_attribute(row)}>"
         + "".join(f"<td>{escape(_display(row.get(column)))}</td>" for column in columns)
         + "</tr>"
         for row in rows
@@ -413,10 +430,10 @@ def _collapsed_table(title: str, rows: list[JsonObject]) -> str:
 def _inline_table(rows: list[JsonObject]) -> str:
     if not rows:
         return ""
-    columns = list(dict.fromkeys(key for row in rows for key in row))
+    columns = list(dict.fromkeys(key for row in rows for key in row if not key.startswith("_")))
     header = "".join(f"<th>{escape(column.replace('_', ' ').title())}</th>" for column in columns)
     body = "".join(
-        "<tr>"
+        f"<tr{_competitor_scope_attribute(row)}>"
         + "".join(f"<td>{escape(_display(row.get(column)))}</td>" for column in columns)
         + "</tr>"
         for row in rows
@@ -424,6 +441,83 @@ def _inline_table(rows: list[JsonObject]) -> str:
     return (
         '<div class="table-wrap comparison-table"><table><thead><tr>'
         f"{header}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
+def _competitor_scope_attribute(row: JsonObject) -> str:
+    competitor_id = row.get("_competitor_id") or row.get("competitor_id")
+    if not competitor_id:
+        return ""
+    return f" data-competitor-id='{escape(str(competitor_id), quote=True)}'"
+
+
+def _portfolio_overflow_attribute(
+    row: JsonObject,
+    positions: dict[int, int],
+    limit: int,
+) -> str:
+    return " data-portfolio-overflow=true" if positions.get(id(row), 0) >= limit else ""
+
+
+def _scorecard_rate(value: object) -> str:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return f"{float(value):.1%}"
+    return "—"
+
+
+def _retailer_scorecard_html(view: JsonObject) -> str:
+    rows = _rows(view, "retailer_scorecards")
+    if not rows:
+        return ""
+    benchmark = _display(view.get("benchmark_retailer") or "Reference retailer")
+    body = "".join(
+        "<tr"
+        + _competitor_scope_attribute(row)
+        + "><td><strong>"
+        + escape(_display(row.get("competitor")))
+        + "</strong><small>"
+        + escape(_display(row.get("comparison_lens")))
+        + "</small></td><td>"
+        + f"{_integer(row.get('matches')):,}"
+        + "</td><td>"
+        + (
+            f"{_integer(row.get('matched_geographies')):,}"
+            if row.get("matched_geographies") is not None
+            else "—"
+        )
+        + "</td><td><div class=score-share><span>"
+        + escape(benchmark)
+        + " <b>"
+        + _scorecard_rate(row.get("benchmark_lower_rate"))
+        + "</b></span><i><b class=benchmark style='width:"
+        + f"{max(1.0, float(row.get('benchmark_lower_rate') or 0) * 100):.1f}%"
+        + "'></b></i><span>"
+        + escape(_display(row.get("competitor")))
+        + " <b>"
+        + _scorecard_rate(row.get("competitor_lower_rate"))
+        + "</b></span><i><b class=competitor style='width:"
+        + f"{max(1.0, float(row.get('competitor_lower_rate') or 0) * 100):.1f}%"
+        + "'></b></i></div></td><td>"
+        + escape(_display(row.get("price_position")))
+        + "</td><td><span class='score-status "
+        + escape(str(row.get("status") or "limited_evidence"), quote=True)
+        + "'>"
+        + ("Ready" if row.get("status") == "ready" else "Limited evidence")
+        + "</span></td></tr>"
+        for row in sorted(
+            rows,
+            key=lambda row: (_integer(row.get("matches")), _display(row.get("competitor"))),
+            reverse=True,
+        )
+    )
+    return (
+        "<section class='report-section retailer-scorecard'><div class=kind>Competitive set</div>"
+        "<h2>Retailer scorecard</h2><p class=group-note>One strict, exact-package view per "
+        f"competitor. Lower-price shares use {escape(benchmark)} as the named reference retailer; "
+        "the typical difference is competitor price minus reference-retailer price.</p>"
+        "<div class=table-wrap><table><thead><tr><th>Competitor</th><th>Matched observations"
+        "</th><th>Matched ZIP markets</th><th>Lower-price share</th><th>Typical price position"
+        f"</th><th>Evidence</th></tr></thead><tbody>{body}</tbody></table></div></section>"
     )
 
 
@@ -478,9 +572,20 @@ def _product_decisions(
     benchmark_label: str,
     include_evidence: bool = False,
 ) -> str:
-    decisions = _rows(context, "product_decisions")[:limit]
-    if not decisions:
+    all_decisions = _rows(context, "product_decisions")
+    if not all_decisions:
         return ""
+    decision_positions = {id(row): index for index, row in enumerate(all_decisions)}
+    decisions = list(all_decisions[:limit])
+    selected = {id(row) for row in decisions}
+    competitor_counts: dict[str, int] = {}
+    for row in all_decisions:
+        competitor_id = str(row.get("competitor") or "competitor")
+        count = competitor_counts.get(competitor_id, 0)
+        if count < limit and id(row) not in selected:
+            decisions.append(row)
+            selected.add(id(row))
+        competitor_counts[competitor_id] = count + 1
     cards: list[str] = []
     for row in decisions:
         priority = str(row.get("priority", "parity"))
@@ -550,8 +655,13 @@ def _product_decisions(
                 "the complete downloadable CSV.</p>"
                 f"{_inline_table(shown)}</details>"
             )
+        overflow_attribute = (
+            " data-portfolio-overflow=true" if decision_positions[id(row)] >= limit else ""
+        )
         cards.append(
-            f"<article class='product-decision {escape(priority)}'>"
+            f"<article class='product-decision {escape(priority)}' "
+            f"data-competitor-id='{escape(str(row.get('competitor') or ''), quote=True)}'"
+            f"{overflow_attribute}>"
             f"<div class=product-pair>{''.join(images)}</div><div>"
             f"<span>{escape(status)}</span>"
             f"<h3 class=benchmark-name>{escape(_display(row.get('benchmark_product_name')))}</h3>"
@@ -577,7 +687,7 @@ def _percent(value: object) -> float | None:
     return max(0.0, min(parsed, 100.0))
 
 
-def _comparison_chart(rows: list[JsonObject]) -> str:
+def _comparison_chart(rows: list[JsonObject], *, benchmark_label: str) -> str:
     candidates = []
     for row in rows:
         benchmark = _percent(row.get("benchmark lower"))
@@ -590,8 +700,21 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
             matches = 0
         candidates.append((matches, row, benchmark, competitor))
     candidates.sort(key=lambda value: value[0], reverse=True)
+    candidate_positions = {id(item[1]): index for index, item in enumerate(candidates)}
+    rendered_candidates = list(candidates[:8])
+    selected = {id(item[1]) for item in rendered_candidates}
+    competitor_counts: dict[str, int] = {}
+    for item in candidates:
+        competitor_id = str(item[1].get("_competitor_id") or item[1].get("competitor"))
+        count = competitor_counts.get(competitor_id, 0)
+        if count < 8 and id(item[1]) not in selected:
+            rendered_candidates.append(item)
+            selected.add(id(item[1]))
+        competitor_counts[competitor_id] = count + 1
     chart_rows = "".join(
-        f"<div class=chart-row><div class=chart-label><strong>"
+        f"<div class=chart-row{_competitor_scope_attribute(row)}"
+        f"{_portfolio_overflow_attribute(row, candidate_positions, 8)}>"
+        "<div class=chart-label><strong>"
         f"{escape(_display(row.get('segment') or row.get('competitor')))}</strong>"
         f"<span>{escape(_display(row.get('competitor')))} · {matches:,} matches · "
         f"{escape(_display(row.get('matched geographies')))} geographies · "
@@ -601,15 +724,15 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
         f"</i><span>{'—' if benchmark is None else f'{benchmark:.1f}%'}</span></div>"
         f"<div><i><b class=competitor style='width:{competitor or 1}%'></b></i>"
         f"<span>{'—' if competitor is None else f'{competitor:.1f}%'}</span></div></div></div>"
-        for matches, row, benchmark, competitor in candidates[:8]
+        for matches, row, benchmark, competitor in rendered_candidates
     )
     if not chart_rows:
         return ""
     return (
         "<figure class=comparison-chart><figcaption><strong>Lower-price share</strong>"
         "<span>Strict comparable-package outcomes with market coverage and "
-        "typical price difference</span>"
-        "</figcaption>"
+        "typical price difference · dark bar "
+        f"{escape(benchmark_label)} · blue bar competitor</span></figcaption>"
         f"<div class=chart-body>{chart_rows}</div><p class=chart-note>Directional share "
         "among matched observations; see the supporting table for definitions and caveats."
         "</p></figure>"
@@ -621,6 +744,7 @@ def _map_figure(
     *,
     state_paths: str,
     coverage_rows: list[JsonObject],
+    benchmark_label: str,
 ) -> str:
     points: list[JsonObject] = []
     for point in _rows(context, "map_points"):
@@ -648,41 +772,43 @@ def _map_figure(
         for product_id, name in products
     )
     coverage = sorted(
-        (
-            (_integer(row.get("matched geographies")), str(row.get("competitor") or "Competitor"))
-            for row in coverage_rows
-        ),
+        coverage_rows,
+        key=lambda row: _integer(row.get("matched geographies")),
         reverse=True,
     )
+    coverage_positions = {id(row): index for index, row in enumerate(coverage)}
     coverage_html = "".join(
-        f"<div><span>{escape(competitor)}</span>"
-        f"<strong>{geographies:,} matched ZIP markets</strong></div>"
-        for geographies, competitor in coverage[:3]
-        if geographies
+        f"<div{_competitor_scope_attribute(row)}"
+        f"{_portfolio_overflow_attribute(row, coverage_positions, 3)}>"
+        f"<span>{escape(_display(row.get('competitor')))}</span>"
+        f"<strong>{_integer(row.get('matched geographies')):,} matched ZIP markets</strong></div>"
+        for row in coverage
+        if _integer(row.get("matched geographies"))
     )
     points_json = json.dumps(points, ensure_ascii=False, separators=(",", ":")).replace(
         "<", "\\u003c"
     )
     script = """
 <script>(()=>{const data=JSON.parse(document.getElementById('map-data').textContent);
-const product=document.getElementById('map-product');const outcome=document.getElementById('map-outcome');
+const benchmarkName=__BENCHMARK_NAME__;const product=document.getElementById('map-product');const outcome=document.getElementById('map-outcome');
 const layer=document.getElementById('map-point-layer');const ns='http://www.w3.org/2000/svg';
 const fmt=n=>Number(n||0).toLocaleString('en-US');const project=p=>({x:((Number(p.longitude)+125)/59)*900+30,y:((50-Number(p.latitude))/26)*460+30});
-function render(){const filtered=data.filter(p=>(product.value==='all'||String(p.benchmark_product_id)===product.value)&&(outcome.value==='all'||(p.outcome||'parity')===outcome.value));
+function render(){const selectedCompetitor=document.getElementById('report-competitor')?.value||'all';const selectedRetailer=window.rciRetailerScope?.competitors?.find(row=>row.id===selectedCompetitor);const retailerMatches=window.rciRetailerMatches||((value,row)=>String(value)===String(row?.id));const filtered=data.filter(p=>(selectedCompetitor==='all'||retailerMatches(p.competitor,selectedRetailer))&&(product.value==='all'||String(p.benchmark_product_id)===product.value)&&(outcome.value==='all'||(p.outcome||'parity')===outcome.value));
 const counts={benchmark_lower:0,competitor_lower:0,parity:0};const clusters=new Map();
 for(const p of filtered){const keyOutcome=p.outcome||'parity';counts[keyOutcome]=(counts[keyOutcome]||0)+Number(p.matches||1);const q=project(p);const key=`${Math.round(q.x/14)}:${Math.round(q.y/14)}:${keyOutcome}`;const current=clusters.get(key);if(current)current.count+=Number(p.matches||1);else clusters.set(key,{point:p,count:Number(p.matches||1),...q});}
 layer.replaceChildren();for(const {point:p,count,x,y} of clusters.values()){const c=document.createElementNS(ns,'circle');c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',Math.min(11,4+Math.sqrt(count)));c.setAttribute('class',p.outcome||'parity');c.setAttribute('tabindex','0');c.setAttribute('role','button');const label=[p.benchmark_product_name||p.label,p.zipcode?`ZIP ${p.zipcode}`:'',p.competitor?`vs. ${p.competitor}`:'',p.value_label||'',count>1?`${count} nearby observations`:''].filter(Boolean).join(' · ');const title=document.createElementNS(ns,'title');title.textContent=label;c.append(title);const show=()=>{document.getElementById('map-detail-name').textContent=p.benchmark_product_name||p.label||'Selected product';document.getElementById('map-detail-scope').textContent=`ZIP ${p.zipcode||'—'} · vs. ${p.competitor||'competitor'}`;document.getElementById('map-detail-value').textContent=p.value_label||'Price evidence';};c.addEventListener('click',show);c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show();}});layer.append(c);}
-document.getElementById('map-current').textContent=product.value==='all'?'All mapped benchmark products':product.options[product.selectedIndex].text;document.getElementById('map-observations').textContent=fmt(filtered.length);for(const key of ['benchmark_lower','competitor_lower','parity']){for(const node of document.querySelectorAll(`[data-map-count="${key}"]`))node.textContent=fmt(counts[key]||0);}}
-product.addEventListener('change',render);outcome.addEventListener('change',render);render();})();</script>
+document.getElementById('map-current').textContent=product.value==='all'?`All mapped ${benchmarkName} products`:product.options[product.selectedIndex].text;document.getElementById('map-observations').textContent=fmt(filtered.length);for(const key of ['benchmark_lower','competitor_lower','parity']){for(const node of document.querySelectorAll(`[data-map-count="${key}"]`))node.textContent=fmt(counts[key]||0);}}
+product.addEventListener('change',render);outcome.addEventListener('change',render);document.addEventListener('rci:competitor-change',render);render();})();</script>
 """
+    script = script.replace("__BENCHMARK_NAME__", json.dumps(benchmark_label))
     return (
-        "<div class=map-controls><label><span>Benchmark product</span>"
-        f"<select id=map-product><option value=all>All mapped benchmark products</option>{options}"
+        f"<div class=map-controls><label><span>{escape(benchmark_label)} product</span>"
+        f"<select id=map-product><option value=all>All mapped {escape(benchmark_label)} products</option>{options}"
         "</select></label><label><span>Price outcome</span><select id=map-outcome>"
         "<option value=all>All outcomes</option><option value=competitor_lower>Competitor lower"
-        "</option><option value=benchmark_lower>Benchmark lower</option><option value=parity>"
+        f"</option><option value=benchmark_lower>{escape(benchmark_label)} lower</option><option value=parity>"
         "Price parity</option></select></label><div class=map-legend>"
-        "<span class=benchmark_lower>Benchmark lower · <b data-map-count=benchmark_lower>0</b></span>"
+        f"<span class=benchmark_lower>{escape(benchmark_label)} lower · <b data-map-count=benchmark_lower>0</b></span>"
         "<span class=competitor_lower>Competitor lower · <b data-map-count=competitor_lower>0</b></span>"
         "<span class=parity>Parity · <b data-map-count=parity>0</b></span></div></div>"
         "<div class=map-stage><figure class=geo-map><svg viewBox='0 0 960 520' role=img "
@@ -692,9 +818,9 @@ product.addEventListener('change',render);outcome.addEventListener('change',rend
         "</svg><figcaption>Circle size reflects nearby matched observations. Select a point for "
         "its product, ZIP, retailer, and price difference.</figcaption></figure><aside class=map-rail>"
         "<div class=selected><span>Current view</span><strong id=map-current>All mapped benchmark "
-        "products</strong></div><div><span>Mapped observations</span><strong id=map-observations>0"
+        f"{escape(benchmark_label)} products</strong></div><div><span>Mapped observations</span><strong id=map-observations>0"
         "</strong></div><div><span>Competitor lower</span><strong data-map-count=competitor_lower>0"
-        "</strong></div><div><span>Benchmark lower</span><strong data-map-count=benchmark_lower>0"
+        f"</strong></div><div><span>{escape(benchmark_label)} lower</span><strong data-map-count=benchmark_lower>0"
         "</strong></div><div class=selected><span>Selected evidence</span><strong id=map-detail-name>"
         "Select a point</strong><span id=map-detail-scope>ZIP and retailer detail</span><b "
         f"id=map-detail-value>Price evidence</b></div>{coverage_html}</aside></div>"
@@ -703,11 +829,26 @@ product.addEventListener('change',render);outcome.addEventListener('change',rend
 
 
 def _product_highlights(context: JsonObject) -> str:
-    products = _rows(context, "product_highlights")[:8]
-    if not products:
+    all_products = _rows(context, "product_highlights")
+    if not all_products:
         return ""
+    product_positions = {id(row): index for index, row in enumerate(all_products)}
+    products = list(all_products[:8])
+    selected = {id(row) for row in products}
+    retailer_counts: dict[str, int] = {}
+    for row in all_products:
+        retailer = str(row.get("retailer") or "retailer")
+        count = retailer_counts.get(retailer, 0)
+        if count < 8 and id(row) not in selected:
+            products.append(row)
+            selected.add(id(row))
+        retailer_counts[retailer] = count + 1
     cards = "".join(
-        "<article class=product-card>"
+        "<article class=product-card data-retailer-id='"
+        + escape(str(product.get("retailer") or ""), quote=True)
+        + "'"
+        + _portfolio_overflow_attribute(product, product_positions, 8)
+        + ">"
         + (
             f"<img src='{escape(str(product['image_url']), quote=True)}' alt='' loading=lazy>"
             if product.get("image_url")
@@ -740,8 +881,22 @@ def _segment_matrix(rows: list[JsonObject], *, benchmark_label: str) -> str:
     ranked.sort(key=lambda item: item[0], reverse=True)
     if not ranked:
         return ""
+    ranked_positions = {id(item[1]): index for index, item in enumerate(ranked)}
+    rendered_ranked = list(ranked[:16])
+    selected = {id(item[1]) for item in rendered_ranked}
+    competitor_counts: dict[str, int] = {}
+    for item in ranked:
+        competitor_id = str(item[1].get("_competitor_id") or item[1].get("competitor"))
+        count = competitor_counts.get(competitor_id, 0)
+        if count < 16 and id(item[1]) not in selected:
+            rendered_ranked.append(item)
+            selected.add(id(item[1]))
+        competitor_counts[competitor_id] = count + 1
     body = "".join(
-        "<div class=segment-row><div><strong>"
+        "<div class=segment-row"
+        + _competitor_scope_attribute(row)
+        + _portfolio_overflow_attribute(row, ranked_positions, 16)
+        + "><div><strong>"
         + escape(_display(row.get("segment") or "Comparable items"))
         + "</strong><small>"
         + escape(_display(row.get("competitor")))
@@ -760,7 +915,7 @@ def _segment_matrix(rows: list[JsonObject], *, benchmark_label: str) -> str:
         + "</strong><small>matched observations</small></div><strong>"
         + escape(_display(row.get("competitor - benchmark gap")))
         + "</strong></div>"
-        for matches, row, benchmark, competitor in ranked[:16]
+        for matches, row, benchmark, competitor in rendered_ranked
     )
     return (
         "<div class=segment-matrix><div class='segment-row head'><span>Comparable product "
@@ -800,7 +955,9 @@ def _quality_evidence(context: JsonObject) -> str:
             f"${float(price):,.2f}" if isinstance(price, int | float) else _display(price)
         )
         body.append(
-            "<tr><td><span class=quality-issue>"
+            "<tr data-retailer-id='"
+            + escape(str(row.get("retailer") or ""), quote=True)
+            + "'><td><span class=quality-issue>"
             + escape(_display(row.get("issue")))
             + "</span></td><td>"
             + escape(_retailer_label(row.get("retailer")))
@@ -832,7 +989,8 @@ def _quality_evidence(context: JsonObject) -> str:
         "search records behind the quality counts</strong><p>This is a representative, "
         "deterministic sample of rejected or incomplete search observations—not PDP data. "
         "Product, retailer, ZIP, store, source price, and exclusion reason stay together for "
-        f"review.</p></div><div class=quality-issues>{issues}</div>{table}<p class=chart-note>"
+        f"review.</p></div><div class=quality-issues data-portfolio-summary=true>{issues}</div>"
+        f"{table}<p class=chart-note>"
         f"Showing {len(rows):,} representative source observations. Authoritative issue totals "
         "remain in the governed narrative above.</p>"
     )
@@ -974,6 +1132,41 @@ class LeadershipHtmlRenderer:
             )
             for group in populated_groups
         )
+        retailer_scope = _mapping(view, "retailer_scope")
+        competitor_options = _rows(retailer_scope, "competitors")
+        scope_control = ""
+        scope_script = ""
+        if competitor_options:
+            options = "".join(
+                f"<option value='{escape(str(row.get('id')), quote=True)}'>"
+                f"{escape(_display(row.get('name')))}</option>"
+                for row in competitor_options
+            )
+            scope_control = (
+                "<div class=retailer-scope><div><strong>Competitive view</strong><span>Use one "
+                "publication for the full competitive set, then focus every evidence surface on "
+                "one retailer.</span></div><label>Competitor<select id=report-competitor>"
+                f"<option value=all>All competitors ({len(competitor_options)})</option>{options}"
+                "</select></label></div><p class=retailer-scope-note id=retailer-scope-note>"
+                "Retailer-only view: portfolio narrative is hidden so it cannot be mistaken for "
+                "retailer-specific commentary. Scorecards and visible evidence reflect the "
+                "selected retailer.</p>"
+            )
+            scope_data = json.dumps(retailer_scope, ensure_ascii=False, separators=(",", ":"))
+            scope_script = """
+<script>(()=>{const select=document.getElementById('report-competitor');if(!select)return;
+const scope=__RETAILER_SCOPE__;const token=value=>String(value||'').toLowerCase().replace(/\\(us\\)/g,'').replace(/[^a-z0-9]/g,'');
+const matches=(value,retailer)=>Boolean(retailer)&&(token(value)===token(retailer.id)||token(value)===token(retailer.name));window.rciRetailerMatches=matches;window.rciRetailerScope=scope;
+const note=document.getElementById('retailer-scope-note');function apply(){const selected=select.value;const retailer=scope.competitors.find(row=>row.id===selected);
+for(const node of document.querySelectorAll('[data-competitor-id]')){node.hidden=selected==='all'?node.dataset.portfolioOverflow==='true':!matches(node.dataset.competitorId,retailer);}
+for(const node of document.querySelectorAll('[data-retailer-id]')){node.hidden=selected==='all'?node.dataset.portfolioOverflow==='true':!(matches(node.dataset.retailerId,scope.benchmark)||matches(node.dataset.retailerId,retailer));}
+for(const node of document.querySelectorAll('[data-portfolio-narrative]')){node.hidden=selected!=='all';}
+for(const node of document.querySelectorAll('[data-portfolio-summary]')){node.hidden=selected!=='all';}
+note?.classList.toggle('visible',selected!=='all');document.dispatchEvent(new CustomEvent('rci:competitor-change',{detail:{competitor:selected}}));}
+select.addEventListener('change',apply);apply();})();</script>
+"""
+            scope_script = scope_script.replace("__RETAILER_SCOPE__", scope_data)
+        scorecard = _retailer_scorecard_html(view)
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
@@ -985,7 +1178,7 @@ and which targeted moves matter most.</p><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
 Generated {escape(_display_generated_at(result))}</div><div class=checksum>Deterministic metrics ·
 Evidence linked · Result checksum {result_checksum[:12]}…</div>
-</header><nav class=report-nav aria-label='Report sections'>{nav}</nav>{section_html}<footer>CPGHero Retail Competitive Intelligence · Immutable result
+</header>{scope_control}<nav class=report-nav aria-label='Report sections'>{nav}</nav>{scorecard}{section_html}{scope_script}<footer>CPGHero Retail Competitive Intelligence · Immutable result
 <code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
 
@@ -1015,13 +1208,15 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
             )
             content.append(
                 "<section class=report-section><div class=kind>Market coverage</div>"
-                "<h2>Where benchmark products win and lose</h2><p class=group-note>Filter the "
+                f"<h2>Where {escape(benchmark_label)} products win and lose</h2>"
+                "<p class=group-note>Filter the "
                 "map by product or outcome. State boundaries provide geographic context; every "
                 "point is tied to retained search-price evidence.</p>"
                 + _map_figure(
                     presentation_context,
                     state_paths=self._state_paths,
                     coverage_rows=coverage,
+                    benchmark_label=benchmark_label,
                 )
                 + "</section>"
             )
@@ -1066,6 +1261,12 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
         narrative_html = _narrative_html(narrative) if isinstance(narrative, dict) else ""
+        if narrative_html and section_kind not in {"data_quality", "methodology"}:
+            narrative_html = narrative_html.replace(
+                "<div class=narrative>",
+                "<div class=narrative data-portfolio-narrative=true>",
+                1,
+            )
         metrics: list[JsonObject] = []
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
@@ -1078,7 +1279,7 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
         if section_kind == "coverage":
             detail = _collapsed_table("View source coverage detail", records)
         elif section_kind == "price_position":
-            chart = _comparison_chart(records)
+            chart = _comparison_chart(records, benchmark_label=benchmark_label)
             detail = f"{chart}{_collapsed_table('View supporting detail', records)}"
         elif section_kind == "segment_analysis":
             detail = (
@@ -1182,6 +1383,53 @@ class ExcelAuditRenderer:
                 "text_wrap": True,
             }
         )
+        numeric_formats = {
+            (False, "integer"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "valign": "top",
+                    "num_format": "#,##0",
+                }
+            ),
+            (True, "integer"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "bg_color": "#F6F7FB",
+                    "valign": "top",
+                    "num_format": "#,##0",
+                }
+            ),
+            (False, "rate"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "valign": "top",
+                    "num_format": "0.0%",
+                }
+            ),
+            (True, "rate"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "bg_color": "#F6F7FB",
+                    "valign": "top",
+                    "num_format": "0.0%",
+                }
+            ),
+            (False, "currency"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "valign": "top",
+                    "num_format": "$#,##0.00;[Red]-$#,##0.00",
+                }
+            ),
+            (True, "currency"): workbook.add_format(  # type: ignore[attr-defined]
+                {
+                    "font_color": "#0A0A0C",
+                    "bg_color": "#F6F7FB",
+                    "valign": "top",
+                    "num_format": "$#,##0.00;[Red]-$#,##0.00",
+                }
+            ),
+        }
         empty_format = workbook.add_format(  # type: ignore[attr-defined]
             {"font_color": "#626269", "italic": True}
         )
@@ -1197,14 +1445,26 @@ class ExcelAuditRenderer:
         for column_index, column in enumerate(columns):
             worksheet.write(0, column_index, column.replace("_", " ").title(), header_format)
         for row_index, row in enumerate(rows, start=1):
-            row_format = alternate_format if row_index % 2 == 0 else body_format
+            alternate = row_index % 2 == 0
+            row_format = alternate_format if alternate else body_format
             for column_index, column in enumerate(columns):
                 value = row.get(column)
                 if isinstance(value, list | dict):
                     value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+                cell_format = row_format
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    if column.endswith(("_rate", "_share")):
+                        cell_format = numeric_formats[(alternate, "rate")]
+                    elif any(token in column for token in ("price", "_gap")):
+                        cell_format = numeric_formats[(alternate, "currency")]
+                    elif any(
+                        token in column
+                        for token in ("matches", "observations", "geographies", "markets")
+                    ):
+                        cell_format = numeric_formats[(alternate, "integer")]
                 rendered = "" if value is None else str(value)
                 widths[column_index] = min(56, max(widths[column_index], len(rendered) + 2))
-                worksheet.write(row_index, column_index, value, row_format)
+                worksheet.write(row_index, column_index, value, cell_format)
         worksheet.freeze_panes(1, 0)
         worksheet.autofilter(0, 0, len(rows), len(columns) - 1)
         for column_index, width in enumerate(widths):
@@ -1215,6 +1475,7 @@ class ExcelAuditRenderer:
         result: JsonObject,
         blueprint: ReportBlueprint | None = None,
         product_pack: JsonObject | None = None,
+        projector: ReportProjector | None = None,
     ) -> bytes:
         output = BytesIO()
         workbook = xlsxwriter.Workbook(
@@ -1231,13 +1492,15 @@ class ExcelAuditRenderer:
             }
         )
         if blueprint is not None and product_pack is not None:
-            projector = ReportProjector()
+            resolved_projector = projector or ReportProjector()
             profile = blueprint.artifact_profile("xlsx")
             for worksheet in profile.get("worksheet_definitions", []):
                 self._write_rows(
                     workbook,
                     str(worksheet["name"]),
-                    projector.worksheet_rows(result, str(worksheet["source"]), product_pack),
+                    resolved_projector.worksheet_rows(
+                        result, str(worksheet["source"]), product_pack
+                    ),
                 )
             self._write_rows(
                 workbook,
@@ -1310,17 +1573,11 @@ class LeadershipEmailRenderer:
             view_product_pack.get("name") or product_pack.get("name") or product_pack.get("id")
         )
         message = EmailMessage()
-        benchmark = (
-            _display(
-                view.get("benchmark_retailer")
-                if view is not None
-                else result.get("benchmark_retailer")
-            )
-            .replace("_", " ")
-            .title()
-        )
+        benchmark = _display(
+            view.get("benchmark_retailer") if view is not None else result.get("benchmark_retailer")
+        ).replace("_", " ")
         competitors = ", ".join(
-            _display(value).replace("_", " ").title()
+            _display(value).replace("_", " ")
             for value in (
                 view.get("competitors", []) if view is not None else result.get("competitors", [])
             )
@@ -1342,18 +1599,64 @@ class LeadershipEmailRenderer:
             f"Result checksum: {_result_checksum(result)}",
         ]
         if view is not None:
+            scorecards = sorted(
+                _rows(view, "retailer_scorecards"),
+                key=lambda row: _integer(row.get("matches")),
+                reverse=True,
+            )
+            if scorecards:
+                lines.extend(("", "Retailer scorecard", ""))
+                for row in scorecards[:5]:
+                    reference_rate = row.get("benchmark_lower_rate")
+                    competitor_rate = row.get("competitor_lower_rate")
+                    reference_position = (
+                        f"{benchmark} lower {_scorecard_rate(reference_rate)}"
+                        if reference_rate is not None
+                        else f"{benchmark} lower-price share unavailable"
+                    )
+                    competitor_position = (
+                        f"{_display(row.get('competitor'))} lower "
+                        f"{_scorecard_rate(competitor_rate)}"
+                        if competitor_rate is not None
+                        else f"{_display(row.get('competitor'))} lower-price share unavailable"
+                    )
+                    lines.append(
+                        f"- {_display(row.get('competitor'))}: "
+                        f"{_integer(row.get('matches')):,} matched observations; "
+                        f"{reference_position}; {competitor_position}; "
+                        f"{_display(row.get('price_position'))}."
+                    )
+                if len(scorecards) > 5:
+                    lines.append(
+                        f"- {len(scorecards) - 5} additional retailer scorecards are included "
+                        "in the attached report and workbook."
+                    )
             for section in _rows(view, "sections"):
-                lines.extend(("", _display(section.get("title")), ""))
+                section_lines: list[str] = []
                 narrative = section.get("narrative")
                 if isinstance(narrative, dict) and narrative.get("body"):
-                    lines.append(_display(narrative["body"]))
+                    section_lines.append(_display(narrative["body"]))
+                elif isinstance(narrative, dict):
+                    if narrative.get("subtitle"):
+                        section_lines.append(_display(narrative.get("subtitle")))
+                    raw_bullets = narrative.get("bullets", [])
+                    if isinstance(raw_bullets, list):
+                        section_lines.extend(
+                            f"- {bullet}"
+                            for bullet in raw_bullets
+                            if isinstance(bullet, str) and bullet.strip()
+                        )
+                    if narrative.get("implication"):
+                        section_lines.append(f"Key point: {_display(narrative.get('implication'))}")
                 metrics = _rows(section, "metrics")
-                if metrics and not (isinstance(narrative, dict) and narrative.get("body")):
-                    lines.extend(
+                if metrics and not section_lines:
+                    section_lines.extend(
                         f"- {_display(metric.get('name'))}: "
                         f"{_metric_display(metric.get('value'), metric.get('unit'))}"
                         for metric in metrics[:6]
                     )
+                if section_lines:
+                    lines.extend(("", _display(section.get("title")), "", *section_lines))
         else:
             lines.extend(("", "Key findings", ""))
             lines.extend(
@@ -1502,6 +1805,7 @@ class ArtifactRenderer:
                     result,
                     context[0] if context else None,
                     context[1] if context else None,
+                    self._projector,
                 ),
                 self.version,
             )

@@ -42,6 +42,11 @@ export interface AnalysisReportView {
   generated_at: string;
   benchmark_retailer: string;
   competitors: string[];
+  retailer_scope: {
+    benchmark: RetailerOption;
+    competitors: RetailerOption[];
+  };
+  retailer_scorecards: RetailerScorecard[];
   product_pack: {
     id: string;
     name: string;
@@ -68,6 +73,31 @@ export interface AnalysisReportView {
   map_points?: MapPoint[];
   quality_observations?: QualityObservation[];
   sections: ReportSectionView[];
+}
+
+export interface RetailerOption {
+  id: string;
+  name: string;
+}
+
+export interface RetailerScorecard {
+  competitor_id: string;
+  competitor: string;
+  benchmark_retailer_id: string;
+  benchmark_retailer: string;
+  profile_id: string;
+  comparison_lens: string;
+  matches: number | null;
+  matched_geographies: number | null;
+  qualifying_geographies: number | null;
+  benchmark_lower_rate: number | null;
+  competitor_lower_rate: number | null;
+  parity_rate: number | null;
+  benchmark_median: number | null;
+  competitor_median: number | null;
+  median_gap: number | null;
+  price_position: string;
+  status: "ready" | "limited_evidence";
 }
 
 export interface QualityObservation {
