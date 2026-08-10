@@ -428,14 +428,14 @@ class GovernedOutputBuilder:
         ):
             raise AgentGovernanceError("narrative output must return every requested section once")
         typed_rows = [dict(row) for row in rows if isinstance(row, dict)]
+        self._reconcile_narrative_refs(typed_rows, requested)
         self._critic.validate(typed_rows, requested, products)
         metric_index = {str(metric["metric_id"]): metric for metric in metrics}
         storyline_index = {str(storyline["id"]): storyline for storyline in storylines}
         product_index = {str(value["id"]): value for value in (products or []) if value.get("id")}
         renderer = MetricCitationRenderer(metrics)
         sections: list[JsonObject] = []
-        for raw in rows:
-            assert isinstance(raw, dict)
+        for raw in typed_rows:
             section_id = str(raw["id"])
             metric_refs = [str(value) for value in raw.get("metric_refs", [])]
             topic_refs = [str(value) for value in raw.get("topic_refs", [])]
@@ -518,6 +518,36 @@ class GovernedOutputBuilder:
                 }
             )
         return {"sections": sections}
+
+    @staticmethod
+    def _reconcile_narrative_refs(
+        rows: list[JsonObject],
+        requested: dict[str, JsonObject],
+    ) -> None:
+        """Recover authorized references that the model used but forgot to declare."""
+
+        reference_specs = (
+            ("metric_refs", "allowed_metric_refs", _PLACEHOLDER),
+            ("storyline_refs", "storyline_refs", _STORYLINE_PLACEHOLDER),
+            ("product_refs", "allowed_product_refs", _PRODUCT_PLACEHOLDER),
+        )
+        for raw in rows:
+            section_id = str(raw["id"])
+            request = requested[section_id]
+            prose_values = NarrativeQualityCritic.prose_values(raw)
+            for reference_field, allowed_field, pattern in reference_specs:
+                embedded = {
+                    match.group(1) for value in prose_values for match in pattern.finditer(value)
+                }
+                allowed = {str(value) for value in request.get(allowed_field, [])}
+                outside_brief = embedded - allowed
+                if outside_brief:
+                    raise AgentGovernanceError(
+                        f"narrative {section_id!r} uses {reference_field} outside its "
+                        f"governed brief: {sorted(outside_brief)}"
+                    )
+                declared = {str(value) for value in raw.get(reference_field, [])}
+                raw[reference_field] = sorted(declared | embedded)
 
     def envelope(
         self,

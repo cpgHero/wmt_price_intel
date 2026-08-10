@@ -304,6 +304,117 @@ def test_structured_narrative_renders_headline_bullets_action_and_product() -> N
     )
 
 
+def test_narrative_builder_recovers_authorized_refs_used_in_prose() -> None:
+    result = GovernedOutputBuilder(REPOSITORY_ROOT).narrative_result(
+        {
+            "sections": [
+                {
+                    "id": "executive_summary",
+                    "headline_template": "Focus the first move on the clearest product loss",
+                    "subtitle_template": (
+                        "{{storyline:story.action|headline}} for "
+                        "{{product:product-a|benchmark_name}} while keeping the decision "
+                        "bounded to the governed comparable-product evidence."
+                    ),
+                    "bullet_templates": [
+                        "ALDI is typically {{metric:gap|currency_abs_2}} cheaper for the cited "
+                        "product and locations.",
+                        "The named item is observed in {{product:product-a|locations}}, which "
+                        "keeps the merchant review specific rather than category wide.",
+                    ],
+                    "implication_template": (
+                        "Review {{product:product-a|benchmark_name}} in the cited stores, then "
+                        "measure the same governed comparison after any price decision."
+                    ),
+                    "topic_refs": ["exact_price", "actions"],
+                    "storyline_refs": [],
+                    "product_refs": [],
+                    "metric_refs": [],
+                }
+            ]
+        },
+        [
+            {
+                "id": "executive_summary",
+                "heading": "Executive Summary",
+                "required_topics": ["exact_price", "actions"],
+                "storyline_refs": ["story.action"],
+                "required_storyline_refs": ["story.action"],
+                "allowed_metric_refs": ["gap"],
+                "allowed_evidence_refs": ["evidence.exact"],
+                "allowed_product_refs": ["product-a"],
+            }
+        ],
+        [
+            {
+                "metric_id": "gap",
+                "value": -0.22,
+                "unit": "USD_per_package",
+                "evidence_refs": ["evidence.exact"],
+            }
+        ],
+        {"evidence.exact"},
+        [{"id": "story.action", "headline": "Protect the opening price point"}],
+        [
+            {
+                "id": "product-a",
+                "position": "attention",
+                "benchmark_name": "All Natural 80/20 Ground Beef, 1 lb",
+                "competitor_name": "Fresh 80/20 Ground Beef, 1 lb",
+                "locations": "ZIP 72712",
+            }
+        ],
+    )
+
+    section = result["sections"][0]
+    assert section["metric_refs"] == ["gap"]
+    assert section["storyline_refs"] == ["story.action"]
+    assert section["product_refs"] == ["product-a"]
+    assert "$0.22 cheaper" in section["body"]
+
+
+def test_narrative_builder_rejects_embedded_refs_outside_brief() -> None:
+    with pytest.raises(AgentGovernanceError, match="metric_refs outside its governed brief"):
+        GovernedOutputBuilder(REPOSITORY_ROOT).narrative_result(
+            {
+                "sections": [
+                    {
+                        "id": "executive_summary",
+                        "body_template": (
+                            "The out-of-brief value is "
+                            "{{metric:unauthorized-gap|currency_abs_2}}, and this deliberately "
+                            "long narrative proves that placeholder authority is checked before "
+                            "the remaining structural and editorial validation steps can run."
+                        ),
+                        "topic_refs": ["exact_price"],
+                        "storyline_refs": ["story.action"],
+                        "metric_refs": ["gap"],
+                    }
+                ]
+            },
+            [
+                {
+                    "id": "executive_summary",
+                    "heading": "Executive Summary",
+                    "required_topics": ["exact_price"],
+                    "storyline_refs": ["story.action"],
+                    "allowed_metric_refs": ["gap"],
+                    "allowed_evidence_refs": ["evidence.exact"],
+                }
+            ],
+            [
+                {
+                    "metric_id": "gap",
+                    "value": -0.22,
+                    "unit": "USD_per_package",
+                    "evidence_refs": ["evidence.exact"],
+                }
+            ],
+            {"evidence.exact"},
+            [{"id": "story.action", "headline": "Protect the opening price point"}],
+        )
+
+
 @pytest.mark.parametrize(
     "prose",
     [
