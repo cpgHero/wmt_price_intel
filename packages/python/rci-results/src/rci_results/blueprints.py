@@ -442,7 +442,9 @@ class ReportProjector:
         ]
         evidence_kinds = set(str(value) for value in section["evidence_kinds"])
         selected_evidence = [
-            evidence for evidence in evidence_sets if str(evidence.get("kind")) in evidence_kinds
+            self._annotate_evidence_retailer(result, evidence)
+            for evidence in evidence_sets
+            if str(evidence.get("kind")) in evidence_kinds
         ]
         kind = str(section["kind"])
         records = self._records_for_kind(
@@ -463,6 +465,13 @@ class ReportProjector:
                     retailer_id = source_record.get("retailer_id")
                     if retailer_id is not None:
                         rendered["_retailer_id"] = str(retailer_id)
+            elif kind == "product_table":
+                for rendered, source_record in zip(records, source_records, strict=True):
+                    retailer_id = self._evidence_retailer_id(result, source_record)
+                    if retailer_id == str(result["benchmark_retailer"]):
+                        rendered["_retailer_id"] = retailer_id
+                    elif retailer_id is not None:
+                        rendered["_competitor_id"] = retailer_id
         narrative = None
         narrative_id = section.get("narrative_section_id")
         narratives = result.get("narratives", {})
@@ -504,6 +513,41 @@ class ReportProjector:
             "evidence_sets": selected_evidence,
             "narrative": narrative,
         }
+
+    @staticmethod
+    def _evidence_retailer_id(result: JsonObject, evidence: JsonObject) -> str | None:
+        retailer_ids = [
+            str(result["benchmark_retailer"]),
+            *(str(value) for value in result["competitors"]),
+        ]
+        evidence_token = re.sub(
+            r"[^a-z0-9]",
+            "",
+            " ".join(
+                str(value).casefold() for value in evidence.values() if isinstance(value, str)
+            ),
+        )
+        for retailer_id in sorted(retailer_ids, key=len, reverse=True):
+            retailer_token = re.sub(r"[^a-z0-9]", "", retailer_id.casefold())
+            if retailer_token and retailer_token in evidence_token:
+                return retailer_id
+        retailer_roots: dict[str, list[str]] = {}
+        for retailer_id in retailer_ids:
+            root = retailer_id.casefold().split("_", 1)[0]
+            retailer_roots.setdefault(root, []).append(retailer_id)
+        for root, matching_ids in retailer_roots.items():
+            if len(matching_ids) == 1 and root in evidence_token:
+                return matching_ids[0]
+        return None
+
+    def _annotate_evidence_retailer(self, result: JsonObject, evidence: JsonObject) -> JsonObject:
+        rendered = dict(evidence)
+        retailer_id = self._evidence_retailer_id(result, evidence)
+        if retailer_id == str(result["benchmark_retailer"]):
+            rendered["_retailer_id"] = retailer_id
+        elif retailer_id is not None:
+            rendered["_competitor_id"] = retailer_id
+        return rendered
 
     def _records_for_kind(
         self,

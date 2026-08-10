@@ -524,6 +524,9 @@ function scopeEvidenceRows(
 ) {
   if (!selected) return rows;
   return rows.filter((row) => {
+    if (row._competitor_id)
+      return matchesRetailer(row._competitor_id, selected);
+    if (row._retailer_id) return true;
     const referencedCompetitor = competitors.find((competitor) =>
       rowReferencesRetailer(row, competitor),
     );

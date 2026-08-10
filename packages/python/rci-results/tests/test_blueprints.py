@@ -52,6 +52,32 @@ def test_v2_contract_resolves_every_metric_and_evidence_reference() -> None:
     assert validated == result
 
 
+def test_evidence_retailer_annotation_prefers_exact_ids_and_safe_unique_roots() -> None:
+    result = {
+        "benchmark_retailer": "walmart_us",
+        "competitors": ["walmart_mx", "amazon_us_same_day"],
+    }
+
+    assert (
+        ReportProjector._evidence_retailer_id(
+            result, {"evidence_set_id": "evidence-classified-walmart_mx"}
+        )
+        == "walmart_mx"
+    )
+    assert (
+        ReportProjector._evidence_retailer_id(
+            result, {"evidence_set_id": "evidence-classified-amazon"}
+        )
+        == "amazon_us_same_day"
+    )
+    assert (
+        ReportProjector._evidence_retailer_id(
+            result, {"evidence_set_id": "evidence-classified-walmart"}
+        )
+        is None
+    )
+
+
 def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     result = _result()
     renderer = ArtifactRenderer(REPOSITORY_ROOT)
@@ -94,6 +120,21 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert view["retailer_scorecards"][0]["matches"] == 9049
     assert view["retailer_scorecards"][0]["competitor_lower_rate"] == pytest.approx(0.8414189413)
     assert view["retailer_scorecards"][1]["benchmark_lower_rate"] == pytest.approx(0.9363920751)
+    product_section = next(
+        section for section in view["sections"] if section["kind"] == "product_table"
+    )
+    amazon_record = next(
+        row
+        for row in product_section["records"]
+        if row["evidence_set_id"] == "evidence-classified-amazon"
+    )
+    assert amazon_record["_competitor_id"] == "amazon_us_same_day"
+    walmart_evidence = next(
+        row
+        for row in product_section["evidence_sets"]
+        if row["evidence_set_id"] == "evidence-classified-walmart"
+    )
+    assert walmart_evidence["_retailer_id"] == "walmart_us"
 
     html = renderer.render(result, "html")
     assert html.body.startswith(b"<!doctype html>")
