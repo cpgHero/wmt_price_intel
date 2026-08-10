@@ -160,30 +160,52 @@ export default async function RunMonitorPage({
           </div>
         )}
 
-      <section className="metric-grid monitor-metrics">
-        <div className="metric-card">
-          <span>Successful pages</span>
-          <strong>
-            {usage.actual_success_pages.toLocaleString()} /{" "}
-            {usage.estimated_pages.toLocaleString()}
-          </strong>
-        </div>
-        <div className="metric-card">
-          <span>Credits used</span>
-          <strong>
-            {usage.actual_credits.toLocaleString()} /{" "}
-            {usage.estimated_credits.toLocaleString()}
-          </strong>
-        </div>
-        <div className="metric-card">
-          <span>Retries</span>
-          <strong>{monitor.retry_attempts.toLocaleString()}</strong>
-        </div>
-        <div className="metric-card">
-          <span>Elapsed</span>
-          <strong>{displayDuration(monitor.elapsed_seconds)}</strong>
-        </div>
-      </section>
+      {run.trigger_type === "historical_import" && totalTasks === 0 ? (
+        <section className="historical-run-context">
+          <div>
+            <span className="section-kicker">Historical source import</span>
+            <strong>Provider task metrics do not apply to this run</strong>
+            <p>
+              This analysis was created from supplied source artifacts rather
+              than live MetricsCart collection tasks, so pages, credits,
+              retries, and elapsed provider time are intentionally omitted.
+            </p>
+          </div>
+          {analysis ? (
+            <Link
+              className="button secondary"
+              href={`/analyses/${encodeURIComponent(analysis.analysis_id)}`}
+            >
+              Review imported analysis
+            </Link>
+          ) : null}
+        </section>
+      ) : (
+        <section className="metric-grid monitor-metrics">
+          <div className="metric-card">
+            <span>Successful pages</span>
+            <strong>
+              {usage.actual_success_pages.toLocaleString()} /{" "}
+              {usage.estimated_pages.toLocaleString()}
+            </strong>
+          </div>
+          <div className="metric-card">
+            <span>Credits used</span>
+            <strong>
+              {usage.actual_credits.toLocaleString()} /{" "}
+              {usage.estimated_credits.toLocaleString()}
+            </strong>
+          </div>
+          <div className="metric-card">
+            <span>Retries</span>
+            <strong>{monitor.retry_attempts.toLocaleString()}</strong>
+          </div>
+          <div className="metric-card">
+            <span>Elapsed</span>
+            <strong>{displayDuration(monitor.elapsed_seconds)}</strong>
+          </div>
+        </section>
+      )}
 
       <section className="workspace-section retailer-progress-section">
         <header>
@@ -196,86 +218,99 @@ export default async function RunMonitorPage({
             </p>
           </div>
         </header>
-        <div className="retailer-progress-list">
-          {monitor.retailers.map((row) => {
-            const retailerFailures = failedTasks.filter(
-              (task) => task.retailer_id === row.retailer_id,
-            );
-            const retailerTotal =
-              row.pending_tasks +
-              row.running_tasks +
-              row.succeeded_tasks +
-              row.failed_tasks +
-              row.cancelled_tasks;
-            return (
-              <details key={row.retailer_id} className="retailer-progress-card">
-                <summary>
-                  <span>
-                    <strong>{displayLabel(row.retailer_id)}</strong>
-                    <small>
-                      {row.succeeded_tasks.toLocaleString()} of{" "}
-                      {retailerTotal.toLocaleString()} tasks succeeded
-                    </small>
-                  </span>
-                  <dl>
-                    <div>
-                      <dt>Failed</dt>
-                      <dd>{row.failed_tasks.toLocaleString()}</dd>
+        {monitor.retailers.length === 0 ? (
+          <div className="empty-inline">
+            {run.trigger_type === "historical_import"
+              ? "Retailer task progress is not recorded for historical imports. The report preserves source-level retailer coverage and evidence."
+              : "No retailer tasks have been created for this run yet."}
+          </div>
+        ) : (
+          <div className="retailer-progress-list">
+            {monitor.retailers.map((row) => {
+              const retailerFailures = failedTasks.filter(
+                (task) => task.retailer_id === row.retailer_id,
+              );
+              const retailerTotal =
+                row.pending_tasks +
+                row.running_tasks +
+                row.succeeded_tasks +
+                row.failed_tasks +
+                row.cancelled_tasks;
+              return (
+                <details
+                  key={row.retailer_id}
+                  className="retailer-progress-card"
+                >
+                  <summary>
+                    <span>
+                      <strong>{displayLabel(row.retailer_id)}</strong>
+                      <small>
+                        {row.succeeded_tasks.toLocaleString()} of{" "}
+                        {retailerTotal.toLocaleString()} tasks succeeded
+                      </small>
+                    </span>
+                    <dl>
+                      <div>
+                        <dt>Failed</dt>
+                        <dd>{row.failed_tasks.toLocaleString()}</dd>
+                      </div>
+                      <div>
+                        <dt>Retries</dt>
+                        <dd>{row.retries.toLocaleString()}</dd>
+                      </div>
+                      <div>
+                        <dt>Credits</dt>
+                        <dd>{row.billable_credits.toLocaleString()}</dd>
+                      </div>
+                    </dl>
+                  </summary>
+                  {retailerFailures.length > 0 ? (
+                    <div className="task-failure-list">
+                      {retailerFailures.slice(0, 100).map((task) => (
+                        <article key={task.id}>
+                          <div>
+                            <strong>ZIP {task.zipcode}</strong>
+                            <span>
+                              {task.store_number
+                                ? `Store ${task.store_number}`
+                                : "ZIP-level request"}{" "}
+                              · Page {task.page_number}
+                            </span>
+                          </div>
+                          <div>
+                            <span>
+                              {displayLabel(
+                                task.failure_class ?? "request failed",
+                              )}
+                            </span>
+                            <small>
+                              {task.http_status
+                                ? `HTTP ${task.http_status}`
+                                : "No HTTP response"}{" "}
+                              · {task.attempt_count}/{task.max_attempts}{" "}
+                              attempts
+                            </small>
+                          </div>
+                        </article>
+                      ))}
+                      {retailerFailures.length > 100 ? (
+                        <p>
+                          Showing 100 of{" "}
+                          {retailerFailures.length.toLocaleString()} failed
+                          tasks.
+                        </p>
+                      ) : null}
                     </div>
-                    <div>
-                      <dt>Retries</dt>
-                      <dd>{row.retries.toLocaleString()}</dd>
+                  ) : (
+                    <div className="empty-inline success">
+                      No failed tasks are recorded for this retailer.
                     </div>
-                    <div>
-                      <dt>Credits</dt>
-                      <dd>{row.billable_credits.toLocaleString()}</dd>
-                    </div>
-                  </dl>
-                </summary>
-                {retailerFailures.length > 0 ? (
-                  <div className="task-failure-list">
-                    {retailerFailures.slice(0, 100).map((task) => (
-                      <article key={task.id}>
-                        <div>
-                          <strong>ZIP {task.zipcode}</strong>
-                          <span>
-                            {task.store_number
-                              ? `Store ${task.store_number}`
-                              : "ZIP-level request"}{" "}
-                            · Page {task.page_number}
-                          </span>
-                        </div>
-                        <div>
-                          <span>
-                            {displayLabel(
-                              task.failure_class ?? "request failed",
-                            )}
-                          </span>
-                          <small>
-                            {task.http_status
-                              ? `HTTP ${task.http_status}`
-                              : "No HTTP response"}{" "}
-                            · {task.attempt_count}/{task.max_attempts} attempts
-                          </small>
-                        </div>
-                      </article>
-                    ))}
-                    {retailerFailures.length > 100 ? (
-                      <p>
-                        Showing 100 of{" "}
-                        {retailerFailures.length.toLocaleString()} failed tasks.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="empty-inline success">
-                    No failed tasks are recorded for this retailer.
-                  </div>
-                )}
-              </details>
-            );
-          })}
-        </div>
+                  )}
+                </details>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <details className="technical-diagnostics">
