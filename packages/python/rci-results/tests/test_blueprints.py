@@ -104,6 +104,8 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert b"Retailer scorecard" in html.body
     assert b"id=report-competitor" in html.body
     assert b"data-competitor-id='aldi_us'" in html.body
+    assert b"data-retailer-title='Leadership answer'" in html.body
+    assert b"node.textContent=`${retailer.name}: ${node.dataset.retailerTitle}`" in html.body
     assert b"Walmart (US)" in html.body
 
     workbook = renderer.render(result, "xlsx")

@@ -249,6 +249,11 @@ function BlueprintAnalysisWorkspace({
         selectedRetailer,
         reportView.retailer_scope.benchmark,
       ),
+      evidence_sets: scopeEvidenceRows(
+        section.evidence_sets,
+        selectedRetailer,
+        competitorOptions,
+      ),
     })),
   }));
   const selectedGroup = scopedSections.find(
@@ -402,6 +407,7 @@ function BlueprintAnalysisWorkspace({
                     productDecisions={scopedDecisions}
                     qualityObservations={scopedQuality}
                     showPortfolioNarrative={selectedRetailer === null}
+                    selectedRetailerName={selectedRetailer?.name ?? null}
                   />
                   {activeGroup === "summary" &&
                   section.kind === "executive_summary" ? (
@@ -496,6 +502,32 @@ function scopeReportRows(
     ) {
       return matchesRetailer(row.competitor, selected);
     }
+    return true;
+  });
+}
+
+function rowReferencesRetailer(row: JsonObject, retailer: RetailerOption) {
+  const aliases = [retailer.id, retailer.name]
+    .map(retailerToken)
+    .filter((alias) => alias.length >= 3);
+  return Object.values(row).some((value) => {
+    if (typeof value !== "string") return false;
+    const token = retailerToken(value);
+    return aliases.some((alias) => token.includes(alias));
+  });
+}
+
+function scopeEvidenceRows(
+  rows: JsonObject[],
+  selected: RetailerOption | null,
+  competitors: RetailerOption[],
+) {
+  if (!selected) return rows;
+  return rows.filter((row) => {
+    const referencedCompetitor = competitors.find((competitor) =>
+      rowReferencesRetailer(row, competitor),
+    );
+    if (referencedCompetitor) return referencedCompetitor.id === selected.id;
     return true;
   });
 }
@@ -651,6 +683,7 @@ function BlueprintSection({
   productDecisions,
   qualityObservations,
   showPortfolioNarrative,
+  selectedRetailerName,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
@@ -658,6 +691,7 @@ function BlueprintSection({
   productDecisions: ProductDecision[];
   qualityObservations: QualityObservation[];
   showPortfolioNarrative: boolean;
+  selectedRetailerName: string | null;
 }>) {
   const narrative = asObject(section.narrative);
   const visibleMetrics = [
@@ -689,14 +723,19 @@ function BlueprintSection({
     Boolean(narrative.subtitle) ||
     narrativeBullets.length > 0 ||
     Boolean(narrative.implication);
+  const hidesPortfolioNarrative =
+    !showPortfolioNarrative &&
+    !["data_quality", "methodology"].includes(section.kind) &&
+    (hasStructuredNarrative || Boolean(narrative.body));
+  const sectionTitle = hidesPortfolioNarrative
+    ? `${selectedRetailerName ?? "Selected competitor"}: ${displayLabel(section.kind)}`
+    : section.title;
   return (
     <Section
-      title={section.title}
+      title={sectionTitle}
       note={`${displayLabel(section.kind)} · ${displayLabel(section.visualization)}`}
     >
-      {!showPortfolioNarrative &&
-      !["data_quality", "methodology"].includes(section.kind) &&
-      (hasStructuredNarrative || narrative.body) ? (
+      {hidesPortfolioNarrative ? (
         <p className="retailer-scope-note">
           Portfolio commentary is hidden in a retailer-only view. The scorecard,
           product evidence, map, and tables below reflect the selected retailer.

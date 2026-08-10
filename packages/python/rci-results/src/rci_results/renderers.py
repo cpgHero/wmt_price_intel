@@ -1161,6 +1161,7 @@ const note=document.getElementById('retailer-scope-note');function apply(){const
 for(const node of document.querySelectorAll('[data-competitor-id]')){node.hidden=selected==='all'?node.dataset.portfolioOverflow==='true':!matches(node.dataset.competitorId,retailer);}
 for(const node of document.querySelectorAll('[data-retailer-id]')){node.hidden=selected==='all'?node.dataset.portfolioOverflow==='true':!(matches(node.dataset.retailerId,scope.benchmark)||matches(node.dataset.retailerId,retailer));}
 for(const node of document.querySelectorAll('[data-portfolio-narrative]')){node.hidden=selected!=='all';}
+for(const node of document.querySelectorAll('[data-retailer-title]')){node.hidden=selected==='all';if(retailer)node.textContent=`${retailer.name}: ${node.dataset.retailerTitle}`;}
 for(const node of document.querySelectorAll('[data-portfolio-summary]')){node.hidden=selected!=='all';}
 note?.classList.toggle('visible',selected!=='all');document.dispatchEvent(new CustomEvent('rci:competitor-change',{detail:{competitor:selected}}));}
 select.addEventListener('change',apply);apply();})();</script>
@@ -1261,11 +1262,16 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
         narrative_html = _narrative_html(narrative) if isinstance(narrative, dict) else ""
+        title_html = f"<h2>{title}</h2>"
         if narrative_html and section_kind not in {"data_quality", "methodology"}:
             narrative_html = narrative_html.replace(
                 "<div class=narrative>",
                 "<div class=narrative data-portfolio-narrative=true>",
                 1,
+            )
+            title_html = (
+                f"<h2 data-portfolio-narrative=true>{title}</h2>"
+                f"<h2 data-retailer-title='{kind}' hidden></h2>"
             )
         metrics: list[JsonObject] = []
         metric_html = "".join(
@@ -1323,7 +1329,7 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
         )
         return (
             f"<section class=report-section id={escape(_display(section.get('id')))}><div class=kind>{kind}</div>"
-            f"<h2>{title}</h2>{narrative_html}{metric_grid}{detail}{empty}</section>"
+            f"{title_html}{narrative_html}{metric_grid}{detail}{empty}</section>"
         )
 
     @staticmethod
