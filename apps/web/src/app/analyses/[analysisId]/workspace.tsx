@@ -637,8 +637,8 @@ function CompetitivePositionChart({
         <div>
           <strong>Lower-price share</strong>
           <span>
-            Strict comparable-package outcomes with market coverage and signed
-            gap
+            Strict comparable-package outcomes with market coverage and typical
+            price difference
           </span>
         </div>
         <div className="chart-legend" aria-label="Chart legend">
