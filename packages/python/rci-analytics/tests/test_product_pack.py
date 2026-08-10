@@ -12,6 +12,7 @@ from rci_analytics.matching import ComparisonEngine
 from rci_analytics.product_pack import (
     InMemoryProductPackRepository,
     ProductPackLoader,
+    primary_exact_profile,
 )
 from rci_contracts import ContractError
 
@@ -34,6 +35,36 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
         "id": "fresh_strawberries_leadership",
         "version": "1.0.0",
     }
+
+
+@pytest.mark.parametrize(
+    ("pack_id", "expected_profile"),
+    [
+        ("fresh_strawberries", "strict"),
+        ("fresh_ground_beef", "strict"),
+        ("fresh_shell_eggs", "strict"),
+        ("fresh_fluid_milk", "same_brand_exact"),
+        ("fresh_bananas", "strict_each"),
+    ],
+)
+def test_primary_exact_profile_is_product_pack_driven(
+    pack_id: str,
+    expected_profile: str,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load(pack_id)
+
+    profile = primary_exact_profile(pack)
+
+    assert profile["id"] == expected_profile
+
+
+def test_primary_exact_profile_honors_active_modes_without_requiring_package_price() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+
+    profile = primary_exact_profile(pack, configured_profile_ids={"compatible"})
+
+    assert profile["id"] == "compatible"
+    assert ComparisonEngine(pack).comparison_metric(str(profile["id"])) == "price_per_dozen"
 
 
 def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:

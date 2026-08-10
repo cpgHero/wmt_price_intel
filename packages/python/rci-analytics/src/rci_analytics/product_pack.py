@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from string import Formatter
@@ -70,6 +71,24 @@ class ProductPack:
             )
         except StopIteration as exc:
             raise ValueError(f"Product Pack has no profile {profile_id!r}") from exc
+
+
+def primary_exact_profile(
+    pack: ProductPack,
+    *,
+    configured_profile_ids: Iterable[str] | None = None,
+) -> JsonObject:
+    """Select the Product Pack's first active exact-ZIP decision profile."""
+
+    exact_profiles = [
+        profile for profile in pack.matching_profiles if str(profile["geography"]) == "exact_zip"
+    ]
+    configured = {str(value) for value in configured_profile_ids or ()}
+    active_profiles = [profile for profile in exact_profiles if str(profile["id"]) in configured]
+    candidates = active_profiles or exact_profiles
+    if not candidates:
+        raise ValueError("Product Pack has no exact-ZIP comparison profile")
+    return candidates[0]
 
 
 class ProductPackLoader:

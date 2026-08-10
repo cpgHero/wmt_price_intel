@@ -22,6 +22,7 @@ from rci_analytics import (
     complete_attributes_from_pdp,
     merge_product_decision_context,
     merge_product_evidence_summary,
+    primary_exact_profile,
     product_context_index,
 )
 from rci_analytics.models import ClassifiedOffer
@@ -222,23 +223,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             if isinstance(value, dict)
         }
         engine = ComparisonEngine(pack)
-        exact_profiles = [
-            profile
-            for profile in pack.matching_profiles
-            if str(profile["geography"]) == "exact_zip"
-            and engine.comparison_metric(str(profile["id"])) == "package_price"
-            and (not configured_modes or str(profile["id"]) in configured_modes)
-        ]
-        if not exact_profiles:
-            exact_profiles = [
-                profile
-                for profile in pack.matching_profiles
-                if str(profile["geography"]) == "exact_zip"
-                and engine.comparison_metric(str(profile["id"])) == "package_price"
-            ]
-        if not exact_profiles:
-            raise ValueError("Product Pack has no exact package-price comparison profile")
-        profile = exact_profiles[0]
+        profile = primary_exact_profile(pack, configured_profile_ids=configured_modes)
         queue = PostgresAnalysisQueue(
             database.engine,
             code_version=settings.app_version or APP_VERSION,

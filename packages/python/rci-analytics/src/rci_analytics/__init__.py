@@ -26,7 +26,7 @@ from rci_analytics.presentation import (
     merge_product_decision_context,
     merge_product_evidence_summary,
 )
-from rci_analytics.product_pack import ProductPackLoader
+from rci_analytics.product_pack import ProductPackLoader, primary_exact_profile
 from rci_analytics.result_v2 import AnalysisResultV2Builder, ComparisonFact, evidence_set
 
 __all__ = [
@@ -56,5 +56,6 @@ __all__ = [
     "merge_product_decision_context",
     "merge_product_evidence_summary",
     "prepare_historical_import",
+    "primary_exact_profile",
     "product_context_index",
 ]
