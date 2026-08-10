@@ -764,12 +764,12 @@ function ProductEvidenceDrawer({
             </div>
             <div className="evidence-toolbar">
               <p>{evidence.comparison_grain}</p>
-              <button
-                type="button"
-                onClick={() => downloadEvidenceCsv(evidence)}
+              <a
+                href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
+                download
               >
                 Download store evidence (.csv)
-              </button>
+              </a>
             </div>
             <div className="evidence-table-wrap">
               <table className="evidence-table">
@@ -829,47 +829,6 @@ function EvidenceStat({
       <span>{label}</span>
     </div>
   );
-}
-
-function csvCell(value: unknown) {
-  const raw = value === null || value === undefined ? "" : String(value);
-  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-function downloadEvidenceCsv(evidence: ProductEvidenceResponse) {
-  const columns = [
-    "outcome",
-    "zipcode",
-    "benchmark_retailer",
-    "benchmark_product_id",
-    "benchmark_product_name",
-    "benchmark_store",
-    "benchmark_price",
-    "competitor",
-    "competitor_product_id",
-    "competitor_product_name",
-    "competitor_store",
-    "competitor_price",
-    "competitor_minus_benchmark",
-  ] as const;
-  const body = [
-    columns.join(","),
-    ...evidence.rows.map((row) =>
-      columns.map((column) => csvCell(row[column])).join(","),
-    ),
-  ].join("\n");
-  const url = URL.createObjectURL(
-    new Blob([body], { type: "text/csv;charset=utf-8" }),
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${evidence.analysis_id}-${evidence.decision_id}-store-evidence.csv`;
-  anchor.hidden = true;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 const chartCapabilityBySection: Record<string, string[]> = {

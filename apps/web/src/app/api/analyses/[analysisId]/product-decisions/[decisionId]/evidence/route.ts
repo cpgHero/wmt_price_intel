@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { getApi, type ProductEvidenceResponse } from "@/lib/api";
+import {
+  productEvidenceCsv,
+  productEvidenceFilename,
+} from "@/lib/evidence-csv";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   {
     params,
   }: {
@@ -19,6 +23,15 @@ export async function GET(
       { error: result.error ?? "Product evidence is unavailable." },
       { status: result.status },
     );
+  }
+  if (new URL(request.url).searchParams.get("format") === "csv") {
+    return new Response(productEvidenceCsv(result.data), {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": `attachment; filename="${productEvidenceFilename(result.data)}"`,
+        "Content-Type": "text/csv; charset=utf-8",
+      },
+    });
   }
   return NextResponse.json(result.data);
 }
