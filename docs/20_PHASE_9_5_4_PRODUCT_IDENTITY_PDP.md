@@ -21,6 +21,17 @@ collection time.
 
 ## Durable queue and cost controls
 
+- Enrichment eligibility starts from the explicit set of offer IDs admitted to the analysis. Raw
+  search-result rows that classification or matching excludes are never candidates for PDP work.
+- Within that admitted set, the planner requests one PDP snapshot for each retailer product ID
+  from one deterministic representative location. Repeated sightings of the same product do not
+  create location-by-location PDP calls.
+- The only automatic fan-out is a verified package-price difference for the same retailer product
+  ID. In that case, the planner requests one representative PDP snapshot for each distinct
+  observed price state so location-specific variants can be investigated. It does not request
+  every location that shares that price.
+- SERP prices drive the exception. PDP responses remain identity evidence and cannot overwrite
+  the authoritative observed search price.
 - A run row is locked while reserving credits, making `planned_credits <= max_credits` atomic.
 - A successful unexpired cache lookup occurs before a reservation and creates no provider job.
 - Request identity hashes retailer, product ID, URL, ZIP, store, fulfillment, endpoint ID, and
@@ -47,7 +58,9 @@ The owner-supplied fixtures cover:
 
 Tests preserve IDs and ZIPs as strings, validate all three normalized snapshots against the shared
 JSON Schema, prove 200/404 billing, retain raw evidence, and prove one cached snapshot enriches two
-SERP observations without changing their differing prices or availability.
+SERP observations without changing their differing prices or availability. Planner tests also prove
+that excluded search noise creates no request, identical product/location sightings collapse to one
+request, and price-variant products create one request per distinct observed price state.
 
 ## Acceptance commands
 

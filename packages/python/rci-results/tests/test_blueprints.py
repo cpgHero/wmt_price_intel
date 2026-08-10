@@ -74,6 +74,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert html.body.startswith(b"<!doctype html>")
     assert b"Normalized Price-per-Pound View" in html.body
     assert b"ALDI pressure is concentrated" in html.body
+    assert b"Competitive Scorecard" in html.body
 
     workbook = renderer.render(result, "xlsx")
     with ZipFile(BytesIO(workbook.body)) as archive:
@@ -135,7 +136,7 @@ def test_leadership_html_prioritizes_governed_narrative_and_visible_comparisons(
     assert "All comparable items" in html
 
 
-def test_leadership_html_humanizes_catalog_and_product_pack_labels() -> None:
+def test_report_view_humanizes_catalog_and_product_pack_labels() -> None:
     result = _result()
     result["metrics"].append(
         {
@@ -148,11 +149,70 @@ def test_leadership_html_humanizes_catalog_and_product_pack_labels() -> None:
         }
     )
 
-    html = ArtifactRenderer(REPOSITORY_ROOT).render(result, "html").body.decode()
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+    names = [str(metric["name"]) for section in view["sections"] for metric in section["metrics"]]
+    rendered = " ".join(names)
 
-    assert "aldi_us" not in html
-    assert "Lean Pct:" not in html
-    assert "ALDI 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed" in html
+    assert "aldi_us" not in rendered
+    assert "Lean Pct:" not in rendered
+    assert "ALDI 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed" in rendered
+
+
+def test_comparison_table_projects_matched_geography_count() -> None:
+    result = _result()
+    metric_id = "aldi-exact-unique-geographies"
+    result["metrics"].append(
+        {
+            "metric_id": metric_id,
+            "name": "ALDI exact matched geographies",
+            "value": 41,
+            "unit": "locations",
+            "method": "distinct exact-match geography keys",
+            "evidence_ref": "evidence.matches.aldi",
+        }
+    )
+    result["comparisons"][0]["metric_refs"].append(metric_id)
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+    price_section = next(
+        section for section in view["sections"] if section["kind"] == "price_position"
+    )
+
+    assert price_section["records"][0]["matched geographies"] == "41"
+
+
+def test_leadership_html_renders_analysis_linked_product_map() -> None:
+    result = _result()
+    context = {
+        "map_points": [
+            {
+                "id": "point-1",
+                "label": "Benchmark ground beef",
+                "latitude": 36.37,
+                "longitude": -94.21,
+                "benchmark_product_id": "100",
+                "benchmark_product_name": "Benchmark ground beef",
+                "outcome": "competitor_lower",
+                "zipcode": "72712",
+                "value_label": "Competitor lower · signed gap $-0.50",
+            }
+        ]
+    }
+
+    html = (
+        ArtifactRenderer(REPOSITORY_ROOT)
+        .render(
+            result,
+            "html",
+            presentation_context=context,
+        )
+        .body.decode()
+    )
+
+    assert "Benchmark product price map" in html
+    assert "All mapped benchmark products" in html
+    assert "data-product='100'" in html
+    assert "PDP enrichment supplies product reference detail" in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:

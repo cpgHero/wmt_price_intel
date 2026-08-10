@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.6.1"
+RENDERER_VERSION = "2.7.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -125,6 +125,17 @@ align-items:center;display:grid;gap:8px;grid-template-columns:1fr 52px}
 height:100%}.paired b.benchmark{background:var(--ink)}.paired b.competitor{background:var(--accent)}
 .paired>div>span{font-size:11px;text-align:right}.chart-note{border-top:1px solid var(--line);
 margin:14px 0 0;padding-top:12px}.product-intro p{color:var(--muted);font-size:13px}
+.map-controls{align-items:end;display:flex;gap:14px;justify-content:space-between;margin:16px 0}
+.map-controls label{color:var(--muted);display:grid;font-size:11px;font-weight:800;gap:6px;
+letter-spacing:.08em;text-transform:uppercase}.map-controls select{background:var(--surface);
+border:1px solid var(--line);border-radius:9px;color:var(--ink);min-height:40px;padding:0 10px}
+.map-legend{color:var(--muted);font-size:11px}.geo-map{margin:0}.geo-map svg{
+background:var(--surface);
+border:1px solid var(--line);border-radius:14px;display:block;width:100%}.geo-map .outline{
+fill:var(--card);stroke:var(--muted);stroke-width:1.5}.geo-map circle{fill:#9b6100;opacity:.76;
+stroke:var(--card);stroke-width:2}.geo-map circle.benchmark_lower{fill:var(--ink)}
+.geo-map circle.competitor_lower{fill:var(--accent)}.geo-map figcaption{color:var(--muted);
+font-size:12px;margin-top:8px}
 .product-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
 .product-card{align-items:center;background:var(--surface);box-shadow:none;display:grid;gap:14px;
 grid-template-columns:72px 1fr;margin:0;padding:12px}.product-card img,
@@ -145,7 +156,8 @@ text-transform:uppercase}tbody tr:nth-child(even){background:var(--surface)}li{m
 footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px;margin-top:34px;
 padding-top:18px}footer code{overflow-wrap:anywhere}
 @media(max-width:700px){main{padding:24px 14px 44px}header{padding:24px 20px}section{padding:18px}
-h1{font-size:42px}.chart-row{grid-template-columns:1fr}}
+h1{font-size:42px}.chart-row{grid-template-columns:1fr}.map-controls{align-items:stretch;
+flex-direction:column}}
 """
 
 
@@ -251,7 +263,9 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
     chart_rows = "".join(
         f"<div class=chart-row><div class=chart-label><strong>"
         f"{escape(_display(row.get('segment') or row.get('competitor')))}</strong>"
-        f"<span>{escape(_display(row.get('competitor')))} · {matches:,} matches</span></div>"
+        f"<span>{escape(_display(row.get('competitor')))} · {matches:,} matches · "
+        f"{escape(_display(row.get('matched geographies')))} geographies · "
+        f"gap {escape(_display(row.get('competitor - benchmark gap')))}</span></div>"
         f"<div class=paired><div><i><b class=benchmark style='width:{benchmark or 1}%'></b>"
         f"</i><span>{'—' if benchmark is None else f'{benchmark:.1f}%'}</span></div>"
         f"<div><i><b class=competitor style='width:{competitor or 1}%'></b></i>"
@@ -262,10 +276,127 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
         return ""
     return (
         "<figure class=comparison-chart><figcaption><strong>Lower-price share</strong>"
-        "<span>Highest-sample comparisons · matched observations shown</span></figcaption>"
+        "<span>Strict comparable-package outcomes with market coverage and signed gap</span>"
+        "</figcaption>"
         f"<div class=chart-body>{chart_rows}</div><p class=chart-note>Directional share "
         "among matched observations; see the supporting table for definitions and caveats."
         "</p></figure>"
+    )
+
+
+def _primary_comparison_rows(view: JsonObject) -> list[JsonObject]:
+    sections = _rows(view, "sections")
+    selected = next(
+        (
+            _rows(section, "records")
+            for section in sections
+            if section.get("kind") == "price_position" and _rows(section, "records")
+        ),
+        [],
+    )
+    if not selected:
+        selected = next(
+            (
+                _rows(section, "records")
+                for section in sections
+                if section.get("kind") == "segment_analysis" and _rows(section, "records")
+            ),
+            [],
+        )
+    overall = [
+        row for row in selected if str(row.get("segment", "")).casefold() == "all comparable items"
+    ]
+    return overall or selected
+
+
+def _map_figure(context: JsonObject) -> str:
+    points = []
+    for point in _rows(context, "map_points"):
+        try:
+            latitude = float(point["latitude"])
+            longitude = float(point["longitude"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (24 <= latitude <= 50 and -125 <= longitude <= -66):
+            continue
+        points.append((point, latitude, longitude))
+    if not points:
+        return ""
+    products = sorted(
+        {
+            str(point.get("benchmark_product_id")): str(
+                point.get("benchmark_product_name") or point.get("label") or "Product"
+            )
+            for point, _latitude, _longitude in points
+            if point.get("benchmark_product_id")
+        }.items(),
+        key=lambda item: item[1],
+    )
+    options = "".join(
+        f"<option value='{escape(product_id, quote=True)}'>{escape(name)}</option>"
+        for product_id, name in products
+    )
+    outline_coordinates = (
+        (-124.7, 48.4),
+        (-123, 46),
+        (-124, 42),
+        (-122, 38),
+        (-117, 32.5),
+        (-111, 31.4),
+        (-106.5, 31.8),
+        (-103, 29.7),
+        (-97, 25.8),
+        (-90, 29),
+        (-83, 25.5),
+        (-80, 27),
+        (-80, 32),
+        (-75, 35),
+        (-75, 39),
+        (-67, 45),
+        (-71, 47),
+        (-83, 47),
+        (-95, 49),
+        (-105, 49),
+        (-116, 49),
+        (-124.7, 48.4),
+    )
+    outline = " ".join(
+        f"{'M' if index == 0 else 'L'}{((longitude + 125) / 59) * 900 + 30:.1f},"
+        f"{((50 - latitude) / 26) * 460 + 30:.1f}"
+        for index, (longitude, latitude) in enumerate(outline_coordinates)
+    )
+    circles = "".join(
+        "<circle class='geo-point "
+        + escape(str(point.get("outcome") or "parity"), quote=True)
+        + "' data-product='"
+        + escape(str(point.get("benchmark_product_id") or ""), quote=True)
+        + f"' cx='{((longitude + 125) / 59) * 900 + 30:.1f}'"
+        + f" cy='{((50 - latitude) / 26) * 460 + 30:.1f}' r='4.5'><title>"
+        + escape(
+            " · ".join(
+                str(value)
+                for value in (
+                    point.get("benchmark_product_name") or point.get("label"),
+                    f"ZIP {point['zipcode']}" if point.get("zipcode") else None,
+                    point.get("value_label"),
+                )
+                if value
+            )
+        )
+        + "</title></circle>"
+        for point, latitude, longitude in points[:3000]
+    )
+    return (
+        "<div class=map-controls><label>Benchmark product<select "
+        "onchange=\"for(const p of document.querySelectorAll('.geo-point'))"
+        "p.style.display=!this.value||p.dataset.product===this.value?'':'none'\">"
+        f"<option value=''>All mapped benchmark products</option>{options}</select></label>"
+        "<div class=map-legend>Dark = benchmark lower · Blue = competitor lower · "
+        "Gold = parity</div></div><figure class=geo-map>"
+        f"<svg viewBox='0 0 960 520' role=img aria-label='Benchmark product price map'>"
+        f"<path class=outline d='{outline} Z'/>{circles}</svg><figcaption>"
+        "Exact comparison evidence only. PDP enrichment supplies product reference detail; "
+        "it does not drive mapped price outcomes.</figcaption></figure>"
     )
 
 
@@ -356,8 +487,10 @@ class LeadershipHtmlRenderer:
         product_pack = _mapping(view, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         result_checksum = escape(_result_checksum(result))
+        decision_rows = _primary_comparison_rows(view)
         section_html = "".join(
-            self._section(section, presentation_context) for section in _rows(view, "sections")
+            self._section(section, presentation_context, decision_rows)
+            for section in _rows(view, "sections")
         )
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
@@ -374,15 +507,23 @@ Generated {escape(_display_generated_at(result))}</div>
         return document.encode("utf-8")
 
     @staticmethod
-    def _section(section: JsonObject, presentation_context: JsonObject) -> str:
-        title = escape(_display(section.get("title")))
+    def _section(
+        section: JsonObject,
+        presentation_context: JsonObject,
+        decision_rows: list[JsonObject],
+    ) -> str:
         section_kind = str(section.get("kind", ""))
+        title = escape(
+            "Competitive Scorecard"
+            if section_kind == "kpi_strip"
+            else _display(section.get("title"))
+        )
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
         narrative_html = (
             _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""
         )
-        metrics = _rows(section, "metrics")[:6] if section_kind in {"kpi_strip", "coverage"} else []
+        metrics: list[JsonObject] = []
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
             f"<strong>{escape(_metric_display(metric.get('value'), metric.get('unit')))}</strong>"
@@ -391,7 +532,14 @@ Generated {escape(_display_generated_at(result))}</div>
         )
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
-        if section_kind in {
+        if section_kind == "kpi_strip":
+            detail = _comparison_chart(decision_rows)
+        elif section_kind == "coverage":
+            detail = (
+                f"{_map_figure(presentation_context)}"
+                f"{_collapsed_table('View source coverage detail', records)}"
+            )
+        elif section_kind in {
             "price_position",
             "segment_analysis",
             "geographic_sensitivity",

@@ -24,6 +24,7 @@ dependencies = [
 rci-worker = "rci_worker.main:main"
 rci-import-historical = "rci_worker.historical_cli:main"
 rci-narrative-bakeoff = "rci_worker.narrative_bakeoff:main"
+rci-publication-context = "rci_worker.publication_context:main"
 
 [tool.uv.sources]
 rci-agents = { workspace = true }

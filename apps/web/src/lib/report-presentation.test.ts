@@ -6,6 +6,7 @@ import {
   formatMetric,
   groupReportSections,
   metricBarWidth,
+  primaryComparisonRows,
 } from "./report-presentation";
 
 function section(id: string, kind: string): ReportSectionView {
@@ -77,5 +78,21 @@ describe("report presentation", () => {
     ).toBe(
       "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Signed median gap",
     );
+  });
+
+  it("selects overall exact-price rows for the executive and geography views", () => {
+    const exact = section("exact", "price_position");
+    exact.records = [
+      { competitor: "ALDI", segment: "All comparable items", matches: "9,049" },
+      { competitor: "ALDI", segment: "80 / 20", matches: "1,456" },
+    ];
+    const normalized = section("normalized", "segment_analysis");
+    normalized.records = [
+      { competitor: "ALDI", segment: "All comparable items", matches: "7,622" },
+    ];
+
+    expect(primaryComparisonRows([normalized, exact])).toEqual([
+      exact.records[0],
+    ]);
   });
 });

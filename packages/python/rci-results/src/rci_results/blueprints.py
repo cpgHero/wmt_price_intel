@@ -97,6 +97,7 @@ def _merchant_record(
 
 _COMPARISON_FIELDS = (
     "matches",
+    "unique_geographies",
     "benchmark_lower_rate",
     "competitor_lower_rate",
     "benchmark_median",
@@ -480,6 +481,7 @@ class ReportProjector:
                         product_pack,
                     ),
                     "matches": _formatted_metric(values.get("matches")),
+                    "matched geographies": _formatted_metric(values.get("unique_geographies")),
                     "benchmark lower": _formatted_metric(values.get("benchmark_lower_rate")),
                     "competitor lower": _formatted_metric(values.get("competitor_lower_rate")),
                     "benchmark median": _formatted_metric(values.get("benchmark_median")),

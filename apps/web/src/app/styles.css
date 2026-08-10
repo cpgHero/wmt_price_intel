@@ -587,8 +587,16 @@ dd {
 .report-header {
   align-items: center;
   background:
-    radial-gradient(circle at 88% 16%, rgba(88, 210, 248, 0.16), transparent 28%),
-    linear-gradient(135deg, color-mix(in srgb, var(--green-soft) 68%, var(--card)), var(--card));
+    radial-gradient(
+      circle at 88% 16%,
+      rgba(88, 210, 248, 0.16),
+      transparent 28%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--green-soft) 68%, var(--card)),
+      var(--card)
+    );
   border: 1px solid var(--line);
   border-radius: 24px;
   margin-top: 2rem;
@@ -979,6 +987,59 @@ a.product-highlight:hover {
 .analysis-map {
   margin: 0;
 }
+.map-controls {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.map-controls label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: min(520px, 100%);
+}
+.map-controls label span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.map-controls select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 0 0.8rem;
+}
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+.map-legend span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.68rem;
+  gap: 0.4rem;
+}
+.map-legend span::before {
+  background: var(--amber);
+  border-radius: 999px;
+  content: "";
+  height: 8px;
+  width: 8px;
+}
+.map-legend .benchmark_lower::before {
+  background: var(--ink);
+}
+.map-legend .competitor_lower::before {
+  background: var(--green);
+}
 .analysis-map svg {
   background:
     linear-gradient(var(--soft-line) 1px, transparent 1px),
@@ -994,16 +1055,67 @@ a.product-highlight:hover {
 .analysis-map rect {
   fill: transparent;
 }
+.analysis-map .us-outline {
+  fill: color-mix(in srgb, var(--card) 72%, transparent);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
 .analysis-map circle {
-  fill: var(--green);
-  opacity: 0.72;
+  fill: var(--amber);
+  opacity: 0.76;
   stroke: var(--card);
   stroke-width: 2;
+}
+.analysis-map circle.benchmark_lower {
+  fill: var(--ink);
+}
+.analysis-map circle.competitor_lower {
+  fill: var(--green);
 }
 .analysis-map figcaption {
   color: var(--muted);
   font-size: 0.72rem;
   margin-top: 0.65rem;
+}
+.market-coverage-chart {
+  display: grid;
+  gap: 1.1rem;
+  margin: 0;
+}
+.market-coverage-chart > div {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(240px, 2fr) 150px;
+}
+.market-coverage-chart span strong,
+.market-coverage-chart span small {
+  display: block;
+}
+.market-coverage-chart span strong {
+  font-size: 0.82rem;
+}
+.market-coverage-chart span small,
+.market-coverage-chart em {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-style: normal;
+}
+.market-coverage-chart i {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  display: block;
+  height: 12px;
+  overflow: hidden;
+}
+.market-coverage-chart i b {
+  background: var(--green);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.market-coverage-chart em {
+  text-align: right;
 }
 .finding-grid,
 .match-grid {
@@ -1508,6 +1620,20 @@ tbody tr:last-child td {
   }
   .full-field {
     grid-column: auto;
+  }
+  .map-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .map-legend {
+    justify-content: flex-start;
+  }
+  .market-coverage-chart > div {
+    gap: 0.55rem;
+    grid-template-columns: 1fr;
+  }
+  .market-coverage-chart em {
+    text-align: left;
   }
   .gate-banner,
   .analysis-pending-banner {

@@ -207,10 +207,17 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 store,
                 renderer,
             )
+            previous_publication = await service.latest_publication(record.analysis_id)
+            presentation_context = (
+                dict(previous_publication.presentation_context)
+                if previous_publication is not None
+                else {}
+            )
+            presentation_context["product_highlights"] = product_highlights
             publication = await service.publish_publication(
                 record.analysis_id,
                 validated,
-                presentation_context={"product_highlights": product_highlights},
+                presentation_context=presentation_context,
             )
             artifact = await service.generate_artifact(record.analysis_id, "html")
             storage_uri = artifact.storage_uri

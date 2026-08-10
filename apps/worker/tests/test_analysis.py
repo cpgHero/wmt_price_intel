@@ -159,8 +159,8 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
                 storage_uri=f"s3://raw/{task.id}.json.gz",
                 checksum="a" * 64,
                 collected_at=now,
-                latitude=None,
-                longitude=None,
+                latitude=40.7584,
+                longitude=-82.5154,
             )
         )
         payloads[task.id] = _payload(product_id, price)
@@ -226,6 +226,15 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
     }
     assert len(artifact_recorder.artifacts) >= 7
     assert all(uri.endswith(".parquet") for uri in dataset_store.objects)
+    publication = await result_service.latest_publication(analysis_id)
+    assert publication is not None
+    map_points = publication.presentation_context["map_points"]
+    assert isinstance(map_points, list)
+    assert {point["benchmark_product_id"] for point in map_points} == {"44391605"}
+    assert {point["competitor"] for point in map_points} == {
+        "aldi_us",
+        "amazon_us_same_day",
+    }
 
 
 async def test_historical_input_replays_through_same_generic_pipeline() -> None:

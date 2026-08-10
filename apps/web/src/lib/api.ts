@@ -84,6 +84,15 @@ export interface MapPoint {
   value?: number | null;
   value_label?: string | null;
   retailer?: string | null;
+  benchmark_product_id?: string | null;
+  benchmark_product_name?: string | null;
+  benchmark_price?: number | null;
+  competitor_price?: number | null;
+  competitor?: string | null;
+  outcome?: "benchmark_lower" | "competitor_lower" | "parity" | null;
+  zipcode?: string | null;
+  store?: string | null;
+  matches?: number | null;
 }
 
 export interface RunRecord {

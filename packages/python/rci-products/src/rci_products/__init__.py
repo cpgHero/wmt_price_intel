@@ -27,6 +27,7 @@ from rci_products.models import (
     ProductDetailRun,
     ProductDetailSnapshotRecord,
 )
+from rci_products.planning import ProductDetailCandidate, plan_product_detail_candidates
 from rci_products.postgres import PostgresProductDetailRepository
 from rci_products.repository import ProductDetailBudgetExceeded, ProductDetailRepository
 from rci_products.service import ProductDetailWorker
@@ -46,6 +47,7 @@ __all__ = [
     "PostgresProductDetailLimiterRegistry",
     "PostgresProductDetailRepository",
     "ProductDetailBudgetExceeded",
+    "ProductDetailCandidate",
     "ProductDetailCatalog",
     "ProductDetailEndpoint",
     "ProductDetailFetchResult",
@@ -61,6 +63,7 @@ __all__ = [
     "StaticProductDetailLimiterRegistry",
     "attach_product_identity",
     "canonical_product_document",
+    "plan_product_detail_candidates",
     "snapshot_document",
     "source_context",
 ]

@@ -41,6 +41,22 @@ export function groupReportSections(sections: ReportSectionView[]) {
   }));
 }
 
+export function primaryComparisonRows(sections: ReportSectionView[]) {
+  const preferred = sections.find(
+    (section) =>
+      section.kind === "price_position" && section.records.length > 0,
+  );
+  const fallback = sections.find(
+    (section) =>
+      section.kind === "segment_analysis" && section.records.length > 0,
+  );
+  const rows = preferred?.records ?? fallback?.records ?? [];
+  const overall = rows.filter(
+    (row) => String(row.segment ?? "").toLowerCase() === "all comparable items",
+  );
+  return overall.length > 0 ? overall : rows;
+}
+
 export function formatMetric(value: unknown, unit: unknown): string {
   if (typeof value !== "number") return displayValue(value);
   const normalizedUnit = typeof unit === "string" ? unit : "";

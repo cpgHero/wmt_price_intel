@@ -23,6 +23,7 @@ import {
   formatMetric,
   groupReportSections,
   metricBarWidth,
+  primaryComparisonRows,
 } from "@/lib/report-presentation";
 
 const tabs = [
@@ -202,6 +203,7 @@ function BlueprintAnalysisWorkspace({
   );
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
+  const primaryComparisons = primaryComparisonRows(reportView.sections);
   return (
     <>
       <header className="workspace-header report-header">
@@ -209,8 +211,8 @@ function BlueprintAnalysisWorkspace({
           <p className="eyebrow">Competitive intelligence report</p>
           <h1>{reportView.product_pack.name}</h1>
           <p className="report-deck">
-            Where the price war is being won, where it is being lost, and
-            which targeted moves matter most.
+            Where the price war is being won, where it is being lost, and which
+            targeted moves matter most.
           </p>
           <p className="workspace-meta">
             {analysis.analysis_id} · Generated{" "}
@@ -275,21 +277,29 @@ function BlueprintAnalysisWorkspace({
           </Section>
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
+            {activeGroup === "summary" && primaryComparisons.length > 0 ? (
+              <DecisionScorecard rows={primaryComparisons} />
+            ) : null}
             {activeGroup === "geography" && reportView.map_points?.length ? (
               <AnalysisMap points={reportView.map_points} />
+            ) : null}
+            {activeGroup === "geography" ? (
+              <ComparableMarketCoverage rows={primaryComparisons} />
             ) : null}
             {activeGroup === "products" &&
             reportView.product_highlights?.length ? (
               <ProductHighlights products={reportView.product_highlights} />
             ) : null}
-            {selectedGroup.sections.map((section) => (
-              <BlueprintSection
-                section={section}
-                recommendedCharts={recommendedCharts}
-                benchmarkRetailer={reportView.benchmark_retailer}
-                key={section.id}
-              />
-            ))}
+            {selectedGroup.sections
+              .filter((section) => section.kind !== "kpi_strip")
+              .map((section) => (
+                <BlueprintSection
+                  section={section}
+                  recommendedCharts={recommendedCharts}
+                  benchmarkRetailer={reportView.benchmark_retailer}
+                  key={section.id}
+                />
+              ))}
           </>
         ) : (
           <Section
@@ -316,7 +326,8 @@ function BlueprintSection({
   benchmarkRetailer: string;
 }>) {
   const narrative = asObject(section.narrative);
-  const visibleMetrics = section.metrics.slice(0, 6);
+  const visibleMetrics =
+    section.kind === "coverage" ? [] : section.metrics.slice(0, 6);
   const metricValues = visibleMetrics.map((metric) => metric.value);
   const comparisonChart = shouldShowComparisonChart(section, recommendedCharts);
   const narrativeLeads =
@@ -366,7 +377,10 @@ function BlueprintSection({
         </div>
       ) : null}
       {comparisonChart ? (
-        <CompetitivePositionChart rows={section.records} title={section.title} />
+        <CompetitivePositionChart
+          rows={section.records}
+          title={section.title}
+        />
       ) : null}
       {section.records.length > 0 &&
       section.visualization === "ranked_cards" &&
@@ -374,6 +388,7 @@ function BlueprintSection({
         <DecisionCards rows={section.records} />
       ) : section.records.length > 0 &&
         section.kind !== "kpi_strip" &&
+        section.kind !== "coverage" &&
         !narrativeLeads &&
         !comparisonChart ? (
         <DataTable rows={section.records} />
@@ -399,6 +414,51 @@ function BlueprintSection({
   );
 }
 
+function DecisionScorecard({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  return (
+    <Section
+      title="Competitive scorecard"
+      note="Strict comparable-package outcomes by competitor; matched observations and signed price gaps remain visible for context."
+    >
+      <CompetitivePositionChart rows={rows} title="Competitive scorecard" />
+    </Section>
+  );
+}
+
+function ComparableMarketCoverage({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  const coverage = rows
+    .map((row) => ({
+      competitor: displayValue(row.competitor),
+      geographies: parseCount(row["matched geographies"]),
+      matches: parseCount(row.matches),
+    }))
+    .filter((row) => row.geographies > 0)
+    .sort((left, right) => right.geographies - left.geographies);
+  const maximum = Math.max(...coverage.map((row) => row.geographies), 0);
+  if (coverage.length === 0) return null;
+  return (
+    <Section
+      title="Comparable market coverage"
+      note="Distinct geographies with strict package comparisons—not raw retailer footprint or source-row volume."
+    >
+      <figure className="market-coverage-chart">
+        {coverage.map((row) => (
+          <div key={row.competitor}>
+            <span>
+              <strong>{row.competitor}</strong>
+              <small>{row.matches.toLocaleString()} matched observations</small>
+            </span>
+            <i aria-hidden="true">
+              <b style={{ width: `${(row.geographies / maximum) * 100}%` }} />
+            </i>
+            <em>{row.geographies.toLocaleString()} geographies</em>
+          </div>
+        ))}
+      </figure>
+    </Section>
+  );
+}
+
 const chartCapabilityBySection: Record<string, string[]> = {
   price_position: ["package_price_gap", "exact_match", "price_position"],
   segment_analysis: ["price_per_lb", "normalized_price", "segment_win_rate"],
@@ -411,7 +471,9 @@ function shouldShowComparisonChart(
 ) {
   const capabilities = chartCapabilityBySection[section.kind];
   if (!capabilities || section.records.length === 0) return false;
-  return capabilities.some((capability) => recommendedCharts.includes(capability));
+  return capabilities.some((capability) =>
+    recommendedCharts.includes(capability),
+  );
 }
 
 function parseRate(value: unknown): number | null {
@@ -440,6 +502,7 @@ function CompetitivePositionChart({
       competitorRate: parseRate(row["competitor lower"]),
       benchmarkRate: parseRate(row["benchmark lower"]),
       matches: parseCount(row.matches),
+      geographies: parseCount(row["matched geographies"]),
     }))
     .filter(
       (item) => item.competitorRate !== null || item.benchmarkRate !== null,
@@ -452,7 +515,10 @@ function CompetitivePositionChart({
       <figcaption>
         <div>
           <strong>Lower-price share</strong>
-          <span>Highest-sample comparisons · matched observations shown</span>
+          <span>
+            Strict comparable-package outcomes with market coverage and signed
+            gap
+          </span>
         </div>
         <div className="chart-legend" aria-label="Chart legend">
           <span className="benchmark">Benchmark</span>
@@ -460,36 +526,56 @@ function CompetitivePositionChart({
         </div>
       </figcaption>
       <div className="comparison-chart-body">
-        {chartRows.map(({ row, benchmarkRate, competitorRate, matches }, index) => (
-          <div className="comparison-chart-row" key={String(row.id ?? index)}>
-            <div className="comparison-chart-label">
-              <strong>{displayValue(row.segment ?? row.competitor)}</strong>
-              <span>
-                {displayValue(row.competitor)} · {matches.toLocaleString()} matches
-              </span>
-            </div>
-            <div className="paired-bars">
-              <div>
-                <i>
-                  <b
-                    className="benchmark"
-                    style={{ width: `${Math.max(benchmarkRate ?? 0, 1)}%` }}
-                  />
-                </i>
-                <span>{benchmarkRate === null ? "—" : `${benchmarkRate.toFixed(1)}%`}</span>
+        {chartRows.map(
+          (
+            { row, benchmarkRate, competitorRate, matches, geographies },
+            index,
+          ) => (
+            <div className="comparison-chart-row" key={String(row.id ?? index)}>
+              <div className="comparison-chart-label">
+                <strong>{displayValue(row.segment ?? row.competitor)}</strong>
+                <span>
+                  {displayValue(row.competitor)} · {matches.toLocaleString()}{" "}
+                  matches
+                  {geographies > 0
+                    ? ` · ${geographies.toLocaleString()} geographies`
+                    : ""}
+                  {row["competitor - benchmark gap"]
+                    ? ` · gap ${displayValue(row["competitor - benchmark gap"])}`
+                    : ""}
+                </span>
               </div>
-              <div>
-                <i>
-                  <b
-                    className="competitor"
-                    style={{ width: `${Math.max(competitorRate ?? 0, 1)}%` }}
-                  />
-                </i>
-                <span>{competitorRate === null ? "—" : `${competitorRate.toFixed(1)}%`}</span>
+              <div className="paired-bars">
+                <div>
+                  <i>
+                    <b
+                      className="benchmark"
+                      style={{ width: `${Math.max(benchmarkRate ?? 0, 1)}%` }}
+                    />
+                  </i>
+                  <span>
+                    {benchmarkRate === null
+                      ? "—"
+                      : `${benchmarkRate.toFixed(1)}%`}
+                  </span>
+                </div>
+                <div>
+                  <i>
+                    <b
+                      className="competitor"
+                      style={{ width: `${Math.max(competitorRate ?? 0, 1)}%` }}
+                    />
+                  </i>
+                  <span>
+                    {competitorRate === null
+                      ? "—"
+                      : `${competitorRate.toFixed(1)}%`}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ),
+        )}
       </div>
       <p className="chart-note">
         Directional share among matched observations; open the supporting detail
@@ -553,27 +639,127 @@ function ProductHighlights({
 }
 
 function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
+  const products = Array.from(
+    new Map(
+      points
+        .filter((point) => point.benchmark_product_id)
+        .map((point) => [
+          String(point.benchmark_product_id),
+          point.benchmark_product_name ?? point.label,
+        ]),
+    ),
+  ).sort((left, right) => left[1].localeCompare(right[1]));
+  const [selectedProduct, setSelectedProduct] = useState("all");
   const positioned = points
     .filter(
       (point) =>
-        Number.isFinite(point.latitude) && Number.isFinite(point.longitude),
+        Number.isFinite(point.latitude) &&
+        Number.isFinite(point.longitude) &&
+        point.latitude >= 24 &&
+        point.latitude <= 50 &&
+        point.longitude >= -125 &&
+        point.longitude <= -66 &&
+        (selectedProduct === "all" ||
+          point.benchmark_product_id === selectedProduct),
     )
-    .slice(0, 500);
+    .slice(0, 3000);
+  const outcomeCounts = positioned.reduce(
+    (counts, point) => {
+      const outcome = point.outcome ?? "parity";
+      counts[outcome] = (counts[outcome] ?? 0) + (point.matches ?? 1);
+      return counts;
+    },
+    {} as Record<string, number>,
+  );
+  const projectedOutline = [
+    [-124.7, 48.4],
+    [-123, 46],
+    [-124, 42],
+    [-122, 38],
+    [-117, 32.5],
+    [-111, 31.4],
+    [-106.5, 31.8],
+    [-103, 29.7],
+    [-97, 25.8],
+    [-90, 29],
+    [-83, 25.5],
+    [-80, 27],
+    [-80, 32],
+    [-75, 35],
+    [-75, 39],
+    [-67, 45],
+    [-71, 47],
+    [-83, 47],
+    [-95, 49],
+    [-105, 49],
+    [-116, 49],
+    [-124.7, 48.4],
+  ]
+    .map(([longitude, latitude], index) => {
+      const x = ((longitude + 125) / 59) * 900 + 30;
+      const y = ((50 - latitude) / 26) * 460 + 30;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
   return (
     <Section
-      title="Geographic signal map"
-      note={`${positioned.length.toLocaleString()} analysis-linked locations; dots are omitted when coordinates are unavailable.`}
+      title="Benchmark-product price map"
+      note={`${positioned.length.toLocaleString()} evidence-linked comparison locations in the continental U.S.`}
     >
+      <div className="map-controls">
+        <label>
+          <span>Benchmark product</span>
+          <select
+            value={selectedProduct}
+            onChange={(event) => setSelectedProduct(event.target.value)}
+          >
+            <option value="all">All mapped benchmark products</option>
+            {products.map(([id, name]) => (
+              <option value={id} key={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="map-legend" aria-label="Map outcome legend">
+          <span className="benchmark_lower">
+            Benchmark lower ·{" "}
+            {(outcomeCounts.benchmark_lower ?? 0).toLocaleString()}
+          </span>
+          <span className="competitor_lower">
+            Competitor lower ·{" "}
+            {(outcomeCounts.competitor_lower ?? 0).toLocaleString()}
+          </span>
+          <span className="parity">
+            Parity · {(outcomeCounts.parity ?? 0).toLocaleString()}
+          </span>
+        </div>
+      </div>
       <figure className="analysis-map">
-        <svg viewBox="0 0 960 520" role="img" aria-label="Analysis-linked geographic locations">
+        <svg
+          viewBox="0 0 960 520"
+          role="img"
+          aria-label="Analysis-linked geographic locations"
+        >
           <rect width="960" height="520" rx="22" />
+          <path className="us-outline" d={`${projectedOutline} Z`} />
           {positioned.map((point) => {
             const x = ((point.longitude + 125) / 59) * 900 + 30;
             const y = ((50 - point.latitude) / 26) * 460 + 30;
             return (
-              <circle cx={x} cy={y} r="5" key={point.id}>
+              <circle
+                cx={x}
+                cy={y}
+                r="4.5"
+                className={point.outcome ?? "parity"}
+                key={point.id}
+              >
                 <title>
-                  {point.label}
+                  {point.benchmark_product_name ?? point.label}
+                  {point.zipcode ? ` · ZIP ${point.zipcode}` : ""}
+                  {point.competitor
+                    ? ` · vs. ${displayLabel(point.competitor)}`
+                    : ""}
                   {point.value_label ? ` · ${point.value_label}` : ""}
                 </title>
               </circle>
@@ -581,8 +767,9 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
           })}
         </svg>
         <figcaption>
-          Hover a point for its evidence label. This map is shown only for
-          coordinates carried by the analysis publication.
+          Filter by benchmark product, then hover a point for its ZIP,
+          competitor, and signed price-gap evidence. PDP data does not drive
+          these price outcomes.
         </figcaption>
       </figure>
     </Section>

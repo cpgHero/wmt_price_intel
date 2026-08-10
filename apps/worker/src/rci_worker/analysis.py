@@ -31,9 +31,11 @@ from rci_analytics import (
     OfferClassifier,
     ParquetDatasetWriter,
     ProductPackLoader,
+    benchmark_product_map_points,
     evidence_set,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
+from rci_analytics.models import MatchRecord
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
@@ -667,8 +669,10 @@ class AnalysisProcessor:
 
         comparison_facts: list[ComparisonFact] = []
         comparison_evidence_sets: list[dict[str, Any]] = []
+        map_matches: list[MatchRecord] = []
         headline_segments = tuple(str(value) for value in pack.reporting["headline_segments"])
         for competitor in competitors:
+            mapped_competitor = False
             for profile_index, profile in enumerate(selected_profiles):
                 matches = engine.compare(
                     comparison_offers,
@@ -691,6 +695,13 @@ class AnalysisProcessor:
                 evidence_ref = f"evidence.matches.{competitor}.{profile_id}"
                 geography = str(profile["geography"])
                 comparison_metric = matches[0].comparison_metric
+                if (
+                    not mapped_competitor
+                    and geography == "exact_zip"
+                    and comparison_metric == "package_price"
+                ):
+                    map_matches.extend(matches)
+                    mapped_competitor = True
                 if geography == "radius":
                     evidence_kind = "proximity_matches"
                 elif comparison_metric != "package_price":
@@ -845,6 +856,17 @@ class AnalysisProcessor:
                 report_blueprint=blueprint.document,
             )
         record = await self._results.publish(document, collection_run_id=job.collection_run_id)
+        map_points = benchmark_product_map_points(
+            comparison_offers,
+            map_matches,
+            benchmark_retailer=benchmark,
+        )
+        if map_points:
+            await self._results.publish_publication(
+                record.analysis_id,
+                document,
+                presentation_context={"map_points": map_points},
+            )
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id
 
