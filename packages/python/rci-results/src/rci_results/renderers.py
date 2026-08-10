@@ -19,7 +19,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.11.1"
+RENDERER_VERSION = "2.11.2"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
