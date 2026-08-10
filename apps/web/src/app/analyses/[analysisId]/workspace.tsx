@@ -805,7 +805,7 @@ function BlueprintSection({
       {comparisonChart ? (
         <CompetitivePositionChart
           rows={section.records}
-          title={section.title}
+          title={sectionTitle}
           benchmarkRetailer={benchmarkRetailer}
           productDecisions={productDecisions}
         />
