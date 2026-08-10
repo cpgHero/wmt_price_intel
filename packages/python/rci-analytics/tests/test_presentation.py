@@ -6,8 +6,10 @@ from decimal import Decimal
 from rci_analytics.models import ClassifiedOffer, MatchRecord, NormalizedOffer
 from rci_analytics.presentation import (
     benchmark_product_decisions,
+    benchmark_product_evidence,
     benchmark_product_map_points,
     merge_product_decision_context,
+    merge_product_evidence_summary,
 )
 
 
@@ -199,3 +201,61 @@ def test_pdp_context_improves_identity_without_changing_price_evidence() -> None
     assert enriched[0]["benchmark_image_url"] == "https://example.com/product.jpg"
     assert enriched[0]["benchmark_specification"] == {"size": "one pound"}
     assert enriched[0]["median_gap"] == -0.5
+
+
+def test_product_evidence_reports_every_benchmark_store_without_changing_match_grain() -> None:
+    benchmark = [
+        _offer("walmart-1", "100", -94.2),
+        _offer("walmart-2", "100", -94.1),
+    ]
+    competitor = ClassifiedOffer(
+        offer=NormalizedOffer(
+            offer_id="aldi-1",
+            retailer_id="aldi_us",
+            retailer_product_id="200",
+            title="ALDI comparison product",
+            brand=None,
+            price=Decimal("3.50"),
+            currency="USD",
+            zipcode="72712",
+            store_number="aldi-store",
+            latitude=36.38,
+            longitude=-94.15,
+            in_stock=True,
+            product_url=None,
+            image_url=None,
+            collected_at=None,
+            raw={},
+        ),
+        in_scope=True,
+        scope_reason=None,
+        attributes={"size": "1 lb"},
+        metrics={},
+        review_reasons=(),
+    )
+    decision = {
+        "id": "decision-1",
+        "benchmark_product_id": "100",
+        "competitor": "aldi_us",
+        "competitor_product_id": "200",
+    }
+
+    evidence = benchmark_product_evidence(
+        [*benchmark, competitor],
+        [decision],
+        benchmark_retailer="walmart_us",
+    )
+    summary = evidence["decision-1"]["summary"]
+
+    assert summary == {
+        "matched_zip_markets": 1,
+        "benchmark_store_observations": 2,
+        "competitor_store_observations": 1,
+        "benchmark_stores_lower": 0,
+        "benchmark_stores_undercut": 2,
+        "price_parity": 0,
+    }
+    assert len(evidence["decision-1"]["rows"]) == 2
+    merged = merge_product_evidence_summary([decision], evidence)
+    assert merged[0]["evidence_available"] is True
+    assert merged[0]["evidence_summary"] == summary

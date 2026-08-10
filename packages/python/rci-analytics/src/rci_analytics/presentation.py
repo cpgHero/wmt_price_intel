@@ -207,6 +207,170 @@ def benchmark_product_decisions(
     return selected[:max_rows]
 
 
+def benchmark_product_evidence(
+    offers: Iterable[ClassifiedOffer],
+    decisions: Iterable[JsonObject],
+    *,
+    benchmark_retailer: str,
+    parity_tolerance: Decimal = Decimal("0.01"),
+) -> dict[str, JsonObject]:
+    """Build store-grain evidence for the product pairs shown in a report.
+
+    Search observations remain authoritative for price and location. For an exact-ZIP
+    product pair, every distinct benchmark store observation is compared with the
+    lowest observed price for that exact competitor product in the same ZIP. This is
+    deliberately separate from the analytical match metric, which retains one lowest
+    qualifying offer per ZIP and configured attribute set.
+    """
+
+    decision_rows = [dict(value) for value in decisions]
+    selected_products = {
+        (benchmark_retailer, str(row["benchmark_product_id"])) for row in decision_rows
+    } | {(str(row["competitor"]), str(row["competitor_product_id"])) for row in decision_rows}
+    observations: dict[tuple[str, str], list[NormalizedOffer]] = {}
+    for classified in offers:
+        offer = classified.offer
+        key = (offer.retailer_id, offer.retailer_product_id)
+        if (
+            classified.in_scope
+            and key in selected_products
+            and offer.price is not None
+            and offer.price > 0
+            and offer.zipcode
+        ):
+            observations.setdefault(key, []).append(offer)
+
+    evidence: dict[str, JsonObject] = {}
+    for decision in decision_rows:
+        decision_id = str(decision["id"])
+        competitor_id = str(decision["competitor"])
+        benchmark_key = (benchmark_retailer, str(decision["benchmark_product_id"]))
+        competitor_key = (competitor_id, str(decision["competitor_product_id"]))
+        benchmark_locations = _lowest_store_observations(observations.get(benchmark_key, []))
+        competitor_locations = _lowest_store_observations(observations.get(competitor_key, []))
+        competitor_by_zip: dict[str, NormalizedOffer] = {}
+        for offer in competitor_locations.values():
+            previous = competitor_by_zip.get(str(offer.zipcode))
+            if previous is None or (offer.price, offer.offer_id) < (
+                previous.price,
+                previous.offer_id,
+            ):
+                competitor_by_zip[str(offer.zipcode)] = offer
+
+        rows: list[JsonObject] = []
+        for benchmark in benchmark_locations.values():
+            competitor = competitor_by_zip.get(str(benchmark.zipcode))
+            if competitor is None or benchmark.price is None or competitor.price is None:
+                continue
+            gap = competitor.price - benchmark.price
+            outcome = (
+                "parity"
+                if abs(gap) <= parity_tolerance
+                else "benchmark_lower"
+                if gap > 0
+                else "competitor_lower"
+            )
+            row_seed = "|".join(
+                (
+                    decision_id,
+                    str(benchmark.zipcode),
+                    benchmark.store_number or benchmark.offer_id,
+                    competitor.store_number or competitor.offer_id,
+                )
+            )
+            rows.append(
+                {
+                    "id": f"evidence-{hashlib.sha256(row_seed.encode()).hexdigest()[:24]}",
+                    "decision_id": decision_id,
+                    "comparison_basis": (
+                        "benchmark store vs lowest observed exact competitor product "
+                        "in the same ZIP"
+                    ),
+                    "zipcode": benchmark.zipcode,
+                    "outcome": outcome,
+                    "benchmark_retailer": benchmark_retailer,
+                    "benchmark_product_id": benchmark.retailer_product_id,
+                    "benchmark_product_name": benchmark.title,
+                    "benchmark_store": benchmark.store_number,
+                    "benchmark_price": float(benchmark.price),
+                    "benchmark_latitude": benchmark.latitude,
+                    "benchmark_longitude": benchmark.longitude,
+                    "competitor": competitor_id,
+                    "competitor_product_id": competitor.retailer_product_id,
+                    "competitor_product_name": competitor.title,
+                    "competitor_store": competitor.store_number,
+                    "competitor_price": float(competitor.price),
+                    "competitor_minus_benchmark": float(gap),
+                }
+            )
+        rows.sort(
+            key=lambda row: (
+                {"competitor_lower": 0, "benchmark_lower": 1, "parity": 2}[str(row["outcome"])],
+                -abs(float(row["competitor_minus_benchmark"])),
+                str(row["zipcode"]),
+                str(row.get("benchmark_store") or ""),
+            )
+        )
+        outcomes = Counter(str(row["outcome"]) for row in rows)
+        matched_zips = {str(row["zipcode"]) for row in rows}
+        matched_competitor_stores = {
+            (str(row["zipcode"]), str(row.get("competitor_store") or "ZIP-level")) for row in rows
+        }
+        evidence[decision_id] = {
+            "decision_id": decision_id,
+            "comparison_grain": (
+                "one row per observed benchmark store; exact product pair; same ZIP"
+            ),
+            "price_source": "retailer search observation",
+            "attribute_source": "Product Pack classification with PDP enrichment when available",
+            "summary": {
+                "matched_zip_markets": len(matched_zips),
+                "benchmark_store_observations": len(rows),
+                "competitor_store_observations": len(matched_competitor_stores),
+                "benchmark_stores_lower": outcomes["benchmark_lower"],
+                "benchmark_stores_undercut": outcomes["competitor_lower"],
+                "price_parity": outcomes["parity"],
+            },
+            "rows": rows,
+        }
+    return evidence
+
+
+def merge_product_evidence_summary(
+    decisions: Iterable[JsonObject], evidence: dict[str, JsonObject]
+) -> list[JsonObject]:
+    """Attach bounded evidence summaries without embedding store rows in report views."""
+
+    merged: list[JsonObject] = []
+    for source in decisions:
+        row = dict(source)
+        item = evidence.get(str(row.get("id", "")))
+        if item is not None:
+            row["evidence_summary"] = dict(item.get("summary", {}))
+            row["comparison_grain"] = item.get("comparison_grain")
+            row["evidence_available"] = True
+        merged.append(row)
+    return merged
+
+
+def _lowest_store_observations(
+    offers: Iterable[NormalizedOffer],
+) -> dict[tuple[str, str], NormalizedOffer]:
+    selected: dict[tuple[str, str], NormalizedOffer] = {}
+    for offer in offers:
+        if not offer.zipcode or offer.price is None or offer.price <= 0:
+            continue
+        location = offer.store_number or "ZIP-level"
+        key = (offer.zipcode, location)
+        previous = selected.get(key)
+        if previous is None or (offer.price, offer.offer_id) < (
+            previous.price,
+            previous.offer_id,
+        ):
+            selected[key] = offer
+    return selected
+
+
 def merge_product_decision_context(
     decisions: Iterable[JsonObject],
     product_context: Iterable[JsonObject],

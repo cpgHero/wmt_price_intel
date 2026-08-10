@@ -58,7 +58,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
 
         generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
         assert generated.status_code == 201
-        assert generated.json()["renderer_version"] == "2.8.1"
+        assert generated.json()["renderer_version"] == "2.9.0"
         assert generated.json()["publication_id"] is None
         artifact_id = generated.json()["id"]
         artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")
@@ -122,3 +122,63 @@ async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> Non
         "version": "1.0.0",
     }
     assert report.json()["sections"][0]["id"] == "executive_summary"
+
+
+async def test_product_decision_evidence_is_read_separately_from_report_view() -> None:
+    service = _service()
+    app = create_app()
+    app.dependency_overrides[get_analysis_service] = lambda: service
+    document = json.loads(
+        (REPOSITORY_ROOT / "examples/analysis-result-v2.ground-beef.json").read_text()
+    )
+    document["source"]["collection_run_id"] = "run-product-evidence"
+    decision = {
+        "id": "product-decision-1",
+        "benchmark_product_id": "100",
+        "competitor": "aldi_us",
+        "competitor_product_id": "200",
+    }
+    evidence = {
+        "decision_id": "product-decision-1",
+        "summary": {"benchmark_stores_undercut": 1},
+        "rows": [
+            {
+                "zipcode": "72712",
+                "benchmark_store": "100",
+                "competitor_store": "200",
+                "benchmark_price": 4.0,
+                "competitor_price": 3.5,
+                "competitor_minus_benchmark": -0.5,
+                "outcome": "competitor_lower",
+            }
+        ],
+    }
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        published = await service.publish(
+            document,
+            collection_run_id="run-product-evidence",
+        )
+        await service.publish_publication(
+            published.analysis_id,
+            document,
+            presentation_context={
+                "product_decisions": [decision],
+                "product_evidence": {"product-decision-1": evidence},
+            },
+        )
+
+        report = await client.get(f"/api/v1/analyses/{published.analysis_id}/report")
+        detail = await client.get(
+            f"/api/v1/analyses/{published.analysis_id}/product-decisions/"
+            "product-decision-1/evidence"
+        )
+
+    assert report.status_code == 200
+    assert "product_evidence" not in report.json()
+    assert detail.status_code == 200
+    assert detail.json()["summary"]["benchmark_stores_undercut"] == 1
+    assert detail.json()["rows"][0]["benchmark_store"] == "100"

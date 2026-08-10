@@ -15,7 +15,11 @@ _GENERIC_NAME_WORDS = {"fresh", "raw", "whole", "product", "products"}
 
 
 def _normalized_text(value: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
+    # Preserve decimal points so a source value such as ``2.25 lb`` cannot be
+    # normalized into ``2 25 lb`` and then misread as a 25-pound package.
+    protected = re.sub(r"(?<=\d)\.(?=\d)", "decimalpoint", value.casefold())
+    normalized = " ".join(re.sub(r"[^a-z0-9]+", " ", protected).split())
+    return normalized.replace("decimalpoint", ".")
 
 
 def _singular(value: str) -> str:

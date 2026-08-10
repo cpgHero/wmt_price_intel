@@ -87,6 +87,16 @@ export interface ProductDecision {
   median_competitor_price: number;
   median_gap: number;
   plain_insight: string;
+  comparison_grain?: string | null;
+  evidence_available?: boolean;
+  evidence_summary?: {
+    matched_zip_markets?: number;
+    benchmark_store_observations?: number;
+    competitor_store_observations?: number;
+    benchmark_stores_lower?: number;
+    benchmark_stores_undercut?: number;
+    price_parity?: number;
+  };
   top_locations: Array<{
     zipcode: string;
     store?: string | null;
@@ -95,6 +105,36 @@ export interface ProductDecision {
     competitor_price: number;
     gap: number;
   }>;
+}
+
+export interface ProductEvidenceRow {
+  id: string;
+  zipcode: string;
+  outcome: "benchmark_lower" | "competitor_lower" | "parity";
+  benchmark_retailer: string;
+  benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_store?: string | null;
+  benchmark_price: number;
+  competitor: string;
+  competitor_product_id: string;
+  competitor_product_name: string;
+  competitor_store?: string | null;
+  competitor_price: number;
+  competitor_minus_benchmark: number;
+}
+
+export interface ProductEvidenceResponse {
+  analysis_id: string;
+  publication_id: string;
+  publication_version: number;
+  decision: ProductDecision | null;
+  decision_id: string;
+  comparison_grain: string;
+  price_source: string;
+  attribute_source: string;
+  summary: NonNullable<ProductDecision["evidence_summary"]>;
+  rows: ProductEvidenceRow[];
 }
 
 export interface ProductHighlight {

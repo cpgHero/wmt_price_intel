@@ -488,7 +488,7 @@ class GovernedOutputBuilder:
                     *implication_claims,
                 ]
                 body = "\n\n".join(
-                    [subtitle, *(f"• {bullet}" for bullet in bullets), f"What to do: {implication}"]
+                    [subtitle, *(f"• {bullet}" for bullet in bullets), f"Key point: {implication}"]
                 )
             else:
                 body, claims = render_text(str(raw.get("body_template", "")))

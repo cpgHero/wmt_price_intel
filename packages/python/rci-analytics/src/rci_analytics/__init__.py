@@ -18,10 +18,13 @@ from rci_analytics.insights import (
 from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
 from rci_analytics.normalization import CanonicalOfferNormalizer
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
+from rci_analytics.pdp_attributes import complete_attributes_from_pdp, product_context_index
 from rci_analytics.presentation import (
     benchmark_product_decisions,
+    benchmark_product_evidence,
     benchmark_product_map_points,
     merge_product_decision_context,
+    merge_product_evidence_summary,
 )
 from rci_analytics.product_pack import ProductPackLoader
 from rci_analytics.result_v2 import AnalysisResultV2Builder, ComparisonFact, evidence_set
@@ -46,8 +49,12 @@ __all__ = [
     "RankedInsightCandidate",
     "S3HistoricalObjectStore",
     "benchmark_product_decisions",
+    "benchmark_product_evidence",
     "benchmark_product_map_points",
+    "complete_attributes_from_pdp",
     "evidence_set",
     "merge_product_decision_context",
+    "merge_product_evidence_summary",
     "prepare_historical_import",
+    "product_context_index",
 ]

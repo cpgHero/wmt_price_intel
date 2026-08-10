@@ -1,6 +1,9 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import type { GeometryCollection, Topology } from "topojson-specification";
+import { feature } from "topojson-client";
+import statesTopologySource from "us-atlas/states-10m.json";
 
 import { DataTable } from "@/app/components/data-table";
 import type {
@@ -9,6 +12,7 @@ import type {
   JsonObject,
   MapPoint,
   ProductDecision,
+  ProductEvidenceResponse,
   ProductHighlight,
   ReportSectionView,
 } from "@/lib/api";
@@ -279,10 +283,11 @@ function BlueprintAnalysisWorkspace({
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
             {activeGroup === "geography" && reportView.map_points?.length ? (
-              <AnalysisMap points={reportView.map_points} />
-            ) : null}
-            {activeGroup === "geography" ? (
-              <ComparableMarketCoverage rows={primaryComparisons} />
+              <AnalysisMap
+                points={reportView.map_points}
+                decisions={reportView.product_decisions ?? []}
+                coverageRows={primaryComparisons}
+              />
             ) : null}
             {activeGroup === "products" &&
             reportView.product_highlights?.length ? (
@@ -291,8 +296,10 @@ function BlueprintAnalysisWorkspace({
             {activeGroup === "products" &&
             reportView.product_decisions?.length ? (
               <ProductDecisionBoard
+                analysisId={analysis.analysis_id}
+                benchmarkRetailer={reportView.benchmark_retailer}
                 rows={reportView.product_decisions}
-                title="Product-level price decisions"
+                title="Product-level price evidence"
               />
             ) : null}
             {selectedGroup.sections
@@ -303,18 +310,18 @@ function BlueprintAnalysisWorkspace({
                     section={section}
                     recommendedCharts={recommendedCharts}
                     benchmarkRetailer={reportView.benchmark_retailer}
+                    productDecisions={reportView.product_decisions ?? []}
                   />
                   {activeGroup === "summary" &&
                   section.kind === "executive_summary" ? (
                     <>
                       {reportView.product_decisions?.length ? (
                         <ProductDecisionBoard
+                          analysisId={analysis.analysis_id}
+                          benchmarkRetailer={reportView.benchmark_retailer}
                           rows={reportView.product_decisions.slice(0, 6)}
-                          title="Products that need attention—and positions to protect"
+                          title="Products changing the competitive picture"
                         />
-                      ) : null}
-                      {primaryComparisons.length > 0 ? (
-                        <DecisionScorecard rows={primaryComparisons} />
                       ) : null}
                     </>
                   ) : null}
@@ -340,21 +347,32 @@ function BlueprintSection({
   section,
   recommendedCharts,
   benchmarkRetailer,
+  productDecisions,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
   benchmarkRetailer: string;
+  productDecisions: ProductDecision[];
 }>) {
   const narrative = asObject(section.narrative);
-  const visibleMetrics =
-    section.kind === "coverage" ? [] : section.metrics.slice(0, 6);
+  const visibleMetrics = [
+    "coverage",
+    "geographic_sensitivity",
+    "segment_analysis",
+    "recommendations",
+    "data_quality",
+  ].includes(section.kind)
+    ? []
+    : section.metrics.slice(0, 6);
   const metricValues = visibleMetrics.map((metric) => metric.value);
   const comparisonChart = shouldShowComparisonChart(section, recommendedCharts);
   const narrativeLeads =
     Boolean(narrative.body) &&
     ["executive_summary", "recommendations"].includes(section.kind);
   const narrativeBullets = Array.isArray(narrative.bullets)
-    ? narrative.bullets.filter((value): value is string => typeof value === "string")
+    ? narrative.bullets.filter(
+        (value): value is string => typeof value === "string",
+      )
     : [];
   const hasStructuredNarrative =
     Boolean(narrative.subtitle) ||
@@ -381,7 +399,7 @@ function BlueprintSection({
           ) : null}
           {narrative.implication ? (
             <aside>
-              <b>What to do</b>
+              <b>Key point</b>
               <span>{displayValue(narrative.implication)}</span>
             </aside>
           ) : null}
@@ -428,15 +446,30 @@ function BlueprintSection({
         <CompetitivePositionChart
           rows={section.records}
           title={section.title}
+          productDecisions={productDecisions}
         />
+      ) : null}
+      {section.kind === "segment_analysis" && section.records.length > 0 ? (
+        <SegmentPositionMatrix rows={section.records} />
+      ) : null}
+      {section.kind === "recommendations" && section.records.length > 0 ? (
+        <KeyPointCards rows={section.records} />
+      ) : null}
+      {section.kind === "data_quality" && section.records.length > 0 ? (
+        <QualityEvidence rows={section.records} />
       ) : null}
       {section.records.length > 0 &&
       section.visualization === "ranked_cards" &&
-      !narrativeLeads ? (
-        <DecisionCards rows={section.records} />
+      !narrativeLeads &&
+      !["recommendations", "data_quality"].includes(section.kind) ? (
+        <KeyPointCards rows={section.records} />
       ) : section.records.length > 0 &&
         section.kind !== "kpi_strip" &&
         section.kind !== "coverage" &&
+        section.kind !== "geographic_sensitivity" &&
+        section.kind !== "segment_analysis" &&
+        section.kind !== "recommendations" &&
+        section.kind !== "data_quality" &&
         !narrativeLeads &&
         !comparisonChart ? (
         <DataTable rows={section.records} />
@@ -462,25 +495,22 @@ function BlueprintSection({
   );
 }
 
-function DecisionScorecard({ rows }: Readonly<{ rows: JsonObject[] }>) {
-  return (
-    <Section
-      title="Competitive position by retailer"
-      note="Comparable-package outcomes by competitor. Price differences are supporting context; product decisions above are the action surface."
-    >
-      <CompetitivePositionChart rows={rows} title="Competitive scorecard" />
-    </Section>
-  );
-}
-
 function ProductDecisionBoard({
+  analysisId,
+  benchmarkRetailer,
   rows,
   title,
-}: Readonly<{ rows: ProductDecision[]; title: string }>) {
+}: Readonly<{
+  analysisId: string;
+  benchmarkRetailer: string;
+  rows: ProductDecision[];
+  title: string;
+}>) {
+  const [selected, setSelected] = useState<ProductDecision | null>(null);
   return (
     <Section
       title={title}
-      note="Ranked from exact product matches. PDP enrichment adds identity and imagery; search evidence remains authoritative for price and location."
+      note="Each card names the exact product pair and median matched prices. Search observations control price and store evidence; PDP data supplies identity, attributes, and imagery."
     >
       <div className="product-decision-grid">
         {rows.map((row) => {
@@ -491,29 +521,32 @@ function ProductDecisionBoard({
           });
           const position =
             row.median_gap < 0
-              ? `${competitor} is typically ${difference} cheaper`
+              ? `${competitor} is ${difference} lower at the median match`
               : row.median_gap > 0
-                ? `Walmart is typically ${difference} cheaper`
-                : "Typical prices are tied";
-          const locationLabels = row.top_locations.map((location) =>
-            location.store
-              ? `ZIP ${location.zipcode} · store ${location.store}`
-              : `ZIP ${location.zipcode}`,
-          );
+                ? `${displayLabel(benchmarkRetailer)} is ${difference} lower at the median match`
+                : "Median matched prices are tied";
+          const evidence = row.evidence_summary;
           return (
-            <article
+            <button
+              type="button"
               className={`product-decision-card ${row.priority}`}
               key={row.id}
+              onClick={() => setSelected(row)}
             >
-              <div className="product-decision-image">
-                {row.benchmark_image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.benchmark_image_url} alt="" />
-                ) : (
-                  <span aria-hidden="true">P</span>
-                )}
+              <div className="product-pair-visual" aria-hidden="true">
+                <ProductImage
+                  imageUrl={row.benchmark_image_url}
+                  name={row.benchmark_product_name}
+                  retailer={displayLabel(benchmarkRetailer)}
+                />
+                <span className="product-pair-vs">vs</span>
+                <ProductImage
+                  imageUrl={row.competitor_image_url}
+                  name={row.competitor_product_name}
+                  retailer={competitor}
+                />
               </div>
-              <div>
+              <div className="product-decision-copy">
                 <span className="product-decision-status">
                   {row.priority === "attention"
                     ? "Needs attention"
@@ -523,67 +556,317 @@ function ProductDecisionBoard({
                 </span>
                 <h3>{row.benchmark_product_name}</h3>
                 <p className="product-competitor">
-                  vs. {row.competitor_product_name} at {competitor}
+                  {row.benchmark_product_name}
                 </p>
-                <strong>{position}</strong>
+                <h3>{row.competitor_product_name}</h3>
+                <div className="product-price-pair">
+                  <span>
+                    {displayLabel(benchmarkRetailer)}
+                    <b>{formatCurrency(row.median_benchmark_price)}</b>
+                  </span>
+                  <span>
+                    {competitor}
+                    <b>{formatCurrency(row.median_competitor_price)}</b>
+                  </span>
+                </div>
+                <strong className="product-decision-conclusion">
+                  {position}
+                </strong>
                 <p>
-                  Seen across {row.geographies.toLocaleString()} comparable{" "}
-                  {row.geographies === 1 ? "location" : "locations"}.
+                  {evidence?.benchmark_store_observations
+                    ? `${evidence.benchmark_store_observations.toLocaleString()} observed benchmark stores across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} matched ZIP markets.`
+                    : `${row.geographies.toLocaleString()} matched ZIP markets in the analytical comparison.`}
                 </p>
-                {locationLabels.length ? (
-                  <ul className="product-location-list">
-                    {locationLabels.map((label) => (
-                      <li key={label}>{label}</li>
-                    ))}
-                  </ul>
-                ) : null}
+                <span className="product-card-action">
+                  View stores and download evidence →
+                </span>
               </div>
-            </article>
+            </button>
           );
         })}
       </div>
+      {selected ? (
+        <ProductEvidenceDrawer
+          key={selected.id}
+          analysisId={analysisId}
+          benchmarkRetailer={benchmarkRetailer}
+          decision={selected}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </Section>
   );
 }
 
-function ComparableMarketCoverage({ rows }: Readonly<{ rows: JsonObject[] }>) {
-  const coverage = rows
-    .map((row) => ({
-      competitor: displayValue(row.competitor),
-      geographies: parseCount(row["matched geographies"]),
-      matches: parseCount(row.matches),
-    }))
-    .filter((row) => row.geographies > 0)
-    .sort((left, right) => right.geographies - left.geographies);
-  const maximum = Math.max(...coverage.map((row) => row.geographies), 0);
-  if (coverage.length === 0) return null;
+function formatCurrency(value: number) {
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function ProductImage({
+  imageUrl,
+  name,
+  retailer,
+}: Readonly<{
+  imageUrl?: string | null;
+  name: string;
+  retailer: string;
+}>) {
   return (
-    <Section
-      title="Comparable market coverage"
-      note="Distinct geographies with strict package comparisons—not raw retailer footprint or source-row volume."
-    >
-      <figure className="market-coverage-chart">
-        {coverage.map((row) => (
-          <div key={row.competitor}>
-            <span>
-              <strong>{row.competitor}</strong>
-              <small>{row.matches.toLocaleString()} matched observations</small>
-            </span>
-            <i aria-hidden="true">
-              <b style={{ width: `${(row.geographies / maximum) * 100}%` }} />
-            </i>
-            <em>{row.geographies.toLocaleString()} geographies</em>
-          </div>
-        ))}
-      </figure>
-    </Section>
+    <span className="product-pair-image">
+      <i>{retailer}</i>
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" loading="lazy" />
+      ) : (
+        <b>{name.slice(0, 1)}</b>
+      )}
+    </span>
   );
+}
+
+function ProductThumbnailStack({
+  products,
+}: Readonly<{ products: ProductDecision[] }>) {
+  const images = products
+    .flatMap((product) => [
+      {
+        url: product.benchmark_image_url,
+        name: product.benchmark_product_name,
+      },
+      {
+        url: product.competitor_image_url,
+        name: product.competitor_product_name,
+      },
+    ])
+    .filter((item): item is { url: string; name: string } => Boolean(item.url))
+    .filter(
+      (item, index, values) =>
+        values.findIndex((candidate) => candidate.url === item.url) === index,
+    )
+    .slice(0, 3);
+  if (images.length === 0) return null;
+  return (
+    <span className="product-thumbnail-stack" aria-hidden="true">
+      {images.map((item) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.url} alt="" key={item.url} loading="lazy" />
+      ))}
+    </span>
+  );
+}
+
+function ProductEvidenceDrawer({
+  analysisId,
+  benchmarkRetailer,
+  decision,
+  onClose,
+}: Readonly<{
+  analysisId: string;
+  benchmarkRetailer: string;
+  decision: ProductDecision;
+  onClose: () => void;
+}>) {
+  const [evidence, setEvidence] = useState<ProductEvidenceResponse | null>(
+    null,
+  );
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(
+      `/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence`,
+    )
+      .then(async (response) => {
+        const body = (await response.json()) as ProductEvidenceResponse & {
+          error?: string;
+        };
+        if (!response.ok)
+          throw new Error(body.error ?? "Evidence is unavailable.");
+        if (!cancelled) setEvidence(body);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled)
+          setError(
+            cause instanceof Error ? cause.message : "Evidence is unavailable.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisId, decision.id]);
+
+  return (
+    <div
+      className="evidence-drawer-backdrop"
+      role="presentation"
+      onClick={onClose}
+    >
+      <aside
+        className="evidence-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="evidence-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Store-level evidence</span>
+            <h2 id="evidence-title">Where this product pair wins and loses</h2>
+            <p>
+              {decision.benchmark_product_name} vs.{" "}
+              {decision.competitor_product_name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close evidence panel"
+          >
+            ×
+          </button>
+        </header>
+        {loading ? (
+          <p className="drawer-status">Loading exact store evidence…</p>
+        ) : null}
+        {error ? <p className="drawer-status error">{error}</p> : null}
+        {evidence ? (
+          <>
+            <div className="evidence-summary-grid">
+              <EvidenceStat
+                label="Benchmark stores compared"
+                value={evidence.summary.benchmark_store_observations ?? 0}
+              />
+              <EvidenceStat
+                label={`${displayLabel(decision.competitor)} lower`}
+                value={evidence.summary.benchmark_stores_undercut ?? 0}
+              />
+              <EvidenceStat
+                label={`${displayLabel(benchmarkRetailer)} lower`}
+                value={evidence.summary.benchmark_stores_lower ?? 0}
+              />
+              <EvidenceStat
+                label="Matched ZIP markets"
+                value={evidence.summary.matched_zip_markets ?? 0}
+              />
+            </div>
+            <div className="evidence-toolbar">
+              <p>{evidence.comparison_grain}</p>
+              <button
+                type="button"
+                onClick={() => downloadEvidenceCsv(evidence)}
+              >
+                Download store evidence (.csv)
+              </button>
+            </div>
+            <div className="evidence-table-wrap">
+              <table className="evidence-table">
+                <thead>
+                  <tr>
+                    <th>Outcome</th>
+                    <th>ZIP</th>
+                    <th>{displayLabel(benchmarkRetailer)} store</th>
+                    <th>{displayLabel(benchmarkRetailer)} price</th>
+                    <th>{displayLabel(decision.competitor)} store</th>
+                    <th>{displayLabel(decision.competitor)} price</th>
+                    <th>Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {evidence.rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <span className={`outcome-pill ${row.outcome}`}>
+                          {row.outcome === "competitor_lower"
+                            ? `${displayLabel(decision.competitor)} lower`
+                            : row.outcome === "benchmark_lower"
+                              ? `${displayLabel(benchmarkRetailer)} lower`
+                              : "Parity"}
+                        </span>
+                      </td>
+                      <td>{row.zipcode}</td>
+                      <td>{row.benchmark_store ?? "ZIP-level"}</td>
+                      <td>{formatCurrency(row.benchmark_price)}</td>
+                      <td>{row.competitor_store ?? "ZIP-level"}</td>
+                      <td>{formatCurrency(row.competitor_price)}</td>
+                      <td>{formatCurrency(row.competitor_minus_benchmark)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="evidence-method-note">
+              Search observations are authoritative for price and location. Each
+              benchmark store is compared with the lowest observed price for
+              this exact competitor product in the same ZIP.
+            </p>
+          </>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
+function EvidenceStat({
+  label,
+  value,
+}: Readonly<{ label: string; value: number }>) {
+  return (
+    <div>
+      <strong>{value.toLocaleString()}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function csvCell(value: unknown) {
+  const raw = value === null || value === undefined ? "" : String(value);
+  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+function downloadEvidenceCsv(evidence: ProductEvidenceResponse) {
+  const columns = [
+    "outcome",
+    "zipcode",
+    "benchmark_retailer",
+    "benchmark_product_id",
+    "benchmark_product_name",
+    "benchmark_store",
+    "benchmark_price",
+    "competitor",
+    "competitor_product_id",
+    "competitor_product_name",
+    "competitor_store",
+    "competitor_price",
+    "competitor_minus_benchmark",
+  ] as const;
+  const body = [
+    columns.join(","),
+    ...evidence.rows.map((row) =>
+      columns.map((column) => csvCell(row[column])).join(","),
+    ),
+  ].join("\n");
+  const url = URL.createObjectURL(
+    new Blob([body], { type: "text/csv;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${evidence.analysis_id}-${evidence.decision_id}-store-evidence.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 const chartCapabilityBySection: Record<string, string[]> = {
   price_position: ["package_price_gap", "exact_match", "price_position"],
-  segment_analysis: ["price_per_lb", "normalized_price", "segment_win_rate"],
-  geographic_sensitivity: ["radius_sensitivity", "proximity"],
 };
 
 function shouldShowComparisonChart(
@@ -616,7 +899,12 @@ function parseCount(value: unknown): number {
 function CompetitivePositionChart({
   rows,
   title,
-}: Readonly<{ rows: JsonObject[]; title: string }>) {
+  productDecisions,
+}: Readonly<{
+  rows: JsonObject[];
+  title: string;
+  productDecisions: ProductDecision[];
+}>) {
   const chartRows = rows
     .map((row) => ({
       row,
@@ -654,10 +942,19 @@ function CompetitivePositionChart({
           ) => (
             <div className="comparison-chart-row" key={String(row.id ?? index)}>
               <div className="comparison-chart-label">
-                <strong>{displayValue(row.segment ?? row.competitor)}</strong>
+                <div className="comparison-label-heading">
+                  <ProductThumbnailStack
+                    products={productDecisions.filter(
+                      (decision) =>
+                        displayLabel(decision.competitor) ===
+                        displayValue(row.competitor),
+                    )}
+                  />
+                  <strong>{displayValue(row.segment ?? row.competitor)}</strong>
+                </div>
                 <span>
                   {displayValue(row.competitor)} · {matches.toLocaleString()}{" "}
-                  matches
+                  matched observations
                   {geographies > 0
                     ? ` · ${geographies.toLocaleString()} geographies`
                     : ""}
@@ -699,8 +996,8 @@ function CompetitivePositionChart({
         )}
       </div>
       <p className="chart-note">
-        Directional share among matched observations; open the supporting detail
-        for exact definitions and caveats.
+        One retained lowest-price observation per matched ZIP and configured
+        package. Product cards provide the store-level supporting evidence.
       </p>
     </figure>
   );
@@ -759,7 +1056,63 @@ function ProductHighlights({
   );
 }
 
-function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
+const statesTopology = statesTopologySource as Topology;
+const continentalStateFeatures = (
+  feature(
+    statesTopology,
+    statesTopology.objects.states as GeometryCollection,
+  ) as unknown as {
+    features: Array<{
+      id?: string | number;
+      geometry: { type: string; coordinates: unknown };
+    }>;
+  }
+).features;
+
+function projectCoordinate(longitude: number, latitude: number) {
+  return {
+    x: ((longitude + 125) / 59) * 900 + 30,
+    y: ((50 - latitude) / 26) * 460 + 30,
+  };
+}
+
+function coordinateRingPath(value: unknown) {
+  if (!Array.isArray(value)) return "";
+  const points = value.filter(
+    (item): item is [number, number] =>
+      Array.isArray(item) &&
+      typeof item[0] === "number" &&
+      typeof item[1] === "number",
+  );
+  if (points.length === 0) return "";
+  return `${points
+    .map(([longitude, latitude], index) => {
+      const { x, y } = projectCoordinate(longitude, latitude);
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ")} Z`;
+}
+
+function geometryPath(geometry: { type: string; coordinates: unknown }) {
+  if (!Array.isArray(geometry.coordinates)) return "";
+  const polygons =
+    geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons
+    .flatMap((polygon) => (Array.isArray(polygon) ? polygon : []))
+    .map(coordinateRingPath)
+    .filter(Boolean)
+    .join(" ");
+}
+
+function AnalysisMap({
+  points,
+  decisions,
+  coverageRows,
+}: Readonly<{
+  points: MapPoint[];
+  decisions: ProductDecision[];
+  coverageRows: JsonObject[];
+}>) {
   const products = Array.from(
     new Map(
       points
@@ -771,19 +1124,26 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
     ),
   ).sort((left, right) => left[1].localeCompare(right[1]));
   const [selectedProduct, setSelectedProduct] = useState("all");
-  const positioned = points
-    .filter(
-      (point) =>
-        Number.isFinite(point.latitude) &&
-        Number.isFinite(point.longitude) &&
-        point.latitude >= 24 &&
-        point.latitude <= 50 &&
-        point.longitude >= -125 &&
-        point.longitude <= -66 &&
-        (selectedProduct === "all" ||
-          point.benchmark_product_id === selectedProduct),
-    )
-    .slice(0, 3000);
+  const [selectedOutcome, setSelectedOutcome] = useState("all");
+  const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
+  const positioned = useMemo(
+    () =>
+      points
+        .filter(
+          (point) =>
+            Number.isFinite(point.latitude) &&
+            Number.isFinite(point.longitude) &&
+            point.latitude >= 24 &&
+            point.latitude <= 50 &&
+            point.longitude >= -125 &&
+            point.longitude <= -66 &&
+            (selectedProduct === "all" ||
+              point.benchmark_product_id === selectedProduct) &&
+            (selectedOutcome === "all" || point.outcome === selectedOutcome),
+        )
+        .slice(0, 3000),
+    [points, selectedOutcome, selectedProduct],
+  );
   const outcomeCounts = positioned.reduce(
     (counts, point) => {
       const outcome = point.outcome ?? "parity";
@@ -792,40 +1152,37 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
     },
     {} as Record<string, number>,
   );
-  const projectedOutline = [
-    [-124.7, 48.4],
-    [-123, 46],
-    [-124, 42],
-    [-122, 38],
-    [-117, 32.5],
-    [-111, 31.4],
-    [-106.5, 31.8],
-    [-103, 29.7],
-    [-97, 25.8],
-    [-90, 29],
-    [-83, 25.5],
-    [-80, 27],
-    [-80, 32],
-    [-75, 35],
-    [-75, 39],
-    [-67, 45],
-    [-71, 47],
-    [-83, 47],
-    [-95, 49],
-    [-105, 49],
-    [-116, 49],
-    [-124.7, 48.4],
-  ]
-    .map(([longitude, latitude], index) => {
-      const x = ((longitude + 125) / 59) * 900 + 30;
-      const y = ((50 - latitude) / 26) * 460 + 30;
-      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+  const clusters = useMemo(() => {
+    const grouped = new Map<
+      string,
+      { point: MapPoint; count: number; x: number; y: number }
+    >();
+    for (const point of positioned) {
+      const projected = projectCoordinate(point.longitude, point.latitude);
+      const key = `${Math.round(projected.x / 14)}:${Math.round(projected.y / 14)}:${point.outcome ?? "parity"}`;
+      const current = grouped.get(key);
+      if (current) current.count += point.matches ?? 1;
+      else grouped.set(key, { point, count: point.matches ?? 1, ...projected });
+    }
+    return [...grouped.values()];
+  }, [positioned]);
+  const selectedDecision =
+    selectedProduct === "all"
+      ? null
+      : (decisions.find(
+          (decision) => decision.benchmark_product_id === selectedProduct,
+        ) ?? null);
+  const coverage = coverageRows
+    .map((row) => ({
+      competitor: displayValue(row.competitor),
+      geographies: parseCount(row["matched geographies"]),
+    }))
+    .filter((row) => row.geographies > 0)
+    .sort((left, right) => right.geographies - left.geographies);
   return (
     <Section
-      title="Benchmark-product price map"
-      note={`${positioned.length.toLocaleString()} evidence-linked comparison locations in the continental U.S.`}
+      title="Where benchmark products win and lose"
+      note="Filter the map by product or outcome. State boundaries provide geographic context; each plotted cluster is tied to retained search-price evidence."
     >
       <div className="map-controls">
         <label>
@@ -842,6 +1199,18 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
             ))}
           </select>
         </label>
+        <label>
+          <span>Price outcome</span>
+          <select
+            value={selectedOutcome}
+            onChange={(event) => setSelectedOutcome(event.target.value)}
+          >
+            <option value="all">All outcomes</option>
+            <option value="competitor_lower">Competitor lower</option>
+            <option value="benchmark_lower">Benchmark lower</option>
+            <option value="parity">Price parity</option>
+          </select>
+        </label>
         <div className="map-legend" aria-label="Map outcome legend">
           <span className="benchmark_lower">
             Benchmark lower ·{" "}
@@ -856,50 +1225,156 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
           </span>
         </div>
       </div>
-      <figure className="analysis-map">
-        <svg
-          viewBox="0 0 960 520"
-          role="img"
-          aria-label="Analysis-linked geographic locations"
-        >
-          <rect width="960" height="520" rx="22" />
-          <path className="us-outline" d={`${projectedOutline} Z`} />
-          {positioned.map((point) => {
-            const x = ((point.longitude + 125) / 59) * 900 + 30;
-            const y = ((50 - point.latitude) / 26) * 460 + 30;
-            return (
-              <circle
-                cx={x}
-                cy={y}
-                r="4.5"
-                className={point.outcome ?? "parity"}
-                key={point.id}
-              >
-                <title>
-                  {point.benchmark_product_name ?? point.label}
-                  {point.zipcode ? ` · ZIP ${point.zipcode}` : ""}
-                  {point.competitor
-                    ? ` · vs. ${displayLabel(point.competitor)}`
-                    : ""}
-                  {point.value_label ? ` · ${point.value_label}` : ""}
-                </title>
-              </circle>
-            );
-          })}
-        </svg>
-        <figcaption>
-          Filter by benchmark product, then hover a point for its ZIP,
-          competitor, and price-difference evidence. PDP data does not drive
-          these price outcomes.
-        </figcaption>
-      </figure>
+      <div className="map-stage">
+        <figure className="analysis-map">
+          <svg
+            viewBox="0 0 960 520"
+            role="img"
+            aria-label="Analysis-linked geographic price outcomes"
+          >
+            <rect width="960" height="520" rx="22" />
+            <g className="state-layer">
+              {continentalStateFeatures.map((state) => (
+                <path d={geometryPath(state.geometry)} key={String(state.id)} />
+              ))}
+            </g>
+            <g className="map-point-layer">
+              {clusters.map(({ point, count, x, y }) => (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={Math.min(11, 4 + Math.sqrt(count))}
+                  className={point.outcome ?? "parity"}
+                  key={`${point.id}-${x}-${y}`}
+                  onClick={() => setSelectedPoint(point)}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${point.benchmark_product_name ?? point.label}, ZIP ${point.zipcode ?? "unknown"}, ${point.value_label ?? "price evidence"}`}
+                >
+                  <title>
+                    {point.benchmark_product_name ?? point.label}
+                    {point.zipcode ? ` · ZIP ${point.zipcode}` : ""}
+                    {point.competitor
+                      ? ` · vs. ${displayLabel(point.competitor)}`
+                      : ""}
+                    {point.value_label ? ` · ${point.value_label}` : ""}
+                    {count > 1 ? ` · ${count} nearby observations` : ""}
+                  </title>
+                </circle>
+              ))}
+            </g>
+          </svg>
+          <figcaption>
+            Circle size reflects nearby matched observations. Click a point for
+            its product, ZIP, retailer, and price difference.
+          </figcaption>
+        </figure>
+        <aside className="map-insight-rail">
+          {selectedDecision ? (
+            <div className="map-selected-product">
+              <ProductThumbnailStack products={[selectedDecision]} />
+              <span>Selected benchmark product</span>
+              <strong>{selectedDecision.benchmark_product_name}</strong>
+            </div>
+          ) : (
+            <div className="map-selected-product">
+              <span>Current view</span>
+              <strong>All mapped benchmark products</strong>
+            </div>
+          )}
+          <EvidenceStat label="Mapped observations" value={positioned.length} />
+          <EvidenceStat
+            label="Competitor lower"
+            value={outcomeCounts.competitor_lower ?? 0}
+          />
+          <EvidenceStat
+            label="Benchmark lower"
+            value={outcomeCounts.benchmark_lower ?? 0}
+          />
+          {selectedPoint ? (
+            <div className="map-point-detail">
+              <span>Selected evidence</span>
+              <strong>
+                {selectedPoint.benchmark_product_name ?? selectedPoint.label}
+              </strong>
+              <p>
+                ZIP {selectedPoint.zipcode ?? "—"} · vs.{" "}
+                {displayLabel(selectedPoint.competitor ?? "competitor")}
+              </p>
+              <b>{selectedPoint.value_label ?? "Price evidence"}</b>
+            </div>
+          ) : null}
+          {coverage.slice(0, 3).map((row) => (
+            <div className="map-coverage-row" key={row.competitor}>
+              <span>{row.competitor}</span>
+              <b>{row.geographies.toLocaleString()} matched ZIP markets</b>
+            </div>
+          ))}
+        </aside>
+      </div>
     </Section>
   );
 }
 
-function DecisionCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
+function SegmentPositionMatrix({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  const matrix = rows
+    .map((row) => ({
+      row,
+      benchmarkRate: parseRate(row["benchmark lower"]),
+      competitorRate: parseRate(row["competitor lower"]),
+      matches: parseCount(row.matches),
+      gap: displayValue(row["competitor - benchmark gap"]),
+    }))
+    .filter(
+      (item) => item.benchmarkRate !== null || item.competitorRate !== null,
+    )
+    .sort((left, right) => right.matches - left.matches);
   return (
-    <div className="decision-card-grid">
+    <div className="segment-matrix">
+      <div className="segment-matrix-head">
+        <span>Comparable product segment</span>
+        <span>Lower-price leader</span>
+        <span>Matched evidence</span>
+        <span>Typical difference</span>
+      </div>
+      {matrix
+        .slice(0, 16)
+        .map(({ row, benchmarkRate, competitorRate, matches, gap }, index) => {
+          const benchmarkWins = (benchmarkRate ?? 0) >= (competitorRate ?? 0);
+          return (
+            <div className="segment-matrix-row" key={String(row.id ?? index)}>
+              <div>
+                <strong>
+                  {displayValue(row.segment ?? "Comparable items")}
+                </strong>
+                <span>{displayValue(row.competitor)}</span>
+              </div>
+              <div>
+                <span
+                  className={`segment-leader ${benchmarkWins ? "benchmark" : "competitor"}`}
+                >
+                  {benchmarkWins ? "Benchmark" : displayValue(row.competitor)}
+                </span>
+                <b>
+                  {Math.max(benchmarkRate ?? 0, competitorRate ?? 0).toFixed(1)}
+                  %
+                </b>
+              </div>
+              <div>
+                <strong>{matches.toLocaleString()}</strong>
+                <span>matched observations</span>
+              </div>
+              <strong>{gap}</strong>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+function KeyPointCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  return (
+    <div className="key-point-list">
       {rows.map((row, index) => {
         const rank = row.priority ?? row.severity ?? index + 1;
         const headline =
@@ -910,13 +1385,39 @@ function DecisionCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
           "Decision signal";
         const detail = row.detail ?? row.rationale ?? row.description;
         return (
-          <article className="decision-card" key={String(row.id ?? index)}>
-            <span>{displayValue(rank)}</span>
-            <h3>{displayValue(headline)}</h3>
-            {detail ? <p>{displayValue(detail)}</p> : null}
+          <article className="key-point-card" key={String(row.id ?? index)}>
+            <span>
+              {typeof rank === "number"
+                ? `0${rank}`.slice(-2)
+                : displayValue(rank)}
+            </span>
+            <div>
+              <h3>{displayValue(headline)}</h3>
+              {detail ? <p>{displayValue(detail)}</p> : null}
+            </div>
           </article>
         );
       })}
+    </div>
+  );
+}
+
+function QualityEvidence({ rows }: Readonly<{ rows: JsonObject[] }>) {
+  return (
+    <div className="quality-evidence">
+      <div className="quality-explainer">
+        <span>What this page contains</span>
+        <strong>
+          Search-result records requiring interpretation or review
+        </strong>
+        <p>
+          Product title, URL, retailer, and review reason stay together so a
+          reviewer can judge the source observation. PDP enrichment may clarify
+          identity and attributes, but never replaces store-specific search
+          price.
+        </p>
+      </div>
+      <DataTable rows={rows} />
     </div>
   );
 }

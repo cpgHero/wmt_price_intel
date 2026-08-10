@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.8.1"
+RENDERER_VERSION = "2.9.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -155,10 +155,15 @@ line-height:1.35;margin:5px 0}.product-card p{color:var(--muted);font-size:12px;
 .product-decision-intro h3{font-size:18px;margin:0}.product-decision-intro p{color:var(--muted);
 font-size:13px;margin:5px 0 14px}.product-decisions{display:grid;gap:12px;
 grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}.product-decision{background:var(--surface);
-border-top:4px solid #9b6100;box-shadow:none;display:grid;gap:12px;grid-template-columns:70px 1fr;
-margin:0;padding:14px}.product-decision.protect{border-top-color:var(--accent)}
-.product-decision.parity{border-top-color:var(--muted)}.product-decision img,
-.product-decision .product-placeholder{height:70px;width:70px}.product-decision h3{font-size:14px;
+border-left:4px solid #9b6100;box-shadow:none;display:grid;gap:14px;grid-template-columns:118px 1fr;
+margin:0;padding:14px}.product-decision.protect{border-left-color:var(--accent)}
+.product-decision.parity{border-left-color:var(--muted)}.product-decision img,
+.product-decision .product-placeholder{height:76px;width:112px}.product-pair{display:grid;gap:6px}
+.product-pair-image{position:relative}.product-pair-image span{background:var(--ink);
+border-radius:99px;color:white;font-size:8px;font-weight:800;left:5px;padding:3px 5px;
+position:absolute;top:5px;z-index:1}.product-prices{display:flex;flex-wrap:wrap;gap:6px;
+margin:8px 0}.product-prices b{background:var(--card);border:1px solid var(--line);
+border-radius:7px;font-size:10px;padding:5px 7px}.product-decision h3{font-size:14px;
 line-height:1.35;margin:5px 0}.product-decision p{color:var(--muted);font-size:11px;margin:4px 0}
 .product-decision strong{display:block;font-size:13px;margin-top:8px}
 .product-locations{display:flex;flex-wrap:wrap;gap:4px;list-style:none;margin:9px 0 0;padding:0}
@@ -276,7 +281,7 @@ def _narrative_html(value: object) -> str:
             else ""
         )
         implication = (
-            "<aside><b>What to do</b>"
+            "<aside><b>Key point</b>"
             f"<span>{escape(_display(value.get('implication')))}</span></aside>"
             if value.get("implication")
             else ""
@@ -312,49 +317,59 @@ def _product_decisions(context: JsonObject, *, limit: int) -> str:
             gap = 0
             geographies = 0
         position = (
-            f"{competitor} is typically ${abs(gap):,.2f} cheaper"
+            f"{competitor} is ${abs(gap):,.2f} lower at the median match"
             if gap < 0
-            else f"Walmart is typically ${abs(gap):,.2f} cheaper"
+            else f"Walmart is ${abs(gap):,.2f} lower at the median match"
             if gap > 0
-            else "Typical prices are tied"
+            else "Median matched prices are tied"
         )
         status = {
             "attention": "Needs attention",
             "protect": "Position to protect",
             "parity": "Price parity",
         }.get(priority, "Price position")
-        image_url = row.get("benchmark_image_url")
-        image = (
-            f'<img src="{escape(str(image_url), quote=True)}" alt="">'
-            if image_url
-            else "<div class=product-placeholder>P</div>"
+        images = []
+        for label, image_url in (
+            ("Walmart", row.get("benchmark_image_url")),
+            (competitor, row.get("competitor_image_url")),
+        ):
+            image = (
+                f'<img src="{escape(str(image_url), quote=True)}" alt="">'
+                if image_url
+                else "<div class=product-placeholder>P</div>"
+            )
+            images.append(
+                f"<div class=product-pair-image><span>{escape(label)}</span>{image}</div>"
+            )
+        try:
+            benchmark_price = float(row.get("median_benchmark_price", 0))
+            competitor_price = float(row.get("median_competitor_price", 0))
+        except (TypeError, ValueError):
+            benchmark_price = competitor_price = 0
+        summary = row.get("evidence_summary", {})
+        store_count = (
+            int(summary.get("benchmark_store_observations", 0)) if isinstance(summary, dict) else 0
         )
-        raw_locations = row.get("top_locations", [])
-        location_html = ""
-        if isinstance(raw_locations, list):
-            labels = []
-            for location in raw_locations[:3]:
-                if not isinstance(location, dict):
-                    continue
-                label = f"ZIP {_display(location.get('zipcode'))}"
-                if location.get("store"):
-                    label += f" · store {_display(location.get('store'))}"
-                labels.append(f"<li>{escape(label)}</li>")
-            if labels:
-                location_html = f"<ul class=product-locations>{''.join(labels)}</ul>"
+        scope = (
+            f"{store_count:,} observed benchmark stores across {geographies:,} matched ZIP markets."
+            if store_count
+            else f"{geographies:,} matched ZIP markets in the analytical comparison."
+        )
         cards.append(
-            f"<article class='product-decision {escape(priority)}'>{image}<div>"
+            f"<article class='product-decision {escape(priority)}'>"
+            f"<div class=product-pair>{''.join(images)}</div><div>"
             f"<span>{escape(status)}</span>"
-            f"<h3>{escape(_display(row.get('benchmark_product_name')))}</h3>"
-            f"<p>vs. {escape(_display(row.get('competitor_product_name')))} at "
-            f"{escape(competitor)}</p><strong>{escape(position)}</strong>"
-            f"<p>Seen across {geographies:,} comparable "
-            f"{'location' if geographies == 1 else 'locations'}.</p>{location_html}</div></article>"
+            f"<p>{escape(_display(row.get('benchmark_product_name')))}</p>"
+            f"<h3>{escape(_display(row.get('competitor_product_name')))}</h3>"
+            f"<div class=product-prices><b>Walmart ${benchmark_price:,.2f}</b>"
+            f"<b>{escape(competitor)} ${competitor_price:,.2f}</b></div>"
+            f"<strong>{escape(position)}</strong><p>{escape(scope)}</p></div></article>"
         )
     return (
-        "<div class=product-decision-intro><h3>Products that need attention—and positions "
-        "to protect</h3><p>Ranked exact product matches. PDP data improves identity and imagery; "
-        "search evidence remains authoritative for price and location.</p></div>"
+        "<div class=product-decision-intro><h3>Products changing the competitive picture</h3>"
+        "<p>Each card names the exact product pair and median matched prices. PDP data supplies "
+        "identity and imagery; search evidence remains authoritative for price and location."
+        "</p></div>"
         f"<div class=product-decisions>{''.join(cards)}</div>"
     )
 
@@ -404,31 +419,6 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
         "among matched observations; see the supporting table for definitions and caveats."
         "</p></figure>"
     )
-
-
-def _primary_comparison_rows(view: JsonObject) -> list[JsonObject]:
-    sections = _rows(view, "sections")
-    selected = next(
-        (
-            _rows(section, "records")
-            for section in sections
-            if section.get("kind") == "price_position" and _rows(section, "records")
-        ),
-        [],
-    )
-    if not selected:
-        selected = next(
-            (
-                _rows(section, "records")
-                for section in sections
-                if section.get("kind") == "segment_analysis" and _rows(section, "records")
-            ),
-            [],
-        )
-    overall = [
-        row for row in selected if str(row.get("segment", "")).casefold() == "all comparable items"
-    ]
-    return overall or selected
 
 
 def _map_figure(context: JsonObject) -> str:
@@ -609,10 +599,8 @@ class LeadershipHtmlRenderer:
         product_pack = _mapping(view, "product_pack")
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         result_checksum = escape(_result_checksum(result))
-        decision_rows = _primary_comparison_rows(view)
         section_html = "".join(
-            self._section(section, presentation_context, decision_rows)
-            for section in _rows(view, "sections")
+            self._section(section, presentation_context) for section in _rows(view, "sections")
         )
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
@@ -632,7 +620,6 @@ Generated {escape(_display_generated_at(result))}</div>
     def _section(
         section: JsonObject,
         presentation_context: JsonObject,
-        decision_rows: list[JsonObject],
     ) -> str:
         section_kind = str(section.get("kind", ""))
         title = escape(
@@ -653,19 +640,17 @@ Generated {escape(_display_generated_at(result))}</div>
         metric_grid = f"<div class=metrics>{metric_html}</div>" if metric_html else ""
         records = _rows(section, "records")
         if section_kind == "kpi_strip":
-            detail = _comparison_chart(decision_rows)
+            detail = ""
         elif section_kind == "coverage":
             detail = (
                 f"{_map_figure(presentation_context)}"
                 f"{_collapsed_table('View source coverage detail', records)}"
             )
-        elif section_kind in {
-            "price_position",
-            "segment_analysis",
-            "geographic_sensitivity",
-        }:
+        elif section_kind == "price_position":
             chart = _comparison_chart(records)
             detail = f"{chart}{_collapsed_table('View supporting detail', records)}"
+        elif section_kind in {"segment_analysis", "geographic_sensitivity"}:
+            detail = _collapsed_table("View evidence-backed detail", records)
         elif section_kind == "product_table":
             detail = (
                 f"{_product_decisions(presentation_context, limit=16)}"

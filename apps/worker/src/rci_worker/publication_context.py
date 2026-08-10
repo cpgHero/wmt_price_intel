@@ -16,8 +16,12 @@ from rci_analytics import (
     OfferClassifier,
     ProductPackLoader,
     benchmark_product_decisions,
+    benchmark_product_evidence,
     benchmark_product_map_points,
+    complete_attributes_from_pdp,
     merge_product_decision_context,
+    merge_product_evidence_summary,
+    product_context_index,
 )
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
@@ -121,6 +125,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         sources = await queue.historical_sources(input_set_id)
         if not sources:
             raise ValueError("historical analysis has no persisted source artifacts")
+        source_artifact_ids = [str(value) for value in source.get("source_artifact_ids", [])]
+        highlights = await PostgresProductDetailRepository(
+            database.engine,
+            repository_root,
+        ).publication_highlights(source_artifact_ids, limit=64, per_retailer_limit=32)
+        pdp_context = product_context_index(highlights)
         reader = S3HistoricalCSVReader(bucket=bucket, client=client)
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
@@ -136,7 +146,17 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         )
                     except ValueError:
                         continue
-                    reducer.add(classifier.classify(normalized))
+                    classified = classifier.classify(normalized)
+                    reducer.add(
+                        complete_attributes_from_pdp(
+                            classified,
+                            pdp_context.get(
+                                f"{normalized.retailer_id}:{normalized.retailer_product_id}"
+                            ),
+                            classifier=classifier,
+                            pack=pack,
+                        )
+                    )
         offers = reducer.offers()
         engine = ComparisonEngine(pack)
         matches = [
@@ -161,6 +181,45 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             matches,
             benchmark_retailer=benchmark,
         )
+        selected_product_keys = {
+            (benchmark, str(row["benchmark_product_id"])) for row in product_decisions
+        } | {
+            (str(row["competitor"]), str(row["competitor_product_id"])) for row in product_decisions
+        }
+        evidence_offers = []
+        for historical_source in sources:
+            async for rows in reader.iter_batches(historical_source):
+                for row in rows:
+                    try:
+                        normalized = normalizer.normalize(
+                            {**row, "retailer_id": historical_source.retailer_id}
+                        )
+                    except ValueError:
+                        continue
+                    if (
+                        normalized.retailer_id,
+                        normalized.retailer_product_id,
+                    ) in selected_product_keys:
+                        classified = classifier.classify(normalized)
+                        evidence_offers.append(
+                            complete_attributes_from_pdp(
+                                classified,
+                                pdp_context.get(
+                                    f"{normalized.retailer_id}:{normalized.retailer_product_id}"
+                                ),
+                                classifier=classifier,
+                                pack=pack,
+                            )
+                        )
+        product_evidence = benchmark_product_evidence(
+            evidence_offers,
+            product_decisions,
+            benchmark_retailer=benchmark,
+        )
+        product_decisions = merge_product_evidence_summary(
+            product_decisions,
+            product_evidence,
+        )
         report_store = S3ReportObjectStore(bucket=bucket, client=client)
         service = AnalysisResultService(
             results_repository,
@@ -172,11 +231,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         document = previous.result if previous is not None else record.result
         context = dict(previous.presentation_context) if previous is not None else {}
         context["map_points"] = map_points
-        source_artifact_ids = [str(value) for value in source.get("source_artifact_ids", [])]
-        highlights = await PostgresProductDetailRepository(
-            database.engine,
-            repository_root,
-        ).publication_highlights(source_artifact_ids, limit=48)
+        context["product_evidence"] = product_evidence
         context["product_decisions"] = merge_product_decision_context(
             product_decisions,
             highlights,
@@ -201,6 +256,9 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             "publication_version": publication.version,
             "map_points": len(map_points),
             "product_decisions": len(product_decisions),
+            "product_evidence_rows": sum(
+                len(value.get("rows", [])) for value in product_evidence.values()
+            ),
             "mapped_benchmark_products": len(
                 {str(point["benchmark_product_id"]) for point in map_points}
             ),

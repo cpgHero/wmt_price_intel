@@ -19,7 +19,11 @@ from rci_results import (
     S3ReportObjectStore,
 )
 from rci_results.models import AnalysisRecord, DownloadLink, ReportArtifactRecord
-from rci_results.service import AnalysisNotFoundError, ArtifactNotFoundError
+from rci_results.service import (
+    AnalysisNotFoundError,
+    ArtifactNotFoundError,
+    ProductEvidenceNotFoundError,
+)
 from rci_results.storage import ReportObjectStore, UnavailableReportObjectStore
 
 router = APIRouter(prefix="/api/v1")
@@ -191,6 +195,23 @@ async def get_report_view(
         raise _analysis_not_found(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.get(
+    "/analyses/{analysis_id}/product-decisions/{decision_id}/evidence",
+    tags=["analyses"],
+)
+async def get_product_decision_evidence(
+    analysis_id: str,
+    decision_id: str,
+    service: AnalysisServiceDependency,
+) -> dict[str, Any]:
+    try:
+        return await service.product_evidence(analysis_id, decision_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except ProductEvidenceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get(

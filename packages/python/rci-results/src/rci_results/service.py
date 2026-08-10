@@ -26,6 +26,10 @@ class ArtifactNotFoundError(LookupError):
     pass
 
 
+class ProductEvidenceNotFoundError(LookupError):
+    pass
+
+
 class AnalysisResultService:
     def __init__(
         self,
@@ -109,6 +113,7 @@ class AnalysisResultService:
         unknown_context = set(context) - {
             "product_highlights",
             "product_decisions",
+            "product_evidence",
             "map_points",
             "notes",
         }
@@ -160,7 +165,15 @@ class AnalysisResultService:
 
     async def report_view(self, identifier: str) -> JsonObject:
         _analysis, publication, document = await self._presentation_source(identifier)
-        presentation_context = publication.presentation_context if publication is not None else None
+        presentation_context = (
+            {
+                key: value
+                for key, value in publication.presentation_context.items()
+                if key != "product_evidence"
+            }
+            if publication is not None
+            else None
+        )
         view = self._renderer.report_view(
             document,
             presentation_context=presentation_context,
@@ -187,6 +200,34 @@ class AnalysisResultService:
             else None
         )
         return view
+
+    async def product_evidence(self, identifier: str, decision_id: str) -> JsonObject:
+        analysis, publication, _document = await self._presentation_source(identifier)
+        if publication is None:
+            raise ProductEvidenceNotFoundError(
+                f"product evidence for analysis {analysis.analysis_id!r} is not available"
+            )
+        evidence = publication.presentation_context.get("product_evidence", {})
+        if not isinstance(evidence, dict) or not isinstance(evidence.get(decision_id), dict):
+            raise ProductEvidenceNotFoundError(
+                f"product decision evidence {decision_id!r} was not found"
+            )
+        decisions = publication.presentation_context.get("product_decisions", [])
+        decision = next(
+            (
+                dict(row)
+                for row in decisions
+                if isinstance(row, dict) and str(row.get("id")) == decision_id
+            ),
+            None,
+        )
+        return {
+            "analysis_id": analysis.analysis_id,
+            "publication_id": publication.id,
+            "publication_version": publication.version,
+            "decision": decision,
+            **dict(evidence[decision_id]),
+        }
 
     async def generate_artifact(
         self, identifier: str, artifact_type: ArtifactType
