@@ -143,7 +143,8 @@ def _segment_display_label(segment: JsonObject, product_pack: JsonObject) -> str
             if unit == "percent":
                 percentages.append(f"{rendered}% {label}")
             else:
-                measurements.append(f"{rendered} {unit or label}".strip())
+                display_unit = unit.replace("_", " ") if unit else label
+                measurements.append(f"{rendered} {display_unit}".strip())
         else:
             rendered = str(value).replace("_", " ").strip().casefold()
             if rendered not in baseline_values:
@@ -818,7 +819,7 @@ class AnalysisBriefBuilder:
                 AnalysisBriefBuilder._storyline(
                     f"story.action.{index}",
                     "action",
-                    f"{segment}: the next {competitor} decision",
+                    f"Review the {competitor} price position for {segment}",
                     str(
                         recommendation.get(
                             "rationale",

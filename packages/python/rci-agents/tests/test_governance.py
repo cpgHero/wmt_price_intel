@@ -20,6 +20,7 @@ from rci_agents import (
     PromptTemplateLoader,
     ProviderResponse,
 )
+from rci_agents.brief import _segment_display_label
 from rci_agents.governance import NarrativeQualityCritic, canonical_bytes
 
 from rci_contracts import validate_instance
@@ -774,6 +775,38 @@ def test_analysis_brief_uses_merchant_facing_retailer_and_segment_names() -> Non
     assert '"fact_refs"' not in model_text
 
 
+def test_segment_display_label_humanizes_configured_units() -> None:
+    product_pack = _document("product-packs/fresh_fluid_milk.json")
+
+    label = _segment_display_label(
+        {
+            "segment_id": "milk-half-gallon",
+            "attributes": {"volume_oz": 64},
+        },
+        product_pack,
+    )
+
+    assert label == "64 fl oz"
+
+
+def test_action_storylines_use_plain_merchant_language() -> None:
+    result = _document("examples/analysis-result-v2.ground-beef.json")
+    result["recommendations"][0]["metric_refs"] = ["aldi-exact-matches"]
+    product_pack = _document("product-packs/fresh_ground_beef.json")
+    blueprint = _document("report-blueprints/fresh_ground_beef_leadership.json")
+
+    brief = AnalysisBriefBuilder(REPOSITORY_ROOT).build(
+        result,
+        product_pack=product_pack,
+        report_blueprint=blueprint,
+    )
+
+    headlines = [str(row["headline"]) for row in brief["storylines"] if row["kind"] == "action"]
+    assert headlines
+    assert all("the next" not in value.casefold() for value in headlines)
+    assert all(value.startswith("Review the ") for value in headlines)
+
+
 def test_narrative_critic_rejects_machine_oriented_labels() -> None:
     with pytest.raises(AgentGovernanceError, match="machine-oriented"):
         NarrativeQualityCritic.validate_prose(
@@ -790,6 +823,8 @@ def test_narrative_critic_rejects_machine_oriented_labels() -> None:
     )
     with pytest.raises(AgentGovernanceError, match="machine-oriented"):
         NarrativeQualityCritic.validate_prose("The raw flag is Grass Fed: True.")
+    with pytest.raises(AgentGovernanceError, match="machine-oriented"):
+        NarrativeQualityCritic.validate_prose("Review the 64 fl_oz package.")
 
 
 def test_narrative_critic_rejects_omitted_required_topic() -> None:
