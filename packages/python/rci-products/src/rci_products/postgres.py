@@ -840,8 +840,9 @@ class PostgresProductDetailRepository:
         source_artifact_ids: list[str],
         *,
         limit: int = 8,
+        per_retailer_limit: int = 16,
     ) -> list[JsonObject]:
-        if not source_artifact_ids or limit < 1:
+        if not source_artifact_ids or limit < 1 or per_retailer_limit < 1:
             return []
         async with self._engine.connect() as connection:
             rows = (
@@ -877,7 +878,7 @@ class PostgresProductDetailRepository:
                               ) snapshot ON true
                             )
                             SELECT * FROM enriched
-                            WHERE retailer_rank <= 3
+                            WHERE retailer_rank <= :per_retailer_limit
                             ORDER BY (snapshot_document IS NOT NULL) DESC,
                               source_context_count DESC, retailer_id, canonical_product_id
                             LIMIT :limit
@@ -886,6 +887,7 @@ class PostgresProductDetailRepository:
                         {
                             "source_artifact_ids": source_artifact_ids,
                             "limit": limit,
+                            "per_retailer_limit": per_retailer_limit,
                         },
                     )
                 )
@@ -910,6 +912,15 @@ class PostgresProductDetailRepository:
                         if isinstance(media, dict)
                         else identity.get("image_primary")
                     ),
+                    "description": normalized.get("description_short")
+                    or normalized.get("description_full"),
+                    "category_path": normalized.get("category_path"),
+                    "identifiers": normalized.get("identifiers", {}),
+                    "specification": normalized.get("specification", {}),
+                    "physical_properties": normalized.get("physical_properties", {}),
+                    "variant_configuration": normalized.get("variant_configuration", {}),
+                    "price": normalized.get("price"),
+                    "price_currency": normalized.get("price_currency"),
                     "role": (
                         "PDP-enriched reference"
                         if isinstance(snapshot, dict)

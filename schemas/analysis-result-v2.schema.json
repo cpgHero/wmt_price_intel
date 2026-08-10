@@ -675,6 +675,21 @@
           "type": "string",
           "minLength": 1
         },
+        "subtitle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bullets": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "implication": {
+          "type": "string"
+        },
         "topic_refs": {
           "type": "array",
           "minItems": 1,
@@ -698,6 +713,14 @@
         "storyline_refs": {
           "type": "array",
           "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "product_refs": {
+          "type": "array",
           "uniqueItems": true,
           "items": {
             "type": "string",

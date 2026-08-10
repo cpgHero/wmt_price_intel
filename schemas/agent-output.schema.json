@@ -366,6 +366,21 @@
                 "type": "string",
                 "minLength": 1
               },
+              "subtitle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bullets": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "implication": {
+                "type": "string"
+              },
               "topic_refs": {
                 "type": "array",
                 "minItems": 1,
@@ -388,6 +403,14 @@
               },
               "storyline_refs": {
                 "$ref": "#/$defs/nonempty_refs"
+              },
+              "product_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               },
               "metric_refs": {
                 "$ref": "#/$defs/nonempty_refs"
@@ -435,7 +458,8 @@
             "decimal_2",
             "percent_1",
             "percent_2",
-            "currency_2"
+            "currency_2",
+            "currency_abs_2"
           ]
         }
       }

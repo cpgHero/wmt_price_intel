@@ -15,7 +15,9 @@ from rci_analytics import (
     ComparisonInputReducer,
     OfferClassifier,
     ProductPackLoader,
+    benchmark_product_decisions,
     benchmark_product_map_points,
+    merge_product_decision_context,
 )
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
@@ -154,6 +156,11 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             max_products=args.max_products,
             max_points_per_product=args.max_points_per_product,
         )
+        product_decisions = benchmark_product_decisions(
+            offers,
+            matches,
+            benchmark_retailer=benchmark,
+        )
         report_store = S3ReportObjectStore(bucket=bucket, client=client)
         service = AnalysisResultService(
             results_repository,
@@ -169,7 +176,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         highlights = await PostgresProductDetailRepository(
             database.engine,
             repository_root,
-        ).publication_highlights(source_artifact_ids)
+        ).publication_highlights(source_artifact_ids, limit=48)
+        context["product_decisions"] = merge_product_decision_context(
+            product_decisions,
+            highlights,
+            benchmark_retailer=benchmark,
+        )
         if highlights:
             context["product_highlights"] = highlights
         publication = await service.publish_publication(
@@ -188,6 +200,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             "publication_id": publication.id,
             "publication_version": publication.version,
             "map_points": len(map_points),
+            "product_decisions": len(product_decisions),
             "mapped_benchmark_products": len(
                 {str(point["benchmark_product_id"]) for point in map_points}
             ),

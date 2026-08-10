@@ -106,7 +106,12 @@ class AnalysisResultService:
             ):
                 raise ValueError(f"publication changed authoritative {field}")
         context = dict(presentation_context or {})
-        unknown_context = set(context) - {"product_highlights", "map_points", "notes"}
+        unknown_context = set(context) - {
+            "product_highlights",
+            "product_decisions",
+            "map_points",
+            "notes",
+        }
         if unknown_context:
             raise ValueError(
                 f"publication presentation context has unsupported keys {sorted(unknown_context)}"

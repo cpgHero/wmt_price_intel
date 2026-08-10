@@ -22,6 +22,7 @@ from rci_agents import (
     ProviderResponse,
 )
 
+from rci_analytics import merge_product_decision_context
 from rci_core import AppSettings
 from rci_db import DatabaseProbe
 from rci_products import PostgresProductDetailRepository
@@ -149,6 +150,37 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         blueprint, product_pack = ReportBlueprintLoader(repository_root).load_for_result(
             deterministic_result
         )
+        source = deterministic_result.get("source", {})
+        source_artifact_ids = (
+            [str(value) for value in source.get("source_artifact_ids", [])]
+            if isinstance(source, dict)
+            else []
+        )
+        previous_publication = await results.latest_publication(record.analysis_id)
+        presentation_context = (
+            dict(previous_publication.presentation_context)
+            if previous_publication is not None
+            else {}
+        )
+        product_highlights = await PostgresProductDetailRepository(
+            database.engine,
+            repository_root,
+        ).publication_highlights(source_artifact_ids, limit=48)
+        if product_highlights:
+            presentation_context["product_highlights"] = product_highlights
+        raw_product_decisions = presentation_context.get("product_decisions", [])
+        product_decisions = (
+            [dict(row) for row in raw_product_decisions if isinstance(row, dict)]
+            if isinstance(raw_product_decisions, list)
+            else []
+        )
+        if product_decisions:
+            product_decisions = merge_product_decision_context(
+                product_decisions,
+                product_highlights,
+                benchmark_retailer=str(deterministic_result["benchmark_retailer"]),
+            )
+            presentation_context["product_decisions"] = product_decisions
         provider = RecordingProvider(
             OpenAIResponsesProvider(
                 api_key=os.environ["OPENAI_API_KEY"],
@@ -173,6 +205,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             deepcopy(deterministic_result),
             product_pack=product_pack,
             report_blueprint=blueprint.document,
+            product_decisions=product_decisions,
         )
         if _digest(enriched.get("metrics")) != _digest(deterministic_result.get("metrics")):
             raise RuntimeError("bake-off changed authoritative metrics")
@@ -191,29 +224,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         renderer = ArtifactRenderer(repository_root)
         publication = None
         if args.publish:
-            source = validated.get("source", {})
-            source_artifact_ids = (
-                [str(value) for value in source.get("source_artifact_ids", [])]
-                if isinstance(source, dict)
-                else []
-            )
-            product_highlights = await PostgresProductDetailRepository(
-                database.engine,
-                repository_root,
-            ).publication_highlights(source_artifact_ids)
             service = AnalysisResultService(
                 results,
                 AnalysisResultValidator(repository_root),
                 store,
                 renderer,
             )
-            previous_publication = await service.latest_publication(record.analysis_id)
-            presentation_context = (
-                dict(previous_publication.presentation_context)
-                if previous_publication is not None
-                else {}
-            )
-            presentation_context["product_highlights"] = product_highlights
             publication = await service.publish_publication(
                 record.analysis_id,
                 validated,
@@ -222,7 +238,11 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             artifact = await service.generate_artifact(record.analysis_id, "html")
             storage_uri = artifact.storage_uri
         else:
-            payload = renderer.render(validated, "html")
+            payload = renderer.render(
+                validated,
+                "html",
+                presentation_context=presentation_context,
+            )
             storage_uri = await store.put(f"bakeoff-{record.analysis_id}", payload)
         download_url = await store.presign(
             storage_uri,

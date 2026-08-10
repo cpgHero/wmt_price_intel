@@ -53,7 +53,7 @@ _NUMERIC_LITERAL = re.compile(
 )
 _METRIC_PLACEHOLDER_PATTERN = (
     r"\{\{metric:[A-Za-z0-9_.-]+\|"
-    r"(?:integer|decimal_1|decimal_2|percent_1|percent_2|currency_2)\}\}"
+    r"(?:integer|decimal_1|decimal_2|percent_1|percent_2|currency_2|currency_abs_2)\}\}"
 )
 
 
@@ -85,26 +85,42 @@ def _narrative_section_schema(section: JsonObject) -> JsonObject:
     required_topics = [str(value) for value in section.get("required_topics", [])]
     storyline_refs = [str(value) for value in section.get("storyline_refs", [])]
     metric_refs = [str(value) for value in section.get("allowed_metric_refs", [])]
+    product_refs = [str(value) for value in section.get("allowed_product_refs", [])]
+    required = [
+        "id",
+        "headline_template",
+        "subtitle_template",
+        "bullet_templates",
+        "implication_template",
+        "topic_refs",
+        "storyline_refs",
+        "metric_refs",
+    ]
+    if product_refs:
+        required.append("product_refs")
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": [
-            "id",
-            "body_template",
-            "topic_refs",
-            "storyline_refs",
-            "metric_refs",
-        ],
+        "required": required,
         "properties": {
             "id": {
                 "type": "string",
                 "minLength": 1,
                 **({"enum": [section_id]} if section_id else {}),
             },
-            "body_template": {"type": "string", "minLength": 1},
+            "headline_template": {"type": "string", "minLength": 1},
+            "subtitle_template": {"type": "string", "minLength": 1},
+            "bullet_templates": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 5,
+                "items": {"type": "string", "minLength": 1},
+            },
+            "implication_template": {"type": "string", "minLength": 1},
             "topic_refs": _refs(required_topics),
             "storyline_refs": _refs(storyline_refs),
             "metric_refs": _refs(metric_refs),
+            **({"product_refs": _refs(product_refs)} if product_refs else {}),
         },
     }
 

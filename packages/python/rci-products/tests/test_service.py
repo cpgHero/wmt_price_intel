@@ -127,17 +127,15 @@ async def test_one_cached_pdp_enriches_all_linked_serp_observations_without_over
     assert all(row["product_identity"]["brand"] == "Lay's" for row in enriched)
     assert product_document["identity"]["description_full"]
     highlights = await repository.publication_highlights(["raw-walmart-test"])
-    assert highlights == [
-        {
-            "canonical_product_id": "walmart_us:677669806",
-            "retailer": "walmart_us",
-            "name": "Lay's Classic Potato Chips, Party Size, 13 oz Bag",
-            "brand": "Lay's",
-            "url": "https://www.walmart.com/ip/677669806",
-            "image_url": product_document["identity"]["image_primary"],
-            "role": "PDP-enriched reference",
-        }
-    ]
+    assert len(highlights) == 1
+    assert highlights[0]["canonical_product_id"] == "walmart_us:677669806"
+    assert highlights[0]["name"] == "Lay's Classic Potato Chips, Party Size, 13 oz Bag"
+    assert highlights[0]["brand"] == "Lay's"
+    assert highlights[0]["image_url"] == product_document["identity"]["image_primary"]
+    assert highlights[0]["description"]
+    assert highlights[0]["category_path"]
+    assert highlights[0]["identifiers"]["upc"] == "028400310413"
+    assert highlights[0]["role"] == "PDP-enriched reference"
 
 
 async def test_concurrent_enqueue_enforces_atomic_credit_ceiling() -> None:

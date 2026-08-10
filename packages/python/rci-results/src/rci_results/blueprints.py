@@ -358,6 +358,11 @@ class ReportProjector:
                 ),
                 None,
             )
+        presentation_title = (
+            str(narrative.get("heading"))
+            if isinstance(narrative, dict) and narrative.get("heading")
+            else str(section["title"])
+        )
         if kind == "methodology":
             records = [
                 {
@@ -371,7 +376,7 @@ class ReportProjector:
         empty = not (records or selected_metrics or narrative)
         return {
             "id": section["id"],
-            "title": section["title"],
+            "title": presentation_title,
             "kind": kind,
             "visualization": section.get("visualization", "none"),
             "required": section["required"],

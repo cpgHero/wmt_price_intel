@@ -727,6 +727,41 @@ dd {
 .section-narrative p + p {
   margin-top: 0.8rem;
 }
+.section-narrative .narrative-subtitle {
+  font-size: 1.04rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+.section-narrative ul {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.9rem 0 0;
+  padding-left: 1.15rem;
+}
+.section-narrative li {
+  color: var(--ink);
+  line-height: 1.55;
+}
+.section-narrative aside {
+  align-items: baseline;
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1rem;
+  padding: 0.8rem 0.9rem;
+}
+.section-narrative aside b {
+  color: var(--green);
+  font-size: 0.65rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.section-narrative aside span {
+  color: var(--ink);
+  line-height: 1.5;
+}
 .metric-grid {
   display: grid;
   gap: 0.8rem;
@@ -983,6 +1018,91 @@ a.product-highlight:hover {
   display: block;
   font-size: 0.7rem;
   margin: 0.35rem 0 0;
+}
+.product-decision-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.product-decision-card {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-top: 4px solid var(--amber);
+  border-radius: 14px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 78px 1fr;
+  padding: 1rem;
+}
+.product-decision-card.protect {
+  border-top-color: var(--green);
+}
+.product-decision-card.parity {
+  border-top-color: var(--muted);
+}
+.product-decision-image {
+  align-items: center;
+  background: var(--card);
+  border-radius: 10px;
+  display: flex;
+  height: 78px;
+  justify-content: center;
+  overflow: hidden;
+  width: 78px;
+}
+.product-decision-image img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+.product-decision-image span {
+  color: var(--green);
+  font-size: 1.8rem;
+  font-weight: 850;
+}
+.product-decision-status {
+  color: var(--green);
+  font-size: 0.63rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.product-decision-card.attention .product-decision-status {
+  color: var(--amber);
+}
+.product-decision-card h3 {
+  font-size: 1rem;
+  line-height: 1.35;
+  margin: 0.35rem 0 0;
+}
+.product-decision-card p {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 0.35rem 0 0;
+}
+.product-decision-card strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+.product-competitor {
+  line-height: 1.4;
+}
+.product-location-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+}
+.product-location-list li {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.63rem;
+  padding: 0.25rem 0.45rem;
 }
 .analysis-map {
   margin: 0;

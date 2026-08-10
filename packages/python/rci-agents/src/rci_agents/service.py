@@ -65,6 +65,7 @@ class GovernedAnalysisAssistant:
         *,
         product_pack: JsonObject,
         report_blueprint: JsonObject,
+        product_decisions: list[JsonObject] | None = None,
     ) -> JsonObject:
         deterministic_insights = _rows(result.get("insights"))
         recommendations = _rows(result.get("recommendations"))
@@ -126,6 +127,27 @@ class GovernedAnalysisAssistant:
                 task_ids.append(str(insight_output["task_id"]))
 
         narrative_sections = _rows(analysis_brief.get("requested_sections"))
+        model_products = _model_products(product_decisions or [])
+        product_section_ids = {
+            "executive_summary",
+            "exact_price",
+            "normalized_price",
+            "products",
+            "recommendations",
+        }
+        if model_products:
+            product_refs = [str(product["id"]) for product in model_products]
+            narrative_sections = [
+                {
+                    **section,
+                    **(
+                        {"allowed_product_refs": product_refs}
+                        if str(section.get("id")) in product_section_ids
+                        else {}
+                    ),
+                }
+                for section in narrative_sections
+            ]
         narrative_output: JsonObject | None = None
         if narrative_sections:
             interpreted_insights = (
@@ -146,6 +168,7 @@ class GovernedAnalysisAssistant:
                 "metrics": selected_metrics,
                 "evidence_sets": evidence_sets,
                 "required_caveats": product_pack.get("reporting", {}).get("required_caveats", []),
+                "decision_products": model_products,
             }
             narrative_output = await self._run(
                 result,
@@ -157,6 +180,7 @@ class GovernedAnalysisAssistant:
                     selected_metrics,
                     evidence_ids,
                     _rows(analysis_brief.get("storylines")),
+                    model_products,
                 ),
             )
             if narrative_output is not None:
@@ -295,6 +319,55 @@ def _rows(value: object) -> list[JsonObject]:
     if not isinstance(value, list):
         return []
     return [dict(row) for row in value if isinstance(row, dict)]
+
+
+def _model_products(rows: list[JsonObject], *, limit: int = 8) -> list[JsonObject]:
+    products: list[JsonObject] = []
+    for row in rows[:limit]:
+        product_id = str(row.get("id", "")).strip()
+        benchmark_name = str(row.get("benchmark_product_name", "")).strip()
+        competitor_name = str(row.get("competitor_product_name", "")).strip()
+        if not product_id or not benchmark_name or not competitor_name:
+            continue
+        benchmark_detail = _product_detail(row, "benchmark")
+        competitor_detail = _product_detail(row, "competitor")
+        raw_locations = row.get("top_locations", [])
+        location_labels = (
+            [
+                f"ZIP {location.get('zipcode')}"
+                for location in raw_locations[:3]
+                if isinstance(location, dict) and location.get("zipcode")
+            ]
+            if isinstance(raw_locations, list)
+            else []
+        )
+        products.append(
+            {
+                "id": product_id,
+                "benchmark_name": benchmark_name,
+                "competitor_name": competitor_name,
+                "benchmark_detail": benchmark_detail,
+                "competitor_detail": competitor_detail,
+                "locations": ", ".join(dict.fromkeys(location_labels)) or "mapped locations",
+                "position": str(row.get("priority", "parity")),
+                "identity_source": (
+                    "PDP enrichment"
+                    if row.get("benchmark_description") or row.get("competitor_description")
+                    else "admitted search evidence"
+                ),
+            }
+        )
+    return products
+
+
+def _product_detail(row: JsonObject, prefix: str) -> str:
+    values = [
+        str(row.get(f"{prefix}_brand", "")).strip(),
+        str(row.get(f"{prefix}_category_path", "")).strip(),
+        str(row.get(f"{prefix}_description", "")).strip(),
+    ]
+    combined = " · ".join(dict.fromkeys(value for value in values if value))
+    return combined[:400] or "No additional PDP detail was available"
 
 
 def _collect_refs(value: object, key: str) -> set[str]:

@@ -59,8 +59,42 @@ export interface AnalysisReportView {
     created_at: string;
   } | null;
   product_highlights?: ProductHighlight[];
+  product_decisions?: ProductDecision[];
   map_points?: MapPoint[];
   sections: ReportSectionView[];
+}
+
+export interface ProductDecision {
+  id: string;
+  priority: "attention" | "protect" | "parity";
+  benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_image_url?: string | null;
+  benchmark_product_url?: string | null;
+  competitor: string;
+  competitor_product_id: string;
+  competitor_product_name: string;
+  competitor_image_url?: string | null;
+  competitor_product_url?: string | null;
+  matches: number;
+  geographies: number;
+  benchmark_lower: number;
+  competitor_lower: number;
+  parity: number;
+  benchmark_lower_share: number;
+  competitor_lower_share: number;
+  median_benchmark_price: number;
+  median_competitor_price: number;
+  median_gap: number;
+  plain_insight: string;
+  top_locations: Array<{
+    zipcode: string;
+    store?: string | null;
+    outcome: "benchmark_lower" | "competitor_lower" | "parity";
+    benchmark_price: number;
+    competitor_price: number;
+    gap: number;
+  }>;
 }
 
 export interface ProductHighlight {

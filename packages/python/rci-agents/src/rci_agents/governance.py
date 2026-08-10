@@ -7,6 +7,7 @@ import json
 import re
 from copy import deepcopy
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from rci_agents.models import JsonObject, PromptTemplate, ProviderResponse
@@ -14,9 +15,13 @@ from rci_contracts import validate_instance
 
 _PLACEHOLDER = re.compile(
     r"\{\{metric:([A-Za-z0-9_.-]+)\|"
-    r"(integer|decimal_1|decimal_2|percent_1|percent_2|currency_2)\}\}"
+    r"(integer|decimal_1|decimal_2|percent_1|percent_2|currency_2|currency_abs_2)\}\}"
 )
 _STORYLINE_PLACEHOLDER = re.compile(r"\{\{storyline:([A-Za-z0-9_.-]+)\|headline\}\}")
+_PRODUCT_PLACEHOLDER = re.compile(
+    r"\{\{product:([A-Za-z0-9_.-]+)\|"
+    r"(benchmark_name|competitor_name|benchmark_detail|competitor_detail|locations)\}\}"
+)
 _NUMERIC_LITERAL = re.compile(
     r"(?<![A-Za-z0-9_.])(?:-\$?|\$-?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?"
 )
@@ -30,6 +35,12 @@ _MACHINE_PROSE = re.compile(
     r"\b(?:lean pct|fat pct|weight lb)\s*:|"
     r"\b(?:organic|grass fed)\s*:\s*(?:true|false)\b|"
     r"\bpremium tier\s*:\s*[a-z][a-z0-9_]*\b",
+    flags=re.IGNORECASE,
+)
+_UNCLEAR_MERCHANT_PROSE = re.compile(
+    r"\bsigned median gap\b|\bmatched denominator\b|\bprice investment\b|"
+    r"\b(?:act on|use|treat)\s+(?:the\s+)?[A-Za-z& ]+\s+response\b|"
+    r"\b[A-Za-z& ]+\s+response\s+for\b",
     flags=re.IGNORECASE,
 )
 
@@ -63,6 +74,21 @@ class NarrativeQualityCritic:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} has missing or undeclared storylines"
                 )
+            products = {str(value) for value in raw.get("product_refs", [])}
+            allowed_products = {str(value) for value in request.get("allowed_product_refs", [])}
+            if allowed_products and (not products or not products.issubset(allowed_products)):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} has missing or undeclared products"
+                )
+            product_placeholders = {
+                match.group(1)
+                for value in NarrativeQualityCritic.prose_values(raw)
+                for match in _PRODUCT_PLACEHOLDER.finditer(value)
+            }
+            if allowed_products and not product_placeholders.intersection(products):
+                raise AgentGovernanceError(
+                    f"narrative {section_id!r} does not use a governed product placeholder"
+                )
             required_storylines = {
                 str(value) for value in request.get("required_storyline_refs", [])
             }
@@ -71,13 +97,14 @@ class NarrativeQualityCritic:
                     f"narrative {section_id!r} omits required storylines "
                     f"{sorted(required_storylines - storylines)}"
                 )
-            body = str(raw.get("body_template", "")).strip()
+            prose_values = NarrativeQualityCritic.prose_values(raw)
+            body = " ".join(prose_values)
             minimum_length = 220 if required_storylines else 80
             if len(body) < minimum_length:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} is too thin for leadership use"
                 )
-            self.validate_prose(body)
+            self.validate_prose(*prose_values)
             covered_topics.update(topics)
             required_topics.update(required)
         if not required_topics.issubset(covered_topics):
@@ -88,12 +115,37 @@ class NarrativeQualityCritic:
     @staticmethod
     def validate_prose(*values: str) -> None:
         for value in values:
-            prose = _STORYLINE_PLACEHOLDER.sub("", _PLACEHOLDER.sub("", value))
+            prose = _PRODUCT_PLACEHOLDER.sub(
+                "", _STORYLINE_PLACEHOLDER.sub("", _PLACEHOLDER.sub("", value))
+            )
             match = _MACHINE_PROSE.search(prose)
             if match:
                 raise AgentGovernanceError(
                     f"leadership prose exposes machine-oriented label {match.group(0)!r}"
                 )
+            unclear = _UNCLEAR_MERCHANT_PROSE.search(prose)
+            if unclear:
+                raise AgentGovernanceError(
+                    f"leadership prose uses unclear merchant jargon {unclear.group(0)!r}"
+                )
+
+    @staticmethod
+    def prose_values(row: JsonObject) -> list[str]:
+        structured = [
+            str(row.get("headline_template", "")).strip(),
+            str(row.get("subtitle_template", "")).strip(),
+            *(
+                str(value).strip()
+                for value in row.get("bullet_templates", [])
+                if isinstance(value, str)
+            ),
+            str(row.get("implication_template", "")).strip(),
+        ]
+        selected = [value for value in structured if value]
+        if selected:
+            return selected
+        legacy = str(row.get("body_template", "")).strip()
+        return [legacy] if legacy else []
 
 
 def trusted_numeric_literals(source: JsonObject) -> set[str]:
@@ -134,11 +186,13 @@ class MetricCitationRenderer:
         trusted_numeric_literals: set[str] | None = None,
         allowed_storyline_refs: set[str] | None = None,
         storylines: dict[str, JsonObject] | None = None,
+        allowed_product_refs: set[str] | None = None,
+        products: dict[str, JsonObject] | None = None,
     ) -> tuple[str, list[JsonObject]]:
         trusted_numbers = trusted_numeric_literals or set()
         without_placeholders = _STORYLINE_PLACEHOLDER.sub(
             "",
-            _PLACEHOLDER.sub("", template),
+            _PRODUCT_PLACEHOLDER.sub("", _PLACEHOLDER.sub("", template)),
         )
         unsupported = [
             value
@@ -195,10 +249,33 @@ class MetricCitationRenderer:
             return headline
 
         rendered = _STORYLINE_PLACEHOLDER.sub(substitute_storyline, rendered)
+        trusted_product_numbers: list[str] = []
+
+        def substitute_product(match: re.Match[str]) -> str:
+            product_ref, field_name = match.groups()
+            if product_ref not in (allowed_product_refs or set()):
+                raise AgentGovernanceError(
+                    f"narrative placeholder references undeclared product {product_ref!r}"
+                )
+            product = (products or {}).get(product_ref)
+            if product is None:
+                raise AgentGovernanceError(
+                    f"narrative placeholder references unknown product {product_ref!r}"
+                )
+            value = str(product.get(field_name, "")).strip()
+            if not value:
+                raise AgentGovernanceError(
+                    f"narrative product placeholder has no {field_name!r} value"
+                )
+            trusted_product_numbers.extend(_NUMERIC_LITERAL.findall(value))
+            return value
+
+        rendered = _PRODUCT_PLACEHOLDER.sub(substitute_product, rendered)
         remaining = _NUMERIC_LITERAL.findall(rendered)
         claim_values = [
             *[str(claim["rendered_value"]) for claim in claims],
             *trusted_storyline_numbers,
+            *trusted_product_numbers,
         ]
         for value in remaining:
             if value in trusted_numbers:
@@ -225,10 +302,10 @@ class MetricCitationRenderer:
                 raise AgentGovernanceError("percent format requires a rate metric")
             precision = 1 if format_name == "percent_1" else 2
             return f"{value * 100:,.{precision}f}%"
-        if format_name == "currency_2":
+        if format_name in {"currency_2", "currency_abs_2"}:
             if not unit.startswith("USD"):
                 raise AgentGovernanceError("currency format requires a USD metric")
-            sign = "-" if value < 0 else ""
+            sign = "-" if value < 0 and format_name == "currency_2" else ""
             return f"{sign}${abs(value):,.2f}"
         raise AgentGovernanceError(f"unsupported metric format {format_name!r}")
 
@@ -303,6 +380,7 @@ class GovernedOutputBuilder:
         metrics: list[JsonObject],
         evidence_ids: set[str],
         storylines: list[JsonObject],
+        products: list[JsonObject] | None = None,
     ) -> JsonObject:
         requested = {str(section["id"]): section for section in requested_sections}
         rows = provider_result.get("sections")
@@ -318,6 +396,7 @@ class GovernedOutputBuilder:
         self._critic.validate(typed_rows, requested)
         metric_index = {str(metric["metric_id"]): metric for metric in metrics}
         storyline_index = {str(storyline["id"]): storyline for storyline in storylines}
+        product_index = {str(value["id"]): value for value in (products or []) if value.get("id")}
         renderer = MetricCitationRenderer(metrics)
         sections: list[JsonObject] = []
         for raw in rows:
@@ -326,6 +405,7 @@ class GovernedOutputBuilder:
             metric_refs = [str(value) for value in raw.get("metric_refs", [])]
             topic_refs = [str(value) for value in raw.get("topic_refs", [])]
             storyline_refs = [str(value) for value in raw.get("storyline_refs", [])]
+            product_refs = [str(value) for value in raw.get("product_refs", [])]
             allowed_metrics = {
                 str(value) for value in requested[section_id].get("allowed_metric_refs", [])
             }
@@ -350,22 +430,53 @@ class GovernedOutputBuilder:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} metrics have no governed evidence"
                 )
-            body, claims = renderer.render(
-                str(raw.get("body_template", "")),
+
+            render_text = partial(
+                renderer.render,
                 allowed_metric_refs=set(metric_refs),
                 allowed_storyline_refs=set(storyline_refs),
                 storylines=storyline_index,
+                allowed_product_refs=set(product_refs),
+                products=product_index,
             )
+
+            if raw.get("headline_template"):
+                headline, headline_claims = render_text(str(raw["headline_template"]))
+                subtitle, subtitle_claims = render_text(str(raw["subtitle_template"]))
+                rendered_bullets = [
+                    render_text(str(value)) for value in raw.get("bullet_templates", [])
+                ]
+                bullets = [value[0] for value in rendered_bullets]
+                implication, implication_claims = render_text(str(raw["implication_template"]))
+                claims = [
+                    *headline_claims,
+                    *subtitle_claims,
+                    *(claim for _bullet, row_claims in rendered_bullets for claim in row_claims),
+                    *implication_claims,
+                ]
+                body = "\n\n".join(
+                    [subtitle, *(f"• {bullet}" for bullet in bullets), f"What to do: {implication}"]
+                )
+            else:
+                body, claims = render_text(str(raw.get("body_template", "")))
+                headline = str(requested[section_id]["heading"])
+                subtitle = body
+                bullets = []
+                implication = ""
             if not body:
                 raise AgentGovernanceError("AI narrative body cannot be empty")
-            self._critic.validate_prose(body)
+            self._critic.validate_prose(headline, subtitle, *bullets, implication)
             sections.append(
                 {
                     "id": section_id,
-                    "heading": requested[section_id]["heading"],
+                    "heading": headline,
+                    "subtitle": subtitle,
+                    "bullets": bullets,
+                    "implication": implication,
                     "body": body,
                     "topic_refs": topic_refs,
                     "storyline_refs": storyline_refs,
+                    "product_refs": product_refs,
                     "metric_refs": metric_refs,
                     "evidence_refs": referenced_evidence,
                     "numeric_claims": claims,

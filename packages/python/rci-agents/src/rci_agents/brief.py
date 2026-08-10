@@ -721,7 +721,7 @@ class AnalysisBriefBuilder:
                 kind = "competitive_pressure"
                 headline = f"{competitor} price pressure in {segment}"
                 interpretation = (
-                    f"Treat this as {article} {profile.casefold()} watchlist and keep the action "
+                    f"Monitor this as {article} {profile.casefold()} exception and keep the action "
                     "within the "
                     "matched product specification."
                 )
@@ -738,8 +738,8 @@ class AnalysisBriefBuilder:
                 kind = "mixed_position"
                 headline = f"mixed price position against {competitor} in {segment}"
                 interpretation = (
-                    f"Avoid a broad price conclusion; use the {profile} evidence and matched "
-                    "denominator to guide monitoring."
+                    f"Avoid a broad price conclusion; use the {profile} evidence and comparable "
+                    "observations to guide monitoring."
                 )
             topics = [
                 "exact_price"
@@ -818,11 +818,11 @@ class AnalysisBriefBuilder:
                 AnalysisBriefBuilder._storyline(
                     f"story.action.{index}",
                     "action",
-                    f"{competitor} response for {segment}",
+                    f"{segment}: the next {competitor} decision",
                     str(
                         recommendation.get(
                             "rationale",
-                            "Tie the operating response to the cited comparison evidence.",
+                            "Tie the next merchant move to the cited comparison evidence.",
                         )
                     ),
                     ["actions"],

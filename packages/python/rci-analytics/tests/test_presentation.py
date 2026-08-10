@@ -3,7 +3,11 @@ from __future__ import annotations
 from decimal import Decimal
 
 from rci_analytics.models import ClassifiedOffer, MatchRecord, NormalizedOffer
-from rci_analytics.presentation import benchmark_product_map_points
+from rci_analytics.presentation import (
+    benchmark_product_decisions,
+    benchmark_product_map_points,
+    merge_product_decision_context,
+)
 
 
 def _offer(offer_id: str, product_id: str, longitude: float) -> ClassifiedOffer:
@@ -86,3 +90,76 @@ def test_map_points_apply_deterministic_product_and_location_caps() -> None:
 
     assert len(points) == 2
     assert {point["benchmark_product_id"] for point in points} == {"100"}
+
+
+def test_product_decisions_prioritize_losses_and_name_locations() -> None:
+    benchmark = [_offer("store-a", "100", -94.2), _offer("store-b", "100", -90.1)]
+    competitor = [
+        ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"competitor-{item.offer.offer_id}",
+                retailer_id="aldi_us",
+                retailer_product_id="aldi-100",
+                title="ALDI comparison product",
+                brand=None,
+                price=Decimal("3.50"),
+                currency="USD",
+                zipcode=item.offer.zipcode,
+                store_number="aldi-store",
+                latitude=item.offer.latitude,
+                longitude=item.offer.longitude,
+                in_stock=True,
+                product_url="https://example.com/aldi-100",
+                image_url="https://example.com/aldi-100.jpg",
+                collected_at=None,
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={"size": "1 lb"},
+            metrics={},
+            review_reasons=(),
+        )
+        for item in benchmark
+    ]
+    decisions = benchmark_product_decisions(
+        [*benchmark, *competitor],
+        [_match("store-a", "aldi_us", "-0.50"), _match("store-b", "aldi_us", "-0.25")],
+        benchmark_retailer="walmart_us",
+    )
+
+    assert len(decisions) == 1
+    assert decisions[0]["priority"] == "attention"
+    assert decisions[0]["competitor_product_name"] == "ALDI comparison product"
+    assert decisions[0]["plain_insight"] == "Competitor is typically $0.38 lower"
+    assert decisions[0]["geographies"] == 2
+    assert decisions[0]["top_locations"][0]["zipcode"] == "72712"
+
+
+def test_pdp_context_improves_identity_without_changing_price_evidence() -> None:
+    decision = {
+        "id": "decision-1",
+        "benchmark_product_id": "100",
+        "benchmark_product_name": "Search title",
+        "competitor": "aldi_us",
+        "competitor_product_id": "200",
+        "competitor_product_name": "Search competitor title",
+        "median_gap": -0.5,
+    }
+    enriched = merge_product_decision_context(
+        [decision],
+        [
+            {
+                "canonical_product_id": "walmart_us:100",
+                "name": "PDP product title",
+                "image_url": "https://example.com/product.jpg",
+                "specification": {"size": "one pound"},
+            }
+        ],
+        benchmark_retailer="walmart_us",
+    )
+
+    assert enriched[0]["benchmark_product_name"] == "PDP product title"
+    assert enriched[0]["benchmark_image_url"] == "https://example.com/product.jpg"
+    assert enriched[0]["benchmark_specification"] == {"size": "one pound"}
+    assert enriched[0]["median_gap"] == -0.5

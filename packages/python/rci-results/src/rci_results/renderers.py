@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.7.0"
+RENDERER_VERSION = "2.8.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -110,6 +110,13 @@ article,section{background:var(--card);border:1px solid var(--line);border-radiu
 box-shadow:var(--shadow);padding:22px;margin-top:18px}article p{font-size:17px;margin:10px 0}
 article span{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.1em;
 text-transform:uppercase}
+.narrative{background:rgba(88,210,248,.08);border-left:3px solid var(--accent);
+border-radius:0 12px 12px 0;margin:14px 0 20px;max-width:900px;padding:18px 20px}
+.narrative .narrative-subtitle{font-size:17px;font-weight:650;margin:0;line-height:1.55}
+.narrative ul{display:grid;gap:9px;margin:14px 0 0;padding-left:20px}.narrative li{margin:0}
+.narrative aside{background:var(--card);border:1px solid var(--line);border-radius:10px;
+display:grid;gap:4px;margin-top:16px;padding:12px}.narrative aside b{color:var(--accent);
+font-size:11px;letter-spacing:.09em;text-transform:uppercase}.narrative aside span{font-size:14px}
 .metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
 .metric strong{display:block;font-size:24px;margin-top:12px}.table-wrap{overflow:auto}
 .comparison-chart{background:var(--surface);border:1px solid var(--line);border-radius:14px;
@@ -144,6 +151,19 @@ border-radius:9px;height:72px;object-fit:contain;width:72px}.product-placeholder
 color:var(--accent);display:flex;font-size:28px;justify-content:center}
 .product-card h3{font-size:14px;
 line-height:1.35;margin:5px 0}.product-card p{color:var(--muted);font-size:12px;margin:0}
+.product-decision-intro{border-top:1px solid var(--line);margin-top:22px;padding-top:20px}
+.product-decision-intro h3{font-size:18px;margin:0}.product-decision-intro p{color:var(--muted);
+font-size:13px;margin:5px 0 14px}.product-decisions{display:grid;gap:12px;
+grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}.product-decision{background:var(--surface);
+border-top:4px solid #9b6100;box-shadow:none;display:grid;gap:12px;grid-template-columns:70px 1fr;
+margin:0;padding:14px}.product-decision.protect{border-top-color:var(--accent)}
+.product-decision.parity{border-top-color:var(--muted)}.product-decision img,
+.product-decision .product-placeholder{height:70px;width:70px}.product-decision h3{font-size:14px;
+line-height:1.35;margin:5px 0}.product-decision p{color:var(--muted);font-size:11px;margin:4px 0}
+.product-decision strong{display:block;font-size:13px;margin-top:8px}
+.product-locations{display:flex;flex-wrap:wrap;gap:4px;list-style:none;margin:9px 0 0;padding:0}
+.product-locations li{background:var(--card);border:1px solid var(--line);border-radius:999px;
+color:var(--muted);font-size:10px;margin:0;padding:3px 6px}
 .decision-card{background:var(--surface);box-shadow:none}.decision-card h3{font-size:17px;
 line-height:1.35;margin:12px 0 0}.decision-card p{color:var(--muted);font-size:14px}
 .evidence{border-top:1px solid var(--line);margin-top:20px;padding-top:14px}
@@ -235,8 +255,108 @@ def _inline_table(rows: list[JsonObject]) -> str:
 
 
 def _narrative_html(value: object) -> str:
-    paragraphs = [paragraph.strip() for paragraph in str(value).split("\n\n")]
-    return "".join(f"<p>{escape(paragraph)}</p>" for paragraph in paragraphs if paragraph)
+    if isinstance(value, dict) and (
+        value.get("subtitle") or value.get("bullets") or value.get("implication")
+    ):
+        subtitle = (
+            f"<p class=narrative-subtitle>{escape(_display(value.get('subtitle')))}</p>"
+            if value.get("subtitle")
+            else ""
+        )
+        raw_bullets = value.get("bullets", [])
+        bullets = (
+            "<ul>"
+            + "".join(
+                f"<li>{escape(str(bullet))}</li>"
+                for bullet in raw_bullets
+                if isinstance(bullet, str) and bullet.strip()
+            )
+            + "</ul>"
+            if isinstance(raw_bullets, list) and raw_bullets
+            else ""
+        )
+        implication = (
+            "<aside><b>What to do</b>"
+            f"<span>{escape(_display(value.get('implication')))}</span></aside>"
+            if value.get("implication")
+            else ""
+        )
+        return f"<div class=narrative>{subtitle}{bullets}{implication}</div>"
+    body = value.get("body") if isinstance(value, dict) else value
+    paragraphs = [paragraph.strip() for paragraph in str(body or "").split("\n\n")]
+    rendered = "".join(f"<p>{escape(paragraph)}</p>" for paragraph in paragraphs if paragraph)
+    return f"<div class=narrative>{rendered}</div>" if rendered else ""
+
+
+def _retailer_label(value: object) -> str:
+    retailer_id = str(value)
+    return {
+        "walmart_us": "Walmart",
+        "aldi_us": "ALDI",
+        "amazon_us": "Amazon Same Day",
+    }.get(retailer_id, retailer_id.replace("_us", "").replace("_", " ").title())
+
+
+def _product_decisions(context: JsonObject, *, limit: int) -> str:
+    decisions = _rows(context, "product_decisions")[:limit]
+    if not decisions:
+        return ""
+    cards: list[str] = []
+    for row in decisions:
+        priority = str(row.get("priority", "parity"))
+        competitor = _retailer_label(row.get("competitor"))
+        try:
+            gap = float(row.get("median_gap", 0))
+            geographies = int(row.get("geographies", 0))
+        except (TypeError, ValueError):
+            gap = 0
+            geographies = 0
+        position = (
+            f"{competitor} is typically ${abs(gap):,.2f} cheaper"
+            if gap < 0
+            else f"Walmart is typically ${abs(gap):,.2f} cheaper"
+            if gap > 0
+            else "Typical prices are tied"
+        )
+        status = {
+            "attention": "Needs attention",
+            "protect": "Position to protect",
+            "parity": "Price parity",
+        }.get(priority, "Price position")
+        image_url = row.get("benchmark_image_url")
+        image = (
+            f'<img src="{escape(str(image_url), quote=True)}" alt="">'
+            if image_url
+            else "<div class=product-placeholder>P</div>"
+        )
+        raw_locations = row.get("top_locations", [])
+        location_html = ""
+        if isinstance(raw_locations, list):
+            labels = []
+            for location in raw_locations[:3]:
+                if not isinstance(location, dict):
+                    continue
+                label = f"ZIP {_display(location.get('zipcode'))}"
+                if location.get("store"):
+                    label += f" · store {_display(location.get('store'))}"
+                labels.append(f"<li>{escape(label)}</li>")
+            if labels:
+                location_html = f"<ul class=product-locations>{''.join(labels)}</ul>"
+        cards.append(
+            f"<article class='product-decision {escape(priority)}'>{image}<div>"
+            f"<span>{escape(status)}</span>"
+            f"<h3>{escape(_display(row.get('benchmark_product_name')))}</h3>"
+            f"<p>vs. {escape(_display(row.get('competitor_product_name')))} at "
+            f"{escape(competitor)}</p><strong>{escape(position)}</strong>"
+            f"<p>Seen across {geographies:,} comparable "
+            f"{'location' if geographies == 1 else 'locations'}.</p>{location_html}</div></article>"
+        )
+    return (
+        "<div class=product-decision-intro><h3>Products that need attention—and positions "
+        "to protect</h3><p>Ranked exact product matches. PDP data improves identity and imagery; "
+        "search evidence remains authoritative for price and location.</p></div>"
+        f"<div class=product-decisions>{''.join(cards)}</div>"
+    )
 
 
 def _percent(value: object) -> float | None:
@@ -520,9 +640,7 @@ Generated {escape(_display_generated_at(result))}</div>
         )
         kind = escape(_SECTION_EYEBROWS.get(section_kind, section_kind.replace("_", " ").title()))
         narrative = section.get("narrative")
-        narrative_html = (
-            _narrative_html(narrative.get("body")) if isinstance(narrative, dict) else ""
-        )
+        narrative_html = _narrative_html(narrative) if isinstance(narrative, dict) else ""
         metrics: list[JsonObject] = []
         metric_html = "".join(
             f"<div class=metric><span>{escape(_display(metric.get('name')))}</span>"
@@ -548,6 +666,7 @@ Generated {escape(_display_generated_at(result))}</div>
             detail = f"{chart}{_collapsed_table('View supporting detail', records)}"
         elif section_kind == "product_table":
             detail = (
+                f"{_product_decisions(presentation_context, limit=16)}"
                 f"{_product_highlights(presentation_context)}"
                 f"{_collapsed_table('View evidence-backed detail', records)}"
             )
@@ -566,7 +685,9 @@ Generated {escape(_display_generated_at(result))}</div>
                 for index, row in enumerate(records[:5])
             )
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
-        elif section_kind in {"executive_summary", "recommendations", "data_quality"}:
+        elif section_kind == "executive_summary":
+            detail = _product_decisions(presentation_context, limit=6)
+        elif section_kind in {"recommendations", "data_quality"}:
             detail = ""
         else:
             detail = _collapsed_table("View evidence-backed detail", records)

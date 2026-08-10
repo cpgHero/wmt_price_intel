@@ -199,6 +199,124 @@ def test_metric_citations_reject_direct_numbers_and_unknown_metrics() -> None:
         )
 
 
+def test_governed_product_placeholders_preserve_exact_pdp_identity_and_zip() -> None:
+    renderer = MetricCitationRenderer(
+        [{"metric_id": "gap", "value": -0.22, "unit": "USD_per_package"}]
+    )
+    rendered, claims = renderer.render(
+        "{{product:product-a|benchmark_name}} needs attention in "
+        "{{product:product-a|locations}} because ALDI is typically "
+        "{{metric:gap|currency_abs_2}} cheaper.",
+        allowed_metric_refs={"gap"},
+        allowed_product_refs={"product-a"},
+        products={
+            "product-a": {
+                "benchmark_name": "All Natural 80/20 Ground Beef, 1 lb",
+                "locations": "ZIP 72712",
+            }
+        },
+    )
+
+    assert "All Natural 80/20 Ground Beef, 1 lb" in rendered
+    assert "ZIP 72712" in rendered
+    assert "$0.22 cheaper" in rendered
+    assert claims == [{"metric_ref": "gap", "rendered_value": "$0.22", "format": "currency_abs_2"}]
+
+
+def test_structured_narrative_renders_headline_bullets_action_and_product() -> None:
+    builder = GovernedOutputBuilder(REPOSITORY_ROOT)
+    result = builder.narrative_result(
+        {
+            "sections": [
+                {
+                    "id": "executive_summary",
+                    "headline_template": "Focus the first move on the clearest product loss",
+                    "subtitle_template": (
+                        "{{product:product-a|benchmark_name}} is the most actionable item in the "
+                        "governed product evidence."
+                    ),
+                    "bullet_templates": [
+                        "ALDI is typically {{metric:gap|currency_abs_2}} cheaper in the cited "
+                        "comparable observations.",
+                        "The evidence is concentrated in {{product:product-a|locations}}, so the "
+                        "decision can remain targeted rather than category wide.",
+                    ],
+                    "implication_template": (
+                        "Review the opening price point for {{product:product-a|benchmark_name}} "
+                        "in the cited locations and monitor the same comparison after the test."
+                    ),
+                    "topic_refs": ["exact_price", "actions"],
+                    "storyline_refs": ["story.action"],
+                    "product_refs": ["product-a"],
+                    "metric_refs": ["gap"],
+                }
+            ]
+        },
+        [
+            {
+                "id": "executive_summary",
+                "heading": "Executive Summary",
+                "required_topics": ["exact_price", "actions"],
+                "storyline_refs": ["story.action"],
+                "required_storyline_refs": ["story.action"],
+                "allowed_metric_refs": ["gap"],
+                "allowed_evidence_refs": ["evidence.exact"],
+                "allowed_product_refs": ["product-a"],
+            }
+        ],
+        [
+            {
+                "metric_id": "gap",
+                "value": -0.22,
+                "unit": "USD_per_package",
+                "evidence_refs": ["evidence.exact"],
+            }
+        ],
+        {"evidence.exact"},
+        [{"id": "story.action", "headline": "Target the opening price point"}],
+        [
+            {
+                "id": "product-a",
+                "benchmark_name": "All Natural 80/20 Ground Beef, 1 lb",
+                "competitor_name": "Fresh 80/20 Ground Beef, 1 lb",
+                "locations": "ZIP 72712",
+            }
+        ],
+    )
+
+    section = result["sections"][0]
+    assert section["heading"] == "Focus the first move on the clearest product loss"
+    assert len(section["bullets"]) == 2
+    assert "$0.22 cheaper" in section["bullets"][0]
+    assert "All Natural 80/20 Ground Beef, 1 lb" in section["implication"]
+    envelope = _document("examples/agent-output.ground-beef-insight.json")
+    envelope["role"] = "narrative"
+    prompt_template = envelope["prompt_template"]
+    assert isinstance(prompt_template, dict)
+    prompt_template["id"] = "governed_narrative"
+    envelope["result"] = result
+    envelope["evidence_refs"] = ["evidence.exact"]
+    validate_instance(
+        REPOSITORY_ROOT,
+        "agent-output.schema.json",
+        envelope,
+        label="structured narrative output",
+    )
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "The signed median gap requires action.",
+        "Use ALDI response for this segment.",
+        "Treat ALDI response for the priority item.",
+    ],
+)
+def test_narrative_critic_rejects_unclear_merchant_jargon(prose: str) -> None:
+    with pytest.raises(AgentGovernanceError, match="unclear merchant jargon"):
+        NarrativeQualityCritic.validate_prose(prose)
+
+
 def test_metric_citations_accept_only_source_backed_numeric_descriptors() -> None:
     renderer = MetricCitationRenderer([])
 

@@ -31,6 +31,7 @@ from rci_analytics import (
     OfferClassifier,
     ParquetDatasetWriter,
     ProductPackLoader,
+    benchmark_product_decisions,
     benchmark_product_map_points,
     evidence_set,
 )
@@ -844,6 +845,16 @@ class AnalysisProcessor:
             evidence_sets=evidence_sets,
             raw_source_artifact_ids=raw_artifact_ids,
         )
+        map_points = benchmark_product_map_points(
+            comparison_offers,
+            map_matches,
+            benchmark_retailer=benchmark,
+        )
+        product_decisions = benchmark_product_decisions(
+            comparison_offers,
+            map_matches,
+            benchmark_retailer=benchmark,
+        )
         if (
             self._assistant is not None
             and isinstance(analysis_options, dict)
@@ -854,18 +865,17 @@ class AnalysisProcessor:
                 document,
                 product_pack=pack.document,
                 report_blueprint=blueprint.document,
+                product_decisions=product_decisions,
             )
         record = await self._results.publish(document, collection_run_id=job.collection_run_id)
-        map_points = benchmark_product_map_points(
-            comparison_offers,
-            map_matches,
-            benchmark_retailer=benchmark,
-        )
-        if map_points:
+        if map_points or product_decisions:
             await self._results.publish_publication(
                 record.analysis_id,
                 document,
-                presentation_context={"map_points": map_points},
+                presentation_context={
+                    "map_points": map_points,
+                    "product_decisions": product_decisions,
+                },
             )
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id

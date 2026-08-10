@@ -91,6 +91,7 @@ class ProductDetailRepository(Protocol):
         source_artifact_ids: list[str],
         *,
         limit: int = 8,
+        per_retailer_limit: int = 16,
     ) -> list[JsonObject]: ...
 
     async def get_run(self, run_id: str) -> ProductDetailRun | None: ...

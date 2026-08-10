@@ -58,7 +58,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
 
         generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
         assert generated.status_code == 201
-        assert generated.json()["renderer_version"] == "2.7.0"
+        assert generated.json()["renderer_version"] == "2.8.0"
         assert generated.json()["publication_id"] is None
         artifact_id = generated.json()["id"]
         artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")

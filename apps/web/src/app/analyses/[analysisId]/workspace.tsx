@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { DataTable } from "@/app/components/data-table";
 import type {
@@ -8,6 +8,7 @@ import type {
   AnalysisReportView,
   JsonObject,
   MapPoint,
+  ProductDecision,
   ProductHighlight,
   ReportSectionView,
 } from "@/lib/api";
@@ -277,9 +278,6 @@ function BlueprintAnalysisWorkspace({
           </Section>
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
-            {activeGroup === "summary" && primaryComparisons.length > 0 ? (
-              <DecisionScorecard rows={primaryComparisons} />
-            ) : null}
             {activeGroup === "geography" && reportView.map_points?.length ? (
               <AnalysisMap points={reportView.map_points} />
             ) : null}
@@ -290,15 +288,37 @@ function BlueprintAnalysisWorkspace({
             reportView.product_highlights?.length ? (
               <ProductHighlights products={reportView.product_highlights} />
             ) : null}
+            {activeGroup === "products" &&
+            reportView.product_decisions?.length ? (
+              <ProductDecisionBoard
+                rows={reportView.product_decisions}
+                title="Product-level price decisions"
+              />
+            ) : null}
             {selectedGroup.sections
               .filter((section) => section.kind !== "kpi_strip")
               .map((section) => (
-                <BlueprintSection
-                  section={section}
-                  recommendedCharts={recommendedCharts}
-                  benchmarkRetailer={reportView.benchmark_retailer}
-                  key={section.id}
-                />
+                <Fragment key={section.id}>
+                  <BlueprintSection
+                    section={section}
+                    recommendedCharts={recommendedCharts}
+                    benchmarkRetailer={reportView.benchmark_retailer}
+                  />
+                  {activeGroup === "summary" &&
+                  section.kind === "executive_summary" ? (
+                    <>
+                      {reportView.product_decisions?.length ? (
+                        <ProductDecisionBoard
+                          rows={reportView.product_decisions.slice(0, 6)}
+                          title="Products that need attention—and positions to protect"
+                        />
+                      ) : null}
+                      {primaryComparisons.length > 0 ? (
+                        <DecisionScorecard rows={primaryComparisons} />
+                      ) : null}
+                    </>
+                  ) : null}
+                </Fragment>
               ))}
           </>
         ) : (
@@ -333,12 +353,40 @@ function BlueprintSection({
   const narrativeLeads =
     Boolean(narrative.body) &&
     ["executive_summary", "recommendations"].includes(section.kind);
+  const narrativeBullets = Array.isArray(narrative.bullets)
+    ? narrative.bullets.filter((value): value is string => typeof value === "string")
+    : [];
+  const hasStructuredNarrative =
+    Boolean(narrative.subtitle) ||
+    narrativeBullets.length > 0 ||
+    Boolean(narrative.implication);
   return (
     <Section
       title={section.title}
       note={`${displayLabel(section.kind)} · ${displayLabel(section.visualization)}`}
     >
-      {narrative.body ? (
+      {hasStructuredNarrative ? (
+        <div className="section-narrative">
+          {narrative.subtitle ? (
+            <p className="narrative-subtitle">
+              {displayValue(narrative.subtitle)}
+            </p>
+          ) : null}
+          {narrativeBullets.length ? (
+            <ul>
+              {narrativeBullets.map((bullet) => (
+                <li key={bullet}>{bullet}</li>
+              ))}
+            </ul>
+          ) : null}
+          {narrative.implication ? (
+            <aside>
+              <b>What to do</b>
+              <span>{displayValue(narrative.implication)}</span>
+            </aside>
+          ) : null}
+        </div>
+      ) : narrative.body ? (
         <div className="section-narrative">
           {displayValue(narrative.body)
             .split(/\n{2,}/)
@@ -417,10 +465,83 @@ function BlueprintSection({
 function DecisionScorecard({ rows }: Readonly<{ rows: JsonObject[] }>) {
   return (
     <Section
-      title="Competitive scorecard"
-      note="Strict comparable-package outcomes by competitor; matched observations and signed price gaps remain visible for context."
+      title="Competitive position by retailer"
+      note="Comparable-package outcomes by competitor. Price differences are supporting context; product decisions above are the action surface."
     >
       <CompetitivePositionChart rows={rows} title="Competitive scorecard" />
+    </Section>
+  );
+}
+
+function ProductDecisionBoard({
+  rows,
+  title,
+}: Readonly<{ rows: ProductDecision[]; title: string }>) {
+  return (
+    <Section
+      title={title}
+      note="Ranked from exact product matches. PDP enrichment adds identity and imagery; search evidence remains authoritative for price and location."
+    >
+      <div className="product-decision-grid">
+        {rows.map((row) => {
+          const competitor = displayLabel(row.competitor);
+          const difference = Math.abs(row.median_gap).toLocaleString("en-US", {
+            style: "currency",
+            currency: "USD",
+          });
+          const position =
+            row.median_gap < 0
+              ? `${competitor} is typically ${difference} cheaper`
+              : row.median_gap > 0
+                ? `Walmart is typically ${difference} cheaper`
+                : "Typical prices are tied";
+          const locationLabels = row.top_locations.map((location) =>
+            location.store
+              ? `ZIP ${location.zipcode} · store ${location.store}`
+              : `ZIP ${location.zipcode}`,
+          );
+          return (
+            <article
+              className={`product-decision-card ${row.priority}`}
+              key={row.id}
+            >
+              <div className="product-decision-image">
+                {row.benchmark_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={row.benchmark_image_url} alt="" />
+                ) : (
+                  <span aria-hidden="true">P</span>
+                )}
+              </div>
+              <div>
+                <span className="product-decision-status">
+                  {row.priority === "attention"
+                    ? "Needs attention"
+                    : row.priority === "protect"
+                      ? "Position to protect"
+                      : "Price parity"}
+                </span>
+                <h3>{row.benchmark_product_name}</h3>
+                <p className="product-competitor">
+                  vs. {row.competitor_product_name} at {competitor}
+                </p>
+                <strong>{position}</strong>
+                <p>
+                  Seen across {row.geographies.toLocaleString()} comparable{" "}
+                  {row.geographies === 1 ? "location" : "locations"}.
+                </p>
+                {locationLabels.length ? (
+                  <ul className="product-location-list">
+                    {locationLabels.map((label) => (
+                      <li key={label}>{label}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </Section>
   );
 }
@@ -768,7 +889,7 @@ function AnalysisMap({ points }: Readonly<{ points: MapPoint[] }>) {
         </svg>
         <figcaption>
           Filter by benchmark product, then hover a point for its ZIP,
-          competitor, and signed price-gap evidence. PDP data does not drive
+          competitor, and price-difference evidence. PDP data does not drive
           these price outcomes.
         </figcaption>
       </figure>
