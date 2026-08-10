@@ -19,6 +19,7 @@ from rci_results import (
     InMemoryReportObjectStore,
     PostgresResultsRepository,
 )
+from rci_results.renderers import RENDERER_VERSION
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -70,7 +71,7 @@ async def test_postgres_result_and_report_persistence_is_idempotent_and_immutabl
 
         artifact = await service.generate_artifact(analysis_id, "html")
         assert (await service.generate_artifact(analysis_id, "html")).id == artifact.id
-        assert artifact.renderer_version == "2.8.0"
+        assert artifact.renderer_version == RENDERER_VERSION
         assert (await service.get(analysis_id)).result == document
         assert [row.id for row in await service.list_artifacts(analysis_id)] == [artifact.id]
     finally:
