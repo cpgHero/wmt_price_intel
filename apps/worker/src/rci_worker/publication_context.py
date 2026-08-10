@@ -6,8 +6,9 @@ import argparse
 import asyncio
 import json
 import os
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any
 
 from rci_analytics import (
     CanonicalOfferNormalizer,
@@ -23,6 +24,7 @@ from rci_analytics import (
     merge_product_evidence_summary,
     product_context_index,
 )
+from rci_analytics.models import ClassifiedOffer
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
@@ -58,13 +60,132 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--max-products", type=int, default=20)
     parser.add_argument("--max-points-per-product", type=int, default=150)
+    parser.add_argument("--max-quality-observations", type=int, default=160)
     parser.add_argument("--expires-in-seconds", type=int, default=86_400)
     return parser.parse_args()
 
 
+def _raw_value(row: dict[str, Any], *names: str) -> Any:
+    for name in names:
+        value = row.get(name)
+        if value is not None and str(value).strip():
+            return value
+    return None
+
+
+def _raw_quality_observation(
+    row: dict[str, Any],
+    *,
+    retailer_id: str,
+    issue: str,
+    reason: str,
+) -> dict[str, object]:
+    return {
+        "issue": issue,
+        "retailer": retailer_id,
+        "product": _raw_value(row, "title", "name", "Product Name") or "Unavailable",
+        "product_id": _raw_value(
+            row,
+            "retailer_product_id",
+            "Retailer Product Id",
+            "asin",
+            "ASIN",
+            "id",
+        ),
+        "price": _raw_value(row, "price", "Price"),
+        "zipcode": _raw_value(
+            row,
+            "zipcode",
+            "Zipcode",
+            "pickup_zipcode",
+            "shipping_delivery_zipcode",
+            "Shipping Delivery Zipcode",
+        ),
+        "store": _raw_value(
+            row,
+            "store_number",
+            "Retailer Store Id",
+            "retailer_store_id",
+            "pickup_store_id",
+        ),
+        "reason": reason,
+        "source_url": _raw_value(row, "product_url", "url", "Url"),
+        "image_url": _raw_value(row, "image_url", "image_primary", "Image Url"),
+    }
+
+
+def _offer_quality_observation(
+    classified: ClassifiedOffer,
+    *,
+    issue: str,
+    reason: str,
+) -> dict[str, object]:
+    offer = classified.offer
+    return {
+        "issue": issue,
+        "retailer": offer.retailer_id,
+        "product": offer.title,
+        "product_id": offer.retailer_product_id,
+        "price": float(offer.price) if offer.price is not None else None,
+        "zipcode": offer.zipcode,
+        "store": offer.store_number,
+        "reason": reason,
+        "source_url": offer.product_url,
+        "image_url": offer.image_url,
+    }
+
+
+def _select_quality_observations(
+    rows: list[dict[str, object]],
+    *,
+    max_rows: int,
+) -> list[dict[str, object]]:
+    """Return a stable, issue-balanced sample of source search observations."""
+
+    buckets: dict[str, list[dict[str, object]]] = defaultdict(list)
+    seen: set[tuple[str, ...]] = set()
+    for row in rows:
+        key = tuple(
+            str(row.get(field) or "")
+            for field in ("issue", "retailer", "product_id", "zipcode", "store", "reason")
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        buckets[str(row["issue"])].append(row)
+    for values in buckets.values():
+        values.sort(
+            key=lambda row: tuple(
+                str(row.get(field) or "")
+                for field in ("retailer", "product", "zipcode", "store", "reason")
+            )
+        )
+    ordered_issues = [
+        issue
+        for issue in (
+            "Missing or zero search price",
+            "Attribute review",
+            "Normalization rejected",
+        )
+        if buckets.get(issue)
+    ]
+    if not ordered_issues:
+        return []
+    quota = max(1, max_rows // len(ordered_issues))
+    selected = [row for issue in ordered_issues for row in buckets[issue][:quota]]
+    if len(selected) < max_rows:
+        remainder = [row for issue in ordered_issues for row in buckets[issue][quota:]]
+        selected.extend(remainder[: max_rows - len(selected)])
+    return selected[:max_rows]
+
+
 async def _run(args: argparse.Namespace) -> dict[str, object]:
-    if args.max_products < 1 or args.max_points_per_product < 1:
-        raise ValueError("map Product and point limits must be positive")
+    if (
+        args.max_products < 1
+        or args.max_points_per_product < 1
+        or args.max_quality_observations < 1
+    ):
+        raise ValueError("presentation context limits must be positive")
     if not 60 <= args.expires_in_seconds <= 604_800:
         raise ValueError("expires-in-seconds must be between 60 and 604800")
     settings = AppSettings.from_env()
@@ -137,6 +258,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         )
         classifier = OfferClassifier(pack)
         reducer = ComparisonInputReducer(pack, profile_ids={str(profile["id"])})
+        quality_candidates: list[dict[str, object]] = []
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
                 for row in rows:
@@ -144,19 +266,41 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         normalized = normalizer.normalize(
                             {**row, "retailer_id": historical_source.retailer_id}
                         )
-                    except ValueError:
-                        continue
-                    classified = classifier.classify(normalized)
-                    reducer.add(
-                        complete_attributes_from_pdp(
-                            classified,
-                            pdp_context.get(
-                                f"{normalized.retailer_id}:{normalized.retailer_product_id}"
-                            ),
-                            classifier=classifier,
-                            pack=pack,
+                    except ValueError as exc:
+                        quality_candidates.append(
+                            _raw_quality_observation(
+                                row,
+                                retailer_id=historical_source.retailer_id,
+                                issue="Normalization rejected",
+                                reason=str(exc),
+                            )
                         )
+                        continue
+                    classified = complete_attributes_from_pdp(
+                        classifier.classify(normalized),
+                        pdp_context.get(
+                            f"{normalized.retailer_id}:{normalized.retailer_product_id}"
+                        ),
+                        classifier=classifier,
+                        pack=pack,
                     )
+                    if normalized.price is None or normalized.price <= 0:
+                        quality_candidates.append(
+                            _offer_quality_observation(
+                                classified,
+                                issue="Missing or zero search price",
+                                reason="Search result did not contain a positive USD price",
+                            )
+                        )
+                    if classified.review_reasons:
+                        quality_candidates.append(
+                            _offer_quality_observation(
+                                classified,
+                                issue="Attribute review",
+                                reason="; ".join(classified.review_reasons),
+                            )
+                        )
+                    reducer.add(classified)
         offers = reducer.offers()
         engine = ComparisonEngine(pack)
         matches = [
@@ -220,6 +364,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             product_decisions,
             product_evidence,
         )
+        quality_observations = _select_quality_observations(
+            quality_candidates,
+            max_rows=args.max_quality_observations,
+        )
         report_store = S3ReportObjectStore(bucket=bucket, client=client)
         service = AnalysisResultService(
             results_repository,
@@ -232,6 +380,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         context = dict(previous.presentation_context) if previous is not None else {}
         context["map_points"] = map_points
         context["product_evidence"] = product_evidence
+        context["quality_observations"] = quality_observations
         context["product_decisions"] = merge_product_decision_context(
             product_decisions,
             highlights,
@@ -259,6 +408,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             "product_evidence_rows": sum(
                 len(value.get("rows", [])) for value in product_evidence.values()
             ),
+            "quality_observations": len(quality_observations),
             "mapped_benchmark_products": len(
                 {str(point["benchmark_product_id"]) for point in map_points}
             ),

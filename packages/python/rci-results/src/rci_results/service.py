@@ -115,6 +115,7 @@ class AnalysisResultService:
             "product_decisions",
             "product_evidence",
             "map_points",
+            "quality_observations",
             "notes",
         }
         if unknown_context:

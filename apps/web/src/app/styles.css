@@ -2083,10 +2083,9 @@ tbody tr:last-child td {
   align-items: center;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(260px, 2fr) minmax(150px, 0.9fr) minmax(
-      140px,
-      0.8fr
-    ) minmax(120px, 0.7fr);
+  grid-template-columns:
+    minmax(260px, 2fr) minmax(150px, 0.9fr) minmax(140px, 0.8fr)
+    minmax(120px, 0.7fr);
   padding: 0.9rem 1rem;
 }
 .segment-matrix-head {
@@ -2177,6 +2176,83 @@ tbody tr:last-child td {
   line-height: 1.55;
   margin: 0;
   max-width: 82ch;
+}
+.quality-issue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.quality-issue-strip > span {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  padding: 0.45rem 0.7rem;
+}
+.quality-issue-strip b {
+  color: var(--ink);
+  margin-right: 0.2rem;
+}
+.quality-observation-table {
+  max-height: 620px;
+}
+.quality-observation-table table {
+  font-size: 0.72rem;
+}
+.quality-observation-table th {
+  background: var(--surface-alt);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.quality-observation-table td {
+  min-width: 92px;
+  vertical-align: top;
+}
+.quality-observation-table td:nth-child(3) {
+  min-width: 290px;
+}
+.quality-observation-table td:nth-child(7) {
+  min-width: 260px;
+  white-space: normal;
+}
+.quality-issue-label {
+  background: var(--warning-soft);
+  border-radius: 999px;
+  color: var(--amber);
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0.28rem 0.45rem;
+  white-space: nowrap;
+}
+.quality-product-cell {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+.quality-product-cell img {
+  background: white;
+  border: 1px solid var(--soft-line);
+  border-radius: 8px;
+  height: 46px;
+  object-fit: contain;
+  padding: 2px;
+  width: 46px;
+}
+.quality-product-cell span {
+  display: grid;
+  gap: 0.25rem;
+}
+.quality-product-cell small,
+.quality-sample-note {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+.quality-observation-table a {
+  color: var(--green);
+  font-weight: 800;
 }
 .map-controls {
   align-items: end;

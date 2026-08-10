@@ -46,6 +46,7 @@ export function displayDate(value: string): string {
     : new Intl.DateTimeFormat("en-US", {
         dateStyle: "medium",
         timeStyle: "short",
+        timeZone: "America/Chicago",
       }).format(date);
 }
 

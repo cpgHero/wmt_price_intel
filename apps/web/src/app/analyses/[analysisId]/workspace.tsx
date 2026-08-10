@@ -14,6 +14,7 @@ import type {
   ProductDecision,
   ProductEvidenceResponse,
   ProductHighlight,
+  QualityObservation,
   ReportSectionView,
 } from "@/lib/api";
 import {
@@ -311,6 +312,7 @@ function BlueprintAnalysisWorkspace({
                     recommendedCharts={recommendedCharts}
                     benchmarkRetailer={reportView.benchmark_retailer}
                     productDecisions={reportView.product_decisions ?? []}
+                    qualityObservations={reportView.quality_observations ?? []}
                   />
                   {activeGroup === "summary" &&
                   section.kind === "executive_summary" ? (
@@ -348,16 +350,20 @@ function BlueprintSection({
   recommendedCharts,
   benchmarkRetailer,
   productDecisions,
+  qualityObservations,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
   benchmarkRetailer: string;
   productDecisions: ProductDecision[];
+  qualityObservations: QualityObservation[];
 }>) {
   const narrative = asObject(section.narrative);
   const visibleMetrics = [
     "coverage",
+    "executive_summary",
     "geographic_sensitivity",
+    "price_position",
     "segment_analysis",
     "recommendations",
     "data_quality",
@@ -374,6 +380,10 @@ function BlueprintSection({
         (value): value is string => typeof value === "string",
       )
     : [];
+  const supportingRows =
+    section.kind === "recommendations"
+      ? uniqueDecisionRows(section.records)
+      : section.records;
   const hasStructuredNarrative =
     Boolean(narrative.subtitle) ||
     narrativeBullets.length > 0 ||
@@ -452,11 +462,8 @@ function BlueprintSection({
       {section.kind === "segment_analysis" && section.records.length > 0 ? (
         <SegmentPositionMatrix rows={section.records} />
       ) : null}
-      {section.kind === "recommendations" && section.records.length > 0 ? (
-        <KeyPointCards rows={section.records} />
-      ) : null}
-      {section.kind === "data_quality" && section.records.length > 0 ? (
-        <QualityEvidence rows={section.records} />
+      {section.kind === "data_quality" ? (
+        <QualityEvidence rows={qualityObservations} />
       ) : null}
       {section.records.length > 0 &&
       section.visualization === "ranked_cards" &&
@@ -474,10 +481,10 @@ function BlueprintSection({
         !comparisonChart ? (
         <DataTable rows={section.records} />
       ) : null}
-      {comparisonChart || (narrativeLeads && section.records.length > 0) ? (
+      {comparisonChart || (narrativeLeads && supportingRows.length > 0) ? (
         <details className="evidence-disclosure report-detail">
           <summary>View supporting detail</summary>
-          <DataTable rows={section.records} />
+          <DataTable rows={supportingRows} />
         </details>
       ) : null}
       {section.evidence_sets.length > 0 ? (
@@ -555,9 +562,6 @@ function ProductDecisionBoard({
                       : "Price parity"}
                 </span>
                 <h3>{row.benchmark_product_name}</h3>
-                <p className="product-competitor">
-                  {row.benchmark_product_name}
-                </p>
                 <h3>{row.competitor_product_name}</h3>
                 <div className="product-price-pair">
                   <span>
@@ -861,8 +865,11 @@ function downloadEvidenceCsv(evidence: ProductEvidenceResponse) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${evidence.analysis_id}-${evidence.decision_id}-store-evidence.csv`;
+  anchor.hidden = true;
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 const chartCapabilityBySection: Record<string, string[]> = {
@@ -1372,6 +1379,22 @@ function SegmentPositionMatrix({ rows }: Readonly<{ rows: JsonObject[] }>) {
   );
 }
 
+function uniqueDecisionRows(rows: JsonObject[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = JSON.stringify([
+      row.summary,
+      row.action,
+      row.title,
+      row.text,
+      row.rationale,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function KeyPointCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
   return (
     <div className="key-point-list">
@@ -1402,22 +1425,113 @@ function KeyPointCards({ rows }: Readonly<{ rows: JsonObject[] }>) {
   );
 }
 
-function QualityEvidence({ rows }: Readonly<{ rows: JsonObject[] }>) {
+function QualityEvidence({ rows }: Readonly<{ rows: QualityObservation[] }>) {
+  const issueCounts = rows.reduce(
+    (counts, row) => {
+      counts[row.issue] = (counts[row.issue] ?? 0) + 1;
+      return counts;
+    },
+    {} as Record<string, number>,
+  );
   return (
     <div className="quality-evidence">
       <div className="quality-explainer">
         <span>What this page contains</span>
-        <strong>
-          Search-result records requiring interpretation or review
-        </strong>
+        <strong>Source search records behind the quality counts</strong>
         <p>
-          Product title, URL, retailer, and review reason stay together so a
-          reviewer can judge the source observation. PDP enrichment may clarify
-          identity and attributes, but never replaces store-specific search
-          price.
+          This is a representative, deterministic sample of rejected or
+          incomplete search observations—not PDP data. Product, retailer, ZIP,
+          store, source price, and the exact exclusion reason stay together so a
+          reviewer can judge what the pipeline omitted.
         </p>
       </div>
-      <DataTable rows={rows} />
+      {rows.length ? (
+        <>
+          <div
+            className="quality-issue-strip"
+            aria-label="Displayed quality records"
+          >
+            {Object.entries(issueCounts).map(([issue, count]) => (
+              <span key={issue}>
+                <b>{count.toLocaleString()}</b> {issue}
+              </span>
+            ))}
+          </div>
+          <div className="table-scroll quality-observation-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Issue</th>
+                  <th>Retailer</th>
+                  <th>Search product</th>
+                  <th>Price</th>
+                  <th>ZIP</th>
+                  <th>Store</th>
+                  <th>Reason</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr
+                    key={`${row.issue}-${row.retailer}-${row.product_id ?? index}-${row.zipcode ?? ""}-${row.store ?? ""}`}
+                  >
+                    <td>
+                      <span className="quality-issue-label">{row.issue}</span>
+                    </td>
+                    <td>{displayLabel(row.retailer)}</td>
+                    <td>
+                      <div className="quality-product-cell">
+                        {row.image_url ? (
+                          // Search-result imagery is referential evidence and remains unoptimized.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.image_url} alt="" loading="lazy" />
+                        ) : null}
+                        <span>
+                          <b>{row.product}</b>
+                          {row.product_id ? (
+                            <small>{row.product_id}</small>
+                          ) : null}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      {typeof row.price === "number"
+                        ? formatCurrency(row.price)
+                        : displayValue(row.price)}
+                    </td>
+                    <td>{displayValue(row.zipcode)}</td>
+                    <td>{displayValue(row.store)}</td>
+                    <td>{row.reason}</td>
+                    <td>
+                      {row.source_url ? (
+                        <a
+                          href={row.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open result
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="quality-sample-note">
+            Showing {rows.length.toLocaleString()} representative source
+            observations. The authoritative issue totals remain in the governed
+            narrative above.
+          </p>
+        </>
+      ) : (
+        <div className="empty-inline">
+          No source search observations were retained for this publication.
+        </div>
+      )}
     </div>
   );
 }

@@ -215,6 +215,35 @@ def test_leadership_html_renders_analysis_linked_product_map() -> None:
     assert "PDP enrichment supplies product reference detail" in html
 
 
+def test_leadership_html_links_quality_counts_to_search_observations() -> None:
+    result = _result()
+    context = {
+        "quality_observations": [
+            {
+                "issue": "Missing or zero search price",
+                "retailer": "walmart_us",
+                "product": "Fresh Ground Beef",
+                "product_id": "abc-123",
+                "price": None,
+                "zipcode": "00501",
+                "store": "0042",
+                "reason": "Search result did not contain a positive USD price",
+                "source_url": "https://example.test/product/abc-123",
+            }
+        ]
+    }
+
+    html = (
+        ArtifactRenderer(REPOSITORY_ROOT)
+        .render(result, "html", presentation_context=context)
+        .body.decode()
+    )
+
+    assert "View source search observations" in html
+    assert "Fresh Ground Beef" in html
+    assert "Missing or zero search price" in html
+
+
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:
     result = _result()
     renderer = ArtifactRenderer(REPOSITORY_ROOT)

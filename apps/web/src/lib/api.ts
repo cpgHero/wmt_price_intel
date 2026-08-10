@@ -61,7 +61,21 @@ export interface AnalysisReportView {
   product_highlights?: ProductHighlight[];
   product_decisions?: ProductDecision[];
   map_points?: MapPoint[];
+  quality_observations?: QualityObservation[];
   sections: ReportSectionView[];
+}
+
+export interface QualityObservation {
+  issue: string;
+  retailer: string;
+  product: string;
+  product_id?: string | null;
+  price?: string | number | null;
+  zipcode?: string | null;
+  store?: string | null;
+  reason: string;
+  source_url?: string | null;
+  image_url?: string | null;
 }
 
 export interface ProductDecision {

@@ -90,9 +90,11 @@ class NarrativeQualityCritic:
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} has missing or undeclared storylines"
                 )
-            products = {str(value) for value in raw.get("product_refs", [])}
+            product_refs = {str(value) for value in raw.get("product_refs", [])}
             allowed_products = {str(value) for value in request.get("allowed_product_refs", [])}
-            if allowed_products and (not products or not products.issubset(allowed_products)):
+            if allowed_products and (
+                not product_refs or not product_refs.issubset(allowed_products)
+            ):
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} has missing or undeclared products"
                 )
@@ -101,7 +103,7 @@ class NarrativeQualityCritic:
                 for value in NarrativeQualityCritic.prose_values(raw)
                 for match in _PRODUCT_PLACEHOLDER.finditer(value)
             }
-            if allowed_products and not product_placeholders.intersection(products):
+            if allowed_products and not product_placeholders.intersection(product_refs):
                 raise AgentGovernanceError(
                     f"narrative {section_id!r} does not use a governed product placeholder"
                 )

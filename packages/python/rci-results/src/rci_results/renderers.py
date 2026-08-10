@@ -17,7 +17,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.9.0"
+RENDERER_VERSION = "2.10.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -674,7 +674,12 @@ Generated {escape(_display_generated_at(result))}</div>
             detail = f"<div class=decision-cards>{cards}</div>" if cards else ""
         elif section_kind == "executive_summary":
             detail = _product_decisions(presentation_context, limit=6)
-        elif section_kind in {"recommendations", "data_quality"}:
+        elif section_kind == "data_quality":
+            detail = _collapsed_table(
+                "View source search observations",
+                _rows(presentation_context, "quality_observations"),
+            )
+        elif section_kind == "recommendations":
             detail = ""
         else:
             detail = _collapsed_table("View evidence-backed detail", records)
