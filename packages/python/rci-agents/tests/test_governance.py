@@ -317,6 +317,35 @@ def test_narrative_critic_rejects_unclear_merchant_jargon(prose: str) -> None:
         NarrativeQualityCritic.validate_prose(prose)
 
 
+@pytest.mark.parametrize(
+    ("position", "prose"),
+    [
+        (
+            "attention",
+            "Walmart also wins the named pack {{product:pair-1|benchmark_name}}.",
+        ),
+        (
+            "protect",
+            "ALDI wins the named pack {{product:pair-1|benchmark_name}}.",
+        ),
+    ],
+)
+def test_narrative_critic_rejects_product_direction_reversal(
+    position: str,
+    prose: str,
+) -> None:
+    with pytest.raises(AgentGovernanceError, match=r"reverses .* product direction"):
+        NarrativeQualityCritic.validate_product_direction(prose, {"pair-1": position})
+
+
+def test_narrative_critic_allows_aggregate_product_distinction() -> None:
+    NarrativeQualityCritic.validate_product_direction(
+        "ALDI wins the visible price on {{product:pair-1|benchmark_name}}, but Walmart is lower "
+        "across the broader segment.",
+        {"pair-1": "attention"},
+    )
+
+
 def test_metric_citations_accept_only_source_backed_numeric_descriptors() -> None:
     renderer = MetricCitationRenderer([])
 

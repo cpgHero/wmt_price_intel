@@ -43,6 +43,16 @@ _UNCLEAR_MERCHANT_PROSE = re.compile(
     r"\b[A-Za-z& ]+\s+response\s+for\b",
     flags=re.IGNORECASE,
 )
+_BENCHMARK_WIN_BEFORE_PRODUCT = re.compile(
+    r"\b(?:Walmart|benchmark)\b[^.!?;:]{0,60}"
+    r"\b(?:wins?|is lower|lower-priced|price advantage)\b[^.!?;:]{0,48}$",
+    flags=re.IGNORECASE,
+)
+_COMPETITOR_WIN_BEFORE_PRODUCT = re.compile(
+    r"\b(?:ALDI|Amazon(?: Same Day)?|competitor)\b[^.!?;:]{0,60}"
+    r"\b(?:wins?|is lower|lower-priced|price advantage)\b[^.!?;:]{0,48}$",
+    flags=re.IGNORECASE,
+)
 
 
 class AgentGovernanceError(ValueError):
@@ -56,7 +66,13 @@ class NarrativeQualityCritic:
         self,
         rows: list[JsonObject],
         requested: dict[str, JsonObject],
+        products: list[JsonObject] | None = None,
     ) -> None:
+        product_positions = {
+            str(product["id"]): str(product.get("position", "parity"))
+            for product in products or []
+            if product.get("id")
+        }
         covered_topics: set[str] = set()
         required_topics: set[str] = set()
         for raw in rows:
@@ -98,6 +114,8 @@ class NarrativeQualityCritic:
                     f"{sorted(required_storylines - storylines)}"
                 )
             prose_values = NarrativeQualityCritic.prose_values(raw)
+            for value in prose_values:
+                self.validate_product_direction(value, product_positions)
             body = " ".join(prose_values)
             minimum_length = 220 if required_storylines else 80
             if len(body) < minimum_length:
@@ -111,6 +129,21 @@ class NarrativeQualityCritic:
             raise AgentGovernanceError(
                 "narrative does not cover the complete requested leadership brief"
             )
+
+    @staticmethod
+    def validate_product_direction(value: str, product_positions: dict[str, str]) -> None:
+        for match in _PRODUCT_PLACEHOLDER.finditer(value):
+            product_ref = match.group(1)
+            position = product_positions.get(product_ref)
+            prefix = value[max(0, match.start() - 150) : match.start()]
+            if position == "attention" and _BENCHMARK_WIN_BEFORE_PRODUCT.search(prefix):
+                raise AgentGovernanceError(
+                    f"narrative reverses attention product direction for {product_ref!r}"
+                )
+            if position == "protect" and _COMPETITOR_WIN_BEFORE_PRODUCT.search(prefix):
+                raise AgentGovernanceError(
+                    f"narrative reverses protect product direction for {product_ref!r}"
+                )
 
     @staticmethod
     def validate_prose(*values: str) -> None:
@@ -393,7 +426,7 @@ class GovernedOutputBuilder:
         ):
             raise AgentGovernanceError("narrative output must return every requested section once")
         typed_rows = [dict(row) for row in rows if isinstance(row, dict)]
-        self._critic.validate(typed_rows, requested)
+        self._critic.validate(typed_rows, requested, products)
         metric_index = {str(metric["metric_id"]): metric for metric in metrics}
         storyline_index = {str(storyline["id"]): storyline for storyline in storylines}
         product_index = {str(value["id"]): value for value in (products or []) if value.get("id")}
