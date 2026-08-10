@@ -65,7 +65,7 @@ def test_narrative_decision_lenses_resolve_runtime_metric_names() -> None:
                         "comparison",
                         "competitor",
                         str(profile["geography"]),
-                        engine._comparison_metric(profile),
+                        engine.comparison_metric(str(profile["id"])),
                         str(profile["id"]),
                         "segment",
                         "matches",

@@ -70,6 +70,8 @@ def _classified():
 
 def test_strict_profile_never_crosses_package_weights() -> None:
     offers, engine = _classified()
+    assert engine.comparison_metric("strict") == "package_price"
+    assert engine.comparison_metric("unit_price") == "price_per_lb"
     matches = engine.compare(
         offers,
         benchmark_id="walmart_us",

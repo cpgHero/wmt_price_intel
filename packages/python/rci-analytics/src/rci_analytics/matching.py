@@ -79,6 +79,11 @@ class ComparisonEngine:
             )
         return self._exact_zip_matches(offers, benchmark_id, competitor_id, profile)
 
+    def comparison_metric(self, profile_id: str) -> str:
+        """Resolve a profile's configured or derived comparison metric."""
+
+        return self._comparison_metric(self.pack.profile(profile_id))
+
     def _comparison_metric(self, profile: JsonObject) -> str:
         configured = profile.get("comparison_metric")
         if configured:

@@ -116,11 +116,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             for value in record.result.get("comparison_modes", [])
             if isinstance(value, dict)
         }
+        engine = ComparisonEngine(pack)
         exact_profiles = [
             profile
             for profile in pack.matching_profiles
             if str(profile["geography"]) == "exact_zip"
-            and str(profile["comparison_metric"]) == "package_price"
+            and engine.comparison_metric(str(profile["id"])) == "package_price"
             and (not configured_modes or str(profile["id"]) in configured_modes)
         ]
         if not exact_profiles:
@@ -154,7 +155,6 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     reducer.add(classifier.classify(normalized))
         offers = reducer.offers()
         offer_index = {item.offer.offer_id: item for item in offers}
-        engine = ComparisonEngine(pack)
         matches = [
             match
             for competitor in competitors
