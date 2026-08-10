@@ -38,6 +38,7 @@ class ProductPackCatalogVersion:
     id: str
     name: str
     version: str
+    schema_version: str
     checksum: str
     document: dict[str, Any]
 
@@ -71,6 +72,7 @@ def load_product_pack_catalog_versions(root: Path) -> tuple[ProductPackCatalogVe
                 id=str(document["id"]),
                 name=str(document["name"]),
                 version=str(document["version"]),
+                schema_version=str(document.get("schema_version", "1.0.0")),
                 checksum=_canonical_checksum(document),
                 document=document,
             )
@@ -108,7 +110,7 @@ async def synchronize_product_pack_catalog(engine: AsyncEngine, root: Path) -> i
                 {
                     "id": pack.id,
                     "version": pack.version,
-                    "schema_version": str(pack.document["schema_version"]),
+                    "schema_version": pack.schema_version,
                     "config": json.dumps(pack.document, sort_keys=True),
                     "checksum": pack.checksum,
                 },
