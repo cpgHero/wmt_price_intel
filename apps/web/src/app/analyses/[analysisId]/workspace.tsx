@@ -662,7 +662,7 @@ function CompetitivePositionChart({
                     ? ` · ${geographies.toLocaleString()} geographies`
                     : ""}
                   {row["competitor - benchmark gap"]
-                    ? ` · gap ${displayValue(row["competitor - benchmark gap"])}`
+                    ? ` · typical difference ${displayValue(row["competitor - benchmark gap"])}`
                     : ""}
                 </span>
               </div>
