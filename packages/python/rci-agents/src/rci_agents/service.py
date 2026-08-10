@@ -19,6 +19,26 @@ from rci_agents.repository import AgentTaskRepository
 
 logger = logging.getLogger(__name__)
 
+_PRODUCT_NARRATIVE_SECTION_KINDS = {
+    "executive_summary",
+    "price_position",
+    "segment_analysis",
+    "product_table",
+    "recommendations",
+}
+
+
+def _product_narrative_section_ids(report_blueprint: JsonObject) -> set[str]:
+    """Return Product Pack report sections that may cite admitted decision products."""
+
+    return {
+        str(section["narrative_section_id"])
+        for section in report_blueprint.get("sections", [])
+        if isinstance(section, dict)
+        and section.get("narrative_section_id")
+        and str(section.get("kind")) in _PRODUCT_NARRATIVE_SECTION_KINDS
+    }
+
 
 class GovernedAnalysisAssistant:
     """Use models only for bounded interpretation; deterministic output is always the fallback."""
@@ -128,13 +148,7 @@ class GovernedAnalysisAssistant:
 
         narrative_sections = _rows(analysis_brief.get("requested_sections"))
         model_products = _model_products(product_decisions or [])
-        product_section_ids = {
-            "executive_summary",
-            "exact_price",
-            "normalized_price",
-            "products",
-            "recommendations",
-        }
+        product_section_ids = _product_narrative_section_ids(report_blueprint)
         if model_products:
             product_refs = [str(product["id"]) for product in model_products]
             narrative_sections = [

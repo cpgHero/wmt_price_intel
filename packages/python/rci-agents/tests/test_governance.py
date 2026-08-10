@@ -22,6 +22,7 @@ from rci_agents import (
 )
 from rci_agents.brief import _segment_display_label
 from rci_agents.governance import NarrativeQualityCritic, canonical_bytes
+from rci_agents.service import _product_narrative_section_ids
 
 from rci_contracts import validate_instance
 
@@ -805,6 +806,38 @@ def test_action_storylines_use_plain_merchant_language() -> None:
     assert headlines
     assert all("the next" not in value.casefold() for value in headlines)
     assert all(value.startswith("Review the ") for value in headlines)
+
+
+@pytest.mark.parametrize(
+    "blueprint_id",
+    [
+        "fresh_ground_beef_leadership",
+        "fresh_shell_eggs_leadership",
+        "fresh_strawberries_leadership",
+        "fresh_fluid_milk_leadership",
+        "fresh_bananas_leadership",
+    ],
+)
+def test_product_permissions_follow_report_section_kinds(blueprint_id: str) -> None:
+    blueprint = _document(f"report-blueprints/{blueprint_id}.json")
+
+    section_ids = _product_narrative_section_ids(blueprint)
+
+    expected = {
+        str(section["narrative_section_id"])
+        for section in blueprint["sections"]
+        if section.get("kind")
+        in {
+            "executive_summary",
+            "price_position",
+            "segment_analysis",
+            "product_table",
+            "recommendations",
+        }
+    }
+    assert section_ids == expected
+    assert "coverage" not in section_ids
+    assert "methodology" not in section_ids
 
 
 def test_narrative_critic_rejects_machine_oriented_labels() -> None:
