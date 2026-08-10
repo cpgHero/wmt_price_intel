@@ -567,24 +567,25 @@ class PostgresCollectionRepository:
         retailer_id: str | None = None,
         status: str | None = None,
     ) -> list[QueueTask]:
+        filters = ["collection_run_id::text = :run_id"]
+        parameters: dict[str, object] = {"run_id": run_id, "limit": limit}
+        if retailer_id is not None:
+            filters.append("retailer_id = :retailer_id")
+            parameters["retailer_id"] = retailer_id
+        if status is not None:
+            filters.append("status = :status")
+            parameters["status"] = status
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
                     text(
-                        """
+                        f"""
                         SELECT * FROM collection_task
-                        WHERE collection_run_id::text = :run_id
-                          AND (:retailer_id IS NULL OR retailer_id = :retailer_id)
-                          AND (:status IS NULL OR status = :status)
+                        WHERE {" AND ".join(filters)}
                         ORDER BY created_at, id LIMIT :limit
                         """
                     ),
-                    {
-                        "run_id": run_id,
-                        "limit": limit,
-                        "retailer_id": retailer_id,
-                        "status": status,
-                    },
+                    parameters,
                 )
             ).mappings()
             return [_task(row) for row in rows]
