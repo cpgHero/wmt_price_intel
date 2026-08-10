@@ -94,7 +94,8 @@ class ComparisonEngine:
         applicable = [
             rule
             for rule in rules
-            if rule.competitor_id == competitor_id and rule.profile_id == profile_id
+            if rule.competitor_id == competitor_id
+            and profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
         ]
         confirmed = [rule for rule in applicable if rule.decision == "confirmed"]
         rejected = {

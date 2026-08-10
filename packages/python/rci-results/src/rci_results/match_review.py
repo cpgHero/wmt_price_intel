@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
@@ -48,7 +48,8 @@ class MatchRuleRecord:
     id: str
     revision_id: str
     competitor_retailer_id: str
-    profile_id: str
+    source_profile_id: str
+    eligible_profile_ids: tuple[str, ...]
     benchmark_product_id: str
     competitor_product_id: str
     decision: str
@@ -77,6 +78,7 @@ class MatchDecisionCommand:
     decision: str
     replace_conflicts: bool = False
     reason: str | None = None
+    eligible_profile_ids: tuple[str, ...] = ()
 
 
 class MatchReviewRepository(Protocol):
@@ -128,7 +130,8 @@ def _rule(row: RowMapping | dict[str, Any]) -> MatchRuleRecord:
         id=str(row["id"]),
         revision_id=str(row["revision_id"]),
         competitor_retailer_id=str(row["competitor_retailer_id"]),
-        profile_id=str(row["profile_id"]),
+        source_profile_id=str(row["profile_id"]),
+        eligible_profile_ids=tuple(str(value) for value in row["eligible_profile_ids"]),
         benchmark_product_id=str(row["benchmark_product_id"]),
         competitor_product_id=str(row["competitor_product_id"]),
         decision=str(row["decision"]),
@@ -309,7 +312,6 @@ class PostgresMatchReviewRepository:
             for row in next_rows:
                 is_target = (
                     str(row["competitor_retailer_id"]) == command.competitor_retailer_id
-                    and str(row["profile_id"]) == command.profile_id
                     and str(row["benchmark_product_id"]) == command.benchmark_product_id
                     and str(row["competitor_product_id"]) == command.competitor_product_id
                 )
@@ -318,10 +320,12 @@ class PostgresMatchReviewRepository:
                         """
                         INSERT INTO product_match_rule (
                           revision_id, competitor_retailer_id, profile_id,
+                          eligible_profile_ids,
                           benchmark_product_id, competitor_product_id, decision,
                           origin, reason, benchmark_snapshot, competitor_snapshot
                         ) VALUES (
-                          CAST(:revision_id AS uuid), :competitor_retailer_id, :profile_id,
+                          CAST(:revision_id AS uuid), :competitor_retailer_id,
+                          :profile_id, CAST(:eligible_profile_ids AS text[]),
                           :benchmark_product_id, :competitor_product_id, :decision,
                           :origin, :reason, CAST(:benchmark_snapshot AS jsonb),
                           CAST(:competitor_snapshot AS jsonb)
@@ -331,7 +335,8 @@ class PostgresMatchReviewRepository:
                     {
                         "revision_id": revision_id,
                         "competitor_retailer_id": str(row["competitor_retailer_id"]),
-                        "profile_id": str(row["profile_id"]),
+                        "profile_id": str(row.get("source_profile_id") or row.get("profile_id")),
+                        "eligible_profile_ids": list(row["eligible_profile_ids"]),
                         "benchmark_product_id": str(row["benchmark_product_id"]),
                         "competitor_product_id": str(row["competitor_product_id"]),
                         "decision": str(row["decision"]),
@@ -377,7 +382,6 @@ class PostgresMatchReviewRepository:
         def target(row: dict[str, Any]) -> bool:
             return (
                 str(row["competitor_retailer_id"]) == command.competitor_retailer_id
-                and str(row["profile_id"]) == command.profile_id
                 and str(row["benchmark_product_id"]) == command.benchmark_product_id
                 and str(row["competitor_product_id"]) == command.competitor_product_id
             )
@@ -393,7 +397,6 @@ class PostgresMatchReviewRepository:
                 for row in remaining
                 if str(row["decision"]) == "confirmed"
                 and str(row["competitor_retailer_id"]) == command.competitor_retailer_id
-                and str(row["profile_id"]) == command.profile_id
                 and (
                     str(row["benchmark_product_id"]) == command.benchmark_product_id
                     or str(row["competitor_product_id"]) == command.competitor_product_id
@@ -416,7 +419,8 @@ class PostgresMatchReviewRepository:
             {
                 "id": str(uuid4()),
                 "competitor_retailer_id": command.competitor_retailer_id,
-                "profile_id": command.profile_id,
+                "source_profile_id": command.profile_id,
+                "eligible_profile_ids": list(command.eligible_profile_ids or (command.profile_id,)),
                 "benchmark_product_id": command.benchmark_product_id,
                 "competitor_product_id": command.competitor_product_id,
                 "decision": command.decision,
@@ -555,7 +559,8 @@ class InMemoryMatchReviewRepository:
                     id=str(row.get("id") or uuid4()),
                     revision_id=revision.id,
                     competitor_retailer_id=str(row["competitor_retailer_id"]),
-                    profile_id=str(row["profile_id"]),
+                    source_profile_id=str(row["source_profile_id"]),
+                    eligible_profile_ids=tuple(str(value) for value in row["eligible_profile_ids"]),
                     benchmark_product_id=str(row["benchmark_product_id"]),
                     competitor_product_id=str(row["competitor_product_id"]),
                     decision=str(row["decision"]),
@@ -617,12 +622,13 @@ class MatchReviewService:
             benchmark_retailer_id=benchmark,
         )
         rules = await self._repository.rules(revision.id) if revision is not None else []
-        products = self._products(context, benchmark, competitors)
         profiles = self._profiles(document)
+        products = self._products(context, benchmark, competitors, rules)
         connections = self._connections(
             context,
             rules,
             default_profile_id=(profiles[0]["id"] if profiles else "strict"),
+            profile_ids={str(profile["id"]) for profile in profiles},
         )
         connected = {
             (connection["competitor_retailer_id"], connection["competitor_product_id"])
@@ -687,11 +693,41 @@ class MatchReviewService:
         competitor_key = (command.competitor_retailer_id, command.competitor_product_id)
         if benchmark_key not in products or competitor_key not in products:
             raise ValueError("both products must be present in the analysis product catalog")
+        connection = next(
+            (
+                row
+                for row in view["connections"]
+                if str(row["competitor_retailer_id"]) == command.competitor_retailer_id
+                and str(row["benchmark_product_id"]) == command.benchmark_product_id
+                and str(row["competitor_product_id"]) == command.competitor_product_id
+            ),
+            None,
+        )
+        eligible_profile_ids = tuple(
+            sorted(
+                {
+                    command.profile_id,
+                    *(
+                        str(value)
+                        for value in (
+                            connection.get("eligible_profile_ids", [])
+                            if isinstance(connection, dict)
+                            else []
+                        )
+                        if str(value) in profile_ids
+                    ),
+                }
+            )
+        )
+        effective_command = replace(
+            command,
+            eligible_profile_ids=eligible_profile_ids,
+        )
         analysis = await self._results.get(analysis_id)
         revision = await self._repository.save_decision(
             analysis,
             benchmark_retailer_id=benchmark_id,
-            command=command,
+            command=effective_command,
             benchmark_snapshot=products[benchmark_key],
             competitor_snapshot=products[competitor_key],
             actor=actor,
@@ -728,7 +764,12 @@ class MatchReviewService:
         ]
 
     @staticmethod
-    def _products(context: JsonObject, benchmark: str, competitors: list[str]) -> list[JsonObject]:
+    def _products(
+        context: JsonObject,
+        benchmark: str,
+        competitors: list[str],
+        rules: list[MatchRuleRecord],
+    ) -> list[JsonObject]:
         products: dict[tuple[str, str], JsonObject] = {}
         allowed = {benchmark, *competitors}
         for row in context.get("product_highlights", []):
@@ -770,6 +811,27 @@ class MatchReviewService:
                         "price": row.get(f"median_{prefix}_price"),
                     },
                 )
+        for rule in rules:
+            for retailer, product_id, snapshot in (
+                (benchmark, rule.benchmark_product_id, rule.benchmark_snapshot),
+                (
+                    rule.competitor_retailer_id,
+                    rule.competitor_product_id,
+                    rule.competitor_snapshot,
+                ),
+            ):
+                if retailer not in allowed or not product_id:
+                    continue
+                products.setdefault(
+                    (retailer, product_id),
+                    {
+                        **dict(snapshot),
+                        "retailer_id": retailer,
+                        "product_id": product_id,
+                        "canonical_product_id": f"{retailer}:{product_id}",
+                        "name": str(snapshot.get("name") or product_id),
+                    },
+                )
         return sorted(
             products.values(),
             key=lambda row: (str(row["retailer_id"]), str(row["name"]), str(row["product_id"])),
@@ -781,68 +843,135 @@ class MatchReviewService:
         rules: list[MatchRuleRecord],
         *,
         default_profile_id: str,
+        profile_ids: set[str],
     ) -> list[JsonObject]:
         persisted = {
             (
                 rule.competitor_retailer_id,
-                rule.profile_id,
                 rule.benchmark_product_id,
                 rule.competitor_product_id,
             ): rule
             for rule in rules
         }
-        connections: dict[tuple[str, str, str, str], JsonObject] = {}
+        connections: dict[tuple[str, str, str], JsonObject] = {}
         candidate_rows = context.get("match_candidates", context.get("product_decisions", [])) or []
         for row in candidate_rows:
             if not isinstance(row, dict):
                 continue
             key = (
                 str(row.get("competitor") or ""),
-                default_profile_id,
                 str(row.get("benchmark_product_id") or ""),
                 str(row.get("competitor_product_id") or ""),
             )
             if not all(key):
                 continue
+            candidate_profile_id = str(row.get("profile_id") or default_profile_id)
+            if candidate_profile_id not in profile_ids:
+                continue
+            connection = connections.setdefault(
+                key,
+                {
+                    "id": str(row.get("id") or "automatic"),
+                    "competitor_retailer_id": key[0],
+                    "source_profile_id": candidate_profile_id,
+                    "eligible_profile_ids": [],
+                    "benchmark_product_id": key[1],
+                    "competitor_product_id": key[2],
+                    "status": "suggested",
+                    "origin": "automatic",
+                    "reason": str(
+                        row.get("match_rationale")
+                        or "Product Pack comparison rules admitted this pair"
+                    ),
+                    "matches": 0,
+                    "geographies": 0,
+                    "median_gap": row.get("median_gap"),
+                    "match_basis": str(row.get("match_basis") or "exact_package"),
+                    "profile_evidence": [],
+                },
+            )
+            eligible = connection["eligible_profile_ids"]
+            if isinstance(eligible, list) and candidate_profile_id not in eligible:
+                eligible.append(candidate_profile_id)
+            evidence = connection["profile_evidence"]
+            if isinstance(evidence, list):
+                evidence.append(
+                    {
+                        "profile_id": candidate_profile_id,
+                        "profile_label": str(row.get("profile_label") or candidate_profile_id),
+                        "comparison_metric": str(row.get("comparison_metric") or "package_price"),
+                        "match_basis": str(row.get("match_basis") or "exact_package"),
+                        "matches": row.get("matches"),
+                        "geographies": row.get("geographies"),
+                        "median_gap": row.get("median_gap"),
+                        "match_attributes": dict(row.get("match_attributes") or {}),
+                        "rationale": str(
+                            row.get("match_rationale")
+                            or "Product Pack comparison rules admitted this pair"
+                        ),
+                    }
+                )
+            connection["matches"] = max(
+                int(connection.get("matches") or 0), int(row.get("matches") or 0)
+            )
+            connection["geographies"] = max(
+                int(connection.get("geographies") or 0),
+                int(row.get("geographies") or 0),
+            )
+            if connection["match_basis"] != str(row.get("match_basis") or "exact_package"):
+                connection["match_basis"] = "multiple"
+
+        for key, connection in connections.items():
             rule = persisted.get(key)
-            connections[key] = {
-                "id": rule.id if rule is not None else str(row.get("id") or "automatic"),
-                "competitor_retailer_id": key[0],
-                "profile_id": key[1],
-                "benchmark_product_id": key[2],
-                "competitor_product_id": key[3],
-                "status": rule.decision if rule is not None else "suggested",
-                "origin": rule.origin if rule is not None else "automatic",
-                "reason": rule.reason if rule is not None else str(row.get("plain_insight") or ""),
-                "matches": row.get("matches"),
-                "geographies": row.get("geographies"),
-                "median_gap": row.get("median_gap"),
-            }
+            connection["eligible_profile_ids"] = sorted(
+                str(value) for value in connection["eligible_profile_ids"]
+            )
+            connection["profile_evidence"] = sorted(
+                connection["profile_evidence"], key=lambda value: str(value["profile_id"])
+            )
+            if rule is None:
+                continue
+            connection.update(
+                {
+                    "id": rule.id,
+                    "source_profile_id": rule.source_profile_id,
+                    "eligible_profile_ids": list(rule.eligible_profile_ids),
+                    "status": rule.decision,
+                    "origin": rule.origin,
+                    "reason": rule.reason or connection["reason"],
+                }
+            )
+            connection["profile_evidence"] = [
+                evidence
+                for evidence in connection["profile_evidence"]
+                if evidence["profile_id"] in rule.eligible_profile_ids
+            ]
         for key, rule in persisted.items():
             connections.setdefault(
                 key,
                 {
                     "id": rule.id,
                     "competitor_retailer_id": key[0],
-                    "profile_id": key[1],
-                    "benchmark_product_id": key[2],
-                    "competitor_product_id": key[3],
+                    "source_profile_id": rule.source_profile_id,
+                    "eligible_profile_ids": list(rule.eligible_profile_ids),
+                    "benchmark_product_id": key[1],
+                    "competitor_product_id": key[2],
                     "status": rule.decision,
                     "origin": rule.origin,
                     "reason": rule.reason,
                     "matches": None,
                     "geographies": None,
                     "median_gap": None,
+                    "match_basis": "user_defined",
+                    "profile_evidence": [],
                 },
             )
         confirmed = [row for row in connections.values() if row["status"] == "confirmed"]
         locked_benchmark = {
-            (row["competitor_retailer_id"], row["profile_id"], row["benchmark_product_id"])
-            for row in confirmed
+            (row["competitor_retailer_id"], row["benchmark_product_id"]) for row in confirmed
         }
         locked_competitor = {
-            (row["competitor_retailer_id"], row["profile_id"], row["competitor_product_id"])
-            for row in confirmed
+            (row["competitor_retailer_id"], row["competitor_product_id"]) for row in confirmed
         }
         return sorted(
             (
@@ -852,13 +981,11 @@ class MatchReviewService:
                 or (
                     (
                         row["competitor_retailer_id"],
-                        row["profile_id"],
                         row["benchmark_product_id"],
                     )
                     not in locked_benchmark
                     and (
                         row["competitor_retailer_id"],
-                        row["profile_id"],
                         row["competitor_product_id"],
                     )
                     not in locked_competitor

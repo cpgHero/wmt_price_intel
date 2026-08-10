@@ -24,6 +24,7 @@ from rci_analytics.presentation import (
     benchmark_product_decisions,
     benchmark_product_evidence,
     benchmark_product_map_points,
+    benchmark_product_match_candidates,
     merge_product_decision_context,
     merge_product_evidence_summary,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "benchmark_product_decisions",
     "benchmark_product_evidence",
     "benchmark_product_map_points",
+    "benchmark_product_match_candidates",
     "complete_attributes_from_pdp",
     "evidence_set",
     "merge_product_decision_context",

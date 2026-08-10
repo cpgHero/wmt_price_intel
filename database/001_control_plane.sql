@@ -270,6 +270,7 @@ CREATE TABLE product_match_rule (
   revision_id uuid NOT NULL REFERENCES product_match_revision(id) ON DELETE CASCADE,
   competitor_retailer_id text NOT NULL REFERENCES retailer(id),
   profile_id text NOT NULL,
+  eligible_profile_ids text[] NOT NULL CHECK (cardinality(eligible_profile_ids) > 0),
   benchmark_product_id text NOT NULL,
   competitor_product_id text NOT NULL,
   decision text NOT NULL CHECK (decision IN ('confirmed', 'rejected')),
@@ -278,14 +279,14 @@ CREATE TABLE product_match_rule (
   benchmark_snapshot jsonb NOT NULL DEFAULT '{}',
   competitor_snapshot jsonb NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(revision_id, competitor_retailer_id, profile_id,
+  UNIQUE(revision_id, competitor_retailer_id,
     benchmark_product_id, competitor_product_id)
 );
 CREATE UNIQUE INDEX product_match_rule_confirmed_benchmark_uq
-  ON product_match_rule(revision_id, competitor_retailer_id, profile_id,
+  ON product_match_rule(revision_id, competitor_retailer_id,
     benchmark_product_id) WHERE decision = 'confirmed';
 CREATE UNIQUE INDEX product_match_rule_confirmed_competitor_uq
-  ON product_match_rule(revision_id, competitor_retailer_id, profile_id,
+  ON product_match_rule(revision_id, competitor_retailer_id,
     competitor_product_id) WHERE decision = 'confirmed';
 
 CREATE TABLE product_match_review_event (

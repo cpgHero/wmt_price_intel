@@ -34,6 +34,7 @@ from rci_analytics import (
     ProductPackLoader,
     benchmark_product_decisions,
     benchmark_product_map_points,
+    benchmark_product_match_candidates,
     evidence_set,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
@@ -564,10 +565,11 @@ class AnalysisProcessor:
             governed_rules = [
                 ProductMatchRule(
                     competitor_id=rule.competitor_retailer_id,
-                    profile_id=rule.profile_id,
+                    profile_id=rule.source_profile_id,
                     benchmark_product_id=rule.benchmark_product_id,
                     competitor_product_id=rule.competitor_product_id,
                     decision=rule.decision,
+                    eligible_profile_ids=rule.eligible_profile_ids,
                 )
                 for rule in await self._match_reviews.rules(job.match_revision_id)
             ]
@@ -715,6 +717,7 @@ class AnalysisProcessor:
         comparison_facts: list[ComparisonFact] = []
         comparison_evidence_sets: list[dict[str, Any]] = []
         map_matches: list[MatchRecord] = []
+        review_matches: list[MatchRecord] = []
         headline_segments = tuple(str(value) for value in pack.reporting["headline_segments"])
         for competitor in competitors:
             mapped_competitor = False
@@ -750,6 +753,8 @@ class AnalysisProcessor:
                 evidence_ref = f"evidence.matches.{competitor}.{profile_id}"
                 geography = str(profile["geography"])
                 comparison_metric = matches[0].comparison_metric
+                if geography == "exact_zip":
+                    review_matches.extend(matches)
                 if (
                     not mapped_competitor
                     and geography == "exact_zip"
@@ -913,10 +918,11 @@ class AnalysisProcessor:
             map_matches,
             benchmark_retailer=benchmark,
         )
-        match_candidates = benchmark_product_decisions(
+        match_candidates = benchmark_product_match_candidates(
             comparison_offers,
-            map_matches,
+            review_matches,
             benchmark_retailer=benchmark,
+            profiles=selected_profiles,
             max_rows=2_000,
             max_locations_per_row=1,
         )

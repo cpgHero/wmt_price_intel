@@ -40,6 +40,12 @@ def _analysis() -> AnalysisRecord:
                     "comparison_metric": "package_price",
                 },
                 {
+                    "profile_id": "unit_price",
+                    "label": "Price per pound",
+                    "geography": "exact_zip",
+                    "comparison_metric": "price_per_lb",
+                },
+                {
                     "profile_id": "radius",
                     "label": "Radius",
                     "geography": "radius",
@@ -89,9 +95,13 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "price": 4.79,
                 },
             ],
-            "product_decisions": [
+            "match_candidates": [
                 {
                     "id": "automatic-w1-a1",
+                    "profile_id": "strict",
+                    "profile_label": "Strict exact package",
+                    "comparison_metric": "package_price",
+                    "match_basis": "exact_package",
                     "competitor": "aldi_us",
                     "benchmark_product_id": "w1",
                     "benchmark_product_name": "Walmart 93/7 Ground Beef",
@@ -100,8 +110,28 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "matches": 120,
                     "geographies": 100,
                     "median_gap": -0.18,
+                    "match_attributes": {"lean_pct": 93, "fat_pct": 7},
+                    "match_rationale": "Product Pack attributes align on lean and fat",
                     "plain_insight": "ALDI is lower in the matched markets.",
-                }
+                },
+                {
+                    "id": "automatic-w1-a1-unit",
+                    "profile_id": "unit_price",
+                    "profile_label": "Price per pound",
+                    "comparison_metric": "price_per_lb",
+                    "match_basis": "normalized_unit",
+                    "competitor": "aldi_us",
+                    "benchmark_product_id": "w1",
+                    "benchmark_product_name": "Walmart 93/7 Ground Beef",
+                    "competitor_product_id": "a1",
+                    "competitor_product_name": "ALDI 93/7 Ground Beef",
+                    "matches": 118,
+                    "geographies": 98,
+                    "median_gap": -0.08,
+                    "match_attributes": {"lean_pct": 93, "fat_pct": 7},
+                    "match_rationale": "Product Pack attributes align on lean and fat",
+                    "plain_insight": "ALDI has a lower normalized unit price.",
+                },
             ],
         },
         created_at=datetime.now(UTC),
@@ -125,13 +155,14 @@ def _command(
     revision: int,
     benchmark: str = "w1",
     competitor: str = "a1",
+    profile: str = "strict",
     decision: str = "confirmed",
     replace: bool = False,
 ) -> MatchDecisionCommand:
     return MatchDecisionCommand(
         expected_revision=revision,
         competitor_retailer_id="aldi_us",
-        profile_id="strict",
+        profile_id=profile,
         benchmark_product_id=benchmark,
         competitor_product_id=competitor,
         decision=decision,
@@ -154,7 +185,9 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
     )
     assert initial["revision"] == 0
     assert initial["summary"]["suggested"] == 1
-    assert [row["id"] for row in initial["profiles"]] == ["strict"]
+    assert [row["id"] for row in initial["profiles"]] == ["strict", "unit_price"]
+    assert initial["connections"][0]["eligible_profile_ids"] == ["strict", "unit_price"]
+    assert len(initial["connections"][0]["profile_evidence"]) == 2
 
     saved = await service.decide(
         "fresh-ground-beef-example", _command(revision=0), actor="reviewer@example.test"
@@ -181,13 +214,19 @@ async def test_match_review_is_optimistic_and_strictly_one_to_one() -> None:
     with pytest.raises(MatchOneToOneConflictError):
         await service.decide(
             "analysis",
-            _command(revision=1, benchmark="w1", competitor="a2"),
+            _command(revision=1, benchmark="w1", competitor="a2", profile="unit_price"),
             actor="reviewer",
         )
 
     await service.decide(
         "analysis",
-        _command(revision=1, benchmark="w1", competitor="a2", replace=True),
+        _command(
+            revision=1,
+            benchmark="w1",
+            competitor="a2",
+            profile="unit_price",
+            replace=True,
+        ),
         actor="reviewer",
     )
     reviewed = await service.view("analysis")

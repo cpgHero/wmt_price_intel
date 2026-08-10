@@ -147,6 +147,28 @@ def test_governed_confirmation_replaces_conflicting_automatic_pairs() -> None:
     assert product_pairs == {("w-1", "a-2"), ("w-o", "a-o")}
 
 
+def test_governed_relationship_applies_to_every_eligible_profile() -> None:
+    offers, engine = _classified()
+    rule = ProductMatchRule(
+        competitor_id="aldi_us",
+        profile_id="strict",
+        benchmark_product_id="w-1",
+        competitor_product_id="a-2",
+        decision="confirmed",
+        eligible_profile_ids=("strict", "unit_price"),
+    )
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="unit_price",
+        rules=[rule],
+    )
+
+    assert any(match.attributes.get("_match_origin") == "user_confirmed" for match in matches)
+
+
 def test_governed_rejection_removes_only_the_rejected_pair() -> None:
     offers, engine = _classified()
 

@@ -8,6 +8,7 @@ from rci_analytics.presentation import (
     benchmark_product_decisions,
     benchmark_product_evidence,
     benchmark_product_map_points,
+    benchmark_product_match_candidates,
     merge_product_decision_context,
     merge_product_evidence_summary,
 )
@@ -137,6 +138,61 @@ def test_product_decisions_prioritize_losses_and_name_locations() -> None:
     assert decisions[0]["plain_insight"] == "Competitor is typically $0.38 lower"
     assert decisions[0]["geographies"] == 2
     assert decisions[0]["top_locations"][0]["zipcode"] == "72712"
+    assert decisions[0]["match_attributes"] == {"size": "1 lb"}
+
+
+def test_match_candidates_preserve_profile_eligibility_without_inventing_pairs() -> None:
+    benchmark = [_offer("store-a", "100", -94.2)]
+    competitor = [
+        ClassifiedOffer(
+            offer=replace(
+                benchmark[0].offer,
+                offer_id="competitor-store-a",
+                retailer_id="aldi_us",
+                retailer_product_id="aldi-100",
+                title="ALDI comparison product",
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={"size": "1 lb"},
+            metrics={},
+            review_reasons=(),
+        )
+    ]
+    strict = _match("store-a", "aldi_us", "-0.50")
+    unit = replace(
+        strict,
+        profile_id="unit_price",
+        comparison_metric="price_per_lb",
+        gap=Decimal("-0.25"),
+    )
+
+    candidates = benchmark_product_match_candidates(
+        [*benchmark, *competitor],
+        [strict, unit],
+        benchmark_retailer="walmart_us",
+        profiles=[
+            {
+                "id": "strict",
+                "label": "Exact package",
+                "geography": "exact_zip",
+                "comparison_metric": "package_price",
+            },
+            {
+                "id": "unit_price",
+                "label": "Price per pound",
+                "geography": "exact_zip",
+                "comparison_metric": "price_per_lb",
+            },
+        ],
+    )
+
+    assert [row["profile_id"] for row in candidates] == ["strict", "unit_price"]
+    assert [row["match_basis"] for row in candidates] == [
+        "exact_package",
+        "normalized_unit",
+    ]
+    assert all("size" in str(row["match_rationale"]) for row in candidates)
 
 
 def test_presentation_excludes_mismatched_weighted_multipacks() -> None:

@@ -103,6 +103,7 @@ class ProductMatchRule:
     benchmark_product_id: str
     competitor_product_id: str
     decision: str
+    eligible_profile_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

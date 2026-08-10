@@ -9,10 +9,13 @@ changed.
 
 ## Integrity contract
 
-- An active price match is one benchmark product to one competitor product per organization,
-  Product Pack version, competitor retailer, and comparison profile.
-- A benchmark product and competitor product may each participate in at most one confirmed match
-  in that scope. Database partial unique indexes enforce both sides of the relationship.
+- An active price match is one reference-retailer product to one competitor product per
+  organization, Product Pack version, and competitor retailer. Phase 9.9.2a makes the
+  relationship independent of the display lens and records the exact comparison profiles for
+  which deterministic Product Pack evidence makes it eligible.
+- A reference-retailer product and competitor product may each participate in at most one
+  confirmed match in that scope, across all comparison profiles. Database partial unique indexes
+  enforce both sides of the relationship.
 - A benchmark product may be matched separately in different competitor-retailer tabs.
 - Confirmed user decisions take precedence over automated candidates. Rejected pairs are removed
   from automated output. New products remain eligible for generic Product Pack matching.
@@ -46,8 +49,9 @@ counts, medians, rates, conversions, or geographic outcomes.
 
 ## User experience
 
-- Competitor products appear on the left and the named reference-retailer products on the right.
-- Each competitor retailer has a tab; the comparison profile is explicit.
+- The named reference-retailer products appear on the left and competitor products on the right.
+- Each competitor retailer has a tab; the comparison lens filters profile eligibility but does
+  not require the same relationship to be reviewed repeatedly.
 - Product cards show retailer, product ID, PDP-backed identity and image, current match state, and
   retained price-evidence counts.
 - Analysts can drag or select two products to connect them, confirm an automated suggestion, reject

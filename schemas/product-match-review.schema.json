@@ -92,16 +92,25 @@
       "additionalProperties": false,
       "required": [
         "competitor_retailer_id",
-        "profile_id",
+        "source_profile_id",
+        "eligible_profile_ids",
         "benchmark_product_id",
         "competitor_product_id",
         "status",
-        "origin"
+        "origin",
+        "match_basis",
+        "profile_evidence"
       ],
       "properties": {
         "id": { "type": ["string", "null"] },
         "competitor_retailer_id": { "type": "string", "minLength": 1 },
-        "profile_id": { "type": "string", "minLength": 1 },
+        "source_profile_id": { "type": "string", "minLength": 1 },
+        "eligible_profile_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
         "benchmark_product_id": { "type": "string", "minLength": 1 },
         "competitor_product_id": { "type": "string", "minLength": 1 },
         "status": { "enum": ["suggested", "confirmed", "rejected"] },
@@ -110,6 +119,37 @@
         "matches": { "type": ["integer", "null"], "minimum": 0 },
         "geographies": { "type": ["integer", "null"], "minimum": 0 },
         "median_gap": { "type": ["number", "null"] }
+        ,
+        "match_basis": {
+          "enum": ["exact_package", "normalized_unit", "multiple", "user_defined"]
+        },
+        "profile_evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/profileEvidence" }
+        }
+      }
+    },
+    "profileEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_label",
+        "comparison_metric",
+        "match_basis",
+        "match_attributes",
+        "rationale"
+      ],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "profile_label": { "type": "string", "minLength": 1 },
+        "comparison_metric": { "type": "string", "minLength": 1 },
+        "match_basis": { "enum": ["exact_package", "normalized_unit"] },
+        "matches": { "type": ["integer", "null"], "minimum": 0 },
+        "geographies": { "type": ["integer", "null"], "minimum": 0 },
+        "median_gap": { "type": ["number", "null"] },
+        "match_attributes": { "type": "object" },
+        "rationale": { "type": "string", "minLength": 1 }
       }
     }
   }

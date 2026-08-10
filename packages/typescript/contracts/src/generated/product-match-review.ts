@@ -42,7 +42,11 @@ export interface Product {
 export interface Connection {
   id?: string | null;
   competitor_retailer_id: string;
-  profile_id: string;
+  source_profile_id: string;
+  /**
+   * @minItems 1
+   */
+  eligible_profile_ids: [string, ...string[]];
   benchmark_product_id: string;
   competitor_product_id: string;
   status: "suggested" | "confirmed" | "rejected";
@@ -51,4 +55,19 @@ export interface Connection {
   matches?: number | null;
   geographies?: number | null;
   median_gap?: number | null;
+  match_basis: "exact_package" | "normalized_unit" | "multiple" | "user_defined";
+  profile_evidence: ProfileEvidence[];
+}
+export interface ProfileEvidence {
+  profile_id: string;
+  profile_label: string;
+  comparison_metric: string;
+  match_basis: "exact_package" | "normalized_unit";
+  matches?: number | null;
+  geographies?: number | null;
+  median_gap?: number | null;
+  match_attributes: {
+    [k: string]: unknown;
+  };
+  rationale: string;
 }

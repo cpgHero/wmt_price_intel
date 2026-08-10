@@ -19,6 +19,7 @@ from rci_analytics import (
     benchmark_product_decisions,
     benchmark_product_evidence,
     benchmark_product_map_points,
+    benchmark_product_match_candidates,
     complete_attributes_from_pdp,
     merge_product_decision_context,
     merge_product_evidence_summary,
@@ -224,6 +225,14 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         }
         engine = ComparisonEngine(pack)
         profile = primary_exact_profile(pack, configured_profile_ids=configured_modes)
+        review_profiles = [
+            value
+            for value in pack.matching_profiles
+            if str(value.get("id")) in configured_modes
+            and str(value.get("geography")) == "exact_zip"
+        ]
+        if not review_profiles:
+            review_profiles = [profile]
         queue = PostgresAnalysisQueue(
             database.engine,
             code_version=settings.app_version or APP_VERSION,
@@ -243,7 +252,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
         )
         classifier = OfferClassifier(pack)
-        reducer = ComparisonInputReducer(pack, profile_ids={str(profile["id"])})
+        reducer = ComparisonInputReducer(
+            pack,
+            profile_ids={str(value["id"]) for value in review_profiles},
+        )
         quality_candidates: list[dict[str, object]] = []
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
@@ -300,6 +312,17 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 profile_id=str(profile["id"]),
             )
         ]
+        review_matches = [
+            match
+            for review_profile in review_profiles
+            for competitor in competitors
+            for match in engine.compare(
+                offers,
+                benchmark_id=benchmark,
+                competitor_id=competitor,
+                profile_id=str(review_profile["id"]),
+            )
+        ]
         map_points = benchmark_product_map_points(
             offers,
             matches,
@@ -312,10 +335,11 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             matches,
             benchmark_retailer=benchmark,
         )
-        match_candidates = benchmark_product_decisions(
+        match_candidates = benchmark_product_match_candidates(
             offers,
-            matches,
+            review_matches,
             benchmark_retailer=benchmark,
+            profiles=review_profiles,
             max_rows=2_000,
             max_locations_per_row=1,
         )

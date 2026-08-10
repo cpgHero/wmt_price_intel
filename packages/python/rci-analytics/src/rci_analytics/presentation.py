@@ -172,6 +172,11 @@ def benchmark_product_decisions(
                 ),
                 "median_gap": float(median_gap),
                 "plain_insight": lead,
+                "match_attributes": {
+                    str(name): value
+                    for name, value in match_rows[0].attributes.items()
+                    if not str(name).startswith("_")
+                },
                 "top_locations": top_locations,
             }
         )
@@ -205,6 +210,88 @@ def benchmark_product_decisions(
         if str(row["id"]) not in selected_ids
     )
     return selected[:max_rows]
+
+
+def benchmark_product_match_candidates(
+    offers: Iterable[ClassifiedOffer],
+    matches: Iterable[MatchRecord],
+    *,
+    benchmark_retailer: str,
+    profiles: Iterable[JsonObject],
+    max_rows: int = 2_000,
+    max_locations_per_row: int = 1,
+) -> list[JsonObject]:
+    """Project review candidates for every exact-geography comparison profile.
+
+    A product relationship is emitted once per eligible profile here so the review
+    service can combine identical pairs into a single governed relationship with
+    deterministic lens-eligibility evidence. This projection never infers a match;
+    it only annotates match rows already admitted by the Product Pack engine.
+    """
+
+    if max_rows < 1 or max_locations_per_row < 1:
+        raise ValueError("product match candidate limits must be positive")
+    profile_index = {
+        str(profile["id"]): profile
+        for profile in profiles
+        if str(profile.get("geography") or "") == "exact_zip"
+    }
+    grouped_matches: dict[str, list[MatchRecord]] = {}
+    for match in matches:
+        if match.profile_id in profile_index:
+            grouped_matches.setdefault(match.profile_id, []).append(match)
+
+    candidates: list[JsonObject] = []
+    for profile_id, profile in profile_index.items():
+        profile_matches = grouped_matches.get(profile_id, [])
+        if not profile_matches:
+            continue
+        comparison_metric = str(
+            profile.get("comparison_metric") or profile_matches[0].comparison_metric
+        )
+        for row in benchmark_product_decisions(
+            offers,
+            profile_matches,
+            benchmark_retailer=benchmark_retailer,
+            max_rows=max_rows,
+            max_locations_per_row=max_locations_per_row,
+        ):
+            attributes = row.get("match_attributes", {})
+            attribute_names = [
+                str(name).replace("_", " ")
+                for name, value in sorted(
+                    attributes.items() if isinstance(attributes, dict) else []
+                )
+                if value is not None and str(value).strip()
+            ]
+            candidates.append(
+                {
+                    **row,
+                    "profile_id": profile_id,
+                    "profile_label": str(profile.get("label") or profile_id),
+                    "comparison_metric": comparison_metric,
+                    "match_basis": (
+                        "exact_package"
+                        if comparison_metric == "package_price"
+                        else "normalized_unit"
+                    ),
+                    "match_rationale": (
+                        "Product Pack attributes align on " + ", ".join(attribute_names)
+                        if attribute_names
+                        else "Product Pack comparison rules admitted this pair"
+                    ),
+                }
+            )
+
+    return sorted(
+        candidates,
+        key=lambda row: (
+            str(row["competitor"]),
+            str(row["benchmark_product_id"]),
+            str(row["competitor_product_id"]),
+            str(row["profile_id"]),
+        ),
+    )[:max_rows]
 
 
 def benchmark_product_evidence(

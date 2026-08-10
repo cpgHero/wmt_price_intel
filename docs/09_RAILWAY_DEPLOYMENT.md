@@ -173,7 +173,7 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at `0013_governed_ai`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at `0018_match_lens_eligibility`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
