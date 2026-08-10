@@ -65,6 +65,22 @@ export function scopeMatchReview(
       !connection.eligible_profile_ids.includes(profileId),
   );
   const crossLensMemberships: Record<string, CrossLensMembership[]> = {};
+  const addCrossLensMembership = (
+    key: string,
+    membership: CrossLensMembership,
+  ) => {
+    const memberships = (crossLensMemberships[key] ||= []);
+    const existing = memberships.find(
+      (candidate) => candidate.profileId === membership.profileId,
+    );
+    if (!existing) {
+      memberships.push(membership);
+      return;
+    }
+    if (membership.status === "confirmed" && existing.status !== "confirmed") {
+      Object.assign(existing, membership);
+    }
+  };
   for (const connection of review.connections) {
     if (
       connection.competitor_retailer_id !== competitorId ||
@@ -82,9 +98,9 @@ export function scopeMatchReview(
         counterpartProductId: connection.competitor_product_id,
       } satisfies CrossLensMembership;
       const benchmarkKey = `${review.benchmark_retailer.id}:${connection.benchmark_product_id}`;
-      (crossLensMemberships[benchmarkKey] ||= []).push(membership);
+      addCrossLensMembership(benchmarkKey, membership);
       const competitorKey = `${competitorId}:${connection.competitor_product_id}`;
-      (crossLensMemberships[competitorKey] ||= []).push({
+      addCrossLensMembership(competitorKey, {
         ...membership,
         counterpartProductId: connection.benchmark_product_id,
       });

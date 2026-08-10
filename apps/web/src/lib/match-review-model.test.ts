@@ -146,4 +146,24 @@ describe("match review scope", () => {
       },
     ]);
   });
+
+  it("shows one cross-lens indicator per lens when a product has several suggestions", () => {
+    const multipleSuggestions = structuredClone(review);
+    multipleSuggestions.connections[0].eligible_profile_ids = ["unit"];
+    multipleSuggestions.connections.push({
+      ...structuredClone(multipleSuggestions.connections[0]),
+      competitor_product_id: "a2",
+    });
+
+    const scope = scopeMatchReview(multipleSuggestions, "aldi_us", "strict");
+
+    expect(scope.crossLensMemberships["walmart_us:w1"]).toEqual([
+      {
+        profileId: "unit",
+        profileLabel: "Price per pound",
+        status: "suggested",
+        counterpartProductId: "a1",
+      },
+    ]);
+  });
 });
