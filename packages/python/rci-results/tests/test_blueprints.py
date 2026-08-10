@@ -9,7 +9,12 @@ from zipfile import ZipFile
 
 import pytest
 
-from rci_results import AnalysisResultValidator, ArtifactRenderer, ReportBlueprintLoader
+from rci_results import (
+    AnalysisResultValidator,
+    ArtifactRenderer,
+    ReportBlueprintLoader,
+    ReportViewValidator,
+)
 from rci_results.blueprints import ReportProjector, _segment_display_label
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -50,6 +55,12 @@ def test_v2_contract_resolves_every_metric_and_evidence_reference() -> None:
     validated = AnalysisResultValidator(REPOSITORY_ROOT).validate(result)
 
     assert validated == result
+
+
+def test_report_view_contract_validates_canonical_delivery_fixture() -> None:
+    document = json.loads((REPOSITORY_ROOT / "examples/report-view.ground-beef.json").read_text())
+
+    assert ReportViewValidator(REPOSITORY_ROOT).validate(document) == document
 
 
 def test_evidence_retailer_annotation_prefers_exact_ids_and_safe_unique_roots() -> None:
@@ -98,15 +109,14 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         "Methodology & Caveats",
     ]
     assert [(group["id"], group["label"]) for group in view["groups"]] == [
-        ("summary", "Summary"),
-        ("geography", "Geography"),
-        ("price", "Price"),
-        ("segments", "Segments"),
+        ("overview", "Overview"),
+        ("price-segments", "Price & Segments"),
         ("products", "Products"),
+        ("geography", "Geography"),
         ("assortment", "Assortment"),
-        ("opportunities", "Opportunities"),
-        ("quality", "Quality"),
-        ("methodology", "Methodology"),
+        ("match-review", "Match Review"),
+        ("quality-methodology", "Quality & Methodology"),
+        ("exports", "Exports"),
     ]
     assert view["retailer_scope"] == {
         "benchmark": {"id": "walmart_us", "name": "Walmart (US)"},
@@ -119,6 +129,11 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         "aldi_us",
         "amazon_us_same_day",
     ]
+    assert view["schema_version"] == "1.0.0"
+    assert view["comparison_bases"][0]["profile_id"] == "strict_exact_package"
+    assert view["retailer_scorecards"][0]["basis_status"] == "preferred"
+    assert view["retailer_scorecards"][0]["dominant_outcome"] == "competitor_lower"
+    assert view["report_readiness"]["status"] == "ready"
     assert view["retailer_scorecards"][0]["matches"] == 9049
     assert view["retailer_scorecards"][0]["competitor_lower_rate"] == pytest.approx(0.8414189413)
     assert view["retailer_scorecards"][1]["benchmark_lower_rate"] == pytest.approx(0.9363920751)
@@ -143,7 +158,10 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert b"Normalized Price-per-Pound View" in html.body
     assert b"ALDI pressure is concentrated" in html.body
     assert b"Decision KPIs" not in html.body
-    assert b">Summary</a>" in html.body
+    assert b">Overview</a>" in html.body
+    assert b"Decision readiness" in html.body
+    assert b"Product relationship review" in html.body
+    assert b"Export manifest" in html.body
     assert b"Retailer scorecard" in html.body
     assert b"id=report-competitor" in html.body
     assert b"data-competitor-id='aldi_us'" in html.body
@@ -164,6 +182,12 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
             b"Geography",
             b"Data Quality",
             b"Methodology",
+            b"Report Readiness",
+            b"Comparison Bases",
+            b"Product Decisions",
+            b"Suppressed Decisions",
+            b"Match Relationships",
+            b"Match Governance",
             b"Artifact Manifest",
         ):
             assert name in workbook_xml
@@ -178,6 +202,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert "Fresh Ground Beef" in str(email["Subject"])
     assert "Prioritize" in email.get_body(preferencelist=("plain",)).get_content()
     assert "Retailer scorecard" in email.get_body(preferencelist=("plain",)).get_content()
+    assert "Report integrity" in email.get_body(preferencelist=("plain",)).get_content()
     attachments = list(email.iter_attachments())
     assert [attachment.get_filename() for attachment in attachments] == [
         "ground-beef-2026-08-07-example-report.html"
@@ -188,6 +213,59 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     with ZipFile(BytesIO(audit.body)) as archive:
         assert "analysis-result.json" in archive.namelist()
         assert json.loads(archive.read("analysis-result.json")) == result
+
+
+def test_report_readiness_blocks_ambiguous_relationship_groups() -> None:
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        _result(),
+        presentation_context={
+            "match_relationships": [],
+            "ambiguous_match_groups": [
+                {
+                    "candidate_group_id": "candidate-1",
+                    "competitor_id": "aldi_us",
+                    "candidates": [],
+                }
+            ],
+            "suppressed_product_decisions": [],
+        },
+    )
+
+    assert view["match_governance"]["ambiguous"] == 1
+    assert view["report_readiness"]["status"] == "review_required"
+    assert view["report_readiness"]["blocking_reasons"][0]["code"] == (
+        "ambiguous_product_relationships"
+    )
+
+
+def test_sparse_suppressed_product_decisions_warn_without_blocking_report() -> None:
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        _result(),
+        presentation_context={
+            "match_relationships": [],
+            "ambiguous_match_groups": [],
+            "suppressed_product_decisions": [
+                {
+                    "id": "sparse-pair",
+                    "benchmark_product_id": "100",
+                    "competitor_product_id": "200",
+                    "competitor": "aldi_us",
+                    "suppression_reasons": ["Only 8 retained observations; 25 are required"],
+                }
+            ],
+        },
+    )
+
+    assert view["report_readiness"]["status"] == "ready"
+    assert view["report_readiness"]["blocking_reasons"] == []
+    assert view["report_readiness"]["warnings"][0]["code"] == (
+        "sparse_product_decisions_suppressed"
+    )
+
+
+def test_parity_is_a_first_class_dominant_outcome() -> None:
+    assert ReportProjector._dominant_outcome(0.0, 0.0, 1.0) == "parity"
+    assert ReportProjector._dominant_outcome(0.4, 0.4, 0.2) == "competitor_lower"
 
 
 def test_leadership_html_prioritizes_governed_narrative_and_visible_comparisons() -> None:
@@ -457,15 +535,14 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     )
 
     expected_groups = [
-        "Summary",
-        "Geography",
-        "Price",
-        "Segments",
+        "Overview",
+        "Price &amp; Segments",
         "Products",
+        "Geography",
         "Assortment",
-        "Opportunities",
-        "Quality",
-        "Methodology",
+        "Match Review",
+        "Quality &amp; Methodology",
+        "Exports",
     ]
     assert all(f">{label}</a>" in html for label in expected_groups)
     assert "Product-level price evidence" in html
@@ -476,6 +553,9 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     assert "00501" in html
     assert "Product relationship and whitespace scorecard" in html
     assert "Four governed product relationships were observed." in html
+    assert "Decision readiness" in html
+    assert "Product relationship review" in html
+    assert "Export manifest" in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:

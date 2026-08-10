@@ -49,6 +49,10 @@ const agentPromptValidator = await validator("agent-prompt.schema.json");
 const reportBlueprintValidator = await validator(
   "report-blueprint.schema.json",
 );
+const reportViewValidator = await validator("report-view.schema.json");
+const productMatchReviewValidator = await validator(
+  "product-match-review.schema.json",
+);
 const historicalInputManifestValidator = await validator(
   "historical-input-manifest.schema.json",
 );
@@ -130,6 +134,16 @@ await assertValid(
   reportBlueprintValidator,
   await loadJson("examples", "report-blueprint.ground-beef.json"),
   "report blueprint",
+);
+await assertValid(
+  reportViewValidator,
+  await loadJson("examples", "report-view.ground-beef.json"),
+  "report view",
+);
+await assertValid(
+  productMatchReviewValidator,
+  await loadJson("examples", "product-match-review.ground-beef.json"),
+  "product match review",
 );
 const historicalInputManifestFiles = exampleFiles
   .filter(

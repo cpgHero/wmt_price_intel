@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import statistics
 from collections.abc import Iterable
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
@@ -16,6 +18,259 @@ from rci_analytics.models import (
     ProductMatchRule,
 )
 from rci_analytics.product_pack import ProductPack
+
+
+@dataclass(frozen=True, slots=True)
+class MatchRelationshipResolution:
+    """One-to-one relationship projection over Product Pack-admitted matches."""
+
+    matches: tuple[MatchRecord, ...]
+    relationships: tuple[JsonObject, ...]
+    ambiguous_groups: tuple[JsonObject, ...]
+
+
+def _maximum_matching(
+    edges: set[tuple[str, str]],
+    *,
+    omitted: tuple[str, str] | None = None,
+) -> dict[str, str]:
+    adjacency: dict[str, list[str]] = {}
+    for benchmark_product_id, competitor_product_id in sorted(edges):
+        if (benchmark_product_id, competitor_product_id) == omitted:
+            continue
+        adjacency.setdefault(benchmark_product_id, []).append(competitor_product_id)
+    competitor_to_benchmark: dict[str, str] = {}
+
+    def admit(benchmark_product_id: str, seen: set[str]) -> bool:
+        for competitor_product_id in adjacency.get(benchmark_product_id, []):
+            if competitor_product_id in seen:
+                continue
+            seen.add(competitor_product_id)
+            previous = competitor_to_benchmark.get(competitor_product_id)
+            if previous is None or admit(previous, seen):
+                competitor_to_benchmark[competitor_product_id] = benchmark_product_id
+                return True
+        return False
+
+    for benchmark_product_id in sorted(adjacency):
+        admit(benchmark_product_id, set())
+    return {
+        benchmark_product_id: competitor_product_id
+        for competitor_product_id, benchmark_product_id in competitor_to_benchmark.items()
+    }
+
+
+def _edge_components(edges: set[tuple[str, str]]) -> list[set[tuple[str, str]]]:
+    remaining = set(edges)
+    components: list[set[tuple[str, str]]] = []
+    while remaining:
+        seed = min(remaining)
+        component: set[tuple[str, str]] = set()
+        benchmark_frontier = {seed[0]}
+        competitor_frontier = {seed[1]}
+        while benchmark_frontier or competitor_frontier:
+            related = {
+                edge
+                for edge in remaining
+                if edge[0] in benchmark_frontier or edge[1] in competitor_frontier
+            }
+            if not related:
+                break
+            component.update(related)
+            remaining.difference_update(related)
+            benchmark_frontier = {edge[0] for edge in related}
+            competitor_frontier = {edge[1] for edge in related}
+        components.append(component)
+    return components
+
+
+def resolve_one_to_one_relationships(
+    offers: Iterable[ClassifiedOffer],
+    matches: Iterable[MatchRecord],
+    *,
+    benchmark_retailer: str,
+    profile_priority: Iterable[str],
+) -> MatchRelationshipResolution:
+    """Resolve automatic exact-geography candidates without arbitrary business tie-breaks.
+
+    Confirmed relationship rows always win. Automatic edges must be mutual best on the
+    Product Pack profile priority and part of a unique maximum one-to-one assignment.
+    Evidence volume and stable IDs never decide product identity.
+    """
+
+    match_rows = list(matches)
+    priorities = {str(profile_id): index for index, profile_id in enumerate(profile_priority)}
+    offer_index = {item.offer.offer_id: item.offer for item in offers}
+    pair_rows: dict[tuple[str, str, str], list[MatchRecord]] = {}
+    passthrough: list[MatchRecord] = []
+    for match in match_rows:
+        if match.profile_id not in priorities:
+            passthrough.append(match)
+            continue
+        benchmark = offer_index.get(match.benchmark_offer_id)
+        competitor = offer_index.get(match.competitor_offer_id)
+        if (
+            benchmark is None
+            or competitor is None
+            or benchmark.retailer_id != benchmark_retailer
+            or competitor.retailer_id != match.competitor_id
+        ):
+            continue
+        key = (
+            match.competitor_id,
+            benchmark.retailer_product_id,
+            competitor.retailer_product_id,
+        )
+        pair_rows.setdefault(key, []).append(match)
+
+    selected: dict[tuple[str, str, str], str] = {}
+    ambiguous_groups: list[JsonObject] = []
+    for competitor_id in sorted({key[0] for key in pair_rows}):
+        competitor_pairs = {key for key in pair_rows if key[0] == competitor_id}
+        confirmed = {
+            key
+            for key in competitor_pairs
+            if any(
+                str(row.attributes.get("_match_origin")) == "user_confirmed"
+                for row in pair_rows[key]
+            )
+        }
+        confirmed_benchmark = [key[1] for key in confirmed]
+        confirmed_competitor = [key[2] for key in confirmed]
+        if len(confirmed_benchmark) != len(set(confirmed_benchmark)) or len(
+            confirmed_competitor
+        ) != len(set(confirmed_competitor)):
+            raise ValueError("confirmed product relationships must be globally one-to-one")
+        selected.update({key: "confirmed" for key in confirmed})
+        locked_benchmark = set(confirmed_benchmark)
+        locked_competitor = set(confirmed_competitor)
+        automatic = {
+            key
+            for key in competitor_pairs - confirmed
+            if key[1] not in locked_benchmark and key[2] not in locked_competitor
+        }
+        if not automatic:
+            continue
+        edge_rank = {
+            (key[1], key[2]): min(priorities[row.profile_id] for row in pair_rows[key])
+            for key in automatic
+        }
+        best_benchmark = {
+            benchmark_product_id: min(
+                rank
+                for (candidate_benchmark, _candidate_competitor), rank in edge_rank.items()
+                if candidate_benchmark == benchmark_product_id
+            )
+            for benchmark_product_id, _competitor_product_id in edge_rank
+        }
+        best_competitor = {
+            competitor_product_id: min(
+                rank
+                for (_candidate_benchmark, candidate_competitor), rank in edge_rank.items()
+                if candidate_competitor == competitor_product_id
+            )
+            for _benchmark_product_id, competitor_product_id in edge_rank
+        }
+        mutual_best = {
+            edge
+            for edge, rank in edge_rank.items()
+            if rank == best_benchmark[edge[0]] and rank == best_competitor[edge[1]]
+        }
+        for component in _edge_components(mutual_best):
+            assignment = _maximum_matching(component)
+            unique = all(
+                len(_maximum_matching(component, omitted=edge)) < len(assignment)
+                for edge in assignment.items()
+            )
+            if unique:
+                for benchmark_product_id, competitor_product_id in assignment.items():
+                    selected[(competitor_id, benchmark_product_id, competitor_product_id)] = (
+                        "suggested"
+                    )
+                continue
+            candidate_rows = [
+                {
+                    "benchmark_product_id": benchmark_product_id,
+                    "competitor_product_id": competitor_product_id,
+                    "eligible_profile_ids": sorted(
+                        {
+                            row.profile_id
+                            for row in pair_rows[
+                                (competitor_id, benchmark_product_id, competitor_product_id)
+                            ]
+                        },
+                        key=lambda value: (priorities[value], value),
+                    ),
+                }
+                for benchmark_product_id, competitor_product_id in sorted(component)
+            ]
+            seed = "|".join(
+                (
+                    competitor_id,
+                    *(
+                        f"{row['benchmark_product_id']}:{row['competitor_product_id']}"
+                        for row in candidate_rows
+                    ),
+                )
+            )
+            ambiguous_groups.append(
+                {
+                    "candidate_group_id": (
+                        f"candidate-{hashlib.sha256(seed.encode()).hexdigest()[:20]}"
+                    ),
+                    "competitor_id": competitor_id,
+                    "candidates": candidate_rows,
+                }
+            )
+
+    relationships: list[JsonObject] = []
+    resolved: list[MatchRecord] = list(passthrough)
+    for key, status in sorted(selected.items()):
+        competitor_id, benchmark_product_id, competitor_product_id = key
+        seed = "|".join(key)
+        relationship_id = f"relationship-{hashlib.sha256(seed.encode()).hexdigest()[:20]}"
+        rows = pair_rows[key]
+        eligible_profiles = sorted(
+            {row.profile_id for row in rows},
+            key=lambda value: (priorities[value], value),
+        )
+        relationships.append(
+            {
+                "relationship_id": relationship_id,
+                "competitor_id": competitor_id,
+                "benchmark_product_id": benchmark_product_id,
+                "competitor_product_id": competitor_product_id,
+                "status": status,
+                "eligible_profile_ids": eligible_profiles,
+                "qa_status": "ready",
+                "suppression_reasons": [],
+            }
+        )
+        resolved.extend(
+            replace(
+                row,
+                attributes={
+                    **row.attributes,
+                    "_relationship_id": relationship_id,
+                    "_relationship_status": status,
+                },
+            )
+            for row in rows
+        )
+    resolved.sort(
+        key=lambda row: (
+            row.competitor_id,
+            priorities.get(row.profile_id, len(priorities)),
+            row.geography_key,
+            row.benchmark_offer_id,
+            row.competitor_offer_id,
+        )
+    )
+    return MatchRelationshipResolution(
+        matches=tuple(resolved),
+        relationships=tuple(relationships),
+        ambiguous_groups=tuple(ambiguous_groups),
+    )
 
 
 def haversine_miles(

@@ -97,6 +97,7 @@ describe("match review scope", () => {
       suggested: 1,
       confirmed: 0,
       rejected: 0,
+      ambiguous: 0,
       unmatched: 1,
     });
     expect(

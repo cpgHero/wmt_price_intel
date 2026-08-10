@@ -11,6 +11,7 @@ from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
     geographic_overlap,
+    resolve_one_to_one_relationships,
 )
 from rci_analytics.models import ProductMatchRule
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
@@ -206,6 +207,105 @@ def test_governed_rules_fail_closed_when_not_one_to_one() -> None:
             profile_id="strict",
             rules=rules,
         )
+
+
+def test_automatic_relationships_are_one_to_one_across_lenses() -> None:
+    offers, engine = _classified()
+    matches = [
+        match
+        for profile_id in ("strict", "unit_price")
+        for match in engine.compare(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id=profile_id,
+        )
+    ]
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        matches,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict", "unit_price"),
+    )
+
+    benchmark_ids = [str(row["benchmark_product_id"]) for row in resolution.relationships]
+    competitor_ids = [str(row["competitor_product_id"]) for row in resolution.relationships]
+    assert len(benchmark_ids) == len(set(benchmark_ids))
+    assert len(competitor_ids) == len(set(competitor_ids))
+    assert all(row["status"] == "suggested" for row in resolution.relationships)
+    assert all(match.attributes.get("_relationship_id") for match in resolution.matches)
+
+
+def test_equally_valid_many_to_one_candidates_remain_ambiguous() -> None:
+    offers, engine = _classified()
+    strict = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+    first = next(match for match in strict if match.attributes["weight_oz"] == 16.0)
+    benchmark_two_pound = next(
+        item.offer.offer_id
+        for item in offers
+        if item.offer.retailer_id == "walmart_us" and item.offer.retailer_product_id == "w-2"
+    )
+    candidates = [
+        first,
+        replace(
+            first,
+            geography_key="10002",
+            benchmark_offer_id=benchmark_two_pound,
+        ),
+    ]
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        candidates,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert resolution.matches == ()
+    assert resolution.relationships == ()
+    assert len(resolution.ambiguous_groups) == 1
+    assert len(resolution.ambiguous_groups[0]["candidates"]) == 2
+
+
+def test_confirmed_relationship_wins_before_automatic_resolution() -> None:
+    offers, engine = _classified()
+    rule = ProductMatchRule(
+        competitor_id="aldi_us",
+        profile_id="strict",
+        benchmark_product_id="w-1",
+        competitor_product_id="a-2",
+        decision="confirmed",
+        eligible_profile_ids=("strict", "unit_price"),
+    )
+    matches = [
+        match
+        for profile_id in ("strict", "unit_price")
+        for match in engine.compare_governed(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id=profile_id,
+            rules=(rule,),
+        )
+    ]
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        matches,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict", "unit_price"),
+    )
+
+    confirmed = next(row for row in resolution.relationships if row["status"] == "confirmed")
+    assert confirmed["benchmark_product_id"] == "w-1"
+    assert confirmed["competitor_product_id"] == "a-2"
+    assert confirmed["eligible_profile_ids"] == ["strict", "unit_price"]
 
 
 def test_geographic_overlap_and_optional_radius_validation() -> None:

@@ -686,6 +686,66 @@ dd {
 .workspace-panel {
   padding-top: 1.5rem;
 }
+.report-readiness,
+.comparison-basis-control {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 14px;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding: 1rem 1.15rem;
+}
+.report-readiness.review_required {
+  border-left-color: var(--amber);
+}
+.report-readiness.limited {
+  border-left-color: var(--muted);
+}
+.report-readiness > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.report-readiness small,
+.comparison-basis-control label span {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.report-readiness span,
+.report-readiness p,
+.comparison-basis-control p {
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin: 0;
+}
+.report-readiness p {
+  max-width: 620px;
+}
+.comparison-basis-control {
+  margin: 0 0 1rem;
+}
+.comparison-basis-control h2 {
+  font-size: 1.2rem;
+  margin: 0.15rem 0 0.35rem;
+}
+.comparison-basis-control label {
+  display: grid;
+  flex: 0 0 min(360px, 44%);
+  gap: 0.35rem;
+}
+.comparison-basis-control select {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  padding: 0.65rem 0.75rem;
+}
 .workspace-section {
   background: var(--card);
   border: 1px solid var(--line);
@@ -3038,6 +3098,31 @@ tbody tr:last-child td {
   margin-top: 1rem;
   padding: 0.75rem 0.25rem 0;
 }
+.match-drawer-footer p {
+  margin: 0;
+}
+.match-drawer-footer,
+.match-drawer-footer > span {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+.match-drawer-footer button,
+.evidence-toolbar button {
+  background: var(--green);
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.65rem 0.8rem;
+}
+.match-drawer-footer button.quiet {
+  background: #e4ecef;
+  color: #18333f;
+}
 @media (max-width: 1100px) {
   .match-scope-banner {
     grid-template-columns: 1fr auto 1fr;
@@ -3516,6 +3601,25 @@ tbody tr:last-child td {
   font-weight: 800;
   padding: 0.75rem 0.9rem;
   text-decoration: none;
+}
+.evidence-toolbar > span {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+}
+@media (max-width: 760px) {
+  .report-readiness,
+  .comparison-basis-control,
+  .match-drawer-footer,
+  .match-drawer-footer > span,
+  .evidence-toolbar,
+  .evidence-toolbar > span {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .comparison-basis-control label {
+    flex-basis: auto;
+  }
 }
 .evidence-table-wrap {
   border: 1px solid var(--line);

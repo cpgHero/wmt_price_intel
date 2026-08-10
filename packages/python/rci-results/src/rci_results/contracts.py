@@ -85,3 +85,19 @@ class AnalysisResultValidator:
             raise ValueError(
                 f"AnalysisResult V2 references unknown evidence sets {sorted(unknown_evidence)}"
             )
+
+
+class ReportViewValidator:
+    def __init__(self, repository_root: Path) -> None:
+        self._root = repository_root
+
+    def validate(self, document: dict[str, Any]) -> JsonObject:
+        validate_instance(
+            self._root,
+            "report-view.schema.json",
+            document,
+            label="ReportView",
+        )
+        canonical = json.loads(canonical_result_bytes(document))
+        assert isinstance(canonical, dict)
+        return canonical

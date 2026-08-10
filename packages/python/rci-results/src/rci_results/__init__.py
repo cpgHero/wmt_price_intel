@@ -1,7 +1,7 @@
 """Canonical AnalysisResult persistence and delivery."""
 
 from rci_results.blueprints import ReportBlueprintLoader, ReportProjector
-from rci_results.contracts import AnalysisResultValidator
+from rci_results.contracts import AnalysisResultValidator, ReportViewValidator
 from rci_results.match_review import (
     InMemoryMatchReviewRepository,
     MatchDecisionCommand,
@@ -35,5 +35,6 @@ __all__ = [
     "PostgresResultsRepository",
     "ReportBlueprintLoader",
     "ReportProjector",
+    "ReportViewValidator",
     "S3ReportObjectStore",
 ]

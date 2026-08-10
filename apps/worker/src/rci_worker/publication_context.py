@@ -27,6 +27,7 @@ from rci_analytics import (
     merge_product_evidence_summary,
     primary_exact_profile,
     product_context_index,
+    resolve_one_to_one_relationships,
 )
 from rci_analytics.models import ClassifiedOffer
 from rci_analytics.normalization import RetailerIdentityMap
@@ -306,17 +307,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     reducer.add(classified)
                     assortment_accumulator.add(classified)
         offers = reducer.offers()
-        matches = [
-            match
-            for competitor in competitors
-            for match in engine.compare(
-                offers,
-                benchmark_id=benchmark,
-                competitor_id=competitor,
-                profile_id=str(profile["id"]),
-            )
-        ]
-        review_matches = [
+        candidate_matches = [
             match
             for review_profile in review_profiles
             for competitor in competitors
@@ -327,26 +318,94 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 profile_id=str(review_profile["id"]),
             )
         ]
+        decision_rules = pack.reporting["decision_rules"]
+        profile_priority = [
+            str(value)
+            for value in decision_rules["profile_priority"]
+            if any(str(review_profile["id"]) == str(value) for review_profile in review_profiles)
+        ]
+        resolution = resolve_one_to_one_relationships(
+            offers,
+            candidate_matches,
+            benchmark_retailer=benchmark,
+            profile_priority=profile_priority,
+        )
+        review_matches = list(resolution.matches)
+        matches = [match for match in review_matches if match.profile_id == str(profile["id"])]
+        match_relationships = [dict(row) for row in resolution.relationships]
+        ambiguous_match_groups = [dict(row) for row in resolution.ambiguous_groups]
+        decision_rows = benchmark_product_decisions(
+            offers,
+            matches,
+            benchmark_retailer=benchmark,
+            decision_rules=decision_rules,
+            qa_rules=pack.document["qa_rules"],
+        )
+        product_decisions = [row for row in decision_rows if row["qa_status"] == "ready"]
+        suppressed_product_decisions = [row for row in decision_rows if row["qa_status"] != "ready"]
         map_points = benchmark_product_map_points(
             offers,
             matches,
             benchmark_retailer=benchmark,
             max_products=args.max_products,
             max_points_per_product=args.max_points_per_product,
-        )
-        product_decisions = benchmark_product_decisions(
-            offers,
-            matches,
-            benchmark_retailer=benchmark,
+            allowed_relationship_ids={
+                str(row["relationship_id"])
+                for row in product_decisions
+                if row.get("relationship_id")
+            },
         )
         match_candidates = benchmark_product_match_candidates(
             offers,
-            review_matches,
+            candidate_matches,
             benchmark_retailer=benchmark,
             profiles=review_profiles,
             max_rows=2_000,
             max_locations_per_row=1,
         )
+        relationship_index = {
+            (
+                str(row["competitor_id"]),
+                str(row["benchmark_product_id"]),
+                str(row["competitor_product_id"]),
+            ): row
+            for row in match_relationships
+        }
+        ambiguous_index = {
+            (
+                str(group["competitor_id"]),
+                str(candidate["benchmark_product_id"]),
+                str(candidate["competitor_product_id"]),
+            ): str(group["candidate_group_id"])
+            for group in ambiguous_match_groups
+            for candidate in group["candidates"]
+        }
+        for candidate in match_candidates:
+            key = (
+                str(candidate["competitor"]),
+                str(candidate["benchmark_product_id"]),
+                str(candidate["competitor_product_id"]),
+            )
+            relationship = relationship_index.get(key)
+            candidate["relationship_id"] = (
+                str(relationship["relationship_id"]) if relationship is not None else None
+            )
+            candidate["relationship_status"] = (
+                str(relationship["status"])
+                if relationship is not None
+                else "ambiguous"
+                if key in ambiguous_index
+                else "unmatched"
+            )
+            candidate["candidate_group_id"] = ambiguous_index.get(key)
+            candidate["qa_status"] = (
+                "review_required" if candidate["relationship_status"] == "ambiguous" else "ready"
+            )
+            candidate["suppression_reasons"] = (
+                ["Automatic candidates do not have a unique one-to-one assignment"]
+                if candidate["relationship_status"] == "ambiguous"
+                else []
+            )
         assortment_analysis = merge_assortment_product_context(
             assortment_accumulator.finalize(
                 benchmark_retailer=benchmark,
@@ -417,7 +476,14 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             highlights,
             benchmark_retailer=benchmark,
         )
+        context["suppressed_product_decisions"] = merge_product_decision_context(
+            suppressed_product_decisions,
+            highlights,
+            benchmark_retailer=benchmark,
+        )
         context["match_candidates"] = match_candidates
+        context["match_relationships"] = match_relationships
+        context["ambiguous_match_groups"] = ambiguous_match_groups
         context["assortment_analysis"] = assortment_analysis
         if highlights:
             context["product_highlights"] = highlights

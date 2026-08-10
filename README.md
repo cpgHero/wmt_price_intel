@@ -78,3 +78,9 @@ Phases 9.7 through 9.9 add publication-scoped narrative evidence, selective PDP 
 product-led decision surfaces, and one shared presentation contract for the app, HTML export, and
 shareable report. See `docs/26_PHASE_9_7_DECISION_SURFACE_AND_ENRICHMENT.md` through
 `docs/28_PHASE_9_9_REPORT_SURFACE_PARITY.md`.
+
+Phases 9.9.1 through 9.9.3 add multi-retailer scorecards, globally one-to-one product-match
+governance, and the implemented report-cohesion contract that separates comparison lenses, segments,
+relationships, parity, readiness, and the insight-to-Match-Review workflow. See
+`docs/29_PHASE_9_9_1_MULTI_RETAILER_REPORTING.md` through
+`docs/32_PHASE_9_9_3_REPORT_COHESION_AND_MATCH_WORKFLOW.md`.

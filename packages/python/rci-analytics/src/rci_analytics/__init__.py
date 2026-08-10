@@ -16,7 +16,12 @@ from rci_analytics.insights import (
     DeterministicInsightEngine,
     RankedInsightCandidate,
 )
-from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
+from rci_analytics.matching import (
+    ComparisonEngine,
+    ComparisonInputReducer,
+    MatchRelationshipResolution,
+    resolve_one_to_one_relationships,
+)
 from rci_analytics.models import ProductMatchRule
 from rci_analytics.normalization import CanonicalOfferNormalizer
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
@@ -46,6 +51,7 @@ __all__ = [
     "InMemoryDatasetStore",
     "InMemoryHistoricalInputRepository",
     "InMemoryHistoricalObjectStore",
+    "MatchRelationshipResolution",
     "OfferClassifier",
     "ParquetDatasetWriter",
     "PostgresAnalysisInputRepository",
@@ -65,4 +71,5 @@ __all__ = [
     "prepare_historical_import",
     "primary_exact_profile",
     "product_context_index",
+    "resolve_one_to_one_relationships",
 ]

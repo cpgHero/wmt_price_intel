@@ -52,6 +52,8 @@ def benchmark_product_decisions(
     benchmark_retailer: str,
     max_rows: int = 16,
     max_locations_per_row: int = 3,
+    decision_rules: JsonObject | None = None,
+    qa_rules: JsonObject | None = None,
 ) -> list[JsonObject]:
     """Build decision-first product pairs from admitted exact-match evidence.
 
@@ -90,11 +92,19 @@ def benchmark_product_decisions(
         competitor_lower = outcomes["competitor_lower"]
         parity = outcomes["parity"]
         median_gap = median(match.gap for match in match_rows)
+        dominant_outcome = max(
+            (
+                (benchmark_lower, "benchmark_lower"),
+                (competitor_lower, "competitor_lower"),
+                (parity, "parity"),
+            ),
+            key=lambda value: (value[0], value[1] == "parity", value[1]),
+        )[1]
         priority = (
             "attention"
-            if competitor_lower > benchmark_lower
+            if dominant_outcome == "competitor_lower"
             else "protect"
-            if benchmark_lower > competitor_lower
+            if dominant_outcome == "benchmark_lower"
             else "parity"
         )
         lead = (
@@ -128,10 +138,70 @@ def benchmark_product_decisions(
             ),
         )[:max_locations_per_row]
         seed = "|".join((benchmark_product_id, competitor_id, competitor_product_id))
+        relationship_id = next(
+            (
+                str(match.attributes["_relationship_id"])
+                for match in match_rows
+                if match.attributes.get("_relationship_id")
+            ),
+            None,
+        )
+        relationship_status = next(
+            (
+                str(match.attributes["_relationship_status"])
+                for match in match_rows
+                if match.attributes.get("_relationship_status")
+            ),
+            "unavailable",
+        )
+        minimum_observations = int((decision_rules or {}).get("minimum_observations", 1))
+        minimum_geographies = int((decision_rules or {}).get("minimum_geographies", 1))
+        allowed_states = {
+            str(value)
+            for value in (decision_rules or {}).get(
+                "executive_relationship_states", ["suggested", "confirmed"]
+            )
+        }
+        suppression_reasons: list[str] = []
+        if decision_rules is not None and relationship_status not in allowed_states:
+            suppression_reasons.append("Relationship is not decision-ready")
+        if match_count < minimum_observations:
+            suppression_reasons.append(
+                f"Requires at least {minimum_observations} retained observations"
+            )
+        if len(geography_rows) < minimum_geographies:
+            suppression_reasons.append(
+                f"Requires at least {minimum_geographies} retained geographies"
+            )
+        benchmark_median = median(match.benchmark_value for match in match_rows)
+        suspicious_gap_pct = (qa_rules or {}).get("suspicious_gap_pct")
+        if (
+            isinstance(suspicious_gap_pct, int | float)
+            and benchmark_median > 0
+            and abs(median_gap / benchmark_median * 100) > Decimal(str(suspicious_gap_pct))
+        ):
+            suppression_reasons.append(
+                "Typical price difference exceeds the Product Pack review threshold"
+            )
+        qa_status = (
+            "suppressed"
+            if suppression_reasons
+            and (decision_rules or {}).get("extreme_gap_behavior", "suppress") == "suppress"
+            else "review_required"
+            if suppression_reasons
+            else "ready"
+        )
         rows.append(
             {
                 "id": f"product-{hashlib.sha256(seed.encode()).hexdigest()[:20]}",
+                "relationship_id": relationship_id,
+                "relationship_status": relationship_status,
+                "profile_id": match_rows[0].profile_id,
+                "comparison_metric": match_rows[0].comparison_metric,
+                "qa_status": qa_status,
+                "suppression_reasons": suppression_reasons,
                 "priority": priority,
+                "dominant_outcome": dominant_outcome,
                 "benchmark_product_id": benchmark_product_id,
                 "benchmark_product_name": _preferred_text(
                     (offer.title for offer in benchmark_offers), benchmark_product_id
@@ -164,9 +234,7 @@ def benchmark_product_decisions(
                 "parity": parity,
                 "benchmark_lower_share": benchmark_lower / match_count,
                 "competitor_lower_share": competitor_lower / match_count,
-                "median_benchmark_price": float(
-                    median(match.benchmark_value for match in match_rows)
-                ),
+                "median_benchmark_price": float(benchmark_median),
                 "median_competitor_price": float(
                     median(match.competitor_value for match in match_rows)
                 ),
@@ -531,6 +599,7 @@ def benchmark_product_map_points(
     benchmark_retailer: str,
     max_products: int = 20,
     max_points_per_product: int = 150,
+    allowed_relationship_ids: set[str] | None = None,
 ) -> list[JsonObject]:
     """Project exact-match evidence into a benchmark-product-filterable map dataset."""
 
@@ -540,6 +609,9 @@ def benchmark_product_map_points(
     candidate_rows: list[JsonObject] = []
     product_counts: Counter[str] = Counter()
     for match in matches:
+        relationship_id = str(match.attributes.get("_relationship_id") or "")
+        if allowed_relationship_ids is not None and relationship_id not in allowed_relationship_ids:
+            continue
         benchmark = offer_index.get(match.benchmark_offer_id)
         competitor = offer_index.get(match.competitor_offer_id)
         if benchmark is None or benchmark.offer.retailer_id != benchmark_retailer:
@@ -577,6 +649,9 @@ def benchmark_product_map_points(
                 "value": gap,
                 "value_label": f"{outcome_label} · price difference ${abs(gap):.2f}",
                 "retailer": benchmark_retailer,
+                "relationship_id": relationship_id or None,
+                "profile_id": match.profile_id,
+                "comparison_metric": match.comparison_metric,
                 "benchmark_product_id": product_id,
                 "benchmark_product_name": offer.title,
                 "competitor": match.competitor_id,

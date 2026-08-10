@@ -468,6 +468,56 @@
             "type": "string"
           }
         },
+                "decision_rules": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "preferred_scorecard_profile_id",
+                        "profile_priority",
+                        "minimum_observations",
+                        "minimum_geographies",
+                        "executive_relationship_states",
+                        "extreme_gap_behavior",
+                        "parity_display"
+                    ],
+                    "properties": {
+                        "preferred_scorecard_profile_id": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "profile_priority": {
+                            "type": "array",
+                            "minItems": 1,
+                            "uniqueItems": true,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1
+                            }
+                        },
+                        "minimum_observations": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "minimum_geographies": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "executive_relationship_states": {
+                            "type": "array",
+                            "minItems": 1,
+                            "uniqueItems": true,
+                            "items": {
+                                "enum": ["suggested", "confirmed"]
+                            }
+                        },
+                        "extreme_gap_behavior": {
+                            "enum": ["review", "suppress"]
+                        },
+                        "parity_display": {
+                            "enum": ["include", "hide_when_zero"]
+                        }
+                    }
+                },
                 "alertable_metrics": {
                     "type": "array",
                     "items": {

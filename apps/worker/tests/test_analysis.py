@@ -265,11 +265,14 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
     assert publication is not None
     map_points = publication.presentation_context["map_points"]
     assert isinstance(map_points, list)
-    assert {point["benchmark_product_id"] for point in map_points} == {"44391605"}
-    assert {point["competitor"] for point in map_points} == {
-        "aldi_us",
-        "amazon_us_same_day",
-    }
+    assert map_points == []
+    suppressed = publication.presentation_context["suppressed_product_decisions"]
+    assert suppressed
+    assert all(row["qa_status"] == "suppressed" for row in suppressed)
+    assert all(
+        "Requires at least 25 retained observations" in row["suppression_reasons"]
+        for row in suppressed
+    )
 
 
 async def test_historical_input_replays_through_same_generic_pipeline() -> None:

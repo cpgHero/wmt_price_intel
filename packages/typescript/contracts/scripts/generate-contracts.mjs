@@ -27,6 +27,7 @@ const contracts = [
   ["product-pack.schema.json", "product-pack.ts"],
   ["provider-error.schema.json", "provider-error.ts"],
   ["report-blueprint.schema.json", "report-blueprint.ts"],
+  ["report-view.schema.json", "report-view.ts"],
 ];
 
 await mkdir(outputDirectory, { recursive: true });

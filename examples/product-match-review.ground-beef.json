@@ -1,0 +1,92 @@
+{
+  "analysis_id": "ground-beef-report-view-example",
+  "product_pack_id": "fresh_ground_beef",
+  "product_pack_version": "1.0.0",
+  "revision_id": "00000000-0000-4000-8000-000000000001",
+  "revision": 1,
+  "current_publication_revision_id": "00000000-0000-4000-8000-000000000001",
+  "staged_revision_id": null,
+  "future_application": {
+    "revision_id": "00000000-0000-4000-8000-000000000001",
+    "revision": 1
+  },
+  "benchmark_retailer": { "id": "walmart_us", "name": "Walmart (US)" },
+  "competitors": [{ "id": "aldi_us", "name": "ALDI" }],
+  "profiles": [
+    {
+      "id": "strict",
+      "label": "Strict same-ZIP and exact-package comparison",
+      "geography": "exact_zip",
+      "comparison_metric": "package_price"
+    }
+  ],
+  "products": [
+    {
+      "retailer_id": "walmart_us",
+      "product_id": "walmart-1",
+      "canonical_product_id": "walmart_us:walmart-1",
+      "name": "Walmart ground beef",
+      "brand": "All Natural",
+      "image_url": null,
+      "url": null,
+      "price": 5.48,
+      "other_lens_participation": [
+        { "profile_id": "strict", "status": "confirmed" }
+      ]
+    },
+    {
+      "retailer_id": "aldi_us",
+      "product_id": "aldi-1",
+      "canonical_product_id": "aldi_us:aldi-1",
+      "name": "ALDI ground beef",
+      "brand": null,
+      "image_url": null,
+      "url": null,
+      "price": 5.26,
+      "other_lens_participation": [
+        { "profile_id": "strict", "status": "confirmed" }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "00000000-0000-4000-8000-000000000010",
+      "relationship_id": "relationship-1",
+      "candidate_group_id": null,
+      "competitor_retailer_id": "aldi_us",
+      "source_profile_id": "strict",
+      "eligible_profile_ids": ["strict"],
+      "benchmark_product_id": "walmart-1",
+      "competitor_product_id": "aldi-1",
+      "status": "confirmed",
+      "origin": "user",
+      "reason": "Confirmed from exact package and identity evidence.",
+      "matches": 100,
+      "geographies": 80,
+      "median_gap": -0.22,
+      "qa_status": "ready",
+      "suppression_reasons": [],
+      "match_basis": "exact_package",
+      "profile_evidence": [
+        {
+          "profile_id": "strict",
+          "profile_label": "Strict same-ZIP and exact-package comparison",
+          "comparison_metric": "package_price",
+          "match_basis": "exact_package",
+          "matches": 100,
+          "geographies": 80,
+          "median_gap": -0.22,
+          "match_attributes": { "weight_lb": 1 },
+          "rationale": "Exact package attributes align."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "suggested": 0,
+    "confirmed": 1,
+    "rejected": 0,
+    "unmatched": 0,
+    "ambiguous": 0
+  }
+}

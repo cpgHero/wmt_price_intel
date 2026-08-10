@@ -18,3 +18,4 @@ export type { RetailCompetitiveIntelligenceAlertDefinition } from "./generated/a
 export type { RetailCompetitiveIntelligenceGovernedAgentOutput } from "./generated/agent-output";
 export type { RetailCompetitiveIntelligenceGovernedAgentPrompt } from "./generated/agent-prompt";
 export type { RetailCompetitiveIntelligenceReportBlueprint } from "./generated/report-blueprint";
+export type { RetailCompetitiveIntelligenceReportView } from "./generated/report-view";

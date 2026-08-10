@@ -536,6 +536,22 @@
       "market_price_distribution",
       "unit_comparison"
     ],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "strict_each",
+      "profile_priority": [
+        "strict_each",
+        "weight_normalized",
+        "count_compatible",
+        "conventional_bunch_range",
+        "organic_bunch_package",
+        "organic_bunch_midpoint"
+      ],
+      "minimum_observations": 25,
+      "minimum_geographies": 25,
+      "executive_relationship_states": ["suggested", "confirmed"],
+      "extreme_gap_behavior": "suppress",
+      "parity_display": "include"
+    },
     "alertable_metrics": [
       "each_gap",
       "price_per_lb_gap",

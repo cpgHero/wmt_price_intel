@@ -23,6 +23,11 @@
     "product_pack_version": { "type": "string", "minLength": 1 },
     "revision_id": { "type": ["string", "null"], "format": "uuid" },
     "revision": { "type": "integer", "minimum": 0 },
+    "current_publication_revision_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "staged_revision_id": { "type": ["string", "null"], "format": "uuid" },
     "future_application": {
       "oneOf": [
         { "type": "null" },
@@ -62,7 +67,8 @@
         "suggested": { "type": "integer", "minimum": 0 },
         "confirmed": { "type": "integer", "minimum": 0 },
         "rejected": { "type": "integer", "minimum": 0 },
-        "unmatched": { "type": "integer", "minimum": 0 }
+        "unmatched": { "type": "integer", "minimum": 0 },
+        "ambiguous": { "type": "integer", "minimum": 0 }
       }
     }
   },
@@ -100,6 +106,21 @@
         "image_url": { "type": ["string", "null"] },
         "url": { "type": ["string", "null"] },
         "price": { "type": ["number", "null"] }
+        ,
+        "other_lens_participation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["profile_id", "status"],
+            "properties": {
+              "profile_id": { "type": "string", "minLength": 1 },
+              "status": {
+                "enum": ["suggested", "confirmed", "rejected", "ambiguous"]
+              }
+            }
+          }
+        }
       }
     },
     "connection": {
@@ -118,6 +139,8 @@
       ],
       "properties": {
         "id": { "type": ["string", "null"] },
+        "relationship_id": { "type": ["string", "null"] },
+        "candidate_group_id": { "type": ["string", "null"] },
         "competitor_retailer_id": { "type": "string", "minLength": 1 },
         "source_profile_id": { "type": "string", "minLength": 1 },
         "eligible_profile_ids": {
@@ -128,13 +151,20 @@
         },
         "benchmark_product_id": { "type": "string", "minLength": 1 },
         "competitor_product_id": { "type": "string", "minLength": 1 },
-        "status": { "enum": ["suggested", "confirmed", "rejected"] },
+        "status": { "enum": ["suggested", "confirmed", "rejected", "ambiguous"] },
         "origin": { "enum": ["automatic", "user"] },
         "reason": { "type": ["string", "null"] },
         "matches": { "type": ["integer", "null"], "minimum": 0 },
         "geographies": { "type": ["integer", "null"], "minimum": 0 },
         "median_gap": { "type": ["number", "null"] }
         ,
+        "qa_status": {
+          "enum": ["ready", "review_required", "suppressed"]
+        },
+        "suppression_reasons": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "match_basis": {
           "enum": ["exact_package", "normalized_unit", "multiple", "user_defined"]
         },

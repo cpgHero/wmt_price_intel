@@ -2,6 +2,7 @@ import type {
   RetailCompetitiveIntelligenceAnalysisResult,
   RetailCompetitiveIntelligenceAnalysisResultV2,
   RetailCompetitiveIntelligenceProductMatchReview,
+  RetailCompetitiveIntelligenceReportView,
 } from "@rci/contracts";
 
 import { loadServerConfig } from "./config";
@@ -38,7 +39,18 @@ export interface ReportSectionView {
   narrative: JsonObject | null;
 }
 
-export interface AnalysisReportView {
+export interface AnalysisReportView extends Omit<
+  RetailCompetitiveIntelligenceReportView,
+  | "retailer_scorecards"
+  | "product_pack"
+  | "product_highlights"
+  | "product_decisions"
+  | "suppressed_product_decisions"
+  | "map_points"
+  | "quality_observations"
+  | "assortment_analysis"
+  | "sections"
+> {
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: string;
@@ -55,22 +67,9 @@ export interface AnalysisReportView {
     recommended_charts?: string[];
   };
   blueprint: { id: string; version: string };
-  groups?: Array<{
-    id: string;
-    label: string;
-    section_ids: string[];
-  }>;
-  result_checksum: string;
-  publication: {
-    id: string;
-    version: number;
-    status: string;
-    source_result_checksum: string;
-    publication_checksum: string;
-    created_at: string;
-  } | null;
   product_highlights?: ProductHighlight[];
   product_decisions?: ProductDecision[];
+  suppressed_product_decisions?: ProductDecision[];
   map_points?: MapPoint[];
   quality_observations?: QualityObservation[];
   assortment_analysis?: AssortmentAnalysis;
@@ -142,6 +141,7 @@ export interface RetailerScorecard {
   benchmark_retailer: string;
   profile_id: string;
   comparison_lens: string;
+  basis_status: "preferred" | "fallback" | "unavailable";
   matches: number | null;
   matched_geographies: number | null;
   qualifying_geographies: number | null;
@@ -151,6 +151,8 @@ export interface RetailerScorecard {
   benchmark_median: number | null;
   competitor_median: number | null;
   median_gap: number | null;
+  dominant_outcome:
+    "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
   price_position: string;
   status: "ready" | "limited_evidence";
 }
@@ -170,6 +172,13 @@ export interface QualityObservation {
 
 export interface ProductDecision {
   id: string;
+  relationship_id?: string | null;
+  relationship_status?:
+    "suggested" | "confirmed" | "rejected" | "ambiguous" | "unavailable";
+  profile_id?: string | null;
+  comparison_metric?: string | null;
+  qa_status?: "ready" | "review_required" | "suppressed";
+  suppression_reasons?: string[];
   priority: "attention" | "protect" | "parity";
   benchmark_product_id: string;
   benchmark_product_name: string;
@@ -275,6 +284,9 @@ export interface MapPoint {
   zipcode?: string | null;
   store?: string | null;
   matches?: number | null;
+  relationship_id?: string | null;
+  profile_id?: string | null;
+  comparison_metric?: string | null;
 }
 
 export interface RunRecord {

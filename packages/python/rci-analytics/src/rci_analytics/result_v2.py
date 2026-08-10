@@ -516,24 +516,36 @@ class AnalysisResultV2Builder:
             segment_label = str(segment.get("label", "all comparable items"))
             benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
             competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
-            if benchmark_rate >= competitor_rate:
+            parity_rate = float(values.get("parity_rate", {}).get("value", 0))
+            if parity_rate >= benchmark_rate and parity_rate >= competitor_rate:
+                rate = values.get("parity_rate")
+                outcome = "Prices are at parity"
+            elif benchmark_rate >= competitor_rate:
                 winner = _display_id(benchmark_retailer)
                 rate = values.get("benchmark_lower_rate")
+                outcome = f"{winner} is lower"
             else:
                 winner = competitor
                 rate = values.get("competitor_lower_rate")
+                outcome = f"{winner} is lower"
             matches = values.get("matches")
             if rate is None or matches is None:
                 return f"{profile} evidence is available for {competitor} in {segment_label}."
             sentence = (
-                f"{winner} is lower in {_metric_display(rate)} of "
+                f"{outcome} in {_metric_display(rate)} of "
                 f"{_metric_display(matches)} {profile.lower()} matches for {segment_label}."
             )
             median_gap = values.get("median_gap")
             if median_gap is not None:
-                sentence += (
-                    f" The median competitor-minus-benchmark gap is {_metric_display(median_gap)}."
-                )
+                gap_value = float(median_gap["value"])
+                if gap_value < 0:
+                    sentence += f" {competitor} was typically ${abs(gap_value):,.2f} lower."
+                elif gap_value > 0:
+                    sentence += (
+                        f" {_display_id(benchmark_retailer)} was typically ${gap_value:,.2f} lower."
+                    )
+                else:
+                    sentence += " Typical matched prices were tied."
             return sentence
 
         overall = [row for row in comparisons if str(row["segment_id"]) == "all"]
@@ -639,7 +651,14 @@ class AnalysisResultV2Builder:
                 values = values_for(row)
                 benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
                 competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
-                directions.add("benchmark" if benchmark_rate >= competitor_rate else "competitor")
+                parity_rate = float(values.get("parity_rate", {}).get("value", 0))
+                directions.add(
+                    "parity"
+                    if parity_rate >= benchmark_rate and parity_rate >= competitor_rate
+                    else "benchmark"
+                    if benchmark_rate >= competitor_rate
+                    else "competitor"
+                )
                 metrics_seen.add(
                     str(
                         mode_index.get(str(row["profile_id"]), {}).get(

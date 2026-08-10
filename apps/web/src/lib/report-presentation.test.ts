@@ -35,16 +35,16 @@ describe("report presentation", () => {
     ]);
 
     expect(
-      grouped.find((group) => group.id === "summary")?.sections,
+      grouped.find((group) => group.id === "overview")?.sections,
     ).toHaveLength(1);
     expect(
       grouped.find((group) => group.id === "geography")?.sections,
     ).toHaveLength(1);
     expect(
-      grouped.find((group) => group.id === "segments")?.sections,
+      grouped.find((group) => group.id === "price-segments")?.sections,
     ).toHaveLength(1);
     expect(
-      grouped.find((group) => group.id === "opportunities")?.sections,
+      grouped.find((group) => group.id === "quality-methodology")?.sections,
     ).toHaveLength(1);
     expect(
       grouped.find((group) => group.id === "assortment")?.sections,
@@ -58,12 +58,19 @@ describe("report presentation", () => {
     const grouped = groupReportSections(
       [summary, price],
       [
-        { id: "summary", label: "Overview", section_ids: ["summary-copy"] },
-        { id: "price", label: "Price", section_ids: ["price-table"] },
+        { id: "overview", label: "Overview", section_ids: ["summary-copy"] },
+        {
+          id: "price-segments",
+          label: "Price & Segments",
+          section_ids: ["price-table"],
+        },
       ],
     );
 
-    expect(grouped.map((group) => group.label)).toEqual(["Overview", "Price"]);
+    expect(grouped.map((group) => group.label)).toEqual([
+      "Overview",
+      "Price & Segments",
+    ]);
     expect(grouped[0]?.sections).toEqual([summary]);
     expect(grouped[1]?.sections).toEqual([price]);
   });

@@ -162,15 +162,18 @@ _COMPARISON_FIELDS = (
 )
 
 _REPORT_GROUPS = (
-    ("summary", "Summary", ("executive_summary", "kpi_strip")),
-    ("geography", "Geography", ("coverage", "geographic_sensitivity")),
-    ("price", "Price", ("price_position",)),
-    ("segments", "Segments", ("segment_analysis",)),
+    ("overview", "Overview", ("executive_summary", "kpi_strip")),
+    ("price-segments", "Price & Segments", ("price_position", "segment_analysis")),
     ("products", "Products", ("product_table",)),
+    ("geography", "Geography", ("coverage", "geographic_sensitivity")),
     ("assortment", "Assortment", ("assortment",)),
-    ("opportunities", "Opportunities", ("recommendations",)),
-    ("quality", "Quality", ("data_quality",)),
-    ("methodology", "Methodology", ("methodology",)),
+    ("match-review", "Match Review", ()),
+    (
+        "quality-methodology",
+        "Quality & Methodology",
+        ("recommendations", "data_quality", "methodology"),
+    ),
+    ("exports", "Exports", ()),
 )
 
 
@@ -338,6 +341,7 @@ class ReportProjector:
             for group_id, label, kinds in _REPORT_GROUPS
         ]
         return {
+            "schema_version": "1.0.0",
             "analysis_id": result["analysis_id"],
             "generated_at": result["generated_at"],
             "benchmark_retailer": self._retailer_names.get(
@@ -359,6 +363,9 @@ class ReportProjector:
                 ],
             },
             "retailer_scorecards": self.retailer_scorecards(result, product_pack),
+            "comparison_bases": self.comparison_bases(result, product_pack),
+            "match_governance": self._base_match_governance(result),
+            "report_readiness": self._base_report_readiness(result),
             "product_pack": {
                 "id": product_pack["id"],
                 "name": product_pack["name"],
@@ -370,6 +377,98 @@ class ReportProjector:
             "blueprint": {"id": blueprint.id, "version": blueprint.version},
             "groups": groups,
             "sections": sections,
+        }
+
+    def comparison_bases(
+        self,
+        result: JsonObject,
+        product_pack: JsonObject,
+    ) -> list[JsonObject]:
+        profile_index = {
+            str(profile["id"]): profile for profile in product_pack.get("matching_profiles", [])
+        }
+        decision_rules = product_pack.get("reporting", {}).get("decision_rules", {})
+        preferred = str(decision_rules.get("preferred_scorecard_profile_id", ""))
+        bases: list[JsonObject] = []
+        for mode in self._rows(result.get("comparison_modes")):
+            profile_id = str(mode.get("profile_id", ""))
+            profile = profile_index.get(profile_id, {})
+            comparison_metric = str(mode.get("comparison_metric", "package_price"))
+            package_basis = (
+                "exact_package"
+                if comparison_metric == "package_price"
+                else "configured_interval"
+                if profile.get("comparison_interval")
+                else "normalized_unit"
+            )
+            price_unit = (
+                "USD/package"
+                if comparison_metric == "package_price"
+                else f"USD/{comparison_metric.removeprefix('price_per_').replace('_', ' ')}"
+            )
+            bases.append(
+                {
+                    "profile_id": profile_id,
+                    "label": str(mode.get("label") or profile.get("label") or profile_id),
+                    "geography": str(
+                        mode.get("geography") or profile.get("geography") or "unknown"
+                    ),
+                    "comparison_metric": comparison_metric,
+                    "price_unit": price_unit,
+                    "package_basis": package_basis,
+                    "availability_policy": str(
+                        profile.get("availability_policy", "search_presence")
+                    ),
+                    "scorecard_role": "preferred" if profile_id == preferred else "fallback",
+                }
+            )
+        priority = {
+            str(value): index
+            for index, value in enumerate(decision_rules.get("profile_priority", []))
+        }
+        return sorted(
+            bases,
+            key=lambda row: (
+                priority.get(
+                    str(row["profile_id"]),
+                    len(priority)
+                    + (
+                        0
+                        if row["geography"] == "exact_zip"
+                        and row["comparison_metric"] == "package_price"
+                        else 1
+                        if row["geography"] == "exact_zip"
+                        else 2
+                    ),
+                ),
+                str(row["profile_id"]),
+            ),
+        )
+
+    @staticmethod
+    def _base_match_governance(result: JsonObject) -> JsonObject:
+        source = result.get("source", {})
+        revision_id = source.get("match_revision_id") if isinstance(source, dict) else None
+        return {
+            "mode": "governed" if revision_id else "ungoverned",
+            "match_revision_id": revision_id,
+            "applied_policy_revision_id": None,
+            "staged_revision_id": None,
+            "suggested": 0,
+            "confirmed": 0,
+            "rejected": 0,
+            "ambiguous": 0,
+        }
+
+    @staticmethod
+    def _base_report_readiness(result: JsonObject) -> JsonObject:
+        validation = result.get("validation", {})
+        ready = isinstance(validation, dict) and validation.get("status") == "ready_to_share"
+        return {
+            "status": "ready" if ready else "limited",
+            "blocking_reasons": [],
+            "warnings": [],
+            "suppressed_decisions": 0,
         }
 
     def worksheet_rows(
@@ -646,6 +745,9 @@ class ReportProjector:
                         self._retailer_names,
                         product_pack,
                     ),
+                    "comparison metric": str(
+                        mode.get("comparison_metric", "package_price")
+                    ).replace("_", " "),
                     "segment": _merchant_text(
                         segment_label,
                         self._retailer_names,
@@ -659,6 +761,13 @@ class ReportProjector:
                     "benchmark median": _formatted_metric(values.get("benchmark_median")),
                     "competitor median": _formatted_metric(values.get("competitor_median")),
                     "competitor - benchmark gap": _formatted_metric(values.get("median_gap")),
+                    "dominant outcome": self._dominant_outcome(
+                        self._numeric_metric(values.get("benchmark_lower_rate")),
+                        self._numeric_metric(values.get("competitor_lower_rate")),
+                        self._numeric_metric(values.get("parity_rate")),
+                    )
+                    .replace("_", " ")
+                    .title(),
                 }
             )
         return sorted(
@@ -689,13 +798,26 @@ class ReportProjector:
         comparisons = self._rows(result.get("comparisons"))
         benchmark_id = str(result.get("benchmark_retailer", "benchmark"))
         benchmark_name = self._retailer_name(benchmark_id)
+        decision_rules = product_pack.get("reporting", {}).get("decision_rules", {})
+        preferred_profile = str(decision_rules.get("preferred_scorecard_profile_id", ""))
+        preferred_profile_available = preferred_profile in modes
+        configured_priority = {
+            str(value): index
+            for index, value in enumerate(decision_rules.get("profile_priority", []))
+        }
         scorecards: list[JsonObject] = []
         for competitor_value in result.get("competitors", []):
             competitor_id = str(competitor_value)
             candidates = [
                 row for row in comparisons if str(row.get("competitor_id")) == competitor_id
             ]
-            candidates.sort(key=lambda row: self._scorecard_priority(row, modes))
+            candidates.sort(
+                key=lambda row: self._scorecard_priority(
+                    row,
+                    modes,
+                    configured_priority=configured_priority,
+                )
+            )
             comparison = candidates[0] if candidates else {}
             values = self._comparison_metric_values(
                 comparison,
@@ -726,6 +848,14 @@ class ReportProjector:
                         self._retailer_names,
                         product_pack,
                     ),
+                    "basis_status": (
+                        "preferred"
+                        if str(comparison.get("profile_id", "")) == preferred_profile
+                        or (comparison and not preferred_profile_available)
+                        else "fallback"
+                        if comparison
+                        else "unavailable"
+                    ),
                     "matches": self._whole_number(matches),
                     "matched_geographies": self._whole_number(matched_geographies),
                     "qualifying_geographies": self._whole_number(coverage_geographies),
@@ -735,6 +865,11 @@ class ReportProjector:
                     "benchmark_median": self._numeric_metric(values.get("benchmark_median")),
                     "competitor_median": self._numeric_metric(values.get("competitor_median")),
                     "median_gap": median_gap,
+                    "dominant_outcome": self._dominant_outcome(
+                        benchmark_rate,
+                        competitor_rate,
+                        parity_rate,
+                    ),
                     "price_position": self._price_position(
                         benchmark_name,
                         self._retailer_name(competitor_id),
@@ -753,6 +888,8 @@ class ReportProjector:
     def _scorecard_priority(
         comparison: JsonObject,
         modes: Mapping[str, JsonObject],
+        *,
+        configured_priority: Mapping[str, int] | None = None,
     ) -> tuple[int, str]:
         mode = modes.get(str(comparison.get("profile_id")), {})
         strict_exact = (
@@ -761,8 +898,11 @@ class ReportProjector:
         )
         exact_zip = str(mode.get("geography")) == "exact_zip"
         overall = str(comparison.get("segment_id", "all")) == "all"
+        configured = (configured_priority or {}).get(str(comparison.get("profile_id")))
         priority = (
-            0
+            configured * 2 + (0 if overall else 1)
+            if configured is not None
+            else 0
             if strict_exact and overall
             else 1
             if exact_zip and overall
@@ -829,6 +969,24 @@ class ReportProjector:
             return float(value)
         return None
 
+    @staticmethod
+    def _dominant_outcome(
+        benchmark_rate: float | None,
+        competitor_rate: float | None,
+        parity_rate: float | None,
+    ) -> str:
+        if benchmark_rate is None and competitor_rate is None and parity_rate is None:
+            return "unavailable"
+        values = {
+            "benchmark_lower": benchmark_rate or 0.0,
+            "competitor_lower": competitor_rate or 0.0,
+            "parity": parity_rate or 0.0,
+        }
+        return max(
+            values,
+            key=lambda key: (values[key], key == "parity", key),
+        )
+
     @classmethod
     def _coverage_value(
         cls,
@@ -866,10 +1024,10 @@ class ReportProjector:
         if median_gap is None:
             return "Typical price difference unavailable"
         if median_gap < 0:
-            return f"{competitor} is ${abs(median_gap):,.2f} lower at the median match"
+            return f"{competitor} was typically ${abs(median_gap):,.2f} lower"
         if median_gap > 0:
-            return f"{benchmark} is ${median_gap:,.2f} lower at the median match"
-        return "Median matched prices are tied"
+            return f"{benchmark} was typically ${median_gap:,.2f} lower"
+        return "Typical matched prices were tied"
 
     @staticmethod
     def _rows(value: object) -> list[JsonObject]:

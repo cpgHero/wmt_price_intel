@@ -199,6 +199,7 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
         "suggested": 0,
         "confirmed": 1,
         "rejected": 0,
+        "ambiguous": 0,
         "unmatched": 2,
     }
     assert reviewed["connections"][0]["status"] == "confirmed"

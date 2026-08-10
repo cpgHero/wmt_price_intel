@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from html import escape
@@ -16,10 +17,10 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 import xlsxwriter  # type: ignore[import-untyped]
 
 from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, ReportProjector
-from rci_results.contracts import canonical_result_bytes
+from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.13.0"
+RENDERER_VERSION = "2.14.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -294,6 +295,14 @@ padding:8px 11px;text-decoration:none;white-space:nowrap}.report-nav a:hover,.re
 background:var(--surface);color:var(--ink);outline:none}.report-group{background:transparent;border:0;
 box-shadow:none;margin:28px 0 0;padding:0}.report-group>h2{font-size:26px;margin:0 0 4px}
 .report-group>.group-note{color:var(--muted);margin:0 0 10px}.report-section{box-shadow:var(--shadow)}
+.readiness{align-items:center;border-left:4px solid var(--accent);display:flex;gap:24px;
+justify-content:space-between;margin-top:18px}.readiness.review_required{border-left-color:#9b6100}
+.readiness.limited{border-left-color:var(--muted)}.readiness h2{font-size:20px;margin:3px 0}
+.readiness p{color:var(--muted);margin:0}.readiness dl{display:grid;gap:8px;
+grid-template-columns:repeat(3,minmax(80px,1fr));margin:0}.readiness dl div{background:var(--surface);
+border-radius:10px;display:grid;padding:8px 12px}.readiness dt{color:var(--muted);font-size:9px;
+font-weight:800;letter-spacing:.06em;text-transform:uppercase}.readiness dd{font-size:20px;font-weight:800;margin:0}
+.comparison-basis td:first-child small{color:var(--muted);display:block;font-size:9px}
 .product-decisions{grid-template-columns:repeat(auto-fit,minmax(390px,1fr))}
 .product-decision{background:var(--card);border:1px solid var(--line);border-left:5px solid #9b6100;
 border-radius:18px;display:grid;gap:18px;grid-template-columns:142px minmax(0,1fr);margin:0;
@@ -526,12 +535,116 @@ def _retailer_scorecard_html(view: JsonObject) -> str:
     )
     return (
         "<section class='report-section retailer-scorecard'><div class=kind>Competitive set</div>"
-        "<h2>Retailer scorecard</h2><p class=group-note>One strict, exact-package view per "
+        "<h2>Retailer scorecard</h2><p class=group-note>One preferred comparison basis per "
         f"competitor. Lower-price shares use {escape(benchmark)} as the named reference retailer; "
         "the typical difference is competitor price minus reference-retailer price.</p>"
         "<div class=table-wrap><table><thead><tr><th>Competitor</th><th>Matched observations"
         "</th><th>Matched ZIP markets</th><th>Lower-price share</th><th>Typical price position"
         f"</th><th>Evidence</th></tr></thead><tbody>{body}</tbody></table></div></section>"
+    )
+
+
+def _report_readiness_html(view: JsonObject) -> str:
+    readiness = _mapping(view, "report_readiness")
+    governance = _mapping(view, "match_governance")
+    status = str(readiness.get("status") or "limited")
+    labels = {
+        "ready": "Ready for decision use",
+        "review_required": "Match review required",
+        "limited": "Use with stated limitations",
+    }
+    reasons = [*_rows(readiness, "blocking_reasons"), *_rows(readiness, "warnings")]
+    note = (
+        _display(reasons[0].get("message"))
+        if reasons
+        else (
+            f"{_integer(readiness.get('suppressed_decisions')):,} product decisions were "
+            "withheld by deterministic evidence guardrails."
+        )
+    )
+    return (
+        f"<section class='report-section readiness {escape(status, quote=True)}'>"
+        "<div><div class=kind>Decision readiness</div>"
+        f"<h2>{escape(labels.get(status, labels['limited']))}</h2>"
+        f"<p>{escape(note)}</p></div><dl><div><dt>Confirmed</dt><dd>"
+        f"{_integer(governance.get('confirmed')):,}</dd></div><div><dt>Suggested</dt><dd>"
+        f"{_integer(governance.get('suggested')):,}</dd></div><div><dt>Ambiguous</dt><dd>"
+        f"{_integer(governance.get('ambiguous')):,}</dd></div></dl></section>"
+    )
+
+
+def _comparison_basis_html(view: JsonObject) -> str:
+    rows = _rows(view, "comparison_bases")
+    if not rows:
+        return ""
+    body = "".join(
+        "<tr><td><strong>"
+        + escape(_display(row.get("label")))
+        + "</strong><small>"
+        + escape(_display(row.get("profile_id")))
+        + "</small></td><td>"
+        + escape(_display(row.get("comparison_metric")).replace("_", " "))
+        + "</td><td>"
+        + escape(_display(row.get("package_basis")).replace("_", " "))
+        + "</td><td>"
+        + escape(_display(row.get("geography")).replace("_", " "))
+        + "</td><td>"
+        + escape(_display(row.get("scorecard_role", "configured")).replace("_", " "))
+        + "</td></tr>"
+        for row in rows
+    )
+    return (
+        "<section class='report-section comparison-basis'><div class=kind>Comparison contract"
+        "</div><h2>Price and segment lenses</h2><p class=group-note>Every result below states "
+        "whether it compares exact package price, normalized unit price, or a configured "
+        "proximity sensitivity.</p><div class=table-wrap><table><thead><tr><th>Lens</th>"
+        "<th>Metric</th><th>Package basis</th><th>Geography</th><th>Scorecard role</th></tr>"
+        f"</thead><tbody>{body}</tbody></table></div></section>"
+    )
+
+
+def _match_governance_html(view: JsonObject) -> str:
+    relationships = _rows(view, "match_relationships")
+    governance = _mapping(view, "match_governance")
+    rows = [
+        {
+            "relationship_id": row.get("relationship_id") or row.get("id"),
+            "status": row.get("status"),
+            "competitor": row.get("competitor") or row.get("competitor_retailer_id"),
+            "primary_product": row.get("benchmark_product_name") or row.get("benchmark_product_id"),
+            "competitor_product": row.get("competitor_product_name")
+            or row.get("competitor_product_id"),
+            "eligible_lenses": row.get("eligible_profile_ids") or row.get("profile_ids"),
+        }
+        for row in relationships
+    ]
+    revision = governance.get("match_revision_id") or "No saved revision"
+    return (
+        "<section class=report-section><div class=kind>Governed one-to-one matching</div>"
+        "<h2>Product relationship review</h2><p class=group-note>Relationship decisions are "
+        "staged separately from the current publication. Use the application to confirm, reject, "
+        f"or reset a pair. Current match revision: {escape(_display(revision))}.</p>"
+        + _collapsed_table("View product relationships", rows)
+        + "</section>"
+    )
+
+
+def _export_manifest_html(view: JsonObject) -> str:
+    publication = _mapping(view, "publication")
+    row = {
+        "analysis_id": view.get("analysis_id"),
+        "publication_version": publication.get("version"),
+        "publication_status": publication.get("status"),
+        "result_checksum": view.get("result_checksum"),
+        "report_schema_version": view.get("schema_version"),
+        "renderer_version": RENDERER_VERSION,
+    }
+    return (
+        "<section class=report-section><div class=kind>Delivery integrity</div>"
+        "<h2>Export manifest</h2><p class=group-note>The app, HTML report, leadership email, "
+        "and workbook are projections of the same immutable AnalysisResult.</p>"
+        + _collapsed_table("View export identifiers", [row])
+        + "</section>"
     )
 
 
@@ -1196,6 +1309,7 @@ class LeadershipHtmlRenderer:
         presentation_context: JsonObject,
     ) -> bytes:
         product_pack = _mapping(view, "product_pack")
+        report_context = {**view, **presentation_context}
         pack_name = escape(_display(product_pack.get("name") or product_pack.get("id")))
         result_checksum = escape(_result_checksum(result))
         benchmark_label = str(view.get("benchmark_retailer") or "Benchmark")
@@ -1209,10 +1323,12 @@ class LeadershipHtmlRenderer:
                     "section_ids": list(sections),
                 }
             ]
+        special_groups = {"match-review", "exports"}
         populated_groups = [
             group
             for group in groups
-            if any(str(section_id) in sections for section_id in group.get("section_ids", []))
+            if group.get("id") in special_groups
+            or any(str(section_id) in sections for section_id in group.get("section_ids", []))
         ]
         nav = "".join(
             f"<a href='#{escape(str(group.get('id')), quote=True)}'>"
@@ -1223,7 +1339,7 @@ class LeadershipHtmlRenderer:
             self._group(
                 group,
                 sections,
-                presentation_context,
+                report_context,
                 benchmark_label=benchmark_label,
             )
             for group in populated_groups
@@ -1263,7 +1379,6 @@ note?.classList.toggle('visible',selected!=='all');document.dispatchEvent(new Cu
 select.addEventListener('change',apply);apply();})();</script>
 """
             scope_script = scope_script.replace("__RETAILER_SCOPE__", scope_data)
-        scorecard = _retailer_scorecard_html(view)
         document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{pack_name} analysis</title>
@@ -1275,7 +1390,7 @@ and which targeted moves matter most.</p><div class="meta">
 Analysis {escape(_display(result.get("analysis_id")))} ·
 Generated {escape(_display_generated_at(result))}</div><div class=checksum>Deterministic metrics ·
 Evidence linked · Result checksum {result_checksum[:12]}…</div>
-</header>{scope_control}<nav class=report-nav aria-label='Report sections'>{nav}</nav>{scorecard}{section_html}{scope_script}<footer>CPGHero Retail Competitive Intelligence · Immutable result
+</header>{scope_control}{_report_readiness_html(report_context)}<nav class=report-nav aria-label='Report sections'>{nav}</nav>{section_html}{scope_script}<footer>CPGHero Retail Competitive Intelligence · Immutable result
 <code>{result_checksum}</code></footer></main></body></html>"""
         return document.encode("utf-8")
 
@@ -1294,6 +1409,14 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
             if str(section_id) in sections
         ]
         content: list[str] = []
+        if group_id == "overview":
+            scorecard = _retailer_scorecard_html(presentation_context)
+            if scorecard:
+                content.append(scorecard)
+        if group_id == "price-segments":
+            basis = _comparison_basis_html(presentation_context)
+            if basis:
+                content.append(basis)
         if group_id == "geography" and _rows(presentation_context, "map_points"):
             coverage = next(
                 (
@@ -1337,6 +1460,10 @@ Evidence linked · Result checksum {result_checksum[:12]}…</div>
             )
             if assortment:
                 content.append(assortment)
+        if group_id == "match-review":
+            content.append(_match_governance_html(presentation_context))
+        if group_id == "exports":
+            content.append(_export_manifest_html(presentation_context))
         for section in group_sections:
             if section.get("kind") in {"kpi_strip", "assortment"}:
                 continue
@@ -1585,6 +1712,7 @@ class ExcelAuditRenderer:
         blueprint: ReportBlueprint | None = None,
         product_pack: JsonObject | None = None,
         projector: ReportProjector | None = None,
+        report_view: JsonObject | None = None,
     ) -> bytes:
         output = BytesIO()
         workbook = xlsxwriter.Workbook(
@@ -1603,14 +1731,32 @@ class ExcelAuditRenderer:
         if blueprint is not None and product_pack is not None:
             resolved_projector = projector or ReportProjector()
             profile = blueprint.artifact_profile("xlsx")
+            written_names: set[str] = set()
             for worksheet in profile.get("worksheet_definitions", []):
+                worksheet_name = str(worksheet["name"])
                 self._write_rows(
                     workbook,
-                    str(worksheet["name"]),
+                    worksheet_name,
                     resolved_projector.worksheet_rows(
                         result, str(worksheet["source"]), product_pack
                     ),
                 )
+                written_names.add(worksheet_name)
+            if report_view is not None:
+                aligned_sheets = (
+                    ("Report Readiness", [_mapping(report_view, "report_readiness")]),
+                    ("Comparison Bases", _rows(report_view, "comparison_bases")),
+                    ("Product Decisions", _rows(report_view, "product_decisions")),
+                    (
+                        "Suppressed Decisions",
+                        _rows(report_view, "suppressed_product_decisions"),
+                    ),
+                    ("Match Relationships", _rows(report_view, "match_relationships")),
+                    ("Match Governance", [_mapping(report_view, "match_governance")]),
+                )
+                for sheet_name, rows in aligned_sheets:
+                    if sheet_name not in written_names:
+                        self._write_rows(workbook, sheet_name, rows)
             self._write_rows(
                 workbook,
                 "Artifact Manifest",
@@ -1708,6 +1854,22 @@ class LeadershipEmailRenderer:
             f"Result checksum: {_result_checksum(result)}",
         ]
         if view is not None:
+            readiness = _mapping(view, "report_readiness")
+            governance = _mapping(view, "match_governance")
+            lines.extend(
+                (
+                    "",
+                    "Report integrity",
+                    "",
+                    f"- Decision readiness: {_display(readiness.get('status')).replace('_', ' ').title()}",
+                    f"- Match revision: {_display(governance.get('match_revision_id') or 'No saved revision')}",
+                    f"- Relationships: {_integer(governance.get('confirmed')):,} confirmed; "
+                    f"{_integer(governance.get('suggested')):,} suggested; "
+                    f"{_integer(governance.get('ambiguous')):,} ambiguous.",
+                    f"- Product decisions withheld by evidence guardrails: "
+                    f"{_integer(readiness.get('suppressed_decisions')):,}.",
+                )
+            )
             scorecards = sorted(
                 _rows(view, "retailer_scorecards"),
                 key=lambda row: _integer(row.get("matches")),
@@ -1835,6 +1997,11 @@ class ArtifactRenderer:
             else None
         )
         self._projector = ReportProjector(retailer_names)
+        self._report_view_validator = (
+            ReportViewValidator(inferred_root)
+            if (inferred_root / "schemas/report-view.schema.json").is_file()
+            else None
+        )
 
     @property
     def version(self) -> str:
@@ -1860,7 +2027,115 @@ class ArtifactRenderer:
         )
         if presentation_context:
             view.update(presentation_context)
-        return view
+        self._apply_report_integrity(view, result)
+        view["result_checksum"] = _result_checksum(result)
+        view["publication"] = None
+        return (
+            self._report_view_validator.validate(view)
+            if self._report_view_validator is not None
+            else view
+        )
+
+    @staticmethod
+    def _apply_report_integrity(view: JsonObject, result: JsonObject) -> None:
+        relationships = _rows(view, "match_relationships")
+        ambiguous_groups = _rows(view, "ambiguous_match_groups")
+        suppressed = _rows(view, "suppressed_product_decisions")
+        decisions = _rows(view, "product_decisions")
+        statuses = Counter(str(row.get("status")) for row in relationships)
+        source = _mapping(result, "source")
+        revision_id = source.get("match_revision_id")
+        view["match_governance"] = {
+            "mode": "governed" if revision_id else "ungoverned",
+            "match_revision_id": revision_id,
+            "applied_policy_revision_id": None,
+            "staged_revision_id": None,
+            "suggested": statuses["suggested"],
+            "confirmed": statuses["confirmed"],
+            "rejected": statuses["rejected"],
+            "ambiguous": len(ambiguous_groups),
+        }
+        blocking_reasons: list[JsonObject] = []
+        warnings: list[JsonObject] = []
+        if ambiguous_groups:
+            blocking_reasons.append(
+                {
+                    "code": "ambiguous_product_relationships",
+                    "message": (
+                        f"{len(ambiguous_groups):,} automatic candidate groups require "
+                        "one-to-one review."
+                    ),
+                }
+            )
+        if suppressed:
+            material_terms = ("package", "unit", "incompatible", "unresolved", "exceeds")
+            material_suppressed = [
+                row
+                for row in suppressed
+                if any(
+                    term in str(reason).casefold()
+                    for reason in row.get("suppression_reasons", [])
+                    for term in material_terms
+                )
+            ]
+            target = blocking_reasons if material_suppressed else warnings
+            target.append(
+                {
+                    "code": (
+                        "material_product_decisions_suppressed"
+                        if material_suppressed
+                        else "sparse_product_decisions_suppressed"
+                    ),
+                    "message": (
+                        f"{len(suppressed):,} product decisions were withheld; "
+                        + (
+                            f"{len(material_suppressed):,} require package, unit, or gap review."
+                            if material_suppressed
+                            else "the available store or geography evidence was below the configured minimum."
+                        )
+                    ),
+                }
+            )
+        scorecards = _rows(view, "retailer_scorecards")
+        for scorecard in scorecards:
+            rates = [
+                scorecard.get("benchmark_lower_rate"),
+                scorecard.get("competitor_lower_rate"),
+                scorecard.get("parity_rate"),
+            ]
+            numeric_rates = [
+                float(value)
+                for value in rates
+                if isinstance(value, int | float) and not isinstance(value, bool)
+            ]
+            if len(numeric_rates) == 3 and abs(sum(numeric_rates) - 1.0) > 0.001:
+                blocking_reasons.append(
+                    {
+                        "code": "price_outcomes_do_not_reconcile",
+                        "message": (
+                            f"Price outcomes do not reconcile for {scorecard.get('competitor')}."
+                        ),
+                        "competitor_id": str(scorecard.get("competitor_id")),
+                        "profile_id": str(scorecard.get("profile_id")),
+                    }
+                )
+        if decisions and not relationships:
+            warnings.append(
+                {
+                    "code": "legacy_relationship_projection",
+                    "message": "Product decisions predate relationship-governance metadata.",
+                }
+            )
+        has_ready_scorecard = any(row.get("status") == "ready" for row in scorecards)
+        status = (
+            "review_required" if blocking_reasons else "ready" if has_ready_scorecard else "limited"
+        )
+        view["report_readiness"] = {
+            "status": status,
+            "blocking_reasons": blocking_reasons,
+            "warnings": warnings,
+            "suppressed_decisions": len(suppressed),
+        }
 
     def _context(
         self,
@@ -1883,6 +2158,24 @@ class ArtifactRenderer:
             ),
         )
 
+    def _artifact_view(
+        self,
+        result: JsonObject,
+        context: tuple[ReportBlueprint, JsonObject, JsonObject] | None,
+        presentation_context: JsonObject | None,
+    ) -> JsonObject | None:
+        """Build a renderer view while retaining presentation-only evidence payloads."""
+
+        if context is None:
+            return None
+        view = dict(context[2])
+        if presentation_context:
+            view.update(presentation_context)
+        self._apply_report_integrity(view, result)
+        view["result_checksum"] = _result_checksum(result)
+        view.setdefault("publication", None)
+        return view
+
     def render(
         self,
         result: JsonObject,
@@ -1893,19 +2186,21 @@ class ArtifactRenderer:
         analysis_id = str(result["analysis_id"])
         if artifact_type == "html":
             context = self._context(result, "html")
+            view = self._artifact_view(result, context, presentation_context)
             return ArtifactPayload(
                 "html",
                 f"{analysis_id}.html",
                 "text/html; charset=utf-8",
                 self._html.render(
                     result,
-                    context[2] if context else None,
-                    presentation_context=presentation_context,
+                    view,
+                    presentation_context=view,
                 ),
                 self.version,
             )
         if artifact_type == "xlsx":
             context = self._context(result, "xlsx")
+            view = self._artifact_view(result, context, presentation_context)
             return ArtifactPayload(
                 "xlsx",
                 f"{analysis_id}.xlsx",
@@ -1915,13 +2210,15 @@ class ArtifactRenderer:
                     context[0] if context else None,
                     context[1] if context else None,
                     self._projector,
+                    view,
                 ),
                 self.version,
             )
         if artifact_type == "leadership_email":
             context = self._context(result, "leadership_email")
             html_context = self._context(result, "html")
-            view = context[2] if context else None
+            view = self._artifact_view(result, context, presentation_context)
+            html_view = self._artifact_view(result, html_context, presentation_context)
             return ArtifactPayload(
                 "leadership_email",
                 f"{analysis_id}.eml",
@@ -1931,8 +2228,8 @@ class ArtifactRenderer:
                     view,
                     report_html=self._html.render(
                         result,
-                        html_context[2] if html_context else None,
-                        presentation_context=presentation_context,
+                        html_view,
+                        presentation_context=html_view,
                     ),
                 ),
                 self.version,
@@ -1949,7 +2246,7 @@ class ArtifactRenderer:
     ) -> ArtifactPayload:
         children = [
             self.render(result, "html", presentation_context=presentation_context),
-            self.render(result, "xlsx"),
+            self.render(result, "xlsx", presentation_context=presentation_context),
             self.render(
                 result,
                 "leadership_email",

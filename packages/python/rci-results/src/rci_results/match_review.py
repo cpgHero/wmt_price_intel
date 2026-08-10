@@ -744,6 +744,28 @@ class MatchReviewService:
             default_profile_id=(profiles[0]["id"] if profiles else "strict"),
             profile_ids={str(profile["id"]) for profile in profiles},
         )
+        for product in products:
+            participation: list[JsonObject] = []
+            for connection in connections:
+                is_benchmark = str(product["retailer_id"]) == benchmark and str(
+                    product["product_id"]
+                ) == str(connection["benchmark_product_id"])
+                is_competitor = str(product["retailer_id"]) == str(
+                    connection["competitor_retailer_id"]
+                ) and str(product["product_id"]) == str(connection["competitor_product_id"])
+                if not (is_benchmark or is_competitor):
+                    continue
+                participation.extend(
+                    {
+                        "profile_id": str(profile_id),
+                        "status": str(connection["status"]),
+                    }
+                    for profile_id in connection.get("eligible_profile_ids", [])
+                )
+            product["other_lens_participation"] = sorted(
+                participation,
+                key=lambda row: (str(row["profile_id"]), str(row["status"])),
+            )
         connected = {
             (connection["competitor_retailer_id"], connection["competitor_product_id"])
             for connection in connections
@@ -755,7 +777,7 @@ class MatchReviewService:
         }
         summary = {
             status: sum(connection["status"] == status for connection in connections)
-            for status in ("suggested", "confirmed", "rejected")
+            for status in ("suggested", "confirmed", "rejected", "ambiguous")
         }
         summary["unmatched"] = sum(
             (product["retailer_id"], product["product_id"]) not in connected for product in products
@@ -766,6 +788,22 @@ class MatchReviewService:
             "product_pack_version": analysis.product_pack_version,
             "revision_id": revision.id if revision is not None else None,
             "revision": revision.revision if revision is not None else 0,
+            "current_publication_revision_id": (
+                document.get("source", {}).get("match_revision_id")
+                if isinstance(document.get("source"), dict)
+                else None
+            ),
+            "staged_revision_id": (
+                revision.id
+                if revision is not None
+                and revision.id
+                != (
+                    document.get("source", {}).get("match_revision_id")
+                    if isinstance(document.get("source"), dict)
+                    else None
+                )
+                else None
+            ),
             "future_application": (
                 {
                     "revision_id": future_revision.id,
@@ -999,19 +1037,24 @@ class MatchReviewService:
             )
             if not all(key):
                 continue
+            candidate_status = str(row.get("relationship_status") or "suggested")
+            if candidate_status == "unmatched":
+                continue
             candidate_profile_id = str(row.get("profile_id") or default_profile_id)
             if candidate_profile_id not in profile_ids:
                 continue
             connection = connections.setdefault(
                 key,
                 {
-                    "id": str(row.get("id") or "automatic"),
+                    "id": str(row.get("relationship_id") or row.get("id") or "automatic"),
+                    "relationship_id": row.get("relationship_id"),
+                    "candidate_group_id": row.get("candidate_group_id"),
                     "competitor_retailer_id": key[0],
                     "source_profile_id": candidate_profile_id,
                     "eligible_profile_ids": [],
                     "benchmark_product_id": key[1],
                     "competitor_product_id": key[2],
-                    "status": "suggested",
+                    "status": candidate_status,
                     "origin": "automatic",
                     "reason": str(
                         row.get("match_rationale")
@@ -1020,6 +1063,8 @@ class MatchReviewService:
                     "matches": 0,
                     "geographies": 0,
                     "median_gap": row.get("median_gap"),
+                    "qa_status": str(row.get("qa_status") or "ready"),
+                    "suppression_reasons": list(row.get("suppression_reasons") or []),
                     "match_basis": str(row.get("match_basis") or "exact_package"),
                     "profile_evidence": [],
                 },
@@ -1068,6 +1113,8 @@ class MatchReviewService:
             connection.update(
                 {
                     "id": rule.id,
+                    "relationship_id": rule.id,
+                    "candidate_group_id": None,
                     "source_profile_id": rule.source_profile_id,
                     "eligible_profile_ids": list(rule.eligible_profile_ids),
                     "status": rule.decision,
@@ -1085,6 +1132,8 @@ class MatchReviewService:
                 key,
                 {
                     "id": rule.id,
+                    "relationship_id": rule.id,
+                    "candidate_group_id": None,
                     "competitor_retailer_id": key[0],
                     "source_profile_id": rule.source_profile_id,
                     "eligible_profile_ids": list(rule.eligible_profile_ids),
@@ -1096,6 +1145,8 @@ class MatchReviewService:
                     "matches": None,
                     "geographies": None,
                     "median_gap": None,
+                    "qa_status": "ready",
+                    "suppression_reasons": [],
                     "match_basis": "user_defined",
                     "profile_evidence": [],
                 },
@@ -1127,7 +1178,7 @@ class MatchReviewService:
             ),
             key=lambda row: (
                 str(row["competitor_retailer_id"]),
-                {"confirmed": 0, "suggested": 1, "rejected": 2}[str(row["status"])],
+                {"confirmed": 0, "suggested": 1, "ambiguous": 2, "rejected": 3}[str(row["status"])],
                 -int(row.get("matches") or 0),
                 str(row["benchmark_product_id"]),
             ),

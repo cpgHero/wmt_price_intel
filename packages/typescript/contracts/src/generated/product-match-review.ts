@@ -6,6 +6,8 @@ export interface RetailCompetitiveIntelligenceProductMatchReview {
   product_pack_version: string;
   revision_id?: string | null;
   revision: number;
+  current_publication_revision_id?: string | null;
+  staged_revision_id?: string | null;
   future_application: null | {
     revision_id: string;
     revision: number;
@@ -20,6 +22,7 @@ export interface RetailCompetitiveIntelligenceProductMatchReview {
     confirmed: number;
     rejected: number;
     unmatched: number;
+    ambiguous?: number;
   };
 }
 export interface Retailer {
@@ -41,10 +44,16 @@ export interface Product {
   image_url?: string | null;
   url?: string | null;
   price?: number | null;
+  other_lens_participation?: {
+    profile_id: string;
+    status: "suggested" | "confirmed" | "rejected" | "ambiguous";
+  }[];
   [k: string]: unknown;
 }
 export interface Connection {
   id?: string | null;
+  relationship_id?: string | null;
+  candidate_group_id?: string | null;
   competitor_retailer_id: string;
   source_profile_id: string;
   /**
@@ -53,12 +62,14 @@ export interface Connection {
   eligible_profile_ids: [string, ...string[]];
   benchmark_product_id: string;
   competitor_product_id: string;
-  status: "suggested" | "confirmed" | "rejected";
+  status: "suggested" | "confirmed" | "rejected" | "ambiguous";
   origin: "automatic" | "user";
   reason?: string | null;
   matches?: number | null;
   geographies?: number | null;
   median_gap?: number | null;
+  qa_status?: "ready" | "review_required" | "suppressed";
+  suppression_reasons?: string[];
   match_basis: "exact_package" | "normalized_unit" | "multiple" | "user_defined";
   profile_evidence: ProfileEvidence[];
 }

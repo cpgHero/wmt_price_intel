@@ -514,6 +514,15 @@
       "segment_outcome",
       "brand_table"
     ],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "same_brand_exact",
+      "profile_priority": ["same_brand_exact", "private_label", "all_brand"],
+      "minimum_observations": 25,
+      "minimum_geographies": 25,
+      "executive_relationship_states": ["suggested", "confirmed"],
+      "extreme_gap_behavior": "suppress",
+      "parity_display": "include"
+    },
     "alertable_metrics": [
       "price_gap_per_gallon",
       "same_brand_parity_rate",

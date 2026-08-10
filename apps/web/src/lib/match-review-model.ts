@@ -16,6 +16,7 @@ export interface MatchReviewScope {
     suggested: number;
     confirmed: number;
     rejected: number;
+    ambiguous: number;
     unmatched: number;
   };
 }
@@ -143,6 +144,9 @@ export function scopeMatchReview(
       ).length,
       rejected: connections.filter(
         (connection) => connection.status === "rejected",
+      ).length,
+      ambiguous: connections.filter(
+        (connection) => connection.status === "ambiguous",
       ).length,
       unmatched:
         unmatchedBenchmarkProducts.length + unmatchedCompetitorProducts.length,

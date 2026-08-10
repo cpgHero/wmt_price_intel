@@ -80,6 +80,25 @@ def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
         )
 
 
+def test_every_product_pack_defines_generic_decision_reporting_rules() -> None:
+    for pack_id in (
+        "fresh_strawberries",
+        "fresh_ground_beef",
+        "fresh_shell_eggs",
+        "fresh_fluid_milk",
+        "fresh_bananas",
+    ):
+        pack = ProductPackLoader(REPOSITORY_ROOT).load(pack_id)
+        rules = pack.reporting["decision_rules"]
+
+        assert rules["preferred_scorecard_profile_id"] in rules["profile_priority"]
+        assert set(rules["profile_priority"]) == {
+            str(profile["id"]) for profile in pack.matching_profiles
+        }
+        assert rules["executive_relationship_states"] == ["suggested", "confirmed"]
+        assert rules["parity_display"] == "include"
+
+
 def test_narrative_decision_lenses_resolve_runtime_metric_names() -> None:
     benchmark_categories = json.loads(
         (REPOSITORY_ROOT / "fixtures/golden/narrative-benchmarks.json").read_text()
@@ -160,6 +179,16 @@ def test_semantic_validation_rejects_unknown_insight_template_fields() -> None:
     invalid["reporting"]["insight_rules"][0]["title_template"] = "{category} pressure"
 
     with pytest.raises(ContractError, match="unknown template fields"):
+        loader._validate_semantics(invalid)
+
+
+def test_semantic_validation_rejects_unknown_decision_profile() -> None:
+    loader = ProductPackLoader(REPOSITORY_ROOT)
+    pack = loader.load("fresh_strawberries")
+    invalid = copy.deepcopy(pack.document)
+    invalid["reporting"]["decision_rules"]["profile_priority"].append("not_a_profile")
+
+    with pytest.raises(ContractError, match="unknown profiles"):
         loader._validate_semantics(invalid)
 
 

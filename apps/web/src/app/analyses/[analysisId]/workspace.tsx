@@ -210,35 +210,100 @@ function BlueprintAnalysisWorkspace({
     reportView.groups,
   );
   const firstPopulatedGroup =
-    groupedSections.find((group) => group.sections.length > 0)?.id ?? "summary";
+    groupedSections.find((group) => group.sections.length > 0)?.id ??
+    "overview";
   const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);
   const competitorOptions = reportView.retailer_scope.competitors;
   const [selectedCompetitor, setSelectedCompetitor] = useState("all");
+  const preferredBasis =
+    reportView.comparison_bases.find(
+      (basis) => basis.scorecard_role === "preferred",
+    )?.profile_id ??
+    reportView.comparison_bases[0]?.profile_id ??
+    "";
+  const [selectedLens, setSelectedLens] = useState(preferredBasis);
+  const [selectedPair, setSelectedPair] = useState<string | null>(null);
   useEffect(() => {
     const applyLocation = () => {
-      const requested = new URL(window.location.href).searchParams.get(
-        "competitor",
-      );
+      const parameters = new URL(window.location.href).searchParams;
+      const requested = parameters.get("competitor");
       setSelectedCompetitor(
         requested && competitorOptions.some((option) => option.id === requested)
           ? requested
           : "all",
       );
+      const requestedTab = parameters.get("tab");
+      setActiveGroup(
+        requestedTab &&
+          reportView.groups.some((group) => group.id === requestedTab)
+          ? requestedTab
+          : firstPopulatedGroup,
+      );
+      const requestedLens = parameters.get("lens");
+      setSelectedLens(
+        requestedLens &&
+          reportView.comparison_bases.some(
+            (basis) => basis.profile_id === requestedLens,
+          )
+          ? requestedLens
+          : preferredBasis,
+      );
+      setSelectedPair(parameters.get("pair"));
     };
     applyLocation();
     window.addEventListener("popstate", applyLocation);
     return () => window.removeEventListener("popstate", applyLocation);
-  }, [competitorOptions]);
+  }, [competitorOptions, firstPopulatedGroup, preferredBasis, reportView]);
+  const updateRoute = (updates: Record<string, string | null>) => {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  };
   const selectCompetitor = (competitorId: string) => {
     const valid =
       competitorId === "all" ||
       competitorOptions.some((option) => option.id === competitorId);
     const next = valid ? competitorId : "all";
     setSelectedCompetitor(next);
-    const url = new URL(window.location.href);
-    if (next === "all") url.searchParams.delete("competitor");
-    else url.searchParams.set("competitor", next);
-    window.history.replaceState(window.history.state, "", url);
+    updateRoute({ competitor: next === "all" ? null : next });
+  };
+  const selectGroup = (groupId: string) => {
+    setActiveGroup(groupId);
+    if (groupId !== "match-review") setSelectedPair(null);
+    updateRoute({
+      tab: groupId === firstPopulatedGroup ? null : groupId,
+      pair: groupId === "match-review" ? selectedPair : null,
+    });
+  };
+  const selectLens = (profileId: string) => {
+    const valid = reportView.comparison_bases.some(
+      (basis) => basis.profile_id === profileId,
+    );
+    const next = valid ? profileId : preferredBasis;
+    setSelectedLens(next);
+    updateRoute({ lens: next === preferredBasis ? null : next });
+  };
+  const reviewDecision = (decision: ProductDecision) => {
+    setActiveGroup("match-review");
+    setSelectedCompetitor(
+      competitorOptions.find((option) =>
+        matchesRetailer(decision.competitor, option),
+      )?.id ?? selectedCompetitor,
+    );
+    setSelectedLens(decision.profile_id || preferredBasis);
+    setSelectedPair(decision.relationship_id || decision.id);
+    updateRoute({
+      tab: "match-review",
+      competitor:
+        competitorOptions.find((option) =>
+          matchesRetailer(decision.competitor, option),
+        )?.id ?? null,
+      lens: decision.profile_id || null,
+      pair: decision.relationship_id || decision.id,
+    });
   };
   const selectedRetailer =
     competitorOptions.find((option) => option.id === selectedCompetitor) ??
@@ -251,6 +316,7 @@ function BlueprintAnalysisWorkspace({
         section,
         selectedRetailer,
         reportView.retailer_scope.benchmark,
+        selectedLens,
       ),
       evidence_sets: scopeEvidenceRows(
         section.evidence_sets,
@@ -340,6 +406,7 @@ function BlueprintAnalysisWorkspace({
         selected={selectedCompetitor}
         onSelect={selectCompetitor}
       />
+      <ReportReadinessBanner reportView={reportView} />
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
         {groupedSections.map((group) => (
           <button
@@ -347,36 +414,22 @@ function BlueprintAnalysisWorkspace({
             role="tab"
             aria-selected={activeGroup === group.id}
             className={activeGroup === group.id ? "active" : ""}
-            onClick={() => setActiveGroup(group.id)}
+            onClick={() => selectGroup(group.id)}
             key={group.id}
           >
             {group.label}
           </button>
         ))}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeGroup === "match-review"}
-          className={activeGroup === "match-review" ? "active" : ""}
-          onClick={() => setActiveGroup("match-review")}
-        >
-          Match Review
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeGroup === "exports"}
-          className={activeGroup === "exports" ? "active" : ""}
-          onClick={() => setActiveGroup("exports")}
-        >
-          Exports
-        </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
         {activeGroup === "match-review" ? (
           <MatchReviewWorkbench
             analysisId={analysis.analysis_id}
             scopedCompetitorId={selectedRetailer?.id ?? null}
+            scopedProfileId={selectedLens || null}
+            focusedRelationshipId={selectedPair}
+            onCompetitorSelect={selectCompetitor}
+            onProfileSelect={selectLens}
           />
         ) : activeGroup === "exports" ? (
           <Section
@@ -394,11 +447,18 @@ function BlueprintAnalysisWorkspace({
           />
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
-            {activeGroup === "summary" && selectedScorecards.length ? (
+            {activeGroup === "overview" && selectedScorecards.length ? (
               <RetailerScorecardPanel
                 benchmark={reportView.retailer_scope.benchmark}
                 rows={selectedScorecards}
                 onSelect={selectCompetitor}
+              />
+            ) : null}
+            {activeGroup === "price-segments" ? (
+              <ComparisonBasisControl
+                bases={reportView.comparison_bases}
+                selected={selectedLens}
+                onSelect={selectLens}
               />
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
@@ -418,6 +478,7 @@ function BlueprintAnalysisWorkspace({
                 benchmarkRetailer={reportView.benchmark_retailer}
                 rows={scopedDecisions}
                 title="Product-level price evidence"
+                onReviewMatch={reviewDecision}
               />
             ) : null}
             {selectedGroup.sections
@@ -433,7 +494,7 @@ function BlueprintAnalysisWorkspace({
                     showPortfolioNarrative={selectedRetailer === null}
                     selectedRetailerName={selectedRetailer?.name ?? null}
                   />
-                  {activeGroup === "summary" &&
+                  {activeGroup === "overview" &&
                   section.kind === "executive_summary" ? (
                     <>
                       {scopedDecisions.length ? (
@@ -442,6 +503,7 @@ function BlueprintAnalysisWorkspace({
                           benchmarkRetailer={reportView.benchmark_retailer}
                           rows={scopedDecisions.slice(0, 6)}
                           title="Products changing the competitive picture"
+                          onReviewMatch={reviewDecision}
                         />
                       ) : null}
                     </>
@@ -764,9 +826,16 @@ function scopeReportRows(
   section: ReportSectionView,
   selected: RetailerOption | null,
   benchmark: RetailerOption,
+  selectedProfileId?: string,
 ) {
-  if (!selected) return section.records;
   return section.records.filter((row) => {
+    if (
+      selectedProfileId &&
+      row._profile_id &&
+      String(row._profile_id) !== selectedProfileId
+    )
+      return false;
+    if (!selected) return true;
     if (row._competitor_id)
       return matchesRetailer(row._competitor_id, selected);
     if (row._retailer_id) {
@@ -785,6 +854,76 @@ function scopeReportRows(
     }
     return true;
   });
+}
+
+function ReportReadinessBanner({
+  reportView,
+}: Readonly<{ reportView: AnalysisReportView }>) {
+  const readiness = reportView.report_readiness;
+  const relationshipCounts = reportView.match_governance;
+  return (
+    <section className={`report-readiness ${readiness.status}`}>
+      <div>
+        <small>Decision readiness</small>
+        <strong>
+          {readiness.status === "ready"
+            ? "Ready for decision use"
+            : readiness.status === "review_required"
+              ? "Match review required"
+              : "Use with stated limitations"}
+        </strong>
+        <span>
+          {relationshipCounts.confirmed.toLocaleString()} confirmed ·{" "}
+          {relationshipCounts.suggested.toLocaleString()} suggested ·{" "}
+          {relationshipCounts.ambiguous.toLocaleString()} ambiguous
+        </span>
+      </div>
+      <p>
+        {readiness.blocking_reasons[0]?.message ??
+          readiness.warnings[0]?.message ??
+          `${readiness.suppressed_decisions.toLocaleString()} product decisions were withheld by deterministic evidence guardrails.`}
+      </p>
+    </section>
+  );
+}
+
+function ComparisonBasisControl({
+  bases,
+  selected,
+  onSelect,
+}: Readonly<{
+  bases: AnalysisReportView["comparison_bases"];
+  selected: string;
+  onSelect: (profileId: string) => void;
+}>) {
+  const current = bases.find((basis) => basis.profile_id === selected);
+  return (
+    <section className="comparison-basis-control">
+      <div>
+        <p className="eyebrow">Comparison basis</p>
+        <h2>{current?.label ?? "Configured comparison lens"}</h2>
+        <p>
+          {current
+            ? `${displayLabel(current.comparison_metric)} · ${displayLabel(current.package_basis)} · ${displayLabel(current.geography)}`
+            : "Choose the deterministic basis used for the price and segment evidence below."}
+        </p>
+      </div>
+      <label>
+        <span>Lens</span>
+        <select
+          value={selected}
+          onChange={(event) => onSelect(event.target.value)}
+        >
+          {bases.map((basis) => (
+            <option value={basis.profile_id} key={basis.profile_id}>
+              {basis.label}
+              {basis.scorecard_role === "preferred" ? " · preferred" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+    </section>
+  );
 }
 
 function rowReferencesRetailer(row: JsonObject, retailer: RetailerOption) {
@@ -1142,11 +1281,13 @@ function ProductDecisionBoard({
   benchmarkRetailer,
   rows,
   title,
+  onReviewMatch,
 }: Readonly<{
   analysisId: string;
   benchmarkRetailer: string;
   rows: ProductDecision[];
   title: string;
+  onReviewMatch: (decision: ProductDecision) => void;
 }>) {
   const [selected, setSelected] = useState<ProductDecision | null>(null);
   return (
@@ -1231,6 +1372,7 @@ function ProductDecisionBoard({
           benchmarkRetailer={benchmarkRetailer}
           decision={selected}
           onClose={() => setSelected(null)}
+          onReviewMatch={() => onReviewMatch(selected)}
         />
       ) : null}
     </Section>
@@ -1304,11 +1446,13 @@ function ProductEvidenceDrawer({
   benchmarkRetailer,
   decision,
   onClose,
+  onReviewMatch,
 }: Readonly<{
   analysisId: string;
   benchmarkRetailer: string;
   decision: ProductDecision;
   onClose: () => void;
+  onReviewMatch: () => void;
 }>) {
   const [evidence, setEvidence] = useState<ProductEvidenceResponse | null>(
     null,
@@ -1399,12 +1543,17 @@ function ProductEvidenceDrawer({
             </div>
             <div className="evidence-toolbar">
               <p>{evidence.comparison_grain}</p>
-              <a
-                href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
-                download
-              >
-                Download store evidence (.csv)
-              </a>
+              <span>
+                <button type="button" onClick={onReviewMatch}>
+                  Review or change this match
+                </button>
+                <a
+                  href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
+                  download
+                >
+                  Download store evidence (.csv)
+                </a>
+              </span>
             </div>
             <div className="evidence-table-wrap">
               <table className="evidence-table">

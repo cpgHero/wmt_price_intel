@@ -323,6 +323,15 @@
       "price_outcome",
       "segment_table"
     ],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "strict",
+      "profile_priority": ["strict", "compatible"],
+      "minimum_observations": 25,
+      "minimum_geographies": 25,
+      "executive_relationship_states": ["suggested", "confirmed"],
+      "extreme_gap_behavior": "suppress",
+      "parity_display": "include"
+    },
     "alertable_metrics": [
       "walmart_lower_rate",
       "median_gap_per_dozen",

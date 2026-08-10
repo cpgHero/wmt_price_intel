@@ -37,6 +37,7 @@ from rci_analytics import (
     benchmark_product_map_points,
     benchmark_product_match_candidates,
     evidence_set,
+    resolve_one_to_one_relationships,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
 from rci_analytics.models import MatchRecord
@@ -721,16 +722,30 @@ class AnalysisProcessor:
         comparison_evidence_sets: list[dict[str, Any]] = []
         map_matches: list[MatchRecord] = []
         review_matches: list[MatchRecord] = []
+        candidate_matches: list[MatchRecord] = []
+        match_relationships: list[dict[str, Any]] = []
+        ambiguous_match_groups: list[dict[str, Any]] = []
         headline_segments = tuple(str(value) for value in pack.reporting["headline_segments"])
+        decision_rules = pack.reporting["decision_rules"]
+        profile_priority = [
+            str(value)
+            for value in decision_rules["profile_priority"]
+            if any(
+                str(profile["id"]) == str(value) and str(profile["geography"]) == "exact_zip"
+                for profile in selected_profiles
+            )
+        ]
         for competitor in competitors:
             mapped_competitor = False
-            for profile_index, profile in enumerate(selected_profiles):
-                matches = (
+            ungoverned_by_profile: dict[str, list[MatchRecord]] = {}
+            for profile in selected_profiles:
+                profile_id = str(profile["id"])
+                ungoverned_by_profile[profile_id] = (
                     engine.compare_governed(
                         comparison_offers,
                         benchmark_id=benchmark,
                         competitor_id=competitor,
-                        profile_id=str(profile["id"]),
+                        profile_id=profile_id,
                         rules=governed_rules,
                     )
                     if job.match_revision_id is not None
@@ -738,9 +753,28 @@ class AnalysisProcessor:
                         comparison_offers,
                         benchmark_id=benchmark,
                         competitor_id=competitor,
-                        profile_id=str(profile["id"]),
+                        profile_id=profile_id,
                     )
                 )
+                if str(profile["geography"]) == "exact_zip":
+                    candidate_matches.extend(ungoverned_by_profile[profile_id])
+            resolution = resolve_one_to_one_relationships(
+                comparison_offers,
+                (
+                    match
+                    for profile_matches in ungoverned_by_profile.values()
+                    for match in profile_matches
+                ),
+                benchmark_retailer=benchmark,
+                profile_priority=profile_priority,
+            )
+            match_relationships.extend(dict(row) for row in resolution.relationships)
+            ambiguous_match_groups.extend(dict(row) for row in resolution.ambiguous_groups)
+            resolved_by_profile: dict[str, list[MatchRecord]] = defaultdict(list)
+            for match in resolution.matches:
+                resolved_by_profile[match.profile_id].append(match)
+            for profile_index, profile in enumerate(selected_profiles):
+                matches = resolved_by_profile.get(str(profile["id"]), [])
                 if not matches:
                     continue
                 artifact = await self._dataset_writer.write_matches(
@@ -911,24 +945,76 @@ class AnalysisProcessor:
             evidence_sets=evidence_sets,
             raw_source_artifact_ids=raw_artifact_ids,
         )
+        decision_rows = benchmark_product_decisions(
+            comparison_offers,
+            map_matches,
+            benchmark_retailer=benchmark,
+            decision_rules=decision_rules,
+            qa_rules=pack.document["qa_rules"],
+        )
+        product_decisions = [row for row in decision_rows if row["qa_status"] == "ready"]
+        suppressed_product_decisions = [row for row in decision_rows if row["qa_status"] != "ready"]
         map_points = benchmark_product_map_points(
             comparison_offers,
             map_matches,
             benchmark_retailer=benchmark,
-        )
-        product_decisions = benchmark_product_decisions(
-            comparison_offers,
-            map_matches,
-            benchmark_retailer=benchmark,
+            allowed_relationship_ids={
+                str(row["relationship_id"])
+                for row in product_decisions
+                if row.get("relationship_id")
+            },
         )
         match_candidates = benchmark_product_match_candidates(
             comparison_offers,
-            review_matches,
+            candidate_matches,
             benchmark_retailer=benchmark,
             profiles=selected_profiles,
             max_rows=2_000,
             max_locations_per_row=1,
         )
+        relationship_index: dict[tuple[str, str, str], dict[str, Any]] = {
+            (
+                str(row["competitor_id"]),
+                str(row["benchmark_product_id"]),
+                str(row["competitor_product_id"]),
+            ): row
+            for row in match_relationships
+        }
+        ambiguous_index: dict[tuple[str, str, str], str] = {
+            (
+                str(group["competitor_id"]),
+                str(candidate["benchmark_product_id"]),
+                str(candidate["competitor_product_id"]),
+            ): str(group["candidate_group_id"])
+            for group in ambiguous_match_groups
+            for candidate in group["candidates"]
+        }
+        for candidate in match_candidates:
+            relationship_key = (
+                str(candidate["competitor"]),
+                str(candidate["benchmark_product_id"]),
+                str(candidate["competitor_product_id"]),
+            )
+            relationship = relationship_index.get(relationship_key)
+            candidate["relationship_id"] = (
+                str(relationship["relationship_id"]) if relationship is not None else None
+            )
+            candidate["relationship_status"] = (
+                str(relationship["status"])
+                if relationship is not None
+                else "ambiguous"
+                if relationship_key in ambiguous_index
+                else "unmatched"
+            )
+            candidate["candidate_group_id"] = ambiguous_index.get(relationship_key)
+            candidate["qa_status"] = (
+                "review_required" if candidate["relationship_status"] == "ambiguous" else "ready"
+            )
+            candidate["suppression_reasons"] = (
+                ["Automatic candidates do not have a unique one-to-one assignment"]
+                if candidate["relationship_status"] == "ambiguous"
+                else []
+            )
         assortment_analysis = assortment_accumulator.finalize(
             benchmark_retailer=benchmark,
             competitors=competitors,
@@ -949,14 +1035,17 @@ class AnalysisProcessor:
                 product_decisions=product_decisions,
             )
         record = await self._results.publish(document, collection_run_id=job.collection_run_id)
-        if map_points or product_decisions:
+        if map_points or product_decisions or suppressed_product_decisions or match_relationships:
             await self._results.publish_publication(
                 record.analysis_id,
                 document,
                 presentation_context={
                     "map_points": map_points,
                     "product_decisions": product_decisions,
+                    "suppressed_product_decisions": suppressed_product_decisions,
                     "match_candidates": match_candidates,
+                    "match_relationships": match_relationships,
+                    "ambiguous_match_groups": ambiguous_match_groups,
                     "assortment_analysis": assortment_analysis,
                 },
             )

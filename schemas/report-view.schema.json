@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/report-view.schema.json",
+  "title": "Retail Competitive Intelligence Report View",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "generated_at",
+    "benchmark_retailer",
+    "competitors",
+    "retailer_scope",
+    "retailer_scorecards",
+    "product_pack",
+    "blueprint",
+    "comparison_bases",
+    "match_governance",
+    "report_readiness",
+    "groups",
+    "sections",
+    "result_checksum",
+    "publication"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "benchmark_retailer": { "type": "string", "minLength": 1 },
+    "competitors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "retailer_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["benchmark", "competitors"],
+      "properties": {
+        "benchmark": { "$ref": "#/$defs/retailer" },
+        "competitors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/retailer" }
+        }
+      }
+    },
+    "retailer_scorecards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scorecard" }
+    },
+    "product_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "recommended_charts"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "recommended_charts": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "blueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "comparison_bases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/comparisonBasis" }
+    },
+    "match_governance": { "$ref": "#/$defs/matchGovernance" },
+    "report_readiness": { "$ref": "#/$defs/reportReadiness" },
+    "groups": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/group" }
+    },
+    "sections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "result_checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "publication": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/publication" }
+      ]
+    },
+    "product_highlights": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "product_decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/productDecision" }
+    },
+    "suppressed_product_decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/productDecision" }
+    },
+    "match_candidates": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "match_relationships": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "ambiguous_match_groups": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "map_points": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "quality_observations": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "assortment_analysis": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "comparisonBasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "label",
+        "geography",
+        "comparison_metric",
+        "price_unit",
+        "package_basis",
+        "availability_policy"
+      ],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "geography": { "type": "string", "minLength": 1 },
+        "comparison_metric": { "type": "string", "minLength": 1 },
+        "price_unit": { "type": "string", "minLength": 1 },
+        "package_basis": {
+          "enum": ["exact_package", "normalized_unit", "configured_interval"]
+        },
+        "availability_policy": { "type": "string", "minLength": 1 },
+        "scorecard_role": { "enum": ["preferred", "fallback", "excluded"] }
+      }
+    },
+    "matchGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "match_revision_id",
+        "applied_policy_revision_id",
+        "staged_revision_id",
+        "suggested",
+        "confirmed",
+        "rejected",
+        "ambiguous"
+      ],
+      "properties": {
+        "mode": { "enum": ["ungoverned", "governed"] },
+        "match_revision_id": { "type": ["string", "null"], "format": "uuid" },
+        "applied_policy_revision_id": { "type": ["string", "null"], "format": "uuid" },
+        "staged_revision_id": { "type": ["string", "null"], "format": "uuid" },
+        "suggested": { "type": "integer", "minimum": 0 },
+        "confirmed": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "ambiguous": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reportReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "blocking_reasons", "warnings", "suppressed_decisions"],
+      "properties": {
+        "status": { "enum": ["ready", "review_required", "limited"] },
+        "blocking_reasons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/readinessReason" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/readinessReason" }
+        },
+        "suppressed_decisions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "readinessReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "message": { "type": "string", "minLength": 1 },
+        "competitor_id": { "type": ["string", "null"] },
+        "profile_id": { "type": ["string", "null"] },
+        "relationship_id": { "type": ["string", "null"] }
+      }
+    },
+    "scorecard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "competitor_id",
+        "competitor",
+        "benchmark_retailer_id",
+        "benchmark_retailer",
+        "profile_id",
+        "comparison_lens",
+        "basis_status",
+        "matches",
+        "matched_geographies",
+        "qualifying_geographies",
+        "benchmark_lower_rate",
+        "competitor_lower_rate",
+        "parity_rate",
+        "benchmark_median",
+        "competitor_median",
+        "median_gap",
+        "dominant_outcome",
+        "price_position",
+        "status"
+      ],
+      "properties": {
+        "competitor_id": { "type": "string", "minLength": 1 },
+        "competitor": { "type": "string", "minLength": 1 },
+        "benchmark_retailer_id": { "type": "string", "minLength": 1 },
+        "benchmark_retailer": { "type": "string", "minLength": 1 },
+        "profile_id": { "type": "string" },
+        "comparison_lens": { "type": "string", "minLength": 1 },
+        "basis_status": { "enum": ["preferred", "fallback", "unavailable"] },
+        "matches": { "type": ["integer", "number", "null"], "minimum": 0 },
+        "matched_geographies": { "type": ["integer", "number", "null"], "minimum": 0 },
+        "qualifying_geographies": { "type": ["integer", "number", "null"], "minimum": 0 },
+        "benchmark_lower_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "competitor_lower_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "parity_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "benchmark_median": { "type": ["number", "null"] },
+        "competitor_median": { "type": ["number", "null"] },
+        "median_gap": { "type": ["number", "null"] },
+        "dominant_outcome": {
+          "enum": ["benchmark_lower", "competitor_lower", "parity", "unavailable"]
+        },
+        "price_position": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["ready", "limited_evidence"] }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "section_ids"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "section_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "visualization",
+        "required",
+        "empty",
+        "metrics",
+        "records",
+        "evidence_sets",
+        "narrative"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "visualization": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "empty": { "type": "boolean" },
+        "empty_state": { "type": ["string", "null"] },
+        "metrics": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "records": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "evidence_sets": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "narrative": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "object", "additionalProperties": true }
+          ]
+        }
+      }
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "status",
+        "source_result_checksum",
+        "publication_checksum",
+        "created_at"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "source_result_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "publication_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "productDecision": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "benchmark_product_id",
+        "competitor_product_id",
+        "competitor"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "relationship_id": { "type": ["string", "null"] },
+        "relationship_status": {
+          "enum": ["suggested", "confirmed", "rejected", "ambiguous", "unavailable"]
+        },
+        "profile_id": { "type": ["string", "null"] },
+        "comparison_metric": { "type": ["string", "null"] },
+        "qa_status": { "enum": ["ready", "review_required", "suppressed"] },
+        "suppression_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "benchmark_product_id": { "type": "string", "minLength": 1 },
+        "competitor_product_id": { "type": "string", "minLength": 1 },
+        "competitor": { "type": "string", "minLength": 1 },
+        "matches": { "type": "integer", "minimum": 0 },
+        "geographies": { "type": "integer", "minimum": 0 },
+        "benchmark_lower": { "type": "integer", "minimum": 0 },
+        "competitor_lower": { "type": "integer", "minimum": 0 },
+        "parity": { "type": "integer", "minimum": 0 },
+        "median_gap": { "type": "number" },
+        "plain_insight": { "type": "string", "minLength": 1 },
+        "top_locations": { "type": "array" }
+      }
+    }
+  }
+}

@@ -259,6 +259,27 @@ class ProductPackLoader:
     @staticmethod
     def _validate_reporting(document: JsonObject) -> None:
         reporting = document["reporting"]
+        decision_rules = reporting.get("decision_rules")
+        if decision_rules:
+            known_profiles = {str(profile["id"]) for profile in document["matching_profiles"]}
+            preferred = str(decision_rules["preferred_scorecard_profile_id"])
+            priority = [str(value) for value in decision_rules["profile_priority"]]
+            unknown_profiles = {preferred, *priority} - known_profiles
+            if unknown_profiles:
+                raise ContractError(
+                    "Product Pack decision rules reference unknown profiles "
+                    f"{sorted(unknown_profiles)}"
+                )
+            if preferred not in priority:
+                raise ContractError(
+                    "Product Pack preferred scorecard profile must appear in profile priority"
+                )
+            if set(priority) != known_profiles:
+                missing = known_profiles - set(priority)
+                raise ContractError(
+                    "Product Pack decision profile priority must include every matching profile; "
+                    f"missing {sorted(missing)}"
+                )
         weights = reporting["insight_ranking"]["weights"]
         if sum(float(value) for value in weights.values()) <= 0:
             raise ContractError("insight ranking weights must have a positive total")

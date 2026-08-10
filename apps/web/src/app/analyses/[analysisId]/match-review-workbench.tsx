@@ -148,6 +148,7 @@ function RelationshipProduct({
 function statusCopy(status: MatchReviewConnection["status"]) {
   if (status === "confirmed") return "Confirmed and locked";
   if (status === "rejected") return "Rejected by user";
+  if (status === "ambiguous") return "Needs a human decision";
   return "Suggested by Product Pack";
 }
 
@@ -225,12 +226,16 @@ function MatchEvidenceDrawer({
   benchmarkName,
   competitorName,
   onClose,
+  busy,
+  onDecide,
 }: Readonly<{
   selection: DetailSelection;
   profileId: string;
   benchmarkName: string;
   competitorName: string;
   onClose: () => void;
+  busy: boolean;
+  onDecide: (decision: Decision) => void;
 }>) {
   const evidence = selection.connection
     ? evidenceForProfile(selection.connection, profileId)
@@ -323,10 +328,45 @@ function MatchEvidenceDrawer({
             />
           ) : null}
         </div>
-        <footer>
-          Store-specific price and location evidence comes from Search. PDP
-          evidence is used for product identity, descriptions, specifications,
-          URLs, and imagery.
+        <footer className="match-drawer-footer">
+          <p>
+            Store-specific price and location evidence comes from Search. PDP
+            evidence is used for product identity, descriptions, specifications,
+            URLs, and imagery.
+          </p>
+          {selection.connection ? (
+            <span>
+              {selection.connection.status !== "confirmed" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onDecide("confirmed")}
+                >
+                  Confirm relationship
+                </button>
+              ) : null}
+              {selection.connection.status !== "rejected" ? (
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={busy}
+                  onClick={() => onDecide("rejected")}
+                >
+                  Reject relationship
+                </button>
+              ) : null}
+              {selection.connection.origin === "user" ? (
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={busy}
+                  onClick={() => onDecide("reset")}
+                >
+                  Reset to automatic
+                </button>
+              ) : null}
+            </span>
+          ) : null}
         </footer>
       </aside>
     </div>
@@ -336,7 +376,18 @@ function MatchEvidenceDrawer({
 export function MatchReviewWorkbench({
   analysisId,
   scopedCompetitorId,
-}: Readonly<{ analysisId: string; scopedCompetitorId: string | null }>) {
+  scopedProfileId,
+  focusedRelationshipId,
+  onCompetitorSelect,
+  onProfileSelect,
+}: Readonly<{
+  analysisId: string;
+  scopedCompetitorId: string | null;
+  scopedProfileId: string | null;
+  focusedRelationshipId: string | null;
+  onCompetitorSelect?: (competitorId: string) => void;
+  onProfileSelect?: (profileId: string) => void;
+}>) {
   const [review, setReview] = useState<MatchReview | null>(null);
   const [competitorId, setCompetitorId] = useState("");
   const [profileId, setProfileId] = useState("");
@@ -350,6 +401,7 @@ export function MatchReviewWorkbench({
   const [busy, setBusy] = useState(false);
   const [showRecompute, setShowRecompute] = useState(false);
   const [message, setMessage] = useState("Loading governed match review…");
+  const [openedFocus, setOpenedFocus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(
@@ -370,13 +422,18 @@ export function MatchReviewWorkbench({
         ? current
         : body.competitors[0]?.id || "";
     });
-    setProfileId((current) =>
-      body.profiles.some((row) => row.id === current)
+    setProfileId((current) => {
+      if (
+        scopedProfileId &&
+        body.profiles.some((row) => row.id === scopedProfileId)
+      )
+        return scopedProfileId;
+      return body.profiles.some((row) => row.id === current)
         ? current
-        : body.profiles[0]?.id || "",
-    );
+        : body.profiles[0]?.id || "";
+    });
     setMessage("");
-  }, [analysisId, scopedCompetitorId]);
+  }, [analysisId, scopedCompetitorId, scopedProfileId]);
 
   useEffect(() => {
     // Loading is the external synchronization performed by this effect.
@@ -423,6 +480,38 @@ export function MatchReviewWorkbench({
       ).includes(needle);
     });
   }, [productByKey, query, review, scoped, status]);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- URL deep links synchronize the governed workbench selection. */
+  useEffect(() => {
+    if (
+      !review ||
+      !focusedRelationshipId ||
+      openedFocus === focusedRelationshipId
+    )
+      return;
+    const connection = review.connections.find(
+      (row) =>
+        row.relationship_id === focusedRelationshipId ||
+        row.id === focusedRelationshipId,
+    );
+    if (!connection) return;
+    const nextProfile = connection.eligible_profile_ids.includes(profileId)
+      ? profileId
+      : connection.source_profile_id;
+    setCompetitorId(connection.competitor_retailer_id);
+    setProfileId(nextProfile);
+    setDetails({
+      benchmark: productByKey.get(
+        `${review.benchmark_retailer.id}:${connection.benchmark_product_id}`,
+      ),
+      competitor: productByKey.get(
+        `${connection.competitor_retailer_id}:${connection.competitor_product_id}`,
+      ),
+      connection,
+    });
+    setOpenedFocus(focusedRelationshipId);
+  }, [focusedRelationshipId, openedFocus, productByKey, profileId, review]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function decide(
     decision: Decision,
@@ -593,6 +682,7 @@ export function MatchReviewWorkbench({
               className={competitorId === retailer.id ? "active" : ""}
               onClick={() => {
                 setCompetitorId(retailer.id);
+                onCompetitorSelect?.(retailer.id);
                 setBenchmarkId(null);
                 setCompetitorProductId(null);
               }}
@@ -608,6 +698,7 @@ export function MatchReviewWorkbench({
             value={profileId}
             onChange={(event) => {
               setProfileId(event.target.value);
+              onProfileSelect?.(event.target.value);
               setBenchmarkId(null);
               setCompetitorProductId(null);
             }}
@@ -655,6 +746,10 @@ export function MatchReviewWorkbench({
           <b>{scoped.summary.rejected}</b>
           Rejected relationships
         </span>
+        <span>
+          <b>{scoped.summary.ambiguous}</b>
+          Ambiguous candidates
+        </span>
       </div>
 
       <div className="match-connections">
@@ -684,6 +779,7 @@ export function MatchReviewWorkbench({
               ["all", "All"],
               ["suggested", "Suggested"],
               ["confirmed", "Confirmed"],
+              ["ambiguous", "Needs decision"],
               ["rejected", "Rejected"],
             ] as const
           ).map(([value, label]) => (
@@ -947,6 +1043,15 @@ export function MatchReviewWorkbench({
           benchmarkName={review.benchmark_retailer.name}
           competitorName={competitorName}
           onClose={() => setDetails(null)}
+          busy={busy}
+          onDecide={(decision) => {
+            if (!details.connection) return;
+            void decide(
+              decision,
+              details.connection.benchmark_product_id,
+              details.connection.competitor_product_id,
+            );
+          }}
         />
       ) : null}
       {showRecompute ? (

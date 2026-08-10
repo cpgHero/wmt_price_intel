@@ -390,6 +390,15 @@
       "segment_win_rate",
       "price_per_lb"
     ],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "strict",
+      "profile_priority": ["strict", "unit_price", "aldi_10mi"],
+      "minimum_observations": 25,
+      "minimum_geographies": 25,
+      "executive_relationship_states": ["suggested", "confirmed"],
+      "extreme_gap_behavior": "suppress",
+      "parity_display": "include"
+    },
     "alertable_metrics": [
       "1lb_conventional_gap",
       "2lb_conventional_gap",

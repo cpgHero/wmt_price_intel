@@ -2,31 +2,30 @@ import type { ReportSectionView } from "./api";
 import { displayValue } from "./presentation";
 
 export const reportGroups = [
-  { id: "summary", label: "Summary" },
-  { id: "geography", label: "Geography" },
-  { id: "price", label: "Price" },
-  { id: "segments", label: "Segments" },
+  { id: "overview", label: "Overview" },
+  { id: "price-segments", label: "Price & Segments" },
   { id: "products", label: "Products" },
+  { id: "geography", label: "Geography" },
   { id: "assortment", label: "Assortment" },
-  { id: "opportunities", label: "Opportunities" },
-  { id: "quality", label: "Quality" },
-  { id: "methodology", label: "Methodology" },
+  { id: "match-review", label: "Match Review" },
+  { id: "quality-methodology", label: "Quality & Methodology" },
+  { id: "exports", label: "Exports" },
 ] as const;
 
 export type ReportGroupId = (typeof reportGroups)[number]["id"];
 
 const groupByKind: Record<string, ReportGroupId> = {
-  executive_summary: "summary",
-  kpi_strip: "summary",
+  executive_summary: "overview",
+  kpi_strip: "overview",
   coverage: "geography",
   geographic_sensitivity: "geography",
-  price_position: "price",
-  segment_analysis: "segments",
+  price_position: "price-segments",
+  segment_analysis: "price-segments",
   product_table: "products",
   assortment: "assortment",
-  recommendations: "opportunities",
-  data_quality: "quality",
-  methodology: "methodology",
+  recommendations: "quality-methodology",
+  data_quality: "quality-methodology",
+  methodology: "quality-methodology",
 };
 
 export function groupReportSections(

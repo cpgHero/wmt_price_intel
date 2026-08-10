@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "ground-beef-report-view-example",
+  "generated_at": "2026-08-10T12:00:00Z",
+  "benchmark_retailer": "Walmart (US)",
+  "competitors": ["ALDI"],
+  "retailer_scope": {
+    "benchmark": { "id": "walmart_us", "name": "Walmart (US)" },
+    "competitors": [{ "id": "aldi_us", "name": "ALDI" }]
+  },
+  "retailer_scorecards": [
+    {
+      "competitor_id": "aldi_us",
+      "competitor": "ALDI",
+      "benchmark_retailer_id": "walmart_us",
+      "benchmark_retailer": "Walmart (US)",
+      "profile_id": "strict",
+      "comparison_lens": "Strict same-ZIP and exact-package comparison",
+      "basis_status": "preferred",
+      "matches": 100,
+      "matched_geographies": 80,
+      "qualifying_geographies": 80,
+      "benchmark_lower_rate": 0.35,
+      "competitor_lower_rate": 0.55,
+      "parity_rate": 0.1,
+      "benchmark_median": 5.48,
+      "competitor_median": 5.26,
+      "median_gap": -0.22,
+      "dominant_outcome": "competitor_lower",
+      "price_position": "ALDI was typically $0.22 lower",
+      "status": "ready"
+    }
+  ],
+  "product_pack": {
+    "id": "fresh_ground_beef",
+    "name": "Fresh Ground Beef",
+    "version": "1.0.0",
+    "recommended_charts": ["footprint", "segment_win_rate", "package_price_gap"]
+  },
+  "blueprint": { "id": "fresh_ground_beef_leadership", "version": "1.0.0" },
+  "comparison_bases": [
+    {
+      "profile_id": "strict",
+      "label": "Strict same-ZIP and exact-package comparison",
+      "geography": "exact_zip",
+      "comparison_metric": "package_price",
+      "price_unit": "USD/package",
+      "package_basis": "exact_package",
+      "availability_policy": "retailer_specific",
+      "scorecard_role": "preferred"
+    }
+  ],
+  "match_governance": {
+    "mode": "governed",
+    "match_revision_id": "00000000-0000-4000-8000-000000000001",
+    "applied_policy_revision_id": "00000000-0000-4000-8000-000000000001",
+    "staged_revision_id": null,
+    "suggested": 2,
+    "confirmed": 3,
+    "rejected": 1,
+    "ambiguous": 0
+  },
+  "report_readiness": {
+    "status": "ready",
+    "blocking_reasons": [],
+    "warnings": [],
+    "suppressed_decisions": 0
+  },
+  "groups": [
+    { "id": "overview", "label": "Overview", "section_ids": ["executive_summary"] }
+  ],
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "kind": "executive_summary",
+      "visualization": "narrative",
+      "required": true,
+      "empty": false,
+      "metrics": [],
+      "records": [],
+      "evidence_sets": [],
+      "narrative": {
+        "heading": "ALDI leads the selected exact-package comparison",
+        "body": "The conclusion uses retained Search-backed prices from decision-ready relationships."
+      }
+    }
+  ],
+  "result_checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "publication": null,
+  "product_decisions": [
+    {
+      "id": "decision-1",
+      "relationship_id": "relationship-1",
+      "relationship_status": "confirmed",
+      "profile_id": "strict",
+      "comparison_metric": "package_price",
+      "qa_status": "ready",
+      "suppression_reasons": [],
+      "benchmark_product_id": "walmart-1",
+      "competitor_product_id": "aldi-1",
+      "competitor": "ALDI",
+      "matches": 100,
+      "geographies": 80,
+      "benchmark_lower": 35,
+      "competitor_lower": 55,
+      "parity": 10,
+      "median_gap": -0.22,
+      "plain_insight": "ALDI was typically $0.22 lower across 80 comparable ZIP markets.",
+      "top_locations": []
+    }
+  ]
+}

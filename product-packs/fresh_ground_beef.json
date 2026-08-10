@@ -1256,6 +1256,15 @@
       "price_per_lb",
       "radius_sensitivity"
     ],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "strict",
+      "profile_priority": ["strict", "unit_price", "aldi_10mi"],
+      "minimum_observations": 25,
+      "minimum_geographies": 25,
+      "executive_relationship_states": ["suggested", "confirmed"],
+      "extreme_gap_behavior": "suppress",
+      "parity_display": "include"
+    },
     "alertable_metrics": [
       "organic_85_15_gap_per_lb",
       "aldi_80_20_2_25lb_gap",

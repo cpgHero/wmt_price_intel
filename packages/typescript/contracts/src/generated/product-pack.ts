@@ -137,6 +137,21 @@ export interface RetailCompetitiveIntelligenceProductPack {
     headline_segments: string[];
     required_caveats: string[];
     recommended_charts?: string[];
+    decision_rules?: {
+      preferred_scorecard_profile_id: string;
+      /**
+       * @minItems 1
+       */
+      profile_priority: [string, ...string[]];
+      minimum_observations: number;
+      minimum_geographies: number;
+      /**
+       * @minItems 1
+       */
+      executive_relationship_states: ["suggested" | "confirmed", ...("suggested" | "confirmed")[]];
+      extreme_gap_behavior: "review" | "suppress";
+      parity_display: "include" | "hide_when_zero";
+    };
     alertable_metrics?: string[];
     report_blueprint: {
       id: string;
