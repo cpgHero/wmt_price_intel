@@ -36,7 +36,7 @@ from rci_results import (
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
-from rci_worker.analysis import PostgresAnalysisQueue, S3HistoricalCSVReader
+from rci_worker.analysis import PostgresAnalysisQueue, S3HistoricalCSVReader, historical_source_row
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -262,15 +262,17 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
                 for row in rows:
+                    source_row = historical_source_row(row, historical_source)
                     try:
-                        normalized = normalizer.normalize(
-                            {**row, "retailer_id": historical_source.retailer_id}
-                        )
+                        normalized = normalizer.normalize(source_row)
                     except ValueError as exc:
                         quality_candidates.append(
                             _raw_quality_observation(
-                                row,
-                                retailer_id=historical_source.retailer_id,
+                                source_row,
+                                retailer_id=str(
+                                    _raw_value(source_row, "retailer_id", "Retailer")
+                                    or historical_source.retailer_id
+                                ),
                                 issue="Normalization rejected",
                                 reason=str(exc),
                             )
@@ -336,7 +338,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 for row in rows:
                     try:
                         normalized = normalizer.normalize(
-                            {**row, "retailer_id": historical_source.retailer_id}
+                            historical_source_row(row, historical_source)
                         )
                     except ValueError:
                         continue

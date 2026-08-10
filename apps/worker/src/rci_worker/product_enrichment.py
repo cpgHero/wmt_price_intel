@@ -29,7 +29,7 @@ from rci_products import (
     plan_product_detail_candidates,
 )
 from rci_results import PostgresResultsRepository
-from rci_worker.analysis import PostgresAnalysisQueue, S3HistoricalCSVReader
+from rci_worker.analysis import PostgresAnalysisQueue, S3HistoricalCSVReader, historical_source_row
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -132,7 +132,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             historical_replay_enabled=True,
         )
         sources = await queue.historical_sources(str(source["input_set_id"]))
-        source_artifacts = {item.retailer_id: item.dataset_artifact_id for item in sources}
+        source_artifact_by_offer_id: dict[str, str] = {}
         reader = S3HistoricalCSVReader(bucket=bucket, client=client)
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
@@ -144,10 +144,13 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 for row in rows:
                     try:
                         normalized = normalizer.normalize(
-                            {**row, "retailer_id": historical_source.retailer_id}
+                            historical_source_row(row, historical_source)
                         )
                     except ValueError:
                         continue
+                    source_artifact_by_offer_id[normalized.offer_id] = (
+                        historical_source.dataset_artifact_id
+                    )
                     reducer.add(classifier.classify(normalized))
         offers = reducer.offers()
         offer_index = {item.offer.offer_id: item for item in offers}
@@ -270,7 +273,9 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 context={
                     "source": "analysis_admitted_match",
                     "analysis_id": record.analysis_id,
-                    "source_artifact_id": source_artifacts.get(candidate.retailer_id),
+                    "source_artifact_id": source_artifact_by_offer_id.get(
+                        candidate.source_offer_id
+                    ),
                     "source_offer_id": candidate.source_offer_id,
                     "zipcode": candidate.context.zipcode,
                     "store_number": candidate.context.store,
