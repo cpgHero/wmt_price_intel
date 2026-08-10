@@ -118,7 +118,7 @@ export function compactMetricName(
     benchmark_lower_rate: `${benchmarkRetailer} lower rate`,
     competitor_lower_rate: `${competitor} lower rate`,
     parity_rate: "Parity rate",
-    median_gap: "Signed median gap",
+    median_gap: "Typical price difference",
   };
   const segment = rawSegment.replace(/ \/ standard$/i, "");
   return segment === "All comparable items"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 from rci_analytics.models import ClassifiedOffer, MatchRecord, NormalizedOffer
@@ -134,6 +135,41 @@ def test_product_decisions_prioritize_losses_and_name_locations() -> None:
     assert decisions[0]["plain_insight"] == "Competitor is typically $0.38 lower"
     assert decisions[0]["geographies"] == 2
     assert decisions[0]["top_locations"][0]["zipcode"] == "72712"
+
+
+def test_presentation_excludes_mismatched_weighted_multipacks() -> None:
+    benchmark = _offer("store-a", "walmart-three-pack", -94.2)
+    benchmark = replace(
+        benchmark,
+        offer=replace(benchmark.offer, title="Organic Ground Beef, 1 lb, 3 Count"),
+    )
+    competitor = _offer("competitor-store-a", "aldi-single", -94.2)
+    competitor = replace(
+        competitor,
+        offer=replace(
+            competitor.offer,
+            retailer_id="aldi_us",
+            title="Organic Ground Beef, 1 lb",
+        ),
+    )
+    matches = [_match("store-a", "aldi_us", "-10.00")]
+
+    assert (
+        benchmark_product_decisions(
+            [benchmark, competitor],
+            matches,
+            benchmark_retailer="walmart_us",
+        )
+        == []
+    )
+    assert (
+        benchmark_product_map_points(
+            [benchmark, competitor],
+            matches,
+            benchmark_retailer="walmart_us",
+        )
+        == []
+    )
 
 
 def test_pdp_context_improves_identity_without_changing_price_evidence() -> None:

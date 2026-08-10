@@ -15,6 +15,12 @@ function hasFields(value: JsonObject): boolean {
 }
 
 export function displayLabel(value: string): string {
+  const knownLabels: Record<string, string> = {
+    aldi_us: "ALDI",
+    amazon_us_same_day: "Amazon Same Day",
+    walmart_us: "Walmart",
+  };
+  if (knownLabels[value]) return knownLabels[value];
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());

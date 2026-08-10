@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from collections.abc import Iterable
 from decimal import Decimal
@@ -20,6 +21,28 @@ def _preferred_text(values: Iterable[str | None], fallback: str) -> str:
 
 def _money(value: Decimal) -> str:
     return f"${abs(value):,.2f}"
+
+
+_LABELED_UNIT_COUNT = re.compile(
+    r"(?:pack\s+of\s+(\d+)|(\d+)\s*(?:count|ct|pack(?:age)?s?))",
+    flags=re.IGNORECASE,
+)
+_WEIGHT_UNIT = re.compile(r"\b(?:lb|lbs|pounds?|oz|ounces?|kg|g)\b", flags=re.IGNORECASE)
+
+
+def _labeled_unit_pack_count(title: str) -> int:
+    """Return an explicit multipack count when a title also states unit weight."""
+
+    if _WEIGHT_UNIT.search(title) is None:
+        return 1
+    match = _LABELED_UNIT_COUNT.search(title)
+    if match is None:
+        return 1
+    return int(match.group(1) or match.group(2))
+
+
+def _labeled_unit_packs_are_compatible(left: str, right: str) -> bool:
+    return _labeled_unit_pack_count(left) == _labeled_unit_pack_count(right)
 
 
 def benchmark_product_decisions(
@@ -46,6 +69,8 @@ def benchmark_product_decisions(
         benchmark = offer_index.get(match.benchmark_offer_id)
         competitor = offer_index.get(match.competitor_offer_id)
         if benchmark is None or competitor is None or benchmark.retailer_id != benchmark_retailer:
+            continue
+        if not _labeled_unit_packs_are_compatible(benchmark.title, competitor.title):
             continue
         key = (
             benchmark.retailer_product_id,
@@ -265,7 +290,12 @@ def benchmark_product_map_points(
     product_counts: Counter[str] = Counter()
     for match in matches:
         benchmark = offer_index.get(match.benchmark_offer_id)
+        competitor = offer_index.get(match.competitor_offer_id)
         if benchmark is None or benchmark.offer.retailer_id != benchmark_retailer:
+            continue
+        if competitor is not None and not _labeled_unit_packs_are_compatible(
+            benchmark.offer.title, competitor.offer.title
+        ):
             continue
         offer = benchmark.offer
         if offer.latitude is None or offer.longitude is None:

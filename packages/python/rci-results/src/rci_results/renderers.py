@@ -396,7 +396,8 @@ def _comparison_chart(rows: list[JsonObject]) -> str:
         return ""
     return (
         "<figure class=comparison-chart><figcaption><strong>Lower-price share</strong>"
-        "<span>Strict comparable-package outcomes with market coverage and signed gap</span>"
+        "<span>Strict comparable-package outcomes with market coverage and "
+        "typical price difference</span>"
         "</figcaption>"
         f"<div class=chart-body>{chart_rows}</div><p class=chart-note>Directional share "
         "among matched observations; see the supporting table for definitions and caveats."

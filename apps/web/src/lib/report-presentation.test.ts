@@ -76,7 +76,7 @@ describe("report presentation", () => {
         "Walmart (US)",
       ),
     ).toBe(
-      "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Signed median gap",
+      "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Typical price difference",
     );
   });
 
