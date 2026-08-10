@@ -53,6 +53,16 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--max-product-pairs", type=int, default=16)
     parser.add_argument("--max-credits", type=int, default=1000)
+    parser.add_argument(
+        "--retailer",
+        action="append",
+        dest="retailers",
+        default=[],
+        help=(
+            "Restrict the plan to one retailer ID. Repeat the option for multiple "
+            "retailers; omit it to include all retailers."
+        ),
+    )
     parser.add_argument("--confirm-paid-calls", action="store_true")
     return parser.parse_args()
 
@@ -181,10 +191,13 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             (_observation(item) for item in offers),
             analysis_offer_ids=analysis_offer_ids,
         )
+        retailer_filter = {str(value).strip() for value in args.retailers if str(value).strip()}
         catalog = ProductDetailCatalog.from_path(repository_root)
         valid_candidates = []
         invalid_candidates: list[dict[str, str]] = []
         for candidate in candidates:
+            if retailer_filter and candidate.retailer_id not in retailer_filter:
+                continue
             try:
                 endpoint = catalog.get(candidate.retailer_id)
                 MetricsCartProductDetailAdapter(endpoint).build_request(candidate.context)
@@ -215,6 +228,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             "planned_calls": len(valid_candidates),
             "required_credits": required_credits,
             "credit_ceiling": args.max_credits,
+            "retailer_filter": sorted(retailer_filter),
             "credits_by_retailer": dict(
                 Counter(
                     {
