@@ -56,8 +56,21 @@
 }
 
 /* Governed Product Pack authoring */
+.product-pack-page-header {
+  gap: 2rem;
+  padding: 2.75rem 0 2.25rem;
+}
+.product-pack-page-header.compact h1 {
+  font-size: clamp(2.9rem, 4.5vw, 4.4rem);
+}
 .product-pack-page-header h1 {
   max-width: 760px;
+}
+.product-pack-page-header .page-header-actions {
+  width: min(100%, 560px);
+}
+.product-pack-page-header .page-header-actions p {
+  width: 100%;
 }
 .admin-auth-card {
   background: var(--card);
@@ -2464,6 +2477,10 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 700px) {
+  .product-pack-page-header {
+    gap: 1.25rem;
+    padding: 2rem 0 1.5rem;
+  }
   .topbar {
     min-height: 66px;
     padding: 0 1rem;
