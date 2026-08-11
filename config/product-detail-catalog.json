@@ -32,7 +32,7 @@
       "domain": "aldi.us",
       "endpoint_id": "14",
       "method": "GET",
-      "path": "/mc/new_aldi/pdp/zipcode",
+      "path": "/mc/new_aldi/pdp/zipcode/",
       "credits_per_successful_page": 1,
       "required_params": ["zipcode", "store", "fulfillment_type"],
       "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"]
@@ -109,7 +109,7 @@
       "domain": "walmart.com",
       "endpoint_id": "3",
       "method": "GET",
-      "path": "/mc/walmart/product/zipcode",
+      "path": "/mc/walmart/product/zipcode/",
       "credits_per_successful_page": 2,
       "required_params": ["zipcode", "store", "fulfillment_type"],
       "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"]

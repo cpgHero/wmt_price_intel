@@ -30,7 +30,7 @@ def _price(value: object) -> Decimal | None:
         parsed = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
-    if not parsed.is_finite() or parsed < 0:
+    if not parsed.is_finite() or parsed <= 0:
         return None
     return parsed.normalize()
 
@@ -81,6 +81,7 @@ def plan_product_detail_candidates(
             or offer_id not in analysis_offer_ids
             or retailer_id is None
             or product_id is None
+            or _price(observation.get("price")) is None
         ):
             continue
         grouped[(retailer_id, product_id)].append(dict(observation))
@@ -95,11 +96,7 @@ def plan_product_detail_candidates(
         planned_groups = (
             [(price, by_price[price]) for price in known_prices]
             if price_variance
-            else (
-                [(known_prices[0], by_price[known_prices[0]])]
-                if known_prices
-                else [(None, product_rows)]
-            )
+            else [(known_prices[0], by_price[known_prices[0]])]
         )
         for observed_price, price_rows in planned_groups:
             representative = min(price_rows, key=_rank)

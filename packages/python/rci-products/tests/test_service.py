@@ -162,6 +162,49 @@ async def test_concurrent_enqueue_enforces_atomic_credit_ceiling() -> None:
     assert (await repository.get_run(run.id)).planned_credits == 2
 
 
+async def test_failed_snapshot_does_not_suppress_a_later_recovery_run() -> None:
+    repository = InMemoryProductDetailRepository(REPOSITORY_ROOT)
+    product = await _product(repository)
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    context = ProductDetailRequestContext(
+        product_id="677669806",
+        zipcode="90020",
+        store="2464",
+        fulfillment_type="pickup",
+    )
+    failed_run = await repository.create_run(max_credits=2)
+    await repository.enqueue(failed_run.id, product, endpoint, context)
+    failed_job = (await repository.claim("worker-old", limit=1, lease_seconds=60))[0]
+    await repository.record_fetch(
+        failed_job,
+        "worker-old",
+        ProductDetailFetchResult(
+            observed_at=datetime.now(UTC),
+            http_status=404,
+            billable=True,
+            credits=2,
+            raw_artifact=ProductDetailRawArtifact(
+                artifact_id="raw-old-path-failure",
+                storage_uri="s3://test/pdp/old-path-404.json.gz",
+                checksum="d" * 64,
+                byte_size=1,
+                metadata={},
+            ),
+            failure_class="unavailable",
+            failure_message="MetricsCart HTTP 404",
+            should_retry=False,
+        ),
+        cache_ttl_seconds=3600,
+    )
+
+    recovery_run = await repository.create_run(max_credits=2)
+    recovery = await repository.enqueue(recovery_run.id, product, endpoint, context)
+
+    assert recovery.created is True
+    assert recovery.cached is False
+    assert recovery.job_id is not None
+
+
 async def test_cancel_prevents_queued_jobs_from_being_claimed() -> None:
     repository = InMemoryProductDetailRepository(REPOSITORY_ROOT)
     product = await _product(repository)

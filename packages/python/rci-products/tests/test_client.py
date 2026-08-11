@@ -67,7 +67,7 @@ async def test_success_is_billed_once_and_raw_response_is_immutable() -> None:
     payload = json.loads(
         (REPOSITORY_ROOT / "fixtures/api_samples/metricscart_pdp_walmart_200.json").read_text()
     )
-    route = respx.get(f"{BASE_URL}/mc/walmart/product/zipcode").mock(
+    route = respx.get(f"{BASE_URL}/mc/walmart/product/zipcode/").mock(
         return_value=httpx.Response(200, json=payload)
     )
     store = InMemoryProductDetailRawObjectStore()
@@ -105,7 +105,7 @@ async def test_failure_billing_and_retry_policy(
     failure_class: str,
     retry: bool,
 ) -> None:
-    respx.get(f"{BASE_URL}/mc/walmart/product/zipcode").mock(
+    respx.get(f"{BASE_URL}/mc/walmart/product/zipcode/").mock(
         return_value=httpx.Response(status, json={"error": "fixture"})
     )
     store = InMemoryProductDetailRawObjectStore()

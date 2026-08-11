@@ -81,3 +81,17 @@ def test_missing_price_does_not_create_a_false_location_variant() -> None:
     assert candidates[0].observed_price == Decimal("4.98")
     assert candidates[0].context.zipcode == "72712"
     assert candidates[0].reason == "product_reference"
+
+
+def test_pdp_plan_requires_a_positive_search_price() -> None:
+    observations = [
+        _observation("zero", "100", "72712", "1", 0),
+        {**_observation("missing", "101", "90210", "2", 4.98), "price": None},
+    ]
+
+    candidates = plan_product_detail_candidates(
+        observations,
+        analysis_offer_ids={"zero", "missing"},
+    )
+
+    assert candidates == []

@@ -103,6 +103,10 @@ def test_pdp_fixtures_build_requests_and_normalize_to_valid_snapshots(
     assert request.params["product_id"] == expected_id
     if retailer_id == "amazon_us_same_day":
         assert request.path == "/mc/amazon/pdp/zipcode/"
+    if retailer_id == "aldi_us":
+        assert request.path == "/mc/new_aldi/pdp/zipcode/"
+    if retailer_id == "walmart_us":
+        assert request.path == "/mc/walmart/product/zipcode/"
     assert normalized.retailer_product_id == expected_id
     assert normalized.category_path == expected_category
     validate_instance(
@@ -131,3 +135,55 @@ def test_request_builder_preserves_leading_zero_ids_and_rejects_missing_context(
         adapter.build_request(
             ProductDetailRequestContext(product_id="0000000000008696", zipcode="00501")
         )
+
+
+def test_aldi_request_matches_verified_zipcode_contract() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("aldi_us")
+    adapter = MetricsCartProductDetailAdapter(endpoint)
+    context = ProductDetailRequestContext(
+        product_id="17499083",
+        zipcode="71111",
+        store="475-107",
+        fulfillment_type="pickup",
+    )
+    request = adapter.build_request(context)
+    normalized = adapter.normalize(
+        {
+            "name": "73% Lean 27% Fat Ground Beef",
+            "retailer_product_id": "17499083",
+            "retailer_store_id": "512548",
+        },
+        context,
+    )
+
+    assert request.method == "GET"
+    assert request.path == "/mc/new_aldi/pdp/zipcode/"
+    assert request.params == {
+        "product_id": "17499083",
+        "zipcode": "71111",
+        "store": "475-107",
+        "fulfillment_type": "pickup",
+    }
+    assert context.store == "475-107"
+    assert normalized.extras["retailer_store_id"] == "512548"
+
+
+def test_walmart_request_matches_verified_zipcode_contract() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(
+        ProductDetailRequestContext(
+            product_id="15136790",
+            zipcode="03038",
+            store="1753",
+            fulfillment_type="pickup",
+        )
+    )
+
+    assert request.method == "GET"
+    assert request.path == "/mc/walmart/product/zipcode/"
+    assert request.params == {
+        "product_id": "15136790",
+        "zipcode": "03038",
+        "store": "1753",
+        "fulfillment_type": "pickup",
+    }
