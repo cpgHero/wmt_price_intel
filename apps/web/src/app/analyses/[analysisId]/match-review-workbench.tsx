@@ -399,8 +399,9 @@ function MatchEvidenceDrawer({
                 </strong>
               </span>
               <em>
-                Search-derived · {priceUnitLabel(evidence?.price_unit)} ·
-                medians and paired gap are distinct statistics
+                Search-derived · {evidence?.profile_label ?? profileId} ·{" "}
+                {priceUnitLabel(evidence?.price_unit)} · medians and paired gap
+                are distinct statistics
               </em>
             </div>
             <p>{evidence?.rationale || selection.connection.reason}</p>
@@ -1033,7 +1034,11 @@ export function MatchReviewWorkbench({
                     evidence?.price_unit,
                   )}
                 </p>
-                <small>{eligibleLabels}</small>
+                <small>
+                  Price evidence: {evidence?.profile_label ?? profileId} ·{" "}
+                  {priceUnitLabel(evidence?.price_unit)}
+                </small>
+                <small>Eligible lenses: {eligibleLabels || "None"}</small>
                 <small className="match-scope-chip">
                   {scopeLabel(connection.scope)}
                 </small>
