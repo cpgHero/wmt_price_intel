@@ -324,6 +324,7 @@ await assertValid(
         observed_zipcodes: 1,
         location_share: 1,
         distribution_tier: "single_location",
+        distribution_evidence: "search_brand_field",
         product_examples: [],
       },
     ],

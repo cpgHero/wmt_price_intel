@@ -83,6 +83,7 @@
         "observed_zipcodes",
         "location_share",
         "distribution_tier",
+        "distribution_evidence",
         "product_examples"
       ],
       "properties": {
@@ -94,11 +95,18 @@
         "origin": { "enum": ["product_pack", "deterministic", "user"] },
         "reason": { "type": ["string", "null"] },
         "observed_products": { "type": "integer", "minimum": 1 },
-        "observed_locations": { "type": "integer", "minimum": 1 },
-        "observed_zipcodes": { "type": "integer", "minimum": 1 },
+        "observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_zipcodes": { "type": "integer", "minimum": 0 },
         "location_share": { "type": "number", "minimum": 0, "maximum": 1 },
         "distribution_tier": {
-          "enum": ["single_location", "concentrated", "multi_market", "broad"]
+          "enum": ["unknown", "single_location", "concentrated", "multi_market", "broad"]
+        },
+        "distribution_evidence": {
+          "enum": [
+            "search_brand_field",
+            "pdp_identity_joined_to_matched_search",
+            "pdp_identity_only"
+          ]
         },
         "product_examples": {
           "type": "array",

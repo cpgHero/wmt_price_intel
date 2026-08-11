@@ -55,6 +55,12 @@ from rci_results.match_review import MatchReviewRepository
 logger = logging.getLogger(__name__)
 
 
+def _normalized_brand_name(value: str) -> str:
+    return " ".join(
+        "".join(character if character.isalnum() else " " for character in value.casefold()).split()
+    )
+
+
 def apply_brand_classification_rules(
     pack: ProductPack, rules: Iterable[BrandRuleRecord]
 ) -> ProductPack:
@@ -66,7 +72,7 @@ def apply_brand_classification_rules(
         values = [
             str(value)
             for value in private_labels.get(rule.retailer_id, [])
-            if str(value).casefold() != rule.normalized_brand
+            if _normalized_brand_name(str(value)) != rule.normalized_brand
         ]
         if rule.decision == "confirmed" and rule.role == "private_label":
             values.append(rule.display_brand)

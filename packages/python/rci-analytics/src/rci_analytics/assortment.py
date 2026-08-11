@@ -57,7 +57,7 @@ class AssortmentAccumulator:
                 "product_id": offer.retailer_product_id,
                 "canonical_product_id": f"{offer.retailer_id}:{offer.retailer_product_id}",
                 "name": offer.title,
-                "brand": offer.brand,
+                "brand": item.attributes.get("brand") or offer.brand,
                 "image_url": offer.image_url,
                 "url": offer.product_url,
                 "locations": set(),

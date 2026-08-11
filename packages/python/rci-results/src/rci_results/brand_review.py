@@ -143,6 +143,12 @@ def _rule(row: RowMapping | dict[str, Any]) -> BrandRuleRecord:
     )
 
 
+def _normalize_brand_name(value: str) -> str:
+    return " ".join(
+        "".join(character if character.isalnum() else " " for character in value.casefold()).split()
+    )
+
+
 class PostgresBrandReviewRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -763,11 +769,21 @@ class BrandReviewService:
         pack: ProductPackDocument,
         rules: list[BrandRuleRecord],
     ) -> list[JsonObject]:
+        aliases: dict[str, str] = {}
+        for canonical, values in pack.document.get("brand_rules", {}).get("aliases", {}).items():
+            normalized_canonical = _normalize_brand_name(str(canonical))
+            for value in (canonical, *values):
+                aliases[_normalize_brand_name(str(value))] = normalized_canonical
+
+        def normalize(value: str) -> str:
+            normalized = _normalize_brand_name(value)
+            return aliases.get(normalized, normalized)
+
         configured: dict[tuple[str, str], tuple[str, str]] = {}
         for portfolio in pack.document.get("brand_rules", {}).get("portfolios", []):
             for retailer_id in portfolio["retailer_ids"]:
                 for brand in portfolio["brands"]:
-                    configured[(str(retailer_id), str(brand).casefold().strip())] = (
+                    configured[(str(retailer_id), normalize(str(brand)))] = (
                         str(portfolio["role"]),
                         "product_pack",
                     )
@@ -776,11 +792,13 @@ class BrandReviewService:
         ):
             for brand in values:
                 configured.setdefault(
-                    (str(retailer_id), str(brand).casefold().strip()),
+                    (str(retailer_id), normalize(str(brand))),
                     ("private_label", "product_pack"),
                 )
-        persisted = {(row.retailer_id, row.normalized_brand): row for row in rules}
+        persisted = {(row.retailer_id, normalize(row.normalized_brand)): row for row in rules}
         examples: dict[tuple[str, str], list[JsonObject]] = {}
+        highlighted_products: dict[tuple[str, str], set[str]] = {}
+        highlighted_display: dict[tuple[str, str], str] = {}
         for row in context.get("product_highlights", []):
             if not isinstance(row, dict):
                 continue
@@ -789,14 +807,54 @@ class BrandReviewService:
             brand = str(row.get("brand") or "").strip()
             if not retailer_id or not product_id or not brand:
                 continue
-            examples.setdefault((retailer_id, brand.casefold()), []).append(
-                {
-                    "product_id": product_id,
-                    "name": str(row.get("name") or product_id),
-                    "image_url": row.get("image_url"),
-                }
+            key = (retailer_id, normalize(brand))
+            highlighted_products.setdefault(key, set()).add(product_id)
+            highlighted_display.setdefault(key, brand)
+            if not any(str(value["product_id"]) == product_id for value in examples.get(key, [])):
+                examples.setdefault(key, []).append(
+                    {
+                        "product_id": product_id,
+                        "name": str(row.get("name") or product_id),
+                        "image_url": row.get("image_url"),
+                    }
+                )
+
+        benchmark_retailer = str(document.get("benchmark_retailer") or retailer_ids[0])
+        product_zip_lower_bounds: dict[tuple[str, str], int] = {}
+        product_location_lower_bounds: dict[tuple[str, str], int] = {}
+        for row in context.get("match_candidates", []):
+            if not isinstance(row, dict):
+                continue
+            competitor_id = str(row.get("competitor") or "")
+            pairs = (
+                (benchmark_retailer, str(row.get("benchmark_product_id") or "")),
+                (competitor_id, str(row.get("competitor_product_id") or "")),
             )
-        assortment_value = document.get("assortment_analysis", {})
+            market_count = max(0, int(row.get("geographies") or 0))
+            location_count = len(
+                {str(value) for value in row.get("benchmark_location_scope_keys", []) if value}
+            )
+            for retailer_id, product_id in pairs:
+                if not retailer_id or not product_id:
+                    continue
+                key = (retailer_id, product_id)
+                product_zip_lower_bounds[key] = max(
+                    product_zip_lower_bounds.get(key, 0), market_count
+                )
+                product_location_lower_bounds[key] = max(
+                    product_location_lower_bounds.get(key, 0),
+                    (
+                        location_count
+                        if retailer_id == benchmark_retailer and location_count
+                        else market_count
+                    ),
+                )
+
+        assortment_value = (
+            context.get("assortment_analysis")
+            or document.get("assortment_analysis")
+            or document.get("assortment", {})
+        )
         assortment = assortment_value if isinstance(assortment_value, dict) else {}
         summaries = {
             str(row.get("retailer")): row
@@ -806,24 +864,65 @@ class BrandReviewService:
         output: list[JsonObject] = []
         for retailer_id in retailer_ids:
             summary = summaries.get(retailer_id, {})
-            brand_values = summary.get("brands", summary.get("top_brands", []))
+            brand_values = summary.get("brands") or summary.get("top_brands", [])
             if not isinstance(brand_values, list):
-                continue
+                brand_values = []
+            brand_summaries: dict[tuple[str, str], JsonObject] = {}
             for row in brand_values:
                 if not isinstance(row, dict):
                     continue
                 display = str(row.get("brand") or "").strip()
                 if not display:
                     continue
-                normalized = display.casefold()
+                brand_summaries[(retailer_id, normalize(display))] = row
+            brand_keys = {
+                *brand_summaries,
+                *(key for key in highlighted_products if key[0] == retailer_id),
+            }
+            for key in sorted(brand_keys):
+                row = brand_summaries.get(key)
+                display = (
+                    str(row.get("brand") or "").strip()
+                    if row is not None
+                    else highlighted_display[key]
+                )
+                normalized = key[1]
                 rule = persisted.get((retailer_id, normalized))
                 configured_role, configured_origin = configured.get(
                     (retailer_id, normalized), ("unclassified", "deterministic")
                 )
-                share = float(row.get("location_share") or 0)
-                locations = int(row.get("observed_locations") or 0)
+                product_ids = highlighted_products.get(key, set())
+                if row is not None:
+                    products = max(1, int(row.get("distinct_products") or len(product_ids) or 1))
+                    locations = max(0, int(row.get("observed_locations") or 0))
+                    zipcodes = max(0, int(row.get("observed_zipcodes") or 0))
+                    share = float(row.get("location_share") or 0)
+                    distribution_evidence = "search_brand_field"
+                else:
+                    products = max(1, len(product_ids))
+                    zipcodes = max(
+                        (
+                            product_zip_lower_bounds.get((retailer_id, value), 0)
+                            for value in product_ids
+                        ),
+                        default=0,
+                    )
+                    locations = max(
+                        (
+                            product_location_lower_bounds.get((retailer_id, value), 0)
+                            for value in product_ids
+                        ),
+                        default=0,
+                    )
+                    denominator = max(0, int(summary.get("observed_zipcodes") or 0))
+                    share = zipcodes / denominator if denominator else 0.0
+                    distribution_evidence = (
+                        "pdp_identity_joined_to_matched_search" if zipcodes else "pdp_identity_only"
+                    )
                 tier = (
-                    "single_location"
+                    "unknown"
+                    if locations <= 0
+                    else "single_location"
                     if locations <= 1
                     else "broad"
                     if share >= 0.75
@@ -846,12 +945,13 @@ class BrandReviewService:
                         ),
                         "origin": rule.origin if rule else configured_origin,
                         "reason": rule.reason if rule else None,
-                        "observed_products": max(1, int(row.get("distinct_products") or 1)),
-                        "observed_locations": max(1, locations),
-                        "observed_zipcodes": max(1, int(row.get("observed_zipcodes") or 1)),
+                        "observed_products": products,
+                        "observed_locations": locations,
+                        "observed_zipcodes": zipcodes,
                         "location_share": min(1.0, max(0.0, share)),
                         "distribution_tier": tier,
-                        "product_examples": examples.get((retailer_id, normalized), [])[:4],
+                        "distribution_evidence": distribution_evidence,
+                        "product_examples": examples.get(key, [])[:4],
                     }
                 )
         return sorted(

@@ -137,6 +137,14 @@ Application API:
 - `POST /api/v1/analyses/{analysis_id}/brand-workbench/recompute`
 - the existing Match Review decision endpoint accepts an optional scope contract.
 
+Brand Workbench distribution evidence is explicit in the contract. `search_brand_field` is the
+exact retailer Search footprint. For publications created before classified brands were carried
+into assortment summaries, PDP identity is joined to existing Search-derived match candidates and
+reported as a conservative matched-ZIP lower bound; it is never presented as full brand
+distribution. PDP identity without joinable Search evidence remains available for classification
+with an unknown footprint. Future analyses prefer enriched/classified brand identity when building
+assortment summaries.
+
 ## Deferred boundaries
 
 - Explicit map/lasso selection of individual stores is contract- and runtime-ready but is not yet

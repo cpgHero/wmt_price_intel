@@ -19,6 +19,7 @@ const distributionLabels: Record<
   BrandWorkbenchBrand["distribution_tier"],
   string
 > = {
+  unknown: "Distribution pending",
   single_location: "Single location",
   concentrated: "Concentrated footprint",
   multi_market: "Multi-market footprint",
@@ -349,26 +350,43 @@ export function BrandWorkbenchPanel({
                   products
                 </span>
                 <span>
-                  <b>{brand.observed_locations.toLocaleString()}</b>
-                  locations
+                  <b>
+                    {(brand.distribution_evidence === "search_brand_field"
+                      ? brand.observed_locations
+                      : brand.observed_zipcodes
+                    ).toLocaleString()}
+                  </b>
+                  {brand.distribution_evidence === "search_brand_field"
+                    ? "locations"
+                    : "matched ZIPs"}
                 </span>
                 <span>
-                  <b>{brand.observed_zipcodes.toLocaleString()}</b>
-                  ZIPs
+                  <b>
+                    {brand.distribution_evidence === "search_brand_field"
+                      ? brand.observed_zipcodes.toLocaleString()
+                      : "PDP + Search"}
+                  </b>
+                  {brand.distribution_evidence === "search_brand_field"
+                    ? "ZIPs"
+                    : "evidence"}
                 </span>
               </div>
               <div className="brand-footprint">
                 <span>
                   <b>{distributionLabels[brand.distribution_tier]}</b>
                   <em>
-                    {(brand.location_share * 100).toFixed(1)}% of observed
-                    retailer locations
+                    {brand.distribution_evidence === "search_brand_field"
+                      ? `${(brand.location_share * 100).toFixed(1)}% of observed retailer locations`
+                      : brand.distribution_evidence ===
+                          "pdp_identity_joined_to_matched_search"
+                        ? `At least ${brand.observed_zipcodes.toLocaleString()} matched ZIPs; full footprint will refine on the next analysis`
+                        : "PDP identity is available; Search footprint is not resolved in this publication"}
                   </em>
                 </span>
                 <i>
                   <b
                     style={{
-                      width: `${Math.max(2, brand.location_share * 100)}%`,
+                      width: `${brand.location_share ? Math.max(2, brand.location_share * 100) : 0}%`,
                     }}
                   />
                 </i>

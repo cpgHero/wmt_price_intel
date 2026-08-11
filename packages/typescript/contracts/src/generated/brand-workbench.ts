@@ -36,7 +36,8 @@ export interface Brand {
   observed_locations: number;
   observed_zipcodes: number;
   location_share: number;
-  distribution_tier: "single_location" | "concentrated" | "multi_market" | "broad";
+  distribution_tier: "unknown" | "single_location" | "concentrated" | "multi_market" | "broad";
+  distribution_evidence: "search_brand_field" | "pdp_identity_joined_to_matched_search" | "pdp_identity_only";
   product_examples: {
     product_id: string;
     name: string;
