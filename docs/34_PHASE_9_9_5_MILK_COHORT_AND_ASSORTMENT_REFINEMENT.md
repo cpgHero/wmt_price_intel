@@ -94,6 +94,18 @@ Focused local acceptance completed during implementation:
 Production publication-context replay for milk must use persisted historical inputs and cached PDP
 identity only. It makes zero MetricsCart calls and zero OpenAI calls.
 
+Production acceptance completed on 2026-08-10:
+
+- GitHub Actions run `31454345188` passed the Python, TypeScript, contract, migration, browser, and
+  container-build jobs on commit `538de9106ce6fccbfbf9aa17ad06ea5b4fef3e99`;
+- Railway deployed that commit successfully to web, API, worker, and scheduler;
+- milk publication `0ef10ebd-9092-4e55-8e45-a2caac21ab31` is ready as publication version 5 with
+  renderer `2.14.0`;
+- the replay retained 93 product-evidence rows, 89 map points, and 3 mapped benchmark products while
+  making zero MetricsCart calls and zero OpenAI calls; and
+- live browser acceptance covered cohort filtering and ranking, assortment brand and shared-ZIP
+  evidence, the prioritized needs-decision queue, and light/dark rendering.
+
 ## Acceptance criteria
 
 1. A milk product cannot be confirmed against more than one competitor product for the same governed
