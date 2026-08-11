@@ -198,3 +198,22 @@ node node_modules/next/dist/bin/next build apps/web
 
 The Postgres-backed migration, snapshot, estimate, and idempotent-launch integration continues to
 run in CI where `RCI_TEST_DATABASE_URL` is available.
+
+## Production acceptance — 2026-08-11
+
+Commit `62b92d9d3a4b4b75ab83717744e19ed3eb760d4b` passed GitHub Actions run
+`31488556979`, including the Postgres migration cycle and all four container builds. Railway
+reported successful deployments for web, API, worker, and scheduler.
+
+The production walkthrough at `/collections/new` completed these no-charge actions:
+
+- loaded the five certified Product Packs and the three enabled retailer capabilities from the
+  API;
+- resolved ZIP `44906` to one Walmart store, one ALDI store, and one Amazon Same Day ZIP scope;
+- displayed the map and all three immutable location evidence rows;
+- stored geography resolution `757900ce-e932-4447-a679-b3caf67250bf`;
+- produced a five-credit maximum Search estimate: Walmart 1, ALDI 2, and Amazon Same Day 2; and
+- verified that the paid launch remained disabled without explicit approval.
+
+The production readiness endpoint returned `ready` with API dependency `ok`. No MetricsCart
+Search, MetricsCart PDP, or OpenAI call was made during implementation or production acceptance.
