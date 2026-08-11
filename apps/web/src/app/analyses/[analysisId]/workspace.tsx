@@ -36,6 +36,7 @@ import {
 import {
   comparisonBasisDescription,
   compactMetricName,
+  formatMapValueLabel,
   formatPriceForBasis,
   formatMetric,
   governedOutcomeCounts,
@@ -2474,7 +2475,7 @@ function AnalysisMap({
                   onClick={() => setSelectedPoint(point)}
                   tabIndex={0}
                   role="button"
-                  aria-label={`${point.benchmark_product_name ?? point.label}, ZIP ${point.zipcode ?? "unknown"}, ${point.value_label ?? "price evidence"}`}
+                  aria-label={`${point.benchmark_product_name ?? point.label}, ZIP ${point.zipcode ?? "unknown"}, ${formatMapValueLabel(point.value_label, comparisonBasis?.price_unit) ?? "price evidence"}`}
                 >
                   <title>
                     {point.benchmark_product_name ?? point.label}
@@ -2482,7 +2483,9 @@ function AnalysisMap({
                     {point.competitor
                       ? ` · vs. ${displayLabel(point.competitor)}`
                       : ""}
-                    {point.value_label ? ` · ${point.value_label}` : ""}
+                    {point.value_label
+                      ? ` · ${formatMapValueLabel(point.value_label, comparisonBasis?.price_unit)}`
+                      : ""}
                     {count > 1 ? ` · ${count} nearby observations` : ""}
                   </title>
                 </circle>
@@ -2492,9 +2495,8 @@ function AnalysisMap({
           <figcaption>
             Circle size reflects nearby sampled observations. Click a point for
             its product, ZIP, retailer, and{" "}
-            {priceUnitLabel(comparisonBasis?.price_unit)}
-            price difference. Legend and KPI totals remain full-population
-            counts.
+            {priceUnitLabel(comparisonBasis?.price_unit)} price difference.
+            Legend and KPI totals remain full-population counts.
           </figcaption>
         </figure>
         <aside className="map-insight-rail">
@@ -2542,7 +2544,12 @@ function AnalysisMap({
                 ZIP {selectedPoint.zipcode ?? "—"} · vs.{" "}
                 {displayLabel(selectedPoint.competitor ?? "competitor")}
               </p>
-              <b>{selectedPoint.value_label ?? "Price evidence"}</b>
+              <b>
+                {formatMapValueLabel(
+                  selectedPoint.value_label,
+                  comparisonBasis?.price_unit,
+                ) ?? "Price evidence"}
+              </b>
             </div>
           ) : null}
           {coverage.slice(0, 3).map((row) => (

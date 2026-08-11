@@ -5,6 +5,7 @@ import {
   comparisonBasisDescription,
   compactMetricName,
   formatMetric,
+  formatMapValueLabel,
   formatPriceForBasis,
   governedOutcomeCounts,
   groupReportSections,
@@ -118,6 +119,12 @@ describe("report presentation", () => {
     expect(formatPriceForBasis(2.997, "USD/lb")).toBe("$3.00 / lb");
     expect(formatPriceForBasis(4.497, "USD/dozen")).toBe("$4.50 / dozen");
     expect(priceUnitLabel("USD/gallon")).toBe("per gallon");
+    expect(
+      formatMapValueLabel(
+        "Competitor lower · paired difference $0.56 /gallon",
+        "USD/gallon",
+      ),
+    ).toBe("Competitor lower · paired difference $0.56 / gal");
     expect(
       comparisonBasisDescription({
         profile_id: "milk-gallon",

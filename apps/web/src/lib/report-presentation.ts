@@ -46,6 +46,16 @@ export function formatPriceForBasis(
   return `${amount} / ${priceUnitLabel(priceUnit, "short")}`;
 }
 
+export function formatMapValueLabel(
+  valueLabel: string | null | undefined,
+  priceUnit: string | null | undefined,
+) {
+  if (!valueLabel) return null;
+  const sourceSuffix = `/${priceUnitToken(priceUnit)}`;
+  if (!valueLabel.endsWith(sourceSuffix)) return valueLabel;
+  return `${valueLabel.slice(0, -sourceSuffix.length)}/ ${priceUnitLabel(priceUnit, "short")}`;
+}
+
 export function comparisonBasisDescription(basis?: ComparisonBasis | null) {
   if (!basis) return "Configured comparison basis";
   return [
