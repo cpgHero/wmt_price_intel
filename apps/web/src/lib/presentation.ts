@@ -16,9 +16,20 @@ function hasFields(value: JsonObject): boolean {
 
 export function displayLabel(value: string): string {
   const knownLabels: Record<string, string> = {
+    albertsons_us: "Albertsons",
     aldi_us: "ALDI",
     amazon_us_same_day: "Amazon Same Day",
+    giant_eagle_us: "Giant Eagle",
+    heb_us: "H-E-B",
+    kroger_us: "Kroger",
+    meijer_us: "Meijer",
+    safeway_us: "Safeway",
+    sams_club_us: "Sam's Club",
+    shoprite_us: "ShopRite",
+    target_us: "Target",
+    trader_joes_us: "Trader Joe's",
     walmart_us: "Walmart",
+    wegmans_us: "Wegmans",
   };
   if (knownLabels[value]) return knownLabels[value];
   return value

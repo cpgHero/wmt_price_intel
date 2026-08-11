@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from sqlalchemy import text
@@ -26,6 +26,7 @@ class MemoryProviderLimitState:
     minute_start: float = 0
     minute_count: int = 0
     paused_until: float = 0
+    next_permit_at: float = 0
 
 
 class InMemoryProviderLimiter:
@@ -45,6 +46,7 @@ class InMemoryProviderLimiter:
             raise ValueError("provider limits must be positive")
         self.rps = rps
         self.rpm = rpm
+        self._permit_interval = max(1 / rps, 60 / rpm) * 1.02
         self._state = state or MemoryProviderLimitState()
         self._lock = lock or asyncio.Lock()
         self._clock = clock
@@ -61,21 +63,20 @@ class InMemoryProviderLimiter:
 
     def _wait_or_consume(self, now: float) -> float:
         state = self._state
+        waits = []
         if state.paused_until > now:
-            return state.paused_until - now
+            waits.append(state.paused_until - now)
+        if state.next_permit_at > now:
+            waits.append(state.next_permit_at - now)
+        if waits:
+            return max(waits)
         if now - state.second_start >= 1:
             state.second_start = now
             state.second_count = 0
         if now - state.minute_start >= 60:
             state.minute_start = now
             state.minute_count = 0
-        waits = []
-        if state.second_count >= self.rps:
-            waits.append(state.second_start + 1 - now)
-        if state.minute_count >= self.rpm:
-            waits.append(state.minute_start + 60 - now)
-        if waits:
-            return max(waits)
+        state.next_permit_at = now + self._permit_interval
         state.second_count += 1
         state.minute_count += 1
         return 0
@@ -107,6 +108,7 @@ class PostgresProviderLimiter:
         self.budget_key = budget_key
         self.rps = rps
         self.rpm = rpm
+        self._permit_interval = max(1 / rps, 60 / rpm) * 1.02
         self._sleep = sleep
 
     async def acquire(self) -> None:
@@ -150,6 +152,7 @@ class PostgresProviderLimiter:
             second_count = int(row["second_count"])
             minute_start = row["minute_window_start"]
             minute_count = int(row["minute_count"])
+            next_permit_at = row["next_permit_at"]
             if second_start is None or (now - second_start).total_seconds() >= 1:
                 second_start, second_count = now, 0
             if minute_start is None or (now - minute_start).total_seconds() >= 60:
@@ -157,10 +160,8 @@ class PostgresProviderLimiter:
             waits = []
             if row["paused_until"] is not None and row["paused_until"] > now:
                 waits.append((row["paused_until"] - now).total_seconds())
-            if second_count >= self.rps:
-                waits.append(1 - (now - second_start).total_seconds())
-            if minute_count >= self.rpm:
-                waits.append(60 - (now - minute_start).total_seconds())
+            if next_permit_at is not None and next_permit_at > now:
+                waits.append((next_permit_at - now).total_seconds())
             if waits:
                 return max(waits)
             await connection.execute(
@@ -171,6 +172,7 @@ class PostgresProviderLimiter:
                         second_count = :second_count,
                         minute_window_start = :minute_start,
                         minute_count = :minute_count,
+                        next_permit_at = :next_permit_at,
                         updated_at = clock_timestamp()
                     WHERE provider = :provider AND budget_key = :budget_key
                     """
@@ -182,6 +184,7 @@ class PostgresProviderLimiter:
                     "second_count": second_count + 1,
                     "minute_start": minute_start,
                     "minute_count": minute_count + 1,
+                    "next_permit_at": now + timedelta(seconds=self._permit_interval),
                 },
             )
             return 0

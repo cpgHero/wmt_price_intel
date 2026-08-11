@@ -148,6 +148,7 @@ CREATE TABLE provider_rate_limit_state (
   second_count integer NOT NULL DEFAULT 0,
   minute_window_start timestamptz,
   minute_count integer NOT NULL DEFAULT 0,
+  next_permit_at timestamptz,
   paused_until timestamptz,
   last_429_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now(),

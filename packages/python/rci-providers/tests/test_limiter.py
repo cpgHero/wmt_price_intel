@@ -4,6 +4,8 @@ import asyncio
 import inspect
 from dataclasses import dataclass, field
 
+import pytest
+
 from rci_providers.limiter import (
     InMemoryProviderLimiter,
     MemoryProviderLimitState,
@@ -31,7 +33,7 @@ async def test_multiple_replicas_share_two_rps_budget() -> None:
     replicas = [
         InMemoryProviderLimiter(
             rps=2,
-            rpm=108,
+            rpm=120,
             state=state,
             lock=lock,
             clock=clock.read,
@@ -40,10 +42,11 @@ async def test_multiple_replicas_share_two_rps_budget() -> None:
         for _ in range(3)
     ]
 
-    await asyncio.gather(*(replica.acquire() for replica in replicas))
+    for replica in replicas:
+        await replica.acquire()
 
-    assert clock.now == 1
-    assert clock.sleeps == [1]
+    assert clock.now == pytest.approx(1.02)
+    assert clock.sleeps == pytest.approx([0.51, 0.51])
 
 
 async def test_minute_limit_and_shared_cooldown_gate_every_replica() -> None:
@@ -70,15 +73,16 @@ async def test_minute_limit_and_shared_cooldown_gate_every_replica() -> None:
     for _ in range(108):
         await first.acquire()
     await second.acquire()
-    assert clock.now == 60
+    assert clock.now == pytest.approx(61.2)
 
     await first.pause(120)
     await second.acquire()
-    assert clock.now == 180
+    assert clock.now == pytest.approx(181.2)
 
 
 def test_postgres_limiter_serializes_permits_under_row_lock() -> None:
     source = inspect.getsource(PostgresProviderLimiter)
     assert "FOR UPDATE" in source
     assert "provider_rate_limit_state" in source
+    assert "next_permit_at" in source
     assert "paused_until = GREATEST" in source

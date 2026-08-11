@@ -18,3 +18,7 @@ historical/live input sets with safe artifact cascades. `0012_product_details` a
 product identity, contextual provenance, separately budgeted PDP runs, a leased `SKIP LOCKED` PDP
 queue, and immutable cached PDP snapshots. `0013_governed_ai` adds idempotent, leased, auditable
 insight and narrative tasks without granting model output authority over analytical metrics.
+`0014` through `0019` add renderer-version policy, immutable publications, safe historical
+archival, and one-to-one match governance/application policy. `0020_provider_permit_pacing`
+replaces fixed-window provider bursts with a database-coordinated next-permit timestamp so rolling
+per-second and per-minute limits remain safe across worker replicas.

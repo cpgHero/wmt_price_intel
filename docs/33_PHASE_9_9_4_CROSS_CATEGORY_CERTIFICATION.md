@@ -43,10 +43,12 @@ are classified as adapter-contract failures rather than unavailable retailer pag
    repeated.
 5. Status 200 and 404 consume the configured retailer credits; all paid work is created under a
    hard run ceiling and uses the shared multi-replica rate limiter.
-6. The two contract probes consumed three credits. The bounded ground-beef repair plan is at most
-   69 additional credits: 11 ALDI calls at one credit and 29 Walmart calls at two credits.
-7. Additional category calls require a read-only estimate first. The combined paid plan must remain
-   within the user-approved 1,000-credit development bank.
+6. The two contract probes consumed three credits. The corrected positive-price gate reduced the
+   ground-beef repair from the original 69-credit estimate to 65 credits: 11 ALDI calls at one
+   credit and 27 Walmart calls at two credits.
+7. Additional category calls require a read-only estimate first. The 1,000-credit development bank
+   remains the default ceiling unless the user explicitly approves a category exception. The full
+   high-cardinality milk plan was approved after its 1,405-credit pre-cache estimate was disclosed.
 
 ## Certification sequence
 
@@ -65,7 +67,7 @@ Exit: contracts, `rci-products`, and handoff validation pass.
 
 - Deploy the corrected worker before creating recovery jobs.
 - Run read-only estimates for ALDI and Walmart.
-- Enqueue only the analysis-admitted, positive-price candidates under a 69-credit ceiling.
+- Enqueue only the analysis-admitted, positive-price candidates under a 65-credit ceiling.
 - Wait for the durable queue to reach a terminal state and reconcile planned versus actual credits,
   HTTP outcomes, cache hits, and product identity/image coverage.
 - Do not retry the already-successful Amazon requests.
@@ -110,7 +112,7 @@ Exit: no delivery surface contains obsolete product cards, maps, labels, or outc
 5. Repeated locations at one price create one request; distinct positive prices create one request
    per price state.
 6. A failed old-path snapshot cannot suppress a corrected-path recovery job.
-7. Ground-beef recovery has at most 11 ALDI and 29 Walmart paid calls; Amazon has zero new calls.
+7. Ground-beef recovery has exactly 11 ALDI and 27 Walmart paid calls; Amazon has zero new calls.
 8. Product enrichment changes identity/presentation fields only, never Search price or location.
 9. Five full-source category goldens pass without category-specific core branches.
 10. Application and regenerated deliveries agree on all decision values and relationship states.
@@ -143,6 +145,93 @@ pnpm --filter @rci/web build
    only analysis-required gaps within the remaining credit bank.
 6. Rebuild and certify the five primary application publications.
 7. Regenerate versioned delivery artifacts and certify parity.
+
+## Executed recovery ledger
+
+The production-key recovery and cross-category plans use only governed product relationships and
+positive Search-price observations. Search remains the authority for price and location.
+
+| Category | Planned contexts | Cache hits | Paid jobs | Actual credits | Terminal result | Retailer scope |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| Ground beef repair | 38 | 0 | 38 | 65 | 38 succeeded | ALDI, Walmart; Amazon reused |
+| Milk | 710 | 75 | 635 | 1,255 | 635 succeeded | ALDI, Amazon Same Day, Walmart |
+| Bananas | 33 | 12 | 21 | 38 | 21 succeeded | ALDI, Amazon Same Day, Walmart |
+| Strawberries | 33 | 23 | 10 | 16 | 10 succeeded | ALDI, Amazon Same Day, Walmart |
+| Eggs | 244 | 6 | 238 | 470 | 234 succeeded; 4 HTTP 404 | ALDI, Amazon Same Day, Walmart |
+
+The corrected ground-beef jobs completed 38 of 38 with HTTP 200. Together with the three-credit
+contract probes, the ground-beef validation consumed 68 credits. The four cross-category runs
+consumed 1,779 credits, or $3.558 at $0.002 per credit. Including ground-beef repair and probes, the
+Phase 9.9.4 Product Details validation consumed 1,847 credits, or $3.694. Every milk, banana, and
+strawberry job succeeded. Egg certification retained four explicit unavailable-product states
+rather than hiding or substituting them.
+
+The cross-category load test was temporarily scaled from one to three, eight, and twelve Railway
+worker replicas. At twelve replicas, MetricsCart returned six non-billable Walmart HTTP 429s: four
+during milk and two during eggs. The shared cooldown correctly paused every replica and all six jobs
+subsequently succeeded, but the event exposed a fixed-window boundary burst:
+three permits near the end of one second and three near the start of the next can violate a provider
+rolling window. Migration `0020_provider_permit_pacing` adds a shared `next_permit_at` timestamp.
+Permits are now globally spaced at the stricter per-second/per-minute interval with two-percent
+headroom, while the existing database cooldown remains authoritative across all replicas.
+
+MetricsCart also returned three non-billable HTTP 500 responses: two ALDI milk attempts and one
+ALDI banana attempt. Durable retries succeeded. Those transient responses consumed no credits and
+did not create missing PDP states.
+
+### Replicable terminal HTTP 404s
+
+All four failures use a positive-price Search observation for the exact item, ZIP, and store shown.
+The API key is intentionally omitted from these diagnostic URLs.
+
+| Retailer | Product | ZIP | Store | Request URL |
+| --- | --- | --- | --- | --- |
+| ALDI | `25928369` | `01020` | `473-022` | `https://api.metricscart.com/mc/new_aldi/pdp/zipcode/?product_id=25928369&zipcode=01020&store=473-022&fulfillment_type=pickup` |
+| Walmart | `142862696` | `64154` | `2857` | `https://api.metricscart.com/mc/walmart/product/zipcode/?product_id=142862696&zipcode=64154&store=2857&fulfillment_type=pickup` |
+| Walmart | `662711730` | `69361` | `867` | `https://api.metricscart.com/mc/walmart/product/zipcode/?product_id=662711730&zipcode=69361&store=867&fulfillment_type=pickup` |
+| Walmart | `958047526` | `45005` | `3784` | `https://api.metricscart.com/mc/walmart/product/zipcode/?product_id=958047526&zipcode=45005&store=3784&fulfillment_type=pickup` |
+
+Egg estimates also identified valid-looking catalog entries for H-E-B and Safeway. They are excluded
+from paid certification until their current exact request contracts are verified. Other egg
+retailers remain explicit unsupported or missing-parameter states rather than silently entering the
+queue.
+
+## PDP refresh cadence policy
+
+High-cardinality categories such as milk legitimately contain local brands, pack variants, and
+regional assortment differences. The initial governed identity build may therefore require many
+PDP calls. Subsequent collections should separate the two cadences:
+
+- Search price and availability remain collection-cadence, store-specific evidence.
+- New products and products whose admitted identity/package signals materially changed receive PDP
+  enrichment first.
+- Stable enriched products use a configurable weekly or monthly PDP freshness window instead of
+  being recollected on every Search run.
+- A user-triggered identity refresh may override the normal PDP freshness window, subject to an
+  explicit credit estimate and ceiling.
+- The cache key continues to include retailer, product, supported ZIP/store context, fulfillment,
+  and provider-contract version so a contract correction cannot be hidden by an old failure.
+
+## Milk comparison hierarchy
+
+Regional brands and local assortment breadth do not relax price-match cardinality. The reporting
+contract has three distinct levels:
+
+1. **Product relationship:** one Walmart product to one competitor product within an active
+   comparison lens. Store-level price facts, evidence downloads, and user match governance remain
+   one-to-one and auditable.
+2. **Comparable cohort:** Product Pack attributes roll products into retailer-neutral milk cohorts,
+   including package volume, fat level, organic status, lactose-free status, and other governed
+   specifications. Multiple products may contribute to a cohort summary without becoming a
+   many-to-many product match.
+3. **Assortment rollup:** retailer and geography views summarize cohort coverage, local-brand
+   breadth, whitespace, availability, price leadership, and volatility. Whitespace is a review
+   signal, not an assumed substitute.
+
+When one product has several plausible counterparts, the engine ranks candidates under each lens.
+It may select one deterministic best pair or stage the ambiguity for review, but it must not count
+the cross-product of candidates as independent price matches. This keeps category-level reporting
+useful for Dairy leadership without compromising item-level price integrity.
 
 ## Deferred
 
