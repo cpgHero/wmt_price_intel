@@ -171,6 +171,7 @@ class AssortmentAccumulator:
             ),
             "distinct_brands": len(brand_rows),
             "unbranded_products": unbranded_products,
+            "brands": brand_rows,
             "top_brands": brand_rows[:12],
             "geographically_concentrated_brands": concentrated_brands[:12],
         }

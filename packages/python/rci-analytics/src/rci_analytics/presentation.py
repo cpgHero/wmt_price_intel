@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 from statistics import median
 
+from rci_analytics.matching import location_scope_key
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord, NormalizedOffer
 
 
@@ -299,6 +300,20 @@ def benchmark_product_match_candidates(
 
     if max_rows < 1 or max_locations_per_row < 1:
         raise ValueError("product match candidate limits must be positive")
+    offer_rows = list(offers)
+    benchmark_footprints: dict[str, set[str]] = {}
+    for classified in offer_rows:
+        offer = classified.offer
+        if (
+            classified.in_scope
+            and offer.retailer_id == benchmark_retailer
+            and offer.zipcode is not None
+            and offer.price is not None
+            and offer.price > 0
+        ):
+            benchmark_footprints.setdefault(offer.retailer_product_id, set()).add(
+                location_scope_key(offer)
+            )
     profile_index = {
         str(profile["id"]): profile
         for profile in profiles
@@ -318,7 +333,7 @@ def benchmark_product_match_candidates(
             profile.get("comparison_metric") or profile_matches[0].comparison_metric
         )
         for row in benchmark_product_decisions(
-            offers,
+            offer_rows,
             profile_matches,
             benchmark_retailer=benchmark_retailer,
             max_rows=max_rows,
@@ -347,6 +362,9 @@ def benchmark_product_match_candidates(
                         "Product Pack attributes align on " + ", ".join(attribute_names)
                         if attribute_names
                         else "Product Pack comparison rules admitted this pair"
+                    ),
+                    "benchmark_location_scope_keys": sorted(
+                        benchmark_footprints.get(str(row["benchmark_product_id"]), set())
                     ),
                 }
             )

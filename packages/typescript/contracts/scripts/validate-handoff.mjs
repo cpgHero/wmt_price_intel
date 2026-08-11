@@ -63,6 +63,15 @@ const reportViewValidator = validator("report-view.schema.json");
 const productMatchReviewValidator = validator(
   "product-match-review.schema.json",
 );
+const productMatchScopeValidator = validator("product-match-scope.schema.json");
+const productFootprintValidator = validator("product-footprint.schema.json");
+const scopedMatchAssignmentValidator = validator(
+  "scoped-match-assignment.schema.json",
+);
+const brandClassificationDecisionValidator = validator(
+  "brand-classification-decision.schema.json",
+);
+const brandWorkbenchValidator = validator("brand-workbench.schema.json");
 const historicalInputManifestValidator = validator(
   "historical-input-manifest.schema.json",
 );
@@ -215,6 +224,117 @@ await assertValid(
   productMatchReviewValidator,
   await loadJson("examples", "product-match-review.ground-beef.json"),
   "product match review",
+);
+const exampleScope = {
+  mode: "observed_benchmark_product_footprint",
+  relationship_role: "primary",
+  comparison_family_key: "whole_milk_gallon",
+  definition: {
+    source_analysis_id: "analysis-milk",
+    benchmark_location_scope_keys: ["walmart_us|03038|1753"],
+    excluded_benchmark_location_scope_keys: [],
+    future_location_policy: "review",
+  },
+  checksum: "c".repeat(64),
+  artifact_id: null,
+};
+await assertValid(
+  productMatchScopeValidator,
+  exampleScope,
+  "product match scope",
+);
+await assertValid(
+  productFootprintValidator,
+  {
+    schema_version: "1.0.0",
+    analysis_id: "analysis-milk",
+    retailer_id: "walmart_us",
+    product_id: "15136790",
+    source_authority: "search",
+    locations: [
+      {
+        scope_key: "walmart_us|03038|1753",
+        store_number: "1753",
+        zipcode: "03038",
+        observations: 1,
+        lowest_positive_price: 3.98,
+      },
+    ],
+    checksum: "d".repeat(64),
+  },
+  "product footprint",
+);
+await assertValid(
+  scopedMatchAssignmentValidator,
+  {
+    schema_version: "1.0.0",
+    assignment_id: "assignment-milk-1",
+    analysis_id: "analysis-milk",
+    match_revision_id: "00000000-0000-0000-0000-000000000301",
+    brand_revision_id: null,
+    competitor_retailer_id: "aldi_us",
+    relationship_id: "00000000-0000-0000-0000-000000000302",
+    profile_id: "private_label_exact",
+    comparison_family_key: "whole_milk_gallon",
+    relationship_role: "primary",
+    benchmark_product_id: "15136790",
+    competitor_product_id: "aldi-whole-milk-gallon",
+    benchmark_location_scope_key: "walmart_us|03038|1753",
+    status: "active",
+    source_authority: "search",
+    benchmark_value: 3.98,
+    competitor_value: 3.89,
+    comparison_metric: "package_price",
+    winner: "competitor_lower",
+  },
+  "scoped match assignment",
+);
+await assertValid(
+  brandClassificationDecisionValidator,
+  {
+    expected_revision: 0,
+    retailer_id: "walmart_us",
+    normalized_brand: "great value",
+    role: "private_label",
+    decision: "confirmed",
+    reason: "Retailer-owned portfolio",
+  },
+  "brand classification decision",
+);
+await assertValid(
+  brandWorkbenchValidator,
+  {
+    schema_version: "1.0.0",
+    analysis_id: "analysis-milk",
+    product_pack_id: "fresh_fluid_milk",
+    product_pack_version: "1.2.0",
+    revision: 0,
+    future_application: null,
+    retailers: [{ id: "walmart_us", name: "Walmart" }],
+    brands: [
+      {
+        retailer_id: "walmart_us",
+        normalized_brand: "great value",
+        display_brand: "Great Value",
+        role: "private_label",
+        status: "suggested",
+        origin: "product_pack",
+        observed_products: 1,
+        observed_locations: 1,
+        observed_zipcodes: 1,
+        location_share: 1,
+        distribution_tier: "single_location",
+        product_examples: [],
+      },
+    ],
+    summary: {
+      confirmed: 0,
+      suggested: 1,
+      unclassified: 0,
+      rejected: 0,
+    },
+  },
+  "brand workbench",
 );
 const historicalInputManifestFiles = exampleFiles
   .filter(

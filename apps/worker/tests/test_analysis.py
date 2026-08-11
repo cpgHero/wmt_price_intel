@@ -4,9 +4,10 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from rci_analytics import InMemoryDatasetStore, ParquetDatasetWriter
+from rci_analytics import InMemoryDatasetStore, ParquetDatasetWriter, ProductPackLoader
 from rci_collections.models import QueueTask, RawArtifact
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import (
@@ -21,6 +22,7 @@ from rci_worker.analysis import (
     CollectedPage,
     HistoricalSource,
     S3HistoricalCSVReader,
+    apply_brand_classification_rules,
     historical_source_row,
 )
 
@@ -376,6 +378,33 @@ def test_analysis_orchestrator_has_no_product_category_branches() -> None:
     assert "fresh_strawberries" not in source
     assert "fresh_shell_eggs" not in source
     assert "fresh_ground_beef" not in source
+
+
+def test_brand_revision_adds_and_removes_private_label_without_mutating_pack() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    rules = [
+        SimpleNamespace(
+            retailer_id="walmart_us",
+            normalized_brand="hiland dairy",
+            display_brand="Hiland Dairy",
+            role="private_label",
+            decision="confirmed",
+        ),
+        SimpleNamespace(
+            retailer_id="walmart_us",
+            normalized_brand="great value",
+            display_brand="Great Value",
+            role="private_label",
+            decision="rejected",
+        ),
+    ]
+
+    governed = apply_brand_classification_rules(pack, rules)  # type: ignore[arg-type]
+
+    assert "Hiland Dairy" in governed.document["brand_rules"]["private_labels"]["walmart_us"]
+    assert "Great Value" not in governed.document["brand_rules"]["private_labels"]["walmart_us"]
+    assert "Hiland Dairy" not in pack.document["brand_rules"]["private_labels"]["walmart_us"]
+    assert "Great Value" in pack.document["brand_rules"]["private_labels"]["walmart_us"]
 
 
 async def test_historical_reader_yields_checksum_verified_bounded_batches() -> None:

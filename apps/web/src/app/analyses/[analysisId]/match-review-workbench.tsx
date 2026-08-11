@@ -6,6 +6,7 @@ import type {
   MatchReview,
   MatchReviewConnection,
   MatchReviewProduct,
+  ProductMatchScope,
 } from "@/lib/api";
 import {
   type CrossLensMembership,
@@ -18,11 +19,78 @@ import {
 
 type Decision = "confirmed" | "rejected" | "reset";
 type StatusFilter = "all" | MatchReviewConnection["status"];
+type ScopeMode = ProductMatchScope["mode"];
 
 interface DetailSelection {
   benchmark?: MatchReviewProduct;
   competitor?: MatchReviewProduct;
   connection?: MatchReviewConnection;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value))
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+async function proposedScope(
+  analysisId: string,
+  profileId: string,
+  mode: ScopeMode,
+  connection?: MatchReviewConnection,
+): Promise<ProductMatchScope> {
+  if (connection?.scope) return connection.scope;
+  const evidence = connection
+    ? evidenceForProfile(connection, profileId)
+    : undefined;
+  const familySource = {
+    profile_id: profileId,
+    match_attributes: evidence?.match_attributes ?? {},
+  };
+  const familyHash = await sha256(canonicalJson(familySource));
+  const definition =
+    mode === "global"
+      ? { future_location_policy: "review" as const }
+      : {
+          source_analysis_id: analysisId,
+          benchmark_location_scope_keys: [] as string[],
+          excluded_benchmark_location_scope_keys: [] as string[],
+          future_location_policy: "follow_unique_product_footprint" as const,
+        };
+  const payload = {
+    mode,
+    relationship_role: "primary" as const,
+    comparison_family_key: `${profileId}:${familyHash.slice(0, 20)}`,
+    definition,
+    artifact_id: null,
+  };
+  return { ...payload, checksum: await sha256(canonicalJson(payload)) };
+}
+
+function scopeLabel(scope: MatchReviewConnection["scope"]) {
+  if (!scope || scope.mode === "global") return "All observed locations";
+  const count = scope.definition.benchmark_location_scope_keys?.length ?? 0;
+  if (scope.mode === "explicit_benchmark_locations")
+    return `${count} selected primary locations`;
+  return count
+    ? `Primary product footprint · ${count} locations`
+    : "Primary product footprint";
 }
 
 function ProductImage({
@@ -405,6 +473,7 @@ export function MatchReviewWorkbench({
   );
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [scopeMode, setScopeMode] = useState<ScopeMode>("global");
   const [details, setDetails] = useState<DetailSelection | null>(null);
   const [busy, setBusy] = useState(false);
   const [showRecompute, setShowRecompute] = useState(false);
@@ -431,14 +500,21 @@ export function MatchReviewWorkbench({
         : body.competitors[0]?.id || "";
     });
     setProfileId((current) => {
+      let next: string;
       if (
         scopedProfileId &&
         body.profiles.some((row) => row.id === scopedProfileId)
       )
-        return scopedProfileId;
-      return body.profiles.some((row) => row.id === current)
-        ? current
-        : body.profiles[0]?.id || "";
+        next = scopedProfileId;
+      else
+        next = body.profiles.some((row) => row.id === current)
+          ? current
+          : body.profiles[0]?.id || "";
+      setScopeMode(
+        body.profiles.find((profile) => profile.id === next)
+          ?.default_scope_mode || "global",
+      );
+      return next;
     });
     setMessage("");
   }, [analysisId, scopedCompetitorId, scopedProfileId]);
@@ -533,6 +609,7 @@ export function MatchReviewWorkbench({
     selectedBenchmarkId = benchmarkId,
     selectedCompetitorProductId = competitorProductId,
     replaceConflicts = false,
+    connection?: MatchReviewConnection,
   ) {
     if (
       !review ||
@@ -543,6 +620,12 @@ export function MatchReviewWorkbench({
       return;
     setBusy(true);
     setMessage("");
+    const scope = await proposedScope(
+      analysisId,
+      profileId,
+      scopeMode,
+      connection,
+    );
     const body = {
       expected_revision: review.revision,
       competitor_retailer_id: competitorId,
@@ -551,6 +634,7 @@ export function MatchReviewWorkbench({
       competitor_product_id: selectedCompetitorProductId,
       decision,
       replace_conflicts: replaceConflicts,
+      scope,
     };
     setMessage(
       `${decision === "confirmed" ? "Confirming" : decision === "rejected" ? "Rejecting" : "Resetting"} relationship…`,
@@ -579,6 +663,7 @@ export function MatchReviewWorkbench({
             selectedBenchmarkId,
             selectedCompetitorProductId,
             true,
+            connection,
           );
         return;
       }
@@ -732,6 +817,10 @@ export function MatchReviewWorkbench({
             onChange={(event) => {
               setProfileId(event.target.value);
               onProfileSelect?.(event.target.value);
+              const next = review.profiles.find(
+                (profile) => profile.id === event.target.value,
+              );
+              setScopeMode(next?.default_scope_mode || "global");
               setBenchmarkId(null);
               setCompetitorProductId(null);
             }}
@@ -741,6 +830,18 @@ export function MatchReviewWorkbench({
                 {profile.label}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          Match scope
+          <select
+            value={scopeMode}
+            onChange={(event) => setScopeMode(event.target.value as ScopeMode)}
+          >
+            <option value="observed_benchmark_product_footprint">
+              Primary product footprint
+            </option>
+            <option value="global">All observed locations</option>
           </select>
         </label>
       </div>
@@ -756,9 +857,10 @@ export function MatchReviewWorkbench({
           <strong>{competitorName}</strong>
         </div>
         <p>
-          {selectedProfile?.label}. One approval governs this product
-          relationship across every lens where Product Pack evidence says it is
-          eligible.
+          {selectedProfile?.label}. New decisions default to the primary
+          product&apos;s observed store footprint, allowing the same competitor
+          item to map to different regional primary products only where their
+          footprints do not overlap.
         </p>
       </div>
 
@@ -900,6 +1002,9 @@ export function MatchReviewWorkbench({
                   )}
                 </p>
                 <small>{eligibleLabels}</small>
+                <small className="match-scope-chip">
+                  {scopeLabel(connection.scope)}
+                </small>
                 <button
                   type="button"
                   className="match-why-link"
@@ -926,6 +1031,8 @@ export function MatchReviewWorkbench({
                         "confirmed",
                         connection.benchmark_product_id,
                         connection.competitor_product_id,
+                        false,
+                        connection,
                       )
                     }
                   >
@@ -942,6 +1049,8 @@ export function MatchReviewWorkbench({
                         "rejected",
                         connection.benchmark_product_id,
                         connection.competitor_product_id,
+                        false,
+                        connection,
                       )
                     }
                   >
@@ -958,6 +1067,8 @@ export function MatchReviewWorkbench({
                         "reset",
                         connection.benchmark_product_id,
                         connection.competitor_product_id,
+                        false,
+                        connection,
                       )
                     }
                   >
@@ -1058,8 +1169,9 @@ export function MatchReviewWorkbench({
               Confirm relationship
             </button>
             <small>
-              A product can belong to only one confirmed pair with this
-              competitor.
+              One primary match is allowed per overlapping store footprint. The
+              same item may support another relationship only where the
+              primary-product footprints are disjoint.
             </small>
           </div>
           <div>
@@ -1109,6 +1221,8 @@ export function MatchReviewWorkbench({
               decision,
               details.connection.benchmark_product_id,
               details.connection.competitor_product_id,
+              false,
+              details.connection,
             );
           }}
         />

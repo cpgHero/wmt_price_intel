@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-match-scope.schema.json",
+  "title": "Retail Competitive Intelligence Product Match Scope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode",
+    "relationship_role",
+    "comparison_family_key",
+    "definition",
+    "checksum"
+  ],
+  "properties": {
+    "mode": {
+      "enum": [
+        "global",
+        "observed_benchmark_product_footprint",
+        "explicit_benchmark_locations"
+      ]
+    },
+    "relationship_role": { "enum": ["primary", "alternative"] },
+    "comparison_family_key": { "type": "string", "minLength": 1 },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_analysis_id": { "type": ["string", "null"] },
+        "benchmark_location_scope_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "excluded_benchmark_location_scope_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "future_location_policy": {
+          "enum": ["review", "follow_unique_product_footprint", "explicit_only"]
+        }
+      }
+    },
+    "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifact_id": { "type": ["string", "null"], "format": "uuid" }
+  }
+}

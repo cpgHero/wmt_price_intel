@@ -372,6 +372,36 @@
               "in_stock_only",
               "retailer_specific"
             ]
+          },
+          "relationship_scope_policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "default_scope_mode",
+              "allow_scoped_reuse",
+              "relationship_role",
+              "conflict_behavior",
+              "comparison_context_grain"
+            ],
+            "properties": {
+              "default_scope_mode": {
+                "enum": [
+                  "global",
+                  "observed_benchmark_product_footprint",
+                  "explicit_benchmark_locations"
+                ]
+              },
+              "allow_scoped_reuse": { "type": "boolean" },
+              "relationship_role": { "enum": ["primary", "alternative"] },
+              "conflict_behavior": { "const": "exclude_from_price_comparison" },
+              "comparison_context_grain": {
+                "enum": ["benchmark_location", "benchmark_zip"]
+              },
+              "minimum_locations": { "type": "integer", "minimum": 1 },
+              "future_location_policy": {
+                "enum": ["require_review", "inherit_observed_footprint"]
+              }
+            }
           }
         }
       }
@@ -395,6 +425,34 @@
             "minItems": 1,
             "items": {
               "type": "string"
+            }
+          }
+        },
+        "portfolios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "role", "retailer_ids", "brands"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "label": { "type": "string", "minLength": 1 },
+              "role": {
+                "enum": ["private_label", "regional", "national", "unclassified"]
+              },
+              "retailer_ids": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "brands": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "evidence_notes": { "type": "string" }
             }
           }
         }
@@ -466,6 +524,37 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "brand_portfolio_panels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label",
+              "profile_id",
+              "benchmark_portfolio_ids",
+              "competitor_portfolio_ids",
+              "question"
+            ],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "label": { "type": "string", "minLength": 1 },
+              "profile_id": { "type": "string", "minLength": 1 },
+              "benchmark_portfolio_ids": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "competitor_portfolio_ids": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "question": { "type": "string", "minLength": 1 }
+            }
           }
         },
                 "decision_rules": {

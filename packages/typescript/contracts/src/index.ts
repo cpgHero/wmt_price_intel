@@ -13,8 +13,12 @@ export type { NormalizedRetailOffer } from "./generated/normalized-offer";
 export type { RetailCompetitiveIntelligenceNarrativeBenchmarks } from "./generated/narrative-benchmarks";
 export type { MetricsCartProductDetailCatalog } from "./generated/product-detail-catalog";
 export type { RetailCompetitiveIntelligenceProductDetailSnapshot } from "./generated/product-detail-snapshot";
+export type { RetailCompetitiveIntelligenceBrandClassificationDecision } from "./generated/brand-classification-decision";
+export type { RetailCompetitiveIntelligenceBrandWorkbench } from "./generated/brand-workbench";
+export type { RetailCompetitiveIntelligenceProductFootprint } from "./generated/product-footprint";
 export type { RetailCompetitiveIntelligenceProductMatchDecision } from "./generated/product-match-decision";
 export type { RetailCompetitiveIntelligenceProductMatchReview } from "./generated/product-match-review";
+export type { RetailCompetitiveIntelligenceProductMatchScope } from "./generated/product-match-scope";
 export type { RetailCompetitiveIntelligenceProductPackCapabilities } from "./generated/product-pack-capabilities";
 export type { RetailCompetitiveIntelligenceProductPackDraft } from "./generated/product-pack-draft";
 export type { RetailCompetitiveIntelligenceProductPackPublication } from "./generated/product-pack-publication";
@@ -26,3 +30,4 @@ export type { RetailCompetitiveIntelligenceGovernedAgentOutput } from "./generat
 export type { RetailCompetitiveIntelligenceGovernedAgentPrompt } from "./generated/agent-prompt";
 export type { RetailCompetitiveIntelligenceReportBlueprint } from "./generated/report-blueprint";
 export type { RetailCompetitiveIntelligenceReportView } from "./generated/report-view";
+export type { RetailCompetitiveIntelligenceScopedMatchAssignment } from "./generated/scoped-match-assignment";

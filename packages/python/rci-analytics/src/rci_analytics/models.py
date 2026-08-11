@@ -104,6 +104,11 @@ class ProductMatchRule:
     competitor_product_id: str
     decision: str
     eligible_profile_ids: tuple[str, ...] = ()
+    comparison_family_key: str = "legacy"
+    relationship_role: str = "primary"
+    scope_mode: str = "global"
+    scope_definition: JsonObject | None = None
+    scope_checksum: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -39,3 +39,8 @@ Governed guided authoring, exact-version runtime catalog, immutable evidence man
 leased deterministic certification, and explicit publish/activate controls. Product Packs remain
 configuration over category-neutral capabilities; published versions are immutable and existing
 collections remain pinned to their original version.
+
+## Phase 10.3 - Distribution-Scoped Matching and Brand Governance
+One-to-one integrity at overlapping primary-store-footprint grain, reusable competitor products
+across disjoint regional distributions, immutable human brand classifications, explicit
+current/future application, and Milk 1.2.0 as the first configuration-only adopter.

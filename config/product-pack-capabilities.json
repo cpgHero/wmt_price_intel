@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "attribute_data_types": [
     { "id": "string", "label": "Text", "description": "A normalized text value.", "status": "available" },
     { "id": "number", "label": "Number", "description": "A numeric value with an optional unit.", "status": "available" },
@@ -49,6 +49,25 @@
     { "id": "exact_package_first", "label": "Exact package first", "description": "Prefer equal package definitions before normalized comparisons.", "status": "available" },
     { "id": "unit_normalized_only", "label": "Normalized unit only", "description": "Compare only through the configured normalized unit.", "status": "available" },
     { "id": "category_specific", "label": "Legacy category-specific", "description": "Legacy configuration only; unavailable for newly authored packs.", "status": "deprecated" }
+  ],
+  "relationship_scope_modes": [
+    { "id": "global", "label": "Global relationship", "description": "Use one relationship everywhere both products are observed.", "status": "available" },
+    { "id": "observed_benchmark_product_footprint", "label": "Observed benchmark footprint", "description": "Use the relationship only where the benchmark product is observed in authoritative Search evidence.", "status": "available" },
+    { "id": "explicit_benchmark_locations", "label": "Selected benchmark locations", "description": "Use the relationship only at an explicit, reviewable set of benchmark locations.", "status": "available" }
+  ],
+  "relationship_roles": [
+    { "id": "primary", "label": "Primary", "description": "The one price-bearing relationship selected for a comparison context.", "status": "available" },
+    { "id": "alternative", "label": "Alternative", "description": "A valid non-price-bearing alternative retained for assortment context.", "status": "available" }
+  ],
+  "comparison_context_grains": [
+    { "id": "benchmark_location", "label": "Benchmark location", "description": "Resolve one primary relationship for each benchmark store context.", "status": "available" },
+    { "id": "benchmark_zip", "label": "Benchmark ZIP", "description": "Resolve one primary relationship for each benchmark ZIP context.", "status": "available" }
+  ],
+  "brand_roles": [
+    { "id": "private_label", "label": "Private label", "description": "A retailer-owned or retailer-exclusive brand portfolio.", "status": "available" },
+    { "id": "regional", "label": "Regional brand", "description": "A brand with an observed multi-market but non-national footprint.", "status": "available" },
+    { "id": "national", "label": "National brand", "description": "A broadly distributed branded portfolio.", "status": "available" },
+    { "id": "unclassified", "label": "Needs classification", "description": "A brand whose portfolio role has not yet been confirmed.", "status": "available" }
   ],
   "report_sections": [
     { "id": "executive_summary", "label": "Executive summary", "description": "Evidence-backed leadership answer.", "status": "available" },

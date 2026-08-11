@@ -1,10 +1,12 @@
 import type {
   RetailCompetitiveIntelligenceAnalysisResult,
   RetailCompetitiveIntelligenceAnalysisResultV2,
+  RetailCompetitiveIntelligenceBrandWorkbench,
   RetailCompetitiveIntelligenceCollectionGeographyRequest,
   RetailCompetitiveIntelligenceCollectionGeographyResolution,
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
   RetailCompetitiveIntelligenceProductMatchReview,
+  RetailCompetitiveIntelligenceProductMatchScope,
   RetailCompetitiveIntelligenceReportView,
 } from "@rci/contracts";
 
@@ -293,6 +295,9 @@ export interface ProductHighlight {
 export type MatchReview = RetailCompetitiveIntelligenceProductMatchReview;
 export type MatchReviewProduct = MatchReview["products"][number];
 export type MatchReviewConnection = MatchReview["connections"][number];
+export type ProductMatchScope = RetailCompetitiveIntelligenceProductMatchScope;
+export type BrandWorkbench = RetailCompetitiveIntelligenceBrandWorkbench;
+export type BrandWorkbenchBrand = BrandWorkbench["brands"][number];
 
 export interface MapPoint {
   id: string;

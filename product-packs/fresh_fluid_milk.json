@@ -1,7 +1,7 @@
 {
   "id": "fresh_fluid_milk",
   "name": "Fresh Fluid Milk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "category_family": "dairy",
   "scope": {
     "target_terms": [
@@ -397,6 +397,15 @@
       "unknown_policy": "reject",
       "price_selection": "lowest_positive",
       "comparison_metric": "price_per_gallon",
+      "relationship_scope_policy": {
+        "default_scope_mode": "observed_benchmark_product_footprint",
+        "allow_scoped_reuse": true,
+        "relationship_role": "primary",
+        "conflict_behavior": "exclude_from_price_comparison",
+        "comparison_context_grain": "benchmark_location",
+        "minimum_locations": 1,
+        "future_location_policy": "require_review"
+      },
       "attribute_constraints": {
         "brand": [
           "Lactaid",
@@ -430,7 +439,16 @@
       "brand_policy": "private_label_equivalent",
       "unknown_policy": "reject",
       "price_selection": "lowest_positive",
-      "comparison_metric": "price_per_gallon"
+      "comparison_metric": "price_per_gallon",
+      "relationship_scope_policy": {
+        "default_scope_mode": "observed_benchmark_product_footprint",
+        "allow_scoped_reuse": true,
+        "relationship_role": "primary",
+        "conflict_behavior": "exclude_from_price_comparison",
+        "comparison_context_grain": "benchmark_location",
+        "minimum_locations": 1,
+        "future_location_policy": "require_review"
+      }
     },
     {
       "id": "all_brand",
@@ -452,7 +470,16 @@
       "brand_policy": "ignore_brand",
       "unknown_policy": "reject",
       "price_selection": "lowest_positive",
-      "comparison_metric": "price_per_gallon"
+      "comparison_metric": "price_per_gallon",
+      "relationship_scope_policy": {
+        "default_scope_mode": "observed_benchmark_product_footprint",
+        "allow_scoped_reuse": true,
+        "relationship_role": "primary",
+        "conflict_behavior": "exclude_from_price_comparison",
+        "comparison_context_grain": "benchmark_location",
+        "minimum_locations": 1,
+        "future_location_policy": "require_review"
+      }
     }
   ],
   "brand_rules": {
@@ -486,7 +513,52 @@
         "Amazon Grocery",
         "Know & Love"
       ]
-    }
+    },
+    "portfolios": [
+      {
+        "id": "walmart_private_label",
+        "label": "Walmart private label",
+        "role": "private_label",
+        "retailer_ids": ["walmart_us"],
+        "brands": ["Great Value", "bettergoods"],
+        "evidence_notes": "Governed retailer portfolio; users may revise it in the Brand Workbench."
+      },
+      {
+        "id": "aldi_private_label",
+        "label": "ALDI private label",
+        "role": "private_label",
+        "retailer_ids": ["aldi_us"],
+        "brands": ["Friendly Farms", "Simply Nature"]
+      },
+      {
+        "id": "amazon_private_label",
+        "label": "Amazon private label",
+        "role": "private_label",
+        "retailer_ids": ["amazon_us_same_day"],
+        "brands": [
+          "Amazon Fresh",
+          "365 by Whole Foods Market",
+          "Happy Belly",
+          "Amazon Grocery",
+          "Know & Love"
+        ]
+      },
+      {
+        "id": "national_milk_brands",
+        "label": "National milk brands",
+        "role": "national",
+        "retailer_ids": ["walmart_us", "aldi_us", "amazon_us_same_day"],
+        "brands": ["Lactaid", "Organic Valley", "fairlife", "Horizon Organic", "a2 Milk"]
+      },
+      {
+        "id": "regional_milk_brands",
+        "label": "Regional milk brands",
+        "role": "regional",
+        "retailer_ids": ["walmart_us", "amazon_us_same_day"],
+        "brands": ["Hiland Dairy", "Garelick Farms", "Kemps", "Darigold", "Maple Hill"],
+        "evidence_notes": "Seed classifications require confirmation against observed distribution."
+      }
+    ]
   },
   "qa_rules": {
     "parity_tolerance_dollars": 0.01,
@@ -514,6 +586,24 @@
       "segment_outcome",
       "brand_table"
     ],
+    "brand_portfolio_panels": [
+      {
+        "id": "private_label_position",
+        "label": "Private-label position",
+        "profile_id": "private_label",
+        "benchmark_portfolio_ids": ["walmart_private_label"],
+        "competitor_portfolio_ids": ["aldi_private_label", "amazon_private_label"],
+        "question": "Where is Walmart private label winning or losing against each competitor's private label within the relevant store footprint?"
+      },
+      {
+        "id": "regional_brand_position",
+        "label": "Regional brand position",
+        "profile_id": "all_brand",
+        "benchmark_portfolio_ids": ["regional_milk_brands"],
+        "competitor_portfolio_ids": ["aldi_private_label", "amazon_private_label", "national_milk_brands"],
+        "question": "How do local and regional Walmart offerings compare with the available competitor substitute in each market?"
+      }
+    ],
     "decision_rules": {
       "preferred_scorecard_profile_id": "same_brand_exact",
       "profile_priority": ["same_brand_exact", "private_label", "all_brand"],
@@ -530,7 +620,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_fluid_milk_leadership",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Separate Walmart's conventional milk strengths from specialty vulnerabilities and distinguish Amazon same-brand, private-label, and broader equivalent-product economics.",

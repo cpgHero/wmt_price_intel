@@ -1,6 +1,14 @@
 """Canonical AnalysisResult persistence and delivery."""
 
 from rci_results.blueprints import ReportBlueprintLoader, ReportProjector
+from rci_results.brand_review import (
+    BrandDecisionCommand,
+    BrandReanalysisRecord,
+    BrandReviewService,
+    BrandRevisionConflictError,
+    InMemoryBrandReviewRepository,
+    PostgresBrandReviewRepository,
+)
 from rci_results.contracts import AnalysisResultValidator, ReportViewValidator
 from rci_results.match_review import (
     InMemoryMatchReviewRepository,
@@ -23,6 +31,11 @@ __all__ = [
     "AnalysisResultService",
     "AnalysisResultValidator",
     "ArtifactRenderer",
+    "BrandDecisionCommand",
+    "BrandReanalysisRecord",
+    "BrandReviewService",
+    "BrandRevisionConflictError",
+    "InMemoryBrandReviewRepository",
     "InMemoryMatchReviewRepository",
     "InMemoryReportObjectStore",
     "InMemoryResultsRepository",
@@ -31,6 +44,7 @@ __all__ = [
     "MatchReanalysisRecord",
     "MatchReviewService",
     "MatchRevisionConflictError",
+    "PostgresBrandReviewRepository",
     "PostgresMatchReviewRepository",
     "PostgresResultsRepository",
     "ReportBlueprintLoader",

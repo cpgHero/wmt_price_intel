@@ -19,7 +19,7 @@ export type Capabilities = [
 ];
 
 export interface RetailCompetitiveIntelligenceProductPackCapabilities {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   attribute_data_types: Capabilities;
   attribute_roles: Capabilities;
   extraction_rules: Capabilities;
@@ -28,6 +28,10 @@ export interface RetailCompetitiveIntelligenceProductPackCapabilities {
   unknown_policies: Capabilities;
   price_selection_policies: Capabilities;
   package_equivalence_policies: Capabilities;
+  relationship_scope_modes: Capabilities;
+  relationship_roles: Capabilities;
+  comparison_context_grains: Capabilities;
+  brand_roles: Capabilities;
   report_sections: Capabilities;
   visualizations: Capabilities;
 }

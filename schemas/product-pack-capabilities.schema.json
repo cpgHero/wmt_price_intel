@@ -14,11 +14,15 @@
     "unknown_policies",
     "price_selection_policies",
     "package_equivalence_policies",
+    "relationship_scope_modes",
+    "relationship_roles",
+    "comparison_context_grains",
+    "brand_roles",
     "report_sections",
     "visualizations"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "attribute_data_types": { "$ref": "#/$defs/capabilities" },
     "attribute_roles": { "$ref": "#/$defs/capabilities" },
     "extraction_rules": { "$ref": "#/$defs/capabilities" },
@@ -27,6 +31,10 @@
     "unknown_policies": { "$ref": "#/$defs/capabilities" },
     "price_selection_policies": { "$ref": "#/$defs/capabilities" },
     "package_equivalence_policies": { "$ref": "#/$defs/capabilities" },
+    "relationship_scope_modes": { "$ref": "#/$defs/capabilities" },
+    "relationship_roles": { "$ref": "#/$defs/capabilities" },
+    "comparison_context_grains": { "$ref": "#/$defs/capabilities" },
+    "brand_roles": { "$ref": "#/$defs/capabilities" },
     "report_sections": { "$ref": "#/$defs/capabilities" },
     "visualizations": { "$ref": "#/$defs/capabilities" }
   },

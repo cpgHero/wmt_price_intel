@@ -130,6 +130,37 @@ describe("match review scope", () => {
     ).toEqual(["a1"]);
   });
 
+  it("keeps products with a scoped confirmation available for disjoint footprints", () => {
+    const scopedConfirmation = structuredClone(review);
+    scopedConfirmation.connections[0].status = "confirmed";
+    scopedConfirmation.connections[0].origin = "user";
+    scopedConfirmation.connections[0].scope = {
+      mode: "observed_benchmark_product_footprint",
+      relationship_role: "primary",
+      comparison_family_key: "beef:93-7:1-lb",
+      definition: {
+        benchmark_location_scope_keys: ["walmart_us|72712|store-1"],
+        future_location_policy: "follow_unique_product_footprint",
+      },
+      checksum: "a".repeat(64),
+    };
+
+    const scope = scopeMatchReview(scopedConfirmation, "aldi_us", "strict");
+
+    expect(
+      scope.unmatchedBenchmarkProducts.map((row) => row.product_id),
+    ).toEqual(["w1", "w2"]);
+    expect(
+      scope.unmatchedCompetitorProducts.map((row) => row.product_id),
+    ).toEqual(["a1"]);
+    expect(scope.crossLensMemberships["aldi_us:a1"]).toContainEqual({
+      profileId: "strict",
+      profileLabel: "Exact package",
+      status: "confirmed",
+      counterpartProductId: "w1",
+    });
+  });
+
   it("labels manual-pool products that are active in another lens", () => {
     const otherLens = structuredClone(review);
     otherLens.connections[0].eligible_profile_ids = ["unit"];

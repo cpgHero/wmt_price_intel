@@ -75,12 +75,14 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "name": "Walmart 93/7 Ground Beef",
                     "image_url": "https://example.test/w1.png",
                     "price": 5.47,
+                    "location_scope_keys": ["walmart_us|72712|store-1"],
                 },
                 {
                     "canonical_product_id": "walmart_us:w2",
                     "retailer": "walmart_us",
                     "name": "Walmart 80/20 Ground Beef",
                     "price": 4.97,
+                    "location_scope_keys": ["walmart_us|72713|store-2"],
                 },
                 {
                     "canonical_product_id": "aldi_us:a1",
@@ -158,6 +160,7 @@ def _command(
     profile: str = "strict",
     decision: str = "confirmed",
     replace: bool = False,
+    scope: dict | None = None,
 ) -> MatchDecisionCommand:
     return MatchDecisionCommand(
         expected_revision=revision,
@@ -167,7 +170,26 @@ def _command(
         competitor_product_id=competitor,
         decision=decision,
         replace_conflicts=replace,
+        scope=scope,
     )
+
+
+def _scoped(location: str | None = None) -> dict:
+    mode = "explicit_benchmark_locations" if location else "observed_benchmark_product_footprint"
+    return {
+        "mode": mode,
+        "relationship_role": "primary",
+        "comparison_family_key": "milk:whole:gallon",
+        "definition": {
+            "benchmark_location_scope_keys": [location] if location else [],
+            "excluded_benchmark_location_scope_keys": [],
+            "future_location_policy": (
+                "explicit_only" if location else "follow_unique_product_footprint"
+            ),
+        },
+        "checksum": "0" * 64,
+        "artifact_id": None,
+    }
 
 
 async def test_match_review_overlays_durable_user_decisions() -> None:
@@ -278,3 +300,62 @@ async def test_reanalysis_only_updates_future_policy_after_explicit_confirmation
         "revision_id": queued.match_revision_id,
         "revision": 1,
     }
+
+
+async def test_observed_scope_is_materialized_from_search_footprint() -> None:
+    repository = InMemoryMatchReviewRepository()
+    service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
+
+    saved = await service.decide(
+        "analysis", _command(revision=0, scope=_scoped()), actor="reviewer"
+    )
+    rules = await repository.rules(saved["revision_id"])
+
+    assert rules[0].scope_mode == "observed_benchmark_product_footprint"
+    assert rules[0].scope_definition["benchmark_location_scope_keys"] == [
+        "walmart_us|72712|store-1"
+    ]
+    assert rules[0].scope_definition["source_analysis_id"] == "analysis"
+    assert rules[0].scope_checksum != "0" * 64
+
+
+async def test_same_competitor_product_can_be_reused_only_in_disjoint_scopes() -> None:
+    repository = InMemoryMatchReviewRepository()
+    service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
+    await service.decide(
+        "analysis",
+        _command(revision=0, scope=_scoped("walmart_us|72712|store-1")),
+        actor="reviewer",
+    )
+
+    await service.decide(
+        "analysis",
+        _command(
+            revision=1,
+            benchmark="w2",
+            competitor="a1",
+            scope=_scoped("walmart_us|72713|store-2"),
+        ),
+        actor="reviewer",
+    )
+    confirmed = [
+        row
+        for row in (await service.view("analysis"))["connections"]
+        if row["status"] == "confirmed"
+    ]
+    assert {(row["benchmark_product_id"], row["competitor_product_id"]) for row in confirmed} == {
+        ("w1", "a1"),
+        ("w2", "a1"),
+    }
+
+    with pytest.raises(MatchOneToOneConflictError):
+        await service.decide(
+            "analysis",
+            _command(
+                revision=2,
+                benchmark="w2",
+                competitor="a2",
+                scope=_scoped("walmart_us|72713|store-2"),
+            ),
+            actor="reviewer",
+        )

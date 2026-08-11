@@ -105,6 +105,15 @@ export interface RetailCompetitiveIntelligenceProductPack {
       high_metric: string;
     };
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
+    relationship_scope_policy?: {
+      default_scope_mode: "global" | "observed_benchmark_product_footprint" | "explicit_benchmark_locations";
+      allow_scoped_reuse: boolean;
+      relationship_role: "primary" | "alternative";
+      conflict_behavior: "exclude_from_price_comparison";
+      comparison_context_grain: "benchmark_location" | "benchmark_zip";
+      minimum_locations?: number;
+      future_location_policy?: "require_review" | "inherit_observed_footprint";
+    };
     [k: string]: unknown;
   }[];
   brand_rules?: {
@@ -117,6 +126,20 @@ export interface RetailCompetitiveIntelligenceProductPack {
        */
       [k: string]: [string, ...string[]];
     };
+    portfolios?: {
+      id: string;
+      label: string;
+      role: "private_label" | "regional" | "national" | "unclassified";
+      /**
+       * @minItems 1
+       */
+      retailer_ids: [string, ...string[]];
+      /**
+       * @minItems 1
+       */
+      brands: [string, ...string[]];
+      evidence_notes?: string;
+    }[];
   };
   qa_rules: {
     parity_tolerance_dollars?: number;
@@ -137,6 +160,14 @@ export interface RetailCompetitiveIntelligenceProductPack {
     headline_segments: string[];
     required_caveats: string[];
     recommended_charts?: string[];
+    brand_portfolio_panels?: {
+      id: string;
+      label: string;
+      profile_id: string;
+      benchmark_portfolio_ids: string[];
+      competitor_portfolio_ids: string[];
+      question: string;
+    }[];
     decision_rules?: {
       preferred_scorecard_profile_id: string;
       /**

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/scoped-match-assignment.schema.json",
+  "title": "Retail Competitive Intelligence Scoped Match Assignment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "assignment_id",
+    "analysis_id",
+    "competitor_retailer_id",
+    "profile_id",
+    "comparison_family_key",
+    "benchmark_product_id",
+    "competitor_product_id",
+    "benchmark_location_scope_key",
+    "status",
+    "relationship_role",
+    "source_authority"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "assignment_id": { "type": "string", "minLength": 1 },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "match_revision_id": { "type": ["string", "null"], "format": "uuid" },
+    "brand_revision_id": { "type": ["string", "null"], "format": "uuid" },
+    "relationship_id": { "type": ["string", "null"] },
+    "competitor_retailer_id": { "type": "string", "minLength": 1 },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "comparison_family_key": { "type": "string", "minLength": 1 },
+    "benchmark_product_id": { "type": "string", "minLength": 1 },
+    "competitor_product_id": { "type": "string", "minLength": 1 },
+    "benchmark_location_scope_key": { "type": "string", "minLength": 1 },
+    "competitor_location_scope_key": { "type": ["string", "null"] },
+    "status": {
+      "enum": ["active", "scope_conflict", "unavailable", "unmatched", "alternative"]
+    },
+    "relationship_role": { "enum": ["primary", "alternative"] },
+    "resolution_reason": { "type": ["string", "null"] },
+    "benchmark_offer_id": { "type": ["string", "null"] },
+    "competitor_offer_id": { "type": ["string", "null"] },
+    "benchmark_value": { "type": ["number", "null"] },
+    "competitor_value": { "type": ["number", "null"] },
+    "comparison_metric": { "type": ["string", "null"] },
+    "winner": {
+      "type": ["string", "null"],
+      "enum": ["benchmark_lower", "competitor_lower", "parity", null]
+    },
+    "source_authority": { "const": "search" }
+  }
+}

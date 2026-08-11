@@ -48,6 +48,7 @@ from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
+    PostgresBrandReviewRepository,
     PostgresMatchReviewRepository,
     PostgresResultsRepository,
     S3ReportObjectStore,
@@ -208,6 +209,7 @@ async def run() -> None:
                 code_version=settings.app_version or APP_VERSION,
                 assistant=assistant,
                 match_reviews=PostgresMatchReviewRepository(database.engine),
+                brand_reviews=PostgresBrandReviewRepository(database.engine),
                 product_packs=CatalogProductPackLoader(
                     repository_root,
                     product_pack_catalog,

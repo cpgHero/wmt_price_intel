@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import statistics
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
@@ -84,12 +84,133 @@ def _edge_components(edges: set[tuple[str, str]]) -> list[set[tuple[str, str]]]:
     return components
 
 
+def _scope_contexts(scope_keys: frozenset[str], *, comparison_context_grain: str) -> frozenset[str]:
+    if comparison_context_grain == "benchmark_location":
+        return scope_keys
+    if comparison_context_grain == "benchmark_zip":
+        return frozenset("|".join(value.split("|")[:2]) for value in scope_keys)
+    raise ValueError(f"unsupported comparison context grain {comparison_context_grain!r}")
+
+
+def _scopes_overlap(
+    left_mode: str,
+    left_contexts: frozenset[str],
+    right_mode: str,
+    right_contexts: frozenset[str],
+) -> bool:
+    return (
+        left_mode == "global"
+        or right_mode == "global"
+        or not left_contexts
+        or not right_contexts
+        or bool(left_contexts & right_contexts)
+    )
+
+
+def _relationship_conflicts(
+    left: tuple[str, str],
+    right: tuple[str, str],
+    *,
+    scope_modes: Mapping[tuple[str, str], str],
+    scope_contexts: Mapping[tuple[str, str], frozenset[str]],
+) -> bool:
+    if left[0] != right[0] and left[1] != right[1]:
+        return False
+    return _scopes_overlap(
+        scope_modes[left],
+        scope_contexts[left],
+        scope_modes[right],
+        scope_contexts[right],
+    )
+
+
+def _conflict_components(
+    edges: set[tuple[str, str]],
+    *,
+    scope_modes: Mapping[tuple[str, str], str],
+    scope_contexts: Mapping[tuple[str, str], frozenset[str]],
+) -> list[set[tuple[str, str]]]:
+    remaining = set(edges)
+    components: list[set[tuple[str, str]]] = []
+    while remaining:
+        component: set[tuple[str, str]] = set()
+        frontier = {min(remaining)}
+        while frontier:
+            edge = frontier.pop()
+            if edge not in remaining:
+                continue
+            remaining.remove(edge)
+            component.add(edge)
+            frontier.update(
+                candidate
+                for candidate in remaining
+                if _relationship_conflicts(
+                    edge,
+                    candidate,
+                    scope_modes=scope_modes,
+                    scope_contexts=scope_contexts,
+                )
+            )
+        components.append(component)
+    return components
+
+
+def _unique_maximum_independent_set(
+    component: set[tuple[str, str]],
+    *,
+    scope_modes: Mapping[tuple[str, str], str],
+    scope_contexts: Mapping[tuple[str, str], frozenset[str]],
+) -> set[tuple[str, str]] | None:
+    """Return the unique largest non-conflicting scoped assignment, if one exists."""
+
+    if len(component) == 1:
+        return set(component)
+    if len(component) > 64:
+        # Fail closed rather than risk exponential work on a pathologically broad ambiguity.
+        return None
+    neighbors = {
+        edge: {
+            candidate
+            for candidate in component
+            if candidate != edge
+            and _relationship_conflicts(
+                edge,
+                candidate,
+                scope_modes=scope_modes,
+                scope_contexts=scope_contexts,
+            )
+        }
+        for edge in component
+    }
+    best: set[tuple[str, str]] = set()
+    multiple = False
+
+    def search(available: set[tuple[str, str]], selected: set[tuple[str, str]]) -> None:
+        nonlocal best, multiple
+        if len(selected) + len(available) < len(best):
+            return
+        if not available:
+            if len(selected) > len(best):
+                best = set(selected)
+                multiple = False
+            elif len(selected) == len(best) and selected != best:
+                multiple = True
+            return
+        edge = max(available, key=lambda value: (len(neighbors[value] & available), value))
+        search(available - {edge} - neighbors[edge], selected | {edge})
+        search(available - {edge}, selected)
+
+    search(set(component), set())
+    return None if multiple else best
+
+
 def resolve_one_to_one_relationships(
     offers: Iterable[ClassifiedOffer],
     matches: Iterable[MatchRecord],
     *,
     benchmark_retailer: str,
     profile_priority: Iterable[str],
+    profile_scope_policies: Mapping[str, JsonObject] | None = None,
 ) -> MatchRelationshipResolution:
     """Resolve automatic exact-geography candidates without arbitrary business tie-breaks.
 
@@ -98,9 +219,27 @@ def resolve_one_to_one_relationships(
     Evidence volume and stable IDs never decide product identity.
     """
 
+    offer_rows = list(offers)
     match_rows = list(matches)
     priorities = {str(profile_id): index for index, profile_id in enumerate(profile_priority)}
-    offer_index = {item.offer.offer_id: item.offer for item in offers}
+    offer_index = {item.offer.offer_id: item.offer for item in offer_rows}
+    configured_scope_policies = profile_scope_policies or {}
+    product_locations: dict[str, set[str]] = {}
+    for item in offer_rows:
+        offer = item.offer
+        if (
+            item.in_scope
+            and offer.retailer_id == benchmark_retailer
+            and offer.zipcode is not None
+            and offer.price is not None
+            and offer.price > 0
+        ):
+            product_locations.setdefault(offer.retailer_product_id, set()).add(
+                location_scope_key(offer)
+            )
+    product_location_scopes = {
+        product_id: frozenset(scope_keys) for product_id, scope_keys in product_locations.items()
+    }
     pair_rows: dict[tuple[str, str, str], list[MatchRecord]] = {}
     passthrough: list[MatchRecord] = []
     for match in match_rows:
@@ -124,6 +263,7 @@ def resolve_one_to_one_relationships(
         pair_rows.setdefault(key, []).append(match)
 
     selected: dict[tuple[str, str, str], str] = {}
+    selected_scopes: dict[tuple[str, str, str], tuple[str, frozenset[str]]] = {}
     ambiguous_groups: list[JsonObject] = []
     for competitor_id in sorted({key[0] for key in pair_rows}):
         competitor_pairs = {key for key in pair_rows if key[0] == competitor_id}
@@ -135,15 +275,51 @@ def resolve_one_to_one_relationships(
                 for row in pair_rows[key]
             )
         }
-        confirmed_benchmark = [key[1] for key in confirmed]
-        confirmed_competitor = [key[2] for key in confirmed]
-        if len(confirmed_benchmark) != len(set(confirmed_benchmark)) or len(
-            confirmed_competitor
-        ) != len(set(confirmed_competitor)):
-            raise ValueError("confirmed product relationships must be globally one-to-one")
+        for index, left in enumerate(sorted(confirmed)):
+            left_contexts = {
+                str(row.attributes.get("_location_scope_key") or "global")
+                for row in pair_rows[left]
+            }
+            for right in sorted(confirmed)[index + 1 :]:
+                if left[1] != right[1] and left[2] != right[2]:
+                    continue
+                right_contexts = {
+                    str(row.attributes.get("_location_scope_key") or "global")
+                    for row in pair_rows[right]
+                }
+                if "global" in left_contexts | right_contexts or left_contexts & right_contexts:
+                    raise ValueError(
+                        "confirmed product relationships must be one-to-one within each context"
+                    )
         selected.update({key: "confirmed" for key in confirmed})
-        locked_benchmark = set(confirmed_benchmark)
-        locked_competitor = set(confirmed_competitor)
+        for key in confirmed:
+            rows = pair_rows[key]
+            mode = next(
+                (
+                    str(row.attributes["_scope_mode"])
+                    for row in rows
+                    if row.attributes.get("_scope_mode")
+                ),
+                "global",
+            )
+            selected_scopes[key] = (
+                mode,
+                frozenset(
+                    str(row.attributes["_location_scope_key"])
+                    for row in rows
+                    if row.attributes.get("_location_scope_key")
+                ),
+            )
+        global_confirmed = {
+            key
+            for key in confirmed
+            if any(
+                str(row.attributes.get("_scope_mode") or "global") == "global"
+                for row in pair_rows[key]
+            )
+        }
+        locked_benchmark = {key[1] for key in global_confirmed}
+        locked_competitor = {key[2] for key in global_confirmed}
         automatic = {
             key
             for key in competitor_pairs - confirmed
@@ -155,37 +331,133 @@ def resolve_one_to_one_relationships(
             (key[1], key[2]): min(priorities[row.profile_id] for row in pair_rows[key])
             for key in automatic
         }
-        best_benchmark = {
-            benchmark_product_id: min(
-                rank
-                for (candidate_benchmark, _candidate_competitor), rank in edge_rank.items()
-                if candidate_benchmark == benchmark_product_id
+        edge_scope_modes: dict[tuple[str, str], str] = {}
+        edge_scope_keys: dict[tuple[str, str], frozenset[str]] = {}
+        edge_scope_contexts: dict[tuple[str, str], frozenset[str]] = {}
+        edge_context_grains: dict[tuple[str, str], str] = {}
+        minimum_scope_locations: dict[tuple[str, str], int] = {}
+        for key in automatic:
+            edge = (key[1], key[2])
+            ranked_profiles = sorted(
+                {row.profile_id for row in pair_rows[key]},
+                key=lambda value: (priorities[value], value),
             )
-            for benchmark_product_id, _competitor_product_id in edge_rank
-        }
-        best_competitor = {
-            competitor_product_id: min(
-                rank
-                for (_candidate_benchmark, candidate_competitor), rank in edge_rank.items()
-                if candidate_competitor == competitor_product_id
+            policy = dict(configured_scope_policies.get(ranked_profiles[0], {}))
+            allow_scoped_reuse = bool(policy.get("allow_scoped_reuse", False))
+            scope_mode = str(policy.get("default_scope_mode", "global"))
+            if not allow_scoped_reuse:
+                scope_mode = "global"
+            scope_keys = (
+                product_location_scopes.get(key[1], frozenset())
+                if scope_mode != "global"
+                else frozenset()
             )
-            for _benchmark_product_id, competitor_product_id in edge_rank
+            grain = str(policy.get("comparison_context_grain", "benchmark_location"))
+            edge_context_grains[edge] = grain
+            edge_scope_modes[edge] = scope_mode
+            edge_scope_keys[edge] = scope_keys
+            edge_scope_contexts[edge] = _scope_contexts(
+                scope_keys,
+                comparison_context_grain=grain,
+            )
+            minimum_scope_locations[edge] = int(policy.get("minimum_locations", 1))
+        automatic = {
+            key
+            for key in automatic
+            if len(edge_scope_keys[(key[1], key[2])]) >= minimum_scope_locations[(key[1], key[2])]
+            or edge_scope_modes[(key[1], key[2])] == "global"
         }
+        automatic = {
+            key
+            for key in automatic
+            if not any(
+                (key[1] == confirmed_key[1] or key[2] == confirmed_key[2])
+                and _scopes_overlap(
+                    edge_scope_modes[(key[1], key[2])],
+                    edge_scope_contexts[(key[1], key[2])],
+                    selected_scopes[confirmed_key][0],
+                    _scope_contexts(
+                        selected_scopes[confirmed_key][1],
+                        comparison_context_grain=edge_context_grains[(key[1], key[2])],
+                    ),
+                )
+                for confirmed_key in confirmed
+            )
+        }
+        edge_rank = {
+            edge: rank
+            for edge, rank in edge_rank.items()
+            if (competitor_id, edge[0], edge[1]) in automatic
+        }
+        if not edge_rank:
+            continue
+        best_benchmark_rank = {
+            edge: min(
+                rank
+                for candidate, rank in edge_rank.items()
+                if candidate[0] == edge[0]
+                and _scopes_overlap(
+                    edge_scope_modes[edge],
+                    edge_scope_contexts[edge],
+                    edge_scope_modes[candidate],
+                    edge_scope_contexts[candidate],
+                )
+            )
+            for edge in edge_rank
+        }
+        best_competitor_rank = {
+            edge: min(
+                rank
+                for candidate, rank in edge_rank.items()
+                if candidate[1] == edge[1]
+                and _scopes_overlap(
+                    edge_scope_modes[edge],
+                    edge_scope_contexts[edge],
+                    edge_scope_modes[candidate],
+                    edge_scope_contexts[candidate],
+                )
+            )
+            for edge in edge_rank
+        }
+
         mutual_best = {
             edge
             for edge, rank in edge_rank.items()
-            if rank == best_benchmark[edge[0]] and rank == best_competitor[edge[1]]
+            if rank == best_benchmark_rank[edge] and rank == best_competitor_rank[edge]
         }
-        for component in _edge_components(mutual_best):
-            assignment = _maximum_matching(component)
-            unique = all(
-                len(_maximum_matching(component, omitted=edge)) < len(assignment)
-                for edge in assignment.items()
+        all_global = all(edge_scope_modes[edge] == "global" for edge in mutual_best)
+        components = (
+            _edge_components(mutual_best)
+            if all_global
+            else _conflict_components(
+                mutual_best,
+                scope_modes=edge_scope_modes,
+                scope_contexts=edge_scope_contexts,
             )
+        )
+        for component in components:
+            if all_global:
+                assignment = _maximum_matching(component)
+                resolved_edges = set(assignment.items())
+                unique = all(
+                    len(_maximum_matching(component, omitted=edge)) < len(assignment)
+                    for edge in resolved_edges
+                )
+            else:
+                unique_assignment = _unique_maximum_independent_set(
+                    component,
+                    scope_modes=edge_scope_modes,
+                    scope_contexts=edge_scope_contexts,
+                )
+                resolved_edges = unique_assignment or set()
+                unique = unique_assignment is not None
             if unique:
-                for benchmark_product_id, competitor_product_id in assignment.items():
-                    selected[(competitor_id, benchmark_product_id, competitor_product_id)] = (
-                        "suggested"
+                for benchmark_product_id, competitor_product_id in resolved_edges:
+                    key = (competitor_id, benchmark_product_id, competitor_product_id)
+                    selected[key] = "suggested"
+                    selected_scopes[key] = (
+                        edge_scope_modes[(benchmark_product_id, competitor_product_id)],
+                        edge_scope_keys[(benchmark_product_id, competitor_product_id)],
                     )
                 continue
             candidate_rows = [
@@ -200,6 +472,10 @@ def resolve_one_to_one_relationships(
                             ]
                         },
                         key=lambda value: (priorities[value], value),
+                    ),
+                    "scope_mode": edge_scope_modes[(benchmark_product_id, competitor_product_id)],
+                    "benchmark_location_scope_keys": sorted(
+                        edge_scope_keys[(benchmark_product_id, competitor_product_id)]
                     ),
                 }
                 for benchmark_product_id, competitor_product_id in sorted(component)
@@ -234,6 +510,7 @@ def resolve_one_to_one_relationships(
             {row.profile_id for row in rows},
             key=lambda value: (priorities[value], value),
         )
+        scope_mode, scope_keys = selected_scopes.get(key, ("global", frozenset()))
         relationships.append(
             {
                 "relationship_id": relationship_id,
@@ -244,6 +521,16 @@ def resolve_one_to_one_relationships(
                 "eligible_profile_ids": eligible_profiles,
                 "qa_status": "ready",
                 "suppression_reasons": [],
+                "scope_mode": scope_mode,
+                "comparison_family_key": next(
+                    (
+                        str(row.attributes["_comparison_family_key"])
+                        for row in rows
+                        if row.attributes.get("_comparison_family_key")
+                    ),
+                    "legacy",
+                ),
+                "benchmark_location_scope_keys": sorted(scope_keys),
             }
         )
         resolved.extend(
@@ -253,6 +540,8 @@ def resolve_one_to_one_relationships(
                     **row.attributes,
                     "_relationship_id": relationship_id,
                     "_relationship_status": status,
+                    "_scope_mode": scope_mode,
+                    "_location_scope_key": location_scope_key(offer_index[row.benchmark_offer_id]),
                 },
             )
             for row in rows
@@ -309,6 +598,64 @@ def geographic_overlap(
     return benchmark & competitor
 
 
+def location_scope_key(offer: Any) -> str:
+    """Return the stable Search-evidence grain used by scoped relationships."""
+
+    zipcode = str(offer.zipcode or "unknown")
+    store = str(offer.store_number or f"zip:{zipcode}")
+    return "|".join((str(offer.retailer_id), zipcode, store))
+
+
+def product_footprint(
+    offers: Iterable[ClassifiedOffer], *, analysis_id: str, retailer_id: str, product_id: str
+) -> JsonObject:
+    """Project an auditable product footprint from authoritative Search observations."""
+
+    locations: dict[str, JsonObject] = {}
+    for item in offers:
+        offer = item.offer
+        if (
+            not item.in_scope
+            or offer.retailer_id != retailer_id
+            or offer.retailer_product_id != product_id
+            or offer.zipcode is None
+            or offer.price is None
+            or offer.price <= 0
+        ):
+            continue
+        key = location_scope_key(offer)
+        current = locations.setdefault(
+            key,
+            {
+                "scope_key": key,
+                "store_number": offer.store_number,
+                "zipcode": offer.zipcode,
+                "state": offer.raw.get("state"),
+                "latitude": offer.latitude,
+                "longitude": offer.longitude,
+                "observations": 0,
+                "lowest_positive_price": float(offer.price),
+            },
+        )
+        current["observations"] = int(current["observations"]) + 1
+        current["lowest_positive_price"] = min(
+            float(current["lowest_positive_price"]), float(offer.price)
+        )
+    rows = [locations[key] for key in sorted(locations)]
+    seed = "\n".join(
+        f"{row['scope_key']}|{row['observations']}|{row['lowest_positive_price']}" for row in rows
+    )
+    return {
+        "schema_version": "1.0.0",
+        "analysis_id": analysis_id,
+        "retailer_id": retailer_id,
+        "product_id": product_id,
+        "source_authority": "search",
+        "locations": rows,
+        "checksum": hashlib.sha256(seed.encode()).hexdigest(),
+    }
+
+
 class ComparisonEngine:
     def __init__(self, pack: ProductPack) -> None:
         self.pack = pack
@@ -344,7 +691,7 @@ class ComparisonEngine:
         profile_id: str,
         rules: Iterable[ProductMatchRule] = (),
     ) -> list[MatchRecord]:
-        """Apply an immutable one-to-one decision snapshot to generic matches."""
+        """Apply an immutable, context-one-to-one decision snapshot to generic matches."""
 
         applicable = [
             rule
@@ -353,21 +700,30 @@ class ComparisonEngine:
             and profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
         ]
         confirmed = [rule for rule in applicable if rule.decision == "confirmed"]
-        rejected = {
-            (rule.benchmark_product_id, rule.competitor_product_id)
-            for rule in applicable
-            if rule.decision == "rejected"
-        }
-        benchmark_products = [rule.benchmark_product_id for rule in confirmed]
-        competitor_products = [rule.competitor_product_id for rule in confirmed]
-        if len(benchmark_products) != len(set(benchmark_products)) or len(
-            competitor_products
-        ) != len(set(competitor_products)):
-            raise ValueError("confirmed product-match rules must be one-to-one")
-
         offer_index = {item.offer.offer_id: item.offer for item in offers}
-        locked_benchmark = set(benchmark_products)
-        locked_competitor = set(competitor_products)
+        rule_scopes = {
+            id(rule): self._rule_scope_keys(offers, benchmark_id=benchmark_id, rule=rule)
+            for rule in applicable
+        }
+        for index, left in enumerate(confirmed):
+            if left.relationship_role != "primary":
+                continue
+            for right in confirmed[index + 1 :]:
+                if right.relationship_role != "primary":
+                    continue
+                scopes_overlap = "global" in {left.scope_mode, right.scope_mode} or bool(
+                    rule_scopes[id(left)] & rule_scopes[id(right)]
+                )
+                if not scopes_overlap:
+                    continue
+                if (
+                    left.benchmark_product_id == right.benchmark_product_id
+                    or left.competitor_product_id == right.competitor_product_id
+                ):
+                    raise ValueError(
+                        "confirmed product-match rules must be one-to-one within each "
+                        "benchmark location context"
+                    )
         automatic = []
         for match in self.compare(
             offers,
@@ -380,7 +736,20 @@ class ComparisonEngine:
             if benchmark is None or competitor is None:
                 continue
             pair = (benchmark.retailer_product_id, competitor.retailer_product_id)
-            if pair in rejected or pair[0] in locked_benchmark or pair[1] in locked_competitor:
+            scope_key = location_scope_key(benchmark)
+            rejected_here = any(
+                rule.decision == "rejected"
+                and pair == (rule.benchmark_product_id, rule.competitor_product_id)
+                and scope_key in rule_scopes[id(rule)]
+                for rule in applicable
+            )
+            locked_here = any(
+                rule.relationship_role == "primary"
+                and scope_key in rule_scopes[id(rule)]
+                and (pair[0] == rule.benchmark_product_id or pair[1] == rule.competitor_product_id)
+                for rule in confirmed
+            )
+            if rejected_here or locked_here:
                 continue
             automatic.append(match)
 
@@ -390,13 +759,17 @@ class ComparisonEngine:
         governed = [
             match
             for rule in confirmed
-            for match in self._confirmed_exact_zip_matches(
+            if rule.relationship_role == "primary"
+            for match in self._confirmed_exact_location_matches(
                 offers,
                 benchmark_id=benchmark_id,
                 competitor_id=competitor_id,
                 profile=profile,
                 benchmark_product_id=rule.benchmark_product_id,
                 competitor_product_id=rule.competitor_product_id,
+                scope_keys=rule_scopes[id(rule)],
+                scope_mode=rule.scope_mode,
+                comparison_family_key=rule.comparison_family_key,
             )
         ]
         return sorted(
@@ -408,7 +781,37 @@ class ComparisonEngine:
             ),
         )
 
-    def _confirmed_exact_zip_matches(
+    def _rule_scope_keys(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        rule: ProductMatchRule,
+    ) -> set[str]:
+        observed = {
+            location_scope_key(item.offer)
+            for item in offers
+            if item.in_scope
+            and item.offer.retailer_id == benchmark_id
+            and item.offer.retailer_product_id == rule.benchmark_product_id
+            and item.offer.zipcode is not None
+            and item.offer.price is not None
+            and item.offer.price > 0
+        }
+        if rule.scope_mode == "global":
+            return observed
+        definition = rule.scope_definition or {}
+        configured = {str(value) for value in definition.get("benchmark_location_scope_keys", [])}
+        excluded = {
+            str(value) for value in definition.get("excluded_benchmark_location_scope_keys", [])
+        }
+        if rule.scope_mode == "explicit_benchmark_locations":
+            return (configured & observed) - excluded
+        if rule.scope_mode == "observed_benchmark_product_footprint":
+            return ((configured or observed) & observed) - excluded
+        raise ValueError(f"unsupported product-match scope {rule.scope_mode!r}")
+
+    def _confirmed_exact_location_matches(
         self,
         offers: list[ClassifiedOffer],
         *,
@@ -417,9 +820,12 @@ class ComparisonEngine:
         profile: JsonObject,
         benchmark_product_id: str,
         competitor_product_id: str,
+        scope_keys: set[str],
+        scope_mode: str,
+        comparison_family_key: str,
     ) -> list[MatchRecord]:
         metric = self._comparison_metric(profile)
-        benchmark = self._selected_product_by_zip(
+        benchmark = self._selected_product_by_location(
             offers,
             retailer_id=benchmark_id,
             product_id=benchmark_product_id,
@@ -440,20 +846,56 @@ class ComparisonEngine:
             self._match(
                 profile=profile,
                 competitor_id=competitor_id,
-                geography_key=zipcode,
-                benchmark=benchmark[zipcode][0],
-                competitor=competitor[zipcode][0],
+                geography_key=scope_key,
+                benchmark=benchmark[scope_key][0],
+                competitor=competitor[str(benchmark[scope_key][0].offer.zipcode)][0],
                 dimensions=dimensions,
                 metric=metric,
-                benchmark_value=benchmark[zipcode][1],
-                competitor_value=competitor[zipcode][1],
+                benchmark_value=benchmark[scope_key][1],
+                competitor_value=competitor[str(benchmark[scope_key][0].offer.zipcode)][1],
                 matched_attributes={
-                    **{name: benchmark[zipcode][0].attributes.get(name) for name in dimensions},
+                    **{name: benchmark[scope_key][0].attributes.get(name) for name in dimensions},
                     "_match_origin": "user_confirmed",
+                    "_scope_mode": scope_mode,
+                    "_location_scope_key": scope_key,
+                    "_comparison_family_key": comparison_family_key,
                 },
             )
-            for zipcode in sorted(benchmark.keys() & competitor.keys())
+            for scope_key in sorted(benchmark)
+            if scope_key in scope_keys and str(benchmark[scope_key][0].offer.zipcode) in competitor
         ]
+
+    def _selected_product_by_location(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        retailer_id: str,
+        product_id: str,
+        profile: JsonObject,
+        metric: str,
+        role: str,
+    ) -> dict[str, tuple[ClassifiedOffer, Decimal]]:
+        selected: dict[str, tuple[ClassifiedOffer, Decimal]] = {}
+        for item in offers:
+            value = self._metric_value(item, metric)
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or item.offer.retailer_product_id != product_id
+                or item.offer.zipcode is None
+                or not self._available_for_matching(item, profile)
+                or not self._satisfies_constraints(item, profile, role)
+                or value is None
+            ):
+                continue
+            key = location_scope_key(item.offer)
+            previous = selected.get(key)
+            if previous is None or (value, item.offer.offer_id) < (
+                previous[1],
+                previous[0].offer.offer_id,
+            ):
+                selected[key] = (item, value)
+        return selected
 
     def _selected_product_by_zip(
         self,

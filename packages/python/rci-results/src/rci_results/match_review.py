@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -52,6 +53,12 @@ class MatchRuleRecord:
     eligible_profile_ids: tuple[str, ...]
     benchmark_product_id: str
     competitor_product_id: str
+    comparison_family_key: str
+    relationship_role: str
+    scope_mode: str
+    scope_definition: JsonObject
+    scope_checksum: str
+    scope_artifact_id: str | None
     decision: str
     origin: str
     reason: str | None
@@ -80,6 +87,7 @@ class MatchDecisionCommand:
     replace_conflicts: bool = False
     reason: str | None = None
     eligible_profile_ids: tuple[str, ...] = ()
+    scope: JsonObject | None = None
 
 
 class MatchReviewRepository(Protocol):
@@ -146,6 +154,14 @@ def _rule(row: RowMapping | dict[str, Any]) -> MatchRuleRecord:
         eligible_profile_ids=tuple(str(value) for value in row["eligible_profile_ids"]),
         benchmark_product_id=str(row["benchmark_product_id"]),
         competitor_product_id=str(row["competitor_product_id"]),
+        comparison_family_key=str(row.get("comparison_family_key") or "legacy"),
+        relationship_role=str(row.get("relationship_role") or "primary"),
+        scope_mode=str(row.get("scope_mode") or "global"),
+        scope_definition=dict(row.get("scope_definition") or {}),
+        scope_checksum=str(row.get("scope_checksum") or ""),
+        scope_artifact_id=(
+            str(row["scope_artifact_id"]) if row.get("scope_artifact_id") is not None else None
+        ),
         decision=str(row["decision"]),
         origin=str(row["origin"]),
         reason=str(row["reason"]) if row.get("reason") is not None else None,
@@ -370,11 +386,16 @@ class PostgresMatchReviewRepository:
                           revision_id, competitor_retailer_id, profile_id,
                           eligible_profile_ids,
                           benchmark_product_id, competitor_product_id, decision,
+                          comparison_family_key, relationship_role, scope_mode,
+                          scope_definition, scope_checksum, scope_artifact_id,
                           origin, reason, benchmark_snapshot, competitor_snapshot
                         ) VALUES (
                           CAST(:revision_id AS uuid), :competitor_retailer_id,
                           :profile_id, CAST(:eligible_profile_ids AS text[]),
                           :benchmark_product_id, :competitor_product_id, :decision,
+                          :comparison_family_key, :relationship_role, :scope_mode,
+                          CAST(:scope_definition AS jsonb), :scope_checksum,
+                          CAST(:scope_artifact_id AS uuid),
                           :origin, :reason, CAST(:benchmark_snapshot AS jsonb),
                           CAST(:competitor_snapshot AS jsonb)
                         )
@@ -388,6 +409,12 @@ class PostgresMatchReviewRepository:
                         "benchmark_product_id": str(row["benchmark_product_id"]),
                         "competitor_product_id": str(row["competitor_product_id"]),
                         "decision": str(row["decision"]),
+                        "comparison_family_key": str(row["comparison_family_key"]),
+                        "relationship_role": str(row["relationship_role"]),
+                        "scope_mode": str(row["scope_mode"]),
+                        "scope_definition": json.dumps(row["scope_definition"], sort_keys=True),
+                        "scope_checksum": str(row["scope_checksum"]),
+                        "scope_artifact_id": row.get("scope_artifact_id"),
                         "origin": str(row.get("origin") or "user"),
                         "reason": command.reason if is_target else row.get("reason"),
                         "benchmark_snapshot": json.dumps(
@@ -427,11 +454,14 @@ class PostgresMatchReviewRepository:
     def _apply_command(
         existing: list[dict[str, Any]], command: MatchDecisionCommand
     ) -> list[dict[str, Any]]:
+        scope = PostgresMatchReviewRepository._command_scope(command)
+
         def target(row: dict[str, Any]) -> bool:
             return (
                 str(row["competitor_retailer_id"]) == command.competitor_retailer_id
                 and str(row["benchmark_product_id"]) == command.benchmark_product_id
                 and str(row["competitor_product_id"]) == command.competitor_product_id
+                and str(row.get("scope_checksum") or "") == str(scope["checksum"])
             )
 
         remaining = [row for row in existing if not target(row)]
@@ -445,6 +475,11 @@ class PostgresMatchReviewRepository:
                 for row in remaining
                 if str(row["decision"]) == "confirmed"
                 and str(row["competitor_retailer_id"]) == command.competitor_retailer_id
+                and str(row.get("relationship_role") or "primary") == "primary"
+                and scope["relationship_role"] == "primary"
+                and str(row.get("comparison_family_key") or "legacy")
+                == scope["comparison_family_key"]
+                and PostgresMatchReviewRepository._scopes_overlap(row, scope)
                 and (
                     str(row["benchmark_product_id"]) == command.benchmark_product_id
                     or str(row["competitor_product_id"]) == command.competitor_product_id
@@ -456,6 +491,8 @@ class PostgresMatchReviewRepository:
                         {
                             "benchmark_product_id": str(row["benchmark_product_id"]),
                             "competitor_product_id": str(row["competitor_product_id"]),
+                            "scope_mode": str(row.get("scope_mode") or "global"),
+                            "scope_checksum": str(row.get("scope_checksum") or ""),
                         }
                         for row in conflicts
                     ]
@@ -471,6 +508,12 @@ class PostgresMatchReviewRepository:
                 "eligible_profile_ids": list(command.eligible_profile_ids or (command.profile_id,)),
                 "benchmark_product_id": command.benchmark_product_id,
                 "competitor_product_id": command.competitor_product_id,
+                "comparison_family_key": scope["comparison_family_key"],
+                "relationship_role": scope["relationship_role"],
+                "scope_mode": scope["mode"],
+                "scope_definition": scope["definition"],
+                "scope_checksum": scope["checksum"],
+                "scope_artifact_id": scope.get("artifact_id"),
                 "decision": command.decision,
                 "origin": "user",
                 "reason": command.reason,
@@ -478,6 +521,44 @@ class PostgresMatchReviewRepository:
                 "competitor_snapshot": {},
             },
         ]
+
+    @staticmethod
+    def _command_scope(command: MatchDecisionCommand) -> JsonObject:
+        if command.scope is None:
+            checksum = hashlib.sha256(b"global").hexdigest()
+            return {
+                "mode": "global",
+                "relationship_role": "primary",
+                "comparison_family_key": "legacy",
+                "definition": {"future_location_policy": "review"},
+                "checksum": checksum,
+                "artifact_id": None,
+            }
+        return copy.deepcopy(command.scope)
+
+    @staticmethod
+    def _scopes_overlap(row: dict[str, Any], scope: JsonObject) -> bool:
+        left_mode = str(row.get("scope_mode") or "global")
+        right_mode = str(scope["mode"])
+        if "global" in {left_mode, right_mode}:
+            return True
+        left = {
+            str(value)
+            for value in dict(row.get("scope_definition") or {}).get(
+                "benchmark_location_scope_keys", []
+            )
+        }
+        right = {
+            str(value)
+            for value in dict(scope.get("definition") or {}).get(
+                "benchmark_location_scope_keys", []
+            )
+        }
+        # Unresolved observed footprints fail closed until Search-derived locations
+        # are materialized by the review service or analysis worker.
+        if not left or not right:
+            return True
+        return bool(left & right)
 
     async def enqueue_reanalysis(
         self,
@@ -658,6 +739,16 @@ class InMemoryMatchReviewRepository:
                     eligible_profile_ids=tuple(str(value) for value in row["eligible_profile_ids"]),
                     benchmark_product_id=str(row["benchmark_product_id"]),
                     competitor_product_id=str(row["competitor_product_id"]),
+                    comparison_family_key=str(row["comparison_family_key"]),
+                    relationship_role=str(row["relationship_role"]),
+                    scope_mode=str(row["scope_mode"]),
+                    scope_definition=copy.deepcopy(row["scope_definition"]),
+                    scope_checksum=str(row["scope_checksum"]),
+                    scope_artifact_id=(
+                        str(row["scope_artifact_id"])
+                        if row.get("scope_artifact_id") is not None
+                        else None
+                    ),
                     decision=str(row["decision"]),
                     origin=str(row.get("origin") or "user"),
                     reason=(str(row["reason"]) if row.get("reason") is not None else None),
@@ -879,9 +970,24 @@ class MatchReviewService:
                 }
             )
         )
+        persisted_scope = (
+            copy.deepcopy(connection.get("scope"))
+            if isinstance(connection, dict)
+            and str(connection.get("origin")) == "user"
+            and isinstance(connection.get("scope"), dict)
+            else None
+        )
         effective_command = replace(
             command,
             eligible_profile_ids=eligible_profile_ids,
+            scope=(
+                persisted_scope
+                or self._materialize_scope(
+                    command.scope,
+                    analysis_id=analysis_id,
+                    benchmark_product=products[benchmark_key],
+                )
+            ),
         )
         analysis = await self._results.get(analysis_id)
         revision = await self._repository.save_decision(
@@ -893,6 +999,41 @@ class MatchReviewService:
             actor=actor,
         )
         return {"revision_id": revision.id, "revision": revision.revision, "status": "saved"}
+
+    @staticmethod
+    def _materialize_scope(
+        scope: JsonObject | None,
+        *,
+        analysis_id: str,
+        benchmark_product: JsonObject,
+    ) -> JsonObject | None:
+        if scope is None:
+            return None
+        materialized = copy.deepcopy(scope)
+        definition = dict(materialized.get("definition") or {})
+        if str(scope.get("mode")) == "observed_benchmark_product_footprint":
+            observed = {
+                str(value)
+                for value in benchmark_product.get("location_scope_keys", [])
+                if str(value)
+            }
+            if observed:
+                definition["benchmark_location_scope_keys"] = sorted(observed)
+            definition["source_analysis_id"] = analysis_id
+            definition.setdefault("excluded_benchmark_location_scope_keys", [])
+            definition.setdefault("future_location_policy", "follow_unique_product_footprint")
+        materialized["definition"] = definition
+        checksum_payload = {
+            "mode": str(materialized["mode"]),
+            "relationship_role": str(materialized["relationship_role"]),
+            "comparison_family_key": str(materialized["comparison_family_key"]),
+            "definition": definition,
+            "artifact_id": materialized.get("artifact_id"),
+        }
+        materialized["checksum"] = hashlib.sha256(
+            json.dumps(checksum_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return materialized
 
     async def recompute(
         self,
@@ -930,6 +1071,12 @@ class MatchReviewService:
                 "label": str(row["label"]),
                 "geography": str(row["geography"]),
                 "comparison_metric": str(row["comparison_metric"]),
+                "default_scope_mode": str(
+                    row.get("relationship_scope_policy", {}).get("default_scope_mode", "global")
+                ),
+                "allow_scoped_reuse": bool(
+                    row.get("relationship_scope_policy", {}).get("allow_scoped_reuse", False)
+                ),
             }
             for row in document.get("comparison_modes", [])
             if isinstance(row, dict) and str(row.get("geography")) == "exact_zip"
@@ -983,6 +1130,22 @@ class MatchReviewService:
                         "price": row.get(f"median_{prefix}_price"),
                     },
                 )
+                if prefix == "benchmark":
+                    current = products[(retailer, product_id)]
+                    current["location_scope_keys"] = sorted(
+                        {
+                            *(
+                                str(value)
+                                for value in current.get("location_scope_keys", [])
+                                if str(value)
+                            ),
+                            *(
+                                str(value)
+                                for value in row.get("benchmark_location_scope_keys", [])
+                                if str(value)
+                            ),
+                        }
+                    )
         for rule in rules:
             for retailer, product_id, snapshot in (
                 (benchmark, rule.benchmark_product_id, rule.benchmark_snapshot),
@@ -1120,6 +1283,7 @@ class MatchReviewService:
                     "status": rule.decision,
                     "origin": rule.origin,
                     "reason": rule.reason or connection["reason"],
+                    "scope": MatchReviewService._scope_document(rule),
                 }
             )
             connection["profile_evidence"] = [
@@ -1149,6 +1313,7 @@ class MatchReviewService:
                     "suppression_reasons": [],
                     "match_basis": "user_defined",
                     "profile_evidence": [],
+                    "scope": MatchReviewService._scope_document(rule),
                 },
             )
         confirmed = [row for row in connections.values() if row["status"] == "confirmed"]
@@ -1183,3 +1348,14 @@ class MatchReviewService:
                 str(row["benchmark_product_id"]),
             ),
         )
+
+    @staticmethod
+    def _scope_document(rule: MatchRuleRecord) -> JsonObject:
+        return {
+            "mode": rule.scope_mode,
+            "relationship_role": rule.relationship_role,
+            "comparison_family_key": rule.comparison_family_key,
+            "definition": copy.deepcopy(rule.scope_definition),
+            "checksum": rule.scope_checksum,
+            "artifact_id": rule.scope_artifact_id,
+        }

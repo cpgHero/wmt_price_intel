@@ -20,6 +20,8 @@ from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
     MatchRelationshipResolution,
+    location_scope_key,
+    product_footprint,
     resolve_one_to_one_relationships,
 )
 from rci_analytics.models import ProductMatchRule
@@ -70,11 +72,13 @@ __all__ = [
     "benchmark_product_match_candidates",
     "complete_attributes_from_pdp",
     "evidence_set",
+    "location_scope_key",
     "merge_assortment_product_context",
     "merge_product_decision_context",
     "merge_product_evidence_summary",
     "prepare_historical_import",
     "primary_exact_profile",
     "product_context_index",
+    "product_footprint",
     "resolve_one_to_one_relationships",
 ]

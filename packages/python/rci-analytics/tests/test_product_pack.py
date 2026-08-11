@@ -80,6 +80,30 @@ def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
         )
 
 
+def test_milk_uses_generic_distribution_scope_and_brand_portfolios() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+
+    assert pack.version == "1.2.0"
+    assert all(
+        profile["relationship_scope_policy"]
+        == {
+            "default_scope_mode": "observed_benchmark_product_footprint",
+            "allow_scoped_reuse": True,
+            "relationship_role": "primary",
+            "conflict_behavior": "exclude_from_price_comparison",
+            "comparison_context_grain": "benchmark_location",
+            "minimum_locations": 1,
+            "future_location_policy": "require_review",
+        }
+        for profile in pack.matching_profiles
+    )
+    portfolios = {value["id"]: value for value in pack.document["brand_rules"]["portfolios"]}
+    assert portfolios["walmart_private_label"]["role"] == "private_label"
+    assert portfolios["regional_milk_brands"]["role"] == "regional"
+    assert portfolios["national_milk_brands"]["role"] == "national"
+    assert pack.reporting["brand_portfolio_panels"]
+
+
 def test_every_product_pack_defines_generic_decision_reporting_rules() -> None:
     for pack_id in (
         "fresh_strawberries",
@@ -189,6 +213,29 @@ def test_semantic_validation_rejects_unknown_decision_profile() -> None:
     invalid["reporting"]["decision_rules"]["profile_priority"].append("not_a_profile")
 
     with pytest.raises(ContractError, match="unknown profiles"):
+        loader._validate_semantics(invalid)
+
+
+def test_semantic_validation_rejects_duplicate_retailer_brand_portfolios() -> None:
+    loader = ProductPackLoader(REPOSITORY_ROOT)
+    pack = loader.load("fresh_fluid_milk")
+    invalid = copy.deepcopy(pack.document)
+    invalid["brand_rules"]["portfolios"][1]["retailer_ids"] = ["walmart_us"]
+    invalid["brand_rules"]["portfolios"][1]["brands"] = ["Great Value"]
+
+    with pytest.raises(ContractError, match="assign a retailer brand more than once"):
+        loader._validate_semantics(invalid)
+
+
+def test_semantic_validation_rejects_unknown_brand_panel_portfolio() -> None:
+    loader = ProductPackLoader(REPOSITORY_ROOT)
+    pack = loader.load("fresh_fluid_milk")
+    invalid = copy.deepcopy(pack.document)
+    invalid["reporting"]["brand_portfolio_panels"][0]["competitor_portfolio_ids"] = [
+        "missing_portfolio"
+    ]
+
+    with pytest.raises(ContractError, match="references unknown portfolios"):
         loader._validate_semantics(invalid)
 
 

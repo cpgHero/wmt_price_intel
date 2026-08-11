@@ -274,6 +274,15 @@ CREATE TABLE product_match_rule (
   eligible_profile_ids text[] NOT NULL CHECK (cardinality(eligible_profile_ids) > 0),
   benchmark_product_id text NOT NULL,
   competitor_product_id text NOT NULL,
+  comparison_family_key text NOT NULL,
+  relationship_role text NOT NULL DEFAULT 'primary'
+    CHECK (relationship_role IN ('primary','alternative')),
+  scope_mode text NOT NULL DEFAULT 'global'
+    CHECK (scope_mode IN ('global','observed_benchmark_product_footprint',
+      'explicit_benchmark_locations')),
+  scope_definition jsonb NOT NULL DEFAULT '{}',
+  scope_checksum text NOT NULL,
+  scope_artifact_id uuid REFERENCES dataset_artifact(id) ON DELETE SET NULL,
   decision text NOT NULL CHECK (decision IN ('confirmed', 'rejected')),
   origin text NOT NULL DEFAULT 'user' CHECK (origin IN ('user', 'automatic')),
   reason text,
@@ -285,10 +294,15 @@ CREATE TABLE product_match_rule (
 );
 CREATE UNIQUE INDEX product_match_rule_confirmed_benchmark_uq
   ON product_match_rule(revision_id, competitor_retailer_id,
-    benchmark_product_id) WHERE decision = 'confirmed';
+    benchmark_product_id) WHERE decision = 'confirmed'
+      AND relationship_role = 'primary' AND scope_mode = 'global';
 CREATE UNIQUE INDEX product_match_rule_confirmed_competitor_uq
   ON product_match_rule(revision_id, competitor_retailer_id,
-    competitor_product_id) WHERE decision = 'confirmed';
+    competitor_product_id) WHERE decision = 'confirmed'
+      AND relationship_role = 'primary' AND scope_mode = 'global';
+CREATE INDEX product_match_rule_scoped_resolution_idx
+  ON product_match_rule(revision_id, competitor_retailer_id,
+    comparison_family_key, scope_mode);
 
 CREATE TABLE product_match_application_policy (
   organization_id uuid NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
@@ -315,16 +329,80 @@ CREATE TABLE product_match_review_event (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE brand_classification_revision (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  product_pack_id text NOT NULL,
+  product_pack_version text NOT NULL,
+  benchmark_retailer_id text NOT NULL REFERENCES retailer(id),
+  source_analysis_result_id uuid NOT NULL REFERENCES analysis_result(id),
+  revision integer NOT NULL,
+  status text NOT NULL DEFAULT 'current' CHECK (status IN ('current','superseded')),
+  created_by text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(product_pack_id, product_pack_version)
+    REFERENCES product_pack_version(product_pack_id, version),
+  UNIQUE(organization_id, product_pack_id, product_pack_version,
+    benchmark_retailer_id, revision)
+);
+CREATE UNIQUE INDEX brand_classification_revision_current_uq
+  ON brand_classification_revision(
+    organization_id, product_pack_id, product_pack_version, benchmark_retailer_id
+  ) WHERE status = 'current';
+
+CREATE TABLE brand_classification_rule (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  revision_id uuid NOT NULL REFERENCES brand_classification_revision(id) ON DELETE CASCADE,
+  retailer_id text NOT NULL REFERENCES retailer(id),
+  normalized_brand text NOT NULL,
+  display_brand text NOT NULL,
+  role text NOT NULL CHECK (role IN ('private_label','regional','national','unclassified')),
+  decision text NOT NULL CHECK (decision IN ('confirmed','rejected')),
+  origin text NOT NULL CHECK (origin IN ('product_pack','deterministic','user')),
+  reason text,
+  evidence jsonb NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(revision_id, retailer_id, normalized_brand)
+);
+
+CREATE TABLE brand_classification_application_policy (
+  organization_id uuid NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+  product_pack_id text NOT NULL,
+  product_pack_version text NOT NULL,
+  benchmark_retailer_id text NOT NULL REFERENCES retailer(id),
+  revision_id uuid NOT NULL REFERENCES brand_classification_revision(id) ON DELETE CASCADE,
+  updated_by text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(organization_id, product_pack_id, product_pack_version,
+    benchmark_retailer_id),
+  FOREIGN KEY(product_pack_id, product_pack_version)
+    REFERENCES product_pack_version(product_pack_id, version)
+);
+CREATE INDEX brand_classification_application_policy_revision_idx
+  ON brand_classification_application_policy(revision_id);
+
+CREATE TABLE brand_classification_review_event (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  revision_id uuid NOT NULL REFERENCES brand_classification_revision(id) ON DELETE CASCADE,
+  event_type text NOT NULL,
+  actor text NOT NULL,
+  details jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE analysis_run
+  ADD COLUMN brand_revision_id uuid REFERENCES brand_classification_revision(id),
   ADD CONSTRAINT analysis_run_match_revision_fk
     FOREIGN KEY(match_revision_id) REFERENCES product_match_revision(id),
   ADD CONSTRAINT analysis_run_source_result_fk
     FOREIGN KEY(source_analysis_result_id) REFERENCES analysis_result(id),
   ADD CONSTRAINT analysis_run_collection_pack_match_revision_uq
     UNIQUE NULLS NOT DISTINCT (
-      collection_run_id, product_pack_id, product_pack_version, match_revision_id
+      collection_run_id, product_pack_id, product_pack_version, match_revision_id,
+      brand_revision_id
     );
 CREATE INDEX analysis_run_match_revision_idx ON analysis_run(match_revision_id);
+CREATE INDEX analysis_run_brand_revision_idx ON analysis_run(brand_revision_id);
 
 CREATE TABLE agent_task (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

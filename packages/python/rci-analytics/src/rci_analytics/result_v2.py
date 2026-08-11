@@ -317,8 +317,7 @@ class AnalysisResultV2Builder:
             )
         return rows, assortment_refs
 
-    @staticmethod
-    def _comparison_modes(facts: list[ComparisonFact]) -> list[JsonObject]:
+    def _comparison_modes(self, facts: list[ComparisonFact]) -> list[JsonObject]:
         seen: set[str] = set()
         modes: list[JsonObject] = []
         for fact in facts:
@@ -332,6 +331,19 @@ class AnalysisResultV2Builder:
                     "geography": fact.geography,
                     "comparison_metric": fact.comparison_metric,
                     "dimensions": list(fact.dimensions),
+                    "relationship_scope_policy": dict(
+                        self._pack.profile(fact.profile_id).get(
+                            "relationship_scope_policy",
+                            {
+                                "default_scope_mode": "global",
+                                "allow_scoped_reuse": False,
+                                "relationship_role": "primary",
+                                "conflict_behavior": "exclude_from_price_comparison",
+                                "comparison_context_grain": "benchmark_location",
+                                "future_location_policy": "require_review",
+                            },
+                        )
+                    ),
                 }
             )
         return modes

@@ -1237,6 +1237,7 @@ source = { editable = "apps/api" }
 dependencies = [
     { name = "fastapi" },
     { name = "rci-automation" },
+    { name = "rci-analytics" },
     { name = "rci-collections" },
     { name = "rci-core" },
     { name = "rci-db" },
@@ -1250,6 +1251,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.139.2" },
     { name = "rci-automation", editable = "packages/python/rci-automation" },
+    { name = "rci-analytics", editable = "packages/python/rci-analytics" },
     { name = "rci-collections", editable = "packages/python/rci-collections" },
     { name = "rci-core", editable = "packages/python/rci-core" },
     { name = "rci-db", editable = "packages/python/rci-db" },

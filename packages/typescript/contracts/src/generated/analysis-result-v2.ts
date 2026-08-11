@@ -54,6 +54,9 @@ export interface RetailCompetitiveIntelligenceAnalysisResultV2 {
       geography: "exact_zip" | "same_store_market" | "radius" | "national";
       comparison_metric: string;
       dimensions: string[];
+      relationship_scope_policy?: {
+        [k: string]: unknown;
+      };
     },
     ...{
       profile_id: string;
@@ -61,6 +64,9 @@ export interface RetailCompetitiveIntelligenceAnalysisResultV2 {
       geography: "exact_zip" | "same_store_market" | "radius" | "national";
       comparison_metric: string;
       dimensions: string[];
+      relationship_scope_policy?: {
+        [k: string]: unknown;
+      };
     }[]
   ];
   segments: {
@@ -181,6 +187,7 @@ export interface Source {
   kind: "live_collection" | "historical_import";
   collection_run_id?: string | null;
   match_revision_id?: string | null;
+  brand_revision_id?: string | null;
   source_analysis_id?: string | null;
   observed_start?: string | null;
   observed_end?: string | null;

@@ -19,6 +19,7 @@
     "benchmark_product_id": { "type": "string", "minLength": 1 },
     "competitor_product_id": { "type": "string", "minLength": 1 },
     "decision": { "enum": ["confirmed", "rejected", "reset"] },
+    "scope": { "$ref": "product-match-scope.schema.json" },
     "replace_conflicts": { "type": "boolean", "default": false },
     "reason": { "type": ["string", "null"], "maxLength": 1000 }
   }

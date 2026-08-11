@@ -240,6 +240,39 @@ class ProductPackLoader:
                     raise ContractError(
                         f"private-label profile {profile['id']} requires brand_rules.private_labels"
                     )
+            scope_policy = profile.get("relationship_scope_policy")
+            if scope_policy:
+                if (
+                    scope_policy["default_scope_mode"] != "global"
+                    and not scope_policy["allow_scoped_reuse"]
+                ):
+                    raise ContractError(
+                        f"profile {profile['id']} selects a footprint scope but disables "
+                        "scoped reuse"
+                    )
+                if (
+                    scope_policy["relationship_role"] == "alternative"
+                    and scope_policy["default_scope_mode"] == "global"
+                ):
+                    raise ContractError(
+                        f"profile {profile['id']} cannot make a global alternative relationship"
+                    )
+        brand_rules = document.get("brand_rules", {})
+        portfolios = brand_rules.get("portfolios", [])
+        portfolio_ids = [str(value["id"]) for value in portfolios]
+        if len(portfolio_ids) != len(set(portfolio_ids)):
+            raise ContractError("Product Pack brand portfolio IDs must be unique")
+        portfolio_brands: set[tuple[str, str]] = set()
+        for portfolio in portfolios:
+            for retailer_id in portfolio["retailer_ids"]:
+                for brand in portfolio["brands"]:
+                    key = (str(retailer_id), str(brand).casefold().strip())
+                    if key in portfolio_brands:
+                        raise ContractError(
+                            "Product Pack brand portfolios assign a retailer brand more than once: "
+                            f"{retailer_id}/{brand}"
+                        )
+                    portfolio_brands.add(key)
         for retailer_id, override in document.get("retailer_overrides", {}).items():
             if not isinstance(override, dict):
                 raise ContractError(f"retailer override {retailer_id!r} must be an object")
@@ -276,9 +309,34 @@ class ProductPackLoader:
     @staticmethod
     def _validate_reporting(document: JsonObject) -> None:
         reporting = document["reporting"]
+        known_profiles = {str(profile["id"]) for profile in document["matching_profiles"]}
+        known_portfolios = {
+            str(portfolio["id"])
+            for portfolio in document.get("brand_rules", {}).get("portfolios", [])
+        }
+        panel_ids: list[str] = []
+        for panel in reporting.get("brand_portfolio_panels", []):
+            panel_ids.append(str(panel["id"]))
+            if str(panel["profile_id"]) not in known_profiles:
+                raise ContractError(
+                    f"brand portfolio panel {panel['id']} references unknown profile "
+                    f"{panel['profile_id']!r}"
+                )
+            referenced_portfolios = {
+                str(value)
+                for field in ("benchmark_portfolio_ids", "competitor_portfolio_ids")
+                for value in panel[field]
+            }
+            missing = referenced_portfolios - known_portfolios
+            if missing:
+                raise ContractError(
+                    f"brand portfolio panel {panel['id']} references unknown portfolios "
+                    f"{sorted(missing)}"
+                )
+        if len(panel_ids) != len(set(panel_ids)):
+            raise ContractError("Product Pack brand portfolio panel IDs must be unique")
         decision_rules = reporting.get("decision_rules")
         if decision_rules:
-            known_profiles = {str(profile["id"]) for profile in document["matching_profiles"]}
             preferred = str(decision_rules["preferred_scorecard_profile_id"])
             priority = [str(value) for value in decision_rules["profile_priority"]]
             unknown_profiles = {preferred, *priority} - known_profiles

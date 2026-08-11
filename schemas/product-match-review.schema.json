@@ -91,6 +91,11 @@
         "label": { "type": "string", "minLength": 1 },
         "geography": { "type": "string", "minLength": 1 },
         "comparison_metric": { "type": "string", "minLength": 1 }
+        ,
+        "default_scope_mode": {
+          "enum": ["global", "observed_benchmark_product_footprint", "explicit_benchmark_locations"]
+        },
+        "allow_scoped_reuse": { "type": "boolean" }
       }
     },
     "product": {
@@ -171,6 +176,22 @@
         "profile_evidence": {
           "type": "array",
           "items": { "$ref": "#/$defs/profileEvidence" }
+        },
+        "scope": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "product-match-scope.schema.json" }
+          ]
+        },
+        "scope_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "eligible_locations": { "type": "integer", "minimum": 0 },
+            "active_locations": { "type": "integer", "minimum": 0 },
+            "conflict_locations": { "type": "integer", "minimum": 0 },
+            "unmatched_locations": { "type": "integer", "minimum": 0 }
+          }
         }
       }
     },

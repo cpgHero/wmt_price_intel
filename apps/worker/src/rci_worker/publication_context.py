@@ -329,6 +329,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             candidate_matches,
             benchmark_retailer=benchmark,
             profile_priority=profile_priority,
+            profile_scope_policies={
+                str(review_profile["id"]): dict(review_profile.get("relationship_scope_policy", {}))
+                for review_profile in review_profiles
+            },
         )
         review_matches = list(resolution.matches)
         matches = [match for match in review_matches if match.profile_id == str(profile["id"])]

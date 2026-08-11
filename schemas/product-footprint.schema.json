@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-footprint.schema.json",
+  "title": "Retail Competitive Intelligence Product Footprint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "retailer_id",
+    "product_id",
+    "source_authority",
+    "locations",
+    "checksum"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "retailer_id": { "type": "string", "minLength": 1 },
+    "product_id": { "type": "string", "minLength": 1 },
+    "source_authority": { "const": "search" },
+    "locations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/location" }
+    },
+    "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_key", "zipcode", "observations"],
+      "properties": {
+        "scope_key": { "type": "string", "minLength": 1 },
+        "store_number": { "type": ["string", "null"] },
+        "zipcode": { "type": "string", "pattern": "^[0-9]{5}$" },
+        "state": { "type": ["string", "null"] },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "observations": { "type": "integer", "minimum": 1 },
+        "lowest_positive_price": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

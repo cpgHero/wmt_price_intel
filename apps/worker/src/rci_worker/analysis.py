@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import csv
 import gzip
 import hashlib
@@ -11,8 +12,8 @@ import json
 import logging
 import tempfile
 from collections import defaultdict
-from collections.abc import AsyncIterator
-from dataclasses import asdict, dataclass
+from collections.abc import AsyncIterator, Iterable
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -43,13 +44,34 @@ from rci_analytics import (
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
 from rci_analytics.models import MatchRecord
 from rci_analytics.normalization import RetailerIdentityMap
+from rci_analytics.product_pack import ProductPack
 from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import AnalysisResultService, ReportBlueprintLoader
+from rci_results.brand_review import BrandReviewRepository, BrandRuleRecord
 from rci_results.match_review import MatchReviewRepository
 
 logger = logging.getLogger(__name__)
+
+
+def apply_brand_classification_rules(
+    pack: ProductPack, rules: Iterable[BrandRuleRecord]
+) -> ProductPack:
+    """Overlay a governed brand revision without mutating the exact catalog version."""
+
+    document = copy.deepcopy(pack.document)
+    private_labels = document.setdefault("brand_rules", {}).setdefault("private_labels", {})
+    for rule in rules:
+        values = [
+            str(value)
+            for value in private_labels.get(rule.retailer_id, [])
+            if str(value).casefold() != rule.normalized_brand
+        ]
+        if rule.decision == "confirmed" and rule.role == "private_label":
+            values.append(rule.display_brand)
+        private_labels[rule.retailer_id] = sorted(set(values), key=str.casefold)
+    return replace(pack, document=document)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +86,7 @@ class AnalysisJob:
     attempt_count: int
     max_attempts: int
     match_revision_id: str | None = None
+    brand_revision_id: str | None = None
     source_analysis_id: str | None = None
 
 
@@ -188,6 +211,7 @@ class PostgresAnalysisQueue:
                                 AND ar.attempt_count < ar.max_attempts
                                 AND (
                                   :historical_replay_enabled OR ar.match_revision_id IS NOT NULL OR
+                                  ar.brand_revision_id IS NOT NULL OR
                                   NOT EXISTS (
                                     SELECT 1 FROM analysis_input_set source
                                     WHERE source.id = ar.input_set_id
@@ -215,6 +239,7 @@ class PostgresAnalysisQueue:
                               ar.product_pack_id, ar.product_pack_version,
                               ar.attempt_count, ar.max_attempts, v.config,
                               ar.match_revision_id::text,
+                              ar.brand_revision_id::text,
                               (
                                 SELECT source_result.analysis_id
                                 FROM analysis_result source_result
@@ -247,6 +272,11 @@ class PostgresAnalysisQueue:
                     match_revision_id=(
                         str(row["match_revision_id"])
                         if row["match_revision_id"] is not None
+                        else None
+                    ),
+                    brand_revision_id=(
+                        str(row["brand_revision_id"])
+                        if row["brand_revision_id"] is not None
                         else None
                     ),
                     source_analysis_id=(
@@ -510,6 +540,7 @@ class AnalysisProcessor:
         historical_reader: S3HistoricalCSVReader | None = None,
         assistant: GovernedAnalysisAssistant | None = None,
         match_reviews: MatchReviewRepository | None = None,
+        brand_reviews: BrandReviewRepository | None = None,
         product_packs: CatalogProductPackLoader | None = None,
     ) -> None:
         self._root = repository_root
@@ -523,6 +554,7 @@ class AnalysisProcessor:
         self._code_version = code_version
         self._assistant = assistant
         self._match_reviews = match_reviews
+        self._brand_reviews = brand_reviews
         self._product_packs = product_packs
 
     async def process(self, job: AnalysisJob) -> str:
@@ -536,6 +568,11 @@ class AnalysisProcessor:
                 f"Product Pack version mismatch: requested {job.product_pack_version}, "
                 f"loaded {pack.version}"
             )
+        if job.brand_revision_id is not None:
+            if self._brand_reviews is None:
+                raise ValueError("governed reanalysis requires a brand-review repository")
+            brand_rules = await self._brand_reviews.rules(job.brand_revision_id)
+            pack = apply_brand_classification_rules(pack, brand_rules)
         benchmark = str(job.definition_config["benchmark_retailer"])
         analysis_options = job.definition_config.get("analysis", {})
         configured_profiles = (
@@ -579,6 +616,11 @@ class AnalysisProcessor:
                     competitor_product_id=rule.competitor_product_id,
                     decision=rule.decision,
                     eligible_profile_ids=rule.eligible_profile_ids,
+                    comparison_family_key=rule.comparison_family_key,
+                    relationship_role=rule.relationship_role,
+                    scope_mode=rule.scope_mode,
+                    scope_definition=rule.scope_definition,
+                    scope_checksum=rule.scope_checksum,
                 )
                 for rule in await self._match_reviews.rules(job.match_revision_id)
             ]
@@ -774,6 +816,10 @@ class AnalysisProcessor:
                 ),
                 benchmark_retailer=benchmark,
                 profile_priority=profile_priority,
+                profile_scope_policies={
+                    str(profile["id"]): dict(profile.get("relationship_scope_policy", {}))
+                    for profile in selected_profiles
+                },
             )
             match_relationships.extend(dict(row) for row in resolution.relationships)
             ambiguous_match_groups.extend(dict(row) for row in resolution.ambiguous_groups)
@@ -904,6 +950,8 @@ class AnalysisProcessor:
         analysis_id = f"{pack.id}-{job.collection_run_id}"
         if job.match_revision_id is not None:
             analysis_id = f"{analysis_id}-match-{job.match_revision_id[:8]}"
+        if job.brand_revision_id is not None:
+            analysis_id = f"{analysis_id}-brand-{job.brand_revision_id[:8]}"
         if not source_evidence_artifacts:
             raise ValueError("analysis input has no immutable source-artifact evidence")
         evidence_sets = [
@@ -929,6 +977,7 @@ class AnalysisProcessor:
                     job.collection_run_id if job.source_kind == "live_collection" else None
                 ),
                 "match_revision_id": job.match_revision_id,
+                "brand_revision_id": job.brand_revision_id,
                 "source_analysis_id": job.source_analysis_id,
                 "observed_start": min(observed_values) if observed_values else None,
                 "observed_end": max(observed_values) if observed_values else None,
@@ -1032,6 +1081,7 @@ class AnalysisProcessor:
         if (
             self._assistant is not None
             and job.match_revision_id is None
+            and job.brand_revision_id is None
             and isinstance(analysis_options, dict)
             and bool(analysis_options.get("enable_ai_fallback", True))
         ):

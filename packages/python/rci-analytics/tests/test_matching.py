@@ -11,6 +11,7 @@ from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
     geographic_overlap,
+    product_footprint,
     resolve_one_to_one_relationships,
 )
 from rci_analytics.models import ProductMatchRule
@@ -209,6 +210,145 @@ def test_governed_rules_fail_closed_when_not_one_to_one() -> None:
         )
 
 
+def test_scoped_relationships_allow_reuse_only_across_disjoint_store_footprints() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row(
+                    "walmart_us",
+                    "w-regional-north",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="10001",
+                    store="w-1",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-regional-south",
+                    "Fresh Strawberries, 1 lb",
+                    "2.48",
+                    zipcode="10002",
+                    store="w-2",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.29",
+                    zipcode="10001",
+                    store="a-1",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.39",
+                    zipcode="10002",
+                    store="a-2",
+                ),
+            ]
+        )
+    )
+    rules = [
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-regional-north",
+            "a-private-label",
+            "confirmed",
+            comparison_family_key="conventional_1lb",
+            scope_mode="explicit_benchmark_locations",
+            scope_definition={"benchmark_location_scope_keys": ["walmart_us|10001|w-1"]},
+        ),
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-regional-south",
+            "a-private-label",
+            "confirmed",
+            comparison_family_key="conventional_1lb",
+            scope_mode="explicit_benchmark_locations",
+            scope_definition={"benchmark_location_scope_keys": ["walmart_us|10002|w-2"]},
+        ),
+    ]
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=rules,
+    )
+
+    assert [match.geography_key for match in matches] == [
+        "walmart_us|10001|w-1",
+        "walmart_us|10002|w-2",
+    ]
+    assert all(
+        match.attributes["_comparison_family_key"] == "conventional_1lb" for match in matches
+    )
+
+
+def test_scoped_relationships_fail_closed_when_primary_scopes_overlap() -> None:
+    offers, engine = _classified()
+    scope = {"benchmark_location_scope_keys": ["walmart_us|10001|store-1"]}
+    rules = [
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-1",
+            "a-1",
+            "confirmed",
+            scope_mode="explicit_benchmark_locations",
+            scope_definition=scope,
+        ),
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-1",
+            "a-2",
+            "confirmed",
+            scope_mode="explicit_benchmark_locations",
+            scope_definition=scope,
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="benchmark location context"):
+        engine.compare_governed(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+            rules=rules,
+        )
+
+
+def test_product_footprint_uses_positive_search_observations_at_store_grain() -> None:
+    offers, _engine = _classified()
+
+    footprint = product_footprint(
+        offers,
+        analysis_id="analysis-strawberries",
+        retailer_id="walmart_us",
+        product_id="w-1",
+    )
+
+    assert footprint["source_authority"] == "search"
+    assert footprint["locations"] == [
+        {
+            "scope_key": "walmart_us|10001|store-1",
+            "store_number": "store-1",
+            "zipcode": "10001",
+            "state": None,
+            "latitude": 40.75,
+            "longitude": -73.99,
+            "observations": 1,
+            "lowest_positive_price": 2.38,
+        }
+    ]
+
+
 def test_automatic_relationships_are_one_to_one_across_lenses() -> None:
     offers, engine = _classified()
     matches = [
@@ -265,6 +405,161 @@ def test_equally_valid_many_to_one_candidates_remain_ambiguous() -> None:
         candidates,
         benchmark_retailer="walmart_us",
         profile_priority=("strict",),
+    )
+
+    assert resolution.matches == ()
+    assert resolution.relationships == ()
+    assert len(resolution.ambiguous_groups) == 1
+    assert len(resolution.ambiguous_groups[0]["candidates"]) == 2
+
+
+def test_automatic_scoped_relationships_reuse_product_across_disjoint_footprints() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row(
+                    "walmart_us",
+                    "w-regional-north",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="10001",
+                    store="w-1",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-regional-south",
+                    "Fresh Strawberries, 1 lb",
+                    "2.48",
+                    zipcode="10002",
+                    store="w-2",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.29",
+                    zipcode="10001",
+                    store="a-1",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.39",
+                    zipcode="10002",
+                    store="a-2",
+                ),
+            ]
+        )
+    )
+    candidates = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        candidates,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+        profile_scope_policies={
+            "strict": {
+                "default_scope_mode": "observed_benchmark_product_footprint",
+                "allow_scoped_reuse": True,
+                "comparison_context_grain": "benchmark_location",
+                "minimum_locations": 1,
+            }
+        },
+    )
+
+    assert {
+        (str(row["benchmark_product_id"]), str(row["competitor_product_id"]))
+        for row in resolution.relationships
+    } == {
+        ("w-regional-north", "a-private-label"),
+        ("w-regional-south", "a-private-label"),
+    }
+    assert {tuple(row["benchmark_location_scope_keys"]) for row in resolution.relationships} == {
+        ("walmart_us|10001|w-1",),
+        ("walmart_us|10002|w-2",),
+    }
+    assert all(
+        row["scope_mode"] == "observed_benchmark_product_footprint"
+        for row in resolution.relationships
+    )
+
+
+def test_automatic_scoped_relationships_exclude_ambiguous_overlapping_footprints() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row(
+                    "walmart_us",
+                    "w-regional-north",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="10001",
+                    store="w-1",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-regional-north",
+                    "Fresh Strawberries, 1 lb",
+                    "2.58",
+                    zipcode="10002",
+                    store="w-2",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-regional-south",
+                    "Fresh Strawberries, 1 lb",
+                    "2.48",
+                    zipcode="10002",
+                    store="w-2",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.29",
+                    zipcode="10001",
+                    store="a-1",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-private-label",
+                    "Fresh Strawberries, 1 lb",
+                    "2.39",
+                    zipcode="10002",
+                    store="a-2",
+                ),
+            ]
+        )
+    )
+    candidates = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        candidates,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+        profile_scope_policies={
+            "strict": {
+                "default_scope_mode": "observed_benchmark_product_footprint",
+                "allow_scoped_reuse": True,
+                "comparison_context_grain": "benchmark_location",
+                "minimum_locations": 1,
+            }
+        },
     )
 
     assert resolution.matches == ()

@@ -31,8 +31,15 @@ const contracts = [
   ["narrative-benchmarks.schema.json", "narrative-benchmarks.ts"],
   ["product-detail-catalog.schema.json", "product-detail-catalog.ts"],
   ["product-detail-snapshot.schema.json", "product-detail-snapshot.ts"],
+  [
+    "brand-classification-decision.schema.json",
+    "brand-classification-decision.ts",
+  ],
+  ["brand-workbench.schema.json", "brand-workbench.ts"],
+  ["product-footprint.schema.json", "product-footprint.ts"],
   ["product-match-decision.schema.json", "product-match-decision.ts"],
   ["product-match-review.schema.json", "product-match-review.ts"],
+  ["product-match-scope.schema.json", "product-match-scope.ts"],
   ["product-pack-capabilities.schema.json", "product-pack-capabilities.ts"],
   ["product-pack-draft.schema.json", "product-pack-draft.ts"],
   ["product-pack-publication.schema.json", "product-pack-publication.ts"],
@@ -44,6 +51,7 @@ const contracts = [
   ["provider-error.schema.json", "provider-error.ts"],
   ["report-blueprint.schema.json", "report-blueprint.ts"],
   ["report-view.schema.json", "report-view.ts"],
+  ["scoped-match-assignment.schema.json", "scoped-match-assignment.ts"],
 ];
 
 await mkdir(outputDirectory, { recursive: true });

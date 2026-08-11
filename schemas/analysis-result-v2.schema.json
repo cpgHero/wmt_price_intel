@@ -153,6 +153,10 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "relationship_scope_policy": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       }
@@ -497,6 +501,10 @@
           "type": ["string", "null"]
         },
         "match_revision_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "brand_revision_id": {
           "type": ["string", "null"],
           "format": "uuid"
         },

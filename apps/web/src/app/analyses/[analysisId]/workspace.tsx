@@ -6,6 +6,7 @@ import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
 
 import { DataTable } from "@/app/components/data-table";
+import { BrandWorkbenchPanel } from "./brand-workbench";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { MatchReviewWorkbench } from "./match-review-workbench";
 import type {
@@ -238,7 +239,8 @@ function BlueprintAnalysisWorkspace({
       const requestedTab = parameters.get("tab");
       setActiveGroup(
         requestedTab &&
-          reportView.groups.some((group) => group.id === requestedTab)
+          (requestedTab === "brand-workbench" ||
+            reportView.groups.some((group) => group.id === requestedTab))
           ? requestedTab
           : firstPopulatedGroup,
       );
@@ -433,6 +435,15 @@ function BlueprintAnalysisWorkspace({
             {group.label}
           </button>
         ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeGroup === "brand-workbench"}
+          className={activeGroup === "brand-workbench" ? "active" : ""}
+          onClick={() => selectGroup("brand-workbench")}
+        >
+          Brand Workbench
+        </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
         {activeGroup === "match-review" ? (
@@ -444,6 +455,8 @@ function BlueprintAnalysisWorkspace({
             onCompetitorSelect={selectCompetitor}
             onProfileSelect={selectLens}
           />
+        ) : activeGroup === "brand-workbench" ? (
+          <BrandWorkbenchPanel analysisId={analysis.analysis_id} />
         ) : activeGroup === "exports" ? (
           <Section
             title="Delivery artifacts"

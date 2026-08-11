@@ -193,6 +193,9 @@ def test_match_candidates_preserve_profile_eligibility_without_inventing_pairs()
         "normalized_unit",
     ]
     assert all("size" in str(row["match_rationale"]) for row in candidates)
+    assert all(
+        row["benchmark_location_scope_keys"] == ["walmart_us|72712|store-a"] for row in candidates
+    )
 
 
 def test_presentation_excludes_mismatched_weighted_multipacks() -> None:

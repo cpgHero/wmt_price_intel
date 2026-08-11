@@ -11,16 +11,21 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from rci_analytics import CatalogProductPackLoader
 from rci_contracts import ContractError
 from rci_product_packs import PostgresProductPackCatalog
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
+    BrandDecisionCommand,
+    BrandReviewService,
+    BrandRevisionConflictError,
     MatchDecisionCommand,
     MatchOneToOneConflictError,
     MatchReviewService,
     MatchRevisionConflictError,
+    PostgresBrandReviewRepository,
     PostgresMatchReviewRepository,
     PostgresResultsRepository,
     S3ReportObjectStore,
@@ -75,6 +80,15 @@ class DownloadResponse(BaseModel):
     expires_in_seconds: int
 
 
+class MatchScopeRequest(BaseModel):
+    mode: Literal["global", "observed_benchmark_product_footprint", "explicit_benchmark_locations"]
+    relationship_role: Literal["primary", "alternative"]
+    comparison_family_key: str = Field(min_length=1)
+    definition: dict[str, Any]
+    checksum: str = Field(pattern="^[a-f0-9]{64}$")
+    artifact_id: str | None = None
+
+
 class MatchDecisionRequest(BaseModel):
     expected_revision: int = Field(ge=0)
     competitor_retailer_id: str = Field(min_length=1)
@@ -84,9 +98,24 @@ class MatchDecisionRequest(BaseModel):
     decision: Literal["confirmed", "rejected", "reset"]
     replace_conflicts: bool = False
     reason: str | None = Field(default=None, max_length=1000)
+    scope: MatchScopeRequest | None = None
 
 
 class MatchRecomputeRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
+    apply_to_future_runs: bool
+
+
+class BrandDecisionRequest(BaseModel):
+    expected_revision: int = Field(ge=0)
+    retailer_id: str = Field(min_length=1)
+    normalized_brand: str = Field(min_length=1)
+    role: Literal["private_label", "regional", "national", "unclassified"]
+    decision: Literal["confirmed", "rejected", "reset"]
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class BrandRecomputeRequest(BaseModel):
     expected_revision: int = Field(ge=1)
     apply_to_future_runs: bool
 
@@ -136,8 +165,28 @@ def get_match_review_service(request: Request) -> MatchReviewService:
     )
 
 
+def get_brand_review_service(request: Request) -> BrandReviewService:
+    repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
+    retailer_catalog = json.loads(
+        (repository_root / "config" / "retailer-catalog.json").read_text()
+    )
+    names = {
+        str(row["id"]): str(row["display_name"])
+        for row in retailer_catalog.get("retailers", [])
+        if isinstance(row, dict) and row.get("id") and row.get("display_name")
+    }
+    product_pack_catalog = PostgresProductPackCatalog(request.app.state.database_probe.engine)
+    return BrandReviewService(
+        get_analysis_service(request),
+        PostgresBrandReviewRepository(request.app.state.database_probe.engine),
+        CatalogProductPackLoader(repository_root, product_pack_catalog),
+        retailer_names=names,
+    )
+
+
 AnalysisServiceDependency = Annotated[AnalysisResultService, Depends(get_analysis_service)]
 MatchReviewServiceDependency = Annotated[MatchReviewService, Depends(get_match_review_service)]
+BrandReviewServiceDependency = Annotated[BrandReviewService, Depends(get_brand_review_service)]
 AnalysisBody = Annotated[dict[str, Any], Body()]
 
 
@@ -279,6 +328,70 @@ async def recompute_match_review(
     except AnalysisNotFoundError as exc:
         raise _analysis_not_found(exc) from exc
     except (MatchRevisionConflictError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.get("/analyses/{analysis_id}/brand-workbench", tags=["analyses"])
+async def get_brand_workbench(
+    analysis_id: str,
+    service: BrandReviewServiceDependency,
+) -> dict[str, Any]:
+    try:
+        return await service.view(analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/analyses/{analysis_id}/brand-workbench/decisions", tags=["analyses"])
+async def save_brand_decision(
+    analysis_id: str,
+    service: BrandReviewServiceDependency,
+    command: BrandDecisionRequest,
+    actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
+) -> dict[str, Any]:
+    try:
+        return await service.decide(
+            analysis_id,
+            BrandDecisionCommand(**command.model_dump()),
+            actor=actor or "interactive-user",
+        )
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except BrandRevisionConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/analyses/{analysis_id}/brand-workbench/recompute", tags=["analyses"])
+async def recompute_brand_workbench(
+    analysis_id: str,
+    service: BrandReviewServiceDependency,
+    command: BrandRecomputeRequest,
+    actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
+) -> dict[str, Any]:
+    try:
+        result = await service.recompute(
+            analysis_id,
+            expected_revision=command.expected_revision,
+            apply_to_future_runs=command.apply_to_future_runs,
+            actor=actor or "interactive-user",
+        )
+        return {
+            "analysis_run_id": result.analysis_run_id,
+            "source_analysis_id": result.source_analysis_id,
+            "brand_revision_id": result.brand_revision_id,
+            "status": result.status,
+            "applied_to_future_runs": result.applied_to_future_runs,
+            "provider_calls_queued": 0,
+        }
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except (BrandRevisionConflictError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 

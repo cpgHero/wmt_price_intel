@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/brand-workbench.schema.json",
+  "title": "Retail Competitive Intelligence Brand Workbench",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "product_pack_id",
+    "product_pack_version",
+    "revision",
+    "retailers",
+    "brands",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "product_pack_id": { "type": "string", "minLength": 1 },
+    "product_pack_version": { "type": "string", "minLength": 1 },
+    "revision_id": { "type": ["string", "null"], "format": "uuid" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "current_publication_revision_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "future_application": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["revision_id", "revision"],
+          "properties": {
+            "revision_id": { "type": "string", "format": "uuid" },
+            "revision": { "type": "integer", "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "retailers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "brands": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/brand" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suggested", "confirmed", "rejected", "unclassified"],
+      "properties": {
+        "suggested": { "type": "integer", "minimum": 0 },
+        "confirmed": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 },
+        "unclassified": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retailer_id",
+        "normalized_brand",
+        "display_brand",
+        "role",
+        "status",
+        "origin",
+        "observed_products",
+        "observed_locations",
+        "observed_zipcodes",
+        "location_share",
+        "distribution_tier",
+        "product_examples"
+      ],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "normalized_brand": { "type": "string", "minLength": 1 },
+        "display_brand": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "status": { "enum": ["suggested", "confirmed", "rejected", "unclassified"] },
+        "origin": { "enum": ["product_pack", "deterministic", "user"] },
+        "reason": { "type": ["string", "null"] },
+        "observed_products": { "type": "integer", "minimum": 1 },
+        "observed_locations": { "type": "integer", "minimum": 1 },
+        "observed_zipcodes": { "type": "integer", "minimum": 1 },
+        "location_share": { "type": "number", "minimum": 0, "maximum": 1 },
+        "distribution_tier": {
+          "enum": ["single_location", "concentrated", "multi_market", "broad"]
+        },
+        "product_examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["product_id", "name"],
+            "properties": {
+              "product_id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "image_url": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

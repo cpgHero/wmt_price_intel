@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/brand-classification-decision.schema.json",
+  "title": "Retail Competitive Intelligence Brand Classification Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "expected_revision",
+    "retailer_id",
+    "normalized_brand",
+    "role",
+    "decision"
+  ],
+  "properties": {
+    "expected_revision": { "type": "integer", "minimum": 0 },
+    "retailer_id": { "type": "string", "minLength": 1 },
+    "normalized_brand": { "type": "string", "minLength": 1 },
+    "role": { "enum": ["private_label", "regional", "national", "unclassified"] },
+    "decision": { "enum": ["confirmed", "rejected", "reset"] },
+    "reason": { "type": ["string", "null"], "maxLength": 1000 }
+  }
+}

@@ -153,6 +153,35 @@ class PostgresAnalysisInputRepository:
                 if benchmark_retailer
                 else None
             )
+            brand_revision = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT revision.id::text,
+                              revision.source_analysis_result_id::text
+                            FROM brand_classification_application_policy policy
+                            JOIN brand_classification_revision revision
+                              ON revision.id = policy.revision_id
+                            WHERE policy.organization_id = CAST(:organization_id AS uuid)
+                              AND policy.product_pack_id = :product_pack_id
+                              AND policy.product_pack_version = :product_pack_version
+                              AND policy.benchmark_retailer_id = :benchmark_retailer_id
+                            """
+                        ),
+                        {
+                            "organization_id": self._organization_id,
+                            "product_pack_id": prepared.manifest.product_pack_id,
+                            "product_pack_version": prepared.manifest.product_pack_version,
+                            "benchmark_retailer_id": benchmark_retailer,
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+                if benchmark_retailer
+                else None
+            )
             analysis_run_id = str(
                 (
                     await connection.execute(
@@ -161,11 +190,12 @@ class PostgresAnalysisInputRepository:
                             INSERT INTO analysis_run (
                               collection_run_id, input_set_id, product_pack_id,
                               product_pack_version, status, code_version, max_attempts,
-                              match_revision_id, source_analysis_result_id
+                              match_revision_id, brand_revision_id, source_analysis_result_id
                             ) VALUES (
                               CAST(:collection_run_id AS uuid), CAST(:input_set_id AS uuid),
                               :product_pack_id, :product_pack_version, 'queued',
                               :code_version, :max_attempts, CAST(:match_revision_id AS uuid),
+                              CAST(:brand_revision_id AS uuid),
                               CAST(:source_analysis_result_id AS uuid)
                             )
                             RETURNING id::text
@@ -181,9 +211,14 @@ class PostgresAnalysisInputRepository:
                             "match_revision_id": (
                                 str(match_revision["id"]) if match_revision is not None else None
                             ),
+                            "brand_revision_id": (
+                                str(brand_revision["id"]) if brand_revision is not None else None
+                            ),
                             "source_analysis_result_id": (
                                 str(match_revision["source_analysis_result_id"])
                                 if match_revision is not None
+                                else str(brand_revision["source_analysis_result_id"])
+                                if brand_revision is not None
                                 else None
                             ),
                         },
@@ -570,11 +605,15 @@ class PostgresAnalysisInputRepository:
                     INSERT INTO analysis_run (
                       collection_run_id, input_set_id, product_pack_id, product_pack_version,
                       status, code_version, max_attempts,
-                      match_revision_id, source_analysis_result_id
+                      match_revision_id, brand_revision_id, source_analysis_result_id
                     )
                     SELECT i.collection_run_id, i.id, i.product_pack_id,
                            i.product_pack_version, 'queued', :code_version, :max_attempts,
-                           governed.id, governed.source_analysis_result_id
+                           governed_match.id, governed_brand.id,
+                           COALESCE(
+                             governed_match.source_analysis_result_id,
+                             governed_brand.source_analysis_result_id
+                           )
                     FROM analysis_input_set i
                     LEFT JOIN LATERAL (
                       SELECT revision.id, revision.source_analysis_result_id
@@ -587,7 +626,19 @@ class PostgresAnalysisInputRepository:
                         AND policy.benchmark_retailer_id =
                           i.analysis_config->>'benchmark_retailer'
                       LIMIT 1
-                    ) governed ON true
+                    ) governed_match ON true
+                    LEFT JOIN LATERAL (
+                      SELECT revision.id, revision.source_analysis_result_id
+                      FROM brand_classification_application_policy policy
+                      JOIN brand_classification_revision revision
+                        ON revision.id = policy.revision_id
+                      WHERE policy.organization_id = i.organization_id
+                        AND policy.product_pack_id = i.product_pack_id
+                        AND policy.product_pack_version = i.product_pack_version
+                        AND policy.benchmark_retailer_id =
+                          i.analysis_config->>'benchmark_retailer'
+                      LIMIT 1
+                    ) governed_brand ON true
                     WHERE i.source_kind = 'live_collection' AND i.status = 'ready'
                       AND NOT EXISTS (
                         SELECT 1 FROM analysis_run ar

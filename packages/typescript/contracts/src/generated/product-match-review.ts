@@ -34,6 +34,8 @@ export interface Profile {
   label: string;
   geography: string;
   comparison_metric: string;
+  default_scope_mode?: "global" | "observed_benchmark_product_footprint" | "explicit_benchmark_locations";
+  allow_scoped_reuse?: boolean;
 }
 export interface Product {
   retailer_id: string;
@@ -72,6 +74,13 @@ export interface Connection {
   suppression_reasons?: string[];
   match_basis: "exact_package" | "normalized_unit" | "multiple" | "user_defined";
   profile_evidence: ProfileEvidence[];
+  scope?: null | RetailCompetitiveIntelligenceProductMatchScope;
+  scope_summary?: {
+    eligible_locations?: number;
+    active_locations?: number;
+    conflict_locations?: number;
+    unmatched_locations?: number;
+  };
 }
 export interface ProfileEvidence {
   profile_id: string;
@@ -85,4 +94,17 @@ export interface ProfileEvidence {
     [k: string]: unknown;
   };
   rationale: string;
+}
+export interface RetailCompetitiveIntelligenceProductMatchScope {
+  mode: "global" | "observed_benchmark_product_footprint" | "explicit_benchmark_locations";
+  relationship_role: "primary" | "alternative";
+  comparison_family_key: string;
+  definition: {
+    source_analysis_id?: string | null;
+    benchmark_location_scope_keys?: string[];
+    excluded_benchmark_location_scope_keys?: string[];
+    future_location_policy?: "review" | "follow_unique_product_footprint" | "explicit_only";
+  };
+  checksum: string;
+  artifact_id?: string | null;
 }

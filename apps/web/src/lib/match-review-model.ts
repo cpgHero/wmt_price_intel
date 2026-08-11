@@ -85,8 +85,16 @@ export function scopeMatchReview(
   for (const connection of review.connections) {
     if (
       connection.competitor_retailer_id !== competitorId ||
-      connection.status === "rejected" ||
-      connection.eligible_profile_ids.includes(profileId)
+      connection.status === "rejected"
+    )
+      continue;
+    const isScopedConfirmed =
+      connection.status === "confirmed" &&
+      connection.scope != null &&
+      connection.scope.mode !== "global";
+    if (
+      connection.eligible_profile_ids.includes(profileId) &&
+      !isScopedConfirmed
     )
       continue;
     for (const otherProfileId of connection.eligible_profile_ids) {
@@ -110,15 +118,19 @@ export function scopeMatchReview(
   const active = connections.filter(
     (connection) => connection.status !== "rejected",
   );
+  const locksEveryLocation = (connection: MatchReviewConnection) =>
+    connection.status !== "confirmed" ||
+    connection.scope == null ||
+    connection.scope.mode === "global";
   const connectedBenchmark = new Set(
-    [...active, ...confirmedOutsideProfile].map(
-      (connection) => connection.benchmark_product_id,
-    ),
+    [...active, ...confirmedOutsideProfile]
+      .filter(locksEveryLocation)
+      .map((connection) => connection.benchmark_product_id),
   );
   const connectedCompetitor = new Set(
-    [...active, ...confirmedOutsideProfile].map(
-      (connection) => connection.competitor_product_id,
-    ),
+    [...active, ...confirmedOutsideProfile]
+      .filter(locksEveryLocation)
+      .map((connection) => connection.competitor_product_id),
   );
   const unmatchedBenchmarkProducts = benchmarkProducts.filter(
     (product) => !connectedBenchmark.has(product.product_id),
