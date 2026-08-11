@@ -111,6 +111,8 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "competitor_product_name": "ALDI 93/7 Ground Beef",
                     "matches": 120,
                     "geographies": 100,
+                    "median_benchmark_price": 5.47,
+                    "median_competitor_price": 5.29,
                     "median_gap": -0.18,
                     "match_attributes": {"lean_pct": 93, "fat_pct": 7},
                     "match_rationale": "Product Pack attributes align on lean and fat",
@@ -129,6 +131,8 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "competitor_product_name": "ALDI 93/7 Ground Beef",
                     "matches": 118,
                     "geographies": 98,
+                    "median_benchmark_price": 5.47,
+                    "median_competitor_price": 5.39,
                     "median_gap": -0.08,
                     "match_attributes": {"lean_pct": 93, "fat_pct": 7},
                     "match_rationale": "Product Pack attributes align on lean and fat",
@@ -211,6 +215,17 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
     assert [row["id"] for row in initial["profiles"]] == ["strict", "unit_price"]
     assert initial["connections"][0]["eligible_profile_ids"] == ["strict", "unit_price"]
     assert len(initial["connections"][0]["profile_evidence"]) == 2
+    products = {row["canonical_product_id"]: row for row in initial["products"]}
+    assert "price" not in products["walmart_us:w1"]
+    assert products["walmart_us:w1"]["pdp_reference_price"] == 5.47
+    strict_evidence = initial["connections"][0]["profile_evidence"][0]
+    assert strict_evidence["benchmark_median"] == 5.47
+    assert strict_evidence["competitor_median"] == 5.29
+    assert strict_evidence["median_gap"] == -0.18
+    assert strict_evidence["price_source"] == "search"
+    assert strict_evidence["price_unit"] == "USD/package"
+    assert strict_evidence["benchmark_median_statistic"] == "marginal_median"
+    assert strict_evidence["median_gap_statistic"] == "paired_median_gap"
 
     saved = await service.decide(
         "fresh-ground-beef-example", _command(revision=0), actor="reviewer@example.test"

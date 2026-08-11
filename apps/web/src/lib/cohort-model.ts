@@ -23,10 +23,16 @@ export interface ComparableCohort {
   outcome: CohortOutcome;
 }
 
-function numericValue(row: JsonObject, rawKey: string, displayKey: string) {
+function numericValue(
+  row: JsonObject,
+  rawKey: string,
+  displayKey: string,
+  legacyDisplayKey?: string,
+) {
   const raw = row[rawKey];
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  const display = row[displayKey];
+  const display =
+    row[displayKey] ?? (legacyDisplayKey ? row[legacyDisplayKey] : undefined);
   if (typeof display === "number" && Number.isFinite(display)) return display;
   if (typeof display !== "string") return null;
   const percent = display.includes("%");
@@ -76,16 +82,19 @@ export function comparableCohorts(records: JsonObject[]): ComparableCohort[] {
         benchmarkMedian: numericValue(
           row,
           "_benchmark_median",
+          "benchmark marginal median",
           "benchmark median",
         ),
         competitorMedian: numericValue(
           row,
           "_competitor_median",
+          "competitor marginal median",
           "competitor median",
         ),
         medianGap: numericValue(
           row,
           "_median_gap",
+          "paired median gap",
           "competitor - benchmark gap",
         ),
         outcome: outcomeValue(row._dominant_outcome ?? row["dominant outcome"]),

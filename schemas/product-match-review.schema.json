@@ -214,6 +214,13 @@
         "matches": { "type": ["integer", "null"], "minimum": 0 },
         "geographies": { "type": ["integer", "null"], "minimum": 0 },
         "median_gap": { "type": ["number", "null"] },
+        "benchmark_median": { "type": ["number", "null"] },
+        "competitor_median": { "type": ["number", "null"] },
+        "price_unit": { "type": "string", "minLength": 1 },
+        "price_source": { "const": "search" },
+        "benchmark_median_statistic": { "const": "marginal_median" },
+        "competitor_median_statistic": { "const": "marginal_median" },
+        "median_gap_statistic": { "const": "paired_median_gap" },
         "match_attributes": { "type": "object" },
         "rationale": { "type": "string", "minLength": 1 }
       }

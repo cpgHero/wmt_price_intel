@@ -66,6 +66,10 @@ export interface Scorecard {
   benchmark_retailer: string;
   profile_id: string;
   comparison_lens: string;
+  comparison_metric: string;
+  price_unit: string;
+  package_basis: "exact_package" | "normalized_unit" | "configured_interval";
+  geography: string;
   basis_status: "preferred" | "fallback" | "unavailable";
   matches: number | null;
   matched_geographies: number | null;
@@ -76,6 +80,12 @@ export interface Scorecard {
   benchmark_median: number | null;
   competitor_median: number | null;
   median_gap: number | null;
+  benchmark_median_statistic: "marginal_median";
+  competitor_median_statistic: "marginal_median";
+  median_gap_statistic: "paired_median_gap";
+  minimum_observations: number;
+  minimum_geographies: number;
+  readiness_reason: string;
   dominant_outcome: "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
   price_position: string;
   status: "ready" | "limited_evidence";

@@ -436,18 +436,8 @@ class ReportProjector:
             profile_id = str(mode.get("profile_id", ""))
             profile = profile_index.get(profile_id, {})
             comparison_metric = str(mode.get("comparison_metric", "package_price"))
-            package_basis = (
-                "exact_package"
-                if comparison_metric == "package_price"
-                else "configured_interval"
-                if profile.get("comparison_interval")
-                else "normalized_unit"
-            )
-            price_unit = (
-                "USD/package"
-                if comparison_metric == "package_price"
-                else f"USD/{comparison_metric.removeprefix('price_per_').replace('_', ' ')}"
-            )
+            package_basis = self._package_basis(comparison_metric, profile)
+            price_unit = self._price_unit(comparison_metric)
             bases.append(
                 {
                     "profile_id": profile_id,
@@ -486,6 +476,20 @@ class ReportProjector:
                 str(row["profile_id"]),
             ),
         )
+
+    @staticmethod
+    def _package_basis(comparison_metric: str, profile: Mapping[str, object]) -> str:
+        if comparison_metric == "package_price":
+            return "exact_package"
+        if profile.get("comparison_interval"):
+            return "configured_interval"
+        return "normalized_unit"
+
+    @staticmethod
+    def _price_unit(comparison_metric: str) -> str:
+        if comparison_metric == "package_price":
+            return "USD/package"
+        return f"USD/{comparison_metric.removeprefix('price_per_').replace('_', ' ')}"
 
     @staticmethod
     def _base_match_governance(result: JsonObject) -> JsonObject:
@@ -531,10 +535,14 @@ class ReportProjector:
                     "reference_lower_share": row.get("benchmark_lower_rate"),
                     "competitor_lower_share": row.get("competitor_lower_rate"),
                     "parity_share": row.get("parity_rate"),
-                    "reference_median_price": row.get("benchmark_median"),
-                    "competitor_median_price": row.get("competitor_median"),
-                    "competitor_minus_reference_gap": row.get("median_gap"),
-                    "typical_price_position": row.get("price_position"),
+                    "reference_marginal_median_price": row.get("benchmark_median"),
+                    "competitor_marginal_median_price": row.get("competitor_median"),
+                    "paired_median_competitor_minus_reference_gap": row.get("median_gap"),
+                    "paired_median_price_position": row.get("price_position"),
+                    "comparison_metric": row.get("comparison_metric"),
+                    "price_unit": row.get("price_unit"),
+                    "comparison_geography": row.get("geography"),
+                    "readiness_reason": row.get("readiness_reason"),
                     "evidence_status": str(row.get("status", "limited_evidence"))
                     .replace("_", " ")
                     .title(),
@@ -817,9 +825,11 @@ class ReportProjector:
                     "benchmark lower": _formatted_metric(values.get("benchmark_lower_rate")),
                     "competitor lower": _formatted_metric(values.get("competitor_lower_rate")),
                     "parity": _formatted_metric(values.get("parity_rate")),
-                    "benchmark median": _formatted_metric(values.get("benchmark_median")),
-                    "competitor median": _formatted_metric(values.get("competitor_median")),
-                    "competitor - benchmark gap": _formatted_metric(values.get("median_gap")),
+                    "benchmark marginal median": _formatted_metric(values.get("benchmark_median")),
+                    "competitor marginal median": _formatted_metric(
+                        values.get("competitor_median")
+                    ),
+                    "paired median gap": _formatted_metric(values.get("median_gap")),
                     "dominant outcome": dominant_outcome.replace("_", " ").title(),
                 }
             )
@@ -837,7 +847,7 @@ class ReportProjector:
         result: JsonObject,
         product_pack: JsonObject,
     ) -> list[JsonObject]:
-        """Project one deterministic, strict-comparison scorecard per competitor."""
+        """Project one governed comparison scorecard per competitor."""
 
         metric_index = {
             str(metric["metric_id"]): metric for metric in self._rows(result.get("metrics"))
@@ -852,6 +862,8 @@ class ReportProjector:
         benchmark_id = str(result.get("benchmark_retailer", "benchmark"))
         benchmark_name = self._retailer_name(benchmark_id)
         decision_rules = product_pack.get("reporting", {}).get("decision_rules", {})
+        minimum_observations = max(1, int(decision_rules.get("minimum_observations", 1)))
+        minimum_geographies = max(1, int(decision_rules.get("minimum_geographies", 1)))
         preferred_profile = str(decision_rules.get("preferred_scorecard_profile_id", ""))
         preferred_profile_available = preferred_profile in modes
         configured_priority = {
@@ -883,12 +895,60 @@ class ReportProjector:
             parity_rate = self._numeric_metric(values.get("parity_rate"))
             if parity_rate is None and benchmark_rate is not None and competitor_rate is not None:
                 parity_rate = max(0.0, 1.0 - benchmark_rate - competitor_rate)
+            outcome_rates = (benchmark_rate, competitor_rate, parity_rate)
+            rates_available = all(value is not None for value in outcome_rates)
+            rates_reconcile = (
+                rates_available
+                and abs(sum(float(value) for value in outcome_rates if value is not None) - 1.0)
+                <= 0.001
+            )
             matches = self._numeric_metric(values.get("matches"))
             matched_geographies = self._numeric_metric(values.get("unique_geographies"))
             coverage_geographies = self._coverage_value(
                 coverage_by_retailer.get(competitor_id, {}), metric_index
             )
             median_gap = self._numeric_metric(values.get("median_gap"))
+            profile: JsonObject = next(
+                (
+                    row
+                    for row in product_pack.get("matching_profiles", [])
+                    if str(row.get("id")) == str(comparison.get("profile_id", ""))
+                ),
+                {},
+            )
+            comparison_metric = str(mode.get("comparison_metric", "package_price"))
+            evidence_ready = (
+                matches is not None
+                and matches >= minimum_observations
+                and matched_geographies is not None
+                and matched_geographies >= minimum_geographies
+                and rates_reconcile
+            )
+            if evidence_ready:
+                readiness_reason = (
+                    f"Meets the Product Pack minimum of {minimum_observations:,} "
+                    f"observations across {minimum_geographies:,} geographies"
+                )
+            else:
+                shortfalls: list[str] = []
+                if matches is None or matches < minimum_observations:
+                    shortfalls.append(
+                        f"{self._whole_number(matches) or 0:,} of "
+                        f"{minimum_observations:,} required observations"
+                    )
+                if matched_geographies is None or matched_geographies < minimum_geographies:
+                    shortfalls.append(
+                        f"{self._whole_number(matched_geographies) or 0:,} of "
+                        f"{minimum_geographies:,} required geographies"
+                    )
+                if not rates_available:
+                    shortfalls.append(
+                        "complete benchmark, competitor, and parity shares unavailable"
+                    )
+                elif not rates_reconcile:
+                    rate_total = sum(float(value) for value in outcome_rates if value is not None)
+                    shortfalls.append(f"outcome shares total {rate_total:.1%}; expected 100.0%")
+                readiness_reason = "Limited evidence: " + "; ".join(shortfalls)
             scorecards.append(
                 {
                     "competitor_id": competitor_id,
@@ -901,6 +961,10 @@ class ReportProjector:
                         self._retailer_names,
                         product_pack,
                     ),
+                    "comparison_metric": comparison_metric,
+                    "price_unit": self._price_unit(comparison_metric),
+                    "package_basis": self._package_basis(comparison_metric, profile),
+                    "geography": str(mode.get("geography", "unknown")),
                     "basis_status": (
                         "preferred"
                         if str(comparison.get("profile_id", "")) == preferred_profile
@@ -918,6 +982,12 @@ class ReportProjector:
                     "benchmark_median": self._numeric_metric(values.get("benchmark_median")),
                     "competitor_median": self._numeric_metric(values.get("competitor_median")),
                     "median_gap": median_gap,
+                    "benchmark_median_statistic": "marginal_median",
+                    "competitor_median_statistic": "marginal_median",
+                    "median_gap_statistic": "paired_median_gap",
+                    "minimum_observations": minimum_observations,
+                    "minimum_geographies": minimum_geographies,
+                    "readiness_reason": readiness_reason,
                     "dominant_outcome": self._dominant_outcome(
                         benchmark_rate,
                         competitor_rate,
@@ -928,7 +998,7 @@ class ReportProjector:
                         self._retailer_name(competitor_id),
                         median_gap,
                     ),
-                    "status": "ready" if matches and matches > 0 else "limited_evidence",
+                    "status": "ready" if evidence_ready else "limited_evidence",
                 }
             )
         return scorecards
@@ -1075,12 +1145,12 @@ class ReportProjector:
         median_gap: float | None,
     ) -> str:
         if median_gap is None:
-            return "Typical price difference unavailable"
+            return "Paired median price difference unavailable"
         if median_gap < 0:
-            return f"{competitor} was typically ${abs(median_gap):,.2f} lower"
+            return f"{competitor} was ${abs(median_gap):,.2f} lower at the paired median"
         if median_gap > 0:
-            return f"{benchmark} was typically ${median_gap:,.2f} lower"
-        return "Typical matched prices were tied"
+            return f"{benchmark} was ${median_gap:,.2f} lower at the paired median"
+        return "The paired median price difference was $0.00"
 
     @staticmethod
     def _rows(value: object) -> list[JsonObject]:

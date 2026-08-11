@@ -1671,6 +1671,10 @@ dd {
 .paired-bars b.competitor {
   background: var(--green);
 }
+.chart-legend .parity::before,
+.paired-bars b.parity {
+  background: var(--amber);
+}
 .comparison-chart-body {
   display: grid;
   gap: 1rem;
@@ -1907,6 +1911,13 @@ a.product-highlight:hover {
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: flex-end;
+}
+.map-population-note {
+  color: var(--muted);
+  flex-basis: 100%;
+  font-size: 0.68rem;
+  margin: 0;
+  text-align: right;
 }
 .map-legend span {
   align-items: center;
@@ -6332,6 +6343,34 @@ tbody tr:last-child td {
   margin: 0;
   padding: 0.55rem 0.65rem;
 }
+.match-identity-source {
+  color: #53717c;
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+.match-search-price-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 1fr;
+}
+.match-search-price-grid > span {
+  background: #f4f8f9;
+  border: 1px solid #e4eaed;
+  border-radius: 9px;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem;
+}
+.match-search-price-grid > span small,
+.match-search-price-grid > em {
+  color: #6b7d86;
+  font-size: 0.62rem;
+}
+.match-search-price-grid > em {
+  font-style: normal;
+  grid-column: 1 / -1;
+}
 .match-product-description {
   color: #536872;
   font-size: 0.75rem;
@@ -6568,6 +6607,7 @@ tbody tr:last-child td {
   color: var(--green);
 }
 .retailer-scorecard-row > button span,
+.retailer-scorecard-row > button small,
 .retailer-scorecard-row > div > span,
 .retailer-scorecard-row > div > small {
   color: var(--muted);
@@ -6611,18 +6651,29 @@ tbody tr:last-child td {
 .retailer-share-bars i b.competitor {
   background: var(--green);
 }
+.retailer-share-bars i b.parity {
+  background: var(--amber);
+}
 .retailer-price-position {
   font-size: 0.76rem;
   line-height: 1.45;
 }
 .retailer-score-status {
   background: var(--surface-alt);
-  border-radius: 999px;
+  border-radius: 10px;
   color: var(--muted);
   font-size: 0.62rem;
+  display: grid;
   font-weight: 800;
+  gap: 0.22rem;
   justify-self: start;
   padding: 0.35rem 0.55rem;
+}
+.retailer-score-status small {
+  color: inherit;
+  font-size: 0.58rem;
+  font-weight: 650;
+  line-height: 1.35;
 }
 .retailer-score-status.ready {
   background: var(--success-soft);
@@ -6770,7 +6821,15 @@ tbody tr:last-child td {
 }
 .product-price-pair b {
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: 0.94rem;
+}
+.product-decision-statistic {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 9px;
+  color: var(--ink) !important;
+  font-weight: 750;
+  padding: 0.55rem 0.65rem;
 }
 .product-decision-conclusion {
   line-height: 1.35;
@@ -6849,6 +6908,29 @@ tbody tr:last-child td {
   gap: 0.75rem;
   grid-template-columns: repeat(4, 1fr);
   margin: 1.25rem 0;
+}
+.evidence-basis-bridge {
+  background: var(--green-soft);
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
+  border-radius: 14px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1.4fr 0.8fr 1fr;
+  margin: 1.25rem 0;
+  padding: 1rem;
+}
+.evidence-basis-bridge > div {
+  display: grid;
+  gap: 0.25rem;
+}
+.evidence-basis-bridge small,
+.evidence-basis-bridge span {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+.evidence-basis-bridge strong {
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 .evidence-summary-grid > div,
 .map-insight-rail > div:not(.map-selected-product):not(.map-point-detail) {
@@ -7247,6 +7329,7 @@ tbody tr:last-child td {
     width: 100%;
   }
   .evidence-summary-grid,
+  .evidence-basis-bridge,
   .map-insight-rail {
     grid-template-columns: 1fr 1fr;
   }

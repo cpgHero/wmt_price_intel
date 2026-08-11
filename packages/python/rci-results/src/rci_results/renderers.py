@@ -366,6 +366,7 @@ display:block;font-size:10px;margin-top:3px}.score-share{display:grid;gap:4px;gr
 .score-share span{font-size:10px}.score-share span:nth-of-type(2){grid-column:1}.score-share i{background:var(--surface);
 border-radius:999px;display:block;height:7px;overflow:hidden}.score-share i b{border-radius:inherit;display:block;
 height:100%}.score-share i b.benchmark{background:var(--ink)}.score-share i b.competitor{background:var(--accent)}
+.score-share i b.parity{background:#9b6100}.retailer-scorecard td>small{display:block;margin-top:5px;max-width:24ch}
 .score-status{background:rgba(98,98,105,.12);border-radius:999px;color:var(--muted);display:inline-block;
 font-size:10px;font-weight:800;padding:5px 8px}.score-status.ready{background:rgba(0,130,200,.12);color:var(--accent)}
 [data-competitor-id][hidden]{display:none!important}.retailer-scope-note{background:rgba(88,210,248,.08);
@@ -520,13 +521,19 @@ def _retailer_scorecard_html(view: JsonObject) -> str:
         + _scorecard_rate(row.get("competitor_lower_rate"))
         + "</b></span><i><b class=competitor style='width:"
         + f"{max(1.0, float(row.get('competitor_lower_rate') or 0) * 100):.1f}%"
+        + "'></b></i><span>Parity <b>"
+        + _scorecard_rate(row.get("parity_rate"))
+        + "</b></span><i><b class=parity style='width:"
+        + f"{max(1.0, float(row.get('parity_rate') or 0) * 100):.1f}%"
         + "'></b></i></div></td><td>"
         + escape(_display(row.get("price_position")))
         + "</td><td><span class='score-status "
         + escape(str(row.get("status") or "limited_evidence"), quote=True)
         + "'>"
         + ("Ready" if row.get("status") == "ready" else "Limited evidence")
-        + "</span></td></tr>"
+        + "</span><small>"
+        + escape(_display(row.get("readiness_reason")))
+        + "</small></td></tr>"
         for row in sorted(
             rows,
             key=lambda row: (_integer(row.get("matches")), _display(row.get("competitor"))),
@@ -536,10 +543,11 @@ def _retailer_scorecard_html(view: JsonObject) -> str:
     return (
         "<section class='report-section retailer-scorecard'><div class=kind>Competitive set</div>"
         "<h2>Retailer scorecard</h2><p class=group-note>One preferred comparison basis per "
-        f"competitor. Lower-price shares use {escape(benchmark)} as the named reference retailer; "
-        "the typical difference is competitor price minus reference-retailer price.</p>"
+        f"competitor. Each row names its configured comparison basis and unit. Lower-price shares "
+        f"include {escape(benchmark)}, the competitor, and parity; the price-position statement "
+        "uses the paired median of observation-level competitor-minus-reference differences.</p>"
         "<div class=table-wrap><table><thead><tr><th>Competitor</th><th>Matched observations"
-        "</th><th>Matched ZIP markets</th><th>Lower-price share</th><th>Typical price position"
+        "</th><th>Matched ZIP markets</th><th>Lower-price share</th><th>Paired median price position"
         f"</th><th>Evidence</th></tr></thead><tbody>{body}</tbody></table></div></section>"
     )
 
@@ -845,8 +853,8 @@ def _comparison_chart(rows: list[JsonObject], *, benchmark_label: str) -> str:
         f"{escape(_display(row.get('segment') or row.get('competitor')))}</strong>"
         f"<span>{escape(_display(row.get('competitor')))} · {matches:,} matches · "
         f"{escape(_display(row.get('matched geographies')))} geographies · "
-        f"typical difference "
-        f"{escape(_display(row.get('competitor - benchmark gap')))}</span></div>"
+        f"paired median difference "
+        f"{escape(_display(row.get('paired median gap') if row.get('paired median gap') is not None else row.get('competitor - benchmark gap')))}</span></div>"
         f"<div class=paired><div><i><b class=benchmark style='width:{benchmark or 1}%'></b>"
         f"</i><span>{'—' if benchmark is None else f'{benchmark:.1f}%'}</span></div>"
         f"<div><i><b class=competitor style='width:{competitor or 1}%'></b></i>"
@@ -858,7 +866,7 @@ def _comparison_chart(rows: list[JsonObject], *, benchmark_label: str) -> str:
     return (
         "<figure class=comparison-chart><figcaption><strong>Lower-price share</strong>"
         "<span>Strict comparable-package outcomes with market coverage and "
-        "typical price difference · dark bar "
+        "paired median price difference · dark bar "
         f"{escape(benchmark_label)} · blue bar competitor</span></figcaption>"
         f"<div class=chart-body>{chart_rows}</div><p class=chart-note>Directional share "
         "among matched observations; see the supporting table for definitions and caveats."
@@ -1122,14 +1130,20 @@ def _segment_matrix(rows: list[JsonObject], *, benchmark_label: str) -> str:
         + "</strong></div><div><strong>"
         + f"{matches:,}"
         + "</strong><small>matched observations</small></div><strong>"
-        + escape(_display(row.get("competitor - benchmark gap")))
+        + escape(
+            _display(
+                row.get("paired median gap")
+                if row.get("paired median gap") is not None
+                else row.get("competitor - benchmark gap")
+            )
+        )
         + "</strong></div>"
         for matches, row, benchmark, competitor in rendered_ranked
     )
     return (
         "<div class=segment-matrix><div class='segment-row head'><span>Comparable product "
         "segment</span><span>Lower-price leader</span><span>Matched evidence</span>"
-        f"<span>Typical difference</span></div>{body}</div>"
+        f"<span>Paired median difference</span></div>{body}</div>"
     )
 
 

@@ -20,6 +20,12 @@ from rci_results.repository import DEFAULT_ORGANIZATION_ID
 from rci_results.service import AnalysisResultService
 
 
+def _price_unit(comparison_metric: str) -> str:
+    if comparison_metric == "package_price":
+        return "USD/package"
+    return f"USD/{comparison_metric.removeprefix('price_per_').replace('_', ' ')}"
+
+
 class MatchRevisionConflictError(RuntimeError):
     pass
 
@@ -1167,6 +1173,10 @@ class MatchReviewService:
                         "name": str(snapshot.get("name") or product_id),
                     },
                 )
+        for product in products.values():
+            pdp_price = product.pop("price", None)
+            if pdp_price is not None:
+                product["pdp_reference_price"] = pdp_price
         return sorted(
             products.values(),
             key=lambda row: (str(row["retailer_id"]), str(row["name"]), str(row["product_id"])),
@@ -1237,15 +1247,23 @@ class MatchReviewService:
                 eligible.append(candidate_profile_id)
             evidence = connection["profile_evidence"]
             if isinstance(evidence, list):
+                comparison_metric = str(row.get("comparison_metric") or "package_price")
                 evidence.append(
                     {
                         "profile_id": candidate_profile_id,
                         "profile_label": str(row.get("profile_label") or candidate_profile_id),
-                        "comparison_metric": str(row.get("comparison_metric") or "package_price"),
+                        "comparison_metric": comparison_metric,
                         "match_basis": str(row.get("match_basis") or "exact_package"),
                         "matches": row.get("matches"),
                         "geographies": row.get("geographies"),
+                        "benchmark_median": row.get("median_benchmark_price"),
+                        "competitor_median": row.get("median_competitor_price"),
                         "median_gap": row.get("median_gap"),
+                        "price_unit": _price_unit(comparison_metric),
+                        "price_source": "search",
+                        "benchmark_median_statistic": "marginal_median",
+                        "competitor_median_statistic": "marginal_median",
+                        "median_gap_statistic": "paired_median_gap",
                         "match_attributes": dict(row.get("match_attributes") or {}),
                         "rationale": str(
                             row.get("match_rationale")

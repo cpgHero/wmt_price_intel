@@ -551,13 +551,16 @@ class AnalysisResultV2Builder:
             if median_gap is not None:
                 gap_value = float(median_gap["value"])
                 if gap_value < 0:
-                    sentence += f" {competitor} was typically ${abs(gap_value):,.2f} lower."
+                    sentence += (
+                        f" {competitor} was ${abs(gap_value):,.2f} lower at the paired median."
+                    )
                 elif gap_value > 0:
                     sentence += (
-                        f" {_display_id(benchmark_retailer)} was typically ${gap_value:,.2f} lower."
+                        f" {_display_id(benchmark_retailer)} was ${gap_value:,.2f} lower "
+                        "at the paired median."
                     )
                 else:
-                    sentence += " Typical matched prices were tied."
+                    sentence += " The paired median price difference was $0.00."
             return sentence
 
         overall = [row for row in comparisons if str(row["segment_id"]) == "all"]

@@ -74,6 +74,8 @@ def test_map_points_are_filterable_by_benchmark_product_and_evidence_linked() ->
     }
     assert points[0]["benchmark_price"] == 4.0
     assert points[0]["competitor"] == "aldi_us"
+    assert points[0]["comparison_metric"] == "package_price"
+    assert points[0]["value_label"] == "Benchmark lower · paired difference $1.25 /package"
 
 
 def test_map_points_apply_deterministic_product_and_location_caps() -> None:
@@ -135,7 +137,7 @@ def test_product_decisions_prioritize_losses_and_name_locations() -> None:
     assert len(decisions) == 1
     assert decisions[0]["priority"] == "attention"
     assert decisions[0]["competitor_product_name"] == "ALDI comparison product"
-    assert decisions[0]["plain_insight"] == "Competitor is typically $0.38 lower"
+    assert decisions[0]["plain_insight"] == ("Competitor is $0.38 lower at the paired median")
     assert decisions[0]["geographies"] == 2
     assert decisions[0]["top_locations"][0]["zipcode"] == "72712"
     assert decisions[0]["match_attributes"] == {"size": "1 lb"}
@@ -315,6 +317,56 @@ def test_product_evidence_reports_every_benchmark_store_without_changing_match_g
         "price_parity": 0,
     }
     assert len(evidence["decision-1"]["rows"]) == 2
+    assert evidence["decision-1"]["comparison_metric"] == "package_price"
+    assert evidence["decision-1"]["comparison_unit"] == "USD/package"
+    assert evidence["decision-1"]["raw_price_unit"] == "USD/package"
+    assert evidence["decision-1"]["rows"][0]["comparison_gap"] == -0.5
     merged = merge_product_evidence_summary([decision], evidence)
     assert merged[0]["evidence_available"] is True
     assert merged[0]["evidence_summary"] == summary
+
+
+def test_normalized_product_evidence_uses_governed_unit_values_and_retains_raw_prices() -> None:
+    benchmark = replace(
+        _offer("walmart-1", "100", -94.2),
+        offer=replace(_offer("walmart-1", "100", -94.2).offer, price=Decimal("4.00")),
+        metrics={"price_per_lb": Decimal("2.00")},
+    )
+    competitor = ClassifiedOffer(
+        offer=replace(
+            benchmark.offer,
+            offer_id="aldi-1",
+            retailer_id="aldi_us",
+            retailer_product_id="200",
+            title="ALDI comparison product",
+            price=Decimal("3.50"),
+            store_number="aldi-store",
+        ),
+        in_scope=True,
+        scope_reason=None,
+        attributes={"size": "0.5 lb"},
+        metrics={"price_per_lb": Decimal("3.00")},
+        review_reasons=(),
+    )
+    decision = {
+        "id": "normalized-decision",
+        "benchmark_product_id": "100",
+        "competitor": "aldi_us",
+        "competitor_product_id": "200",
+        "comparison_metric": "price_per_lb",
+    }
+
+    row = benchmark_product_evidence(
+        [benchmark, competitor],
+        [decision],
+        benchmark_retailer="walmart_us",
+    )["normalized-decision"]["rows"][0]
+
+    assert row["benchmark_price"] == 4.0
+    assert row["competitor_price"] == 3.5
+    assert row["competitor_minus_benchmark"] == -0.5
+    assert row["benchmark_comparison_value"] == 2.0
+    assert row["competitor_comparison_value"] == 3.0
+    assert row["comparison_gap"] == 1.0
+    assert row["outcome"] == "benchmark_lower"
+    assert row["comparison_unit"] == "USD/lb"

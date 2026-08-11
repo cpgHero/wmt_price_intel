@@ -47,12 +47,13 @@ function gapCopy(
   benchmarkName: string,
   competitorName: string,
 ) {
-  if (gap === null) return "Typical difference unavailable";
-  if (Math.abs(gap) < 0.005) return "Typical matched prices are tied";
+  if (gap === null) return "Paired median difference unavailable";
+  if (Math.abs(gap) < 0.005)
+    return "The paired median price difference is $0.00";
   const amount = formatCurrency(Math.abs(gap));
   return gap < 0
-    ? `${competitorName} median is ${amount} lower`
-    : `${benchmarkName} median is ${amount} lower`;
+    ? `${competitorName} is ${amount} lower at the paired median`
+    : `${benchmarkName} is ${amount} lower at the paired median`;
 }
 
 export function ComparableCohortExplorer({
@@ -174,7 +175,7 @@ export function ComparableCohortExplorer({
             <option value="competitor_pressure">
               Competitor lower-price share
             </option>
-            <option value="gap">Largest typical price difference</option>
+            <option value="gap">Largest paired median difference</option>
           </select>
         </label>
       </div>

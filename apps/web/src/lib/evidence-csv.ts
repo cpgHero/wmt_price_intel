@@ -7,18 +7,25 @@ const columns = [
   "benchmark_product_id",
   "benchmark_product_name",
   "benchmark_store",
+  "raw_price_unit",
   "benchmark_price",
+  "comparison_metric",
+  "comparison_unit",
+  "benchmark_comparison_value",
   "competitor",
   "competitor_product_id",
   "competitor_product_name",
   "competitor_store",
   "competitor_price",
+  "competitor_comparison_value",
   "competitor_minus_benchmark",
+  "comparison_gap",
 ] as const;
 
 function csvCell(value: unknown) {
   const raw = value === null || value === undefined ? "" : String(value);
-  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  const safe =
+    typeof value === "string" && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return `"${safe.replaceAll('"', '""')}"`;
 }
 

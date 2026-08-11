@@ -78,9 +78,9 @@ describe("comparable cohort presentation model", () => {
         "benchmark lower": "59.6%",
         "competitor lower": "40.4%",
         parity: "0.0%",
-        "benchmark median": "$4.00",
-        "competitor median": "$4.90",
-        "competitor - benchmark gap": "$0.90",
+        "benchmark marginal median": "$4.00",
+        "competitor marginal median": "$4.90",
+        "paired median gap": "$0.90",
         "dominant outcome": "Benchmark Lower",
       },
     ]);

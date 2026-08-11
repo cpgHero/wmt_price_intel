@@ -34,10 +34,14 @@ import {
   displayValue,
 } from "@/lib/presentation";
 import {
+  comparisonBasisDescription,
   compactMetricName,
+  formatPriceForBasis,
   formatMetric,
+  governedOutcomeCounts,
   groupReportSections,
   metricBarWidth,
+  priceUnitLabel,
   primaryComparisonRows,
 } from "@/lib/report-presentation";
 
@@ -347,15 +351,25 @@ function BlueprintAnalysisWorkspace({
         (scorecard) => scorecard.competitor_id === selectedRetailer.id,
       )
     : reportView.retailer_scorecards;
+  const selectedBasis =
+    reportView.comparison_bases.find(
+      (basis) => basis.profile_id === selectedLens,
+    ) ?? null;
   const scopedDecisions = scopeRetailerRows(
     reportView.product_decisions ?? [],
     selectedRetailer,
     (row) => row.competitor,
+  ).filter(
+    (row) =>
+      !selectedLens || !row.profile_id || row.profile_id === selectedLens,
   );
   const scopedPoints = scopeRetailerRows(
     reportView.map_points ?? [],
     selectedRetailer,
     (row) => row.competitor,
+  ).filter(
+    (row) =>
+      !selectedLens || !row.profile_id || row.profile_id === selectedLens,
   );
   const scopedHighlights = scopeReferenceAndRetailerRows(
     reportView.product_highlights ?? [],
@@ -507,6 +521,7 @@ function BlueprintAnalysisWorkspace({
                 points={scopedPoints}
                 decisions={scopedDecisions}
                 coverageRows={primaryComparisons}
+                comparisonBasis={selectedBasis}
               />
             ) : null}
             {activeGroup === "products" && scopedHighlights.length ? (
@@ -518,6 +533,7 @@ function BlueprintAnalysisWorkspace({
                 benchmarkRetailer={reportView.benchmark_retailer}
                 rows={scopedDecisions}
                 title="Product-level price evidence"
+                comparisonBasis={selectedBasis}
                 onReviewMatch={reviewDecision}
               />
             ) : null}
@@ -543,6 +559,7 @@ function BlueprintAnalysisWorkspace({
                           benchmarkRetailer={reportView.benchmark_retailer}
                           rows={scopedDecisions.slice(0, 6)}
                           title="Products changing the competitive picture"
+                          comparisonBasis={selectedBasis}
                           onReviewMatch={reviewDecision}
                         />
                       ) : null}
@@ -1262,14 +1279,14 @@ function RetailerScorecardPanel({
           ? `${rows[0].competitor} scorecard`
           : "Retailer scorecard"
       }
-      note={`One strict exact-package view per competitor. ${benchmark.name} is the named reference retailer; shares and price gaps use the same deterministic comparison contract throughout the report.`}
+      note={`Each row names its governed Product Pack comparison basis. Lower-price shares include ${benchmark.name}, the competitor, and parity; the price-position statement uses the paired median gap.`}
     >
       <div className="retailer-scorecard-table">
         <div className="retailer-scorecard-head">
           <span>Competitor</span>
           <span>Matched evidence</span>
           <span>Lower-price share</span>
-          <span>Typical price position</span>
+          <span>Paired median price position</span>
           <span>Status</span>
         </div>
         {ranked.map((row) => (
@@ -1277,6 +1294,10 @@ function RetailerScorecardPanel({
             <button type="button" onClick={() => onSelect(row.competitor_id)}>
               <strong>{row.competitor}</strong>
               <span>{row.comparison_lens}</span>
+              <small>
+                {displayLabel(row.comparison_metric)} ·{" "}
+                {priceUnitLabel(row.price_unit)} · {displayLabel(row.geography)}
+              </small>
             </button>
             <div>
               <strong>{(row.matches ?? 0).toLocaleString()}</strong>
@@ -1312,12 +1333,28 @@ function RetailerScorecardPanel({
                   }}
                 />
               </i>
+              <span>
+                Parity
+                <b>{formatScorecardRate(row.parity_rate)}</b>
+              </span>
+              <i>
+                <b
+                  className="parity"
+                  style={{
+                    width: `${Math.max((row.parity_rate ?? 0) * 100, 1)}%`,
+                  }}
+                />
+              </i>
             </div>
             <strong className="retailer-price-position">
               {row.price_position}
             </strong>
-            <span className={`retailer-score-status ${row.status}`}>
-              {row.status === "ready" ? "Ready" : "Limited evidence"}
+            <span
+              className={`retailer-score-status ${row.status}`}
+              title={row.readiness_reason}
+            >
+              <b>{row.status === "ready" ? "Ready" : "Limited evidence"}</b>
+              <small>{row.readiness_reason}</small>
             </span>
           </div>
         ))}
@@ -1517,33 +1554,48 @@ function ProductDecisionBoard({
   benchmarkRetailer,
   rows,
   title,
+  comparisonBasis,
   onReviewMatch,
 }: Readonly<{
   analysisId: string;
   benchmarkRetailer: string;
   rows: ProductDecision[];
   title: string;
+  comparisonBasis: AnalysisReportView["comparison_bases"][number] | null;
   onReviewMatch: (decision: ProductDecision) => void;
 }>) {
   const [selected, setSelected] = useState<ProductDecision | null>(null);
   return (
     <Section
       title={title}
-      note="Each card names the exact product pair and median matched prices. Search observations control price and store evidence; PDP data supplies identity, attributes, and imagery."
+      note={`Each card states its comparison unit and separates directional share from the paired median gap. ${comparisonBasisDescription(comparisonBasis)}. Search controls price and location; PDP supplies identity, attributes, and imagery.`}
     >
       <div className="product-decision-grid">
         {rows.map((row) => {
           const competitor = displayLabel(row.competitor);
-          const difference = Math.abs(row.median_gap).toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-          });
+          const parityShare = row.matches ? row.parity / row.matches : 0;
+          const dominantShare =
+            row.priority === "attention"
+              ? row.competitor_lower_share
+              : row.priority === "protect"
+                ? row.benchmark_lower_share
+                : parityShare;
           const position =
+            row.priority === "attention"
+              ? `${competitor} is lower in ${formatScorecardRate(dominantShare)} of matched observations`
+              : row.priority === "protect"
+                ? `${displayLabel(benchmarkRetailer)} is lower in ${formatScorecardRate(dominantShare)} of matched observations`
+                : `Price parity in ${formatScorecardRate(dominantShare)} of matched observations`;
+          const gap = formatPriceForBasis(
+            Math.abs(row.median_gap),
+            comparisonBasis?.price_unit,
+          );
+          const gapPosition =
             row.median_gap < 0
-              ? `${competitor} is ${difference} lower at the median match`
+              ? `${competitor} is ${gap} lower at the paired median`
               : row.median_gap > 0
-                ? `${displayLabel(benchmarkRetailer)} is ${difference} lower at the median match`
-                : "Median matched prices are tied";
+                ? `${displayLabel(benchmarkRetailer)} is ${gap} lower at the paired median`
+                : "Paired median price difference: $0.00";
           const evidence = row.evidence_summary;
           return (
             <button
@@ -1578,16 +1630,27 @@ function ProductDecisionBoard({
                 <div className="product-price-pair">
                   <span>
                     {displayLabel(benchmarkRetailer)}
-                    <b>{formatCurrency(row.median_benchmark_price)}</b>
+                    <b>
+                      {formatPriceForBasis(
+                        row.median_benchmark_price,
+                        comparisonBasis?.price_unit,
+                      )}
+                    </b>
                   </span>
                   <span>
                     {competitor}
-                    <b>{formatCurrency(row.median_competitor_price)}</b>
+                    <b>
+                      {formatPriceForBasis(
+                        row.median_competitor_price,
+                        comparisonBasis?.price_unit,
+                      )}
+                    </b>
                   </span>
                 </div>
                 <strong className="product-decision-conclusion">
                   {position}
                 </strong>
+                <p className="product-decision-statistic">{gapPosition}</p>
                 <p>
                   {evidence?.benchmark_store_observations
                     ? `${evidence.benchmark_store_observations.toLocaleString()} observed benchmark stores across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} matched ZIP markets.`
@@ -1607,6 +1670,7 @@ function ProductDecisionBoard({
           analysisId={analysisId}
           benchmarkRetailer={benchmarkRetailer}
           decision={selected}
+          comparisonBasis={comparisonBasis}
           onClose={() => setSelected(null)}
           onReviewMatch={() => onReviewMatch(selected)}
         />
@@ -1681,12 +1745,14 @@ function ProductEvidenceDrawer({
   analysisId,
   benchmarkRetailer,
   decision,
+  comparisonBasis,
   onClose,
   onReviewMatch,
 }: Readonly<{
   analysisId: string;
   benchmarkRetailer: string;
   decision: ProductDecision;
+  comparisonBasis: AnalysisReportView["comparison_bases"][number] | null;
   onClose: () => void;
   onReviewMatch: () => void;
 }>) {
@@ -1757,83 +1823,188 @@ function ProductEvidenceDrawer({
           <p className="drawer-status">Loading exact store evidence…</p>
         ) : null}
         {error ? <p className="drawer-status error">{error}</p> : null}
-        {evidence ? (
-          <>
-            <div className="evidence-summary-grid">
-              <EvidenceStat
-                label="Benchmark stores compared"
-                value={evidence.summary.benchmark_store_observations ?? 0}
-              />
-              <EvidenceStat
-                label={`${displayLabel(decision.competitor)} lower`}
-                value={evidence.summary.benchmark_stores_undercut ?? 0}
-              />
-              <EvidenceStat
-                label={`${displayLabel(benchmarkRetailer)} lower`}
-                value={evidence.summary.benchmark_stores_lower ?? 0}
-              />
-              <EvidenceStat
-                label="Matched ZIP markets"
-                value={evidence.summary.matched_zip_markets ?? 0}
-              />
-            </div>
-            <div className="evidence-toolbar">
-              <p>{evidence.comparison_grain}</p>
-              <span>
-                <button type="button" onClick={onReviewMatch}>
-                  Review or change this match
-                </button>
-                <a
-                  href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
-                  download
-                >
-                  Download store evidence (.csv)
-                </a>
-              </span>
-            </div>
-            <div className="evidence-table-wrap">
-              <table className="evidence-table">
-                <thead>
-                  <tr>
-                    <th>Outcome</th>
-                    <th>ZIP</th>
-                    <th>{displayLabel(benchmarkRetailer)} store</th>
-                    <th>{displayLabel(benchmarkRetailer)} price</th>
-                    <th>{displayLabel(decision.competitor)} store</th>
-                    <th>{displayLabel(decision.competitor)} price</th>
-                    <th>Difference</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {evidence.rows.map((row) => (
-                    <tr key={row.id}>
-                      <td>
-                        <span className={`outcome-pill ${row.outcome}`}>
-                          {row.outcome === "competitor_lower"
-                            ? `${displayLabel(decision.competitor)} lower`
-                            : row.outcome === "benchmark_lower"
-                              ? `${displayLabel(benchmarkRetailer)} lower`
-                              : "Parity"}
-                        </span>
-                      </td>
-                      <td>{row.zipcode}</td>
-                      <td>{row.benchmark_store ?? "ZIP-level"}</td>
-                      <td>{formatCurrency(row.benchmark_price)}</td>
-                      <td>{row.competitor_store ?? "ZIP-level"}</td>
-                      <td>{formatCurrency(row.competitor_price)}</td>
-                      <td>{formatCurrency(row.competitor_minus_benchmark)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="evidence-method-note">
-              Search observations are authoritative for price and location. Each
-              benchmark store is compared with the lowest observed price for
-              this exact competitor product in the same ZIP.
-            </p>
-          </>
-        ) : null}
+        {evidence
+          ? (() => {
+              const comparisonMetric =
+                evidence.comparison_metric ??
+                comparisonBasis?.comparison_metric ??
+                decision.comparison_metric ??
+                "package_price";
+              const comparisonUnit =
+                evidence.comparison_unit ??
+                comparisonBasis?.price_unit ??
+                "USD/package";
+              const normalizedEvidence = comparisonMetric !== "package_price";
+              return (
+                <>
+                  <div className="evidence-basis-bridge">
+                    <div>
+                      <small>Analytical comparison</small>
+                      <strong>
+                        {comparisonBasisDescription(comparisonBasis)}
+                      </strong>
+                      <span>
+                        Card medians: {displayLabel(benchmarkRetailer)}{" "}
+                        {formatPriceForBasis(
+                          decision.median_benchmark_price,
+                          comparisonUnit,
+                        )}{" "}
+                        · {displayLabel(decision.competitor)}{" "}
+                        {formatPriceForBasis(
+                          decision.median_competitor_price,
+                          comparisonUnit,
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <small>Paired median gap</small>
+                      <strong>
+                        {formatPriceForBasis(
+                          decision.median_gap,
+                          comparisonUnit,
+                        )}
+                      </strong>
+                      <span>
+                        Competitor minus {displayLabel(benchmarkRetailer)}
+                      </span>
+                    </div>
+                    <div>
+                      <small>Store evidence below</small>
+                      <strong>
+                        {normalizedEvidence
+                          ? "Package price + normalized comparison"
+                          : "Package-price comparison"}
+                      </strong>
+                      <span>
+                        All price fields come from retailer Search results.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="evidence-summary-grid">
+                    <EvidenceStat
+                      label="Benchmark stores compared"
+                      value={evidence.summary.benchmark_store_observations ?? 0}
+                    />
+                    <EvidenceStat
+                      label={`${displayLabel(decision.competitor)} lower`}
+                      value={evidence.summary.benchmark_stores_undercut ?? 0}
+                    />
+                    <EvidenceStat
+                      label={`${displayLabel(benchmarkRetailer)} lower`}
+                      value={evidence.summary.benchmark_stores_lower ?? 0}
+                    />
+                    <EvidenceStat
+                      label="Matched ZIP markets"
+                      value={evidence.summary.matched_zip_markets ?? 0}
+                    />
+                  </div>
+                  <div className="evidence-toolbar">
+                    <p>
+                      {evidence.comparison_grain} · outcomes use{" "}
+                      {displayLabel(comparisonMetric)} (
+                      {priceUnitLabel(comparisonUnit)})
+                    </p>
+                    <span>
+                      <button type="button" onClick={onReviewMatch}>
+                        Review or change this match
+                      </button>
+                      <a
+                        href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
+                        download
+                      >
+                        Download store evidence (.csv)
+                      </a>
+                    </span>
+                  </div>
+                  <div className="evidence-table-wrap">
+                    <table className="evidence-table">
+                      <thead>
+                        <tr>
+                          <th>Outcome</th>
+                          <th>ZIP</th>
+                          <th>{displayLabel(benchmarkRetailer)} store</th>
+                          <th>
+                            {displayLabel(benchmarkRetailer)} package price
+                          </th>
+                          {normalizedEvidence ? (
+                            <th>
+                              {displayLabel(benchmarkRetailer)} comparison value
+                            </th>
+                          ) : null}
+                          <th>{displayLabel(decision.competitor)} store</th>
+                          <th>
+                            {displayLabel(decision.competitor)} package price
+                          </th>
+                          {normalizedEvidence ? (
+                            <th>
+                              {displayLabel(decision.competitor)} comparison
+                              value
+                            </th>
+                          ) : null}
+                          <th>
+                            Paired difference ({priceUnitLabel(comparisonUnit)})
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {evidence.rows.map((row) => (
+                          <tr key={row.id}>
+                            <td>
+                              <span className={`outcome-pill ${row.outcome}`}>
+                                {row.outcome === "competitor_lower"
+                                  ? `${displayLabel(decision.competitor)} lower`
+                                  : row.outcome === "benchmark_lower"
+                                    ? `${displayLabel(benchmarkRetailer)} lower`
+                                    : "Parity"}
+                              </span>
+                            </td>
+                            <td>{row.zipcode}</td>
+                            <td>{row.benchmark_store ?? "ZIP-level"}</td>
+                            <td>{formatCurrency(row.benchmark_price)}</td>
+                            {normalizedEvidence ? (
+                              <td>
+                                {formatPriceForBasis(
+                                  row.benchmark_comparison_value ??
+                                    row.benchmark_price,
+                                  comparisonUnit,
+                                )}
+                              </td>
+                            ) : null}
+                            <td>{row.competitor_store ?? "ZIP-level"}</td>
+                            <td>{formatCurrency(row.competitor_price)}</td>
+                            {normalizedEvidence ? (
+                              <td>
+                                {formatPriceForBasis(
+                                  row.competitor_comparison_value ??
+                                    row.competitor_price,
+                                  comparisonUnit,
+                                )}
+                              </td>
+                            ) : null}
+                            <td>
+                              {formatPriceForBasis(
+                                row.comparison_gap ??
+                                  row.competitor_minus_benchmark,
+                                comparisonUnit,
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="evidence-method-note">
+                    Search observations are authoritative for price and
+                    location. Each benchmark store is compared with the lowest
+                    observed {priceUnitLabel(comparisonUnit)} value for this
+                    exact competitor product in the same ZIP. Package prices
+                    remain visible for reconciliation; the outcome and paired
+                    difference use the stated analytical comparison value.
+                  </p>
+                </>
+              );
+            })()
+          : null}
       </aside>
     </div>
   );
@@ -1898,11 +2069,15 @@ function CompetitivePositionChart({
       row,
       competitorRate: parseRate(row["competitor lower"]),
       benchmarkRate: parseRate(row["benchmark lower"]),
+      parityRate: parseRate(row.parity),
       matches: parseCount(row.matches),
       geographies: parseCount(row["matched geographies"]),
     }))
     .filter(
-      (item) => item.competitorRate !== null || item.benchmarkRate !== null,
+      (item) =>
+        item.competitorRate !== null ||
+        item.benchmarkRate !== null ||
+        item.parityRate !== null,
     )
     .sort((left, right) => right.matches - left.matches)
     .slice(0, 8);
@@ -1913,19 +2088,27 @@ function CompetitivePositionChart({
         <div>
           <strong>Lower-price share</strong>
           <span>
-            Strict comparable-package outcomes with market coverage and typical
+            Complete directional outcomes with market coverage and paired median
             price difference
           </span>
         </div>
         <div className="chart-legend" aria-label="Chart legend">
           <span className="benchmark">{displayLabel(benchmarkRetailer)}</span>
           <span className="competitor">Competitor</span>
+          <span className="parity">Parity</span>
         </div>
       </figcaption>
       <div className="comparison-chart-body">
         {chartRows.map(
           (
-            { row, benchmarkRate, competitorRate, matches, geographies },
+            {
+              row,
+              benchmarkRate,
+              competitorRate,
+              parityRate,
+              matches,
+              geographies,
+            },
             index,
           ) => (
             <div className="comparison-chart-row" key={String(row.id ?? index)}>
@@ -1946,8 +2129,9 @@ function CompetitivePositionChart({
                   {geographies > 0
                     ? ` · ${geographies.toLocaleString()} geographies`
                     : ""}
-                  {row["competitor - benchmark gap"]
-                    ? ` · typical difference ${displayValue(row["competitor - benchmark gap"])}`
+                  {(row["paired median gap"] ??
+                  row["competitor - benchmark gap"])
+                    ? ` · paired median gap ${displayValue(row["paired median gap"] ?? row["competitor - benchmark gap"])}`
                     : ""}
                 </span>
               </div>
@@ -1978,6 +2162,17 @@ function CompetitivePositionChart({
                       : `${competitorRate.toFixed(1)}%`}
                   </span>
                 </div>
+                <div>
+                  <i>
+                    <b
+                      className="parity"
+                      style={{ width: `${Math.max(parityRate ?? 0, 1)}%` }}
+                    />
+                  </i>
+                  <span>
+                    {parityRate === null ? "—" : `${parityRate.toFixed(1)}%`}
+                  </span>
+                </div>
               </div>
             </div>
           ),
@@ -1985,7 +2180,8 @@ function CompetitivePositionChart({
       </div>
       <p className="chart-note">
         One retained lowest-price observation per matched ZIP and configured
-        package. Product cards provide the store-level supporting evidence.
+        comparison basis. Product cards provide the store-level supporting
+        evidence.
       </p>
     </figure>
   );
@@ -2097,11 +2293,13 @@ function AnalysisMap({
   points,
   decisions,
   coverageRows,
+  comparisonBasis,
 }: Readonly<{
   benchmarkRetailer: string;
   points: MapPoint[];
   decisions: ProductDecision[];
   coverageRows: JsonObject[];
+  comparisonBasis: AnalysisReportView["comparison_bases"][number] | null;
 }>) {
   const products = Array.from(
     new Map(
@@ -2116,7 +2314,7 @@ function AnalysisMap({
   const [selectedProduct, setSelectedProduct] = useState("all");
   const [selectedOutcome, setSelectedOutcome] = useState("all");
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
-  const positioned = useMemo(
+  const displayPopulation = useMemo(
     () =>
       points
         .filter(
@@ -2128,13 +2326,20 @@ function AnalysisMap({
             point.longitude >= -125 &&
             point.longitude <= -66 &&
             (selectedProduct === "all" ||
-              point.benchmark_product_id === selectedProduct) &&
-            (selectedOutcome === "all" || point.outcome === selectedOutcome),
+              point.benchmark_product_id === selectedProduct),
         )
         .slice(0, 3000),
-    [points, selectedOutcome, selectedProduct],
+    [points, selectedProduct],
   );
-  const outcomeCounts = positioned.reduce(
+  const positioned = useMemo(
+    () =>
+      displayPopulation.filter(
+        (point) =>
+          selectedOutcome === "all" || point.outcome === selectedOutcome,
+      ),
+    [displayPopulation, selectedOutcome],
+  );
+  const displayOutcomeCounts = displayPopulation.reduce(
     (counts, point) => {
       const outcome = point.outcome ?? "parity";
       counts[outcome] = (counts[outcome] ?? 0) + (point.matches ?? 1);
@@ -2142,6 +2347,18 @@ function AnalysisMap({
     },
     {} as Record<string, number>,
   );
+  const governedCounts = governedOutcomeCounts(decisions, selectedProduct);
+  const outcomeCounts = governedCounts.total
+    ? governedCounts
+    : {
+        benchmark_lower: displayOutcomeCounts.benchmark_lower ?? 0,
+        competitor_lower: displayOutcomeCounts.competitor_lower ?? 0,
+        parity: displayOutcomeCounts.parity ?? 0,
+        total: Object.values(displayOutcomeCounts).reduce(
+          (total, value) => total + value,
+          0,
+        ),
+      };
   const clusters = useMemo(() => {
     const grouped = new Map<
       string,
@@ -2172,7 +2389,7 @@ function AnalysisMap({
   return (
     <Section
       title={`Where ${displayLabel(benchmarkRetailer)} products win and lose`}
-      note="Filter the map by product or outcome. State boundaries provide geographic context; each plotted cluster is tied to retained search-price evidence."
+      note={`Outcome totals use the full governed product-decision population. Plotted points are a deterministic browser-safe display sample. ${comparisonBasisDescription(comparisonBasis)}.`}
     >
       <div className="map-controls">
         <label>
@@ -2218,6 +2435,14 @@ function AnalysisMap({
             Parity · {(outcomeCounts.parity ?? 0).toLocaleString()}
           </span>
         </div>
+        <p className="map-population-note">
+          Full governed population: {outcomeCounts.total.toLocaleString()}{" "}
+          matched observations · display sample:{" "}
+          {displayPopulation.length.toLocaleString()} map points
+          {selectedOutcome === "all"
+            ? ""
+            : ` · ${positioned.length.toLocaleString()} points visible for this outcome`}
+        </p>
       </div>
       <div className="map-stage">
         <figure className="analysis-map">
@@ -2259,8 +2484,11 @@ function AnalysisMap({
             </g>
           </svg>
           <figcaption>
-            Circle size reflects nearby matched observations. Click a point for
-            its product, ZIP, retailer, and price difference.
+            Circle size reflects nearby sampled observations. Click a point for
+            its product, ZIP, retailer, and{" "}
+            {priceUnitLabel(comparisonBasis?.price_unit)}
+            price difference. Legend and KPI totals remain full-population
+            counts.
           </figcaption>
         </figure>
         <aside className="map-insight-rail">
@@ -2278,7 +2506,14 @@ function AnalysisMap({
               </strong>
             </div>
           )}
-          <EvidenceStat label="Mapped observations" value={positioned.length} />
+          <EvidenceStat
+            label="Full governed observations"
+            value={outcomeCounts.total}
+          />
+          <EvidenceStat
+            label="Map points in display sample"
+            value={displayPopulation.length}
+          />
           <EvidenceStat
             label="Competitor lower"
             value={outcomeCounts.competitor_lower ?? 0}
@@ -2286,6 +2521,10 @@ function AnalysisMap({
           <EvidenceStat
             label={`${displayLabel(benchmarkRetailer)} lower`}
             value={outcomeCounts.benchmark_lower ?? 0}
+          />
+          <EvidenceStat
+            label="Price parity"
+            value={outcomeCounts.parity ?? 0}
           />
           {selectedPoint ? (
             <div className="map-point-detail">
@@ -2322,7 +2561,9 @@ function SegmentPositionMatrix({
       benchmarkRate: parseRate(row["benchmark lower"]),
       competitorRate: parseRate(row["competitor lower"]),
       matches: parseCount(row.matches),
-      gap: displayValue(row["competitor - benchmark gap"]),
+      gap: displayValue(
+        row["paired median gap"] ?? row["competitor - benchmark gap"],
+      ),
     }))
     .filter(
       (item) => item.benchmarkRate !== null || item.competitorRate !== null,
@@ -2334,7 +2575,7 @@ function SegmentPositionMatrix({
         <span>Comparable product segment</span>
         <span>Lower-price leader</span>
         <span>Matched evidence</span>
-        <span>Typical difference</span>
+        <span>Paired median difference</span>
       </div>
       {matrix
         .slice(0, 16)

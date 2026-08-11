@@ -90,6 +90,13 @@ export interface ProfileEvidence {
   matches?: number | null;
   geographies?: number | null;
   median_gap?: number | null;
+  benchmark_median?: number | null;
+  competitor_median?: number | null;
+  price_unit?: string;
+  price_source?: "search";
+  benchmark_median_statistic?: "marginal_median";
+  competitor_median_statistic?: "marginal_median";
+  median_gap_statistic?: "paired_median_gap";
   match_attributes: {
     [k: string]: unknown;
   };

@@ -23,13 +23,19 @@ function evidence(): ProductEvidenceResponse {
         benchmark_product_id: "123",
         benchmark_product_name: '=unsafe "name"',
         benchmark_store: "0042",
+        raw_price_unit: "USD/package",
         benchmark_price: 5.99,
+        comparison_metric: "price_per_lb",
+        comparison_unit: "USD/lb",
+        benchmark_comparison_value: 2.4,
         competitor: "aldi_us",
         competitor_product_id: "456",
         competitor_product_name: "Safe name",
         competitor_store: "475-001",
         competitor_price: 4.99,
+        competitor_comparison_value: 2.8,
         competitor_minus_benchmark: -1,
+        comparison_gap: 0.4,
       },
     ],
   };
@@ -42,6 +48,9 @@ describe("productEvidenceCsv", () => {
     expect(csv).toContain('"00501"');
     expect(csv).toContain('"0042"');
     expect(csv).toContain('"\'=unsafe ""name"""');
+    expect(csv).toContain("comparison_metric,comparison_unit");
+    expect(csv).toContain('"price_per_lb","USD/lb"');
+    expect(csv).toContain('"-1","0.4"');
   });
 
   it("creates a safe download filename", () => {

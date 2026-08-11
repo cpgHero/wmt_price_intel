@@ -1,5 +1,86 @@
-import type { ReportSectionView } from "./api";
-import { displayValue } from "./presentation";
+import type {
+  AnalysisReportView,
+  ProductDecision,
+  ReportSectionView,
+} from "./api";
+import { displayLabel, displayValue } from "./presentation";
+
+export type ComparisonBasis = AnalysisReportView["comparison_bases"][number];
+
+const priceUnitNames: Record<string, { short: string; long: string }> = {
+  package: { short: "package", long: "per package" },
+  lb: { short: "lb", long: "per pound" },
+  pound: { short: "lb", long: "per pound" },
+  gallon: { short: "gal", long: "per gallon" },
+  dozen: { short: "dozen", long: "per dozen" },
+  ounce: { short: "oz", long: "per ounce" },
+  "fluid ounce": { short: "fl oz", long: "per fluid ounce" },
+  count: { short: "count", long: "per count" },
+  unit: { short: "unit", long: "per unit" },
+};
+
+function priceUnitToken(priceUnit: string | null | undefined) {
+  return (priceUnit ?? "USD/package").replace(/^USD\//, "").trim();
+}
+
+export function priceUnitLabel(
+  priceUnit: string | null | undefined,
+  style: "short" | "long" = "long",
+) {
+  const token = priceUnitToken(priceUnit);
+  return priceUnitNames[token]?.[style] ?? `per ${token}`;
+}
+
+export function formatPriceForBasis(
+  value: number | null | undefined,
+  priceUnit: string | null | undefined,
+) {
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
+  const amount = value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${amount} / ${priceUnitLabel(priceUnit, "short")}`;
+}
+
+export function comparisonBasisDescription(basis?: ComparisonBasis | null) {
+  if (!basis) return "Configured comparison basis";
+  return [
+    basis.label,
+    displayLabel(basis.comparison_metric),
+    priceUnitLabel(basis.price_unit),
+    displayLabel(basis.geography),
+  ].join(" · ");
+}
+
+export function governedOutcomeCounts(
+  decisions: ProductDecision[],
+  benchmarkProductId = "all",
+) {
+  const visible = decisions.filter(
+    (decision) =>
+      benchmarkProductId === "all" ||
+      decision.benchmark_product_id === benchmarkProductId,
+  );
+  return visible.reduce(
+    (counts, decision) => {
+      const benchmarkLower = counts.benchmark_lower + decision.benchmark_lower;
+      const competitorLower =
+        counts.competitor_lower + decision.competitor_lower;
+      const parity = counts.parity + decision.parity;
+      return {
+        benchmark_lower: benchmarkLower,
+        competitor_lower: competitorLower,
+        parity,
+        total: benchmarkLower + competitorLower + parity,
+      };
+    },
+    { benchmark_lower: 0, competitor_lower: 0, parity: 0, total: 0 },
+  );
+}
 
 export const reportGroups = [
   { id: "overview", label: "Overview" },
@@ -135,7 +216,7 @@ export function compactMetricName(
     benchmark_lower_rate: `${benchmarkRetailer} lower rate`,
     competitor_lower_rate: `${competitor} lower rate`,
     parity_rate: "Parity rate",
-    median_gap: "Typical price difference",
+    median_gap: "Paired median price difference",
   };
   const segment = rawSegment.replace(/ \/ standard$/i, "");
   return segment === "All comparable items"

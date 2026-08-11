@@ -133,7 +133,14 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert view["comparison_bases"][0]["profile_id"] == "strict_exact_package"
     assert view["retailer_scorecards"][0]["basis_status"] == "preferred"
     assert view["retailer_scorecards"][0]["dominant_outcome"] == "competitor_lower"
-    assert view["report_readiness"]["status"] == "ready"
+    assert view["retailer_scorecards"][0]["comparison_metric"] == "package_price"
+    assert view["retailer_scorecards"][0]["price_unit"] == "USD/package"
+    assert view["retailer_scorecards"][0]["median_gap_statistic"] == "paired_median_gap"
+    assert view["retailer_scorecards"][0]["minimum_observations"] == 25
+    assert view["retailer_scorecards"][0]["minimum_geographies"] == 25
+    assert view["retailer_scorecards"][0]["status"] == "limited_evidence"
+    assert "0 of 25 required geographies" in view["retailer_scorecards"][0]["readiness_reason"]
+    assert view["report_readiness"]["status"] == "limited"
     assert view["retailer_scorecards"][0]["matches"] == 9049
     assert view["retailer_scorecards"][0]["competitor_lower_rate"] == pytest.approx(0.8414189413)
     assert view["retailer_scorecards"][1]["benchmark_lower_rate"] == pytest.approx(0.9363920751)
@@ -194,7 +201,7 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         shared_strings = archive.read("xl/sharedStrings.xml")
         assert b"Reference Retailer" in shared_strings
         assert b"Competitor Lower Share" in shared_strings
-        assert b"Typical Price Position" in shared_strings
+        assert b"Paired Median Price Position" in shared_strings
 
     email = BytesParser(policy=policy.default).parsebytes(
         renderer.render(result, "leadership_email").body
@@ -256,7 +263,7 @@ def test_sparse_suppressed_product_decisions_warn_without_blocking_report() -> N
         },
     )
 
-    assert view["report_readiness"]["status"] == "ready"
+    assert view["report_readiness"]["status"] == "limited"
     assert view["report_readiness"]["blocking_reasons"] == []
     assert view["report_readiness"]["warnings"][0]["code"] == (
         "sparse_product_decisions_suppressed"
@@ -346,7 +353,7 @@ def test_comparison_table_projects_matched_geography_count() -> None:
             "value": 41,
             "unit": "locations",
             "method": "distinct exact-match geography keys",
-            "evidence_ref": "evidence.matches.aldi",
+            "evidence_ref": "evidence-exact-aldi",
         }
     )
     result["comparisons"][0]["metric_refs"].append(metric_id)
@@ -414,6 +421,58 @@ def test_retailer_scorecard_contract_scales_to_thirteen_competitors() -> None:
     assert all(row["benchmark_lower_rate"] == 0.6 for row in scorecards)
     assert all(row["competitor_lower_rate"] == 0.4 for row in scorecards)
     assert all(row["parity_rate"] == pytest.approx(0.0) for row in scorecards)
+    assert all(row["status"] == "limited_evidence" for row in scorecards)
+    assert all("required geographies" in row["readiness_reason"] for row in scorecards)
+
+
+def test_retailer_scorecard_is_limited_when_outcome_shares_do_not_reconcile() -> None:
+    result = _result()
+    result["metrics"].append(
+        {
+            "metric_id": "aldi-benchmark-lower-rate",
+            "name": "ALDI benchmark lower rate",
+            "value": 0.2,
+            "unit": "rate",
+            "method": "test fixture",
+            "evidence_ref": "evidence-exact-aldi",
+        }
+    )
+    result["comparisons"][0]["metric_refs"].append("aldi-benchmark-lower-rate")
+    result["metrics"].append(
+        {
+            "metric_id": "aldi-parity-rate",
+            "name": "ALDI parity rate",
+            "value": 0.25,
+            "unit": "rate",
+            "method": "test fixture",
+            "evidence_ref": "evidence-exact-aldi",
+        }
+    )
+    result["comparisons"][0]["metric_refs"].append("aldi-parity-rate")
+    result["metrics"].append(
+        {
+            "metric_id": "aldi-unique-geographies",
+            "name": "ALDI unique geographies",
+            "value": 100,
+            "unit": "locations",
+            "method": "test fixture",
+            "evidence_ref": "evidence-exact-aldi",
+        }
+    )
+    result["comparisons"][0]["metric_refs"].append("aldi-unique-geographies")
+    product_pack = json.loads(
+        (REPOSITORY_ROOT / "product-packs/fresh_ground_beef.json").read_text()
+    )
+
+    scorecard = ReportProjector().retailer_scorecards(result, product_pack)[0]
+
+    assert scorecard["status"] == "limited_evidence"
+    assert "outcome shares total" in scorecard["readiness_reason"]
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+    assert view["report_readiness"]["status"] == "review_required"
+    assert view["report_readiness"]["blocking_reasons"][0]["code"] == (
+        "price_outcomes_do_not_reconcile"
+    )
 
 
 def test_leadership_html_renders_analysis_linked_product_map() -> None:

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import type { ReportSectionView } from "./api";
+import type { ProductDecision, ReportSectionView } from "./api";
 import {
+  comparisonBasisDescription,
   compactMetricName,
   formatMetric,
+  formatPriceForBasis,
+  governedOutcomeCounts,
   groupReportSections,
   metricBarWidth,
+  priceUnitLabel,
   primaryComparisonRows,
 } from "./report-presentation";
 
@@ -104,8 +108,53 @@ describe("report presentation", () => {
         "Walmart (US)",
       ),
     ).toBe(
-      "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Typical price difference",
+      "ALDI · 80% lean / 20% fat / 2.25 lb / non-organic / non-grass-fed · Paired median price difference",
     );
+  });
+
+  it("formats values with the governed comparison unit", () => {
+    expect(formatPriceForBasis(3.457, "USD/package")).toBe("$3.46 / package");
+    expect(formatPriceForBasis(2.997, "USD/lb")).toBe("$3.00 / lb");
+    expect(formatPriceForBasis(4.497, "USD/dozen")).toBe("$4.50 / dozen");
+    expect(priceUnitLabel("USD/gallon")).toBe("per gallon");
+    expect(
+      comparisonBasisDescription({
+        profile_id: "milk-gallon",
+        label: "Comparable gallon",
+        geography: "exact_zip",
+        comparison_metric: "price_per_gallon",
+        price_unit: "USD/gallon",
+        package_basis: "normalized_unit",
+        availability_policy: "search_presence",
+      }),
+    ).toContain("per gallon");
+  });
+
+  it("derives full governed map outcomes from product decisions rather than sampled points", () => {
+    const decisions = [
+      {
+        benchmark_product_id: "w1",
+        matches: 100,
+        benchmark_lower: 20,
+        competitor_lower: 70,
+        parity: 10,
+      },
+      {
+        benchmark_product_id: "w2",
+        matches: 60,
+        benchmark_lower: 40,
+        competitor_lower: 15,
+        parity: 5,
+      },
+    ] as ProductDecision[];
+
+    expect(governedOutcomeCounts(decisions)).toEqual({
+      benchmark_lower: 60,
+      competitor_lower: 85,
+      parity: 15,
+      total: 160,
+    });
+    expect(governedOutcomeCounts(decisions, "w1").total).toBe(100);
   });
 
   it("selects overall exact-price rows for the executive and geography views", () => {

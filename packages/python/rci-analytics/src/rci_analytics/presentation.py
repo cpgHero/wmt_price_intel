@@ -24,6 +24,12 @@ def _money(value: Decimal) -> str:
     return f"${abs(value):,.2f}"
 
 
+def _price_unit(comparison_metric: str) -> str:
+    if comparison_metric == "package_price":
+        return "USD/package"
+    return f"USD/{comparison_metric.removeprefix('price_per_').replace('_', ' ')}"
+
+
 _LABELED_UNIT_COUNT = re.compile(
     r"(?:pack\s+of\s+(\d+)|(\d+)\s*(?:count|ct|pack(?:age)?s?))",
     flags=re.IGNORECASE,
@@ -109,11 +115,11 @@ def benchmark_product_decisions(
             else "parity"
         )
         lead = (
-            f"Competitor is typically {_money(median_gap)} higher"
+            f"Competitor is {_money(median_gap)} higher at the paired median"
             if median_gap > 0
-            else f"Competitor is typically {_money(median_gap)} lower"
+            else f"Competitor is {_money(median_gap)} lower at the paired median"
             if median_gap < 0
-            else "Typical prices are tied"
+            else "The paired median price difference is $0.00"
         )
         geography_rows: dict[str, JsonObject] = {}
         for match, benchmark, _competitor in values:
@@ -182,7 +188,7 @@ def benchmark_product_decisions(
             and abs(median_gap / benchmark_median * 100) > Decimal(str(suspicious_gap_pct))
         ):
             suppression_reasons.append(
-                "Typical price difference exceeds the Product Pack review threshold"
+                "Paired median price difference exceeds the Product Pack review threshold"
             )
         qa_status = (
             "suppressed"
@@ -400,7 +406,7 @@ def benchmark_product_evidence(
     selected_products = {
         (benchmark_retailer, str(row["benchmark_product_id"])) for row in decision_rows
     } | {(str(row["competitor"]), str(row["competitor_product_id"])) for row in decision_rows}
-    observations: dict[tuple[str, str], list[NormalizedOffer]] = {}
+    observations: dict[tuple[str, str], list[ClassifiedOffer]] = {}
     for classified in offers:
         offer = classified.offer
         key = (offer.retailer_id, offer.retailer_product_id)
@@ -411,36 +417,57 @@ def benchmark_product_evidence(
             and offer.price > 0
             and offer.zipcode
         ):
-            observations.setdefault(key, []).append(offer)
+            observations.setdefault(key, []).append(classified)
 
     evidence: dict[str, JsonObject] = {}
     for decision in decision_rows:
         decision_id = str(decision["id"])
         competitor_id = str(decision["competitor"])
+        comparison_metric = str(decision.get("comparison_metric") or "package_price")
+        comparison_unit = _price_unit(comparison_metric)
         benchmark_key = (benchmark_retailer, str(decision["benchmark_product_id"]))
         competitor_key = (competitor_id, str(decision["competitor_product_id"]))
-        benchmark_locations = _lowest_store_observations(observations.get(benchmark_key, []))
-        competitor_locations = _lowest_store_observations(observations.get(competitor_key, []))
-        competitor_by_zip: dict[str, NormalizedOffer] = {}
-        for offer in competitor_locations.values():
+        benchmark_locations = _lowest_store_observations(
+            observations.get(benchmark_key, []), comparison_metric=comparison_metric
+        )
+        competitor_locations = _lowest_store_observations(
+            observations.get(competitor_key, []), comparison_metric=comparison_metric
+        )
+        competitor_by_zip: dict[str, ClassifiedOffer] = {}
+        for classified in competitor_locations.values():
+            offer = classified.offer
             previous = competitor_by_zip.get(str(offer.zipcode))
-            if previous is None or (offer.price, offer.offer_id) < (
-                previous.price,
-                previous.offer_id,
+            value = _comparison_value(classified, comparison_metric)
+            previous_value = (
+                _comparison_value(previous, comparison_metric) if previous is not None else None
+            )
+            if value is not None and (
+                previous is None
+                or previous_value is None
+                or (value, offer.offer_id) < (previous_value, previous.offer.offer_id)
             ):
-                competitor_by_zip[str(offer.zipcode)] = offer
+                competitor_by_zip[str(offer.zipcode)] = classified
 
         rows: list[JsonObject] = []
-        for benchmark in benchmark_locations.values():
-            competitor = competitor_by_zip.get(str(benchmark.zipcode))
-            if competitor is None or benchmark.price is None or competitor.price is None:
+        for benchmark_classified in benchmark_locations.values():
+            benchmark = benchmark_classified.offer
+            competitor_classified = competitor_by_zip.get(str(benchmark.zipcode))
+            if competitor_classified is None:
                 continue
-            gap = competitor.price - benchmark.price
+            competitor = competitor_classified.offer
+            if benchmark.price is None or competitor.price is None:
+                continue
+            benchmark_value = _comparison_value(benchmark_classified, comparison_metric)
+            competitor_value = _comparison_value(competitor_classified, comparison_metric)
+            if benchmark_value is None or competitor_value is None:
+                continue
+            comparison_gap = competitor_value - benchmark_value
+            package_gap = competitor.price - benchmark.price
             outcome = (
                 "parity"
-                if abs(gap) <= parity_tolerance
+                if abs(comparison_gap) <= parity_tolerance
                 else "benchmark_lower"
-                if gap > 0
+                if comparison_gap > 0
                 else "competitor_lower"
             )
             row_seed = "|".join(
@@ -456,9 +483,12 @@ def benchmark_product_evidence(
                     "id": f"evidence-{hashlib.sha256(row_seed.encode()).hexdigest()[:24]}",
                     "decision_id": decision_id,
                     "comparison_basis": (
-                        "benchmark store vs lowest observed exact competitor product "
-                        "in the same ZIP"
+                        f"{comparison_metric} for benchmark store vs lowest observed exact "
+                        "competitor product in the same ZIP"
                     ),
+                    "comparison_metric": comparison_metric,
+                    "comparison_unit": comparison_unit,
+                    "raw_price_unit": "USD/package",
                     "zipcode": benchmark.zipcode,
                     "outcome": outcome,
                     "benchmark_retailer": benchmark_retailer,
@@ -466,6 +496,7 @@ def benchmark_product_evidence(
                     "benchmark_product_name": benchmark.title,
                     "benchmark_store": benchmark.store_number,
                     "benchmark_price": float(benchmark.price),
+                    "benchmark_comparison_value": float(benchmark_value),
                     "benchmark_latitude": benchmark.latitude,
                     "benchmark_longitude": benchmark.longitude,
                     "competitor": competitor_id,
@@ -473,13 +504,15 @@ def benchmark_product_evidence(
                     "competitor_product_name": competitor.title,
                     "competitor_store": competitor.store_number,
                     "competitor_price": float(competitor.price),
-                    "competitor_minus_benchmark": float(gap),
+                    "competitor_comparison_value": float(competitor_value),
+                    "competitor_minus_benchmark": float(package_gap),
+                    "comparison_gap": float(comparison_gap),
                 }
             )
         rows.sort(
             key=lambda row: (
                 {"competitor_lower": 0, "benchmark_lower": 1, "parity": 2}[str(row["outcome"])],
-                -abs(float(row["competitor_minus_benchmark"])),
+                -abs(float(row["comparison_gap"])),
                 str(row["zipcode"]),
                 str(row.get("benchmark_store") or ""),
             )
@@ -492,8 +525,12 @@ def benchmark_product_evidence(
         evidence[decision_id] = {
             "decision_id": decision_id,
             "comparison_grain": (
-                "one row per observed benchmark store; exact product pair; same ZIP"
+                f"one row per observed benchmark store; exact product pair; same ZIP; "
+                f"outcomes use {comparison_metric}"
             ),
+            "comparison_metric": comparison_metric,
+            "comparison_unit": comparison_unit,
+            "raw_price_unit": "USD/package",
             "price_source": "retailer search observation",
             "attribute_source": "Product Pack classification with PDP enrichment when available",
             "summary": {
@@ -526,21 +563,47 @@ def merge_product_evidence_summary(
     return merged
 
 
+def _comparison_value(
+    classified: ClassifiedOffer,
+    comparison_metric: str,
+) -> Decimal | None:
+    value = (
+        classified.offer.price
+        if comparison_metric == "package_price"
+        else classified.metrics.get(comparison_metric)
+    )
+    return value if value is not None and value > 0 else None
+
+
 def _lowest_store_observations(
-    offers: Iterable[NormalizedOffer],
-) -> dict[tuple[str, str], NormalizedOffer]:
-    selected: dict[tuple[str, str], NormalizedOffer] = {}
-    for offer in offers:
+    offers: Iterable[ClassifiedOffer],
+    *,
+    comparison_metric: str,
+) -> dict[tuple[str, str], ClassifiedOffer]:
+    selected: dict[tuple[str, str], ClassifiedOffer] = {}
+    for classified in offers:
+        offer = classified.offer
+        value = _comparison_value(classified, comparison_metric)
         if not offer.zipcode or offer.price is None or offer.price <= 0:
+            continue
+        if value is None:
             continue
         location = offer.store_number or "ZIP-level"
         key = (offer.zipcode, location)
         previous = selected.get(key)
-        if previous is None or (offer.price, offer.offer_id) < (
-            previous.price,
-            previous.offer_id,
+        previous_value = (
+            _comparison_value(previous, comparison_metric) if previous is not None else None
+        )
+        if (
+            previous is None
+            or previous_value is None
+            or (value, offer.offer_id)
+            < (
+                previous_value,
+                previous.offer.offer_id,
+            )
         ):
-            selected[key] = offer
+            selected[key] = classified
     return selected
 
 
@@ -665,7 +728,10 @@ def benchmark_product_map_points(
                 "latitude": offer.latitude,
                 "longitude": offer.longitude,
                 "value": gap,
-                "value_label": f"{outcome_label} · price difference ${abs(gap):.2f}",
+                "value_label": (
+                    f"{outcome_label} · paired difference ${abs(gap):.2f} "
+                    f"{_price_unit(match.comparison_metric).removeprefix('USD')}"
+                ),
                 "retailer": benchmark_retailer,
                 "relationship_id": relationship_id or None,
                 "profile_id": match.profile_id,

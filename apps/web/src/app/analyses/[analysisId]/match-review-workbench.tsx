@@ -16,6 +16,7 @@ import {
   rankMatchReviewConnections,
   scopeMatchReview,
 } from "@/lib/match-review-model";
+import { formatPriceForBasis, priceUnitLabel } from "@/lib/report-presentation";
 
 type Decision = "confirmed" | "rejected" | "reset";
 type StatusFilter = "all" | MatchReviewConnection["status"];
@@ -109,12 +110,6 @@ function ProductImage({
   );
 }
 
-function priceCopy(product: MatchReviewProduct) {
-  if (typeof product.price !== "number") return null;
-  const role = typeof product.role === "string" ? product.role : "";
-  return `${role.startsWith("PDP") ? "PDP reference" : "Matched search median"}: $${product.price.toFixed(2)}`;
-}
-
 function MatchBuilderProduct({
   product,
   retailerName,
@@ -162,7 +157,9 @@ function MatchBuilderProduct({
           <small>{product.brand || retailerName}</small>
           <strong>{product.name}</strong>
           <em>{product.product_id}</em>
-          {priceCopy(product) ? <b>{priceCopy(product)}</b> : null}
+          <b className="match-identity-source">
+            PDP identity · Search price evidence
+          </b>
           {crossLensMemberships.length ? (
             <span className="match-cross-lens-badges">
               {crossLensMemberships.map((membership) => (
@@ -208,7 +205,9 @@ function RelationshipProduct({
         </small>
         <strong>{product.name}</strong>
         <em>{product.product_id}</em>
-        {priceCopy(product) ? <b>{priceCopy(product)}</b> : null}
+        <b className="match-identity-source">
+          PDP identity · Search price evidence
+        </b>
       </span>
     </button>
   );
@@ -225,13 +224,15 @@ function gapCopy(
   gap: number | null | undefined,
   benchmarkName: string,
   competitorName: string,
+  priceUnit?: string,
 ) {
-  if (typeof gap !== "number") return "Price difference unavailable";
-  if (Math.abs(gap) < 0.005) return "Typical matched prices are tied";
-  const amount = `$${Math.abs(gap).toFixed(2)}`;
+  if (typeof gap !== "number")
+    return "Paired median price difference unavailable";
+  if (Math.abs(gap) < 0.005) return "Paired median price difference: $0.00";
+  const amount = formatPriceForBasis(Math.abs(gap), priceUnit);
   return gap < 0
-    ? `${competitorName} is typically ${amount} lower`
-    : `${benchmarkName} is typically ${amount} lower`;
+    ? `${competitorName} is ${amount} lower at the paired median`
+    : `${benchmarkName} is ${amount} lower at the paired median`;
 }
 
 function ProductEvidencePanel({
@@ -257,9 +258,10 @@ function ProductEvidencePanel({
           <code>{product.product_id}</code>
         </div>
       </div>
-      {priceCopy(product) ? (
-        <p className="match-price-reference">{priceCopy(product)}</p>
-      ) : null}
+      <p className="match-price-reference">
+        PDP identity evidence. Decision-facing price is shown only from matched
+        retailer Search observations.
+      </p>
       <p className="match-product-description">
         {description || "No PDP description is persisted for this product."}
       </p>
@@ -367,10 +369,39 @@ function MatchEvidenceDrawer({
               </strong>
             </div>
             <div>
-              <small>Typical price position</small>
+              <small>Paired median price position</small>
               <strong>
-                {gapCopy(evidence?.median_gap, benchmarkName, competitorName)}
+                {gapCopy(
+                  evidence?.median_gap,
+                  benchmarkName,
+                  competitorName,
+                  evidence?.price_unit,
+                )}
               </strong>
+            </div>
+            <div className="match-search-price-grid">
+              <span>
+                <small>{benchmarkName} marginal median</small>
+                <strong>
+                  {formatPriceForBasis(
+                    evidence?.benchmark_median,
+                    evidence?.price_unit,
+                  )}
+                </strong>
+              </span>
+              <span>
+                <small>{competitorName} marginal median</small>
+                <strong>
+                  {formatPriceForBasis(
+                    evidence?.competitor_median,
+                    evidence?.price_unit,
+                  )}
+                </strong>
+              </span>
+              <em>
+                Search-derived · {priceUnitLabel(evidence?.price_unit)} ·
+                medians and paired gap are distinct statistics
+              </em>
             </div>
             <p>{evidence?.rationale || selection.connection.reason}</p>
             {attributes.length ? (
@@ -999,6 +1030,7 @@ export function MatchReviewWorkbench({
                     evidence?.median_gap,
                     review.benchmark_retailer.name,
                     competitorName,
+                    evidence?.price_unit,
                   )}
                 </p>
                 <small>{eligibleLabels}</small>
