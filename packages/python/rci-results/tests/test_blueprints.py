@@ -357,6 +357,22 @@ def test_comparison_table_projects_matched_geography_count() -> None:
     )
 
     assert price_section["records"][0]["matched geographies"] == "41"
+    assert price_section["records"][0]["_matched_geographies"] == 41.0
+    assert price_section["records"][0]["_dominant_outcome"] == "competitor_lower"
+
+
+def test_report_view_exposes_product_pack_cohort_guidance() -> None:
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(_result())
+
+    assert view["product_pack"]["cohort_dimensions"] == [
+        "Lean Pct",
+        "Fat Pct",
+        "Weight Lb",
+        "Organic",
+        "Grass Fed",
+        "Premium Tier",
+    ]
+    assert view["product_pack"]["minimum_cohort_geographies"] == 25
 
 
 def test_retailer_scorecard_contract_scales_to_thirteen_competitors() -> None:

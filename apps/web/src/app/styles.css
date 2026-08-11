@@ -3611,6 +3611,358 @@ tbody tr:last-child td {
   justify-self: end;
 }
 
+/* Comparable cohort intelligence */
+.report-readiness > button,
+.cohort-explorer-header > button,
+.match-priority-callout > button {
+  background: var(--green);
+  border: 0;
+  border-radius: 9px;
+  color: white;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.65rem 0.8rem;
+}
+.cohort-explorer {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+}
+.cohort-explorer-header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.cohort-explorer-header h2,
+.cohort-explorer-header p {
+  margin: 0;
+}
+.cohort-explorer-header h2 {
+  font-size: 1.25rem;
+  margin-top: 0.2rem;
+}
+.cohort-explorer-header p {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin-top: 0.35rem;
+  max-width: 82ch;
+}
+.comparison-model-guide,
+.assortment-model-guide {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.comparison-model-guide article,
+.assortment-model-guide article {
+  align-items: start;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 0.8rem;
+}
+.assortment-model-guide article {
+  gap: 0.25rem;
+  grid-template-columns: 1fr;
+}
+.comparison-model-guide article.active,
+.assortment-model-guide article.active {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  box-shadow: inset 0 3px 0 var(--green);
+}
+.comparison-model-guide article > span {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--green);
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+}
+.comparison-model-guide article div,
+.assortment-model-guide article {
+  min-width: 0;
+}
+.comparison-model-guide small,
+.assortment-model-guide small {
+  color: var(--green);
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.comparison-model-guide strong,
+.assortment-model-guide strong {
+  display: block;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  margin-top: 0.1rem;
+}
+.comparison-model-guide p,
+.assortment-model-guide span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+  margin: 0.2rem 0 0;
+}
+.cohort-toolbar {
+  align-items: end;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-bottom: 0.9rem;
+}
+.cohort-toolbar > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.cohort-toolbar button {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 750;
+  padding: 0.45rem 0.65rem;
+}
+.cohort-toolbar button.active {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: white;
+}
+.cohort-toolbar label {
+  display: grid;
+  flex: 0 0 min(280px, 36%);
+  gap: 0.25rem;
+}
+.cohort-toolbar label span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.cohort-toolbar select {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 0.7rem;
+  padding: 0.5rem 0.6rem;
+}
+.cohort-list {
+  display: grid;
+  gap: 0.65rem;
+}
+.cohort-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 12px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns:
+    minmax(220px, 1.25fr) minmax(180px, 0.9fr) minmax(230px, 1.1fr)
+    minmax(150px, 0.7fr);
+  padding: 0.85rem;
+}
+.cohort-row.competitor_lower {
+  border-left-color: var(--amber);
+}
+.cohort-row.parity {
+  border-left-color: var(--muted);
+}
+.cohort-title,
+.cohort-outcome {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.cohort-title > span,
+.cohort-outcome > span {
+  color: var(--green);
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.cohort-title h3,
+.cohort-title p {
+  margin: 0;
+}
+.cohort-title h3 {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.cohort-title p,
+.cohort-outcome small,
+.cohort-share small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.cohort-outcome strong {
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+.cohort-outcome small.ready {
+  color: var(--green);
+}
+.cohort-outcome small.limited {
+  color: var(--amber);
+}
+.cohort-share {
+  display: grid;
+  gap: 0.42rem;
+}
+.cohort-share > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.cohort-share span {
+  color: var(--muted);
+  display: flex;
+  font-size: 0.6rem;
+  gap: 0.4rem;
+  justify-content: space-between;
+}
+.cohort-share span b {
+  color: var(--ink);
+}
+.cohort-share i {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  display: block;
+  height: 6px;
+  overflow: hidden;
+}
+.cohort-share i b {
+  background: var(--green-dark);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.cohort-share i b.competitor {
+  background: #079dcc;
+}
+.cohort-medians {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+.cohort-medians div {
+  border-left: 1px solid var(--line);
+  display: grid;
+  gap: 0.1rem;
+  padding-left: 0.65rem;
+}
+.cohort-medians dt {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+.cohort-medians dd {
+  font-size: 0.84rem;
+  font-weight: 850;
+  margin: 0;
+}
+.cohort-empty {
+  background: var(--surface-alt);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 1.25rem;
+  text-align: center;
+}
+.cohort-empty p {
+  color: var(--muted);
+  font-size: 0.7rem;
+  margin: 0.3rem 0 0;
+}
+.cohort-show-more {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 800;
+  justify-self: center;
+  padding: 0.4rem;
+}
+.cohort-explorer > footer {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+@media (max-width: 1100px) {
+  .cohort-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .report-readiness,
+  .cohort-explorer-header,
+  .cohort-toolbar,
+  .match-priority-callout {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .comparison-model-guide,
+  .assortment-model-guide,
+  .cohort-row {
+    grid-template-columns: 1fr;
+  }
+  .cohort-toolbar label {
+    flex-basis: auto;
+  }
+}
+.match-priority-callout {
+  align-items: center;
+  background: color-mix(in srgb, var(--warning-soft) 72%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--amber) 32%, var(--line));
+  border-radius: 14px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+.match-priority-callout div {
+  display: grid;
+  gap: 0.2rem;
+}
+.match-priority-callout small,
+.match-priority-badge {
+  color: var(--amber);
+  font-size: 0.6rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.match-priority-callout p {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  margin: 0;
+  max-width: 80ch;
+}
+.match-priority-badge {
+  justify-self: center;
+}
+
 /* Deterministic assortment intelligence */
 .assortment-analysis {
   display: grid;
@@ -3651,6 +4003,9 @@ tbody tr:last-child td {
 .assortment-hero aside small {
   color: #b9d7df;
 }
+.assortment-model-guide article {
+  background: var(--card);
+}
 .assortment-competitor {
   background: #fff;
   border: 1px solid #dce5ea;
@@ -3688,6 +4043,10 @@ tbody tr:last-child td {
   display: grid;
   gap: 0.2rem;
   padding: 0.85rem;
+}
+.assortment-kpis article.review {
+  background: color-mix(in srgb, var(--warning-soft) 78%, white);
+  border-color: color-mix(in srgb, var(--amber) 30%, #dce5e9);
 }
 .assortment-kpis small,
 .assortment-kpis span {
@@ -3756,6 +4115,13 @@ tbody tr:last-child td {
   color: #17313d;
   font-size: 1rem;
 }
+.assortment-lens-note {
+  color: #60727b;
+  display: block;
+  font-size: 0.61rem;
+  line-height: 1.4;
+  margin-top: 0.7rem;
+}
 .assortment-geography-card > small {
   color: #60727b;
   display: block;
@@ -3772,6 +4138,132 @@ tbody tr:last-child td {
   color: #485f6a;
   font-size: 0.7rem;
   line-height: 1.45;
+}
+.assortment-brand-grid,
+.assortment-gap-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.assortment-brand-panel,
+.assortment-gap-table {
+  border: 1px solid #dce5e9;
+  border-radius: 13px;
+  padding: 1rem;
+}
+.assortment-brand-panel > header,
+.assortment-gap-table > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.assortment-brand-panel h4,
+.assortment-gap-table h4 {
+  font-size: 0.84rem;
+  margin: 0.12rem 0 0;
+}
+.assortment-brand-panel header small,
+.assortment-gap-table header small {
+  color: #0784a4;
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.assortment-brand-panel header > strong {
+  color: #17313d;
+  font-size: 0.78rem;
+}
+.assortment-brand-bars {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+.assortment-brand-bars > div {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(150px, 0.8fr) 1fr;
+}
+.assortment-brand-bars span {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.assortment-brand-bars span b {
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assortment-brand-bars span small {
+  color: #71818a;
+  font-size: 0.58rem;
+}
+.assortment-brand-bars > div > i {
+  background: #e8eef1;
+  border-radius: 999px;
+  height: 7px;
+  overflow: hidden;
+}
+.assortment-brand-bars > div > i b {
+  background: linear-gradient(90deg, #079fc7, #47c8aa);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.assortment-regional-signals {
+  border-top: 1px solid #e4ebee;
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+}
+.assortment-regional-signals > small {
+  color: #17313d;
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+.assortment-regional-signals p {
+  color: #657780;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  margin: 0.2rem 0 0.55rem;
+}
+.assortment-regional-signals > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.assortment-regional-signals span {
+  background: #eef7f9;
+  border-radius: 999px;
+  color: #58717b;
+  font-size: 0.58rem;
+  padding: 0.35rem 0.5rem;
+}
+.assortment-regional-signals span b {
+  color: #17313d;
+  margin-right: 0.25rem;
+}
+.assortment-gap-table > div {
+  align-items: center;
+  border-top: 1px solid #e4ebee;
+  display: grid;
+  font-size: 0.64rem;
+  gap: 0.5rem;
+  grid-template-columns: 0.8fr 1fr 1fr 0.55fr;
+  padding: 0.48rem 0;
+}
+.assortment-gap-table > header + div {
+  border-top: 0;
+  color: #71818a;
+  font-size: 0.55rem;
+  font-weight: 800;
+  margin-top: 0.55rem;
+  text-transform: uppercase;
+}
+.assortment-gap-table > div b {
+  color: #0784a4;
 }
 .assortment-product-columns {
   display: grid;
@@ -3843,10 +4335,51 @@ tbody tr:last-child td {
   line-height: 1.5;
   padding: 0.75rem 0.9rem;
 }
+:root[data-theme="dark"] .assortment-competitor,
+:root[data-theme="dark"] .assortment-brand-panel,
+:root[data-theme="dark"] .assortment-gap-table,
+:root[data-theme="dark"] .assortment-product-list,
+:root[data-theme="dark"] .assortment-middle > section {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .assortment-kpis article,
+:root[data-theme="dark"] .assortment-product-list > header,
+:root[data-theme="dark"] .assortment-source-note {
+  background: var(--surface-alt);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .assortment-kpis article.review {
+  background: color-mix(in srgb, var(--warning-soft) 40%, var(--card));
+}
+:root[data-theme="dark"] .assortment-kpis strong,
+:root[data-theme="dark"] .assortment-lenses b,
+:root[data-theme="dark"] .assortment-geography-card b,
+:root[data-theme="dark"] .assortment-brand-panel header > strong,
+:root[data-theme="dark"] .assortment-regional-signals > small,
+:root[data-theme="dark"] .assortment-regional-signals span b {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .assortment-brand-bars > div > i,
+:root[data-theme="dark"] .assortment-coverage-row > b {
+  background: color-mix(in srgb, var(--muted) 20%, var(--surface-alt));
+}
+:root[data-theme="dark"] .assortment-regional-signals span {
+  background: color-mix(in srgb, var(--green) 13%, var(--surface-alt));
+  color: var(--muted);
+}
+:root[data-theme="dark"] .assortment-product-list article,
+:root[data-theme="dark"] .assortment-gap-table > div,
+:root[data-theme="dark"] .assortment-regional-signals {
+  border-color: var(--line);
+}
 @media (max-width: 980px) {
   .assortment-hero,
   .assortment-middle,
-  .assortment-product-columns {
+  .assortment-product-columns,
+  .assortment-brand-grid,
+  .assortment-gap-grid {
     grid-template-columns: 1fr;
   }
   .assortment-kpis {

@@ -373,6 +373,15 @@ class ReportProjector:
                 "recommended_charts": product_pack.get("reporting", {}).get(
                     "recommended_charts", []
                 ),
+                "cohort_dimensions": [
+                    str(value).replace("_", " ").title()
+                    for value in product_pack.get("reporting", {}).get("headline_segments", [])
+                ],
+                "minimum_cohort_geographies": int(
+                    product_pack.get("reporting", {})
+                    .get("decision_rules", {})
+                    .get("minimum_geographies", 1)
+                ),
             },
             "blueprint": {"id": blueprint.id, "version": blueprint.version},
             "groups": groups,
@@ -734,6 +743,14 @@ class ReportProjector:
                 {**segment, "segment_id": segment_id},
                 product_pack,
             )
+            benchmark_lower_rate = self._numeric_metric(values.get("benchmark_lower_rate"))
+            competitor_lower_rate = self._numeric_metric(values.get("competitor_lower_rate"))
+            parity_rate = self._numeric_metric(values.get("parity_rate"))
+            dominant_outcome = self._dominant_outcome(
+                benchmark_lower_rate,
+                competitor_lower_rate,
+                parity_rate,
+            )
             rows.append(
                 {
                     "_competitor_id": competitor_id,
@@ -753,6 +770,15 @@ class ReportProjector:
                         self._retailer_names,
                         product_pack,
                     ),
+                    "_matches": self._numeric_metric(values.get("matches")),
+                    "_matched_geographies": self._numeric_metric(values.get("unique_geographies")),
+                    "_benchmark_lower_rate": benchmark_lower_rate,
+                    "_competitor_lower_rate": competitor_lower_rate,
+                    "_parity_rate": parity_rate,
+                    "_benchmark_median": self._numeric_metric(values.get("benchmark_median")),
+                    "_competitor_median": self._numeric_metric(values.get("competitor_median")),
+                    "_median_gap": self._numeric_metric(values.get("median_gap")),
+                    "_dominant_outcome": dominant_outcome,
                     "matches": _formatted_metric(values.get("matches")),
                     "matched geographies": _formatted_metric(values.get("unique_geographies")),
                     "benchmark lower": _formatted_metric(values.get("benchmark_lower_rate")),
@@ -761,13 +787,7 @@ class ReportProjector:
                     "benchmark median": _formatted_metric(values.get("benchmark_median")),
                     "competitor median": _formatted_metric(values.get("competitor_median")),
                     "competitor - benchmark gap": _formatted_metric(values.get("median_gap")),
-                    "dominant outcome": self._dominant_outcome(
-                        self._numeric_metric(values.get("benchmark_lower_rate")),
-                        self._numeric_metric(values.get("competitor_lower_rate")),
-                        self._numeric_metric(values.get("parity_rate")),
-                    )
-                    .replace("_", " ")
-                    .title(),
+                    "dominant outcome": dominant_outcome.replace("_", " ").title(),
                 }
             )
         return sorted(

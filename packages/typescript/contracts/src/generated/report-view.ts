@@ -16,6 +16,8 @@ export interface RetailCompetitiveIntelligenceReportView {
     name: string;
     version: string;
     recommended_charts: string[];
+    cohort_dimensions?: string[];
+    minimum_cohort_geographies?: number;
   };
   blueprint: {
     id: string;

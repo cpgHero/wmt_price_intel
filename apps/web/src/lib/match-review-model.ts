@@ -222,3 +222,38 @@ export function connectionSearchText(
     .join(" ")
     .toLowerCase();
 }
+
+const statusPriority: Record<MatchReviewConnection["status"], number> = {
+  ambiguous: 0,
+  suggested: 1,
+  confirmed: 2,
+  rejected: 3,
+};
+
+function strongestEvidence(connection: MatchReviewConnection) {
+  return connection.profile_evidence.reduce(
+    (best, evidence) => ({
+      geographies: Math.max(best.geographies, evidence.geographies ?? 0),
+      matches: Math.max(best.matches, evidence.matches ?? 0),
+      gap: Math.max(best.gap, Math.abs(evidence.median_gap ?? 0)),
+    }),
+    { geographies: 0, matches: 0, gap: 0 },
+  );
+}
+
+export function rankMatchReviewConnections(
+  connections: MatchReviewConnection[],
+) {
+  return [...connections].sort((left, right) => {
+    const leftEvidence = strongestEvidence(left);
+    const rightEvidence = strongestEvidence(right);
+    return (
+      statusPriority[left.status] - statusPriority[right.status] ||
+      rightEvidence.geographies - leftEvidence.geographies ||
+      rightEvidence.matches - leftEvidence.matches ||
+      rightEvidence.gap - leftEvidence.gap ||
+      left.benchmark_product_id.localeCompare(right.benchmark_product_id) ||
+      left.competitor_product_id.localeCompare(right.competitor_product_id)
+    );
+  });
+}

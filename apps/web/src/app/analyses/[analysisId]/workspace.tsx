@@ -6,11 +6,14 @@ import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
 
 import { DataTable } from "@/app/components/data-table";
+import { ComparableCohortExplorer } from "./cohort-explorer";
 import { MatchReviewWorkbench } from "./match-review-workbench";
 import type {
   AnalysisRecord,
   AnalysisReportView,
   AssortmentAnalysis,
+  AssortmentBrand,
+  AssortmentBreadthGap,
   AssortmentProduct,
   JsonObject,
   MapPoint,
@@ -331,6 +334,10 @@ function BlueprintAnalysisWorkspace({
   const selectedGroup = scopedSections.find(
     (group) => group.id === activeGroup,
   );
+  const cohortRecords =
+    selectedGroup?.sections
+      .filter((section) => section.kind === "segment_analysis")
+      .flatMap((section) => section.records) ?? [];
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
   const selectedScorecards = selectedRetailer
@@ -409,7 +416,10 @@ function BlueprintAnalysisWorkspace({
         selected={selectedCompetitor}
         onSelect={selectCompetitor}
       />
-      <ReportReadinessBanner reportView={reportView} />
+      <ReportReadinessBanner
+        reportView={reportView}
+        onReviewMatches={() => selectGroup("match-review")}
+      />
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
         {groupedSections.map((group) => (
           <button
@@ -458,11 +468,25 @@ function BlueprintAnalysisWorkspace({
               />
             ) : null}
             {activeGroup === "price-segments" ? (
-              <ComparisonBasisControl
-                bases={reportView.comparison_bases}
-                selected={selectedLens}
-                onSelect={selectLens}
-              />
+              <>
+                <ComparisonBasisControl
+                  bases={reportView.comparison_bases}
+                  selected={selectedLens}
+                  onSelect={selectLens}
+                />
+                <ComparableCohortExplorer
+                  records={cohortRecords}
+                  benchmarkName={reportView.retailer_scope.benchmark.name}
+                  cohortDimensions={
+                    reportView.product_pack.cohort_dimensions ?? []
+                  }
+                  minimumGeographies={
+                    reportView.product_pack.minimum_cohort_geographies ?? 1
+                  }
+                  ambiguousMatches={reportView.match_governance.ambiguous}
+                  onReviewMatches={() => selectGroup("match-review")}
+                />
+              </>
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
               <AnalysisMap
@@ -573,6 +597,117 @@ function AssortmentProductList({
   );
 }
 
+function AssortmentBrandPanel({
+  retailerName,
+  distinctBrands,
+  topBrands,
+  concentratedBrands,
+}: Readonly<{
+  retailerName: string;
+  distinctBrands: number;
+  topBrands: AssortmentBrand[];
+  concentratedBrands: AssortmentBrand[];
+}>) {
+  if (!topBrands.length) return null;
+  const maxLocations = Math.max(
+    ...topBrands.map((brand) => brand.observed_locations),
+    1,
+  );
+  return (
+    <section className="assortment-brand-panel">
+      <header>
+        <div>
+          <small>{retailerName}</small>
+          <h4>Observed brand breadth</h4>
+        </div>
+        <strong>{distinctBrands.toLocaleString()} brands</strong>
+      </header>
+      <div className="assortment-brand-bars">
+        {topBrands.slice(0, 6).map((brand) => (
+          <div key={brand.brand}>
+            <span>
+              <b>{brand.brand}</b>
+              <small>
+                {brand.distinct_products.toLocaleString()} products ·{" "}
+                {brand.observed_locations.toLocaleString()} locations
+              </small>
+            </span>
+            <i>
+              <b
+                style={{
+                  width: `${Math.max(2, (brand.observed_locations / maxLocations) * 100)}%`,
+                }}
+              />
+            </i>
+          </div>
+        ))}
+      </div>
+      {concentratedBrands.length ? (
+        <div className="assortment-regional-signals">
+          <small>Geographically concentrated brand signals</small>
+          <p>
+            Observed in no more than 25% of this retailer&apos;s collected
+            locations. Concentration is a review signal—not proof of local
+            distribution.
+          </p>
+          <div>
+            {concentratedBrands.slice(0, 6).map((brand) => (
+              <span key={brand.brand}>
+                <b>{brand.brand}</b>
+                {new Intl.NumberFormat("en-US", {
+                  style: "percent",
+                  maximumFractionDigits: 1,
+                }).format(brand.location_share)}{" "}
+                of locations
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AssortmentBreadthGaps({
+  rows,
+  benchmarkName,
+  competitorName,
+  leader,
+}: Readonly<{
+  rows: AssortmentBreadthGap[];
+  benchmarkName: string;
+  competitorName: string;
+  leader: "benchmark" | "competitor";
+}>) {
+  if (!rows.length) return null;
+  const leaderName = leader === "benchmark" ? benchmarkName : competitorName;
+  return (
+    <section className="assortment-gap-table">
+      <header>
+        <small>Largest shared-ZIP breadth gaps</small>
+        <h4>{leaderName} carries more observed products</h4>
+      </header>
+      <div>
+        <span>ZIP</span>
+        <span>{benchmarkName}</span>
+        <span>{competitorName}</span>
+        <span>Gap</span>
+      </div>
+      {rows.slice(0, 6).map((row) => (
+        <div key={row.zipcode}>
+          <strong>{row.zipcode}</strong>
+          <span>{row.benchmark_products.toLocaleString()}</span>
+          <span>{row.competitor_products.toLocaleString()}</span>
+          <b>
+            {row.product_count_gap > 0 ? "+" : ""}
+            {row.product_count_gap}
+          </b>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function AssortmentAnalysisPanel({
   data,
   benchmark,
@@ -619,6 +754,31 @@ function AssortmentAnalysisPanel({
           </span>
         </aside>
       </header>
+      <div className="assortment-model-guide">
+        <article>
+          <small>Item relationship</small>
+          <strong>One primary product ↔ one competitor product</strong>
+          <span>
+            Governed in Match Review and used for auditable price evidence.
+          </span>
+        </article>
+        <article>
+          <small>Comparable cohort</small>
+          <strong>
+            Multiple one-to-one pairs with the same specifications
+          </strong>
+          <span>
+            Used for category price rollups without changing match cardinality.
+          </span>
+        </article>
+        <article className="active">
+          <small>Assortment rollup</small>
+          <strong>Range, brand breadth, whitespace, and geography</strong>
+          <span>
+            Describes observed choice; it does not declare substitute products.
+          </span>
+        </article>
+      </div>
       {comparisons.map((comparison) => {
         const competitor =
           competitors.find((row) =>
@@ -664,18 +824,18 @@ function AssortmentAnalysisPanel({
                 <span>Distinct in-scope IDs</span>
               </article>
               <article>
-                <small>Product relationships</small>
+                <small>1:1 item relationships</small>
                 <strong>
                   {comparison.product_relationships.toLocaleString()}
                 </strong>
-                <span>Unique pairs across all lenses</span>
+                <span>Unique admitted pairs across all lenses</span>
               </article>
               <article>
-                <small>{benchmark.name}-only</small>
+                <small>{benchmark.name} unmatched</small>
                 <strong>
                   {comparison.benchmark_only_products.toLocaleString()}
                 </strong>
-                <span>Differentiated products</span>
+                <span>No admitted item relationship</span>
               </article>
               <article>
                 <small>{competitor.name} whitespace</small>
@@ -684,10 +844,19 @@ function AssortmentAnalysisPanel({
                 </strong>
                 <span>No admitted {benchmark.name} match</span>
               </article>
+              {comparison.ambiguous_candidate_groups ? (
+                <article className="review">
+                  <small>Needs match review</small>
+                  <strong>
+                    {comparison.ambiguous_candidate_groups.toLocaleString()}
+                  </strong>
+                  <span>Ambiguous candidate groups</span>
+                </article>
+              ) : null}
             </div>
             <div className="assortment-middle">
               <section className="assortment-coverage-card">
-                <h4>Match coverage by retailer</h4>
+                <h4>Item-relationship coverage</h4>
                 <p>
                   Share of each retailer&apos;s distinct observed products in an
                   admitted pair.
@@ -723,6 +892,10 @@ function AssortmentAnalysisPanel({
                     </span>
                   ))}
                 </div>
+                <small className="assortment-lens-note">
+                  Relationship counts by comparison lens. The same one-to-one
+                  pair may be eligible in more than one lens.
+                </small>
               </section>
               <section className="assortment-geography-card">
                 <h4>Store-market breadth</h4>
@@ -762,10 +935,48 @@ function AssortmentAnalysisPanel({
                 </ul>
               </section>
             </div>
+            {benchmarkSummary?.top_brands?.length ||
+            competitorSummary?.top_brands?.length ? (
+              <div className="assortment-brand-grid">
+                <AssortmentBrandPanel
+                  retailerName={benchmark.name}
+                  distinctBrands={benchmarkSummary?.distinct_brands ?? 0}
+                  topBrands={benchmarkSummary?.top_brands ?? []}
+                  concentratedBrands={
+                    benchmarkSummary?.geographically_concentrated_brands ?? []
+                  }
+                />
+                <AssortmentBrandPanel
+                  retailerName={competitor.name}
+                  distinctBrands={competitorSummary?.distinct_brands ?? 0}
+                  topBrands={competitorSummary?.top_brands ?? []}
+                  concentratedBrands={
+                    competitorSummary?.geographically_concentrated_brands ?? []
+                  }
+                />
+              </div>
+            ) : null}
+            {comparison.geography.top_benchmark_breadth_gaps?.length ||
+            comparison.geography.top_competitor_breadth_gaps?.length ? (
+              <div className="assortment-gap-grid">
+                <AssortmentBreadthGaps
+                  rows={comparison.geography.top_benchmark_breadth_gaps ?? []}
+                  benchmarkName={benchmark.name}
+                  competitorName={competitor.name}
+                  leader="benchmark"
+                />
+                <AssortmentBreadthGaps
+                  rows={comparison.geography.top_competitor_breadth_gaps ?? []}
+                  benchmarkName={benchmark.name}
+                  competitorName={competitor.name}
+                  leader="competitor"
+                />
+              </div>
+            ) : null}
             <div className="assortment-product-columns">
               <AssortmentProductList
-                title={`${benchmark.name}-only products`}
-                note="Broadest observed products without an admitted competitor match."
+                title={`${benchmark.name} products without an admitted match`}
+                note="Broadest observed products available for relationship review."
                 products={comparison.top_benchmark_only}
               />
               <AssortmentProductList
@@ -861,7 +1072,11 @@ function scopeReportRows(
 
 function ReportReadinessBanner({
   reportView,
-}: Readonly<{ reportView: AnalysisReportView }>) {
+  onReviewMatches,
+}: Readonly<{
+  reportView: AnalysisReportView;
+  onReviewMatches: () => void;
+}>) {
   const readiness = reportView.report_readiness;
   const relationshipCounts = reportView.match_governance;
   return (
@@ -886,6 +1101,11 @@ function ReportReadinessBanner({
           readiness.warnings[0]?.message ??
           `${readiness.suppressed_decisions.toLocaleString()} product decisions were withheld by deterministic evidence guardrails.`}
       </p>
+      {relationshipCounts.ambiguous ? (
+        <button type="button" onClick={onReviewMatches}>
+          Review {relationshipCounts.ambiguous.toLocaleString()} ambiguous pairs
+        </button>
+      ) : null}
     </section>
   );
 }

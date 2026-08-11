@@ -412,6 +412,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 competitors=competitors,
                 matches=review_matches,
                 profiles=review_profiles,
+                ambiguous_groups=ambiguous_match_groups,
             ),
             highlights,
         )

@@ -58,7 +58,12 @@
         "recommended_charts": {
           "type": "array",
           "items": { "type": "string" }
-        }
+        },
+        "cohort_dimensions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "minimum_cohort_geographies": { "type": "integer", "minimum": 1 }
       }
     },
     "blueprint": {

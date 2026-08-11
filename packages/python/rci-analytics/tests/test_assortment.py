@@ -12,6 +12,8 @@ def _offer(
     product_id: str,
     zipcode: str,
     store: str,
+    *,
+    brand: str | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
         offer=NormalizedOffer(
@@ -19,7 +21,7 @@ def _offer(
             retailer_id=retailer,
             retailer_product_id=product_id,
             title=f"Product {product_id}",
-            brand=None,
+            brand=brand,
             price=Decimal("4.99"),
             currency="USD",
             zipcode=zipcode,
@@ -84,6 +86,48 @@ def test_assortment_metrics_are_distinct_product_and_store_based() -> None:
     assert comparison["competitor_whitespace_products"] == 1
     assert comparison["benchmark_match_coverage"] == 0.5
     assert comparison["top_benchmark_only"][0]["product_id"] == "w2"
+    assert comparison["ambiguous_candidate_groups"] == 0
+    assert comparison["geography"]["top_benchmark_breadth_gaps"] == [
+        {
+            "zipcode": "72712",
+            "benchmark_products": 2,
+            "competitor_products": 1,
+            "product_count_gap": 1,
+        }
+    ]
+
+
+def test_assortment_reports_brand_breadth_and_geographic_concentration() -> None:
+    accumulator = AssortmentAccumulator()
+    for offer in (
+        _offer("w1", "walmart_us", "w1", "72712", "1", brand="Regional Dairy"),
+        _offer("w2", "walmart_us", "w2", "72713", "2", brand="Regional Dairy"),
+        _offer("w3", "walmart_us", "w3", "90020", "3", brand="National Dairy"),
+        _offer("w3b", "walmart_us", "w3", "98101", "7", brand="National Dairy"),
+        _offer("w3c", "walmart_us", "w3", "80202", "8", brand="National Dairy"),
+        _offer("w3d", "walmart_us", "w3", "02108", "9", brand="National Dairy"),
+        _offer("w4", "walmart_us", "w4", "10001", "4", brand="National Dairy"),
+        _offer("w5", "walmart_us", "w5", "60601", "5", brand="National Dairy"),
+        _offer("w6", "walmart_us", "w6", "30301", "6"),
+        _offer("a1", "aldi_us", "a1", "72712", "A", brand="Friendly Farms"),
+    ):
+        accumulator.add(offer)
+
+    result = accumulator.finalize(
+        benchmark_retailer="walmart_us",
+        competitors=["aldi_us"],
+        profiles=[{"id": "strict", "label": "Exact package", "geography": "exact_zip"}],
+        matches=[],
+        ambiguous_groups=[{"competitor_id": "aldi_us"}],
+    )
+
+    walmart = result["retailers"][0]
+    comparison = result["comparisons"][0]
+    assert walmart["distinct_brands"] == 2
+    assert walmart["unbranded_products"] == 1
+    assert walmart["top_brands"][0]["brand"] == "National Dairy"
+    assert walmart["geographically_concentrated_brands"][0]["brand"] == ("Regional Dairy")
+    assert comparison["ambiguous_candidate_groups"] == 1
 
 
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:

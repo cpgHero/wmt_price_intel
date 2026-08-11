@@ -12,6 +12,7 @@ import {
   connectionSearchText,
   evidenceForProfile,
   productDetailRows,
+  rankMatchReviewConnections,
   scopeMatchReview,
 } from "@/lib/match-review-model";
 
@@ -473,19 +474,21 @@ export function MatchReviewWorkbench({
   const connections = useMemo(() => {
     if (!review || !scoped) return [];
     const needle = query.trim().toLowerCase();
-    return scoped.connections.filter((connection) => {
-      if (status !== "all" && connection.status !== status) return false;
-      if (!needle) return true;
-      return connectionSearchText(
-        connection,
-        productByKey.get(
-          `${review.benchmark_retailer.id}:${connection.benchmark_product_id}`,
-        ),
-        productByKey.get(
-          `${connection.competitor_retailer_id}:${connection.competitor_product_id}`,
-        ),
-      ).includes(needle);
-    });
+    return rankMatchReviewConnections(
+      scoped.connections.filter((connection) => {
+        if (status !== "all" && connection.status !== status) return false;
+        if (!needle) return true;
+        return connectionSearchText(
+          connection,
+          productByKey.get(
+            `${review.benchmark_retailer.id}:${connection.benchmark_product_id}`,
+          ),
+          productByKey.get(
+            `${connection.competitor_retailer_id}:${connection.competitor_product_id}`,
+          ),
+        ).includes(needle);
+      }),
+    );
   }, [productByKey, query, review, scoped, status]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- URL deep links synchronize the governed workbench selection. */
@@ -782,6 +785,33 @@ export function MatchReviewWorkbench({
         </span>
       </div>
 
+      {scoped.summary.ambiguous ? (
+        <section className="match-priority-callout">
+          <div>
+            <small>Highest-value review queue</small>
+            <strong>
+              Resolve {scoped.summary.ambiguous} ambiguous one-to-one candidate
+              {scoped.summary.ambiguous === 1 ? "" : "s"} first
+            </strong>
+            <p>
+              These candidates are ordered by matched-market breadth, retained
+              observations, and then price-gap magnitude. They remain excluded
+              from decision-ready product reporting until a reviewer chooses a
+              single relationship.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setStatus("ambiguous");
+              setQuery("");
+            }}
+          >
+            Review needs-decision pairs
+          </button>
+        </section>
+      ) : null}
+
       <div className="match-connections">
         <div className="match-connections-head">
           <div>
@@ -852,6 +882,9 @@ export function MatchReviewWorkbench({
                 onView={() => setDetails({ benchmark, competitor, connection })}
               />
               <div className="connection-path">
+                {connection.status === "ambiguous" ? (
+                  <span className="match-priority-badge">Priority review</span>
+                ) : null}
                 <span className={`match-status-badge ${connection.status}`}>
                   {statusCopy(connection.status)}
                 </span>

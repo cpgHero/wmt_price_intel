@@ -6,8 +6,31 @@ import copy
 import statistics
 from collections import defaultdict
 from collections.abc import Iterable
+from typing import TypedDict
 
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord
+
+
+class _BrandWorking(TypedDict):
+    brand: str
+    product_ids: set[str]
+    locations: set[str]
+    zipcodes: set[str]
+
+
+class _BrandSummary(TypedDict):
+    brand: str
+    distinct_products: int
+    observed_locations: int
+    observed_zipcodes: int
+    location_share: float
+
+
+class _BreadthGap(TypedDict):
+    zipcode: str
+    benchmark_products: int
+    competitor_products: int
+    product_count_gap: int
 
 
 def _rate(numerator: int, denominator: int) -> float:
@@ -57,11 +80,13 @@ class AssortmentAccumulator:
         competitors: Iterable[str],
         matches: Iterable[MatchRecord],
         profiles: Iterable[JsonObject],
+        ambiguous_groups: Iterable[JsonObject] = (),
     ) -> JsonObject:
         profile_labels = {
             str(profile["id"]): str(profile.get("label") or profile["id"]) for profile in profiles
         }
         match_rows = list(matches)
+        ambiguous_rows = list(ambiguous_groups)
         retailers = [benchmark_retailer, *[str(value) for value in competitors]]
         return {
             "source": "Search results classified in scope by the Product Pack",
@@ -71,7 +96,13 @@ class AssortmentAccumulator:
             "benchmark_retailer": benchmark_retailer,
             "retailers": [self._retailer_summary(retailer) for retailer in retailers],
             "comparisons": [
-                self._comparison(benchmark_retailer, competitor, match_rows, profile_labels)
+                self._comparison(
+                    benchmark_retailer,
+                    competitor,
+                    match_rows,
+                    profile_labels,
+                    ambiguous_rows,
+                )
                 for competitor in retailers
                 if competitor != benchmark_retailer
             ],
@@ -80,6 +111,56 @@ class AssortmentAccumulator:
     def _retailer_summary(self, retailer: str) -> JsonObject:
         products = self._products.get(retailer, {})
         counts = [len(values) for values in self._locations.get(retailer, {}).values()]
+        brands: dict[str, _BrandWorking] = {}
+        unbranded_products = 0
+        for product in products.values():
+            brand = str(product.get("brand") or "").strip()
+            if not brand:
+                unbranded_products += 1
+                continue
+            key = brand.casefold()
+            row = brands.setdefault(
+                key,
+                {
+                    "brand": brand,
+                    "product_ids": set(),
+                    "locations": set(),
+                    "zipcodes": set(),
+                },
+            )
+            row["product_ids"].add(str(product["product_id"]))
+            row["locations"].update(product["locations"])
+            row["zipcodes"].update(product["zipcodes"])
+        retailer_location_count = len(self._locations.get(retailer, {}))
+        brand_rows: list[_BrandSummary] = [
+            {
+                "brand": str(row["brand"]),
+                "distinct_products": len(row["product_ids"]),
+                "observed_locations": len(row["locations"]),
+                "observed_zipcodes": len(row["zipcodes"]),
+                "location_share": _rate(len(row["locations"]), retailer_location_count),
+            }
+            for row in brands.values()
+        ]
+        brand_rows.sort(
+            key=lambda row: (
+                -int(row["observed_locations"]),
+                -int(row["distinct_products"]),
+                str(row["brand"]).casefold(),
+            )
+        )
+        concentrated_brands = sorted(
+            (
+                row
+                for row in brand_rows
+                if int(row["observed_locations"]) >= 2 and float(row["location_share"]) <= 0.25
+            ),
+            key=lambda row: (
+                -int(row["distinct_products"]),
+                -int(row["observed_locations"]),
+                str(row["brand"]).casefold(),
+            ),
+        )
         return {
             "retailer": retailer,
             "distinct_products": len(products),
@@ -88,6 +169,10 @@ class AssortmentAccumulator:
             "median_products_per_location": (
                 round(float(statistics.median(counts)), 1) if counts else 0.0
             ),
+            "distinct_brands": len(brand_rows),
+            "unbranded_products": unbranded_products,
+            "top_brands": brand_rows[:12],
+            "geographically_concentrated_brands": concentrated_brands[:12],
         }
 
     def _comparison(
@@ -96,6 +181,7 @@ class AssortmentAccumulator:
         competitor: str,
         matches: list[MatchRecord],
         profile_labels: dict[str, str],
+        ambiguous_groups: list[JsonObject],
     ) -> JsonObject:
         benchmark_products = self._products.get(benchmark, {})
         competitor_products = self._products.get(competitor, {})
@@ -130,6 +216,23 @@ class AssortmentAccumulator:
         breadth_gaps = [
             len(benchmark_zips[zipcode]) - len(competitor_zips[zipcode]) for zipcode in shared_zips
         ]
+        breadth_rows: list[_BreadthGap] = [
+            {
+                "zipcode": zipcode,
+                "benchmark_products": len(benchmark_zips[zipcode]),
+                "competitor_products": len(competitor_zips[zipcode]),
+                "product_count_gap": len(benchmark_zips[zipcode]) - len(competitor_zips[zipcode]),
+            }
+            for zipcode in shared_zips
+        ]
+        benchmark_gap_rows = sorted(
+            (row for row in breadth_rows if int(row["product_count_gap"]) > 0),
+            key=lambda row: (-int(row["product_count_gap"]), str(row["zipcode"])),
+        )[:12]
+        competitor_gap_rows = sorted(
+            (row for row in breadth_rows if int(row["product_count_gap"]) < 0),
+            key=lambda row: (int(row["product_count_gap"]), str(row["zipcode"])),
+        )[:12]
         profiles = [
             {
                 "profile_id": profile_id,
@@ -141,6 +244,9 @@ class AssortmentAccumulator:
         return {
             "competitor": competitor,
             "product_relationships": len(pair_profiles),
+            "ambiguous_candidate_groups": sum(
+                str(group.get("competitor_id")) == competitor for group in ambiguous_groups
+            ),
             "matched_benchmark_products": len(matched_benchmark),
             "matched_competitor_products": len(matched_competitor),
             "benchmark_match_coverage": _rate(len(matched_benchmark), len(benchmark_products)),
@@ -158,6 +264,8 @@ class AssortmentAccumulator:
                 "median_product_count_gap": (
                     round(float(statistics.median(breadth_gaps)), 1) if breadth_gaps else 0.0
                 ),
+                "top_benchmark_breadth_gaps": benchmark_gap_rows,
+                "top_competitor_breadth_gaps": competitor_gap_rows,
             },
             "top_benchmark_only": self._rank_products(benchmark, benchmark_only),
             "top_competitor_whitespace": self._rank_products(competitor, competitor_only),

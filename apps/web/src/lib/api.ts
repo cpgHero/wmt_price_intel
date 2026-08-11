@@ -65,6 +65,8 @@ export interface AnalysisReportView extends Omit<
     name: string;
     version: string;
     recommended_charts?: string[];
+    cohort_dimensions?: string[];
+    minimum_cohort_geographies?: number;
   };
   blueprint: { id: string; version: string };
   product_highlights?: ProductHighlight[];
@@ -90,6 +92,7 @@ export interface AssortmentProduct {
 export interface AssortmentComparison {
   competitor: string;
   product_relationships: number;
+  ambiguous_candidate_groups?: number;
   matched_benchmark_products: number;
   matched_competitor_products: number;
   benchmark_match_coverage: number;
@@ -109,6 +112,8 @@ export interface AssortmentComparison {
     competitor_broader_zipcodes: number;
     parity_zipcodes: number;
     median_product_count_gap: number;
+    top_benchmark_breadth_gaps?: AssortmentBreadthGap[];
+    top_competitor_breadth_gaps?: AssortmentBreadthGap[];
   };
   top_benchmark_only: AssortmentProduct[];
   top_competitor_whitespace: AssortmentProduct[];
@@ -125,8 +130,27 @@ export interface AssortmentAnalysis {
     observed_locations: number;
     observed_zipcodes: number;
     median_products_per_location: number;
+    distinct_brands?: number;
+    unbranded_products?: number;
+    top_brands?: AssortmentBrand[];
+    geographically_concentrated_brands?: AssortmentBrand[];
   }>;
   comparisons: AssortmentComparison[];
+}
+
+export interface AssortmentBrand {
+  brand: string;
+  distinct_products: number;
+  observed_locations: number;
+  observed_zipcodes: number;
+  location_share: number;
+}
+
+export interface AssortmentBreadthGap {
+  zipcode: string;
+  benchmark_products: number;
+  competitor_products: number;
+  product_count_gap: number;
 }
 
 export interface RetailerOption {

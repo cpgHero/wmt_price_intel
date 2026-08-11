@@ -5,6 +5,7 @@ import type { MatchReview } from "@/lib/api";
 import {
   evidenceForProfile,
   productDetailRows,
+  rankMatchReviewConnections,
   scopeMatchReview,
 } from "./match-review-model";
 
@@ -166,5 +167,40 @@ describe("match review scope", () => {
         counterpartProductId: "a1",
       },
     ]);
+  });
+
+  it("prioritizes ambiguous relationships and then the broadest evidence", () => {
+    const connections = [
+      {
+        ...structuredClone(review.connections[0]),
+        benchmark_product_id: "confirmed",
+        status: "confirmed" as const,
+        profile_evidence: [
+          { ...review.connections[0].profile_evidence[0], geographies: 500 },
+        ],
+      },
+      {
+        ...structuredClone(review.connections[0]),
+        benchmark_product_id: "narrow",
+        status: "ambiguous" as const,
+        profile_evidence: [
+          { ...review.connections[0].profile_evidence[0], geographies: 20 },
+        ],
+      },
+      {
+        ...structuredClone(review.connections[0]),
+        benchmark_product_id: "broad",
+        status: "ambiguous" as const,
+        profile_evidence: [
+          { ...review.connections[0].profile_evidence[0], geographies: 200 },
+        ],
+      },
+    ];
+
+    expect(
+      rankMatchReviewConnections(connections).map(
+        (connection) => connection.benchmark_product_id,
+      ),
+    ).toEqual(["broad", "narrow", "confirmed"]);
   });
 });

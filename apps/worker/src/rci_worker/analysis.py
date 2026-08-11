@@ -1020,6 +1020,7 @@ class AnalysisProcessor:
             competitors=competitors,
             matches=review_matches,
             profiles=selected_profiles,
+            ambiguous_groups=ambiguous_match_groups,
         )
         if (
             self._assistant is not None
