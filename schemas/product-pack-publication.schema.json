@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-pack-publication.schema.json",
+  "title": "Retail Competitive Intelligence Product Pack Publication",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product_pack_id",
+    "version",
+    "checksum",
+    "report_blueprint_id",
+    "report_blueprint_version",
+    "report_blueprint_checksum",
+    "validation_run_id",
+    "active",
+    "published_by",
+    "published_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "product_pack_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "report_blueprint_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "report_blueprint_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "report_blueprint_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "validation_run_id": { "type": "string", "format": "uuid" },
+    "active": { "type": "boolean" },
+    "published_by": { "type": "string", "minLength": 1 },
+    "published_at": { "type": "string", "format": "date-time" }
+  }
+}

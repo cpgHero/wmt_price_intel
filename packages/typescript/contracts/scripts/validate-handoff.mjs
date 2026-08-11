@@ -68,6 +68,10 @@ const historicalInputManifestValidator = validator(
 );
 const alertValidator = validator("alert-definition.schema.json");
 const productPackValidator = validator("product-pack.schema.json");
+const productPackCapabilitiesValidator = validator(
+  "product-pack-capabilities.schema.json",
+);
+const productPackDraftValidator = validator("product-pack-draft.schema.json");
 const benchmarkValidator = validator("golden-benchmarks.schema.json");
 const narrativeBenchmarkValidator = validator(
   "narrative-benchmarks.schema.json",
@@ -239,6 +243,16 @@ await assertValid(
   productDetailCatalogValidator,
   await loadJson("config", "product-detail-catalog.json"),
   "product detail catalog",
+);
+await assertValid(
+  productPackCapabilitiesValidator,
+  await loadJson("config", "product-pack-capabilities.json"),
+  "Product Pack capabilities",
+);
+await assertValid(
+  productPackDraftValidator,
+  await loadJson("examples", "product-pack-draft.ground-beef.json"),
+  "Product Pack draft",
 );
 
 const productPackFiles = (await readdir(join(repositoryRoot, "product-packs")))

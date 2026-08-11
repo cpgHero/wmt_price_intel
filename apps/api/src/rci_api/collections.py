@@ -36,6 +36,7 @@ from rci_collections.service import (
     CollectionService,
 )
 from rci_contracts import ContractError
+from rci_product_packs import PostgresProductPackCatalog
 
 router = APIRouter(prefix="/api/v1")
 
@@ -296,9 +297,28 @@ def _scope_estimate_response(record: ScopeEstimateRecord) -> ScopeEstimateRespon
 
 
 @router.get("/collection-builder/options", tags=["collections"])
-async def collection_builder_options() -> dict[str, Any]:
+async def collection_builder_options(request: Request) -> dict[str, Any]:
     root = _repository_root()
     product_packs = json.loads((root / "product-packs" / "index.json").read_text(encoding="utf-8"))
+    try:
+        active_packs = await PostgresProductPackCatalog(
+            request.app.state.database_probe.engine
+        ).list_active()
+    except Exception:
+        active_packs = ()
+    pack_options = [
+        {
+            "id": item.id,
+            "name": item.name,
+            "version": item.version,
+            "default_keyword": item.default_keyword,
+        }
+        for item in active_packs
+    ] or product_packs["packs"]
+    active_ids = {str(item["id"]) for item in pack_options}
+    default_pack_id = str(product_packs["default_pack_id"])
+    if default_pack_id not in active_ids:
+        default_pack_id = str(pack_options[0]["id"])
     return {
         "retailers": [
             {
@@ -311,8 +331,8 @@ async def collection_builder_options() -> dict[str, Any]:
             }
             for item in _retailer_catalog().enabled()
         ],
-        "product_packs": product_packs["packs"],
-        "default_product_pack_id": product_packs["default_pack_id"],
+        "product_packs": pack_options,
+        "default_product_pack_id": default_pack_id,
         "geography": {
             "primary_selection_modes": [
                 "all_locations",

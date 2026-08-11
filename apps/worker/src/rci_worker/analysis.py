@@ -26,6 +26,7 @@ from rci_analytics import (
     AnalysisResultV2Builder,
     AssortmentAccumulator,
     CanonicalOfferNormalizer,
+    CatalogProductPackLoader,
     ComparisonEngine,
     ComparisonFact,
     ComparisonInputReducer,
@@ -509,6 +510,7 @@ class AnalysisProcessor:
         historical_reader: S3HistoricalCSVReader | None = None,
         assistant: GovernedAnalysisAssistant | None = None,
         match_reviews: MatchReviewRepository | None = None,
+        product_packs: CatalogProductPackLoader | None = None,
     ) -> None:
         self._root = repository_root
         self._queue = queue
@@ -521,9 +523,14 @@ class AnalysisProcessor:
         self._code_version = code_version
         self._assistant = assistant
         self._match_reviews = match_reviews
+        self._product_packs = product_packs
 
     async def process(self, job: AnalysisJob) -> str:
-        pack = ProductPackLoader(self._root).load(job.product_pack_id)
+        pack = (
+            await self._product_packs.load(job.product_pack_id, job.product_pack_version)
+            if self._product_packs is not None
+            else ProductPackLoader(self._root).load(job.product_pack_id)
+        )
         if pack.version != job.product_pack_version:
             raise ValueError(
                 f"Product Pack version mismatch: requested {job.product_pack_version}, "

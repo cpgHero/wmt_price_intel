@@ -13,6 +13,7 @@ members = [
     "rci-core",
     "rci-db",
     "rci-locations",
+    "rci-product-packs",
     "rci-products",
     "rci-providers",
     "rci-results",
@@ -1212,6 +1213,7 @@ dependencies = [
     { name = "rci-contracts" },
     { name = "rci-db" },
     { name = "rci-locations" },
+    { name = "rci-product-packs" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
@@ -1224,6 +1226,7 @@ requires-dist = [
     { name = "rci-contracts", editable = "packages/python/rci-contracts" },
     { name = "rci-db", editable = "packages/python/rci-db" },
     { name = "rci-locations", editable = "packages/python/rci-locations" },
+    { name = "rci-product-packs", editable = "packages/python/rci-product-packs" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
 ]
 
@@ -1238,6 +1241,7 @@ dependencies = [
     { name = "rci-core" },
     { name = "rci-db" },
     { name = "rci-locations" },
+    { name = "rci-product-packs" },
     { name = "rci-results" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1250,6 +1254,7 @@ requires-dist = [
     { name = "rci-core", editable = "packages/python/rci-core" },
     { name = "rci-db", editable = "packages/python/rci-db" },
     { name = "rci-locations", editable = "packages/python/rci-locations" },
+    { name = "rci-product-packs", editable = "packages/python/rci-product-packs" },
     { name = "rci-results", editable = "packages/python/rci-results" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.51.0" },
 ]
@@ -1355,6 +1360,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rci-product-packs"
+version = "0.1.0"
+source = { editable = "packages/python/rci-product-packs" }
+dependencies = [
+    { name = "rci-contracts" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "rci-contracts", editable = "packages/python/rci-contracts" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
+]
+
+[[package]]
 name = "rci-products"
 version = "0.1.0"
 source = { editable = "packages/python/rci-products" }
@@ -1405,6 +1425,7 @@ source = { editable = "packages/python/rci-results" }
 dependencies = [
     { name = "boto3" },
     { name = "rci-contracts" },
+    { name = "rci-product-packs" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "xlsxwriter" },
 ]
@@ -1413,6 +1434,7 @@ dependencies = [
 requires-dist = [
     { name = "boto3", specifier = "==1.43.53" },
     { name = "rci-contracts", editable = "packages/python/rci-contracts" },
+    { name = "rci-product-packs", editable = "packages/python/rci-product-packs" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
     { name = "xlsxwriter", specifier = "==3.2.9" },
 ]
@@ -1452,6 +1474,7 @@ dependencies = [
     { name = "rci-contracts" },
     { name = "rci-core" },
     { name = "rci-db" },
+    { name = "rci-product-packs" },
     { name = "rci-products" },
     { name = "rci-providers" },
     { name = "rci-results" },
@@ -1470,6 +1493,7 @@ requires-dist = [
     { name = "rci-contracts", editable = "packages/python/rci-contracts" },
     { name = "rci-core", editable = "packages/python/rci-core" },
     { name = "rci-db", editable = "packages/python/rci-db" },
+    { name = "rci-product-packs", editable = "packages/python/rci-product-packs" },
     { name = "rci-products", editable = "packages/python/rci-products" },
     { name = "rci-providers", editable = "packages/python/rci-providers" },
     { name = "rci-results", editable = "packages/python/rci-results" },

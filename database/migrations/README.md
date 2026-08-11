@@ -22,3 +22,8 @@ insight and narrative tasks without granting model output authority over analyti
 archival, and one-to-one match governance/application policy. `0020_provider_permit_pacing`
 replaces fixed-window provider bursts with a database-coordinated next-permit timestamp so rolling
 per-second and per-minute limits remain safe across worker replicas.
+`0021_collection_geography_resolution` adds immutable, approved geography snapshots for the
+dynamic Collection Builder. `0022_product_pack_runtime_catalog` makes exact Product Pack and
+report-blueprint versions first-class runtime records. `0023_product_pack_authoring` adds
+revisioned drafts, immutable evidence manifests, leased validation work, certification links,
+and review events for the governed administrator builder.

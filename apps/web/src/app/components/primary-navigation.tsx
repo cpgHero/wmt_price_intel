@@ -9,6 +9,7 @@ const navigation = [
   ["Reports", "/analyses"],
   ["Schedules & Alerts", "/automation"],
   ["Data Quality", "/data-quality"],
+  ["Admin", "/admin/product-packs"],
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {

@@ -10,6 +10,7 @@ dependencies = [
   "rci-collections",
   "rci-db",
   "rci-locations",
+  "rci-product-packs",
   "rci-results",
   "uvicorn[standard]==0.51.0",
 ]
@@ -20,6 +21,7 @@ rci-core = { workspace = true }
 rci-collections = { workspace = true }
 rci-db = { workspace = true }
 rci-locations = { workspace = true }
+rci-product-packs = { workspace = true }
 rci-results = { workspace = true }
 
 [build-system]

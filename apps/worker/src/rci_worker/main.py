@@ -17,12 +17,17 @@ from rci_agents import (
     PostgresAgentTaskRepository,
 )
 
-from rci_analytics import ParquetDatasetWriter
+from rci_analytics import CatalogProductPackLoader, ParquetDatasetWriter
 from rci_analytics.parquet import S3DatasetStore
 from rci_collections import FakeProvider, PostgresCollectionRepository, QueueWorker
 from rci_collections.worker import CollectionProvider
 from rci_core import APP_VERSION, AppSettings, AsyncHealthServer, configure_logging
 from rci_db import DatabaseProbe
+from rci_product_packs import (
+    PostgresProductPackAuthoringRepository,
+    PostgresProductPackCatalog,
+    ProductPackValidationWorker,
+)
 from rci_products import (
     MetricsCartProductDetailClient,
     PostgresProductDetailLimiterRegistry,
@@ -54,6 +59,7 @@ from rci_worker.analysis import (
     S3HistoricalCSVReader,
     S3RawPageReader,
 )
+from rci_worker.product_pack_validation import validate_product_pack_draft
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -77,10 +83,23 @@ async def run() -> None:
     database = DatabaseProbe(settings.database_url)
     repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
     collection_repository = PostgresCollectionRepository(database.engine)
+    product_pack_catalog = PostgresProductPackCatalog(database.engine)
     worker_id = (
         os.getenv("WORKER_ID")
         or os.getenv("RAILWAY_REPLICA_ID")
         or f"{socket.gethostname()}-{uuid4()}"
+    )
+    product_pack_validation_worker = ProductPackValidationWorker(
+        PostgresProductPackAuthoringRepository(database.engine),
+        lambda draft, evidence, suite: validate_product_pack_draft(
+            repository_root,
+            draft,
+            evidence,
+            suite,
+        ),
+        worker_id=f"{worker_id}-product-pack",
+        claim_limit=int(os.getenv("PRODUCT_PACK_VALIDATION_CLAIM_LIMIT", "1")),
+        lease_seconds=int(os.getenv("PRODUCT_PACK_VALIDATION_LEASE_SECONDS", "900")),
     )
     provider_mode = os.getenv("COLLECTION_PROVIDER", "fake").strip().lower()
     metricscart_client: MetricsCartClient | None = None
@@ -184,10 +203,15 @@ async def run() -> None:
                     AnalysisResultValidator(repository_root),
                     S3ReportObjectStore(bucket=bucket, client=s3_client),
                     ArtifactRenderer(repository_root),
+                    product_pack_catalog,
                 ),
                 code_version=settings.app_version or APP_VERSION,
                 assistant=assistant,
                 match_reviews=PostgresMatchReviewRepository(database.engine),
+                product_packs=CatalogProductPackLoader(
+                    repository_root,
+                    product_pack_catalog,
+                ),
             ),
             worker_id=f"{worker_id}-analysis",
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),
@@ -247,7 +271,8 @@ async def run() -> None:
             product_details = (
                 await product_detail_worker.run_once() if product_detail_worker is not None else 0
             )
-            if claimed + analyses + product_details == 0:
+            product_pack_validations = await product_pack_validation_worker.run_once()
+            if claimed + analyses + product_details + product_pack_validations == 0:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=1)
     finally:

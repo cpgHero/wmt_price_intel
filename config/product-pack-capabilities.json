@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0.0",
+  "attribute_data_types": [
+    { "id": "string", "label": "Text", "description": "A normalized text value.", "status": "available" },
+    { "id": "number", "label": "Number", "description": "A numeric value with an optional unit.", "status": "available" },
+    { "id": "boolean", "label": "Yes or no", "description": "A true or false product characteristic.", "status": "available" },
+    { "id": "enum", "label": "Controlled list", "description": "One value from an explicit vocabulary.", "status": "available" },
+    { "id": "array", "label": "List", "description": "A normalized collection of values.", "status": "available" }
+  ],
+  "attribute_roles": [
+    { "id": "identity", "label": "Identity", "description": "Helps identify and describe the product.", "status": "available" },
+    { "id": "matching", "label": "Matching", "description": "Participates in comparison eligibility.", "status": "available" },
+    { "id": "normalization", "label": "Normalization", "description": "Supports a derived comparison metric.", "status": "available" },
+    { "id": "reporting", "label": "Reporting", "description": "Supports segments or presentation.", "status": "available" },
+    { "id": "qa", "label": "Quality review", "description": "Supports validation and review rules.", "status": "available" }
+  ],
+  "extraction_rules": [
+    { "id": "constant", "label": "Constant", "description": "Assign one configured value.", "status": "available" },
+    { "id": "field", "label": "Source field", "description": "Read a normalized retailer, SERP, or PDP field.", "status": "available" },
+    { "id": "measurement", "label": "Measurement", "description": "Extract a number and normalize configured unit aliases.", "status": "available" },
+    { "id": "number_pattern", "label": "Number pattern", "description": "Extract a number from a bounded regular expression.", "status": "available" },
+    { "id": "term_map", "label": "Term map", "description": "Map explicit source terms to controlled values.", "status": "available" },
+    { "id": "boolean_terms", "label": "Boolean terms", "description": "Resolve true and false terms deterministically.", "status": "available" }
+  ],
+  "geographies": [
+    { "id": "exact_zip", "label": "Exact ZIP", "description": "Compare observations in the same normalized ZIP.", "status": "available" },
+    { "id": "same_store_market", "label": "Same store market", "description": "Compare observations in the same configured market.", "status": "available" },
+    { "id": "radius", "label": "Store radius", "description": "Compare observed stores within an explicit radius.", "status": "available" },
+    { "id": "national", "label": "National", "description": "Compare a national product rollup without local price claims.", "status": "available" }
+  ],
+  "brand_policies": [
+    { "id": "same_brand", "label": "Same brand", "description": "Require a normalized brand match.", "status": "available" },
+    { "id": "private_label_equivalent", "label": "Private-label equivalent", "description": "Permit configured retailer private-label equivalents.", "status": "available" },
+    { "id": "ignore_brand", "label": "Ignore brand", "description": "Do not use brand as an eligibility dimension.", "status": "available" },
+    { "id": "category_specific", "label": "Legacy category-specific", "description": "Legacy configuration only; unavailable for newly authored packs.", "status": "deprecated" }
+  ],
+  "unknown_policies": [
+    { "id": "reject", "label": "Reject", "description": "Unknown values are not comparable.", "status": "available" },
+    { "id": "wildcard_if_one_unknown", "label": "One-sided wildcard", "description": "One unknown side may match a known value for configured dimensions.", "status": "available" },
+    { "id": "allow", "label": "Allow", "description": "Unknown values remain eligible.", "status": "available" },
+    { "id": "review", "label": "Require review", "description": "Retain the candidate but require human review.", "status": "available" }
+  ],
+  "price_selection_policies": [
+    { "id": "lowest_positive", "label": "Lowest positive price", "description": "Use the lowest valid positive SERP price at the comparison grain.", "status": "available" },
+    { "id": "median", "label": "Median price", "description": "Use the median authoritative SERP price at the comparison grain.", "status": "available" },
+    { "id": "retailer_primary_offer", "label": "Retailer primary offer", "description": "Use the retailer-designated primary offer.", "status": "available" }
+  ],
+  "package_equivalence_policies": [
+    { "id": "exact_package_first", "label": "Exact package first", "description": "Prefer equal package definitions before normalized comparisons.", "status": "available" },
+    { "id": "unit_normalized_only", "label": "Normalized unit only", "description": "Compare only through the configured normalized unit.", "status": "available" },
+    { "id": "category_specific", "label": "Legacy category-specific", "description": "Legacy configuration only; unavailable for newly authored packs.", "status": "deprecated" }
+  ],
+  "report_sections": [
+    { "id": "executive_summary", "label": "Executive summary", "description": "Evidence-backed leadership answer.", "status": "available" },
+    { "id": "kpi_strip", "label": "Decision scorecard", "description": "A concise set of governed decision metrics.", "status": "available" },
+    { "id": "coverage", "label": "Coverage", "description": "Retailer and geographic evidence coverage.", "status": "available" },
+    { "id": "price_position", "label": "Price position", "description": "Package or primary price comparisons.", "status": "available" },
+    { "id": "segment_analysis", "label": "Segment analysis", "description": "Configured attribute and normalized-value segments.", "status": "available" },
+    { "id": "geographic_sensitivity", "label": "Geographic sensitivity", "description": "Exact and radius-based geographic validation.", "status": "available" },
+    { "id": "assortment", "label": "Assortment", "description": "Matched, orphaned, and whitespace assortment evidence.", "status": "available" },
+    { "id": "product_table", "label": "Products", "description": "Product-level evidence and decisions.", "status": "available" },
+    { "id": "recommendations", "label": "Key points", "description": "Governed key points grounded in deterministic evidence.", "status": "available" },
+    { "id": "data_quality", "label": "Data quality", "description": "Validation issues and evidence limitations.", "status": "available" },
+    { "id": "methodology", "label": "Methodology", "description": "Comparison definitions, provenance, and caveats.", "status": "available" }
+  ],
+  "visualizations": [
+    { "id": "none", "label": "No visualization", "description": "Narrative or methodology content only.", "status": "available" },
+    { "id": "kpi_cards", "label": "KPI cards", "description": "Compact decision metrics.", "status": "available" },
+    { "id": "bar", "label": "Bar chart", "description": "Ranked or categorical comparison.", "status": "available" },
+    { "id": "stacked_bar", "label": "Stacked bar", "description": "Composition or directional share.", "status": "available" },
+    { "id": "line", "label": "Line chart", "description": "Validated trend evidence.", "status": "available" },
+    { "id": "map", "label": "Map", "description": "Location-backed geographic evidence.", "status": "available" },
+    { "id": "table", "label": "Table", "description": "Detailed auditable evidence.", "status": "available" },
+    { "id": "ranked_cards", "label": "Ranked cards", "description": "Prioritized products or insights.", "status": "available" }
+  ]
+}

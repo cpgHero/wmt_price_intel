@@ -12,6 +12,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Requ
 from pydantic import BaseModel, ConfigDict, Field
 
 from rci_contracts import ContractError
+from rci_product_packs import PostgresProductPackCatalog
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
@@ -116,6 +117,7 @@ def get_analysis_service(request: Request) -> AnalysisResultService:
         AnalysisResultValidator(repository_root),
         object_store,
         ArtifactRenderer(repository_root),
+        PostgresProductPackCatalog(request.app.state.database_probe.engine),
     )
 
 

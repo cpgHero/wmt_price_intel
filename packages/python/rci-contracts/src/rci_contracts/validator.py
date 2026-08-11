@@ -115,6 +115,14 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         "product-detail-catalog.schema.json",
         root / "config" / "product-detail-catalog.json",
     )
+    yield ContractTarget(
+        "product-pack-capabilities.schema.json",
+        root / "config" / "product-pack-capabilities.json",
+    )
+    yield ContractTarget(
+        "product-pack-draft.schema.json",
+        root / "examples" / "product-pack-draft.ground-beef.json",
+    )
     for product_pack in sorted((root / "product-packs").glob("fresh_*.json")):
         yield ContractTarget("product-pack.schema.json", product_pack)
     for blueprint in sorted((root / "report-blueprints").glob("*.json")):

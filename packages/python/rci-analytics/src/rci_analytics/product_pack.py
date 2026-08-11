@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_contracts import ContractError, validate_instance
+from rci_product_packs import ProductPackCatalog
 
 JsonObject = dict[str, Any]
 _FORMULA_NODES = (
@@ -100,14 +101,30 @@ class ProductPackLoader:
             document = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"could not read Product Pack {path}: {exc}") from exc
+        return self.load_document(document, label=str(path))
+
+    def load_document(
+        self,
+        document: JsonObject,
+        *,
+        label: str = "<Product Pack>",
+        report_blueprint: JsonObject | None = None,
+    ) -> ProductPack:
         validate_instance(
             self._root,
             "product-pack.schema.json",
             document,
-            label=str(path),
+            label=label,
         )
         self._validate_semantics(document)
-        self._validate_report_blueprint(document)
+        if report_blueprint is None:
+            self._validate_report_blueprint(document)
+        else:
+            self._validate_report_blueprint_document(
+                document,
+                report_blueprint,
+                label=f"{label} report blueprint",
+            )
         return ProductPack(
             id=str(document["id"]),
             name=str(document["name"]),
@@ -346,9 +363,19 @@ class ProductPackLoader:
             blueprint = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"could not read report blueprint {path}: {exc}") from exc
-        validate_instance(self._root, "report-blueprint.schema.json", blueprint, label=str(path))
+        self._validate_report_blueprint_document(document, blueprint, label=str(path))
+
+    def _validate_report_blueprint_document(
+        self,
+        document: JsonObject,
+        blueprint: JsonObject,
+        *,
+        label: str,
+    ) -> None:
+        validate_instance(self._root, "report-blueprint.schema.json", blueprint, label=label)
+        reference = document["reporting"]["report_blueprint"]
         if blueprint["id"] != reference["id"] or blueprint["version"] != reference["version"]:
-            raise ContractError("Product Pack report blueprint reference does not match the file")
+            raise ContractError("Product Pack report blueprint reference does not match")
         if blueprint["product_pack"] != {
             "id": document["id"],
             "version": document["version"],
@@ -435,6 +462,25 @@ class ProductPackLoader:
             raise ContractError(
                 f"conversion formula {formula!r} uses unknown names {sorted(names - allowed_names)}"
             )
+
+
+class CatalogProductPackLoader:
+    """Validate and materialize an exact Product Pack version from a shared catalog."""
+
+    def __init__(self, repository_root: Path, catalog: ProductPackCatalog) -> None:
+        self._loader = ProductPackLoader(repository_root)
+        self._catalog = catalog
+
+    async def load(self, pack_id: str, version: str) -> ProductPack:
+        record = await self._catalog.get(pack_id, version)
+        pack = self._loader.load_document(
+            record.document,
+            label=f"Product Pack {pack_id}@{version}",
+            report_blueprint=record.report_blueprint,
+        )
+        if pack.checksum != record.checksum:
+            raise ContractError(f"Product Pack {pack_id}@{version} checksum does not match")
+        return pack
 
 
 class ProductPackRepository(Protocol):

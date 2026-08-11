@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from rci_product_packs import ProductPackCatalog
+from rci_results.blueprints import ReportBlueprint
 from rci_results.contracts import AnalysisResultValidator, result_checksum
 from rci_results.models import (
     AnalysisPublicationRecord,
@@ -37,11 +39,32 @@ class AnalysisResultService:
         validator: AnalysisResultValidator,
         object_store: ReportObjectStore,
         renderer: ArtifactRenderer | None = None,
+        product_pack_catalog: ProductPackCatalog | None = None,
     ) -> None:
         self._repository = repository
         self._validator = validator
         self._object_store = object_store
         self._renderer = renderer or ArtifactRenderer()
+        self._product_pack_catalog = product_pack_catalog
+
+    async def _runtime_bundle(
+        self,
+        document: JsonObject,
+    ) -> tuple[ReportBlueprint, JsonObject] | None:
+        if self._product_pack_catalog is None or str(document.get("schema_version")) != "2.0.0":
+            return None
+        product_pack = document.get("product_pack")
+        if not isinstance(product_pack, dict):
+            raise ValueError("AnalysisResult has no Product Pack reference")
+        record = await self._product_pack_catalog.get(
+            str(product_pack["id"]),
+            str(product_pack["version"]),
+        )
+        return self._renderer.runtime_bundle(
+            document,
+            record.document,
+            record.report_blueprint,
+        )
 
     async def publish(
         self, document: dict[str, Any], *, collection_run_id: str | None = None
@@ -183,6 +206,7 @@ class AnalysisResultService:
         view = self._renderer.report_view(
             document,
             presentation_context=presentation_context,
+            runtime_bundle=await self._runtime_bundle(document),
         )
         provenance = document.get("provenance", {})
         governed_checksum = (
@@ -257,6 +281,7 @@ class AnalysisResultService:
             presentation_context=(
                 publication.presentation_context if publication is not None else None
             ),
+            runtime_bundle=await self._runtime_bundle(document),
         )
         storage_uri = await self._object_store.put(analysis.analysis_id, payload)
         return await self._repository.record_artifact(

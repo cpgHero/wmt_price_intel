@@ -2007,18 +2007,31 @@ class ArtifactRenderer:
     def version(self) -> str:
         return RENDERER_VERSION
 
+    def runtime_bundle(
+        self,
+        result: JsonObject,
+        product_pack: JsonObject,
+        report_blueprint: JsonObject,
+    ) -> tuple[ReportBlueprint, JsonObject]:
+        """Validate database-backed presentation documents against the result references."""
+
+        if self._blueprints is None:
+            raise RuntimeError("report blueprint validation is not configured")
+        return self._blueprints.load_for_documents(result, report_blueprint, product_pack)
+
     def report_view(
         self,
         result: JsonObject,
         *,
         artifact_type: ArtifactType | None = None,
         presentation_context: JsonObject | None = None,
+        runtime_bundle: tuple[ReportBlueprint, JsonObject] | None = None,
     ) -> JsonObject:
         if str(result.get("schema_version")) != "2.0.0":
             raise ValueError("report views require AnalysisResult V2")
         if self._blueprints is None:
             raise RuntimeError("report blueprint catalog is not configured")
-        blueprint, product_pack = self._blueprints.load_for_result(result)
+        blueprint, product_pack = runtime_bundle or self._blueprints.load_for_result(result)
         view = self._projector.project(
             result,
             blueprint,
@@ -2141,12 +2154,13 @@ class ArtifactRenderer:
         self,
         result: JsonObject,
         artifact_type: ArtifactType,
+        runtime_bundle: tuple[ReportBlueprint, JsonObject] | None = None,
     ) -> tuple[ReportBlueprint, JsonObject, JsonObject] | None:
         if str(result.get("schema_version")) != "2.0.0":
             return None
         if self._blueprints is None:
             raise RuntimeError("report blueprint catalog is not configured")
-        blueprint, product_pack = self._blueprints.load_for_result(result)
+        blueprint, product_pack = runtime_bundle or self._blueprints.load_for_result(result)
         return (
             blueprint,
             product_pack,
@@ -2182,10 +2196,11 @@ class ArtifactRenderer:
         artifact_type: str,
         *,
         presentation_context: JsonObject | None = None,
+        runtime_bundle: tuple[ReportBlueprint, JsonObject] | None = None,
     ) -> ArtifactPayload:
         analysis_id = str(result["analysis_id"])
         if artifact_type == "html":
-            context = self._context(result, "html")
+            context = self._context(result, "html", runtime_bundle)
             view = self._artifact_view(result, context, presentation_context)
             return ArtifactPayload(
                 "html",
@@ -2199,7 +2214,7 @@ class ArtifactRenderer:
                 self.version,
             )
         if artifact_type == "xlsx":
-            context = self._context(result, "xlsx")
+            context = self._context(result, "xlsx", runtime_bundle)
             view = self._artifact_view(result, context, presentation_context)
             return ArtifactPayload(
                 "xlsx",
@@ -2215,8 +2230,8 @@ class ArtifactRenderer:
                 self.version,
             )
         if artifact_type == "leadership_email":
-            context = self._context(result, "leadership_email")
-            html_context = self._context(result, "html")
+            context = self._context(result, "leadership_email", runtime_bundle)
+            html_context = self._context(result, "html", runtime_bundle)
             view = self._artifact_view(result, context, presentation_context)
             html_view = self._artifact_view(result, html_context, presentation_context)
             return ArtifactPayload(
@@ -2235,7 +2250,11 @@ class ArtifactRenderer:
                 self.version,
             )
         if artifact_type == "audit_zip":
-            return self._audit_package(result, presentation_context=presentation_context)
+            return self._audit_package(
+                result,
+                presentation_context=presentation_context,
+                runtime_bundle=runtime_bundle,
+            )
         raise ValueError(f"unsupported artifact type {artifact_type!r}")
 
     def _audit_package(
@@ -2243,14 +2262,26 @@ class ArtifactRenderer:
         result: JsonObject,
         *,
         presentation_context: JsonObject | None = None,
+        runtime_bundle: tuple[ReportBlueprint, JsonObject] | None = None,
     ) -> ArtifactPayload:
         children = [
-            self.render(result, "html", presentation_context=presentation_context),
-            self.render(result, "xlsx", presentation_context=presentation_context),
+            self.render(
+                result,
+                "html",
+                presentation_context=presentation_context,
+                runtime_bundle=runtime_bundle,
+            ),
+            self.render(
+                result,
+                "xlsx",
+                presentation_context=presentation_context,
+                runtime_bundle=runtime_bundle,
+            ),
             self.render(
                 result,
                 "leadership_email",
                 presentation_context=presentation_context,
+                runtime_bundle=runtime_bundle,
             ),
         ]
         result_body = canonical_result_bytes(result)

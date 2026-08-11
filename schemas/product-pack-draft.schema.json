@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-pack-draft.schema.json",
+  "title": "Retail Competitive Intelligence Product Pack Draft",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "product_pack_id",
+    "proposed_version",
+    "status",
+    "revision",
+    "config",
+    "report_blueprint",
+    "created_by",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "type": "string", "format": "uuid" },
+    "product_pack_id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "base_version": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "proposed_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "enum": ["draft", "validating", "candidate", "certified", "published", "abandoned"]
+    },
+    "revision": { "type": "integer", "minimum": 1 },
+    "config": {
+      "type": "object",
+      "description": "Mutable authoring state; candidate validation applies the normative Product Pack contract."
+    },
+    "report_blueprint": {
+      "type": "object",
+      "description": "Mutable authoring state; candidate validation applies the normative report-blueprint contract."
+    },
+    "validation_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "passed", "failed", "warnings"],
+      "properties": {
+        "status": { "enum": ["not_run", "running", "passed", "failed"] },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "last_run_id": { "type": ["string", "null"], "format": "uuid" }
+      }
+    },
+    "created_by": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

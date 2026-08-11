@@ -34,6 +34,12 @@ test("serves the application shell, workflow routes, and health route", async ({
   expect(quality.ok()).toBe(true);
   expect(await quality.text()).toContain("Decision readiness");
 
+  const productPacks = await request.get("/admin/product-packs");
+  expect(productPacks.ok()).toBe(true);
+  const productPacksHtml = await productPacks.text();
+  expect(productPacksHtml).toContain("Product Packs");
+  expect(productPacksHtml).toContain("Governed administration");
+
   const response = await request.get("/health");
   expect(response.ok()).toBe(true);
   await expect(response.json()).resolves.toMatchObject({

@@ -1,0 +1,16 @@
+[project]
+name = "rci-product-packs"
+version = "0.1.0"
+description = "Immutable Product Pack catalog and governed authoring persistence."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-contracts",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

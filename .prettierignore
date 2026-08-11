@@ -8,7 +8,7 @@ diagrams
 docs
 examples
 fixtures
-product-packs
+/product-packs
 prompts
 packages/typescript/contracts/src/generated
 reference_outputs

@@ -237,11 +237,19 @@ class ReportBlueprintLoader:
             document = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ContractError(f"could not read report blueprint {path}: {exc}") from exc
+        return self.load_document(document, label=str(path))
+
+    def load_document(
+        self,
+        document: JsonObject,
+        *,
+        label: str = "<report blueprint>",
+    ) -> ReportBlueprint:
         validate_instance(
             self._root,
             "report-blueprint.schema.json",
             document,
-            label=str(path),
+            label=label,
         )
         self._validate_semantics(document)
         product_pack = document["product_pack"]
@@ -253,6 +261,19 @@ class ReportBlueprintLoader:
             document=document,
         )
 
+    def load_for_documents(
+        self,
+        result: JsonObject,
+        blueprint_document: JsonObject,
+        product_pack: JsonObject,
+    ) -> tuple[ReportBlueprint, JsonObject]:
+        blueprint = self.load_document(
+            blueprint_document,
+            label="runtime report blueprint",
+        )
+        self._validate_result_references(result, blueprint, product_pack)
+        return blueprint, product_pack
+
     def load_for_result(self, result: JsonObject) -> tuple[ReportBlueprint, JsonObject]:
         product_pack_ref = result.get("product_pack")
         if not isinstance(product_pack_ref, dict):
@@ -261,6 +282,24 @@ class ReportBlueprintLoader:
         if not isinstance(blueprint_ref, dict):
             raise ContractError("AnalysisResult V2 has no report blueprint reference")
         blueprint = self.load(str(blueprint_ref["id"]))
+        pack_path = self._root / "product-packs" / f"{blueprint.product_pack_id}.json"
+        try:
+            product_pack = json.loads(pack_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"could not read Product Pack {pack_path}: {exc}") from exc
+        self._validate_result_references(result, blueprint, product_pack)
+        return blueprint, product_pack
+
+    @staticmethod
+    def _validate_result_references(
+        result: JsonObject,
+        blueprint: ReportBlueprint,
+        product_pack: JsonObject,
+    ) -> None:
+        product_pack_ref = result["product_pack"]
+        assert isinstance(product_pack_ref, dict)
+        blueprint_ref = product_pack_ref["report_blueprint"]
+        assert isinstance(blueprint_ref, dict)
         if blueprint.version != str(blueprint_ref["version"]):
             raise ContractError("AnalysisResult report blueprint version does not match")
         if (blueprint.product_pack_id, blueprint.product_pack_version) != (
@@ -270,14 +309,8 @@ class ReportBlueprintLoader:
             raise ContractError(
                 "report blueprint does not belong to the AnalysisResult Product Pack"
             )
-        pack_path = self._root / "product-packs" / f"{blueprint.product_pack_id}.json"
-        try:
-            product_pack = json.loads(pack_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ContractError(f"could not read Product Pack {pack_path}: {exc}") from exc
         if str(product_pack.get("version")) != blueprint.product_pack_version:
             raise ContractError("report blueprint Product Pack version does not match runtime data")
-        return blueprint, product_pack
 
     @staticmethod
     def _validate_semantics(document: JsonObject) -> None:

@@ -34,13 +34,18 @@ from rci_analytics.presentation import (
     merge_product_decision_context,
     merge_product_evidence_summary,
 )
-from rci_analytics.product_pack import ProductPackLoader, primary_exact_profile
+from rci_analytics.product_pack import (
+    CatalogProductPackLoader,
+    ProductPackLoader,
+    primary_exact_profile,
+)
 from rci_analytics.result_v2 import AnalysisResultV2Builder, ComparisonFact, evidence_set
 
 __all__ = [
     "AnalysisResultV2Builder",
     "AssortmentAccumulator",
     "CanonicalOfferNormalizer",
+    "CatalogProductPackLoader",
     "ComparisonEngine",
     "ComparisonFact",
     "ComparisonInputReducer",

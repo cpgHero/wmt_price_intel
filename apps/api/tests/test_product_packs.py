@@ -7,7 +7,12 @@ from httpx import ASGITransport, AsyncClient
 
 import rci_api.main as api_main
 from rci_api.main import create_app
-from rci_api.product_packs import load_product_pack_catalog_versions
+from rci_api.product_packs import (
+    CreateProductPackDraftRequest,
+    _starter_documents,
+    load_product_pack_catalog_versions,
+)
+from rci_contracts import validate_instance
 from rci_core import AppSettings
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -75,3 +80,41 @@ async def test_production_startup_publishes_product_pack_catalog(monkeypatch: An
         ("synchronized", probe.engine),
         ("disposed", probe.engine),
     ]
+
+
+def test_new_category_starter_is_a_valid_generic_product_pack_bundle() -> None:
+    config, blueprint = _starter_documents(
+        REPOSITORY_ROOT,
+        CreateProductPackDraftRequest(
+            product_pack_id="fresh_test_category",
+            name="Fresh Test Category",
+            proposed_version="1.0.0",
+            category_family="test category",
+            default_keyword="test product",
+        ),
+    )
+
+    validate_instance(REPOSITORY_ROOT, "product-pack.schema.json", config, label="starter-pack")
+    validate_instance(
+        REPOSITORY_ROOT,
+        "report-blueprint.schema.json",
+        blueprint,
+        label="starter-blueprint",
+    )
+    assert config["normalization"]["package_equivalence_policy"] == "exact_package_first"
+    assert config["matching_profiles"][0]["dimensions"] == ["package_weight_oz"]
+    assert config["retailer_overrides"] == {}
+
+
+async def test_production_authoring_requires_narrow_admin_token(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_BUILDER_ENABLED", "true")
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "private-admin-token")
+    app = create_app(AppSettings(app_env="production"))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/admin/product-packs/drafts")
+
+    assert response.status_code == 401
+    assert "administrator" in response.json()["detail"].lower()

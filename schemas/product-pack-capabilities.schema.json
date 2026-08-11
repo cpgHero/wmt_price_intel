@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-pack-capabilities.schema.json",
+  "title": "Retail Competitive Intelligence Product Pack Capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attribute_data_types",
+    "attribute_roles",
+    "extraction_rules",
+    "geographies",
+    "brand_policies",
+    "unknown_policies",
+    "price_selection_policies",
+    "package_equivalence_policies",
+    "report_sections",
+    "visualizations"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "attribute_data_types": { "$ref": "#/$defs/capabilities" },
+    "attribute_roles": { "$ref": "#/$defs/capabilities" },
+    "extraction_rules": { "$ref": "#/$defs/capabilities" },
+    "geographies": { "$ref": "#/$defs/capabilities" },
+    "brand_policies": { "$ref": "#/$defs/capabilities" },
+    "unknown_policies": { "$ref": "#/$defs/capabilities" },
+    "price_selection_policies": { "$ref": "#/$defs/capabilities" },
+    "package_equivalence_policies": { "$ref": "#/$defs/capabilities" },
+    "report_sections": { "$ref": "#/$defs/capabilities" },
+    "visualizations": { "$ref": "#/$defs/capabilities" }
+  },
+  "$defs": {
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "description", "status"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["available", "deprecated", "unavailable"] }
+        }
+      }
+    }
+  }
+}

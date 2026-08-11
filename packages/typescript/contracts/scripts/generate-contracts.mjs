@@ -33,6 +33,13 @@ const contracts = [
   ["product-detail-snapshot.schema.json", "product-detail-snapshot.ts"],
   ["product-match-decision.schema.json", "product-match-decision.ts"],
   ["product-match-review.schema.json", "product-match-review.ts"],
+  ["product-pack-capabilities.schema.json", "product-pack-capabilities.ts"],
+  ["product-pack-draft.schema.json", "product-pack-draft.ts"],
+  ["product-pack-publication.schema.json", "product-pack-publication.ts"],
+  [
+    "product-pack-validation-result.schema.json",
+    "product-pack-validation-result.ts",
+  ],
   ["product-pack.schema.json", "product-pack.ts"],
   ["provider-error.schema.json", "provider-error.ts"],
   ["report-blueprint.schema.json", "report-blueprint.ts"],

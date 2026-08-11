@@ -35,5 +35,7 @@ Approved geography snapshots, primary/competitor correspondence, exact Search es
 explicit paid launch, immutable version editing, and a separately governed PDP cadence.
 
 ## Phase 10.2 - Admin Product Pack Builder
-Only after category schemas and the Phase 10.1 collection workflow stabilize across additional
-categories.
+Governed guided authoring, exact-version runtime catalog, immutable evidence manifests,
+leased deterministic certification, and explicit publish/activate controls. Product Packs remain
+configuration over category-neutral capabilities; published versions are immutable and existing
+collections remain pinned to their original version.
