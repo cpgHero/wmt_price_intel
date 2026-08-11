@@ -358,7 +358,9 @@ export function BrandWorkbenchPanel({
                   </b>
                   {brand.distribution_evidence === "search_brand_field"
                     ? "locations"
-                    : "matched ZIPs"}
+                    : brand.observed_zipcodes === 1
+                      ? "matched ZIP"
+                      : "matched ZIPs"}
                 </span>
                 <span>
                   <b>
@@ -379,7 +381,7 @@ export function BrandWorkbenchPanel({
                       ? `${(brand.location_share * 100).toFixed(1)}% of observed retailer locations`
                       : brand.distribution_evidence ===
                           "pdp_identity_joined_to_matched_search"
-                        ? `At least ${brand.observed_zipcodes.toLocaleString()} matched ZIPs; full footprint will refine on the next analysis`
+                        ? `At least ${brand.observed_zipcodes.toLocaleString()} matched ZIP${brand.observed_zipcodes === 1 ? "" : "s"}; full footprint will refine on the next analysis`
                         : "PDP identity is available; Search footprint is not resolved in this publication"}
                   </em>
                 </span>

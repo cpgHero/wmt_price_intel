@@ -141,9 +141,9 @@ Brand Workbench distribution evidence is explicit in the contract. `search_brand
 exact retailer Search footprint. For publications created before classified brands were carried
 into assortment summaries, PDP identity is joined to existing Search-derived match candidates and
 reported as a conservative matched-ZIP lower bound; it is never presented as full brand
-distribution. PDP identity without joinable Search evidence remains available for classification
-with an unknown footprint. Future analyses prefer enriched/classified brand identity when building
-assortment summaries.
+distribution, an exact location share, or a distribution tier. PDP identity without joinable
+Search evidence remains available for classification with an unknown footprint. Future analyses
+prefer enriched/classified brand identity when building assortment summaries.
 
 ## Deferred boundaries
 

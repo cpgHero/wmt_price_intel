@@ -235,6 +235,7 @@ async def test_brand_workbench_backfills_pdp_brands_from_legacy_publication_cont
     assert great_value["role"] == "private_label"
     assert great_value["observed_products"] == 2
     assert great_value["observed_zipcodes"] == 22
-    assert great_value["location_share"] == 0.22
+    assert great_value["location_share"] == 0
+    assert great_value["distribution_tier"] == "unknown"
     assert great_value["distribution_evidence"] == "pdp_identity_joined_to_matched_search"
     assert friendly_farms["distribution_evidence"] == "search_brand_field"

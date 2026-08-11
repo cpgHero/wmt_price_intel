@@ -843,11 +843,7 @@ class BrandReviewService:
                 )
                 product_location_lower_bounds[key] = max(
                     product_location_lower_bounds.get(key, 0),
-                    (
-                        location_count
-                        if retailer_id == benchmark_retailer and location_count
-                        else market_count
-                    ),
+                    location_count if retailer_id == benchmark_retailer else 0,
                 )
 
         assortment_value = (
@@ -914,14 +910,13 @@ class BrandReviewService:
                         ),
                         default=0,
                     )
-                    denominator = max(0, int(summary.get("observed_zipcodes") or 0))
-                    share = zipcodes / denominator if denominator else 0.0
+                    share = 0.0
                     distribution_evidence = (
                         "pdp_identity_joined_to_matched_search" if zipcodes else "pdp_identity_only"
                     )
                 tier = (
                     "unknown"
-                    if locations <= 0
+                    if distribution_evidence != "search_brand_field" or locations <= 0
                     else "single_location"
                     if locations <= 1
                     else "broad"
