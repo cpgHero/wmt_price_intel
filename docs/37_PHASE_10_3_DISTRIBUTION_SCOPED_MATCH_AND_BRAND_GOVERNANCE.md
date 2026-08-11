@@ -111,7 +111,7 @@ server remains authoritative.
 
 ## Persistence and processing
 
-Migration `0024_distribution_scoped_match_governance` adds scope identity to
+Migration `0024_scoped_match_brand` adds scope identity to
 `product_match_rule`, updates its uniqueness indexes, adds immutable brand revision/rule/event and
 future-application tables, and adds `brand_revision_id` to `analysis_run` idempotency.
 

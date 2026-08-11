@@ -1,6 +1,6 @@
 """Add distribution-scoped product relationships and governed brand roles.
 
-Revision ID: 0024_distribution_scoped_match_governance
+Revision ID: 0024_scoped_match_brand
 Revises: 0023_product_pack_authoring
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0024_distribution_scoped_match_governance"
+revision: str = "0024_scoped_match_brand"
 down_revision: str | None = "0023_product_pack_authoring"
 branch_labels: str | None = None
 depends_on: str | None = None

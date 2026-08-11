@@ -27,6 +27,6 @@ dynamic Collection Builder. `0022_product_pack_runtime_catalog` makes exact Prod
 report-blueprint versions first-class runtime records. `0023_product_pack_authoring` adds
 revisioned drafts, immutable evidence manifests, leased validation work, certification links,
 and review events for the governed administrator builder.
-`0024_distribution_scoped_match_governance` preserves the global one-to-one default while adding
+`0024_scoped_match_brand` preserves the global one-to-one default while adding
 location-scoped relationship metadata, conflict-safe comparison resolution, and immutable brand
 classification revisions/application policy for the Brand Workbench.

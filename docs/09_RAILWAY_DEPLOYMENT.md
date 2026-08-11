@@ -174,7 +174,7 @@ MetricsCart uses query-parameter authentication.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
 5. Deploy `api`. Its pre-deploy log must show Alembic at
-   `0024_distribution_scoped_match_governance`; then verify
+   `0024_scoped_match_brand`; then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
