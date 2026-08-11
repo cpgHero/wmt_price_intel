@@ -2,6 +2,8 @@ import "server-only";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+export { assertSameOrigin } from "./request-origin";
+
 const COOKIE_NAME = "rci_product_pack_admin";
 const SESSION_SECONDS = 8 * 60 * 60;
 
@@ -69,11 +71,6 @@ export function verifyAdminSession(request: Request): boolean {
   } catch {
     return false;
   }
-}
-
-export function assertSameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
 }
 
 export const adminSessionCookie = {
