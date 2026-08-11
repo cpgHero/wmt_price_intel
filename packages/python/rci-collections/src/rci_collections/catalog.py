@@ -14,6 +14,9 @@ class CollectionRetailerCatalog:
         self._retailers = {
             str(item["id"]): RetailerCapability(
                 retailer_id=str(item["id"]),
+                display_name=str(item["display_name"]),
+                adapter_id=str(item.get("adapter_id", "")),
+                status=str(item.get("status", "catalogued")),
                 location_dimension=str(item["location_dimension"]),
                 credits_per_successful_page=int(item["credits_per_successful_page"]),
                 endpoint=str(item["endpoint"]),
@@ -32,3 +35,11 @@ class CollectionRetailerCatalog:
             raise ValueError(
                 f"retailer {retailer_id!r} is absent from the retailer catalog"
             ) from exc
+
+    def enabled(self) -> tuple[RetailerCapability, ...]:
+        return tuple(
+            sorted(
+                (item for item in self._retailers.values() if item.status == "enabled"),
+                key=lambda item: (item.display_name, item.retailer_id),
+            )
+        )

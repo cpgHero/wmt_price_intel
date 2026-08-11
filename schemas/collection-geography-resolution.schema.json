@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/collection-geography-resolution.schema.json",
+  "title": "Retail Competitive Intelligence Collection Geography Resolution",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "request",
+    "checksum",
+    "status",
+    "counts",
+    "locations",
+    "edges",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "request": {
+      "$ref": "collection-geography-request.schema.json"
+    },
+    "checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "invalid"
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "primary",
+        "competitors"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "primary": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "competitors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/location"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "retailer_id",
+        "scope_key",
+        "zipcode",
+        "country",
+        "selection_reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "role": {
+          "enum": [
+            "primary",
+            "competitor"
+          ]
+        },
+        "retailer_id": {
+          "type": "string"
+        },
+        "retailer_location_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "scope_key": {
+          "type": "string"
+        },
+        "store_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "store_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zipcode": {
+          "type": "string"
+        },
+        "city": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "country": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "longitude": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "selection_reason": {
+          "type": "string"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_location_id",
+        "competitor_location_id",
+        "distance_miles"
+      ],
+      "properties": {
+        "primary_location_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "competitor_location_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "distance_miles": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

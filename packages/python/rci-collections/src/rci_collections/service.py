@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
+from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import (
     BudgetExceededError,
     CostEstimate,
     DefinitionRecord,
+    GeographyResolution,
     JsonObject,
     QueueTask,
     RunMonitor,
     RunRecord,
     RunUsage,
+    ScopeEstimateRecord,
 )
 from rci_collections.planner import CollectionPlanner, canonical_checksum
 from rci_collections.ports import CollectionRepository
@@ -26,6 +30,10 @@ class CollectionNotFoundError(LookupError):
 
 
 class CollectionBudgetError(ValueError):
+    pass
+
+
+class CollectionApprovalError(ValueError):
     pass
 
 
@@ -47,10 +55,35 @@ class CollectionService:
         repository: CollectionRepository,
         planner: CollectionPlanner,
         schema_root: Path,
+        geography_resolver: CollectionGeographyResolver | None = None,
     ) -> None:
         self.repository = repository
         self.planner = planner
         self.schema_root = schema_root
+        self.geography_resolver = geography_resolver
+
+    async def resolve_geography(self, request: JsonObject) -> GeographyResolution:
+        if self.geography_resolver is None:
+            raise RuntimeError("collection geography resolver is not configured")
+        validate_instance(
+            self.schema_root,
+            "collection-geography-request.schema.json",
+            request,
+            label="collection geography request",
+        )
+        try:
+            resolution = await self.geography_resolver.resolve(request)
+        except ValueError as exc:
+            raise ContractError(f"collection geography request: {exc}") from exc
+        return await self.repository.save_geography_resolution(resolution)
+
+    async def get_geography_resolution(self, resolution_id: str) -> GeographyResolution:
+        resolution = await self.repository.get_geography_resolution(resolution_id)
+        if resolution is None:
+            raise CollectionNotFoundError(
+                f"collection geography resolution {resolution_id!r} was not found"
+            )
+        return resolution
 
     async def publish_definition(self, config: JsonObject) -> DefinitionRecord:
         validate_instance(
@@ -84,6 +117,80 @@ class CollectionService:
         )
         _validate_schedule(config)
         return (await self.planner.plan(config)).estimate
+
+    async def create_scope_estimate(
+        self,
+        config: JsonObject,
+        *,
+        valid_for_minutes: int = 30,
+    ) -> ScopeEstimateRecord:
+        validate_instance(
+            self.schema_root,
+            "collection-definition.schema.json",
+            config,
+            label="collection definition",
+        )
+        _validate_schedule(config)
+        geography = config.get("geography")
+        if not isinstance(geography, dict) or geography.get("strategy") != "approved_resolution":
+            raise ContractError(
+                "collection definition: geography must reference an approved resolution"
+            )
+        resolution = await self.get_geography_resolution(str(geography["resolution_id"]))
+        if str(geography["resolution_checksum"]) != resolution.checksum:
+            raise ContractError("collection definition: geography checksum does not match")
+        plan = await self.planner.plan(config)
+        now = datetime.now(UTC)
+        record = ScopeEstimateRecord(
+            id=str(uuid4()),
+            definition_id=str(config["id"]),
+            resolution_id=resolution.id,
+            configuration_checksum=canonical_checksum(config),
+            geography_checksum=resolution.checksum,
+            estimate=plan.estimate,
+            expires_at=now + timedelta(minutes=valid_for_minutes),
+            created_at=now,
+        )
+        return await self.repository.save_scope_estimate(record)
+
+    async def launch_approved(self, config: JsonObject, estimate_id: str) -> RunRecord:
+        estimate = await self.repository.get_scope_estimate(estimate_id)
+        if estimate is None:
+            raise CollectionApprovalError("the approved estimate was not found")
+        now = datetime.now(UTC)
+        expires_at = estimate.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at <= now:
+            raise CollectionApprovalError("the approved estimate has expired; estimate again")
+        configuration_checksum = canonical_checksum(config)
+        if configuration_checksum != estimate.configuration_checksum:
+            raise CollectionApprovalError(
+                "the collection changed after approval; review a new estimate"
+            )
+        geography = config.get("geography")
+        if not isinstance(geography, dict):
+            raise CollectionApprovalError("the collection has no approved geography")
+        if (
+            str(geography.get("resolution_id")) != estimate.resolution_id
+            or str(geography.get("resolution_checksum")) != estimate.geography_checksum
+        ):
+            raise CollectionApprovalError(
+                "the geography changed after approval; review a new estimate"
+            )
+        plan = await self.planner.plan(config)
+        if (
+            plan.estimate.estimated_total_pages != estimate.estimate.estimated_total_pages
+            or plan.estimate.estimated_total_credits != estimate.estimate.estimated_total_credits
+        ):
+            raise CollectionApprovalError(
+                "the current plan no longer matches the approved estimate"
+            )
+        definition = await self.publish_definition(config)
+        try:
+            return await self.repository.create_run(definition, plan, scope_estimate_id=estimate.id)
+        except BudgetExceededError as exc:
+            raise CollectionBudgetError(str(exc)) from exc
 
     async def create_run(
         self,

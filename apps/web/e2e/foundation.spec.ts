@@ -14,7 +14,13 @@ test("serves the application shell, workflow routes, and health route", async ({
   expect(collections.ok()).toBe(true);
   const collectionsHtml = await collections.text();
   expect(collectionsHtml).toContain("New collection");
-  expect(collectionsHtml).toContain("Product Packs unavailable");
+  expect(collectionsHtml).toContain("Open collection builder");
+
+  const builder = await request.get("/collections/new");
+  expect(builder.ok()).toBe(true);
+  expect(await builder.text()).toContain(
+    "Collection options could not be loaded",
+  );
 
   const automation = await request.get("/automation");
   expect(automation.ok()).toBe(true);

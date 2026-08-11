@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/collection-scope-estimate.schema.json",
+  "title": "Retail Competitive Intelligence Collection Scope Estimate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "definition_id",
+    "resolution_id",
+    "configuration_checksum",
+    "geography_checksum",
+    "retailers",
+    "estimated_total_pages",
+    "estimated_total_credits",
+    "expires_at",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "definition_id": {
+      "type": "string"
+    },
+    "resolution_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "configuration_checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "geography_checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "retailers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "retailer_id",
+          "location_units",
+          "credits_per_page",
+          "max_pages",
+          "estimated_pages",
+          "estimated_credits"
+        ],
+        "properties": {
+          "retailer_id": {"type": "string"},
+          "location_units": {"type": "integer", "minimum": 0},
+          "credits_per_page": {"type": "integer", "minimum": 0},
+          "max_pages": {"type": "integer", "minimum": 1},
+          "estimated_pages": {"type": "integer", "minimum": 0},
+          "estimated_credits": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "estimated_total_pages": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "estimated_total_credits": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

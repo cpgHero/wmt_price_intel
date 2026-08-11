@@ -113,3 +113,38 @@ def test_analysis_result_v2_requires_narrative_metric_evidence() -> None:
             invalid,
             label="invalid-analysis-result-v2",
         )
+
+
+def test_collection_geography_resolution_resolves_shared_request_schema() -> None:
+    document = {
+        "id": "00000000-0000-0000-0000-000000000201",
+        "request": {
+            "primary_retailer_id": "walmart_us",
+            "competitor_retailer_ids": ["aldi_us"],
+            "country": "USA",
+            "primary_selection": {"mode": "custom_zips", "zipcodes": ["03038"]},
+            "competitor_correspondence": {"mode": "same_zip"},
+        },
+        "checksum": "a" * 64,
+        "status": "ready",
+        "counts": {"total": 0, "primary": 0, "competitors": {"aldi_us": 0}},
+        "locations": [],
+        "edges": [],
+        "created_at": "2026-08-11T00:00:00Z",
+    }
+    validate_instance(
+        REPOSITORY_ROOT,
+        "collection-geography-resolution.schema.json",
+        document,
+        label="collection-geography-resolution",
+    )
+
+    invalid = deepcopy(document)
+    invalid["request"]["primary_selection"] = {"mode": "not-a-mode"}
+    with pytest.raises(ContractError, match="not-a-mode"):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "collection-geography-resolution.schema.json",
+            invalid,
+            label="invalid-collection-geography-resolution",
+        )

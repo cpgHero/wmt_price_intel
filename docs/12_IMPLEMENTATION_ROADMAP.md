@@ -30,5 +30,10 @@ Add Eggs, Milk, Bananas in that order. Minimize new generic capabilities and pro
 ## Phase 9 - Automation
 Schedules, historical run comparison, alert definitions/events, email delivery, collection budgets.
 
-## Phase 10 - Admin Product Pack Builder
-Only after schema stabilizes across additional categories.
+## Phase 10.1 - Dynamic Collection Builder
+Approved geography snapshots, primary/competitor correspondence, exact Search estimates,
+explicit paid launch, immutable version editing, and a separately governed PDP cadence.
+
+## Phase 10.2 - Admin Product Pack Builder
+Only after category schemas and the Phase 10.1 collection workflow stabilize across additional
+categories.

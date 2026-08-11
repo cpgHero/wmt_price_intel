@@ -12,6 +12,8 @@ from rci_collections.models import (
     BudgetExceededError,
     CollectionPlan,
     DefinitionRecord,
+    GeographyResolution,
+    LocationFacet,
     LocationUnit,
     QueueTask,
     RawArtifact,
@@ -19,6 +21,7 @@ from rci_collections.models import (
     RunMonitor,
     RunRecord,
     RunUsage,
+    ScopeEstimateRecord,
     TaskSeed,
 )
 
@@ -37,6 +40,9 @@ class InMemoryCollectionRepository:
         self._task_identities: set[tuple[str, str, str, int, str]] = set()
         self._artifacts: dict[str, RawArtifact] = {}
         self._scheduled_runs: dict[tuple[str, datetime], str] = {}
+        self._geography_resolutions: dict[str, GeographyResolution] = {}
+        self._geography_checksums: dict[str, str] = {}
+        self._scope_estimates: dict[str, ScopeEstimateRecord] = {}
 
     async def list_location_units(
         self, retailer_ids: Sequence[str], country: str
@@ -47,6 +53,50 @@ class InMemoryCollectionRepository:
             for unit in self._location_units
             if unit.retailer_id in selected and unit.country == country
         ]
+
+    async def save_geography_resolution(
+        self, resolution: GeographyResolution
+    ) -> GeographyResolution:
+        async with self._lock:
+            existing_id = self._geography_checksums.get(resolution.checksum)
+            if existing_id is not None:
+                return self._geography_resolutions[existing_id]
+            self._geography_resolutions[resolution.id] = resolution
+            self._geography_checksums[resolution.checksum] = resolution.id
+            return resolution
+
+    async def get_geography_resolution(self, resolution_id: str) -> GeographyResolution | None:
+        async with self._lock:
+            return self._geography_resolutions.get(resolution_id)
+
+    async def list_location_facets(
+        self,
+        retailer_id: str,
+        country: str,
+        states: Sequence[str] = (),
+    ) -> list[LocationFacet]:
+        selected_states = {state.upper() for state in states}
+        counts: dict[tuple[str, str | None], int] = {}
+        for unit in self._location_units:
+            if unit.retailer_id != retailer_id or unit.country != country or not unit.state:
+                continue
+            if selected_states and unit.state.upper() not in selected_states:
+                continue
+            key = (unit.state.upper(), unit.city)
+            counts[key] = counts.get(key, 0) + 1
+        return [
+            LocationFacet(state=state, city=city, location_count=count)
+            for (state, city), count in sorted(counts.items())
+        ]
+
+    async def save_scope_estimate(self, estimate: ScopeEstimateRecord) -> ScopeEstimateRecord:
+        async with self._lock:
+            self._scope_estimates[estimate.id] = estimate
+            return estimate
+
+    async def get_scope_estimate(self, estimate_id: str) -> ScopeEstimateRecord | None:
+        async with self._lock:
+            return self._scope_estimates.get(estimate_id)
 
     async def publish_definition(
         self, config: dict[str, object], checksum: str
@@ -98,9 +148,21 @@ class InMemoryCollectionRepository:
         trigger_type: str = "manual",
         schedule_id: str | None = None,
         scheduled_for: datetime | None = None,
+        scope_estimate_id: str | None = None,
     ) -> RunRecord:
         async with self._lock:
             now = datetime.now(UTC)
+            if scope_estimate_id is not None:
+                existing = next(
+                    (
+                        run
+                        for run in self._runs.values()
+                        if run.scope_estimate_id == scope_estimate_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return existing
             if schedule_id is not None and scheduled_for is not None:
                 existing_id = self._scheduled_runs.get((schedule_id, scheduled_for))
                 if existing_id is not None:
@@ -123,6 +185,7 @@ class InMemoryCollectionRepository:
                 scheduled_for=scheduled_for,
                 availability_gate_status=("pending" if plan.availability_gate else "skipped"),
                 availability_gate_config=dict(plan.availability_gate),
+                scope_estimate_id=scope_estimate_id,
             )
             self._runs[run.id] = run
             if schedule_id is not None and scheduled_for is not None:

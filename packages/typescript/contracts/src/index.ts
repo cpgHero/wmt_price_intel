@@ -4,6 +4,9 @@ export type { RetailCompetitiveIntelligenceAnalysisEvidenceSet } from "./generat
 export type { RetailCompetitiveIntelligenceAnalysisBrief } from "./generated/analysis-brief";
 export type { RetailCompetitiveIntelligenceCanonicalProduct } from "./generated/canonical-product";
 export type { RetailCompetitiveIntelligenceCollectionDefinition } from "./generated/collection-definition";
+export type { RetailCompetitiveIntelligenceCollectionGeographyRequest } from "./generated/collection-geography-request";
+export type { RetailCompetitiveIntelligenceCollectionGeographyResolution } from "./generated/collection-geography-resolution";
+export type { RetailCompetitiveIntelligenceCollectionScopeEstimate } from "./generated/collection-scope-estimate";
 export type { RetailCompetitiveIntelligenceGoldenBenchmarks } from "./generated/golden-benchmarks";
 export type { RetailCompetitiveIntelligenceHistoricalInputManifest } from "./generated/historical-input-manifest";
 export type { NormalizedRetailOffer } from "./generated/normalized-offer";

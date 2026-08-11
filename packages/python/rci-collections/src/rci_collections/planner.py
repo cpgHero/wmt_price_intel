@@ -96,12 +96,38 @@ class CollectionPlanner:
             if capability.location_dimension == "store_zip"
         }
         source_ids.add(benchmark_retailer)
-        rows = await self._universe.list_location_units(sorted(source_ids), country)
+        strategy = str(geography["strategy"])
+        if strategy == "approved_resolution":
+            resolution_id = str(geography.get("resolution_id") or "")
+            resolution = await self._universe.get_geography_resolution(resolution_id)
+            if resolution is None:
+                raise ValueError(f"geography resolution {resolution_id!r} was not found")
+            expected_checksum = str(geography.get("resolution_checksum") or "")
+            if resolution.checksum != expected_checksum:
+                raise ValueError("geography resolution checksum does not match the snapshot")
+            if resolution.status != "ready":
+                raise ValueError("geography resolution is not ready")
+            rows = [
+                LocationUnit(
+                    id=item.retailer_location_id or item.id,
+                    retailer_id=item.retailer_id,
+                    zipcode=item.zipcode,
+                    store_number=item.store_number or "",
+                    state=item.state,
+                    country=item.country,
+                    store_name=item.store_name,
+                    city=item.city,
+                    latitude=item.latitude,
+                    longitude=item.longitude,
+                )
+                for item in resolution.locations
+            ]
+        else:
+            rows = await self._universe.list_location_units(sorted(source_ids), country)
         by_retailer: dict[str, list[LocationUnit]] = defaultdict(list)
         for row in rows:
             by_retailer[row.retailer_id].append(row)
 
-        strategy = str(geography["strategy"])
         states = {state.upper() for state in _strings(geography.get("states"))}
         explicit_zips = {
             normalized
@@ -162,6 +188,7 @@ class CollectionPlanner:
                     benchmark_rows=benchmark_rows,
                     union_zips=union_zips,
                     all_rows=rows,
+                    retailer_rows=by_retailer.get(retailer_id, []),
                 )
                 tasks = [
                     self._zip_task(
@@ -251,7 +278,7 @@ class CollectionPlanner:
         benchmark_zips: set[str],
         union_zips: set[str],
     ) -> list[LocationUnit]:
-        if strategy == "all_retailer_locations":
+        if strategy in {"all_retailer_locations", "approved_resolution"}:
             selected = rows
         elif strategy == "states":
             selected = [row for row in rows if row.state and row.state.upper() in states]
@@ -277,9 +304,12 @@ class CollectionPlanner:
         benchmark_rows: list[LocationUnit],
         union_zips: set[str],
         all_rows: list[LocationUnit],
+        retailer_rows: list[LocationUnit],
     ) -> list[str]:
         if strategy == "custom_zips":
             zipcodes = explicit_zips
+        elif strategy == "approved_resolution":
+            zipcodes = {row.zipcode for row in retailer_rows if row.zipcode}
         elif strategy == "custom_locations":
             zipcodes = {
                 row.zipcode for row in all_rows if row.id in explicit_location_ids and row.zipcode

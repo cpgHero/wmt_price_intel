@@ -11,6 +11,7 @@ from rci_collections import (
     CollectionRetailerCatalog,
     InMemoryCollectionRepository,
 )
+from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import LocationUnit
 from rci_collections.service import CollectionService
 
@@ -51,6 +52,19 @@ def _service() -> CollectionService:
         )
         for index in range(2)
     ]
+    units.append(
+        LocationUnit(
+            id="00000000-0000-0000-0000-000000000101",
+            retailer_id="aldi_us",
+            zipcode="06000",
+            store_number="475-101",
+            state="CT",
+            country="USA",
+            city="Example",
+            latitude=41.6,
+            longitude=-72.7,
+        )
+    )
     repository = InMemoryCollectionRepository(units)
     catalog = CollectionRetailerCatalog.from_path(
         REPOSITORY_ROOT / "config" / "retailer-catalog.json"
@@ -59,7 +73,37 @@ def _service() -> CollectionService:
         repository,
         CollectionPlanner(repository, catalog),
         REPOSITORY_ROOT,
+        CollectionGeographyResolver(repository, catalog),
     )
+
+
+def _approved_config(resolution: dict[str, object]) -> dict[str, object]:
+    config = _config()
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+        },
+        {
+            "retailer_id": "aldi_us",
+            "adapter_id": "metricscart_new_aldi_serp_zipcode",
+            "enabled": True,
+        },
+        {
+            "retailer_id": "amazon_us_same_day",
+            "adapter_id": "metricscart_amazon_same_day_zipcode",
+            "enabled": True,
+        },
+    ]
+    config["geography"] = {
+        "strategy": "approved_resolution",
+        "country": "USA",
+        "resolution_id": resolution["id"],
+        "resolution_checksum": resolution["checksum"],
+        "refresh_policy": "frozen",
+    }
+    return config
 
 
 async def test_collection_definition_run_and_usage_apis() -> None:
@@ -169,3 +213,58 @@ async def test_invalid_collection_definition_is_rejected() -> None:
         response = await client.post("/api/v1/collection-definitions", json=invalid_timezone)
         assert response.status_code == 422
         assert "unknown timezone" in response.json()["detail"]
+
+
+async def test_geography_estimate_and_launch_are_checksum_guarded() -> None:
+    service = _service()
+    app = create_app()
+    app.dependency_overrides[get_collection_service] = lambda: service
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        request = {
+            "primary_retailer_id": "walmart_us",
+            "competitor_retailer_ids": ["aldi_us", "amazon_us_same_day"],
+            "country": "USA",
+            "primary_selection": {"mode": "custom_zips", "zipcodes": ["06000"]},
+            "competitor_correspondence": {"mode": "same_zip"},
+            "exclusions": [],
+        }
+        geography = await client.post("/api/v1/collection-geography-resolutions", json=request)
+        assert geography.status_code == 201
+        assert geography.json()["counts"] == {
+            "total": 3,
+            "primary": 1,
+            "competitors": {"aldi_us": 1, "amazon_us_same_day": 1},
+        }
+
+        config = _approved_config(geography.json())
+        estimate = await client.post("/api/v1/collection-scope-estimates", json=config)
+        assert estimate.status_code == 200
+        assert estimate.json()["estimated_total_credits"] == 5
+
+        changed = dict(config)
+        changed["name"] = "Changed after approval"
+        rejected = await client.post(
+            "/api/v1/collection-launches",
+            json={"config": changed, "estimate_id": estimate.json()["id"]},
+        )
+        assert rejected.status_code == 409
+        assert "changed after approval" in rejected.json()["detail"]
+        definitions_after_rejection = await client.get("/api/v1/collection-definitions")
+        assert definitions_after_rejection.json() == []
+
+        launched = await client.post(
+            "/api/v1/collection-launches",
+            json={"config": config, "estimate_id": estimate.json()["id"]},
+        )
+        assert launched.status_code == 201
+        assert launched.json()["estimated_credits"] == 5
+        repeated_launch = await client.post(
+            "/api/v1/collection-launches",
+            json={"config": config, "estimate_id": estimate.json()["id"]},
+        )
+        assert repeated_launch.status_code == 201
+        assert repeated_launch.json()["id"] == launched.json()["id"]

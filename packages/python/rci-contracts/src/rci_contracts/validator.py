@@ -10,6 +10,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
+from referencing import Registry, Resource
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +53,19 @@ def validate_instance(
 
     schema_path = root / "schemas" / schema_name
     schema = _load_json(schema_path)
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    registry = Registry()
+    for candidate in sorted((root / "schemas").glob("*.json")):
+        candidate_schema = _load_json(candidate)
+        resource = Resource.from_contents(candidate_schema)
+        registry = registry.with_resource(candidate.resolve().as_uri(), resource)
+        schema_id = candidate_schema.get("$id") if isinstance(candidate_schema, dict) else None
+        if isinstance(schema_id, str):
+            registry = registry.with_resource(schema_id, resource)
+    validator = Draft202012Validator(
+        schema,
+        format_checker=FormatChecker(),
+        registry=registry,
+    )
     errors = sorted(validator.iter_errors(document), key=lambda error: list(error.absolute_path))
     if errors:
         messages = "\n".join(_format_error(Path(label), error) for error in errors)

@@ -13,15 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from rci_collections.models import (
     BudgetExceededError,
     CollectionPlan,
+    CostEstimate,
     DefinitionRecord,
+    GeographyEdge,
+    GeographyLocation,
+    GeographyResolution,
+    LocationFacet,
     LocationUnit,
     ProviderRateState,
     QueueTask,
     RawArtifact,
+    RetailerEstimate,
     RetailerRunProgress,
     RunMonitor,
     RunRecord,
     RunUsage,
+    ScopeEstimateRecord,
     TaskSeed,
 )
 
@@ -64,6 +71,9 @@ def _run(row: RowMapping) -> RunRecord:
         scheduled_for=row.get("scheduled_for"),
         availability_gate_status=str(row.get("availability_gate_status", "skipped")),
         availability_gate_config=dict(row.get("availability_gate_config") or {}),
+        scope_estimate_id=(
+            str(row["scope_estimate_id"]) if row.get("scope_estimate_id") is not None else None
+        ),
     )
 
 
@@ -117,7 +127,8 @@ class PostgresCollectionRepository:
             return []
         statement = text(
             """
-            SELECT id::text AS id, retailer_id, zipcode, store_number, state, country
+            SELECT id::text AS id, retailer_id, zipcode, store_number, state, country,
+                   store_name, city, latitude, longitude
             FROM retailer_location
             WHERE retailer_id = ANY(CAST(:retailer_ids AS text[])) AND country = :country
             ORDER BY retailer_id, store_number, id
@@ -131,6 +142,317 @@ class PostgresCollectionRepository:
                 )
             ).mappings()
             return [LocationUnit(**dict(row)) for row in rows]
+
+    async def list_location_facets(
+        self,
+        retailer_id: str,
+        country: str,
+        states: Sequence[str] = (),
+    ) -> list[LocationFacet]:
+        statement = text(
+            """
+            SELECT upper(state) AS state, nullif(trim(city), '') AS city,
+                   count(*)::integer AS location_count
+            FROM retailer_location
+            WHERE retailer_id = :retailer_id AND country = :country
+              AND state IS NOT NULL AND trim(state) <> ''
+              AND (
+                cardinality(CAST(:states AS text[])) = 0
+                OR upper(state) = ANY(CAST(:states AS text[]))
+              )
+            GROUP BY upper(state), nullif(trim(city), '')
+            ORDER BY upper(state), nullif(trim(city), '') NULLS FIRST
+            """
+        )
+        async with self._engine.connect() as connection:
+            rows = (
+                await connection.execute(
+                    statement,
+                    {
+                        "retailer_id": retailer_id,
+                        "country": country,
+                        "states": [state.upper() for state in states],
+                    },
+                )
+            ).mappings()
+            return [LocationFacet(**dict(row)) for row in rows]
+
+    async def save_geography_resolution(
+        self, resolution: GeographyResolution
+    ) -> GeographyResolution:
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:checksum, 0))"),
+                {"checksum": f"collection-geography:{resolution.checksum}"},
+            )
+            existing_id = (
+                await connection.execute(
+                    text(
+                        "SELECT id::text FROM collection_geography_resolution "
+                        "WHERE organization_id = CAST(:organization_id AS uuid) "
+                        "AND checksum = :checksum"
+                    ),
+                    {
+                        "organization_id": DEFAULT_ORGANIZATION_ID,
+                        "checksum": resolution.checksum,
+                    },
+                )
+            ).scalar_one_or_none()
+            if existing_id is not None:
+                stored = await self._get_geography_resolution(connection, str(existing_id))
+                assert stored is not None
+                return stored
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO collection_geography_resolution (
+                      id, organization_id, primary_retailer_id, country,
+                      request, checksum, status, counts, created_at
+                    ) VALUES (
+                      CAST(:id AS uuid), CAST(:organization_id AS uuid),
+                      :primary_retailer_id, :country, CAST(:request AS jsonb),
+                      :checksum, :status, CAST(:counts AS jsonb), :created_at
+                    )
+                    """
+                ),
+                {
+                    "id": resolution.id,
+                    "organization_id": DEFAULT_ORGANIZATION_ID,
+                    "primary_retailer_id": str(resolution.request["primary_retailer_id"]),
+                    "country": str(resolution.request["country"]),
+                    "request": _json(resolution.request),
+                    "checksum": resolution.checksum,
+                    "status": resolution.status,
+                    "counts": _json(resolution.counts),
+                    "created_at": resolution.created_at,
+                },
+            )
+            if resolution.locations:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO collection_geography_location (
+                          id, resolution_id, role, retailer_id, retailer_location_id,
+                          scope_key, store_number, store_name, zipcode, city, state,
+                          country, latitude, longitude, selection_reason
+                        ) VALUES (
+                          CAST(:id AS uuid), CAST(:resolution_id AS uuid), :role,
+                          :retailer_id, CAST(:retailer_location_id AS uuid), :scope_key,
+                          :store_number, :store_name, :zipcode, :city, :state, :country,
+                          :latitude, :longitude, :selection_reason
+                        )
+                        """
+                    ),
+                    [
+                        {
+                            "id": item.id,
+                            "resolution_id": resolution.id,
+                            "role": item.role,
+                            "retailer_id": item.retailer_id,
+                            "retailer_location_id": item.retailer_location_id,
+                            "scope_key": item.scope_key,
+                            "store_number": item.store_number,
+                            "store_name": item.store_name,
+                            "zipcode": item.zipcode,
+                            "city": item.city,
+                            "state": item.state,
+                            "country": item.country,
+                            "latitude": item.latitude,
+                            "longitude": item.longitude,
+                            "selection_reason": item.selection_reason,
+                        }
+                        for item in resolution.locations
+                    ],
+                )
+            if resolution.edges:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO collection_geography_edge (
+                          resolution_id, primary_location_id,
+                          competitor_location_id, distance_miles
+                        ) VALUES (
+                          CAST(:resolution_id AS uuid), CAST(:primary_location_id AS uuid),
+                          CAST(:competitor_location_id AS uuid), :distance_miles
+                        )
+                        """
+                    ),
+                    [
+                        {
+                            "resolution_id": resolution.id,
+                            "primary_location_id": item.primary_location_id,
+                            "competitor_location_id": item.competitor_location_id,
+                            "distance_miles": item.distance_miles,
+                        }
+                        for item in resolution.edges
+                    ],
+                )
+            stored = await self._get_geography_resolution(connection, resolution.id)
+            assert stored is not None
+            return stored
+
+    async def get_geography_resolution(self, resolution_id: str) -> GeographyResolution | None:
+        async with self._engine.connect() as connection:
+            return await self._get_geography_resolution(connection, resolution_id)
+
+    @staticmethod
+    async def _get_geography_resolution(
+        connection: AsyncConnection, resolution_id: str
+    ) -> GeographyResolution | None:
+        header = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT id::text AS id, request, checksum, status, counts, created_at
+                        FROM collection_geography_resolution
+                        WHERE id = CAST(:id AS uuid)
+                          AND organization_id = CAST(:organization_id AS uuid)
+                        """
+                    ),
+                    {"id": resolution_id, "organization_id": DEFAULT_ORGANIZATION_ID},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if header is None:
+            return None
+        location_rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT id::text AS id, role, retailer_id,
+                           retailer_location_id::text AS retailer_location_id,
+                           scope_key, store_number, store_name, zipcode, city, state,
+                           country, latitude, longitude, selection_reason
+                    FROM collection_geography_location
+                    WHERE resolution_id = CAST(:id AS uuid)
+                    ORDER BY role, retailer_id, scope_key
+                    """
+                ),
+                {"id": resolution_id},
+            )
+        ).mappings()
+        edge_rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT primary_location_id::text AS primary_location_id,
+                           competitor_location_id::text AS competitor_location_id,
+                           distance_miles
+                    FROM collection_geography_edge
+                    WHERE resolution_id = CAST(:id AS uuid)
+                    ORDER BY primary_location_id, competitor_location_id
+                    """
+                ),
+                {"id": resolution_id},
+            )
+        ).mappings()
+        return GeographyResolution(
+            id=str(header["id"]),
+            request=dict(header["request"]),
+            checksum=str(header["checksum"]),
+            status=str(header["status"]),
+            counts=dict(header["counts"]),
+            locations=tuple(GeographyLocation(**dict(row)) for row in location_rows),
+            edges=tuple(GeographyEdge(**dict(row)) for row in edge_rows),
+            created_at=header["created_at"],
+        )
+
+    async def save_scope_estimate(self, estimate: ScopeEstimateRecord) -> ScopeEstimateRecord:
+        payload = {
+            "retailers": [
+                {
+                    "retailer_id": item.retailer_id,
+                    "location_units": item.location_units,
+                    "credits_per_page": item.credits_per_page,
+                    "max_pages": item.max_pages,
+                    "estimated_pages": item.estimated_pages,
+                    "estimated_credits": item.estimated_credits,
+                }
+                for item in estimate.estimate.retailers
+            ],
+            "estimated_total_pages": estimate.estimate.estimated_total_pages,
+            "estimated_total_credits": estimate.estimate.estimated_total_credits,
+        }
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO collection_scope_estimate (
+                              id, organization_id, resolution_id, definition_id,
+                              configuration_checksum, geography_checksum,
+                              estimate, expires_at, created_at
+                            ) VALUES (
+                              CAST(:id AS uuid), CAST(:organization_id AS uuid),
+                              CAST(:resolution_id AS uuid), :definition_id,
+                              :configuration_checksum, :geography_checksum,
+                              CAST(:estimate AS jsonb), :expires_at, :created_at
+                            ) RETURNING *
+                            """
+                        ),
+                        {
+                            "id": estimate.id,
+                            "organization_id": DEFAULT_ORGANIZATION_ID,
+                            "resolution_id": estimate.resolution_id,
+                            "definition_id": estimate.definition_id,
+                            "configuration_checksum": estimate.configuration_checksum,
+                            "geography_checksum": estimate.geography_checksum,
+                            "estimate": _json(payload),
+                            "expires_at": estimate.expires_at,
+                            "created_at": estimate.created_at,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            return self._scope_estimate(row)
+
+    async def get_scope_estimate(self, estimate_id: str) -> ScopeEstimateRecord | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT * FROM collection_scope_estimate
+                            WHERE id = CAST(:id AS uuid)
+                              AND organization_id = CAST(:organization_id AS uuid)
+                            """
+                        ),
+                        {"id": estimate_id, "organization_id": DEFAULT_ORGANIZATION_ID},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return self._scope_estimate(row) if row is not None else None
+
+    @staticmethod
+    def _scope_estimate(row: RowMapping) -> ScopeEstimateRecord:
+        payload = dict(row["estimate"])
+        cost = CostEstimate(
+            definition_id=str(row["definition_id"]),
+            retailers=tuple(
+                RetailerEstimate(**dict(item)) for item in payload.get("retailers", [])
+            ),
+            estimated_total_pages=int(payload["estimated_total_pages"]),
+            estimated_total_credits=int(payload["estimated_total_credits"]),
+        )
+        return ScopeEstimateRecord(
+            id=str(row["id"]),
+            definition_id=str(row["definition_id"]),
+            resolution_id=str(row["resolution_id"]),
+            configuration_checksum=str(row["configuration_checksum"]),
+            geography_checksum=str(row["geography_checksum"]),
+            estimate=cost,
+            expires_at=row["expires_at"],
+            created_at=row["created_at"],
+        )
 
     async def publish_definition(
         self, config: dict[str, object], checksum: str
@@ -238,6 +560,12 @@ class PostgresCollectionRepository:
                     )
                 ).scalar_one()
             )
+            geography = config.get("geography")
+            geography_resolution_id = (
+                str(geography.get("resolution_id"))
+                if isinstance(geography, dict) and geography.get("resolution_id")
+                else None
+            )
             row = (
                 (
                     await connection.execute(
@@ -245,10 +573,12 @@ class PostgresCollectionRepository:
                             """
                         WITH inserted AS (
                           INSERT INTO collection_definition_version (
-                            definition_id, version, config, checksum
+                            definition_id, version, config, checksum,
+                            geography_resolution_id
                           ) VALUES (
                             CAST(:definition_id AS uuid), :version,
-                            CAST(:config AS jsonb), :checksum
+                            CAST(:config AS jsonb), :checksum,
+                            CAST(:geography_resolution_id AS uuid)
                           )
                           RETURNING id, version, checksum, config, created_at, definition_id
                         )
@@ -263,6 +593,7 @@ class PostgresCollectionRepository:
                             "version": next_version,
                             "config": _json(config),
                             "checksum": checksum,
+                            "geography_resolution_id": geography_resolution_id,
                         },
                     )
                 )
@@ -329,8 +660,26 @@ class PostgresCollectionRepository:
         trigger_type: str = "manual",
         schedule_id: str | None = None,
         scheduled_for: datetime | None = None,
+        scope_estimate_id: str | None = None,
     ) -> RunRecord:
         async with self._engine.begin() as connection:
+            if scope_estimate_id is not None:
+                existing_approved_run = (
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT * FROM collection_run "
+                                "WHERE scope_estimate_id = CAST(:scope_estimate_id AS uuid) "
+                                "FOR UPDATE"
+                            ),
+                            {"scope_estimate_id": scope_estimate_id},
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+                if existing_approved_run is not None:
+                    return _run(existing_approved_run)
             await connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:budget_key, 0))"),
                 {"budget_key": f"collection-budget:{definition.id}"},
@@ -362,12 +711,13 @@ class PostgresCollectionRepository:
                           organization_id, definition_version_id, status,
                           estimated_pages, estimated_credits, trigger_type,
                           schedule_id, scheduled_for, availability_gate_status,
-                          availability_gate_config
+                          availability_gate_config, scope_estimate_id
                         ) VALUES (
                           CAST(:organization_id AS uuid), CAST(:definition_version_id AS uuid),
                           :status, :estimated_pages, :estimated_credits, :trigger_type,
                           CAST(:schedule_id AS uuid), :scheduled_for,
                           :availability_gate_status, CAST(:availability_gate_config AS jsonb)
+                          , CAST(:scope_estimate_id AS uuid)
                         )
                         ON CONFLICT ON CONSTRAINT collection_run_schedule_slot_uq DO NOTHING
                         RETURNING *
@@ -386,6 +736,7 @@ class PostgresCollectionRepository:
                                 "pending" if plan.availability_gate else "skipped"
                             ),
                             "availability_gate_config": _json(plan.availability_gate),
+                            "scope_estimate_id": scope_estimate_id,
                         },
                     )
                 )

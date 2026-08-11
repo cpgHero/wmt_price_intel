@@ -3,7 +3,10 @@ name = "rci-contracts"
 version = "0.1.0"
 description = "JSON Schema validation for shared Retail Competitive Intelligence contracts."
 requires-python = ">=3.12,<3.15"
-dependencies = ["jsonschema[format-nongpl]==4.26.0"]
+dependencies = [
+  "jsonschema[format-nongpl]==4.26.0",
+  "referencing==0.37.0",
+]
 
 [project.scripts]
 rci-contracts = "rci_contracts.cli:main"
@@ -11,4 +14,3 @@ rci-contracts = "rci_contracts.cli:main"
 [build-system]
 requires = ["hatchling==1.29.0"]
 build-backend = "hatchling.build"
-

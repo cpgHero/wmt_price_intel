@@ -41,19 +41,7 @@ export interface RetailCompetitiveIntelligenceCollectionDefinition {
     }[]
   ];
   geography: {
-    strategy:
-      | "all_retailer_locations"
-      | "benchmark_retailer_zips"
-      | "union_retailer_zips"
-      | "custom_zips"
-      | "custom_locations"
-      | "states";
-    benchmark_retailer?: string | null;
-    country?: string;
-    states?: string[];
-    zipcodes?: string[];
-    location_ids?: string[];
-    proximity_validation_miles?: number | null;
+    [k: string]: unknown;
   };
   pagination: {
     max_pages: number;
@@ -90,5 +78,11 @@ export interface RetailCompetitiveIntelligenceCollectionDefinition {
     block_if_estimate_exceeds_budget?: boolean;
     max_credits_per_day?: number | null;
     max_credits_per_month?: number | null;
+  } | null;
+  product_detail_enrichment?: {
+    policy: "disabled" | "new_or_changed" | "refresh_after_7_days" | "refresh_after_30_days" | "manual";
+    approval: "separate_after_search";
+    analysis_admitted_products_only?: true;
+    price_variation_samples?: boolean;
   } | null;
 }

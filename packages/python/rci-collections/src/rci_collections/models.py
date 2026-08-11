@@ -12,6 +12,9 @@ JsonObject = dict[str, Any]
 @dataclass(frozen=True, slots=True)
 class RetailerCapability:
     retailer_id: str
+    display_name: str
+    adapter_id: str
+    status: str
     location_dimension: str
     credits_per_successful_page: int
     endpoint: str
@@ -25,6 +28,66 @@ class LocationUnit:
     store_number: str
     state: str | None
     country: str
+    store_name: str | None = None
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LocationFacet:
+    state: str
+    city: str | None
+    location_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GeographyLocation:
+    id: str
+    role: str
+    retailer_id: str
+    retailer_location_id: str | None
+    scope_key: str
+    store_number: str | None
+    store_name: str | None
+    zipcode: str
+    city: str | None
+    state: str | None
+    country: str
+    latitude: float | None
+    longitude: float | None
+    selection_reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class GeographyEdge:
+    primary_location_id: str
+    competitor_location_id: str
+    distance_miles: float
+
+
+@dataclass(frozen=True, slots=True)
+class GeographyResolution:
+    id: str
+    request: JsonObject
+    checksum: str
+    status: str
+    counts: JsonObject
+    locations: tuple[GeographyLocation, ...]
+    edges: tuple[GeographyEdge, ...]
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeEstimateRecord:
+    id: str
+    definition_id: str
+    resolution_id: str
+    configuration_checksum: str
+    geography_checksum: str
+    estimate: CostEstimate
+    expires_at: datetime
+    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +166,7 @@ class RunRecord:
     scheduled_for: datetime | None = None
     availability_gate_status: str = "skipped"
     availability_gate_config: JsonObject = field(default_factory=dict)
+    scope_estimate_id: str | None = None
 
 
 class BudgetExceededError(ValueError):

@@ -37,6 +37,7 @@
     {
       "id": "walmart_us",
       "display_name": "Walmart (US)",
+      "adapter_id": "metricscart_walmart_search_zipcode_v2",
       "location_provider": "Walmart",
       "api_retailer_aliases": [
         "walmart",
@@ -66,6 +67,7 @@
     {
       "id": "aldi_us",
       "display_name": "ALDI",
+      "adapter_id": "metricscart_new_aldi_serp_zipcode",
       "location_provider": "ALDI",
       "api_retailer_aliases": [
         "aldi",
@@ -91,6 +93,7 @@
     {
       "id": "amazon_us_same_day",
       "display_name": "Amazon Same Day (US)",
+      "adapter_id": "metricscart_amazon_same_day_zipcode",
       "location_provider": null,
       "api_retailer_aliases": [
         "amazon",

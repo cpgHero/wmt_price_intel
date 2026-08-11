@@ -1,16 +1,12 @@
 import Link from "next/link";
 
-import { EmptyState } from "@/app/components/empty-state";
 import {
   getApi,
   type CollectionDefinitionRecord,
-  type ProductPackCatalog,
   type RunRecord,
 } from "@/lib/api";
 import { definitionForRun, summarizeDefinition } from "@/lib/primary-app";
 import { displayDate, displayLabel } from "@/lib/presentation";
-
-import { CollectionWizard } from "./collection-wizard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,17 +20,12 @@ export default async function CollectionsPage({
 }: {
   searchParams: Promise<CollectionSearchParams>;
 }) {
-  const [
-    { q = "", status = "all" },
-    catalogResponse,
-    definitionResponse,
-    runResponse,
-  ] = await Promise.all([
-    searchParams,
-    getApi<ProductPackCatalog>("/api/v1/product-packs"),
-    getApi<CollectionDefinitionRecord[]>("/api/v1/collection-definitions"),
-    getApi<RunRecord[]>("/api/v1/collection-runs?limit=100"),
-  ]);
+  const [{ q = "", status = "all" }, definitionResponse, runResponse] =
+    await Promise.all([
+      searchParams,
+      getApi<CollectionDefinitionRecord[]>("/api/v1/collection-definitions"),
+      getApi<RunRecord[]>("/api/v1/collection-runs?limit=100"),
+    ]);
   const definitions = definitionResponse.data ?? [];
   const definitionSummaries = definitions.map(summarizeDefinition);
   const normalizedQuery = q.trim().toLowerCase();
@@ -47,8 +38,7 @@ export default async function CollectionsPage({
       run.id.toLowerCase().includes(normalizedQuery);
     return matchesQuery && (status === "all" || run.status === status);
   });
-  const error =
-    catalogResponse.error ?? definitionResponse.error ?? runResponse.error;
+  const error = definitionResponse.error ?? runResponse.error;
 
   return (
     <main>
@@ -62,7 +52,7 @@ export default async function CollectionsPage({
             Revisit saved definitions, monitor every run, and approve the exact
             credit ceiling before new provider work starts.
           </p>
-          <Link className="button primary" href="#new-collection">
+          <Link className="button primary" href="/collections/new">
             New collection
           </Link>
         </div>
@@ -220,34 +210,33 @@ export default async function CollectionsPage({
                   <code>{summary.definition.stable_key}</code>
                   <span>Product Pack v{summary.productPackVersion ?? "—"}</span>
                 </details>
+                <Link
+                  className="button secondary definition-edit-link"
+                  href={`/collections/definitions/${encodeURIComponent(summary.definition.stable_key)}/edit`}
+                >
+                  Create new version
+                </Link>
               </article>
             ))}
           </div>
         )}
       </section>
 
-      <section id="new-collection" className="new-collection-section">
+      <section className="new-collection-section builder-invitation">
         <header className="section-heading">
           <div>
             <span className="section-kicker">Create</span>
             <h2>Launch a new collection</h2>
           </div>
           <p>
-            Configure the current ZIP-based scope, calculate its exact maximum
-            cost, and explicitly approve the credit ceiling before launch.
+            Build a dynamic footprint by retailer locations, state, city, ZIP,
+            or deterministic per-state sampling. Review it on a map and approve
+            the exact Search ceiling before launch.
           </p>
         </header>
-        {catalogResponse.data ? (
-          <CollectionWizard catalog={catalogResponse.data} />
-        ) : (
-          <EmptyState
-            eyebrow="Product Packs unavailable"
-            title="The collection wizard could not be loaded"
-            message={
-              catalogResponse.error ?? "Try again when the API is available."
-            }
-          />
-        )}
+        <Link className="button primary" href="/collections/new">
+          Open collection builder
+        </Link>
       </section>
     </main>
   );

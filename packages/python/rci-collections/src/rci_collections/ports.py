@@ -9,12 +9,15 @@ from typing import Protocol
 from rci_collections.models import (
     CollectionPlan,
     DefinitionRecord,
+    GeographyResolution,
+    LocationFacet,
     LocationUnit,
     QueueTask,
     RawArtifact,
     RunMonitor,
     RunRecord,
     RunUsage,
+    ScopeEstimateRecord,
     TaskSeed,
 )
 
@@ -24,8 +27,24 @@ class LocationUniverseRepository(Protocol):
         self, retailer_ids: Sequence[str], country: str
     ) -> list[LocationUnit]: ...
 
+    async def get_geography_resolution(self, resolution_id: str) -> GeographyResolution | None: ...
+
+    async def list_location_facets(
+        self,
+        retailer_id: str,
+        country: str,
+        states: Sequence[str] = (),
+    ) -> list[LocationFacet]: ...
+
 
 class CollectionRepository(LocationUniverseRepository, Protocol):
+    async def save_geography_resolution(
+        self, resolution: GeographyResolution
+    ) -> GeographyResolution: ...
+
+    async def save_scope_estimate(self, estimate: ScopeEstimateRecord) -> ScopeEstimateRecord: ...
+
+    async def get_scope_estimate(self, estimate_id: str) -> ScopeEstimateRecord | None: ...
     async def publish_definition(
         self, config: dict[str, object], checksum: str
     ) -> DefinitionRecord: ...
@@ -42,6 +61,7 @@ class CollectionRepository(LocationUniverseRepository, Protocol):
         trigger_type: str = "manual",
         schedule_id: str | None = None,
         scheduled_for: datetime | None = None,
+        scope_estimate_id: str | None = None,
     ) -> RunRecord: ...
 
     async def get_run(self, run_id: str) -> RunRecord | None: ...

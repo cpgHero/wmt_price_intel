@@ -16,6 +16,15 @@ const contracts = [
   ["analysis-result-v2.schema.json", "analysis-result-v2.ts"],
   ["canonical-product.schema.json", "canonical-product.ts"],
   ["collection-definition.schema.json", "collection-definition.ts"],
+  [
+    "collection-geography-request.schema.json",
+    "collection-geography-request.ts",
+  ],
+  [
+    "collection-geography-resolution.schema.json",
+    "collection-geography-resolution.ts",
+  ],
+  ["collection-scope-estimate.schema.json", "collection-scope-estimate.ts"],
   ["golden-benchmarks.schema.json", "golden-benchmarks.ts"],
   ["historical-input-manifest.schema.json", "historical-input-manifest.ts"],
   ["normalized-offer.schema.json", "normalized-offer.ts"],
@@ -35,6 +44,7 @@ for (const [schemaName, outputName] of contracts) {
   const schemaPath = join(repositoryRoot, "schemas", schemaName);
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));
   const source = await compile(schema, schema.title, {
+    cwd: dirname(schemaPath),
     bannerComment:
       "/* Generated from the normative JSON Schema. Do not edit manually. */",
     style: { singleQuote: false },

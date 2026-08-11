@@ -1,6 +1,9 @@
 import type {
   RetailCompetitiveIntelligenceAnalysisResult,
   RetailCompetitiveIntelligenceAnalysisResultV2,
+  RetailCompetitiveIntelligenceCollectionGeographyRequest,
+  RetailCompetitiveIntelligenceCollectionGeographyResolution,
+  RetailCompetitiveIntelligenceCollectionScopeEstimate,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceReportView,
 } from "@rci/contracts";
@@ -330,6 +333,7 @@ export interface RunRecord {
   created_at: string;
   availability_gate_status: string;
   availability_gate_config: JsonObject;
+  scope_estimate_id: string | null;
 }
 
 export interface CollectionDefinitionRecord {
@@ -381,6 +385,40 @@ export interface CostEstimate {
   retailers: RetailerEstimate[];
   estimated_total_pages: number;
   estimated_total_credits: number;
+}
+
+export type CollectionGeographyRequest =
+  RetailCompetitiveIntelligenceCollectionGeographyRequest;
+export type CollectionGeographyResolution =
+  RetailCompetitiveIntelligenceCollectionGeographyResolution;
+export type CollectionScopeEstimate =
+  RetailCompetitiveIntelligenceCollectionScopeEstimate;
+
+export interface CollectionBuilderRetailer {
+  id: string;
+  display_name: string;
+  adapter_id: string;
+  location_dimension: "store_zip" | "zipcode";
+  credits_per_page: number;
+  status: "enabled";
+}
+
+export interface CollectionBuilderOptions {
+  retailers: CollectionBuilderRetailer[];
+  product_packs: ProductPackSummary[];
+  default_product_pack_id: string;
+  geography: {
+    primary_selection_modes: string[];
+    competitor_correspondence_modes: string[];
+    radius_miles: Array<1 | 3 | 5>;
+  };
+  product_detail_policies: string[];
+}
+
+export interface CollectionLocationFacet {
+  state: string;
+  city: string | null;
+  location_count: number;
 }
 
 export interface ProductPackSummary {

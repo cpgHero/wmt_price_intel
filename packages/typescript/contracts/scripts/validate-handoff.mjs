@@ -17,8 +17,17 @@ async function loadJson(...parts) {
   return JSON.parse(await readFile(join(repositoryRoot, ...parts), "utf8"));
 }
 
-async function validator(schemaName) {
-  return ajv.compile(await loadJson("schemas", schemaName));
+const schemaNames = (await readdir(join(repositoryRoot, "schemas")))
+  .filter((name) => name.endsWith(".json"))
+  .sort();
+for (const schemaName of schemaNames) {
+  ajv.addSchema(await loadJson("schemas", schemaName), schemaName);
+}
+
+function validator(schemaName) {
+  const validate = ajv.getSchema(schemaName);
+  if (!validate) throw new Error(`Schema was not registered: ${schemaName}`);
+  return validate;
 }
 
 async function assertValid(validate, document, label) {
@@ -29,41 +38,99 @@ async function assertValid(validate, document, label) {
   }
 }
 
-const collectionValidator = await validator(
-  "collection-definition.schema.json",
+const collectionValidator = validator("collection-definition.schema.json");
+const geographyRequestValidator = validator(
+  "collection-geography-request.schema.json",
 );
-const analysisValidator = await validator("analysis-result.schema.json");
-const analysisV2Validator = await validator("analysis-result-v2.schema.json");
-const analysisEvidenceValidator = await validator(
-  "analysis-evidence.schema.json",
+const geographyResolutionValidator = validator(
+  "collection-geography-resolution.schema.json",
 );
-const analysisBriefValidator = await validator("analysis-brief.schema.json");
-const canonicalProductValidator = await validator(
-  "canonical-product.schema.json",
+const scopeEstimateValidator = validator(
+  "collection-scope-estimate.schema.json",
 );
-const productDetailSnapshotValidator = await validator(
+const analysisValidator = validator("analysis-result.schema.json");
+const analysisV2Validator = validator("analysis-result-v2.schema.json");
+const analysisEvidenceValidator = validator("analysis-evidence.schema.json");
+const analysisBriefValidator = validator("analysis-brief.schema.json");
+const canonicalProductValidator = validator("canonical-product.schema.json");
+const productDetailSnapshotValidator = validator(
   "product-detail-snapshot.schema.json",
 );
-const agentOutputValidator = await validator("agent-output.schema.json");
-const agentPromptValidator = await validator("agent-prompt.schema.json");
-const reportBlueprintValidator = await validator(
-  "report-blueprint.schema.json",
-);
-const reportViewValidator = await validator("report-view.schema.json");
-const productMatchReviewValidator = await validator(
+const agentOutputValidator = validator("agent-output.schema.json");
+const agentPromptValidator = validator("agent-prompt.schema.json");
+const reportBlueprintValidator = validator("report-blueprint.schema.json");
+const reportViewValidator = validator("report-view.schema.json");
+const productMatchReviewValidator = validator(
   "product-match-review.schema.json",
 );
-const historicalInputManifestValidator = await validator(
+const historicalInputManifestValidator = validator(
   "historical-input-manifest.schema.json",
 );
-const alertValidator = await validator("alert-definition.schema.json");
-const productPackValidator = await validator("product-pack.schema.json");
-const benchmarkValidator = await validator("golden-benchmarks.schema.json");
-const narrativeBenchmarkValidator = await validator(
+const alertValidator = validator("alert-definition.schema.json");
+const productPackValidator = validator("product-pack.schema.json");
+const benchmarkValidator = validator("golden-benchmarks.schema.json");
+const narrativeBenchmarkValidator = validator(
   "narrative-benchmarks.schema.json",
 );
-const productDetailCatalogValidator = await validator(
+const productDetailCatalogValidator = validator(
   "product-detail-catalog.schema.json",
+);
+
+await assertValid(
+  geographyRequestValidator,
+  {
+    primary_retailer_id: "walmart_us",
+    competitor_retailer_ids: ["aldi_us"],
+    country: "USA",
+    primary_selection: { mode: "custom_zips", zipcodes: ["03038"] },
+    competitor_correspondence: { mode: "same_zip" },
+  },
+  "collection geography request",
+);
+await assertValid(
+  geographyResolutionValidator,
+  {
+    id: "00000000-0000-0000-0000-000000000201",
+    request: {
+      primary_retailer_id: "walmart_us",
+      competitor_retailer_ids: ["aldi_us"],
+      country: "USA",
+      primary_selection: { mode: "custom_zips", zipcodes: ["03038"] },
+      competitor_correspondence: { mode: "same_zip" },
+    },
+    checksum: "a".repeat(64),
+    status: "ready",
+    counts: { total: 0, primary: 0, competitors: { aldi_us: 0 } },
+    locations: [],
+    edges: [],
+    created_at: "2026-08-11T00:00:00Z",
+  },
+  "collection geography resolution",
+);
+await assertValid(
+  scopeEstimateValidator,
+  {
+    id: "00000000-0000-0000-0000-000000000202",
+    definition_id: "collection-test",
+    resolution_id: "00000000-0000-0000-0000-000000000201",
+    configuration_checksum: "b".repeat(64),
+    geography_checksum: "a".repeat(64),
+    retailers: [
+      {
+        retailer_id: "walmart_us",
+        location_units: 2,
+        credits_per_page: 1,
+        max_pages: 5,
+        estimated_pages: 10,
+        estimated_credits: 10,
+      },
+    ],
+    estimated_total_pages: 10,
+    estimated_total_credits: 10,
+    expires_at: "2026-08-11T00:30:00Z",
+    created_at: "2026-08-11T00:00:00Z",
+  },
+  "collection scope estimate",
 );
 
 await assertValid(

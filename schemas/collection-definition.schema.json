@@ -132,7 +132,8 @@
             "union_retailer_zips",
             "custom_zips",
             "custom_locations",
-            "states"
+            "states",
+            "approved_resolution"
           ]
         },
         "benchmark_retailer": {
@@ -169,8 +170,56 @@
             "null"
           ],
           "minimum": 0
+        },
+        "resolution_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "resolution_checksum": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "refresh_policy": {
+          "enum": [
+            "frozen",
+            "new_definition_version"
+          ],
+          "default": "frozen"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "approved_resolution"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "resolution_id",
+              "resolution_checksum"
+            ],
+            "properties": {
+              "resolution_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "resolution_checksum": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
+      ]
     },
     "pagination": {
       "type": "object",
@@ -363,6 +412,38 @@
             "null"
           ],
           "minimum": 0
+        }
+      }
+    },
+    "product_detail_enrichment": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "approval"
+      ],
+      "properties": {
+        "policy": {
+          "enum": [
+            "disabled",
+            "new_or_changed",
+            "refresh_after_7_days",
+            "refresh_after_30_days",
+            "manual"
+          ]
+        },
+        "approval": {
+          "const": "separate_after_search"
+        },
+        "analysis_admitted_products_only": {
+          "const": true
+        },
+        "price_variation_samples": {
+          "type": "boolean",
+          "default": true
         }
       }
     }

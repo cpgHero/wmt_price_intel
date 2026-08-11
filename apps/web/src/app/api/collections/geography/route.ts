@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 
 import {
   postApiJson,
-  type CollectionScopeEstimate,
+  type CollectionGeographyResolution,
   type JsonObject,
 } from "@/lib/api";
 
 export async function POST(request: Request) {
-  const config = (await request.json()) as JsonObject;
-  const response = await postApiJson<CollectionScopeEstimate>(
-    "/api/v1/collection-scope-estimates",
-    config,
+  const body = (await request.json()) as JsonObject;
+  const response = await postApiJson<CollectionGeographyResolution>(
+    "/api/v1/collection-geography-resolutions",
+    body,
   );
   if (!response.data) {
     return NextResponse.json(
@@ -18,5 +18,5 @@ export async function POST(request: Request) {
       { status: response.status },
     );
   }
-  return NextResponse.json(response.data);
+  return NextResponse.json(response.data, { status: 201 });
 }

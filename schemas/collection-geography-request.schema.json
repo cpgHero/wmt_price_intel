@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/collection-geography-request.schema.json",
+  "title": "Retail Competitive Intelligence Collection Geography Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "primary_retailer_id",
+    "competitor_retailer_ids",
+    "country",
+    "primary_selection",
+    "competitor_correspondence"
+  ],
+  "properties": {
+    "primary_retailer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "competitor_retailer_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "country": {
+      "type": "string",
+      "default": "USA"
+    },
+    "primary_selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "all_locations",
+            "states",
+            "per_state",
+            "state_cities",
+            "custom_zips",
+            "custom_locations"
+          ]
+        },
+        "states": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          }
+        },
+        "cities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "city"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 2
+              },
+              "city": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "locations_per_state": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 100
+        },
+        "zipcodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "location_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    "competitor_correspondence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "same_zip",
+            "primary_states",
+            "radius"
+          ]
+        },
+        "radius_miles": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "enum": [
+            1,
+            3,
+            5,
+            null
+          ]
+        }
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "retailer_id",
+          "scope_key"
+        ],
+        "properties": {
+          "retailer_id": {
+            "type": "string"
+          },
+          "retailer_location_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "scope_key": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
