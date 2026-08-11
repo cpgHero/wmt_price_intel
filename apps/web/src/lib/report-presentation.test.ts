@@ -11,6 +11,7 @@ import {
   metricBarWidth,
   priceUnitLabel,
   primaryComparisonRows,
+  productDecisionStance,
 } from "./report-presentation";
 
 function section(id: string, kind: string): ReportSectionView {
@@ -155,6 +156,33 @@ describe("report presentation", () => {
       total: 160,
     });
     expect(governedOutcomeCounts(decisions, "w1").total).toBe(100);
+  });
+
+  it("does not promote a plurality or tied median into a directional product win", () => {
+    expect(
+      productDecisionStance({
+        matches: 901,
+        benchmark_lower_share: 298 / 901,
+        competitor_lower_share: 326 / 901,
+        parity: 277,
+      }),
+    ).toBe("mixed");
+    expect(
+      productDecisionStance({
+        matches: 100,
+        benchmark_lower_share: 0.15,
+        competitor_lower_share: 0.7,
+        parity: 15,
+      }),
+    ).toBe("attention");
+    expect(
+      productDecisionStance({
+        matches: 100,
+        benchmark_lower_share: 0.2,
+        competitor_lower_share: 0.15,
+        parity: 65,
+      }),
+    ).toBe("parity");
   });
 
   it("selects overall exact-price rows for the executive and geography views", () => {

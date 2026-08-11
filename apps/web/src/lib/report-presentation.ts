@@ -82,6 +82,34 @@ export function governedOutcomeCounts(
   );
 }
 
+export type ProductDecisionStance =
+  "attention" | "protect" | "parity" | "mixed";
+
+/**
+ * Convert complete directional evidence into an honest merchant-facing stance.
+ * A retailer win requires a majority of matched observations; otherwise the card
+ * must say that the evidence is mixed instead of promoting a plurality to a win.
+ */
+export function productDecisionStance(
+  decision: Pick<
+    ProductDecision,
+    "matches" | "benchmark_lower_share" | "competitor_lower_share" | "parity"
+  >,
+): ProductDecisionStance {
+  if (decision.matches <= 0) return "mixed";
+  const parityShare = decision.parity / decision.matches;
+  if (decision.competitor_lower_share > 0.5) return "attention";
+  if (decision.benchmark_lower_share > 0.5) return "protect";
+  if (
+    parityShare >= 0.5 &&
+    parityShare >= decision.competitor_lower_share &&
+    parityShare >= decision.benchmark_lower_share
+  ) {
+    return "parity";
+  }
+  return "mixed";
+}
+
 export const reportGroups = [
   { id: "overview", label: "Overview" },
   { id: "price-segments", label: "Price & Segments" },

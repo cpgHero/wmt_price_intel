@@ -1812,6 +1812,9 @@ a.product-highlight:hover {
 .product-decision-card.parity {
   border-top-color: var(--muted);
 }
+.product-decision-card.mixed {
+  border-top-color: var(--muted);
+}
 .product-decision-image {
   align-items: center;
   background: var(--card);
@@ -6743,6 +6746,10 @@ tbody tr:last-child td {
   border-top-color: var(--line);
 }
 .product-decision-card.parity {
+  border-left-color: var(--muted);
+  border-top-color: var(--line);
+}
+.product-decision-card.mixed {
   border-left-color: var(--muted);
   border-top-color: var(--line);
 }

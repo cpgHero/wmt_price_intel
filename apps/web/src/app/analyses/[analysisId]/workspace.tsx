@@ -43,6 +43,7 @@ import {
   metricBarWidth,
   priceUnitLabel,
   primaryComparisonRows,
+  productDecisionStance,
 } from "@/lib/report-presentation";
 
 const tabs = [
@@ -1574,18 +1575,21 @@ function ProductDecisionBoard({
         {rows.map((row) => {
           const competitor = displayLabel(row.competitor);
           const parityShare = row.matches ? row.parity / row.matches : 0;
+          const stance = productDecisionStance(row);
           const dominantShare =
-            row.priority === "attention"
+            stance === "attention"
               ? row.competitor_lower_share
-              : row.priority === "protect"
+              : stance === "protect"
                 ? row.benchmark_lower_share
                 : parityShare;
           const position =
-            row.priority === "attention"
+            stance === "attention"
               ? `${competitor} is lower in ${formatScorecardRate(dominantShare)} of matched observations`
-              : row.priority === "protect"
+              : stance === "protect"
                 ? `${displayLabel(benchmarkRetailer)} is lower in ${formatScorecardRate(dominantShare)} of matched observations`
-                : `Price parity in ${formatScorecardRate(dominantShare)} of matched observations`;
+                : stance === "parity"
+                  ? `Price parity in ${formatScorecardRate(dominantShare)} of matched observations`
+                  : `Mixed result: ${competitor} is lower in ${formatScorecardRate(row.competitor_lower_share)}, ${displayLabel(benchmarkRetailer)} is lower in ${formatScorecardRate(row.benchmark_lower_share)}, and ${formatScorecardRate(parityShare)} are tied`;
           const gap = formatPriceForBasis(
             Math.abs(row.median_gap),
             comparisonBasis?.price_unit,
@@ -1600,7 +1604,7 @@ function ProductDecisionBoard({
           return (
             <button
               type="button"
-              className={`product-decision-card ${row.priority}`}
+              className={`product-decision-card ${stance}`}
               key={row.id}
               onClick={() => setSelected(row)}
             >
@@ -1619,11 +1623,13 @@ function ProductDecisionBoard({
               </div>
               <div className="product-decision-copy">
                 <span className="product-decision-status">
-                  {row.priority === "attention"
+                  {stance === "attention"
                     ? "Needs attention"
-                    : row.priority === "protect"
+                    : stance === "protect"
                       ? "Position to protect"
-                      : "Price parity"}
+                      : stance === "parity"
+                        ? "Price parity"
+                        : "Mixed price position"}
                 </span>
                 <h3>{row.benchmark_product_name}</h3>
                 <h3>{row.competitor_product_name}</h3>

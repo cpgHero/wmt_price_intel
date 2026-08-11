@@ -28,6 +28,9 @@ design.
    points are explicitly labeled as a deterministic display sample.
 7. Renderers consume governed values and metadata; they do not recalculate
    authoritative analytics.
+8. A product card may claim a retailer win only when that retailer is lower in
+   a majority of matched observations. A plurality without a majority is
+   labeled `Mixed price position` and shows all three outcome shares.
 
 ## Implementation scope
 
@@ -46,6 +49,8 @@ design.
 - Product cards show normalized or package prices with an explicit unit.
 - Product-card status is explained by the directional outcome share; paired
   median gap is supporting evidence rather than a conflicting headline.
+- Product cards do not promote a plurality to `Needs attention` or `Position to
+  protect`; mixed evidence remains visibly mixed.
 - Evidence drawers distinguish the analytical comparison basis from raw
   package prices and expose both when the lens is normalized.
 - Retailer scorecards show parity, the selected row basis, evidence thresholds,
@@ -80,3 +85,5 @@ design.
    missing threshold stated.
 6. Match Review contains no decision-facing PDP price label.
 7. No Product Pack-specific branch is added to the core engine or UI.
+8. Tied or split product evidence cannot display a directional win label unless
+   one retailer is lower in more than 50% of matched observations.
