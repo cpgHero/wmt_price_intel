@@ -61,6 +61,9 @@ design.
 - Full-population versus sampled-map count tests.
 - Scorecard parity, basis, statistic, and readiness-threshold tests.
 - Match Review Search-price-authority tests.
+- Full-source publication replay uses a deterministic bounded quality sampler,
+  so large/noisy categories cannot exhaust worker memory before selecting the
+  governed evidence sample.
 - Contract generation/check, Python tests, web tests, lint, typecheck, and build.
 
 ## Acceptance criteria

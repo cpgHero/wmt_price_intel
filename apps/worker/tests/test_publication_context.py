@@ -1,4 +1,5 @@
 from rci_worker.publication_context import (
+    _BoundedQualityObservationSampler,
     _raw_quality_observation,
     _select_quality_observations,
 )
@@ -57,3 +58,29 @@ def test_quality_sample_is_balanced_stable_and_deduplicated() -> None:
         "Normalization rejected",
     }
     assert len({str(row["product_id"]) for row in selected}) == 6
+
+
+def test_bounded_quality_sampler_matches_full_selection_without_retaining_all_rows() -> None:
+    rows = [
+        {
+            "issue": issue,
+            "retailer": f"retailer-{index % 4}",
+            "product": f"Product {1000 - index:04d}",
+            "product_id": f"product-{index}",
+            "zipcode": f"{index % 100000:05d}",
+            "store": str(index % 100),
+            "reason": f"Reason {index % 7}",
+        }
+        for issue in (
+            "Missing or zero search price",
+            "Attribute review",
+            "Normalization rejected",
+        )
+        for index in range(1_000)
+    ]
+    sampler = _BoundedQualityObservationSampler(18)
+    for row in reversed(rows):
+        sampler.add(row)
+
+    assert sampler.retained_count <= 54
+    assert sampler.selected() == _select_quality_observations(rows, max_rows=18)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import bisect
 import json
 import os
 from collections import Counter, defaultdict
@@ -184,6 +185,59 @@ def _select_quality_observations(
     return selected[:max_rows]
 
 
+class _BoundedQualityObservationSampler:
+    """Retain stable leading sample candidates with bounded replay memory."""
+
+    def __init__(self, max_rows: int) -> None:
+        if max_rows < 1:
+            raise ValueError("quality observation sample size must be positive")
+        self._max_rows = max_rows
+        self._buckets: dict[
+            str,
+            list[tuple[tuple[str, ...], tuple[str, ...], dict[str, object]]],
+        ] = defaultdict(list)
+        self._keys: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+
+    @staticmethod
+    def _unique_key(row: dict[str, object]) -> tuple[str, ...]:
+        return tuple(
+            str(row.get(field) or "")
+            for field in ("issue", "retailer", "product_id", "zipcode", "store", "reason")
+        )
+
+    @staticmethod
+    def _sort_key(row: dict[str, object]) -> tuple[str, ...]:
+        return tuple(
+            str(row.get(field) or "")
+            for field in ("retailer", "product", "zipcode", "store", "reason")
+        )
+
+    def add(self, row: dict[str, object]) -> None:
+        issue = str(row["issue"])
+        bucket = self._buckets[issue]
+        retained_keys = self._keys[issue]
+        unique_key = self._unique_key(row)
+        if unique_key in retained_keys:
+            return
+        item = (self._sort_key(row), unique_key, row)
+        if len(bucket) >= self._max_rows and item[:2] >= bucket[-1][:2]:
+            return
+        bisect.insort(bucket, item)
+        retained_keys.add(unique_key)
+        if len(bucket) > self._max_rows:
+            retained_keys.remove(bucket.pop()[1])
+
+    @property
+    def retained_count(self) -> int:
+        return sum(len(bucket) for bucket in self._buckets.values())
+
+    def selected(self) -> list[dict[str, object]]:
+        return _select_quality_observations(
+            [item[2] for bucket in self._buckets.values() for item in bucket],
+            max_rows=self._max_rows,
+        )
+
+
 async def _run(args: argparse.Namespace) -> dict[str, object]:
     if (
         args.max_products < 1
@@ -260,7 +314,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             profile_ids={str(value["id"]) for value in review_profiles},
         )
         assortment_accumulator = AssortmentAccumulator()
-        quality_candidates: list[dict[str, object]] = []
+        quality_sampler = _BoundedQualityObservationSampler(args.max_quality_observations)
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
                 for row in rows:
@@ -268,7 +322,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     try:
                         normalized = normalizer.normalize(source_row)
                     except ValueError as exc:
-                        quality_candidates.append(
+                        quality_sampler.add(
                             _raw_quality_observation(
                                 source_row,
                                 retailer_id=str(
@@ -289,7 +343,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         pack=pack,
                     )
                     if normalized.price is None or normalized.price <= 0:
-                        quality_candidates.append(
+                        quality_sampler.add(
                             _offer_quality_observation(
                                 classified,
                                 issue="Missing or zero search price",
@@ -297,7 +351,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                             )
                         )
                     if classified.review_reasons:
-                        quality_candidates.append(
+                        quality_sampler.add(
                             _offer_quality_observation(
                                 classified,
                                 issue="Attribute review",
@@ -459,10 +513,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             product_decisions,
             product_evidence,
         )
-        quality_observations = _select_quality_observations(
-            quality_candidates,
-            max_rows=args.max_quality_observations,
-        )
+        quality_observations = quality_sampler.selected()
         report_store = S3ReportObjectStore(bucket=bucket, client=client)
         service = AnalysisResultService(
             results_repository,
