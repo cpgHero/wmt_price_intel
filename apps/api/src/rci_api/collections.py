@@ -301,20 +301,21 @@ async def collection_builder_options(request: Request) -> dict[str, Any]:
     root = _repository_root()
     product_packs = json.loads((root / "product-packs" / "index.json").read_text(encoding="utf-8"))
     try:
-        active_packs = await PostgresProductPackCatalog(
+        published_packs = await PostgresProductPackCatalog(
             request.app.state.database_probe.engine
-        ).list_active()
+        ).list_published()
     except Exception:
-        active_packs = ()
+        published_packs = ()
     pack_options = [
         {
             "id": item.id,
             "name": item.name,
             "version": item.version,
             "default_keyword": item.default_keyword,
+            "active": item.active,
         }
-        for item in active_packs
-    ] or product_packs["packs"]
+        for item in published_packs
+    ] or [{**item, "active": True} for item in product_packs["packs"]]
     active_ids = {str(item["id"]) for item in pack_options}
     default_pack_id = str(product_packs["default_pack_id"])
     if default_pack_id not in active_ids:

@@ -40,6 +40,10 @@ function createDefinitionId(): string {
   return `collection-${Date.now().toString(36)}`;
 }
 
+function productPackKey(pack: { id: string; version: string }): string {
+  return `${pack.id}@${pack.version}`;
+}
+
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String) : [];
 }
@@ -252,11 +256,15 @@ export function CollectionBuilder({
   const initialPackConfig = object(initialDefinition?.product_pack);
   const defaultPack =
     options.product_packs.find(
-      (pack) => pack.id === String(initialPackConfig.id ?? ""),
+      (pack) =>
+        pack.id === String(initialPackConfig.id ?? "") &&
+        pack.version === String(initialPackConfig.version ?? ""),
     ) ??
     options.product_packs.find(
-      (pack) => pack.id === options.default_product_pack_id,
+      (pack) =>
+        pack.id === options.default_product_pack_id && pack.active !== false,
     ) ??
+    options.product_packs.find((pack) => pack.active !== false) ??
     options.product_packs[0]!;
   const initialRetailers = Array.isArray(initialDefinition?.retailers)
     ? (initialDefinition.retailers as JsonObject[])
@@ -277,7 +285,9 @@ export function CollectionBuilder({
   const [name, setName] = useState(
     String(initialDefinition?.name ?? `${defaultPack.name} Collection`),
   );
-  const [productPackId, setProductPackId] = useState(defaultPack.id);
+  const [selectedProductPackKey, setSelectedProductPackKey] = useState(
+    productPackKey(defaultPack),
+  );
   const [keyword, setKeyword] = useState(
     String(
       object(initialDefinition?.query).keyword ?? defaultPack.default_keyword,
@@ -390,7 +400,9 @@ export function CollectionBuilder({
   const [error, setError] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const selectedPack =
-    options.product_packs.find((pack) => pack.id === productPackId) ??
+    options.product_packs.find(
+      (pack) => productPackKey(pack) === selectedProductPackKey,
+    ) ??
     defaultPack;
 
   const geographyRequest = useMemo<CollectionGeographyRequest>(() => {
@@ -554,10 +566,12 @@ export function CollectionBuilder({
     );
   });
 
-  function selectPack(packId: string) {
-    const pack = options.product_packs.find((item) => item.id === packId);
+  function selectPack(packKey: string) {
+    const pack = options.product_packs.find(
+      (item) => productPackKey(item) === packKey,
+    );
     if (!pack) return;
-    setProductPackId(pack.id);
+    setSelectedProductPackKey(packKey);
     setName(`${pack.name} Collection`);
     setKeyword(pack.default_keyword);
     setApproved(false);
@@ -801,15 +815,25 @@ export function CollectionBuilder({
               <label>
                 <span>Product Pack</span>
                 <select
-                  value={selectedPack.id}
+                  value={productPackKey(selectedPack)}
                   onChange={(event) => selectPack(event.target.value)}
                 >
                   {options.product_packs.map((pack) => (
-                    <option value={pack.id} key={pack.id}>
+                    <option
+                      value={productPackKey(pack)}
+                      key={productPackKey(pack)}
+                    >
                       {pack.name} · v{pack.version}
+                      {pack.active === false ? " · published candidate" : ""}
                     </option>
                   ))}
                 </select>
+                {selectedPack.active === false ? (
+                  <small>
+                    Explicit comparison candidate; the active default is
+                    unchanged.
+                  </small>
+                ) : null}
               </label>
               <label>
                 <span>Search keyword</span>

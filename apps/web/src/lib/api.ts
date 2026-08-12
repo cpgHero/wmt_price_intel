@@ -450,6 +450,7 @@ export interface ProductPackSummary {
   name: string;
   version: string;
   default_keyword: string;
+  active?: boolean;
 }
 
 export interface ProductPackCatalog {

@@ -39,6 +39,8 @@ class CatalogProductPack:
 class ProductPackCatalog(Protocol):
     async def list_active(self) -> tuple[CatalogProductPack, ...]: ...
 
+    async def list_published(self) -> tuple[CatalogProductPack, ...]: ...
+
     async def get(self, pack_id: str, version: str) -> CatalogProductPack: ...
 
 
@@ -78,6 +80,9 @@ class FileProductPackCatalog:
         return tuple(records)
 
     async def list_active(self) -> tuple[CatalogProductPack, ...]:
+        return self._versions()
+
+    async def list_published(self) -> tuple[CatalogProductPack, ...]:
         return self._versions()
 
     async def get(self, pack_id: str, version: str) -> CatalogProductPack:
@@ -125,6 +130,35 @@ class PostgresProductPackCatalog:
                 .all()
             )
         return tuple(self._record(row, active=True) for row in rows)
+
+    async def list_published(self) -> tuple[CatalogProductPack, ...]:
+        """List every immutable version, keeping active defaults first."""
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT p.id, p.name, v.version, v.checksum, v.config,
+                              COALESCE(v.default_keyword, '') AS default_keyword,
+                              (p.active AND p.active_version = v.version) AS active,
+                              b.config AS report_blueprint
+                            FROM product_pack p
+                            JOIN product_pack_version v ON v.product_pack_id = p.id
+                            JOIN report_blueprint_version b
+                              ON b.report_blueprint_id = v.report_blueprint_id
+                             AND b.version = v.report_blueprint_version
+                            ORDER BY p.name, p.id,
+                              (p.active AND p.active_version = v.version) DESC,
+                              v.published_at DESC
+                            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return tuple(self._record(row, active=bool(row["active"])) for row in rows)
 
     async def get(self, pack_id: str, version: str) -> CatalogProductPack:
         async with self._engine.connect() as connection:

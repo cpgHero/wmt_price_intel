@@ -36,6 +36,12 @@ async def test_file_catalog_lists_every_active_repository_pack() -> None:
     }
 
 
+async def test_file_catalog_lists_bootstrap_versions_as_published() -> None:
+    catalog = FileProductPackCatalog(REPOSITORY_ROOT)
+
+    assert await catalog.list_published() == await catalog.list_active()
+
+
 async def test_file_catalog_rejects_unknown_version() -> None:
     catalog = FileProductPackCatalog(REPOSITORY_ROOT)
 
