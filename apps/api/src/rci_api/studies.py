@@ -99,9 +99,19 @@ class CreateDraftRequest(BaseModel):
 def _category_identity(study: StudyRecord) -> tuple[str, str]:
     """Return a reusable category identity, never a study/geography identity."""
 
-    category_context = str(study.intake.get("category_context") or "").strip()
     keyword = str(study.query_plan.get("keyword") or "").strip()
-    category_name = category_context or keyword or study.name
+    inclusion = next(
+        (
+            str(value).strip()
+            for value in study.intake.get("known_inclusions", [])
+            if str(value).strip()
+        ),
+        "",
+    )
+    category_name = keyword or inclusion or study.name
+    if not category_name.casefold().startswith("fresh "):
+        category_name = f"Fresh {category_name}"
+    category_name = category_name.title()[:160]
     return safe_product_pack_id(category_name), category_name
 
 

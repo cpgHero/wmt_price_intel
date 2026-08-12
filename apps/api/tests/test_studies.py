@@ -171,7 +171,7 @@ def test_study_draft_identity_comes_from_category_not_study_name() -> None:
         name="Fresh category — Walmart vs ALDI — AR/TX pilot",
     )
 
-    assert _category_identity(study) == ("fresh_category", "Fresh category")
+    assert _category_identity(study) == ("fresh_category", "Fresh Category")
 
 
 def test_next_patch_version_preserves_existing_release_line() -> None:
