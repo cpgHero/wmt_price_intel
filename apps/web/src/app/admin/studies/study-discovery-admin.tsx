@@ -364,6 +364,40 @@ export function StudyDiscoveryAdmin() {
     }
   }
 
+  async function refineProfileScope(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    setError(null);
+    try {
+      const study = await jsonRequest<Study>(
+        `/api/admin/studies/${selected.id}/profile-scope`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            target_terms: splitTerms(String(data.get("targets") ?? "")),
+            exclusion_terms: splitTerms(String(data.get("exclusions") ?? "")),
+            rationale:
+              "Refined after reviewing the collected Search population; saved evidence was re-profiled without new provider calls.",
+          }),
+        },
+      );
+      setStudies((rows) =>
+        rows.map((row) => (row.id === study.id ? study : row)),
+      );
+      setProducts([]);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to re-profile the saved Search evidence.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function changeDisposition(
     product: StudyProduct,
     admissionStatus: string,
@@ -737,25 +771,68 @@ export function StudyDiscoveryAdmin() {
                 </div>
               </form>
             ) : (
-              <section className="study-query-card">
-                <div>
-                  <span>Reviewed Search query</span>
-                  <strong>{selected.query_plan.keyword}</strong>
-                  <small>
-                    Target: {selected.query_plan.target_terms.join(", ")} ·
-                    Exclude:{" "}
-                    {selected.query_plan.exclusion_terms.join(", ") || "none"}
-                  </small>
-                </div>
-                <div>
-                  <span>Revision</span>
-                  <strong>{selected.query_plan.revision}</strong>
-                  <small>
-                    Approval checksum{" "}
-                    {selected.query_plan_checksum.slice(0, 10)}…
-                  </small>
-                </div>
-              </section>
+              <>
+                <section className="study-query-card">
+                  <div>
+                    <span>Reviewed Search query</span>
+                    <strong>{selected.query_plan.keyword}</strong>
+                    <small>
+                      Target: {selected.query_plan.target_terms.join(", ")} ·
+                      Exclude:{" "}
+                      {selected.query_plan.exclusion_terms.join(", ") || "none"}
+                    </small>
+                  </div>
+                  <div>
+                    <span>Revision</span>
+                    <strong>{selected.query_plan.revision}</strong>
+                    <small>
+                      Approval checksum{" "}
+                      {selected.query_plan_checksum.slice(0, 10)}…
+                    </small>
+                  </div>
+                </section>
+                {["profile_ready", "pdp_estimated"].includes(
+                  selected.status,
+                ) ? (
+                  <form
+                    className="study-query-editor"
+                    onSubmit={refineProfileScope}
+                  >
+                    <label>
+                      <span>Refine target terms</span>
+                      <input
+                        name="targets"
+                        defaultValue={selected.query_plan.target_terms.join(
+                          ", ",
+                        )}
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span>Refine exclusion concepts</span>
+                      <input
+                        name="exclusions"
+                        defaultValue={selected.query_plan.exclusion_terms.join(
+                          ", ",
+                        )}
+                      />
+                    </label>
+                    <div>
+                      <small>
+                        Re-runs deterministic screening against the saved Search
+                        pages. No MetricsCart calls or credits are used.
+                      </small>
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        type="submit"
+                      >
+                        Re-profile saved evidence
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+              </>
             )}
 
             {selected.status === "query_review" ? (

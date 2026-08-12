@@ -29,6 +29,54 @@ def _terms(values: object) -> tuple[str, ...]:
     return tuple(sorted({str(value).strip().casefold() for value in values if str(value).strip()}))
 
 
+def _token(value: str) -> str:
+    if value.endswith("ies") and len(value) > 3:
+        return f"{value[:-3]}y"
+    if value.endswith("s") and len(value) > 3:
+        return value[:-1]
+    return value
+
+
+def _tokens(value: str) -> tuple[str, ...]:
+    return tuple(_token(token) for token in re.findall(r"[a-z0-9]+", value.casefold()))
+
+
+def _has_target(searchable: str, targets: tuple[str, ...]) -> bool:
+    if not targets:
+        return True
+    searchable_tokens = set(_tokens(searchable))
+    return any(set(_tokens(term)).issubset(searchable_tokens) for term in targets)
+
+
+def _matching_exclusion(
+    searchable: str,
+    exclusions: tuple[str, ...],
+    targets: tuple[str, ...],
+) -> str | None:
+    """Match reviewed exclusion concepts without brittle exact word order.
+
+    Administrators describe concepts such as ``frozen strawberries`` or
+    ``dried or freeze-dried strawberries``. Retailer titles often reverse the
+    words, insert package details, or move a qualifier into parentheses. The
+    category target words are therefore optional inside an exclusion concept,
+    while every remaining token in any ``or`` branch must be present.
+    """
+
+    searchable_tokens = set(_tokens(searchable))
+    target_tokens = {token for term in targets for token in _tokens(term)}
+    for exclusion in exclusions:
+        branches = re.split(r"\bor\b", exclusion, flags=re.IGNORECASE)
+        for branch in branches:
+            required = {token for token in _tokens(branch) if token not in target_tokens}
+            if required and required.issubset(searchable_tokens):
+                return exclusion
+            if not required:
+                branch_tokens = set(_tokens(branch))
+                if branch_tokens and branch_tokens.issubset(searchable_tokens):
+                    return exclusion
+    return None
+
+
 def initial_query_plan(
     category_context: str,
     *,
@@ -118,8 +166,8 @@ def profile_products(
             )
             if value
         ).casefold()
-        matching_exclusion = next((term for term in exclusions if term in searchable), None)
-        has_target = not targets or any(term in searchable for term in targets)
+        matching_exclusion = _matching_exclusion(searchable, exclusions, targets)
+        has_target = _has_target(searchable, targets)
         positive_price = any(row.price is not None and row.price > 0 for row in product_rows)
         if matching_exclusion:
             admission_status = "excluded"

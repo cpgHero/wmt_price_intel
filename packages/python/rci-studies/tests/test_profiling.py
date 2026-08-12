@@ -136,6 +136,115 @@ def test_unknown_brand_fails_closed_and_enters_profile_review_count() -> None:
     assert profile.products[0].brand_resolution["strict_private_label"] is False
 
 
+def test_scope_terms_are_token_aware_and_match_reviewed_exclusion_concepts() -> None:
+    plan = initial_query_plan(
+        "Fresh strawberries",
+        known_inclusions=["strawberries"],
+        known_exclusions=[
+            "chocolate-dipped strawberries",
+            "dried or freeze-dried strawberries",
+            "frozen strawberries",
+            "shelf-stable strawberries",
+            "strawberry bowls",
+            "strawberry cups",
+        ],
+    )
+    observations = [
+        _observation(
+            product_id="fresh",
+            title="Fresh Strawberries, 1 lb Container",
+            brand=None,
+            price="2.46",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="frozen",
+            title="Great Value Organic Whole Strawberries, 10 oz (Frozen)",
+            brand="Great Value",
+            price="2.64",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="dried",
+            title="Simply Nature Freeze-Dried Strawberries, 1.2 oz",
+            brand="Simply Nature",
+            price="8.99",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="unrelated",
+            title="Strawberry Plant Stakes",
+            brand=None,
+            price="4.99",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="dipped",
+            title="Chocolate Hand-Dipped Strawberries",
+            brand=None,
+            price="8.99",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="cup",
+            title="Strawberry & Kiwi Cup",
+            brand=None,
+            price="4.00",
+            store="1",
+            zipcode="72712",
+        ),
+        _observation(
+            product_id="shelf-stable",
+            title="ReadyWise Sliced Strawberries Whole Shelf-Stable",
+            brand=None,
+            price="31.99",
+            store="1",
+            zipcode="72712",
+        ),
+    ]
+
+    profile = profile_products(
+        observations,
+        query_plan=plan,
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    statuses = {row.retailer_product_id: row.admission_status for row in profile.products}
+    assert statuses == {
+        "cup": "excluded",
+        "dried": "excluded",
+        "dipped": "excluded",
+        "fresh": "provisionally_admitted",
+        "frozen": "excluded",
+        "shelf-stable": "excluded",
+        "unrelated": "provisionally_admitted",
+    }
+
+
+def test_target_matching_does_not_treat_partial_words_as_category_evidence() -> None:
+    profile = profile_products(
+        [
+            _observation(
+                product_id="eggplant",
+                title="Fresh Eggplant",
+                brand=None,
+                price="1.25",
+                store="1",
+                zipcode="72712",
+            )
+        ],
+        query_plan=initial_query_plan("Fresh shell eggs", known_inclusions=["eggs"]),
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    assert profile.products[0].admission_status == "review_required"
+
+
 def test_product_pack_id_is_generic_and_category_agnostic() -> None:
     assert safe_product_pack_id("Fresh Local Fluid Milk Discovery") == (
         "fresh_local_fluid_milk_discovery"

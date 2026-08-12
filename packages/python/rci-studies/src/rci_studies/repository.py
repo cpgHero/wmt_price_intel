@@ -212,6 +212,83 @@ class PostgresStudyRepository:
             )
         return _record(row)
 
+    async def revise_profile_scope(
+        self,
+        study_id: str,
+        *,
+        query_plan: JsonObject,
+        checksum: str,
+        actor: str,
+    ) -> StudyRecord:
+        """Re-profile persisted Search evidence without buying another collection."""
+
+        async with self._engine.begin() as connection:
+            current = await self._locked(connection, study_id)
+            if str(current["status"]) not in {"profile_ready", "pdp_estimated"}:
+                raise StudyStateError("profile scope can only change before PDP enrichment")
+            if current["collection_run_id"] is None:
+                raise StudyStateError("profile scope requires a completed Search collection")
+            approval = dict(current["approval_state"])
+            approval["pdp"] = _approval("not_requested", unit="credits")
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO study_discovery_job (
+                      study_id, kind, idempotency_key, payload
+                    ) VALUES (
+                      CAST(:study_id AS uuid), 'profile', 'profile:' || :checksum,
+                      jsonb_build_object(
+                        'collection_run_id', CAST(:run_id AS uuid),
+                        'query_plan_checksum', :checksum
+                      )
+                    )
+                    """
+                ),
+                {
+                    "study_id": study_id,
+                    "run_id": str(current["collection_run_id"]),
+                    "checksum": checksum,
+                },
+            )
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"""
+                            UPDATE study_discovery SET status = 'profiling',
+                              query_plan = CAST(:query_plan AS jsonb),
+                              query_plan_checksum = :checksum,
+                              approval_state = CAST(:approval AS jsonb),
+                              pdp_estimate = NULL, pdp_plan_checksum = NULL,
+                              last_error = NULL, updated_by = :actor, updated_at = now()
+                            WHERE id::text = :study_id
+                            RETURNING {self._returning_columns()}
+                            """
+                        ),
+                        {
+                            "study_id": study_id,
+                            "query_plan": _json(query_plan),
+                            "checksum": checksum,
+                            "approval": _json(approval),
+                            "actor": actor,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await self._audit(
+                connection,
+                "study_profile_scope_revised",
+                study_id,
+                actor,
+                {
+                    "query_plan_checksum": checksum,
+                    "collection_run_id": str(current["collection_run_id"]),
+                },
+            )
+        return _record(row)
+
     async def record_search_estimate(
         self,
         study_id: str,

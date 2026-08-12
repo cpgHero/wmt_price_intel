@@ -61,6 +61,12 @@ class UpdateQueryPlanRequest(BaseModel):
     rationale: str | None = Field(default=None, max_length=2000)
 
 
+class RefineProfileScopeRequest(BaseModel):
+    target_terms: list[str] = Field(min_length=1)
+    exclusion_terms: list[str] = Field(default_factory=list)
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
 class ApproveSearchRequest(BaseModel):
     estimate_id: str
     query_plan_checksum: str = Field(pattern="^[a-f0-9]{64}$")
@@ -327,6 +333,49 @@ async def update_query_plan(
             actor=_actor(x_rci_actor),
         )
     except StudyStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{study_id}/profile-scope", response_model=StudyResponse)
+async def refine_profile_scope(
+    study_id: str,
+    request_body: RefineProfileScopeRequest,
+    request: Request,
+    x_rci_actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> StudyRecord:
+    """Re-run scope screening against saved Search evidence at zero provider cost."""
+
+    _authorized(request, x_rci_admin_token)
+    repository = _repository(request)
+    try:
+        current = await repository.get(study_id)
+        plan = {
+            **current.query_plan,
+            "target_terms": sorted(
+                {value.strip().casefold() for value in request_body.target_terms}
+            ),
+            "exclusion_terms": sorted(
+                {
+                    value.strip().casefold()
+                    for value in request_body.exclusion_terms
+                    if value.strip()
+                }
+            ),
+            "source": "human_refined_post_search",
+            "rationale": request_body.rationale,
+            "revision": int(current.query_plan["revision"]) + 1,
+        }
+        checksum = canonical_checksum(plan)
+        return await repository.revise_profile_scope(
+            study_id,
+            query_plan=plan,
+            checksum=checksum,
+            actor=_actor(x_rci_actor),
+        )
+    except StudyNotFoundError as exc:
+        raise _not_found(exc) from exc
+    except (StudyStateError, IntegrityError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
