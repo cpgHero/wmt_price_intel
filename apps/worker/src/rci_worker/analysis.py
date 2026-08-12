@@ -55,6 +55,7 @@ from rci_providers import MetricsCartAdapterRegistry
 from rci_results import AnalysisResultService, ReportBlueprintLoader
 from rci_results.brand_review import BrandReviewRepository, BrandRuleRecord
 from rci_results.match_review import MatchReviewRepository
+from rci_retailer_packs import BrandDecisionOverride, GovernedBrandResolver
 
 logger = logging.getLogger(__name__)
 
@@ -585,6 +586,8 @@ class AnalysisProcessor:
                 raise ValueError("governed reanalysis requires a brand-review repository")
             brand_rules = await self._brand_reviews.rules(job.brand_revision_id)
             pack = apply_brand_classification_rules(pack, brand_rules)
+        else:
+            brand_rules = []
         benchmark = str(job.definition_config["benchmark_retailer"])
         analysis_options = job.definition_config.get("analysis", {})
         configured_profiles = (
@@ -614,8 +617,22 @@ class AnalysisProcessor:
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(self._root / "config" / "retailer-catalog.json")
         )
-        classifier = OfferClassifier(pack)
-        engine = ComparisonEngine(pack)
+        brand_resolver = GovernedBrandResolver.from_repository(self._root)
+        if brand_rules:
+            brand_resolver = brand_resolver.with_overrides(
+                [
+                    BrandDecisionOverride(
+                        retailer_id=rule.retailer_id,
+                        normalized_brand=rule.normalized_brand,
+                        display_brand=rule.display_brand,
+                        role=rule.role,  # type: ignore[arg-type]
+                        decision=rule.decision,  # type: ignore[arg-type]
+                    )
+                    for rule in brand_rules
+                ]
+            )
+        classifier = OfferClassifier(pack, brand_resolver)
+        engine = ComparisonEngine(pack, brand_resolver)
         governed_rules: list[ProductMatchRule] = []
         if job.match_revision_id is not None:
             if self._match_reviews is None:
@@ -1044,6 +1061,7 @@ class AnalysisProcessor:
             },
             evidence_sets=evidence_sets,
             raw_source_artifact_ids=raw_artifact_ids,
+            retailer_packs=brand_resolver.provenance([benchmark, *competitors]),
         )
         decision_rows = benchmark_product_decisions(
             relationship_offers,

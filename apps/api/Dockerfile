@@ -23,6 +23,7 @@ COPY --chown=rci:rci packages/python/rci-db/pyproject.toml packages/python/rci-d
 COPY --chown=rci:rci packages/python/rci-locations/pyproject.toml packages/python/rci-locations/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-providers/pyproject.toml packages/python/rci-providers/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-products/pyproject.toml packages/python/rci-products/pyproject.toml
+COPY --chown=rci:rci packages/python/rci-retailer-packs/pyproject.toml packages/python/rci-retailer-packs/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-results/pyproject.toml packages/python/rci-results/pyproject.toml
 USER rci
 RUN uv sync --frozen --no-dev --package rci-api --no-install-workspace
@@ -33,6 +34,8 @@ COPY --chown=rci:rci config config
 COPY --chown=rci:rci database database
 COPY --chown=rci:rci fixtures/location_master fixtures/location_master
 COPY --chown=rci:rci product-packs product-packs
+COPY --chown=rci:rci retailer-packs retailer-packs
+COPY --chown=rci:rci brand-foundations brand-foundations
 COPY --chown=rci:rci report-blueprints report-blueprints
 COPY --chown=rci:rci schemas schemas
 RUN uv sync --frozen --no-dev --package rci-api

@@ -12,6 +12,7 @@ dependencies = [
   "rci-db",
   "rci-locations",
   "rci-product-packs",
+  "rci-retailer-packs",
   "sqlalchemy[asyncio]==2.0.51",
 ]
 
@@ -24,6 +25,7 @@ rci-contracts = { workspace = true }
 rci-db = { workspace = true }
 rci-locations = { workspace = true }
 rci-product-packs = { workspace = true }
+rci-retailer-packs = { workspace = true }
 
 [build-system]
 requires = ["hatchling==1.29.0"]

@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "id": "kroger_us",
+  "display_name": "Kroger",
+  "version": "1.0.0",
+  "status": "catalogued",
+  "identity": { "canonical_retailer_id": "kroger_us", "aliases": ["kroger", "kroger.com"] },
+  "observation_semantics": { "price_authority": "search_location_observation", "availability_authority": "search_location_observation", "location_dimension": "store_zip", "physical_store_reporting": true, "notes": ["Store IDs may contain leading zeroes and always remain strings."] },
+  "brand_foundation": { "id": "private_label_brand_foundation", "version": "1.0.0" },
+  "brand_policy": { "resolution_order": ["retailer_context", "exact_canonical", "exact_alias", "unresolved"], "strict_private_label_requires": ["in_private_label_matching", "approved_review", "eligible_status", "eligible_class"], "eligible_statuses": ["Active", "Transitioning", "Seasonal"], "eligible_classes": ["private_label_owned", "private_label_exclusive", "retailer_banner_brand", "sub_brand"], "unknown_behavior": "queue_candidate_never_auto_approve", "fuzzy_behavior": "suggestion_only_within_retailer" },
+  "enrichment_policy": { "identity_scope": "unique_admitted_products", "default_contexts_per_product": 1, "price_variant_context_policy": "additional_observed_context_on_price_difference", "search_fields_are_immutable": true, "default_cache_ttl_days": 30 },
+  "matching_boundary": { "brand_role": "candidate_generation_only", "requires_product_pack_compatibility": true }
+}

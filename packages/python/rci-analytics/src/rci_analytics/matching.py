@@ -18,6 +18,7 @@ from rci_analytics.models import (
     ProductMatchRule,
 )
 from rci_analytics.product_pack import ProductPack
+from rci_retailer_packs import GovernedBrandResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -720,8 +721,13 @@ def product_footprint(
 
 
 class ComparisonEngine:
-    def __init__(self, pack: ProductPack) -> None:
+    def __init__(
+        self,
+        pack: ProductPack,
+        brand_resolver: GovernedBrandResolver | None = None,
+    ) -> None:
         self.pack = pack
+        self._brand_resolver = brand_resolver
         self._tolerance = Decimal(str(pack.document["qa_rules"].get("parity_tolerance_dollars", 0)))
         self._unknown_values = {
             str(definition["name"]): tuple(definition.get("unknown_values", []))
@@ -1072,6 +1078,24 @@ class ComparisonEngine:
         if brand_policy == "same_brand":
             return (normalized,)
         if brand_policy == "private_label_equivalent":
+            if self._brand_resolver is not None:
+                governance = item.attributes.get("_brand_governance")
+                if isinstance(governance, dict):
+                    if governance.get("strict_private_label") is True:
+                        return ("private_label",)
+                    if (
+                        governance.get("override_decision") == "rejected"
+                        or governance.get("status") == "resolved"
+                    ):
+                        return None
+                resolution = self._brand_resolver.resolve(
+                    item.offer.retailer_id,
+                    str(brand),
+                )
+                if resolution.strict_private_label:
+                    return ("private_label",)
+                if resolution.override_decision == "rejected" or resolution.status == "resolved":
+                    return None
             configured = self.pack.document.get("brand_rules", {}).get("private_labels", {})
             private_labels = configured.get(item.offer.retailer_id, [])
             if normalized not in {self._normalized_brand(str(value)) for value in private_labels}:

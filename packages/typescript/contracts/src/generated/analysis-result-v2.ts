@@ -25,6 +25,16 @@ export interface RetailCompetitiveIntelligenceAnalysisResultV2 {
       version: string;
     };
   };
+  retailer_packs: {
+    retailer_id: string;
+    version: string;
+    checksum_sha256: string;
+    brand_foundation: {
+      id: string;
+      version: string;
+      checksum_sha256: string;
+    };
+  }[];
   /**
    * @minItems 1
    */

@@ -83,6 +83,21 @@ def complete_attributes_from_pdp(
         else:
             provenance[name] = "unresolved"
     attributes["_attribute_provenance"] = provenance
+    current_brand_governance = attributes.get("_brand_governance")
+    pdp_brand_governance = pdp_classified.attributes.get("_brand_governance")
+    current_brand_resolved = (
+        isinstance(current_brand_governance, dict)
+        and current_brand_governance.get("status") == "resolved"
+    )
+    pdp_brand_resolved = (
+        isinstance(pdp_brand_governance, dict) and pdp_brand_governance.get("status") == "resolved"
+    )
+    if not current_brand_resolved and pdp_brand_resolved:
+        # Search remains authoritative for price, location, and availability. PDP may
+        # complete unresolved product identity, including governed brand identity.
+        attributes["_brand_governance"] = dict(
+            pdp_brand_governance if isinstance(pdp_brand_governance, dict) else {}
+        )
     metrics = dict(classified.metrics)
     for name, value in pdp_classified.metrics.items():
         if metrics.get(name) is None and value is not None:

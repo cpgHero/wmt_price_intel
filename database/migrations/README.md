@@ -30,3 +30,6 @@ and review events for the governed administrator builder.
 `0024_scoped_match_brand` preserves the global one-to-one default while adding
 location-scoped relationship metadata, conflict-safe comparison resolution, and immutable brand
 classification revisions/application policy for the Brand Workbench.
+`0025_retailer_pack_brand` adds immutable Retailer Pack and brand-foundation runtime tables plus
+the fail-closed unknown-brand discovery queue. Repository bundles remain the reviewed seed source;
+application analyses record exact checksums for reproducibility.

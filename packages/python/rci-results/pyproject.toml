@@ -7,6 +7,7 @@ dependencies = [
   "boto3==1.43.53",
   "rci-contracts",
   "rci-product-packs",
+  "rci-retailer-packs",
   "sqlalchemy[asyncio]==2.0.51",
   "xlsxwriter==3.2.9",
 ]
@@ -14,6 +15,7 @@ dependencies = [
 [tool.uv.sources]
 rci-contracts = { workspace = true }
 rci-product-packs = { workspace = true }
+rci-retailer-packs = { workspace = true }
 
 [build-system]
 requires = ["hatchling==1.29.0"]

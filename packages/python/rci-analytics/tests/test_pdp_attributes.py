@@ -9,6 +9,7 @@ from rci_analytics.classification import OfferClassifier
 from rci_analytics.models import NormalizedOffer
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp, product_context_index
 from rci_analytics.product_pack import ProductPackLoader
+from rci_retailer_packs import GovernedBrandResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -116,3 +117,49 @@ def test_missing_claims_remain_unknown_and_pdp_can_resolve_them() -> None:
     assert enriched.attributes["lactose_free"] is True
     assert enriched.attributes["_attribute_provenance"]["organic"] == "pdp"
     assert enriched.attributes["_attribute_provenance"]["lactose_free"] == "pdp"
+
+
+def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    classifier = OfferClassifier(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offer = NormalizedOffer(
+        offer_id="milk-brand-1",
+        retailer_id="walmart_us",
+        retailer_product_id="milk-brand-product",
+        title="Whole Milk, 1 Gallon",
+        brand=None,
+        price=Decimal("3.97"),
+        currency="USD",
+        zipcode="72712",
+        store_number="100",
+        latitude=36.37,
+        longitude=-94.2,
+        in_stock=True,
+        product_url="https://example.com/milk-brand-product",
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+    search_classified = classifier.classify(offer)
+    assert search_classified.attributes["_brand_governance"]["status"] == "unresolved"
+
+    enriched = complete_attributes_from_pdp(
+        search_classified,
+        {
+            "name": "Great Value Whole Milk, 1 Gallon",
+            "brand": "Great Value",
+            "description": "Grade A whole milk",
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert enriched.offer.price == Decimal("3.97")
+    assert enriched.offer.store_number == "100"
+    assert enriched.attributes["_brand_governance"]["canonical_brand_id"] == (
+        "walmart__great_value"
+    )
+    assert enriched.attributes["_brand_governance"]["strict_private_label"] is True

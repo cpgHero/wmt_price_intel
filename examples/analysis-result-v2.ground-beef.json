@@ -18,7 +18,10 @@
     ]
   },
   "benchmark_retailer": "walmart_us",
-  "competitors": ["aldi_us", "amazon_us_same_day"],
+  "competitors": [
+    "aldi_us",
+    "amazon_us_same_day"
+  ],
   "product_pack": {
     "id": "fresh_ground_beef",
     "version": "1.0.0",
@@ -36,7 +39,9 @@
       "unit": "rows",
       "method": "sum source artifact row counts",
       "source": "deterministic",
-      "evidence_refs": ["evidence-source-manifest"]
+      "evidence_refs": [
+        "evidence-source-manifest"
+      ]
     },
     {
       "metric_id": "walmart-qualifying-zips",
@@ -45,7 +50,9 @@
       "unit": "zipcodes",
       "method": "distinct qualifying normalized ZIP codes",
       "source": "deterministic",
-      "evidence_refs": ["evidence-classified-walmart"]
+      "evidence_refs": [
+        "evidence-classified-walmart"
+      ]
     },
     {
       "metric_id": "aldi-qualifying-zips",
@@ -54,7 +61,9 @@
       "unit": "zipcodes",
       "method": "distinct qualifying normalized ZIP codes",
       "source": "deterministic",
-      "evidence_refs": ["evidence-classified-aldi"]
+      "evidence_refs": [
+        "evidence-classified-aldi"
+      ]
     },
     {
       "metric_id": "amazon-qualifying-zips",
@@ -63,7 +72,9 @@
       "unit": "zipcodes",
       "method": "distinct qualifying normalized ZIP codes",
       "source": "deterministic",
-      "evidence_refs": ["evidence-classified-amazon"]
+      "evidence_refs": [
+        "evidence-classified-amazon"
+      ]
     },
     {
       "metric_id": "aldi-exact-matches",
@@ -72,7 +83,9 @@
       "unit": "matches",
       "method": "strict exact-package comparison",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-aldi"]
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     },
     {
       "metric_id": "aldi-competitor-lower",
@@ -81,7 +94,9 @@
       "unit": "matches",
       "method": "strict exact-package comparison",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-aldi"]
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     },
     {
       "metric_id": "aldi-competitor-lower-rate",
@@ -92,7 +107,9 @@
       "denominator": 9049,
       "method": "competitor-lower matches divided by exact matches",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-aldi"]
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     },
     {
       "metric_id": "amazon-exact-matches",
@@ -101,7 +118,9 @@
       "unit": "matches",
       "method": "strict exact-package comparison",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-amazon"]
+      "evidence_refs": [
+        "evidence-exact-amazon"
+      ]
     },
     {
       "metric_id": "amazon-walmart-lower",
@@ -110,7 +129,9 @@
       "unit": "matches",
       "method": "strict exact-package comparison",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-amazon"]
+      "evidence_refs": [
+        "evidence-exact-amazon"
+      ]
     },
     {
       "metric_id": "amazon-walmart-lower-rate",
@@ -121,7 +142,9 @@
       "denominator": 6713,
       "method": "benchmark-lower matches divided by exact matches",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-amazon"]
+      "evidence_refs": [
+        "evidence-exact-amazon"
+      ]
     },
     {
       "metric_id": "aldi-proximity-matches",
@@ -130,7 +153,9 @@
       "unit": "matches",
       "method": "nearest qualifying Walmart within ten miles",
       "source": "deterministic",
-      "evidence_refs": ["evidence-proximity-aldi"]
+      "evidence_refs": [
+        "evidence-proximity-aldi"
+      ]
     },
     {
       "metric_id": "metric-aldi-organic-85-15-gap-per-lb",
@@ -139,24 +164,38 @@
       "unit": "USD_per_lb",
       "method": "median competitor price per pound minus benchmark price per pound",
       "source": "deterministic",
-      "evidence_refs": ["evidence-exact-aldi"]
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     }
   ],
   "coverage": [
     {
       "retailer_id": "walmart_us",
-      "metric_refs": ["walmart-qualifying-zips"],
-      "evidence_refs": ["evidence-classified-walmart"]
+      "metric_refs": [
+        "walmart-qualifying-zips"
+      ],
+      "evidence_refs": [
+        "evidence-classified-walmart"
+      ]
     },
     {
       "retailer_id": "aldi_us",
-      "metric_refs": ["aldi-qualifying-zips"],
-      "evidence_refs": ["evidence-classified-aldi"]
+      "metric_refs": [
+        "aldi-qualifying-zips"
+      ],
+      "evidence_refs": [
+        "evidence-classified-aldi"
+      ]
     },
     {
       "retailer_id": "amazon_us_same_day",
-      "metric_refs": ["amazon-qualifying-zips"],
-      "evidence_refs": ["evidence-classified-amazon"]
+      "metric_refs": [
+        "amazon-qualifying-zips"
+      ],
+      "evidence_refs": [
+        "evidence-classified-amazon"
+      ]
     }
   ],
   "comparison_modes": [
@@ -165,35 +204,56 @@
       "label": "Exact package",
       "geography": "exact_zip",
       "comparison_metric": "package_price",
-      "dimensions": ["lean_pct", "package_weight_lb", "organic", "grass_fed", "premium_tier"]
+      "dimensions": [
+        "lean_pct",
+        "package_weight_lb",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ]
     },
     {
       "profile_id": "normalized_price_per_lb",
       "label": "Normalized price per pound",
       "geography": "exact_zip",
       "comparison_metric": "price_per_lb",
-      "dimensions": ["lean_pct", "organic", "grass_fed", "premium_tier"]
+      "dimensions": [
+        "lean_pct",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ]
     },
     {
       "profile_id": "strict_within_10mi",
       "label": "Exact package within 10 miles",
       "geography": "radius",
       "comparison_metric": "package_price",
-      "dimensions": ["lean_pct", "package_weight_lb", "organic", "grass_fed", "premium_tier"]
+      "dimensions": [
+        "lean_pct",
+        "package_weight_lb",
+        "organic",
+        "grass_fed",
+        "premium_tier"
+      ]
     }
   ],
   "segments": [
     {
       "segment_id": "organic_grass_fed_85_15_1lb",
-      "label": "85/15 organic grass-fed — 1 lb",
+      "label": "85/15 organic grass-fed \u2014 1 lb",
       "attributes": {
         "lean_pct": 85,
         "package_weight_lb": 1,
         "organic": true,
         "grass_fed": true
       },
-      "metric_refs": ["metric-aldi-organic-85-15-gap-per-lb"],
-      "evidence_refs": ["evidence-exact-aldi"]
+      "metric_refs": [
+        "metric-aldi-organic-85-15-gap-per-lb"
+      ],
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     }
   ],
   "comparisons": [
@@ -202,16 +262,28 @@
       "competitor_id": "aldi_us",
       "profile_id": "strict_exact_package",
       "segment_id": "all",
-      "metric_refs": ["aldi-exact-matches", "aldi-competitor-lower", "aldi-competitor-lower-rate"],
-      "evidence_refs": ["evidence-exact-aldi"]
+      "metric_refs": [
+        "aldi-exact-matches",
+        "aldi-competitor-lower",
+        "aldi-competitor-lower-rate"
+      ],
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     },
     {
       "comparison_id": "amazon-all-exact",
       "competitor_id": "amazon_us_same_day",
       "profile_id": "strict_exact_package",
       "segment_id": "all",
-      "metric_refs": ["amazon-exact-matches", "amazon-walmart-lower", "amazon-walmart-lower-rate"],
-      "evidence_refs": ["evidence-exact-amazon"]
+      "metric_refs": [
+        "amazon-exact-matches",
+        "amazon-walmart-lower",
+        "amazon-walmart-lower-rate"
+      ],
+      "evidence_refs": [
+        "evidence-exact-amazon"
+      ]
     }
   ],
   "geographic_sensitivity": [
@@ -219,22 +291,32 @@
       "id": "aldi-10mi",
       "profile_id": "strict_within_10mi",
       "radius_miles": 10,
-      "metric_refs": ["aldi-proximity-matches"],
-      "evidence_refs": ["evidence-proximity-aldi"]
+      "metric_refs": [
+        "aldi-proximity-matches"
+      ],
+      "evidence_refs": [
+        "evidence-proximity-aldi"
+      ]
     }
   ],
   "assortment": {
     "metric_refs": [],
-    "evidence_refs": ["evidence-product-catalog"]
+    "evidence_refs": [
+      "evidence-product-catalog"
+    ]
   },
   "data_quality": {
     "status": "ready",
-    "metric_refs": ["source-total-rows"],
+    "metric_refs": [
+      "source-total-rows"
+    ],
     "issue_counts": {
       "blocker": 0,
       "warning": 1
     },
-    "evidence_refs": ["evidence-validation"]
+    "evidence_refs": [
+      "evidence-validation"
+    ]
   },
   "validation": {
     "status": "ready_to_share",
@@ -245,12 +327,16 @@
       {
         "id": "authoritative-metrics-deterministic",
         "status": "passed",
-        "evidence_refs": ["evidence-source-manifest"]
+        "evidence_refs": [
+          "evidence-source-manifest"
+        ]
       },
       {
         "id": "variable-weight-semantics-reviewed",
         "status": "warning",
-        "evidence_refs": ["evidence-validation"]
+        "evidence_refs": [
+          "evidence-validation"
+        ]
       }
     ]
   },
@@ -261,10 +347,17 @@
       "summary": "The exact-package headline masks materially different competitive positions by lean ratio, package size, and organic status.",
       "severity": "high",
       "business_impact": "Category action should target the vulnerable segments instead of using one blended ground-beef index.",
-      "metric_refs": ["aldi-competitor-lower-rate", "metric-aldi-organic-85-15-gap-per-lb"],
-      "evidence_refs": ["evidence-exact-aldi"],
+      "metric_refs": [
+        "aldi-competitor-lower-rate",
+        "metric-aldi-organic-85-15-gap-per-lb"
+      ],
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ],
       "confidence": 0.99,
-      "limitations": ["Point-in-time August 7, 2026 snapshot"],
+      "limitations": [
+        "Point-in-time August 7, 2026 snapshot"
+      ],
       "generated_by": "ai_assisted"
     },
     {
@@ -273,10 +366,17 @@
       "summary": "Walmart is lower in the large majority of exact Amazon comparisons.",
       "severity": "positive",
       "business_impact": "Monitoring can focus on localized exceptions and preservation of the current advantage.",
-      "metric_refs": ["amazon-walmart-lower", "amazon-walmart-lower-rate"],
-      "evidence_refs": ["evidence-exact-amazon"],
+      "metric_refs": [
+        "amazon-walmart-lower",
+        "amazon-walmart-lower-rate"
+      ],
+      "evidence_refs": [
+        "evidence-exact-amazon"
+      ],
       "confidence": 0.99,
-      "limitations": ["Search-result presence does not guarantee checkout availability"],
+      "limitations": [
+        "Search-result presence does not guarantee checkout availability"
+      ],
       "generated_by": "ai_assisted"
     }
   ],
@@ -287,27 +387,46 @@
       "action": "Prioritize the ALDI organic grass-fed 85/15 segment for review.",
       "owner": "Category Pricing",
       "rationale": "It is the largest broad, repeatable ALDI price-per-pound pressure point in the validated segment set.",
-      "metric_refs": ["metric-aldi-organic-85-15-gap-per-lb"],
-      "evidence_refs": ["evidence-exact-aldi"]
+      "metric_refs": [
+        "metric-aldi-organic-85-15-gap-per-lb"
+      ],
+      "evidence_refs": [
+        "evidence-exact-aldi"
+      ]
     }
   ],
   "narratives": {
     "generation_mode": "ai_assisted",
-    "agent_task_ids": ["ai-ground-beef-insight-1", "ai-ground-beef-narrative-1"],
+    "agent_task_ids": [
+      "ai-ground-beef-insight-1",
+      "ai-ground-beef-narrative-1"
+    ],
     "sections": [
       {
         "id": "executive_summary",
         "heading": "Executive Summary",
         "body": "ALDI and Amazon create two different competitive stories. ALDI pressure is concentrated in specific packages and organic segments, while Walmart holds a broad observed advantage against Amazon.",
-        "metric_refs": ["aldi-competitor-lower-rate", "amazon-walmart-lower-rate"],
-        "evidence_refs": ["evidence-exact-aldi", "evidence-exact-amazon"]
+        "metric_refs": [
+          "aldi-competitor-lower-rate",
+          "amazon-walmart-lower-rate"
+        ],
+        "evidence_refs": [
+          "evidence-exact-aldi",
+          "evidence-exact-amazon"
+        ]
       },
       {
         "id": "recommendations",
         "heading": "Recommended Actions",
         "body": "Prioritize the organic grass-fed 85/15 pressure point and preserve Walmart's stronger conventional and Amazon positions.",
-        "metric_refs": ["metric-aldi-organic-85-15-gap-per-lb", "amazon-walmart-lower-rate"],
-        "evidence_refs": ["evidence-exact-aldi", "evidence-exact-amazon"]
+        "metric_refs": [
+          "metric-aldi-organic-85-15-gap-per-lb",
+          "amazon-walmart-lower-rate"
+        ],
+        "evidence_refs": [
+          "evidence-exact-aldi",
+          "evidence-exact-amazon"
+        ]
       }
     ]
   },
@@ -377,5 +496,37 @@
       "raw-aldi-ground-beef",
       "raw-amazon-ground-beef"
     ]
-  }
+  },
+  "retailer_packs": [
+    {
+      "retailer_id": "walmart_us",
+      "version": "1.0.0",
+      "checksum_sha256": "02a6fda1322bfd634ec90da505eee5d73e16009f422afdb42e0e23d5368234b6",
+      "brand_foundation": {
+        "id": "private_label_brand_foundation",
+        "version": "1.0.0",
+        "checksum_sha256": "c13fc1ac69b59baedfa2b3e9838e1465c6621080aaf33bdd0dab07779871f4b5"
+      }
+    },
+    {
+      "retailer_id": "aldi_us",
+      "version": "1.0.0",
+      "checksum_sha256": "524da141ea77450a006d6563ceab361ead6c0188bbc91f55601783ff18d87ce1",
+      "brand_foundation": {
+        "id": "private_label_brand_foundation",
+        "version": "1.0.0",
+        "checksum_sha256": "c13fc1ac69b59baedfa2b3e9838e1465c6621080aaf33bdd0dab07779871f4b5"
+      }
+    },
+    {
+      "retailer_id": "amazon_us_same_day",
+      "version": "1.0.0",
+      "checksum_sha256": "a7a36c2e61e024f13b11b522e96c9c9e068f9f3b6868d665b5328179447d8b95",
+      "brand_foundation": {
+        "id": "private_label_brand_foundation",
+        "version": "1.0.0",
+        "checksum_sha256": "c13fc1ac69b59baedfa2b3e9838e1465c6621080aaf33bdd0dab07779871f4b5"
+      }
+    }
+  ]
 }

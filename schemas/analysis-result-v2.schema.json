@@ -13,6 +13,7 @@
     "benchmark_retailer",
     "competitors",
     "product_pack",
+    "retailer_packs",
     "metrics",
     "coverage",
     "comparison_modes",
@@ -90,6 +91,30 @@
             "version": {
               "type": "string",
               "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "retailer_packs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["retailer_id", "version", "checksum_sha256", "brand_foundation"],
+        "properties": {
+          "retailer_id": { "type": "string", "minLength": 1 },
+          "version": { "type": "string", "minLength": 1 },
+          "checksum_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "brand_foundation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version", "checksum_sha256"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "version": { "type": "string", "minLength": 1 },
+              "checksum_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
             }
           }
         }

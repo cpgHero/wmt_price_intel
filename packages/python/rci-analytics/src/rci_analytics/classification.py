@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
 from rci_analytics.product_pack import ProductPack
+from rci_retailer_packs import GovernedBrandResolver
 
 _GENERIC_NAME_WORDS = {"fresh", "raw", "whole", "product", "products"}
 
@@ -90,8 +91,13 @@ class FormulaEvaluator:
 
 
 class OfferClassifier:
-    def __init__(self, pack: ProductPack) -> None:
+    def __init__(
+        self,
+        pack: ProductPack,
+        brand_resolver: GovernedBrandResolver | None = None,
+    ) -> None:
         self.pack = pack
+        self._brand_resolver = brand_resolver
         self._targets = _target_terms(pack)
         self._exclusions = _exclusion_patterns(pack)
         self._formulas = FormulaEvaluator()
@@ -111,6 +117,16 @@ class OfferClassifier:
                 if bool(definition.get("required_for_strict")) and value is None:
                     review.append(f"required attribute {name} is unresolved")
             attributes["_attribute_provenance"] = provenance
+            if self._brand_resolver is not None:
+                observed_brand = attributes.get("brand") or offer.brand
+                resolution = self._brand_resolver.resolve(
+                    offer.retailer_id,
+                    str(observed_brand) if observed_brand else None,
+                )
+                attributes["_brand_governance"] = resolution.to_record()
+                if observed_brand and resolution.canonical_brand_name:
+                    attributes["brand"] = resolution.canonical_brand_name
+                    provenance.setdefault("brand", resolution.resolution_method)
 
         metrics = self._metrics(offer, attributes) if in_scope else {}
         return ClassifiedOffer(

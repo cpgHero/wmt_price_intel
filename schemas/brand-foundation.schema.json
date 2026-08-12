@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/brand-foundation.schema.json",
+  "title": "Retail Competitive Intelligence Brand Foundation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "version",
+    "status",
+    "source_artifacts",
+    "retailer_id_map",
+    "brands",
+    "aliases"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["active", "superseded"] },
+    "source_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256", "role"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "role": { "enum": ["authoritative_master", "authoritative_aliases", "review_view", "instructions"] }
+        }
+      }
+    },
+    "retailer_id_map": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "brands": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/brand" }
+    },
+    "aliases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/alias" }
+    }
+  },
+  "$defs": {
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brand_id",
+        "source_retailer_id",
+        "retailer_id",
+        "retailer",
+        "retailer_parent",
+        "brand_name",
+        "brand_name_normalized",
+        "brand_family",
+        "brand_bucket",
+        "brand_class",
+        "ownership_model",
+        "in_private_label_matching",
+        "is_grocery_relevant",
+        "department_scope",
+        "category_tags",
+        "competitive_brand_role",
+        "positioning",
+        "status",
+        "retailer_exclusive",
+        "matching_priority",
+        "confidence",
+        "source_type",
+        "source_url",
+        "last_verified_at",
+        "first_seen_at",
+        "last_seen_at",
+        "review_status",
+        "notes"
+      ],
+      "properties": {
+        "brand_id": { "type": "string", "minLength": 1 },
+        "source_retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer": { "type": "string", "minLength": 1 },
+        "retailer_parent": { "type": "string", "minLength": 1 },
+        "brand_name": { "type": "string", "minLength": 1 },
+        "brand_name_normalized": { "type": "string", "minLength": 1 },
+        "brand_family": { "type": "string", "minLength": 1 },
+        "brand_bucket": { "enum": ["Private Label", "Retailer-Associated", "Regional", "National", "Candidate/Unknown"] },
+        "brand_class": {
+          "enum": [
+            "private_label_owned",
+            "private_label_exclusive",
+            "retailer_banner_brand",
+            "sub_brand",
+            "acquired_brand",
+            "exclusive_partner_brand",
+            "regional_brand",
+            "national_brand",
+            "candidate_unknown"
+          ]
+        },
+        "ownership_model": { "enum": ["retailer_owned", "retailer_exclusive", "exclusive_partnership", "acquired_owned", "unknown"] },
+        "in_private_label_matching": { "type": "boolean" },
+        "is_grocery_relevant": { "type": "boolean" },
+        "department_scope": { "type": "string", "minLength": 1 },
+        "category_tags": { "type": "string" },
+        "competitive_brand_role": { "type": "string", "pattern": "^retailer_[a-z_]+$" },
+        "positioning": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["Active", "Transitioning", "Seasonal", "Legacy", "Candidate"] },
+        "retailer_exclusive": { "type": "boolean" },
+        "matching_priority": { "enum": ["High", "Medium", "Low"] },
+        "confidence": { "enum": ["Verified", "High", "Medium", "Candidate"] },
+        "source_type": { "type": "string", "minLength": 1 },
+        "source_url": { "type": "string", "format": "uri" },
+        "last_verified_at": { "type": ["string", "null"], "format": "date" },
+        "first_seen_at": { "type": ["string", "null"], "format": "date" },
+        "last_seen_at": { "type": ["string", "null"], "format": "date" },
+        "review_status": { "enum": ["Approved", "Pending", "Rejected", "Legacy Reference"] },
+        "notes": { "type": "string" }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "alias_id",
+        "source_alias_id",
+        "source_retailer_id",
+        "retailer_id",
+        "retailer",
+        "alias_name",
+        "alias_normalized",
+        "canonical_brand_id",
+        "canonical_brand_name",
+        "alias_type",
+        "status",
+        "matching_rule",
+        "confidence"
+      ],
+      "properties": {
+        "alias_id": { "type": "string", "minLength": 1 },
+        "source_alias_id": { "type": "string", "minLength": 1 },
+        "source_retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer": { "type": "string", "minLength": 1 },
+        "alias_name": { "type": "string", "minLength": 1 },
+        "alias_normalized": { "type": "string", "minLength": 1 },
+        "canonical_brand_id": { "type": "string", "minLength": 1 },
+        "canonical_brand_name": { "type": "string", "minLength": 1 },
+        "alias_type": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["Active", "Legacy"] },
+        "matching_rule": { "enum": ["exact_normalized", "manual_or_legacy_map"] },
+        "confidence": { "enum": ["Verified", "High", "Medium", "Candidate"] },
+        "source_url": { "type": ["string", "null"], "format": "uri" },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -72,6 +72,11 @@ const brandClassificationDecisionValidator = validator(
   "brand-classification-decision.schema.json",
 );
 const brandWorkbenchValidator = validator("brand-workbench.schema.json");
+const brandDiscoveryValidator = validator(
+  "brand-discovery-record.schema.json",
+);
+const brandFoundationValidator = validator("brand-foundation.schema.json");
+const retailerPackValidator = validator("retailer-pack.schema.json");
 const historicalInputManifestValidator = validator(
   "historical-input-manifest.schema.json",
 );
@@ -375,6 +380,29 @@ await assertValid(
   await loadJson("examples", "product-pack-draft.ground-beef.json"),
   "Product Pack draft",
 );
+await assertValid(
+  brandDiscoveryValidator,
+  await loadJson("examples", "brand-discovery-record.example.json"),
+  "brand discovery record",
+);
+
+const brandFoundationIndex = await loadJson("brand-foundations", "index.json");
+for (const foundation of brandFoundationIndex.foundations) {
+  await assertValid(
+    brandFoundationValidator,
+    await loadJson("brand-foundations", ...foundation.file.split("/")),
+    foundation.file,
+  );
+}
+
+const retailerPackIndex = await loadJson("retailer-packs", "index.json");
+for (const retailerPack of retailerPackIndex.packs) {
+  await assertValid(
+    retailerPackValidator,
+    await loadJson("retailer-packs", ...retailerPack.file.split("/")),
+    retailerPack.file,
+  );
+}
 
 const productPackFiles = (await readdir(join(repositoryRoot, "product-packs")))
   .filter((name) => name.startsWith("fresh_") && name.endsWith(".json"))
@@ -430,6 +458,8 @@ console.log(
     historicalInputManifestFiles.length +
     reportBlueprintFiles.length +
     agentPromptFiles.length +
-    11
+    brandFoundationIndex.foundations.length +
+    retailerPackIndex.packs.length +
+    12
   } normative JSON documents.`,
 );

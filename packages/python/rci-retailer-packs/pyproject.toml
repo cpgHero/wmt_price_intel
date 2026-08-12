@@ -1,0 +1,15 @@
+[project]
+name = "rci-retailer-packs"
+version = "0.1.0"
+description = "Versioned retailer semantics and governed brand-resolution foundation."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-contracts",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

@@ -36,6 +36,8 @@ const contracts = [
     "brand-classification-decision.ts",
   ],
   ["brand-workbench.schema.json", "brand-workbench.ts"],
+  ["brand-discovery-record.schema.json", "brand-discovery-record.ts"],
+  ["brand-foundation.schema.json", "brand-foundation.ts"],
   ["product-footprint.schema.json", "product-footprint.ts"],
   ["product-match-decision.schema.json", "product-match-decision.ts"],
   ["product-match-review.schema.json", "product-match-review.ts"],
@@ -51,6 +53,7 @@ const contracts = [
   ["provider-error.schema.json", "provider-error.ts"],
   ["report-blueprint.schema.json", "report-blueprint.ts"],
   ["report-view.schema.json", "report-view.ts"],
+  ["retailer-pack.schema.json", "retailer-pack.ts"],
   ["scoped-match-assignment.schema.json", "scoped-match-assignment.ts"],
 ];
 

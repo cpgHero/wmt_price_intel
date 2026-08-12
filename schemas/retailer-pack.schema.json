@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/retailer-pack.schema.json",
+  "title": "Retail Competitive Intelligence Retailer Pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "display_name",
+    "version",
+    "status",
+    "identity",
+    "observation_semantics",
+    "brand_foundation",
+    "brand_policy",
+    "enrichment_policy",
+    "matching_boundary"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "display_name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["active", "catalogued", "needs_verification"] },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_retailer_id", "aliases"],
+      "properties": {
+        "canonical_retailer_id": { "type": "string", "minLength": 1 },
+        "aliases": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "observation_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "price_authority",
+        "availability_authority",
+        "location_dimension",
+        "physical_store_reporting"
+      ],
+      "properties": {
+        "price_authority": { "const": "search_location_observation" },
+        "availability_authority": { "const": "search_location_observation" },
+        "location_dimension": { "enum": ["store_zip", "zipcode", "pending_verification"] },
+        "physical_store_reporting": { "type": "boolean" },
+        "notes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "brand_foundation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "brand_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolution_order",
+        "strict_private_label_requires",
+        "eligible_statuses",
+        "eligible_classes",
+        "unknown_behavior",
+        "fuzzy_behavior"
+      ],
+      "properties": {
+        "resolution_order": {
+          "type": "array",
+          "const": ["retailer_context", "exact_canonical", "exact_alias", "unresolved"]
+        },
+        "strict_private_label_requires": {
+          "type": "array",
+          "const": ["in_private_label_matching", "approved_review", "eligible_status", "eligible_class"]
+        },
+        "eligible_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["Active", "Transitioning", "Seasonal"] }
+        },
+        "eligible_classes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "private_label_owned",
+              "private_label_exclusive",
+              "retailer_banner_brand",
+              "sub_brand"
+            ]
+          }
+        },
+        "unknown_behavior": { "const": "queue_candidate_never_auto_approve" },
+        "fuzzy_behavior": { "const": "suggestion_only_within_retailer" }
+      }
+    },
+    "enrichment_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_scope",
+        "default_contexts_per_product",
+        "price_variant_context_policy",
+        "search_fields_are_immutable"
+      ],
+      "properties": {
+        "identity_scope": { "const": "unique_admitted_products" },
+        "default_contexts_per_product": { "const": 1 },
+        "price_variant_context_policy": { "const": "additional_observed_context_on_price_difference" },
+        "search_fields_are_immutable": { "const": true },
+        "default_cache_ttl_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "matching_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brand_role", "requires_product_pack_compatibility"],
+      "properties": {
+        "brand_role": { "const": "candidate_generation_only" },
+        "requires_product_pack_compatibility": { "const": true }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "packs": [
+    { "id": "walmart_us", "version": "1.0.0", "file": "walmart_us/1.0.0.json" },
+    { "id": "aldi_us", "version": "1.0.0", "file": "aldi_us/1.0.0.json" },
+    { "id": "amazon_us_same_day", "version": "1.0.0", "file": "amazon_us_same_day/1.0.0.json" },
+    { "id": "heb_us", "version": "1.0.0", "file": "heb_us/1.0.0.json" },
+    { "id": "kroger_us", "version": "1.0.0", "file": "kroger_us/1.0.0.json" },
+    { "id": "target_us", "version": "1.0.0", "file": "target_us/1.0.0.json" },
+    { "id": "whole_foods_market_us", "version": "1.0.0", "file": "whole_foods_market_us/1.0.0.json" }
+  ]
+}

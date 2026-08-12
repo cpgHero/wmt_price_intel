@@ -141,6 +141,7 @@ class AnalysisResultV2Builder:
         data_quality_facts: JsonObject,
         evidence_sets: list[JsonObject],
         raw_source_artifact_ids: list[str],
+        retailer_packs: list[JsonObject] | None = None,
     ) -> JsonObject:
         evidence_ids = {str(value["evidence_set_id"]) for value in evidence_sets}
         if len(evidence_ids) != len(evidence_sets):
@@ -207,6 +208,7 @@ class AnalysisResultV2Builder:
                 "checksum_sha256": self._pack.checksum,
                 "report_blueprint": self._pack.report_blueprint,
             },
+            "retailer_packs": list(retailer_packs or []),
             "metrics": registry.documents,
             "coverage": coverage,
             "comparison_modes": comparison_modes,

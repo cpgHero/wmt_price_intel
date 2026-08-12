@@ -254,6 +254,14 @@
         "wegmans",
         "wegmans.com"
       ]
+    },
+    {
+      "id": "whole_foods_market_us",
+      "display_name": "Whole Foods Market",
+      "api_retailer_aliases": [
+        "whole foods market",
+        "wholefoodsmarket.com"
+      ]
     }
   ]
 }

@@ -37,6 +37,7 @@ from rci_results.service import (
     ProductEvidenceNotFoundError,
 )
 from rci_results.storage import ReportObjectStore, UnavailableReportObjectStore
+from rci_retailer_packs import GovernedBrandResolver
 
 router = APIRouter(prefix="/api/v1")
 
@@ -181,6 +182,7 @@ def get_brand_review_service(request: Request) -> BrandReviewService:
         PostgresBrandReviewRepository(request.app.state.database_probe.engine),
         CatalogProductPackLoader(repository_root, product_pack_catalog),
         retailer_names=names,
+        brand_resolver=GovernedBrandResolver.from_repository(repository_root),
     )
 
 

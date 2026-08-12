@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from rci_results.models import AnalysisRecord, JsonObject
 from rci_results.repository import DEFAULT_ORGANIZATION_ID
 from rci_results.service import AnalysisResultService
+from rci_retailer_packs import GovernedBrandResolver
 
 
 class BrandRevisionConflictError(RuntimeError):
@@ -639,11 +640,13 @@ class BrandReviewService:
         product_packs: ExactProductPackLoader,
         *,
         retailer_names: dict[str, str] | None = None,
+        brand_resolver: GovernedBrandResolver | None = None,
     ) -> None:
         self._results = results
         self._repository = repository
         self._product_packs = product_packs
         self._retailer_names = dict(retailer_names or {})
+        self._brand_resolver = brand_resolver
 
     async def view(self, analysis_id: str) -> JsonObject:
         analysis = await self._results.get(analysis_id)
@@ -666,7 +669,14 @@ class BrandReviewService:
         pack = await self._product_packs.load(
             analysis.product_pack_id, analysis.product_pack_version
         )
-        brands = self._brands(document, context, retailer_ids, pack, rules)
+        brands = self._brands(
+            document,
+            context,
+            retailer_ids,
+            pack,
+            rules,
+            brand_resolver=self._brand_resolver,
+        )
         return {
             "schema_version": "1.0.0",
             "analysis_id": analysis.analysis_id,
@@ -768,6 +778,8 @@ class BrandReviewService:
         retailer_ids: list[str],
         pack: ProductPackDocument,
         rules: list[BrandRuleRecord],
+        *,
+        brand_resolver: GovernedBrandResolver | None = None,
     ) -> list[JsonObject]:
         aliases: dict[str, str] = {}
         for canonical, values in pack.document.get("brand_rules", {}).get("aliases", {}).items():
@@ -795,6 +807,35 @@ class BrandReviewService:
                     (str(retailer_id), normalize(str(brand))),
                     ("private_label", "product_pack"),
                 )
+        if brand_resolver is not None:
+            for retailer_id in retailer_ids:
+                summary_value = context.get("assortment_analysis") or document.get(
+                    "assortment_analysis"
+                )
+                if not isinstance(summary_value, dict):
+                    continue
+                retailer_summary = next(
+                    (
+                        row
+                        for row in summary_value.get("retailers", [])
+                        if isinstance(row, dict) and str(row.get("retailer")) == retailer_id
+                    ),
+                    {},
+                )
+                for brand_row in retailer_summary.get("brands", []):
+                    if not isinstance(brand_row, dict) or not brand_row.get("brand"):
+                        continue
+                    resolution = brand_resolver.resolve(retailer_id, str(brand_row["brand"]))
+                    if resolution.status == "resolved" and resolution.role != "unclassified":
+                        configured.setdefault(
+                            (
+                                retailer_id,
+                                _normalize_brand_name(
+                                    resolution.canonical_brand_name or str(brand_row["brand"])
+                                ),
+                            ),
+                            (resolution.role, "deterministic"),
+                        )
         persisted = {(row.retailer_id, normalize(row.normalized_brand)): row for row in rules}
         examples: dict[tuple[str, str], list[JsonObject]] = {}
         highlighted_products: dict[tuple[str, str], set[str]] = {}
