@@ -573,12 +573,43 @@ class AnalysisResultV2Builder:
             competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
             return matches, abs(benchmark_rate - competitor_rate), str(row["comparison_id"])
 
+        decision_rules = self._pack.reporting.get("decision_rules", {})
+        preferred_profile = str(decision_rules.get("preferred_scorecard_profile_id", ""))
+        profile_priority = {
+            str(profile_id): index
+            for index, profile_id in enumerate(decision_rules.get("profile_priority", []))
+        }
+
+        def headline_rank(row: JsonObject) -> tuple[int, int, int, float, float, str]:
+            profile_id = str(row["profile_id"])
+            mode = mode_index.get(profile_id, {})
+            values = values_for(row)
+            matches = float(values.get("matches", {}).get("value", 0))
+            benchmark_rate = float(values.get("benchmark_lower_rate", {}).get("value", 0))
+            competitor_rate = float(values.get("competitor_lower_rate", {}).get("value", 0))
+            return (
+                0 if profile_id == preferred_profile else 1,
+                profile_priority.get(profile_id, len(profile_priority)),
+                0 if str(mode.get("geography")) == "exact_zip" else 1,
+                -matches,
+                -abs(benchmark_rate - competitor_rate),
+                str(row["comparison_id"]),
+            )
+
         overall_by_competitor: dict[str, list[JsonObject]] = {}
         for competitor in sorted({str(row["competitor_id"]) for row in overall}):
             rows = [row for row in overall if str(row["competitor_id"]) == competitor]
-            overall_by_competitor[competitor] = sorted(rows, key=row_score, reverse=True)
+            overall_by_competitor[competitor] = sorted(rows, key=headline_rank)
         headline_rows = [rows[0] for rows in overall_by_competitor.values() if rows]
-        ranked_segments = sorted(segment_rows, key=row_score, reverse=True)
+        headline_profiles = {
+            (str(row["competitor_id"]), str(row["profile_id"])) for row in headline_rows
+        }
+        headline_segment_rows = [
+            row
+            for row in segment_rows
+            if (str(row["competitor_id"]), str(row["profile_id"])) in headline_profiles
+        ]
+        ranked_segments = sorted(headline_segment_rows or segment_rows, key=row_score, reverse=True)
         high_signal_segments = ranked_segments[:4]
 
         source_metric = metric_index.get("source.total_rows")
@@ -600,7 +631,16 @@ class AnalysisResultV2Builder:
                 + "; ".join(comparison_sentence(row) for row in high_signal_segments[:2])
             )
         elif insights:
-            summary_parts.extend(str(value["summary"]) for value in insights[:2])
+            headline_evidence = {
+                str(ref) for row in headline_rows for ref in row.get("evidence_refs", [])
+            }
+            summary_parts.extend(
+                str(value["summary"])
+                for value in insights
+                if headline_evidence.intersection(
+                    str(ref) for ref in value.get("evidence_refs", [])
+                )
+            )
         summary_rows = [*headline_rows[:3], *high_signal_segments[:2]]
         summary_refs, summary_evidence = refs_for(summary_rows)
         if source_metric is not None:

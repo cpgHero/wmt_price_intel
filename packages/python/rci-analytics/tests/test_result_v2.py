@@ -129,3 +129,110 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
         section["metric_refs"] and section["evidence_refs"]
         for section in result["narratives"]["sections"]
     )
+
+
+def test_executive_summary_prefers_governed_scorecard_profile_over_larger_sensitivity() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    source_evidence = evidence_set(
+        "evidence.source",
+        "source_manifest",
+        [("raw-walmart", "a" * 64, 100), ("raw-aldi", "b" * 64, 100)],
+    )
+    facts = [
+        ComparisonFact(
+            competitor_id="aldi_us",
+            profile_id="strict",
+            profile_label="Strict same-ZIP and exact-package comparison",
+            geography="exact_zip",
+            comparison_metric="package_price",
+            dimensions=("weight_lb",),
+            evidence_ref="evidence.matches.aldi.strict",
+            values={
+                "matches": 30,
+                "unique_geographies": 30,
+                "benchmark_lower": 24,
+                "competitor_lower": 6,
+                "parity": 0,
+                "benchmark_lower_rate": 0.8,
+                "competitor_lower_rate": 0.2,
+                "parity_rate": 0.0,
+                "median_gap": 0.35,
+            },
+        ),
+        ComparisonFact(
+            competitor_id="aldi_us",
+            profile_id="aldi_10mi",
+            profile_label="ALDI-Walmart 10 mile sensitivity",
+            geography="radius",
+            comparison_metric="package_price",
+            dimensions=("weight_lb",),
+            evidence_ref="evidence.matches.aldi.radius",
+            values={
+                "matches": 20_000,
+                "unique_geographies": 4_000,
+                "benchmark_lower": 2_000,
+                "competitor_lower": 18_000,
+                "parity": 0,
+                "benchmark_lower_rate": 0.1,
+                "competitor_lower_rate": 0.9,
+                "parity_rate": 0.0,
+                "median_gap": -0.25,
+            },
+        ),
+    ]
+    result = AnalysisResultV2Builder(pack, code_version="test").build(
+        analysis_id="analysis-summary-profile-test",
+        analysis_run_id="run-summary-profile-test",
+        generated_at="2026-08-11T12:00:00Z",
+        source={
+            "input_set_id": "input-summary-profile-test",
+            "kind": "historical_import",
+            "collection_run_id": None,
+            "observed_start": None,
+            "observed_end": None,
+            "sampling": False,
+            "total_rows": 200,
+            "source_artifact_ids": ["raw-walmart", "raw-aldi"],
+        },
+        benchmark_retailer="walmart_us",
+        competitors=["aldi_us"],
+        coverage_facts=[
+            {
+                "retailer_id": retailer,
+                "offers": 100,
+                "in_scope_offers": 100,
+                "in_scope_zips": 30,
+                "in_scope_stores": 30,
+                "evidence_ref": "evidence.source",
+            }
+            for retailer in ("walmart_us", "aldi_us")
+        ],
+        comparison_facts=facts,
+        data_quality_facts={
+            "normalization_rejections": 0,
+            "review_offers": 0,
+            "zero_or_missing_price_offers": 0,
+        },
+        evidence_sets=[
+            source_evidence,
+            evidence_set(
+                "evidence.matches.aldi.strict",
+                "exact_matches",
+                [("strict", "c" * 64, 30)],
+            ),
+            evidence_set(
+                "evidence.matches.aldi.radius",
+                "proximity_matches",
+                [("radius", "d" * 64, 20_000)],
+            ),
+        ],
+        raw_source_artifact_ids=["raw-walmart", "raw-aldi"],
+    )
+
+    summary = next(
+        section["body"]
+        for section in result["narratives"]["sections"]
+        if section["id"] == "executive_summary"
+    )
+    assert "strict same-zip and exact-package comparison" in summary
+    assert "10 mile" not in summary
