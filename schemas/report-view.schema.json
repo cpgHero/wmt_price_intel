@@ -103,6 +103,13 @@
       "type": "array",
       "items": { "type": "object", "additionalProperties": true }
     },
+    "product_evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
     "product_decisions": {
       "type": "array",
       "items": { "$ref": "#/$defs/productDecision" }

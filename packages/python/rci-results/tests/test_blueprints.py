@@ -547,9 +547,11 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     decision = {
         "id": "pair-1",
         "priority": "attention",
+        "benchmark_product_id": "walmart-80-20",
         "benchmark_product_name": "Walmart 80/20 Ground Beef",
         "benchmark_image_url": "https://example.test/walmart.jpg",
         "competitor": "aldi_us",
+        "competitor_product_id": "aldi-80-20",
         "competitor_product_name": "ALDI 80/20 Ground Beef",
         "competitor_image_url": "https://example.test/aldi.jpg",
         "median_gap": -1.8,
@@ -603,6 +605,13 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
             }
         },
     }
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        result,
+        presentation_context=context,
+    )
+
+    assert view["product_evidence"] == context["product_evidence"]
 
     html = (
         ArtifactRenderer(REPOSITORY_ROOT)
