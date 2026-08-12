@@ -960,9 +960,12 @@ async def regenerate_product_pack_draft(
         replacement = await create_product_pack_draft(
             study_id, request_body, request, x_rci_actor, x_rci_admin_token
         )
-    except Exception:
+    except Exception as exc:
         await repository.link_draft(study_id, study.product_pack_draft_id, _actor(x_rci_actor))
-        raise
+        raise HTTPException(
+            status_code=409,
+            detail=f"The replacement Product Pack draft could not be created: {exc}",
+        ) from exc
     await authoring_repository.abandon_draft(
         study.product_pack_draft_id,
         actor=_actor(x_rci_actor),
