@@ -200,6 +200,28 @@ class ProductPackLoader:
                     f"profile {profile['id']} has unknown availability policy "
                     f"{availability_policy!r}"
                 )
+        strict_required = {
+            str(attribute["name"])
+            for attribute in attributes
+            if attribute.get("required_for_strict") is True
+        }
+        preferred_profile_id = str(
+            document.get("reporting", {})
+            .get("decision_rules", {})
+            .get("preferred_scorecard_profile_id", "")
+        )
+        preferred_profile = next(
+            (profile for profile in profiles if str(profile["id"]) == preferred_profile_id),
+            None,
+        )
+        if preferred_profile is not None:
+            preferred_dimensions = {str(value) for value in preferred_profile.get("dimensions", [])}
+            missing_strict = strict_required - preferred_dimensions
+            if missing_strict:
+                raise ContractError(
+                    f"preferred scorecard profile {preferred_profile_id!r} omits strict "
+                    f"identity dimensions {sorted(missing_strict)}"
+                )
         outputs: set[str] = set()
         for rule in document["normalization"].get("conversion_rules", []):
             if not {"from", "to", "formula"}.issubset(rule):

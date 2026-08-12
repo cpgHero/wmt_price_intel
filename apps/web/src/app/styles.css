@@ -1278,6 +1278,12 @@ dd {
   color: var(--red);
 }
 
+.status-badge.review_required,
+.status-badge.limited_evidence {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
+
 .analysis-page {
   max-width: none;
 }

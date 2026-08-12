@@ -42,6 +42,12 @@ engine.
   whitespace so uncertainty is not reported as assortment opportunity.
 - Report comparison bases explicitly state `relationship_resolved_products`; these outcomes must
   not be interpreted as market-floor assortment minima.
+- Executive narratives select each Product Pack's preferred scorecard profile before considering
+  evidence volume. Broader proximity or normalization sensitivity never displaces the governed
+  decision basis merely because it contains more observations.
+- Product Pack validation requires the preferred scorecard profile to contain every attribute
+  marked `required_for_strict`, preventing a published category configuration from silently
+  weakening its declared sellable-product identity.
 - The normative ReportView contract advances to `1.1.0` because `population_basis` is required on
   every comparison basis.
 - Processing-volume diagnostics are kept in the assortment audit context, not counted as data

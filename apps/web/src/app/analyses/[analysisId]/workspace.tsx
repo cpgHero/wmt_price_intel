@@ -388,6 +388,12 @@ function BlueprintAnalysisWorkspace({
   const primaryComparisons = primaryComparisonRows(
     scopedSections.flatMap((group) => group.sections),
   );
+  const visibleStatus =
+    reportView.report_readiness.status === "review_required"
+      ? "review_required"
+      : reportView.report_readiness.status === "limited"
+        ? "limited_evidence"
+        : publication?.status ?? analysis.status;
   return (
     <>
       <header className="workspace-header report-header">
@@ -413,9 +419,9 @@ function BlueprintAnalysisWorkspace({
         </div>
         <div className="workspace-status">
           <span
-            className={`status-badge ${publication?.status ?? analysis.status}`}
+            className={`status-badge ${visibleStatus}`}
           >
-            {displayLabel(publication?.status ?? analysis.status)}
+            {displayLabel(visibleStatus)}
           </span>
           <ArtifactDownloadButton
             analysisId={analysis.analysis_id}

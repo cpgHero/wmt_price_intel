@@ -164,6 +164,17 @@ def test_semantic_validation_rejects_unknown_dimensions() -> None:
         loader._validate_semantics(invalid)
 
 
+def test_semantic_validation_rejects_preferred_profile_missing_strict_identity() -> None:
+    loader = ProductPackLoader(REPOSITORY_ROOT)
+    pack = loader.load("fresh_ground_beef")
+    invalid = copy.deepcopy(pack.document)
+    strict = next(profile for profile in invalid["matching_profiles"] if profile["id"] == "strict")
+    strict["dimensions"].remove("weight_lb")
+
+    with pytest.raises(ContractError, match="omits strict identity dimensions"):
+        loader._validate_semantics(invalid)
+
+
 def test_semantic_validation_rejects_invalid_wildcard_dimensions() -> None:
     loader = ProductPackLoader(REPOSITORY_ROOT)
     pack = loader.load("fresh_shell_eggs")
