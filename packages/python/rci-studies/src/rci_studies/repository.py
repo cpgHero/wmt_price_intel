@@ -757,9 +757,14 @@ class PostgresStudyRepository:
                               count(*) FILTER (
                                 WHERE admission_status = 'review_required'
                               )::integer AS review_required,
-                              count(*) FILTER (
+                              count(DISTINCT (
+                                retailer_id,
+                                brand_resolution->>'normalized_brand'
+                              )) FILTER (
                                 WHERE brand_resolution->>'status' = 'unresolved'
-                                  AND brand_resolution->>'normalized_brand' <> ''
+                                  AND COALESCE(
+                                    brand_resolution->>'normalized_brand', ''
+                                  ) <> ''
                               )::integer AS unknown_brands,
                               COALESCE(sum(
                                 GREATEST(jsonb_array_length(price_contexts) - 1, 0)
