@@ -271,6 +271,34 @@ def test_sparse_suppressed_product_decisions_warn_without_blocking_report() -> N
     )
 
 
+def test_review_threshold_suppression_warns_without_blocking_report() -> None:
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        _result(),
+        presentation_context={
+            "match_relationships": [],
+            "ambiguous_match_groups": [],
+            "suppressed_product_decisions": [
+                {
+                    "id": "large-gap-pair",
+                    "benchmark_product_id": "100",
+                    "competitor_product_id": "200",
+                    "competitor": "amazon_us_same_day",
+                    "suppression_reasons": [
+                        "Only 6 retained observations; 25 are required",
+                        "Paired median price difference exceeds the Product Pack review threshold",
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert view["report_readiness"]["status"] == "limited"
+    assert view["report_readiness"]["blocking_reasons"] == []
+    assert view["report_readiness"]["warnings"][0]["code"] == (
+        "sparse_product_decisions_suppressed"
+    )
+
+
 def test_parity_is_a_first_class_dominant_outcome() -> None:
     assert ReportProjector._dominant_outcome(0.0, 0.0, 1.0) == "parity"
     assert ReportProjector._dominant_outcome(0.4, 0.4, 0.2) == "competitor_lower"

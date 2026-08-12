@@ -2095,7 +2095,11 @@ class ArtifactRenderer:
                 }
             )
         if suppressed:
-            material_terms = ("package", "unit", "incompatible", "unresolved", "exceeds")
+            # A decision that is already withheld solely because its observed gap
+            # exceeds the Product Pack review threshold is safely contained. Keep
+            # that condition visible as a warning; reserve report-wide blocking for
+            # unresolved comparability defects that could contaminate other views.
+            material_terms = ("package", "unit", "incompatible", "unresolved")
             material_suppressed = [
                 row
                 for row in suppressed
