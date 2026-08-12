@@ -229,7 +229,12 @@ class PostgresProductDetailRepository:
             )
             return _product(row)
 
-    async def create_run(self, *, max_credits: int) -> ProductDetailRun:
+    async def create_run(
+        self,
+        *,
+        max_credits: int,
+        active: bool = True,
+    ) -> ProductDetailRun:
         async with self._engine.begin() as connection:
             row = (
                 (
@@ -237,14 +242,15 @@ class PostgresProductDetailRepository:
                         text(
                             """
                             INSERT INTO product_detail_enrichment_run (
-                              organization_id, max_credits
-                            ) VALUES (CAST(:organization_id AS uuid), :max_credits)
+                              organization_id, max_credits, status
+                            ) VALUES (CAST(:organization_id AS uuid), :max_credits, :status)
                             RETURNING *
                             """
                         ),
                         {
                             "organization_id": self._organization_id,
                             "max_credits": require_positive_budget(max_credits),
+                            "status": "active" if active else "planning",
                         },
                     )
                 )
@@ -286,8 +292,8 @@ class PostgresProductDetailRepository:
                 .mappings()
                 .one()
             )
-            if str(run_row["status"]) != "active":
-                raise ValueError("Product Details run is not active")
+            if str(run_row["status"]) not in {"planning", "active"}:
+                raise ValueError("Product Details run is not open for planning")
             cached = (
                 await connection.execute(
                     text(
@@ -729,7 +735,7 @@ class PostgresProductDetailRepository:
                             UPDATE product_detail_enrichment_run
                             SET status = 'canceled', cancel_requested_at = now(),
                                 completed_at = now()
-                            WHERE id::text = :run_id AND status = 'active'
+                            WHERE id::text = :run_id AND status IN ('planning', 'active')
                             RETURNING id
                             """
                     ),
@@ -945,6 +951,13 @@ class PostgresProductDetailRepository:
             )
             return _run(row) if row is not None else None
 
+    async def reconcile_run(self, run_id: str) -> ProductDetailRun | None:
+        """Close an idle run, including a run satisfied entirely from cache."""
+
+        async with self._engine.begin() as connection:
+            await self._reconcile_run(connection, run_id)
+        return await self.get_run(run_id)
+
     async def _reconcile_run(self, connection: AsyncConnection, run_id: str) -> None:
         counts = (
             (
@@ -972,7 +985,7 @@ class PostgresProductDetailRepository:
                     SET status = CASE WHEN :failed_jobs > 0
                           THEN 'completed_with_errors' ELSE 'completed' END,
                         completed_at = now()
-                    WHERE id::text = :run_id AND status = 'active'
+                            WHERE id::text = :run_id AND status = 'active'
                     """
                 ),
                 {"failed_jobs": int(counts["failed_jobs"]), "run_id": run_id},

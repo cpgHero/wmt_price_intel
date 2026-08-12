@@ -1,0 +1,18 @@
+[project]
+name = "rci-studies"
+version = "0.1.0"
+description = "Governed Search-first study discovery and Product Pack evidence profiling."
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "rci-contracts",
+  "rci-retailer-packs",
+  "sqlalchemy[asyncio]==2.0.51",
+]
+
+[tool.uv.sources]
+rci-contracts = { workspace = true }
+rci-retailer-packs = { workspace = true }
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"

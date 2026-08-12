@@ -21,6 +21,7 @@ from rci_api.product_packs import (
 from rci_api.product_packs import (
     synchronize_product_pack_catalog,
 )
+from rci_api.studies import router as study_router
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
 
@@ -62,6 +63,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(collection_router)
     app.include_router(location_router)
     app.include_router(product_pack_router)
+    app.include_router(study_router)
 
     @app.get("/health/live", tags=["health"])
     async def liveness() -> dict[str, str]:

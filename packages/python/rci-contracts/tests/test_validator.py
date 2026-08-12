@@ -97,6 +97,66 @@ def test_agent_contract_forbids_authoritative_metric_computation() -> None:
         )
 
 
+def test_study_discovery_contract_preserves_separate_paid_approval_gates() -> None:
+    study = json.loads(
+        (REPOSITORY_ROOT / "examples/study-discovery.example.json").read_text(encoding="utf-8")
+    )
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "study-discovery.schema.json",
+        study,
+        label="study-discovery",
+    )
+    assert study["approval_state"]["search"]["status"] == "not_requested"
+    assert study["approval_state"]["pdp"]["status"] == "not_requested"
+    assert study["approval_state"]["ai"]["status"] == "not_requested"
+
+
+def test_discovery_collection_allows_no_product_pack_but_analysis_does_not() -> None:
+    discovery = {
+        "id": "study-00000000-0000-0000-0000-000000000099",
+        "name": "Discovery Test",
+        "version": "1.0.0",
+        "purpose": "study_discovery",
+        "benchmark_retailer": "walmart_us",
+        "product_pack": None,
+        "study_discovery": {
+            "study_id": "00000000-0000-0000-0000-000000000099",
+            "query_plan_checksum": "a" * 64,
+        },
+        "query": {"keyword": "milk"},
+        "retailers": [
+            {
+                "retailer_id": "walmart_us",
+                "adapter_id": "metricscart_walmart_search_zipcode_v2",
+                "enabled": True,
+            }
+        ],
+        "geography": {"strategy": "custom_zips", "zipcodes": ["72712"]},
+        "pagination": {"max_pages": 1, "stop_on_empty": True},
+        "analysis": None,
+        "delivery": {"web_report": False, "excel": False, "leadership_email": False},
+    }
+    validate_instance(
+        REPOSITORY_ROOT,
+        "collection-definition.schema.json",
+        discovery,
+        label="discovery collection",
+    )
+
+    invalid = deepcopy(discovery)
+    invalid["purpose"] = "analysis"
+    invalid["study_discovery"] = None
+    with pytest.raises(ContractError, match="product_pack"):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "collection-definition.schema.json",
+            invalid,
+            label="analysis without Product Pack",
+        )
+
+
 def test_analysis_result_v2_requires_narrative_metric_evidence() -> None:
     result = json.loads(
         (REPOSITORY_ROOT / "examples/analysis-result-v2.ground-beef.json").read_text(

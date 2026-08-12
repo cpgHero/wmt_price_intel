@@ -55,6 +55,8 @@ const contracts = [
   ["report-view.schema.json", "report-view.ts"],
   ["retailer-pack.schema.json", "retailer-pack.ts"],
   ["scoped-match-assignment.schema.json", "scoped-match-assignment.ts"],
+  ["study-discovery.schema.json", "study-discovery.ts"],
+  ["study-discovery-ai-output.schema.json", "study-discovery-ai-output.ts"],
 ];
 
 await mkdir(outputDirectory, { recursive: true });

@@ -34,3 +34,5 @@ export type { RetailCompetitiveIntelligenceReportBlueprint } from "./generated/r
 export type { RetailCompetitiveIntelligenceReportView } from "./generated/report-view";
 export type { RetailCompetitiveIntelligenceRetailerPack } from "./generated/retailer-pack";
 export type { RetailCompetitiveIntelligenceScopedMatchAssignment } from "./generated/scoped-match-assignment";
+export type { RetailCompetitiveIntelligenceStudyDiscovery } from "./generated/study-discovery";
+export type { RetailCompetitiveIntelligenceStudyDiscoveryAISuggestion } from "./generated/study-discovery-ai-output";

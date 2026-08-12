@@ -154,6 +154,30 @@ class PostgresProductPackAuthoringRepository:
             raise ProductPackDraftNotFoundError(f"Product Pack draft {draft_id!r} was not found")
         return _draft(row)
 
+    async def find_draft(
+        self,
+        product_pack_id: str,
+        proposed_version: str,
+    ) -> ProductPackDraft | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_DRAFT_SELECT} WHERE product_pack_id = :product_pack_id "
+                            "AND proposed_version = :proposed_version"
+                        ),
+                        {
+                            "product_pack_id": product_pack_id,
+                            "proposed_version": proposed_version,
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        return _draft(row) if row is not None else None
+
     async def create_draft(
         self,
         *,

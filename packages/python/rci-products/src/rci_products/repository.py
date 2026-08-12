@@ -35,7 +35,12 @@ class ProductDetailRepository(Protocol):
         context: JsonObject,
     ) -> CanonicalProductRecord: ...
 
-    async def create_run(self, *, max_credits: int) -> ProductDetailRun: ...
+    async def create_run(
+        self,
+        *,
+        max_credits: int,
+        active: bool = True,
+    ) -> ProductDetailRun: ...
 
     async def enqueue(
         self,
@@ -95,6 +100,8 @@ class ProductDetailRepository(Protocol):
     ) -> list[JsonObject]: ...
 
     async def get_run(self, run_id: str) -> ProductDetailRun | None: ...
+
+    async def reconcile_run(self, run_id: str) -> ProductDetailRun | None: ...
 
 
 def require_positive_budget(value: int) -> int:

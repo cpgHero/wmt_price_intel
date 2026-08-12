@@ -25,6 +25,7 @@ COPY --chown=rci:rci packages/python/rci-providers/pyproject.toml packages/pytho
 COPY --chown=rci:rci packages/python/rci-products/pyproject.toml packages/python/rci-products/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-retailer-packs/pyproject.toml packages/python/rci-retailer-packs/pyproject.toml
 COPY --chown=rci:rci packages/python/rci-results/pyproject.toml packages/python/rci-results/pyproject.toml
+COPY --chown=rci:rci packages/python/rci-studies/pyproject.toml packages/python/rci-studies/pyproject.toml
 USER rci
 RUN uv sync --frozen --no-dev --package rci-api --no-install-workspace
 

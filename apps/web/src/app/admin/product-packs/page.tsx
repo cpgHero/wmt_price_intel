@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ProductPackAdmin } from "./product-pack-admin";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +17,9 @@ export default function ProductPacksPage() {
             Build category intelligence through evidence, deterministic rules,
             comparison lenses, and immutable certification.
           </p>
+          <Link className="button secondary" href="/admin/studies">
+            Start with Study Discovery
+          </Link>
         </div>
       </header>
       <ProductPackAdmin />

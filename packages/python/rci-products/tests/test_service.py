@@ -98,6 +98,10 @@ async def test_one_cached_pdp_enriches_all_linked_serp_observations_without_over
     cached = await repository.enqueue(second_run.id, product, endpoint, context)
     assert cached.cached is True
     assert cached.snapshot_id is not None
+    reconciled = await repository.reconcile_run(second_run.id)
+    assert reconciled.status == "completed"
+    assert reconciled.planned_credits == 0
+    assert reconciled.actual_credits == 0
     assert await worker.run_once() == 0
     assert fetcher.calls == 1
 

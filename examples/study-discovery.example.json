@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0.0",
+  "id": "4bd66ded-3471-48f9-8b4e-821302a8dfc8",
+  "name": "Fresh shell eggs discovery",
+  "status": "query_review",
+  "intake": {
+    "benchmark_retailer_id": "walmart_us",
+    "competitor_retailer_ids": [
+      "aldi_us"
+    ],
+    "category_context": "Fresh shell eggs sold by the dozen or larger multipacks.",
+    "known_inclusions": [
+      "eggs"
+    ],
+    "known_exclusions": [
+      "chocolate eggs"
+    ],
+    "geography_request": {
+      "primary_retailer_id": "walmart_us",
+      "competitor_retailer_ids": [
+        "aldi_us"
+      ],
+      "country": "USA",
+      "primary_selection": {
+        "mode": "per_state",
+        "states": [
+          "AR"
+        ],
+        "locations_per_state": 3
+      },
+      "competitor_correspondence": {
+        "mode": "radius",
+        "radius_miles": 5
+      }
+    },
+    "max_search_pages": 1,
+    "amazon_same_day_url_template": null
+  },
+  "query_plan": {
+    "keyword": "fresh shell eggs",
+    "target_terms": [
+      "egg",
+      "eggs"
+    ],
+    "exclusion_terms": [
+      "chocolate eggs"
+    ],
+    "alternate_queries": [],
+    "source": "deterministic",
+    "rationale": "Initial query created from the administrator's category context.",
+    "revision": 1
+  },
+  "query_plan_checksum": "2a1cef44762cab469c72b2ef7ed64ab6f8c9f988b63b5cd0e51c84305330ed7a",
+  "approval_state": {
+    "search": {
+      "status": "not_requested",
+      "maximum_cost": null,
+      "unit": "credits",
+      "approved_by": null,
+      "approved_at": null,
+      "approved_checksum": null
+    },
+    "pdp": {
+      "status": "not_requested",
+      "maximum_cost": null,
+      "unit": "credits",
+      "approved_by": null,
+      "approved_at": null,
+      "approved_checksum": null
+    },
+    "ai": {
+      "status": "not_requested",
+      "maximum_cost": null,
+      "unit": "usd",
+      "approved_by": null,
+      "approved_at": null,
+      "approved_checksum": null
+    }
+  },
+  "links": {
+    "geography_resolution_id": null,
+    "search_estimate_id": null,
+    "collection_run_id": null,
+    "pdp_run_id": null,
+    "product_pack_draft_id": null
+  },
+  "profile": {
+    "raw_observations": 0,
+    "unique_products": 0,
+    "provisionally_admitted_products": 0,
+    "excluded_products": 0,
+    "review_required_products": 0,
+    "unknown_brands": 0,
+    "price_variant_contexts": 0,
+    "pdp_contexts": 0
+  },
+  "last_error": null,
+  "created_at": "2026-08-12T12:00:00Z",
+  "updated_at": "2026-08-12T12:00:00Z"
+}

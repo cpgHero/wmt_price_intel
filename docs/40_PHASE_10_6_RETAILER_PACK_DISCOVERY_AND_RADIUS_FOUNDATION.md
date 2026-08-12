@@ -35,7 +35,7 @@ decision by themselves.
   overlays. Preserve Brand Workbench decisions as the highest-precedence governed override.
 - Record exact Retailer Pack and brand-foundation checksums in new analysis outputs.
 
-## Phase 10.6B — Study discovery and certification
+## Phase 10.6B — Study discovery and certification (implemented foundation)
 
 1. User supplies a category brief, benchmark retailer, competitors, fulfillment mode, geography,
    and cost ceiling.
@@ -48,6 +48,30 @@ decision by themselves.
 6. AI drafts Product Pack configuration and evidence-backed unknown-brand hypotheses.
 7. Deterministic contract, fixture, compact-golden, and full-golden certification gates run.
 8. A human approves immutable Product Pack and Retailer Pack/brand-foundation versions.
+
+The implemented admin workflow is available at `/admin/studies`. It keeps normal analysis
+collections separate from discovery collections and enforces three independent approval
+boundaries for Search, PDP, and AI spend. The first two are operational; AI has a versioned output
+contract and approval state but is intentionally not auto-applied. Deterministic query drafting is
+used until the AI proposal path passes its evaluation gate.
+
+The operational state order is:
+
+1. create and edit a study brief and deterministic query proposal;
+2. freeze a 1/3/5-mile-ready geography resolution and Search estimate;
+3. explicitly approve and run the billable Search sample;
+4. profile every unique `(retailer, product ID)`, route exclusions/review items, and queue unknown
+   brands for governance;
+5. review product dispositions, then estimate and explicitly approve PDP enrichment;
+6. enrich each admitted product once, plus one extra context per distinct observed Search price;
+7. create an evidence-linked Product Pack draft only after enrichment completes; and
+8. use the existing Product Pack validation and publication workflow for certification.
+
+An all-cache-hit PDP run is explicitly reconciled to completion instead of waiting for a worker job
+that does not exist. Editing a product disposition invalidates the PDP plan and any prior enrichment
+link, preventing a stale population from being certified. The Product Pack draft receives a
+checksummed discovery-population evidence record that identifies both its Search collection and PDP
+run and preserves Search versus PDP source authority.
 
 An unknown brand enters the discovery queue as `Candidate/Unknown`; Search or PDP evidence never
 silently mutates the approved brand foundation.

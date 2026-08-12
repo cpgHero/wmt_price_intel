@@ -133,6 +133,10 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         "brand-discovery-record.schema.json",
         root / "examples" / "brand-discovery-record.example.json",
     )
+    yield ContractTarget(
+        "study-discovery.schema.json",
+        root / "examples" / "study-discovery.example.json",
+    )
     for blueprint in sorted((root / "report-blueprints").glob("*.json")):
         yield ContractTarget("report-blueprint.schema.json", blueprint)
     for prompt in sorted((root / "agent-prompts").glob("*.json")):

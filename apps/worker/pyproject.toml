@@ -20,6 +20,7 @@ dependencies = [
   "rci-retailer-packs",
   "rci-products",
   "rci-results",
+  "rci-studies",
 ]
 
 [project.scripts]
@@ -41,6 +42,7 @@ rci-product-packs = { workspace = true }
 rci-retailer-packs = { workspace = true }
 rci-products = { workspace = true }
 rci-results = { workspace = true }
+rci-studies = { workspace = true }
 
 [build-system]
 requires = ["hatchling==1.29.0"]

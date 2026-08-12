@@ -9,7 +9,6 @@
     "name",
     "version",
     "benchmark_retailer",
-    "product_pack",
     "query",
     "retailers",
     "geography",
@@ -17,6 +16,13 @@
     "delivery"
   ],
   "properties": {
+    "purpose": {
+      "enum": [
+        "analysis",
+        "study_discovery"
+      ],
+      "default": "analysis"
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
@@ -36,7 +42,10 @@
       "type": "string"
     },
     "product_pack": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "required": [
         "id",
@@ -48,6 +57,27 @@
         },
         "version": {
           "type": "string"
+        }
+      }
+    },
+    "study_discovery": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "study_id",
+        "query_plan_checksum"
+      ],
+      "properties": {
+        "study_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "query_plan_checksum": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       }
     },
@@ -330,7 +360,10 @@
       ]
     },
     "analysis": {
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "properties": {
         "comparison_profiles": {
@@ -447,5 +480,49 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "purpose"
+        ],
+        "properties": {
+          "purpose": {
+            "const": "study_discovery"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "product_pack",
+          "study_discovery"
+        ],
+        "properties": {
+          "study_discovery": {
+            "type": "object"
+          },
+          "product_pack": {
+            "type": "null"
+          },
+          "analysis": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "product_pack"
+        ],
+        "properties": {
+          "product_pack": {
+            "type": "object"
+          },
+          "study_discovery": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
 }

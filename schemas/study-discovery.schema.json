@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/study-discovery.schema.json",
+  "title": "Retail Competitive Intelligence Study Discovery",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "status",
+    "intake",
+    "query_plan",
+    "query_plan_checksum",
+    "approval_state",
+    "links",
+    "profile",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "status": {
+      "enum": [
+        "query_review",
+        "search_estimated",
+        "collecting",
+        "profiling",
+        "profile_ready",
+        "pdp_estimated",
+        "enriching",
+        "draft_ready",
+        "certifying",
+        "certified",
+        "published",
+        "failed",
+        "canceled"
+      ]
+    },
+    "intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmark_retailer_id",
+        "competitor_retailer_ids",
+        "category_context",
+        "geography_request",
+        "max_search_pages"
+      ],
+      "properties": {
+        "benchmark_retailer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "competitor_retailer_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "category_context": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2000
+        },
+        "known_inclusions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "known_exclusions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "geography_request": {
+          "$ref": "collection-geography-request.schema.json"
+        },
+        "max_search_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "amazon_same_day_url_template": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    },
+    "query_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyword",
+        "target_terms",
+        "exclusion_terms",
+        "alternate_queries",
+        "source",
+        "revision"
+      ],
+      "properties": {
+        "keyword": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "target_terms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "exclusion_terms": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "alternate_queries": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "source": {
+          "enum": [
+            "deterministic",
+            "ai_assisted",
+            "human_edited"
+          ]
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "query_plan_checksum": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "approval_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "search",
+        "pdp",
+        "ai"
+      ],
+      "properties": {
+        "search": {
+          "$ref": "#/$defs/approval"
+        },
+        "pdp": {
+          "$ref": "#/$defs/approval"
+        },
+        "ai": {
+          "$ref": "#/$defs/approval"
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "geography_resolution_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "search_estimate_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "collection_run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "pdp_run_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "product_pack_draft_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_observations",
+        "unique_products",
+        "provisionally_admitted_products",
+        "excluded_products",
+        "unknown_brands",
+        "price_variant_contexts",
+        "pdp_contexts",
+        "review_required_products"
+      ],
+      "properties": {
+        "raw_observations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unique_products": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provisionally_admitted_products": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded_products": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_brands": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "price_variant_contexts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pdp_contexts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "review_required_products": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "last_error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "maximum_cost"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "not_requested",
+            "estimated",
+            "approved",
+            "consumed"
+          ]
+        },
+        "maximum_cost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unit": {
+          "enum": [
+            "credits",
+            "usd",
+            null
+          ]
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "approved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "approved_checksum": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

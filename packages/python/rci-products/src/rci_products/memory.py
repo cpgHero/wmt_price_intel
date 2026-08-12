@@ -97,13 +97,18 @@ class InMemoryProductDetailRepository:
             self._contexts.setdefault(product_id, {})[context_checksum] = dict(context)
             return record
 
-    async def create_run(self, *, max_credits: int) -> ProductDetailRun:
+    async def create_run(
+        self,
+        *,
+        max_credits: int,
+        active: bool = True,
+    ) -> ProductDetailRun:
         run = ProductDetailRun(
             id=str(uuid4()),
             max_credits=require_positive_budget(max_credits),
             planned_credits=0,
             actual_credits=0,
-            status="active",
+            status="active" if active else "planning",
         )
         async with self._lock:
             self._runs[run.id] = run
@@ -147,6 +152,8 @@ class InMemoryProductDetailRepository:
                     created=False,
                 )
             run = self._runs[run_id]
+            if run.status not in {"planning", "active"}:
+                raise ValueError("Product Details run is not open for planning")
             planned = run.planned_credits + endpoint.credits_per_successful_page
             if planned > run.max_credits:
                 raise ProductDetailBudgetExceeded(
@@ -295,6 +302,7 @@ class InMemoryProductDetailRepository:
             state.job = replace(state.job, status=next_status)
             state.locked_by = None
             state.lease_expires_at = None
+            self._reconcile_run_locked(job.run_id)
             return snapshot
 
     async def fail_transport(
@@ -318,6 +326,7 @@ class InMemoryProductDetailRepository:
             state.available_at = now + timedelta(seconds=max(retry_delay_seconds, 0))
             state.locked_by = None
             state.lease_expires_at = None
+            self._reconcile_run_locked(job.run_id)
 
     async def extend_lease(
         self,
@@ -427,3 +436,25 @@ class InMemoryProductDetailRepository:
 
     async def get_run(self, run_id: str) -> ProductDetailRun:
         return self._runs[run_id]
+
+    async def reconcile_run(self, run_id: str) -> ProductDetailRun:
+        """Close an idle run, including a run satisfied entirely from cache."""
+
+        async with self._lock:
+            self._reconcile_run_locked(run_id)
+            return self._runs[run_id]
+
+    def _reconcile_run_locked(self, run_id: str) -> None:
+        run = self._runs[run_id]
+        if run.status != "active":
+            return
+        statuses = [state.job.status for state in self._jobs.values() if state.job.run_id == run_id]
+        if any(status in {"queued", "running"} for status in statuses):
+            return
+        self._runs[run_id] = ProductDetailRun(
+            id=run.id,
+            max_credits=run.max_credits,
+            planned_credits=run.planned_credits,
+            actual_credits=run.actual_credits,
+            status="completed_with_errors" if "failed" in statuses else "completed",
+        )

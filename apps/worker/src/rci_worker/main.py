@@ -53,6 +53,7 @@ from rci_results import (
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
+from rci_studies import PostgresStudyRepository
 from rci_worker.analysis import (
     AnalysisProcessor,
     AnalysisWorker,
@@ -61,6 +62,7 @@ from rci_worker.analysis import (
     S3RawPageReader,
 )
 from rci_worker.product_pack_validation import validate_product_pack_draft
+from rci_worker.study_discovery import StudyDiscoveryWorker
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -163,6 +165,7 @@ async def run() -> None:
             lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
         )
     analysis_worker: AnalysisWorker | None = None
+    study_discovery_worker: StudyDiscoveryWorker | None = None
     if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
         "OBJECT_STORAGE_BUCKET"
     ):
@@ -186,6 +189,16 @@ async def run() -> None:
             historical_replay_enabled=_enabled(
                 os.getenv("ANALYSIS_HISTORICAL_REPLAY_ENABLED"), default=False
             ),
+        )
+        study_discovery_worker = StudyDiscoveryWorker(
+            repository_root=repository_root,
+            repository=PostgresStudyRepository(database.engine),
+            page_repository=analysis_queue,
+            raw_reader=S3RawPageReader(bucket=bucket, client=s3_client),
+            adapters=adapter_registry,
+            worker_id=f"{worker_id}-study",
+            claim_limit=int(os.getenv("STUDY_DISCOVERY_CLAIM_LIMIT", "1")),
+            lease_seconds=int(os.getenv("STUDY_DISCOVERY_LEASE_SECONDS", "600")),
         )
         analysis_worker = AnalysisWorker(
             analysis_queue,
@@ -278,7 +291,10 @@ async def run() -> None:
                 await product_detail_worker.run_once() if product_detail_worker is not None else 0
             )
             product_pack_validations = await product_pack_validation_worker.run_once()
-            if claimed + analyses + product_details + product_pack_validations == 0:
+            study_jobs = (
+                await study_discovery_worker.run_once() if study_discovery_worker is not None else 0
+            )
+            if claimed + analyses + product_details + product_pack_validations + study_jobs == 0:
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=1)
     finally:

@@ -19,6 +19,7 @@ members = [
     "rci-results",
     "rci-retailer-packs",
     "rci-scheduler",
+    "rci-studies",
     "rci-worker",
     "rci-workspace",
 ]
@@ -1246,8 +1247,10 @@ dependencies = [
     { name = "rci-db" },
     { name = "rci-locations" },
     { name = "rci-product-packs" },
+    { name = "rci-products" },
     { name = "rci-results" },
     { name = "rci-retailer-packs" },
+    { name = "rci-studies" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1261,8 +1264,10 @@ requires-dist = [
     { name = "rci-db", editable = "packages/python/rci-db" },
     { name = "rci-locations", editable = "packages/python/rci-locations" },
     { name = "rci-product-packs", editable = "packages/python/rci-product-packs" },
+    { name = "rci-products", editable = "packages/python/rci-products" },
     { name = "rci-results", editable = "packages/python/rci-results" },
     { name = "rci-retailer-packs", editable = "packages/python/rci-retailer-packs" },
+    { name = "rci-studies", editable = "packages/python/rci-studies" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.51.0" },
 ]
 
@@ -1479,6 +1484,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rci-studies"
+version = "0.1.0"
+source = { editable = "packages/python/rci-studies" }
+dependencies = [
+    { name = "rci-contracts" },
+    { name = "rci-retailer-packs" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "rci-contracts", editable = "packages/python/rci-contracts" },
+    { name = "rci-retailer-packs", editable = "packages/python/rci-retailer-packs" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = "==2.0.51" },
+]
+
+[[package]]
 name = "rci-worker"
 version = "0.1.0"
 source = { editable = "apps/worker" }
@@ -1499,6 +1521,7 @@ dependencies = [
     { name = "rci-providers" },
     { name = "rci-results" },
     { name = "rci-retailer-packs" },
+    { name = "rci-studies" },
 ]
 
 [package.metadata]
@@ -1519,6 +1542,7 @@ requires-dist = [
     { name = "rci-providers", editable = "packages/python/rci-providers" },
     { name = "rci-results", editable = "packages/python/rci-results" },
     { name = "rci-retailer-packs", editable = "packages/python/rci-retailer-packs" },
+    { name = "rci-studies", editable = "packages/python/rci-studies" },
 ]
 
 [[package]]

@@ -1,15 +1,22 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
-export interface RetailCompetitiveIntelligenceCollectionDefinition {
+export type RetailCompetitiveIntelligenceCollectionDefinition = {
+  [k: string]: unknown;
+} & {
+  purpose?: "analysis" | "study_discovery";
   id: string;
   name: string;
   version: string;
   enabled?: boolean;
   benchmark_retailer: string;
-  product_pack: {
+  product_pack?: {
     id: string;
     version: string;
-  };
+  } | null;
+  study_discovery?: {
+    study_id: string;
+    query_plan_checksum: string;
+  } | null;
   query: {
     keyword: string;
     amazon_same_day_url_template?: string | null;
@@ -65,7 +72,7 @@ export interface RetailCompetitiveIntelligenceCollectionDefinition {
     comparison_profiles?: string[];
     enable_ai_fallback?: boolean;
     enable_proximity_validation?: boolean;
-  };
+  } | null;
   delivery: {
     web_report: boolean;
     excel: boolean;
@@ -85,4 +92,4 @@ export interface RetailCompetitiveIntelligenceCollectionDefinition {
     analysis_admitted_products_only?: true;
     price_variation_samples?: boolean;
   } | null;
-}
+};
