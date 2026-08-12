@@ -168,8 +168,7 @@ async def test_postgres_authoring_queue_cancellation_and_immutable_publication()
         assert publication.active is True
         assert record.active is True
         assert any(
-            item.id == pack_id and item.version == "1.0.0" and item.active
-            for item in published
+            item.id == pack_id and item.version == "1.0.0" and item.active for item in published
         )
         assert record.document == config
         assert record.report_blueprint == blueprint

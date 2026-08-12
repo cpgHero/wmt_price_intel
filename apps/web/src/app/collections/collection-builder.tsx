@@ -402,8 +402,7 @@ export function CollectionBuilder({
   const selectedPack =
     options.product_packs.find(
       (pack) => productPackKey(pack) === selectedProductPackKey,
-    ) ??
-    defaultPack;
+    ) ?? defaultPack;
 
   const geographyRequest = useMemo<CollectionGeographyRequest>(() => {
     const primarySelection: CollectionGeographyRequest["primary_selection"] = {
