@@ -25,13 +25,13 @@ from rci_agents import (
 from rci_analytics import merge_product_decision_context
 from rci_core import AppSettings
 from rci_db import DatabaseProbe
+from rci_product_packs import PostgresProductPackCatalog
 from rci_products import PostgresProductDetailRepository
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
     ArtifactRenderer,
     PostgresResultsRepository,
-    ReportBlueprintLoader,
     S3ReportObjectStore,
 )
 
@@ -147,8 +147,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         deterministic_result = AnalysisResultValidator(repository_root).validate(record.result)
         if deterministic_result.get("schema_version") != "2.0.0":
             raise ValueError("narrative bake-off requires AnalysisResult V2")
-        blueprint, product_pack = ReportBlueprintLoader(repository_root).load_for_result(
-            deterministic_result
+        product_pack_catalog = PostgresProductPackCatalog(database.engine)
+        pack_record = await product_pack_catalog.get(
+            record.product_pack_id,
+            record.product_pack_version,
         )
         source = deterministic_result.get("source", {})
         source_artifact_ids = (
@@ -203,8 +205,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         )
         enriched = await assistant.enrich(
             deepcopy(deterministic_result),
-            product_pack=product_pack,
-            report_blueprint=blueprint.document,
+            product_pack=pack_record.document,
+            report_blueprint=pack_record.report_blueprint,
             product_decisions=product_decisions,
         )
         if _digest(enriched.get("metrics")) != _digest(deterministic_result.get("metrics")):
@@ -229,6 +231,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 AnalysisResultValidator(repository_root),
                 store,
                 renderer,
+                product_pack_catalog,
             )
             publication = await service.publish_publication(
                 record.analysis_id,
@@ -242,6 +245,11 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 validated,
                 "html",
                 presentation_context=presentation_context,
+                runtime_bundle=renderer.runtime_bundle(
+                    validated,
+                    pack_record.document,
+                    pack_record.report_blueprint,
+                ),
             )
             storage_uri = await store.put(f"bakeoff-{record.analysis_id}", payload)
         download_url = await store.presign(

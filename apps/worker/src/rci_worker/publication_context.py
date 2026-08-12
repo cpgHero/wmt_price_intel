@@ -273,9 +273,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         if not isinstance(source, dict) or source.get("kind") != "historical_import":
             raise ValueError("presentation-context replay currently requires historical input")
         input_set_id = str(source["input_set_id"])
+        product_pack_catalog = PostgresProductPackCatalog(database.engine)
         pack = await CatalogProductPackLoader(
             repository_root,
-            PostgresProductPackCatalog(database.engine),
+            product_pack_catalog,
         ).load(record.product_pack_id, record.product_pack_version)
         benchmark = str(record.result["benchmark_retailer"])
         competitors = [str(value) for value in record.result.get("competitors", [])]
@@ -528,6 +529,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             AnalysisResultValidator(repository_root),
             report_store,
             ArtifactRenderer(repository_root),
+            product_pack_catalog,
         )
         previous = await service.latest_publication(record.analysis_id)
         document = previous.result if previous is not None else record.result
