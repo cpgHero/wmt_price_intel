@@ -20,7 +20,12 @@ from rci_api.product_packs import (
     _starter_documents,
 )
 from rci_contracts import ContractError, validate_instance
-from rci_product_packs import PostgresProductPackAuthoringRepository, draft_checksum
+from rci_product_packs import (
+    FileProductPackCatalog,
+    PostgresProductPackAuthoringRepository,
+    PostgresProductPackCatalog,
+    draft_checksum,
+)
 from rci_products import (
     MetricsCartProductDetailAdapter,
     PostgresProductDetailRepository,
@@ -89,6 +94,36 @@ class CreateDraftRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     proposed_version: str = Field(default="1.0.0", pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
     category_family: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+def _category_identity(study: StudyRecord) -> tuple[str, str]:
+    """Return a reusable category identity, never a study/geography identity."""
+
+    category_context = str(study.intake.get("category_context") or "").strip()
+    keyword = str(study.query_plan.get("keyword") or "").strip()
+    category_name = category_context or keyword or study.name
+    return safe_product_pack_id(category_name), category_name
+
+
+async def _active_category_pack(
+    request: Request,
+    *,
+    pack_id: str,
+) -> Any | None:
+    """Prefer the database catalog, with the repository catalog as bootstrap fallback."""
+
+    try:
+        records = await PostgresProductPackCatalog(
+            request.app.state.database_probe.engine
+        ).list_active()
+    except Exception:
+        records = await FileProductPackCatalog(_root()).list_active()
+    return next((record for record in records if record.id == pack_id), None)
+
+
+def _next_patch_version(version: str) -> str:
+    major, minor, patch = (int(value) for value in version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
 
 
 class StudyResponse(BaseModel):
@@ -730,40 +765,81 @@ async def create_product_pack_draft(
             status_code=409,
             detail="PDP enrichment is not complete",
         )
-    pack_id = request_body.product_pack_id or safe_product_pack_id(study.name)
-    name = request_body.name or study.name.removesuffix(" discovery").strip()
-    category_family = request_body.category_family or name.casefold()
-    starter_request = CreateProductPackDraftRequest(
-        product_pack_id=pack_id,
-        name=name,
-        proposed_version=request_body.proposed_version,
-        category_family=category_family,
-        default_keyword=str(study.query_plan["keyword"]),
+    inferred_pack_id, inferred_name = _category_identity(study)
+    pack_id = request_body.product_pack_id or inferred_pack_id
+    active_pack = await _active_category_pack(request, pack_id=pack_id)
+    name = request_body.name or (active_pack.name if active_pack else inferred_name)
+    category_family = request_body.category_family or (
+        str(active_pack.document["category_family"]) if active_pack else inferred_name.casefold()
     )
-    config, blueprint = _starter_documents(_root(), starter_request)
-    config["scope"]["target_terms"] = list(study.query_plan["target_terms"])
-    config["scope"]["hard_exclusion_patterns"] = list(study.query_plan["exclusion_terms"])
-    config["scope"]["exclude"] = list(study.query_plan["exclusion_terms"])
+    proposed_version = (
+        _next_patch_version(active_pack.version)
+        if active_pack and request_body.proposed_version == "1.0.0"
+        else request_body.proposed_version
+    )
+    if active_pack:
+        config = json.loads(json.dumps(active_pack.document))
+        blueprint = json.loads(json.dumps(active_pack.report_blueprint))
+        config.update(
+            {
+                "id": pack_id,
+                "name": name,
+                "version": proposed_version,
+                "category_family": category_family,
+            }
+        )
+        blueprint["version"] = proposed_version
+        blueprint["product_pack"] = {"id": pack_id, "version": proposed_version}
+        config["reporting"]["report_blueprint"]["version"] = proposed_version
+    else:
+        starter_request = CreateProductPackDraftRequest(
+            product_pack_id=pack_id,
+            name=name,
+            proposed_version=proposed_version,
+            category_family=category_family,
+            default_keyword=str(study.query_plan["keyword"]),
+        )
+        config, blueprint = _starter_documents(_root(), starter_request)
+    config["scope"]["target_terms"] = sorted(
+        {
+            *(str(value) for value in config["scope"].get("target_terms", [])),
+            *(str(value) for value in study.query_plan["target_terms"]),
+        }
+    )
+    config["scope"]["exclude"] = sorted(
+        {
+            *(str(value) for value in config["scope"].get("exclude", [])),
+            *(str(value) for value in study.query_plan["exclusion_terms"]),
+        }
+    )
+    if not active_pack:
+        config["scope"]["hard_exclusion_patterns"] = list(study.query_plan["exclusion_terms"])
     config["description"] = (
         "Evidence-informed draft from governed study discovery. Attribute hypotheses and "
         "matching lenses require human review and certification before publication."
     )
-    config["regression"]["golden_dataset_ids"] = [f"study:{study_id}"]
+    config["regression"]["golden_dataset_ids"] = sorted(
+        {
+            *(str(value) for value in config["regression"].get("golden_dataset_ids", [])),
+            f"study:{study_id}",
+        }
+    )
     authoring_repository = PostgresProductPackAuthoringRepository(
         request.app.state.database_probe.engine
     )
     try:
         draft = await authoring_repository.create_draft(
             product_pack_id=pack_id,
-            proposed_version=request_body.proposed_version,
+            proposed_version=proposed_version,
             config=config,
             report_blueprint=blueprint,
             actor=_actor(x_rci_actor),
+            base_version=active_pack.version if active_pack else None,
         )
     except IntegrityError as exc:
         existing = await authoring_repository.find_draft(
             pack_id,
-            request_body.proposed_version,
+            proposed_version,
         )
         if existing is None or existing.checksum != draft_checksum(config, blueprint):
             raise HTTPException(
@@ -809,4 +885,87 @@ async def create_product_pack_draft(
         },
         actor=_actor(x_rci_actor),
     )
+    pdp_audit = await product_repository.run_audit(study.pdp_run_id)
+    if pdp_audit is not None:
+        pdp_evidence_document = {
+            "study_id": study_id,
+            "pdp_run_id": study.pdp_run_id,
+            "status": pdp_audit["status"],
+            "actual_credits": pdp_audit["actual_credits"],
+            "calls": [
+                {
+                    "retailer_id": call["retailer_id"],
+                    "retailer_product_id": call["retailer_product_id"],
+                    "product_name": call["product_name"],
+                    "evidence_status": (
+                        "pdp_enriched" if call["status"] == "succeeded" else "pdp_unavailable"
+                    ),
+                    "http_status": call["http_status"],
+                    "request_context": call["request_context"],
+                    "snapshot_id": call["snapshot_id"],
+                    "identity_evidence": call["identity_evidence"],
+                }
+                for call in pdp_audit["calls"]
+            ],
+        }
+        pdp_evidence_checksum = canonical_checksum(pdp_evidence_document)
+        pdp_evidence_bytes = json.dumps(
+            pdp_evidence_document,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        await authoring_repository.add_evidence(
+            draft.id,
+            kind="pdp",
+            label=f"PDP identity outcomes · {study.name}",
+            storage_uri=f"study://{study_id}/pdp/{pdp_evidence_checksum}",
+            content_type="application/json",
+            checksum=pdp_evidence_checksum,
+            byte_size=len(pdp_evidence_bytes),
+            row_count=len(pdp_audit["calls"]),
+            metadata={
+                "study_id": study_id,
+                "pdp_run_id": study.pdp_run_id,
+                "succeeded_calls": pdp_audit["succeeded_calls"],
+                "failed_calls": pdp_audit["failed_calls"],
+                "actual_credits": pdp_audit["actual_credits"],
+                "identity_fallback": "search",
+            },
+            actor=_actor(x_rci_actor),
+        )
     return await repository.link_draft(study_id, draft.id, _actor(x_rci_actor))
+
+
+@router.post("/{study_id}/product-pack-draft/regenerate", response_model=StudyResponse)
+async def regenerate_product_pack_draft(
+    study_id: str,
+    request_body: CreateDraftRequest,
+    request: Request,
+    x_rci_actor: Annotated[str | None, Header(alias="X-RCI-Actor")] = None,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> StudyRecord:
+    _authorized(request, x_rci_admin_token)
+    repository = _repository(request)
+    study = await repository.get(study_id)
+    if study.product_pack_draft_id is None:
+        return await create_product_pack_draft(
+            study_id, request_body, request, x_rci_actor, x_rci_admin_token
+        )
+    authoring_repository = PostgresProductPackAuthoringRepository(
+        request.app.state.database_probe.engine
+    )
+    await repository.reopen_draft_handoff(study_id, _actor(x_rci_actor))
+    try:
+        replacement = await create_product_pack_draft(
+            study_id, request_body, request, x_rci_actor, x_rci_admin_token
+        )
+    except Exception:
+        await repository.link_draft(study_id, study.product_pack_draft_id, _actor(x_rci_actor))
+        raise
+    await authoring_repository.abandon_draft(
+        study.product_pack_draft_id,
+        actor=_actor(x_rci_actor),
+        reason="Superseded by regenerated study evidence handoff",
+    )
+    return replacement

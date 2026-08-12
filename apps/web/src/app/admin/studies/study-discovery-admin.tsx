@@ -1111,6 +1111,13 @@ export function StudyDiscoveryAdmin() {
                 >
                   Open Product Pack draft
                 </Link>
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => action("product-pack-draft/regenerate", {})}
+                >
+                  Regenerate from latest evidence
+                </button>
               </div>
             ) : null}
 

@@ -57,6 +57,20 @@ async def test_postgres_authoring_queue_cancellation_and_immutable_publication()
             report_blueprint=blueprint,
             actor="integration-test",
         )
+        superseded_config, superseded_blueprint = _bundle(f"{pack_id}_superseded")
+        superseded = await repository.create_draft(
+            product_pack_id=f"{pack_id}_superseded",
+            proposed_version="1.0.0",
+            config=superseded_config,
+            report_blueprint=superseded_blueprint,
+            actor="integration-test",
+        )
+        abandoned = await repository.abandon_draft(
+            superseded.id,
+            actor="integration-test",
+            reason="regenerated from corrected evidence",
+        )
+        assert abandoned.status == "abandoned"
         first = await repository.request_validation(
             draft.id,
             suite="quick",

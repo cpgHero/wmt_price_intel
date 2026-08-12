@@ -966,9 +966,17 @@ class PostgresProductDetailRepository:
                             SELECT p.retailer_product_id, p.identity->>'name' AS product_name,
                               j.retailer_id, j.status, j.request_context,
                               j.last_http_status, j.billable_credits, j.attempt_count,
-                              j.last_error
+                              j.last_error, s.id::text AS snapshot_id,
+                              s.document AS snapshot_document
                             FROM product_detail_job j
                             JOIN canonical_product p ON p.id = j.canonical_product_id
+                            LEFT JOIN LATERAL (
+                              SELECT snapshot.id, snapshot.document
+                              FROM product_detail_snapshot snapshot
+                              WHERE snapshot.product_detail_job_id = j.id
+                                AND snapshot.normalized
+                              ORDER BY snapshot.observed_at DESC, snapshot.id DESC LIMIT 1
+                            ) s ON true
                             WHERE j.enrichment_run_id::text = :run_id
                             ORDER BY j.retailer_id, product_name,
                               p.retailer_product_id, j.created_at, j.id
@@ -993,6 +1001,12 @@ class PostgresProductDetailRepository:
                 "attempt_count": int(row["attempt_count"]),
                 "request_context": dict(row["request_context"]),
                 "error": str(row["last_error"]) if row["last_error"] is not None else None,
+                "snapshot_id": str(row["snapshot_id"]) if row["snapshot_id"] is not None else None,
+                "identity_evidence": (
+                    dict(row["snapshot_document"].get("normalized", {}))
+                    if isinstance(row["snapshot_document"], dict)
+                    else None
+                ),
             }
             for row in rows
         ]

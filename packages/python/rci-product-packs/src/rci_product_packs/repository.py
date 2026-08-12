@@ -107,6 +107,12 @@ SELECT id::text AS id, product_pack_id, base_version, proposed_version, status,
 FROM product_pack_draft
 """
 
+_DRAFT_COLUMNS = """
+id::text AS id, product_pack_id, base_version, proposed_version, status,
+revision, config, report_blueprint, checksum, created_by, updated_by,
+created_at, updated_at
+"""
+
 _VALIDATION_COLUMNS = """
 id::text AS id, draft_id::text AS draft_id, draft_revision, draft_checksum,
   suite, status, gates, engine_version, attempt_count, max_attempts, locked_by,
@@ -320,6 +326,50 @@ class PostgresProductPackAuthoringRepository:
                 "draft_updated",
                 actor,
                 {"revision": revision, "reason": reason},
+            )
+        return _draft(row)
+
+    async def abandon_draft(self, draft_id: str, *, actor: str, reason: str) -> ProductPackDraft:
+        """Close a superseded mutable draft while preserving its complete audit history."""
+
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"""
+                            UPDATE product_pack_draft SET status = 'abandoned',
+                              updated_by = :actor, updated_at = now()
+                            WHERE id::text = :draft_id
+                              AND status IN ('draft', 'candidate', 'certified')
+                            RETURNING {_DRAFT_COLUMNS}
+                            """
+                        ),
+                        {"draft_id": draft_id, "actor": actor},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                existing = await connection.execute(
+                    text(f"{_DRAFT_SELECT} WHERE id::text = :draft_id"),
+                    {"draft_id": draft_id},
+                )
+                current = existing.mappings().first()
+                if current is None:
+                    raise ProductPackDraftNotFoundError(
+                        f"Product Pack draft {draft_id!r} was not found"
+                    )
+                if str(current["status"]) == "published":
+                    raise ProductPackDraftConflictError("Published drafts cannot be abandoned")
+                return _draft(current)
+            await self._event(
+                connection,
+                draft_id,
+                "draft_abandoned",
+                actor,
+                {"reason": reason},
             )
         return _draft(row)
 

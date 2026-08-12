@@ -118,6 +118,8 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
             "00501",
             "90020",
         }
+        assert all(row["snapshot_id"] for row in audit["calls"])
+        assert all(row["identity_evidence"]["name"] for row in audit["calls"])
 
         cache_run = await repository.create_run(max_credits=2)
         cleanup_run_ids.append(cache_run.id)

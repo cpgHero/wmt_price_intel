@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rci_api.studies import _pdp_plan, _study_collection_config
+from rci_api.studies import (
+    _category_identity,
+    _next_patch_version,
+    _pdp_plan,
+    _study_collection_config,
+)
 from rci_studies import StudyRecord, canonical_checksum, initial_approval_state
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -157,3 +163,17 @@ def test_pdp_plan_fails_closed_for_missing_retailer_context() -> None:
     assert calls == []
     assert estimate["eligible_products"] == 0
     assert estimate["invalid_candidates"][0]["product_id"] == "100"
+
+
+def test_study_draft_identity_comes_from_category_not_study_name() -> None:
+    study = replace(
+        _study(),
+        name="Fresh category — Walmart vs ALDI — AR/TX pilot",
+    )
+
+    assert _category_identity(study) == ("fresh_category", "Fresh category")
+
+
+def test_next_patch_version_preserves_existing_release_line() -> None:
+    assert _next_patch_version("1.0.0") == "1.0.1"
+    assert _next_patch_version("1.2.7") == "1.2.8"

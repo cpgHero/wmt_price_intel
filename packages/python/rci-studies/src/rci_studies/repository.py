@@ -1050,6 +1050,47 @@ class PostgresStudyRepository:
             )
         return _record(row)
 
+    async def reopen_draft_handoff(self, study_id: str, actor: str) -> StudyRecord:
+        """Detach a mutable candidate so corrected handoff logic can regenerate it."""
+
+        async with self._engine.begin() as connection:
+            current = await self._locked(connection, study_id)
+            if current["product_pack_draft_id"] is None:
+                return _record(current)
+            if str(current["status"]) not in {"draft_ready", "certifying", "certified"}:
+                raise StudyStateError("only an unpublished Product Pack handoff can be regenerated")
+            draft_status = await connection.scalar(
+                text("SELECT status FROM product_pack_draft WHERE id = CAST(:draft_id AS uuid)"),
+                {"draft_id": str(current["product_pack_draft_id"])},
+            )
+            if draft_status == "published":
+                raise StudyStateError("a published Product Pack handoff cannot be regenerated")
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"""
+                            UPDATE study_discovery SET status = 'profile_ready',
+                              product_pack_draft_id = NULL, updated_by = :actor,
+                              updated_at = now() WHERE id::text = :study_id
+                            RETURNING {self._returning_columns()}
+                            """
+                        ),
+                        {"study_id": study_id, "actor": actor},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            await self._audit(
+                connection,
+                "study_product_pack_handoff_reopened",
+                study_id,
+                actor,
+                {"superseded_draft_id": str(current["product_pack_draft_id"])},
+            )
+        return _record(row)
+
     async def _locked(self, connection: AsyncConnection, study_id: str) -> RowMapping:
         row = (
             (
