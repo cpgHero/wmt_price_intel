@@ -12,9 +12,9 @@ from typing import Any
 
 from rci_analytics import (
     CanonicalOfferNormalizer,
+    CatalogProductPackLoader,
     ComparisonEngine,
     OfferClassifier,
-    ProductPackLoader,
     RelationshipInputReducer,
     benchmark_product_match_candidates,
 )
@@ -22,6 +22,7 @@ from rci_analytics.models import ClassifiedOffer
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
+from rci_product_packs import PostgresProductPackCatalog
 from rci_products import (
     MetricsCartProductDetailAdapter,
     PostgresProductDetailRepository,
@@ -116,7 +117,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         source = record.result.get("source")
         if not isinstance(source, dict) or source.get("kind") != "historical_import":
             raise ValueError("PDP replay currently requires a persisted historical analysis")
-        pack = ProductPackLoader(repository_root).load(record.product_pack_id)
+        pack = await CatalogProductPackLoader(
+            repository_root,
+            PostgresProductPackCatalog(database.engine),
+        ).load(record.product_pack_id, record.product_pack_version)
         benchmark = str(record.result["benchmark_retailer"])
         competitors = [str(value) for value in record.result.get("competitors", [])]
         configured_modes = {

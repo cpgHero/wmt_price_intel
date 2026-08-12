@@ -14,9 +14,9 @@ from typing import Any
 from rci_analytics import (
     AssortmentAccumulator,
     CanonicalOfferNormalizer,
+    CatalogProductPackLoader,
     ComparisonEngine,
     OfferClassifier,
-    ProductPackLoader,
     RelationshipInputReducer,
     benchmark_product_decisions,
     benchmark_product_evidence,
@@ -34,6 +34,7 @@ from rci_analytics.models import ClassifiedOffer
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
+from rci_product_packs import PostgresProductPackCatalog
 from rci_products import PostgresProductDetailRepository
 from rci_results import (
     AnalysisResultService,
@@ -272,7 +273,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         if not isinstance(source, dict) or source.get("kind") != "historical_import":
             raise ValueError("presentation-context replay currently requires historical input")
         input_set_id = str(source["input_set_id"])
-        pack = ProductPackLoader(repository_root).load(record.product_pack_id)
+        pack = await CatalogProductPackLoader(
+            repository_root,
+            PostgresProductPackCatalog(database.engine),
+        ).load(record.product_pack_id, record.product_pack_version)
         benchmark = str(record.result["benchmark_retailer"])
         competitors = [str(value) for value in record.result.get("competitors", [])]
         configured_modes = {
