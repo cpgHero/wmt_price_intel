@@ -466,6 +466,29 @@ async def list_study_products(
         raise _not_found(exc) from exc
 
 
+@router.get("/{study_id}/pdp-audit")
+async def get_pdp_audit(
+    study_id: str,
+    request: Request,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> dict[str, Any]:
+    _authorized(request, x_rci_admin_token)
+    try:
+        study = await _repository(request).get(study_id)
+    except StudyNotFoundError as exc:
+        raise _not_found(exc) from exc
+    if study.pdp_run_id is None:
+        raise HTTPException(status_code=404, detail="Study has no PDP enrichment run")
+    product_repository = PostgresProductDetailRepository(
+        request.app.state.database_probe.engine,
+        _root(),
+    )
+    audit = await product_repository.run_audit(study.pdp_run_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="PDP enrichment run was not found")
+    return audit
+
+
 @router.patch("/{study_id}/products", response_model=StudyResponse)
 async def update_study_product(
     study_id: str,

@@ -951,6 +951,70 @@ class PostgresProductDetailRepository:
             )
             return _run(row) if row is not None else None
 
+    async def run_audit(self, run_id: str) -> JsonObject | None:
+        """Return the paid-call ledger and exact request contexts for a PDP run."""
+
+        run = await self.get_run(run_id)
+        if run is None:
+            return None
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT p.retailer_product_id, p.identity->>'name' AS product_name,
+                              j.retailer_id, j.status, j.request_context,
+                              j.last_http_status, j.billable_credits, j.attempt_count,
+                              j.last_error
+                            FROM product_detail_job j
+                            JOIN canonical_product p ON p.id = j.canonical_product_id
+                            WHERE j.enrichment_run_id::text = :run_id
+                            ORDER BY j.retailer_id, product_name,
+                              p.retailer_product_id, j.created_at, j.id
+                            """
+                        ),
+                        {"run_id": run_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        calls = [
+            {
+                "retailer_id": str(row["retailer_id"]),
+                "retailer_product_id": str(row["retailer_product_id"]),
+                "product_name": str(row["product_name"] or "Unknown product"),
+                "status": str(row["status"]),
+                "http_status": (
+                    int(row["last_http_status"]) if row["last_http_status"] is not None else None
+                ),
+                "billable_credits": int(row["billable_credits"]),
+                "attempt_count": int(row["attempt_count"]),
+                "request_context": dict(row["request_context"]),
+                "error": str(row["last_error"]) if row["last_error"] is not None else None,
+            }
+            for row in rows
+        ]
+        http_statuses = sorted(
+            {int(row["last_http_status"]) for row in rows if row["last_http_status"] is not None}
+        )
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "max_credits": run.max_credits,
+            "planned_credits": run.planned_credits,
+            "actual_credits": run.actual_credits,
+            "planned_calls": len(calls),
+            "succeeded_calls": sum(call["status"] == "succeeded" for call in calls),
+            "failed_calls": sum(call["status"] == "failed" for call in calls),
+            "http_status_counts": {
+                str(status): sum(call["http_status"] == status for call in calls)
+                for status in http_statuses
+            },
+            "calls": calls,
+        }
+
     async def reconcile_run(self, run_id: str) -> ProductDetailRun | None:
         """Close an idle run, including a run satisfied entirely from cache."""
 

@@ -87,6 +87,33 @@ interface StudyProduct {
   brand_resolution: { status?: string; role?: string };
 }
 
+interface PdpAuditCall {
+  retailer_id: string;
+  retailer_product_id: string;
+  product_name: string;
+  status: string;
+  http_status: number | null;
+  billable_credits: number;
+  request_context: {
+    zipcode?: string | null;
+    store?: string | null;
+    fulfillment_type?: string | null;
+  };
+  error: string | null;
+}
+
+interface PdpAudit {
+  status: string;
+  max_credits: number;
+  planned_credits: number;
+  actual_credits: number;
+  planned_calls: number;
+  succeeded_calls: number;
+  failed_calls: number;
+  http_status_counts: Record<string, number>;
+  calls: PdpAuditCall[];
+}
+
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -151,6 +178,7 @@ export function StudyDiscoveryAdmin() {
   const [retailers, setRetailers] = useState<RetailerOption[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [products, setProducts] = useState<StudyProduct[]>([]);
+  const [pdpAudit, setPdpAudit] = useState<PdpAudit | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +254,13 @@ export function StudyDiscoveryAdmin() {
         ),
       );
   }, [selectedId, studies]);
+
+  useEffect(() => {
+    if (!selectedId || !selected?.pdp_run_id) return;
+    void jsonRequest<PdpAudit>(`/api/admin/studies/${selectedId}/pdp-audit`)
+      .then(setPdpAudit)
+      .catch(() => setPdpAudit(null));
+  }, [selected?.pdp_run_id, selectedId, selected?.status]);
 
   useEffect(() => {
     if (
@@ -974,11 +1009,89 @@ export function StudyDiscoveryAdmin() {
             {selected.status === "profile_ready" &&
             selected.pdp_run_id &&
             !selected.product_pack_draft_id ? (
-              <p className="study-table-note">
-                PDP enrichment is complete. Search remains authoritative for
-                store price and location; PDP data now supports identity,
-                attributes, imagery, and Product Pack design.
-              </p>
+              <section className="study-pdp-audit">
+                <div className="study-pdp-audit-summary">
+                  <div>
+                    <span className="section-kicker">PDP call ledger</span>
+                    <h3>
+                      {pdpAudit
+                        ? `${metric(pdpAudit.succeeded_calls)} enriched · ${metric(pdpAudit.failed_calls)} unavailable`
+                        : "PDP enrichment complete"}
+                    </h3>
+                    <p>
+                      Search remains authoritative for store price and location.
+                      PDP data supports identity, attributes, imagery, and
+                      Product Pack design.
+                    </p>
+                  </div>
+                  {pdpAudit ? (
+                    <div className="study-pdp-audit-cost">
+                      <strong>
+                        {metric(pdpAudit.actual_credits)} /{" "}
+                        {metric(pdpAudit.max_credits)}
+                      </strong>
+                      <small>credits used</small>
+                    </div>
+                  ) : null}
+                </div>
+                {pdpAudit ? (
+                  <details>
+                    <summary>
+                      Review all {metric(pdpAudit.planned_calls)} request
+                      contexts and statuses
+                    </summary>
+                    <div className="study-product-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Product</th>
+                            <th>Retailer</th>
+                            <th>Observed request context</th>
+                            <th>Result</th>
+                            <th>Credits</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pdpAudit.calls.map((call) => (
+                            <tr
+                              key={`${call.retailer_id}:${call.retailer_product_id}:${call.request_context.zipcode}:${call.request_context.store}`}
+                            >
+                              <td>
+                                <b>{call.product_name}</b>
+                                <small>{call.retailer_product_id}</small>
+                              </td>
+                              <td>
+                                {retailers.find(
+                                  (item) => item.id === call.retailer_id,
+                                )?.display_name ?? call.retailer_id}
+                              </td>
+                              <td>
+                                ZIP {call.request_context.zipcode ?? "—"} ·
+                                store {call.request_context.store ?? "—"}
+                                <small>
+                                  {call.request_context.fulfillment_type ??
+                                    "unspecified fulfillment"}
+                                </small>
+                              </td>
+                              <td>
+                                <span
+                                  className={`study-disposition ${call.status === "succeeded" ? "provisionally_admitted" : "excluded"}`}
+                                >
+                                  {call.http_status ?? call.status}
+                                </span>
+                                {call.error ? (
+                                  <small>{call.error}</small>
+                                ) : null}
+                              </td>
+                              <td>{metric(call.billable_credits)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                ) : null}
+              </section>
             ) : null}
             {selected.product_pack_draft_id ? (
               <div className="study-action-card success">

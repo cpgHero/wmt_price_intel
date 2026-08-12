@@ -107,6 +107,17 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
         assert completed is not None
         assert completed.status == "completed"
         assert completed.actual_credits == 4
+        audit = await repository.run_audit(run.id)
+        assert audit is not None
+        assert audit["planned_calls"] == 2
+        assert audit["succeeded_calls"] == 2
+        assert audit["failed_calls"] == 0
+        assert audit["http_status_counts"] == {"200": 2}
+        assert audit["actual_credits"] == 4
+        assert {row["request_context"]["zipcode"] for row in audit["calls"]} == {
+            "00501",
+            "90020",
+        }
 
         cache_run = await repository.create_run(max_credits=2)
         cleanup_run_ids.append(cache_run.id)

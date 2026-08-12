@@ -254,6 +254,41 @@
 .study-action-card .button {
   flex: 0 0 auto;
 }
+.study-pdp-audit {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+.study-pdp-audit-summary {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.study-pdp-audit-summary h3,
+.study-pdp-audit-summary p {
+  margin: 0.2rem 0 0;
+}
+.study-pdp-audit-cost {
+  display: grid;
+  flex: 0 0 auto;
+  text-align: right;
+}
+.study-pdp-audit-cost strong {
+  font-size: 1.7rem;
+}
+.study-pdp-audit-cost small,
+.study-pdp-audit td small {
+  color: var(--muted);
+  display: block;
+}
+.study-pdp-audit details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
 .study-metric-grid {
   display: grid;
   gap: 0.75rem;
