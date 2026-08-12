@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import statistics
 from collections import defaultdict
 from collections.abc import Iterable
@@ -62,8 +63,16 @@ class AssortmentAccumulator:
                 "url": offer.product_url,
                 "locations": set(),
                 "zipcodes": set(),
+                "attribute_variants": {},
             },
         )
+        visible_attributes = {
+            str(name): value
+            for name, value in item.attributes.items()
+            if not str(name).startswith("_")
+        }
+        signature = json.dumps(visible_attributes, sort_keys=True, default=str)
+        product["attribute_variants"][signature] = visible_attributes
         if not product.get("image_url") and offer.image_url:
             product["image_url"] = offer.image_url
         zipcode = offer.zipcode or "unknown-zip"
@@ -174,6 +183,33 @@ class AssortmentAccumulator:
             "brands": brand_rows,
             "top_brands": brand_rows[:12],
             "geographically_concentrated_brands": concentrated_brands[:12],
+            "products": [
+                {
+                    **{
+                        key: value
+                        for key, value in product.items()
+                        if key not in {"locations", "zipcodes", "attribute_variants"}
+                    },
+                    "observed_locations": len(product["locations"]),
+                    "observed_zipcodes": len(product["zipcodes"]),
+                    "location_scope_keys": sorted(
+                        f"{retailer}|{location}" for location in product["locations"]
+                    ),
+                    "attributes": next(iter(product["attribute_variants"].values()), {}),
+                    "attribute_variants": sorted(
+                        product["attribute_variants"].values(),
+                        key=lambda value: json.dumps(value, sort_keys=True, default=str),
+                    ),
+                    "attribute_conflict": len(product["attribute_variants"]) > 1,
+                }
+                for product in sorted(
+                    products.values(),
+                    key=lambda value: (
+                        str(value["name"]).casefold(),
+                        str(value["product_id"]),
+                    ),
+                )
+            ],
         }
 
     def _comparison(
@@ -202,8 +238,22 @@ class AssortmentAccumulator:
             ].add(match.profile_id)
         matched_benchmark = {pair[0] for pair in pair_profiles}
         matched_competitor = {pair[1] for pair in pair_profiles}
-        benchmark_only = set(benchmark_products) - matched_benchmark
-        competitor_only = set(competitor_products) - matched_competitor
+        ambiguous_benchmark = {
+            str(candidate.get("benchmark_product_id"))
+            for group in ambiguous_groups
+            if str(group.get("competitor_id")) == competitor
+            for candidate in group.get("candidates", [])
+            if candidate.get("benchmark_product_id")
+        }
+        ambiguous_competitor = {
+            str(candidate.get("competitor_product_id"))
+            for group in ambiguous_groups
+            if str(group.get("competitor_id")) == competitor
+            for candidate in group.get("candidates", [])
+            if candidate.get("competitor_product_id")
+        }
+        benchmark_only = set(benchmark_products) - matched_benchmark - ambiguous_benchmark
+        competitor_only = set(competitor_products) - matched_competitor - ambiguous_competitor
         benchmark_zips = self._zips.get(benchmark, {})
         competitor_zips = self._zips.get(competitor, {})
         shared_zips = set(benchmark_zips) & set(competitor_zips)
@@ -252,6 +302,8 @@ class AssortmentAccumulator:
             "matched_competitor_products": len(matched_competitor),
             "benchmark_match_coverage": _rate(len(matched_benchmark), len(benchmark_products)),
             "competitor_match_coverage": _rate(len(matched_competitor), len(competitor_products)),
+            "ambiguous_benchmark_products": len(ambiguous_benchmark - matched_benchmark),
+            "ambiguous_competitor_products": len(ambiguous_competitor - matched_competitor),
             "benchmark_only_products": len(benchmark_only),
             "competitor_whitespace_products": len(competitor_only),
             "profiles": profiles,
@@ -270,6 +322,12 @@ class AssortmentAccumulator:
             },
             "top_benchmark_only": self._rank_products(benchmark, benchmark_only),
             "top_competitor_whitespace": self._rank_products(competitor, competitor_only),
+            "top_ambiguous_benchmark": self._rank_products(
+                benchmark, ambiguous_benchmark - matched_benchmark
+            ),
+            "top_ambiguous_competitor": self._rank_products(
+                competitor, ambiguous_competitor - matched_competitor
+            ),
             "key_points": [
                 (
                     f"{len(pair_profiles):,} distinct Product Pack pairings cover "
@@ -298,7 +356,7 @@ class AssortmentAccumulator:
                     **{
                         key: value
                         for key, value in product.items()
-                        if key not in {"locations", "zipcodes"}
+                        if key not in {"locations", "zipcodes", "attribute_variants"}
                     },
                     "observed_locations": len(product["locations"]),
                     "observed_zipcodes": len(product["zipcodes"]),
@@ -331,4 +389,12 @@ def merge_assortment_product_context(
                 for key in ("name", "brand", "image_url", "url"):
                     if pdp.get(key):
                         product[key] = pdp[key]
+    for retailer in enriched.get("retailers", []):
+        for product in retailer.get("products", []):
+            pdp = context.get(str(product.get("canonical_product_id")))
+            if not pdp:
+                continue
+            for key in ("name", "brand", "image_url", "url"):
+                if pdp.get(key):
+                    product[key] = pdp[key]
     return enriched

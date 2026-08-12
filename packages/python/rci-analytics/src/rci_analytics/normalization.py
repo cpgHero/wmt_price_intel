@@ -9,11 +9,14 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from rci_analytics.models import JsonObject, NormalizedOffer
 from rci_locations.normalization import normalize_zipcode
 
 _PRICE_CLEANER = re.compile(r"[^0-9.\-]")
+_SCIENTIFIC_IDENTIFIER = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
+_URL_IDENTIFIER = re.compile(r"(?<!\d)(\d{6,24})(?!\d)")
 
 
 def _first(row: JsonObject, *names: str) -> Any:
@@ -92,6 +95,22 @@ def _datetime_utc(value: Any) -> str | None:
     return parsed.isoformat().replace("+00:00", "Z")
 
 
+def _lossless_product_id(product_id: str | None, product_url: str | None) -> str | None:
+    """Recover identifiers that spreadsheet exports converted to scientific notation."""
+
+    if product_id is None or not _SCIENTIFIC_IDENTIFIER.fullmatch(product_id):
+        return product_id
+    candidates = _URL_IDENTIFIER.findall(urlsplit(product_url).path) if product_url else []
+    if not candidates:
+        raise ValueError(
+            "offer product identifier is lossy scientific notation and the full ID "
+            "cannot be recovered from its URL"
+        )
+    # Retailer URLs can also contain store IDs. The product identifier is normally
+    # the longest numeric token; use the last token as a deterministic tie-breaker.
+    return max(enumerate(candidates), key=lambda value: (len(value[1]), value[0]))[1]
+
+
 class RetailerIdentityMap:
     def __init__(self, aliases: dict[str, str]) -> None:
         self._aliases = aliases
@@ -137,13 +156,16 @@ class CanonicalOfferNormalizer:
         if title is None:
             raise ValueError("offer has no product title")
         product_url = _text(source, "product_url", "url", "Url")
-        product_id = _text(
-            source,
-            "retailer_product_id",
-            "Retailer Product Id",
-            "asin",
-            "ASIN",
-            "id",
+        product_id = _lossless_product_id(
+            _text(
+                source,
+                "retailer_product_id",
+                "Retailer Product Id",
+                "asin",
+                "ASIN",
+                "id",
+            ),
+            product_url,
         )
         if product_id is None:
             product_id = hashlib.sha256(f"{title}|{product_url or ''}".encode()).hexdigest()[:24]

@@ -222,7 +222,8 @@ def resolve_one_to_one_relationships(
     offer_rows = list(offers)
     match_rows = list(matches)
     priorities = {str(profile_id): index for index, profile_id in enumerate(profile_priority)}
-    offer_index = {item.offer.offer_id: item.offer for item in offer_rows}
+    classified_index = {item.offer.offer_id: item for item in offer_rows}
+    offer_index = {offer_id: item.offer for offer_id, item in classified_index.items()}
     configured_scope_policies = profile_scope_policies or {}
     product_locations: dict[str, set[str]] = {}
     for item in offer_rows:
@@ -325,10 +326,72 @@ def resolve_one_to_one_relationships(
             for key in competitor_pairs - confirmed
             if key[1] not in locked_benchmark and key[2] not in locked_competitor
         }
+        attribute_conflicts: dict[
+            tuple[str, str, str], dict[str, list[tuple[tuple[str, str], ...]]]
+        ] = {}
+        for key in automatic:
+            signatures_by_profile: dict[str, set[tuple[tuple[str, str], ...]]] = {}
+            for row in pair_rows[key]:
+                signature = tuple(
+                    sorted(
+                        (str(name), repr(value))
+                        for name, value in row.attributes.items()
+                        if not str(name).startswith("_")
+                    )
+                )
+                signatures_by_profile.setdefault(row.profile_id, set()).add(signature)
+            conflicting = {
+                profile_id: sorted(signatures)
+                for profile_id, signatures in signatures_by_profile.items()
+                if len(signatures) > 1
+            }
+            if conflicting:
+                attribute_conflicts[key] = conflicting
+        for key, conflicts in sorted(attribute_conflicts.items()):
+            seed = "|".join((*key, "attribute-conflict"))
+            ambiguous_groups.append(
+                {
+                    "candidate_group_id": (
+                        f"candidate-{hashlib.sha256(seed.encode()).hexdigest()[:20]}"
+                    ),
+                    "competitor_id": competitor_id,
+                    "reason": "inconsistent_product_attributes",
+                    "attribute_conflicts": {
+                        profile_id: [dict(signature) for signature in signatures]
+                        for profile_id, signatures in conflicts.items()
+                    },
+                    "candidates": [
+                        {
+                            "benchmark_product_id": key[1],
+                            "competitor_product_id": key[2],
+                            "eligible_profile_ids": sorted(
+                                conflicts,
+                                key=lambda value: (priorities[value], value),
+                            ),
+                            "scope_mode": "global",
+                            "benchmark_location_scope_keys": [],
+                        }
+                    ],
+                }
+            )
+        automatic.difference_update(attribute_conflicts)
         if not automatic:
             continue
+
+        def candidate_rank(row: MatchRecord) -> tuple[int, int, int]:
+            benchmark_item = classified_index[row.benchmark_offer_id]
+            competitor_item = classified_index[row.competitor_offer_id]
+            values = [
+                value for name, value in row.attributes.items() if not str(name).startswith("_")
+            ]
+            return (
+                priorities[row.profile_id],
+                int(bool(benchmark_item.review_reasons or competitor_item.review_reasons)),
+                sum(value is None for value in values),
+            )
+
         edge_rank = {
-            (key[1], key[2]): min(priorities[row.profile_id] for row in pair_rows[key])
+            (key[1], key[2]): min(candidate_rank(row) for row in pair_rows[key])
             for key in automatic
         }
         edge_scope_modes: dict[tuple[str, str], str] = {}
@@ -682,6 +745,40 @@ class ComparisonEngine:
             )
         return self._exact_zip_matches(offers, benchmark_id, competitor_id, profile)
 
+    def compare_products(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        competitor_id: str,
+        profile_id: str,
+    ) -> list[MatchRecord]:
+        """Generate relationship evidence for every compatible product pair.
+
+        ``compare`` intentionally selects the market-floor offer for each
+        geography/dimension. Product identity resolution instead requires every
+        distinct product observed at that geography. Keeping these paths separate
+        prevents a price winner from masquerading as a unique product relationship.
+        """
+
+        profile = self.pack.profile(profile_id)
+        if profile["geography"] == "radius":
+            return self.compare(
+                offers,
+                benchmark_id=benchmark_id,
+                competitor_id=competitor_id,
+                profile_id=profile_id,
+            )
+        if profile["geography"] != "exact_zip":
+            raise ValueError(
+                f"geography {profile['geography']!r} is not implemented for this engine"
+            )
+        if profile.get("unknown_policy") == "wildcard_if_one_unknown":
+            return self._wildcard_product_exact_zip_matches(
+                offers, benchmark_id, competitor_id, profile
+            )
+        return self._product_exact_zip_matches(offers, benchmark_id, competitor_id, profile)
+
     def compare_governed(
         self,
         offers: list[ClassifiedOffer],
@@ -690,6 +787,7 @@ class ComparisonEngine:
         competitor_id: str,
         profile_id: str,
         rules: Iterable[ProductMatchRule] = (),
+        product_candidates: bool = False,
     ) -> list[MatchRecord]:
         """Apply an immutable, context-one-to-one decision snapshot to generic matches."""
 
@@ -725,7 +823,8 @@ class ComparisonEngine:
                         "benchmark location context"
                     )
         automatic = []
-        for match in self.compare(
+        comparison = self.compare_products if product_candidates else self.compare
+        for match in comparison(
             offers,
             benchmark_id=benchmark_id,
             competitor_id=competitor_id,
@@ -858,7 +957,11 @@ class ComparisonEngine:
                     "_match_origin": "user_confirmed",
                     "_scope_mode": scope_mode,
                     "_location_scope_key": scope_key,
-                    "_comparison_family_key": comparison_family_key,
+                    "_comparison_family_key": (
+                        comparison_family_key
+                        if comparison_family_key != "legacy"
+                        else f"profile:{profile['id']}"
+                    ),
                 },
             )
             for scope_key in sorted(benchmark)
@@ -1091,6 +1194,88 @@ class ComparisonEngine:
             )
         return matches
 
+    def _selected_products(
+        self,
+        offers: list[ClassifiedOffer],
+        retailer_id: str,
+        profile: JsonObject,
+        metric: str,
+        role: str,
+    ) -> dict[tuple[str, str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]]:
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        unknown_policy = str(profile.get("unknown_policy", "reject"))
+        brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+        selected: dict[tuple[str, str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
+        for item in offers:
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or item.offer.zipcode is None
+                or not self._available_for_matching(item, profile)
+                or not self._satisfies_constraints(item, profile, role)
+            ):
+                continue
+            dimension_key = self._dimension_key(item, dimensions, unknown_policy, brand_policy)
+            value = self._metric_value(item, metric)
+            if dimension_key is None or value is None:
+                continue
+            key = (item.offer.zipcode, item.offer.retailer_product_id, dimension_key)
+            previous = selected.get(key)
+            if previous is None or (value, item.offer.offer_id) < (
+                previous[1],
+                previous[0].offer.offer_id,
+            ):
+                selected[key] = (item, value)
+        return selected
+
+    def _product_exact_zip_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+    ) -> list[MatchRecord]:
+        metric = self._comparison_metric(profile)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        benchmark = self._selected_products(offers, benchmark_id, profile, metric, "benchmark")
+        competitor = self._selected_products(offers, competitor_id, profile, metric, "competitor")
+        benchmark_groups: dict[
+            tuple[str, tuple[Any, ...]], list[tuple[ClassifiedOffer, Decimal]]
+        ] = {}
+        competitor_groups: dict[
+            tuple[str, tuple[Any, ...]], list[tuple[ClassifiedOffer, Decimal]]
+        ] = {}
+        for (zipcode, _product_id, dimension_key), value in benchmark.items():
+            benchmark_groups.setdefault((zipcode, dimension_key), []).append(value)
+        for (zipcode, _product_id, dimension_key), value in competitor.items():
+            competitor_groups.setdefault((zipcode, dimension_key), []).append(value)
+        matches: list[MatchRecord] = []
+        for zipcode, dimension_key in sorted(
+            benchmark_groups.keys() & competitor_groups.keys(), key=str
+        ):
+            for benchmark_offer, benchmark_value in sorted(
+                benchmark_groups[(zipcode, dimension_key)],
+                key=lambda value: value[0].offer.retailer_product_id,
+            ):
+                for competitor_offer, competitor_value in sorted(
+                    competitor_groups[(zipcode, dimension_key)],
+                    key=lambda value: value[0].offer.retailer_product_id,
+                ):
+                    matches.append(
+                        self._match(
+                            profile=profile,
+                            competitor_id=competitor_id,
+                            geography_key=zipcode,
+                            benchmark=benchmark_offer,
+                            competitor=competitor_offer,
+                            dimensions=dimensions,
+                            metric=metric,
+                            benchmark_value=benchmark_value,
+                            competitor_value=competitor_value,
+                        )
+                    )
+        return matches
+
     def _wildcard_exact_zip_matches(
         self,
         offers: list[ClassifiedOffer],
@@ -1156,6 +1341,83 @@ class ComparisonEngine:
                 matched_attributes={name: resolved[index] for index, name in enumerate(dimensions)},
             )
             for (zipcode, resolved), (
+                benchmark_offer,
+                benchmark_value,
+                competitor_offer,
+                competitor_value,
+            ) in sorted(selected.items(), key=lambda item: str(item[0]))
+        ]
+
+    def _wildcard_product_exact_zip_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+    ) -> list[MatchRecord]:
+        metric = self._comparison_metric(profile)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        wildcard_dimensions = frozenset(
+            str(value) for value in profile.get("wildcard_dimensions", dimensions)
+        )
+        brand_policy = str(profile.get("brand_policy", "ignore_brand"))
+        benchmark = self._eligible_by_zip(offers, benchmark_id, profile, metric, "benchmark")
+        competitor = self._eligible_by_zip(offers, competitor_id, profile, metric, "competitor")
+        selected: dict[
+            tuple[str, str, str, tuple[Any, ...]],
+            tuple[ClassifiedOffer, Decimal, ClassifiedOffer, Decimal],
+        ] = {}
+        for zipcode in benchmark.keys() & competitor.keys():
+            for benchmark_offer, benchmark_value in benchmark[zipcode]:
+                for competitor_offer, competitor_value in competitor[zipcode]:
+                    resolved = self._compatible_dimension_key(
+                        benchmark_offer,
+                        competitor_offer,
+                        dimensions,
+                        wildcard_dimensions,
+                        brand_policy,
+                    )
+                    if resolved is None:
+                        continue
+                    key = (
+                        zipcode,
+                        benchmark_offer.offer.retailer_product_id,
+                        competitor_offer.offer.retailer_product_id,
+                        resolved,
+                    )
+                    candidate = (
+                        benchmark_offer,
+                        benchmark_value,
+                        competitor_offer,
+                        competitor_value,
+                    )
+                    previous = selected.get(key)
+                    if previous is None or (
+                        benchmark_value,
+                        competitor_value,
+                        benchmark_offer.offer.offer_id,
+                        competitor_offer.offer.offer_id,
+                    ) < (
+                        previous[1],
+                        previous[3],
+                        previous[0].offer.offer_id,
+                        previous[2].offer.offer_id,
+                    ):
+                        selected[key] = candidate
+        return [
+            self._match(
+                profile=profile,
+                competitor_id=competitor_id,
+                geography_key=zipcode,
+                benchmark=benchmark_offer,
+                competitor=competitor_offer,
+                dimensions=dimensions,
+                metric=metric,
+                benchmark_value=benchmark_value,
+                competitor_value=competitor_value,
+                matched_attributes={name: resolved[index] for index, name in enumerate(dimensions)},
+            )
+            for (zipcode, _benchmark_product, _competitor_product, resolved), (
                 benchmark_offer,
                 benchmark_value,
                 competitor_offer,
@@ -1393,14 +1655,22 @@ class ComparisonEngine:
             winner = "benchmark_lower"
         else:
             winner = "competitor_lower"
+        attributes = dict(
+            matched_attributes
+            if matched_attributes is not None
+            else {name: benchmark.attributes.get(name) for name in dimensions}
+        )
+        attributes.setdefault(
+            "_comparison_family_key",
+            str(profile.get("comparison_family_key") or f"profile:{profile['id']}"),
+        )
         return MatchRecord(
             profile_id=str(profile["id"]),
             competitor_id=competitor_id,
             geography_key=geography_key,
             benchmark_offer_id=benchmark.offer.offer_id,
             competitor_offer_id=competitor.offer.offer_id,
-            attributes=matched_attributes
-            or {name: benchmark.attributes.get(name) for name in dimensions},
+            attributes=attributes,
             comparison_metric=metric,
             benchmark_value=benchmark_value,
             competitor_value=competitor_value,
@@ -1473,6 +1743,7 @@ class ComparisonInputReducer:
         pack: ProductPack,
         *,
         profile_ids: Iterable[str] | None = None,
+        preserve_products: bool = False,
     ) -> None:
         self._engine = ComparisonEngine(pack)
         requested = set(profile_ids or ())
@@ -1485,6 +1756,7 @@ class ComparisonInputReducer:
             for profile in pack.matching_profiles
             if not requested or str(profile["id"]) in requested
         )
+        self._preserve_products = preserve_products
         self._selected: dict[
             tuple[str, str, str, tuple[Any, ...]],
             tuple[ClassifiedOffer, Decimal],
@@ -1540,6 +1812,7 @@ class ComparisonInputReducer:
                 str(profile["id"]),
                 item.offer.retailer_id,
                 geography_key,
+                *((item.offer.retailer_product_id,) if self._preserve_products else ()),
                 dimension_key,
             )
             previous = self._selected.get(key)
@@ -1559,3 +1832,20 @@ class ComparisonInputReducer:
     @property
     def retained_offers(self) -> int:
         return len({item.offer.offer_id for item, _ in self._selected.values()})
+
+
+class RelationshipInputReducer(ComparisonInputReducer):
+    """Retain one evidence row per product/profile/location/dimension.
+
+    This reducer is for identity and distribution resolution. It must remain separate
+    from ``ComparisonInputReducer``, whose default behavior intentionally retains only
+    the market-floor offer for an aggregate comparison cell.
+    """
+
+    def __init__(
+        self,
+        pack: ProductPack,
+        *,
+        profile_ids: Iterable[str] | None = None,
+    ) -> None:
+        super().__init__(pack, profile_ids=profile_ids, preserve_products=True)

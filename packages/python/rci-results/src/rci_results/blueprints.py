@@ -374,7 +374,7 @@ class ReportProjector:
             for group_id, label, kinds in _REPORT_GROUPS
         ]
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": result["analysis_id"],
             "generated_at": result["generated_at"],
             "benchmark_retailer": self._retailer_names.get(
@@ -451,6 +451,7 @@ class ReportProjector:
                     "availability_policy": str(
                         profile.get("availability_policy", "search_presence")
                     ),
+                    "population_basis": "relationship_resolved_products",
                     "scorecard_role": "preferred" if profile_id == preferred else "fallback",
                 }
             )

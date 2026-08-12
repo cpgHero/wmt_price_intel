@@ -13,9 +13,9 @@ from typing import Any
 from rci_analytics import (
     CanonicalOfferNormalizer,
     ComparisonEngine,
-    ComparisonInputReducer,
     OfferClassifier,
     ProductPackLoader,
+    RelationshipInputReducer,
     benchmark_product_match_candidates,
 )
 from rci_analytics.models import ClassifiedOffer
@@ -55,7 +55,10 @@ def _arguments() -> argparse.Namespace:
         "--max-product-pairs",
         type=int,
         default=2_000,
-        help="Safety ceiling for distinct governed relationships across all exact-ZIP lenses.",
+        help=(
+            "Safety ceiling for distinct in-scope retailer products. The legacy option name "
+            "is retained for deployment compatibility."
+        ),
     )
     parser.add_argument("--max-credits", type=int, default=1000)
     parser.add_argument(
@@ -142,10 +145,11 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
         )
         classifier = OfferClassifier(pack)
-        reducer = ComparisonInputReducer(
+        reducer = RelationshipInputReducer(
             pack,
             profile_ids={str(profile["id"]) for profile in review_profiles},
         )
+        in_scope_products: dict[tuple[str, str], ClassifiedOffer] = {}
         for historical_source in sources:
             async for rows in reader.iter_batches(historical_source):
                 for row in rows:
@@ -158,14 +162,49 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     source_artifact_by_offer_id[normalized.offer_id] = (
                         historical_source.dataset_artifact_id
                     )
-                    reducer.add(classifier.classify(normalized))
+                    classified = classifier.classify(normalized)
+                    reducer.add(classified)
+                    if (
+                        classified.in_scope
+                        and classified.offer.price is not None
+                        and classified.offer.price > 0
+                        and classified.offer.zipcode is not None
+                    ):
+                        key = (
+                            classified.offer.retailer_id,
+                            classified.offer.retailer_product_id,
+                        )
+                        previous = in_scope_products.get(key)
+                        rank = (
+                            int(classified.offer.store_number is None),
+                            classified.offer.zipcode,
+                            classified.offer.store_number or "",
+                            classified.offer.offer_id,
+                        )
+                        previous_rank = (
+                            (
+                                int(previous.offer.store_number is None),
+                                previous.offer.zipcode or "",
+                                previous.offer.store_number or "",
+                                previous.offer.offer_id,
+                            )
+                            if previous is not None
+                            else None
+                        )
+                        if previous_rank is None or rank < previous_rank:
+                            in_scope_products[key] = classified
+        if len(in_scope_products) > args.max_product_pairs:
+            raise ValueError(
+                f"in-scope product count {len(in_scope_products)} exceeds "
+                f"{args.max_product_pairs} safety ceiling"
+            )
         offers = reducer.offers()
-        offer_index = {item.offer.offer_id: item for item in offers}
+        offer_index = {item.offer.offer_id: item for item in [*offers, *in_scope_products.values()]}
         matches = [
             match
             for profile in review_profiles
             for competitor in competitors
-            for match in engine.compare(
+            for match in engine.compare_products(
                 offers,
                 benchmark_id=benchmark,
                 competitor_id=competitor,
@@ -188,19 +227,13 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             )
             for row in relationships
         }
-        analysis_offer_ids = {
-            offer_id
-            for match in matches
-            if (
-                offer_index[match.benchmark_offer_id].offer.retailer_product_id,
-                match.competitor_id,
-                offer_index[match.competitor_offer_id].offer.retailer_product_id,
-            )
-            in selected_pairs
-            for offer_id in (match.benchmark_offer_id, match.competitor_offer_id)
-        }
+        # Enrich every distinct Product Pack-admitted product once. Requiring an
+        # already-resolved relationship here would create a deadlock: PDP evidence is
+        # often what resolves an unknown identity attribute and makes a safe match
+        # possible. Scope classification still excludes Search noise.
+        analysis_offer_ids = {item.offer.offer_id for item in in_scope_products.values()}
         candidates = plan_product_detail_candidates(
-            (_observation(item) for item in offers),
+            (_observation(item) for item in in_scope_products.values()),
             analysis_offer_ids=analysis_offer_ids,
         )
         retailer_filter = {str(value).strip() for value in args.retailers if str(value).strip()}
@@ -229,7 +262,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         summary: dict[str, object] = {
             "status": "estimate" if not args.confirm_paid_calls else "queued",
             "analysis_id": record.analysis_id,
-            "governed_product_relationships": len(selected_pairs),
+            "candidate_product_relationships": len(selected_pairs),
+            "in_scope_retailer_products": len(in_scope_products),
             "admitted_offer_observations": len(analysis_offer_ids),
             "unique_retailer_products": len(
                 {
@@ -280,7 +314,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 image_primary=item.offer.image_url,
                 identifiers={"product_id": candidate.retailer_product_id},
                 context={
-                    "source": "analysis_admitted_match",
+                    "source": "analysis_in_scope_product",
                     "analysis_id": record.analysis_id,
                     "source_artifact_id": source_artifact_by_offer_id.get(
                         candidate.source_offer_id

@@ -100,14 +100,17 @@ class OfferClassifier:
         retailer_override, product_override = self._product_override(offer)
         in_scope, scope_reason = self._scope(offer, retailer_override, product_override)
         attributes: JsonObject = {}
+        provenance: JsonObject = {}
         review: list[str] = []
         if in_scope:
             for definition in self.pack.attributes:
                 name = str(definition["name"])
-                value = self._extract_attribute(name, definition, offer, product_override)
+                value, evidence = self._extract_attribute(name, definition, offer, product_override)
                 attributes[name] = value
+                provenance[name] = evidence
                 if bool(definition.get("required_for_strict")) and value is None:
                     review.append(f"required attribute {name} is unresolved")
+            attributes["_attribute_provenance"] = provenance
 
         metrics = self._metrics(offer, attributes) if in_scope else {}
         return ClassifiedOffer(
@@ -172,16 +175,37 @@ class OfferClassifier:
         definition: JsonObject,
         offer: NormalizedOffer,
         product_override: JsonObject | None,
-    ) -> Any:
+    ) -> tuple[Any, str]:
         if product_override is not None:
             attributes = product_override.get("attributes", {})
             if name in attributes:
-                return attributes[name]
+                return attributes[name], "product_pack_override"
         for rule in definition.get("extraction_rules", []):
             value = self._apply_extraction_rule(rule, definition, offer)
             if value is not None:
-                return value
-        return None
+                if self._used_fallback_default(rule, definition, offer):
+                    # Missing evidence is unknown. A Product Pack may explicitly opt into
+                    # a default only when the absence itself is authoritative evidence.
+                    if str(rule.get("absence_policy") or "unknown") != "infer_default":
+                        return None, "unresolved"
+                    return value, "product_pack_default"
+                return value, (
+                    "product_pack_constant" if str(rule.get("type")) == "constant" else "search"
+                )
+        return None, "unresolved"
+
+    def _used_fallback_default(
+        self,
+        rule: JsonObject,
+        definition: JsonObject,
+        offer: NormalizedOffer,
+    ) -> bool:
+        """Return whether a configured default—not observed evidence—produced the value."""
+
+        if "default" not in rule:
+            return False
+        without_default = {key: value for key, value in rule.items() if key != "default"}
+        return self._apply_extraction_rule(without_default, definition, offer) is None
 
     def _apply_extraction_rule(
         self, rule: JsonObject, definition: JsonObject, offer: NormalizedOffer

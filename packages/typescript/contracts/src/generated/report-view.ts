@@ -1,7 +1,7 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
 export interface RetailCompetitiveIntelligenceReportView {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: string;
@@ -98,6 +98,7 @@ export interface ComparisonBasis {
   price_unit: string;
   package_basis: "exact_package" | "normalized_unit" | "configured_interval";
   availability_policy: string;
+  population_basis: "relationship_resolved_products" | "market_floor";
   scorecard_role?: "preferred" | "fallback" | "excluded";
 }
 export interface MatchGovernance {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -101,13 +102,13 @@ def test_product_packs_load_in_required_expansion_order() -> None:
             _row(
                 "walmart_us",
                 "milk-1",
-                "Organic Lactose-Free Ultra-Filtered Whole Milk, Half Gallon",
+                "Plain Organic Lactose-Free Ultra-Filtered Whole Milk, Half Gallon",
                 "4.00",
             ),
             {
                 "volume_oz": 64.0,
                 "fat_type": "Whole",
-                "flavor": "Plain",
+                "flavor": None,
                 "organic": True,
                 "lactose_free": True,
                 "ultrafiltered": True,
@@ -120,11 +121,11 @@ def test_product_packs_load_in_required_expansion_order() -> None:
             _row(
                 "walmart_us",
                 "banana-1",
-                "Organic Banana Bunch (4-5 Count), 3 lb Package",
+                "Organic Standard Yellow Banana Bunch (4-5 Count), 3 lb Package",
                 "1.50",
             ),
             {
-                "variety": "Standard Yellow",
+                "variety": None,
                 "organic": True,
                 "selling_unit": "fixed_weight_package",
                 "weight_lb": 3.0,
@@ -244,8 +245,18 @@ def test_egg_compatible_profile_supports_one_sided_unknown_wildcards(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
     rows = [
-        _row("walmart_us", "w", "Grade A Large White Eggs, Cage-Free, 12 Count", "3.00"),
-        _row("aldi_us", "a", "Grade A Large Eggs, Cage-Free, 12 Count", "3.50"),
+        _row(
+            "walmart_us",
+            "w",
+            "Organic Grade A Large White Eggs, Cage-Free, 12 Count",
+            "3.00",
+        ),
+        _row(
+            "aldi_us",
+            "a",
+            "Organic Grade A Large Eggs, Cage-Free, 12 Count",
+            "3.50",
+        ),
     ]
     offers, engine = _pipeline("fresh_shell_eggs", normalizer, rows)
 
@@ -304,6 +315,18 @@ def test_milk_brand_policies_are_enforced_generically(
         _row("aldi_us", "a-nb", "Lactaid Whole Milk, 1 Gallon", "5.25", brand="Lactaid"),
     ]
     offers, engine = _pipeline("fresh_fluid_milk", normalizer, rows)
+    explicit_identity = {
+        "flavor": "Plain",
+        "organic": False,
+        "lactose_free": False,
+        "ultrafiltered": False,
+        "a2": False,
+        "grass_fed": False,
+        "omega_3_dha": False,
+        "kids": False,
+        "protein_fortified": False,
+    }
+    offers = [replace(item, attributes={**item.attributes, **explicit_identity}) for item in offers]
 
     same_brand = engine.compare(
         offers,
@@ -328,12 +351,39 @@ def test_banana_profiles_choose_explicit_category_neutral_metrics(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
     rows = [
-        _row("walmart_us", "w-weight", "Bananas, 3 lb Package", "1.50"),
-        _row("aldi_us", "a-weight", "Bananas, 3 lb Package", "1.20"),
-        _row("walmart_us", "w-count", "Banana Bunch (4-5 Count)", "1.00"),
-        _row("aldi_us", "a-count", "Banana Bunch (5-6 Count)", "0.90"),
+        _row(
+            "walmart_us",
+            "w-weight",
+            "Conventional Standard Yellow Bananas, 3 lb Package",
+            "1.50",
+        ),
+        _row(
+            "aldi_us",
+            "a-weight",
+            "Conventional Standard Yellow Bananas, 3 lb Package",
+            "1.20",
+        ),
+        _row(
+            "walmart_us",
+            "w-count",
+            "Conventional Standard Yellow Banana Bunch (4-5 Count)",
+            "1.00",
+        ),
+        _row(
+            "aldi_us",
+            "a-count",
+            "Conventional Standard Yellow Banana Bunch (5-6 Count)",
+            "0.90",
+        ),
     ]
     offers, engine = _pipeline("fresh_bananas", normalizer, rows)
+    offers = [
+        replace(
+            item,
+            attributes={**item.attributes, "variety": "Standard Yellow", "organic": False},
+        )
+        for item in offers
+    ]
 
     weight = engine.compare(
         offers,
@@ -382,11 +432,33 @@ def test_profiles_support_asymmetric_retailer_role_constraints(
         document=document,
     )
     rows = [
-        _row("walmart_us", "w-each", "Banana, 1 Each", "0.20"),
-        _row("aldi_us", "a-bunch", "Banana Bunch (4-5 Count)", "0.90"),
-        _row("aldi_us", "a-each", "Banana, 1 Each", "0.15"),
+        _row(
+            "walmart_us",
+            "w-each",
+            "Conventional Standard Yellow Banana, 1 Each",
+            "0.20",
+        ),
+        _row(
+            "aldi_us",
+            "a-bunch",
+            "Conventional Standard Yellow Banana Bunch (4-5 Count)",
+            "0.90",
+        ),
+        _row(
+            "aldi_us",
+            "a-each",
+            "Conventional Standard Yellow Banana, 1 Each",
+            "0.15",
+        ),
     ]
     offers = OfferClassifier(configured).classify_many(normalizer.normalize_many(rows))
+    offers = [
+        replace(
+            item,
+            attributes={**item.attributes, "variety": "Standard Yellow", "organic": False},
+        )
+        for item in offers
+    ]
 
     matches = ComparisonEngine(configured).compare(
         offers,

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "analysis_id": "ground-beef-report-view-example",
   "generated_at": "2026-08-10T12:00:00Z",
   "benchmark_retailer": "Walmart (US)",
@@ -57,6 +57,7 @@
       "price_unit": "USD/package",
       "package_basis": "exact_package",
       "availability_policy": "retailer_specific",
+      "population_basis": "relationship_resolved_products",
       "scorecard_role": "preferred"
     }
   ],

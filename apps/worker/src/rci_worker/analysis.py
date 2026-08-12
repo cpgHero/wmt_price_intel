@@ -35,10 +35,13 @@ from rci_analytics import (
     ParquetDatasetWriter,
     ProductMatchRule,
     ProductPackLoader,
+    RelationshipInputReducer,
     benchmark_product_decisions,
     benchmark_product_map_points,
     benchmark_product_match_candidates,
+    complete_attributes_from_pdp,
     evidence_set,
+    product_context_index,
     resolve_one_to_one_relationships,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
@@ -47,6 +50,7 @@ from rci_analytics.normalization import RetailerIdentityMap
 from rci_analytics.product_pack import ProductPack
 from rci_collections.models import QueueTask
 from rci_collections.repository import PostgresCollectionRepository
+from rci_products import ProductDetailRepository
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import AnalysisResultService, ReportBlueprintLoader
 from rci_results.brand_review import BrandReviewRepository, BrandRuleRecord
@@ -548,6 +552,7 @@ class AnalysisProcessor:
         match_reviews: MatchReviewRepository | None = None,
         brand_reviews: BrandReviewRepository | None = None,
         product_packs: CatalogProductPackLoader | None = None,
+        product_details: ProductDetailRepository | None = None,
     ) -> None:
         self._root = repository_root
         self._queue = queue
@@ -562,6 +567,7 @@ class AnalysisProcessor:
         self._match_reviews = match_reviews
         self._brand_reviews = brand_reviews
         self._product_packs = product_packs
+        self._product_details = product_details
 
     async def process(self, job: AnalysisJob) -> str:
         pack = (
@@ -631,7 +637,9 @@ class AnalysisProcessor:
                 for rule in await self._match_reviews.rules(job.match_revision_id)
             ]
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
+        relationship_reducer = RelationshipInputReducer(pack, profile_ids=requested_profile_ids)
         assortment_accumulator = AssortmentAccumulator()
+        pdp_context: dict[str, dict[str, Any]] = {}
         raw_artifact_ids: list[str] = []
         source_evidence_artifacts: list[tuple[str, str, int]] = []
         provider_rows_count = 0
@@ -701,7 +709,14 @@ class AnalysisProcessor:
                 observed_values.append(normalized_offer.collected_at)
             retailer_id = normalized_offer.retailer_id
             offer_counts[retailer_id] += 1
-            classified_offer = classifier.classify(normalized_offer)
+            classified_offer = complete_attributes_from_pdp(
+                classifier.classify(normalized_offer),
+                pdp_context.get(
+                    f"{normalized_offer.retailer_id}:{normalized_offer.retailer_product_id}"
+                ),
+                classifier=classifier,
+                pack=pack,
+            )
             review_offer_count += bool(classified_offer.review_reasons)
             zero_or_missing_price_count += (
                 normalized_offer.price is None or normalized_offer.price <= 0
@@ -713,6 +728,7 @@ class AnalysisProcessor:
                 if normalized_offer.store_number is not None:
                     in_scope_stores[retailer_id].add(normalized_offer.store_number)
             reducer.add(classified_offer)
+            relationship_reducer.add(classified_offer)
             assortment_accumulator.add(classified_offer)
             normalized_batches[retailer_id].append(normalized_offer)
             classified_batches[retailer_id].append(classified_offer)
@@ -723,6 +739,18 @@ class AnalysisProcessor:
             pages = await self._queue.pages(job.collection_run_id)
             if not pages:
                 raise ValueError("completed collection has no successful raw provider pages")
+            if self._product_details is not None:
+                pdp_context = product_context_index(
+                    await self._product_details.publication_highlights(
+                        [
+                            str(page.task.raw_artifact_id)
+                            for page in pages
+                            if page.task.raw_artifact_id is not None
+                        ],
+                        limit=1_000_000,
+                        per_retailer_limit=1_000_000,
+                    )
+                )
             for page in pages:
                 payload = await self._raw_reader.read(page)
                 adapter = self._adapters.get(page.task.adapter_id)
@@ -751,6 +779,14 @@ class AnalysisProcessor:
             sources = await self._queue.historical_sources(job.input_set_id)
             if not sources:
                 raise ValueError("historical input set has no source artifacts")
+            if self._product_details is not None:
+                pdp_context = product_context_index(
+                    await self._product_details.publication_highlights(
+                        [source.dataset_artifact_id for source in sources],
+                        limit=1_000_000,
+                        per_retailer_limit=1_000_000,
+                    )
+                )
             for source in sources:
                 iter_batches = getattr(self._historical_reader, "iter_batches", None)
                 if callable(iter_batches):
@@ -772,6 +808,7 @@ class AnalysisProcessor:
             await flush(retailer_id)
 
         comparison_offers = reducer.offers()
+        relationship_offers = relationship_reducer.offers()
 
         comparison_facts: list[ComparisonFact] = []
         comparison_evidence_sets: list[dict[str, Any]] = []
@@ -797,15 +834,16 @@ class AnalysisProcessor:
                 profile_id = str(profile["id"])
                 ungoverned_by_profile[profile_id] = (
                     engine.compare_governed(
-                        comparison_offers,
+                        relationship_offers,
                         benchmark_id=benchmark,
                         competitor_id=competitor,
                         profile_id=profile_id,
                         rules=governed_rules,
+                        product_candidates=True,
                     )
                     if job.match_revision_id is not None
-                    else engine.compare(
-                        comparison_offers,
+                    else engine.compare_products(
+                        relationship_offers,
                         benchmark_id=benchmark,
                         competitor_id=competitor,
                         profile_id=profile_id,
@@ -814,7 +852,7 @@ class AnalysisProcessor:
                 if str(profile["geography"]) == "exact_zip":
                     candidate_matches.extend(ungoverned_by_profile[profile_id])
             resolution = resolve_one_to_one_relationships(
-                comparison_offers,
+                relationship_offers,
                 (
                     match
                     for profile_matches in ungoverned_by_profile.values()
@@ -1008,7 +1046,7 @@ class AnalysisProcessor:
             raw_source_artifact_ids=raw_artifact_ids,
         )
         decision_rows = benchmark_product_decisions(
-            comparison_offers,
+            relationship_offers,
             map_matches,
             benchmark_retailer=benchmark,
             decision_rules=decision_rules,
@@ -1017,7 +1055,7 @@ class AnalysisProcessor:
         product_decisions = [row for row in decision_rows if row["qa_status"] == "ready"]
         suppressed_product_decisions = [row for row in decision_rows if row["qa_status"] != "ready"]
         map_points = benchmark_product_map_points(
-            comparison_offers,
+            relationship_offers,
             map_matches,
             benchmark_retailer=benchmark,
             allowed_relationship_ids={
@@ -1027,7 +1065,7 @@ class AnalysisProcessor:
             },
         )
         match_candidates = benchmark_product_match_candidates(
-            comparison_offers,
+            relationship_offers,
             candidate_matches,
             benchmark_retailer=benchmark,
             profiles=selected_profiles,
@@ -1084,6 +1122,12 @@ class AnalysisProcessor:
             profiles=selected_profiles,
             ambiguous_groups=ambiguous_match_groups,
         )
+        assortment_analysis["comparison_population"] = {
+            "reported_price_outcomes": "relationship_resolved_products",
+            "market_floor_retained_offers": len(comparison_offers),
+            "relationship_retained_offers": len(relationship_offers),
+            "pdp_identity_products": len(pdp_context),
+        }
         if (
             self._assistant is not None
             and job.match_revision_id is None
@@ -1111,6 +1155,12 @@ class AnalysisProcessor:
                     "match_relationships": match_relationships,
                     "ambiguous_match_groups": ambiguous_match_groups,
                     "assortment_analysis": assortment_analysis,
+                    "notes": [
+                        "Price outcomes use unique relationship-resolved product pairs, not the "
+                        "lowest interchangeable item in each market.",
+                        "Retailer Search is authoritative for store-specific price; Product "
+                        "Details supplies identity and attribute context.",
+                    ],
                 },
             )
         await self._generate_deliveries(record.analysis_id, job.definition_config)

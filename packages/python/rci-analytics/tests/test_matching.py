@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -10,6 +11,7 @@ from rci_analytics.classification import OfferClassifier
 from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
+    RelationshipInputReducer,
     geographic_overlap,
     product_footprint,
     resolve_one_to_one_relationships,
@@ -23,8 +25,16 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 def _pipeline():
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_strawberries")
-    document = dict(pack.document)
+    document = copy.deepcopy(pack.document)
     document.pop("retailer_overrides")
+    for attribute in document["attributes"]:
+        if attribute["name"] == "organic":
+            attribute["extraction_rules"][0]["false_terms"] = [
+                "conventional",
+                "non organic",
+            ]
+        if attribute["name"] == "specialty_claim":
+            attribute["extraction_rules"][0]["values"]["None"] = ["standard"]
     pack = replace(pack, document=document)
     normalizer = CanonicalOfferNormalizer(
         RetailerIdentityMap.from_catalog(REPOSITORY_ROOT / "config" / "retailer-catalog.json")
@@ -43,10 +53,13 @@ def _row(
     latitude: float = 40.7500,
     longitude: float = -73.9900,
 ) -> dict[str, object]:
+    governed_title = (
+        f"{title} Standard" if "organic" in title.casefold() else f"{title} Conventional Standard"
+    )
     return {
         "retailer_id": retailer_id,
         "retailer_product_id": product_id,
-        "title": title,
+        "title": governed_title,
         "price": price,
         "zipcode": zipcode,
         "store_number": store,
@@ -674,6 +687,217 @@ def test_streaming_reducer_preserves_generic_profile_results() -> None:
 
     assert reducer.input_offers == len(offers)
     assert reducer.retained_offers <= len(offers)
+
+
+def test_relationship_resolution_uses_complete_product_footprints() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "2.00",
+                    zipcode="10001",
+                    store="w-a",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "4.00",
+                    zipcode="20002",
+                    store="w-b",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-2",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "4.00",
+                    zipcode="10001",
+                    store="w-a",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-2",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "2.00",
+                    zipcode="20002",
+                    store="w-b",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "3.00",
+                    zipcode="10001",
+                    store="a-a",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "3.00",
+                    zipcode="20002",
+                    store="a-b",
+                ),
+            ]
+        )
+    )
+    relationship_reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
+    relationship_reducer.extend(offers)
+    relationship_offers = relationship_reducer.offers()
+    candidates = engine.compare_products(
+        relationship_offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+
+    resolution = resolve_one_to_one_relationships(
+        relationship_offers,
+        candidates,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+        profile_scope_policies={
+            "strict": {
+                "default_scope_mode": "observed_benchmark_product_footprint",
+                "allow_scoped_reuse": True,
+                "comparison_context_grain": "benchmark_location",
+                "minimum_locations": 1,
+            }
+        },
+    )
+
+    assert {
+        (
+            next(
+                item.offer.retailer_product_id
+                for item in relationship_offers
+                if item.offer.offer_id == match.benchmark_offer_id
+            ),
+            next(
+                item.offer.retailer_product_id
+                for item in relationship_offers
+                if item.offer.offer_id == match.competitor_offer_id
+            ),
+        )
+        for match in candidates
+    } == {("w-1", "a-1"), ("w-2", "a-1")}
+    assert resolution.relationships == ()
+    assert len(resolution.ambiguous_groups) == 1
+
+
+def test_confirmed_relationship_is_preserved_when_products_are_not_market_floor() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row("walmart_us", "w-1", "Fresh Organic Strawberries, 1 lb", "2.00"),
+                _row("walmart_us", "w-2", "Fresh Organic Strawberries, 1 lb", "4.00"),
+                _row("aldi_us", "a-1", "Fresh Organic Strawberries, 1 lb", "2.50"),
+                _row("aldi_us", "a-2", "Fresh Organic Strawberries, 1 lb", "4.50"),
+            ]
+        )
+    )
+    relationship_reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
+    relationship_reducer.extend(offers)
+    relationship_offers = relationship_reducer.offers()
+    governed = engine.compare_governed(
+        relationship_offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=(
+            ProductMatchRule(
+                competitor_id="aldi_us",
+                profile_id="strict",
+                benchmark_product_id="w-2",
+                competitor_product_id="a-2",
+                decision="confirmed",
+            ),
+        ),
+        product_candidates=True,
+    )
+    resolution = resolve_one_to_one_relationships(
+        relationship_offers,
+        governed,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert {
+        (
+            str(row["benchmark_product_id"]),
+            str(row["competitor_product_id"]),
+            str(row["status"]),
+        )
+        for row in resolution.relationships
+    } == {("w-1", "a-1", "suggested"), ("w-2", "a-2", "confirmed")}
+    assert all(
+        str(row["comparison_family_key"]).startswith("profile:") for row in resolution.relationships
+    )
+
+
+def test_conflicting_product_identity_attributes_require_manual_review() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "3.00",
+                    zipcode="10001",
+                    store="w-1",
+                ),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Strawberries, 1 lb",
+                    "3.00",
+                    zipcode="20002",
+                    store="w-2",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-1",
+                    "Fresh Organic Strawberries, 1 lb",
+                    "2.50",
+                    zipcode="10001",
+                    store="a-1",
+                ),
+                _row(
+                    "aldi_us",
+                    "a-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.50",
+                    zipcode="20002",
+                    store="a-2",
+                ),
+            ]
+        )
+    )
+    candidates = engine.compare_products(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        candidates,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert resolution.matches == ()
+    assert resolution.relationships == ()
+    assert len(resolution.ambiguous_groups) == 1
+    assert resolution.ambiguous_groups[0]["reason"] == "inconsistent_product_attributes"
 
 
 def test_retailer_specific_match_availability_does_not_change_scope_counts() -> None:

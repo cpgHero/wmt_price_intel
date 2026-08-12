@@ -477,6 +477,10 @@ class ProductPackLoader:
                     f"attribute {attribute['name']} extraction rule {rule_type!r} "
                     f"requires {sorted(missing)}"
                 )
+            if rule.get("absence_policy") == "infer_default" and "default" not in rule:
+                raise ContractError(
+                    f"attribute {attribute['name']} cannot infer an absent value without a default"
+                )
             if rule_type in {"measurement", "number_pattern"} and data_type != "number":
                 raise ContractError(
                     f"attribute {attribute['name']} uses numeric extraction for {data_type}"

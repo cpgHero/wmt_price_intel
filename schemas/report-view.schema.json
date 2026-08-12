@@ -23,7 +23,7 @@
     "publication"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "type": "string", "minLength": 1 },
@@ -160,7 +160,8 @@
         "comparison_metric",
         "price_unit",
         "package_basis",
-        "availability_policy"
+        "availability_policy",
+        "population_basis"
       ],
       "properties": {
         "profile_id": { "type": "string", "minLength": 1 },
@@ -172,6 +173,9 @@
           "enum": ["exact_package", "normalized_unit", "configured_interval"]
         },
         "availability_policy": { "type": "string", "minLength": 1 },
+        "population_basis": {
+          "enum": ["relationship_resolved_products", "market_floor"]
+        },
         "scorecard_role": { "enum": ["preferred", "fallback", "excluded"] }
       }
     },

@@ -11,10 +11,12 @@ from rci_analytics.product_pack import ProductPack
 
 
 def product_context_index(values: list[JsonObject]) -> dict[str, JsonObject]:
+    """Index only records backed by a normalized Product Details snapshot."""
+
     return {
         str(value["canonical_product_id"]): value
         for value in values
-        if value.get("canonical_product_id")
+        if value.get("canonical_product_id") and value.get("role") == "PDP-enriched reference"
     }
 
 
@@ -29,7 +31,8 @@ def complete_attributes_from_pdp(
 
     The search result remains the admission, price, availability, store, and location
     authority. PDP content is flattened into a classification-only text surface and
-    can fill an unresolved attribute; it never overwrites a resolved search attribute.
+    can fill an unresolved attribute; it never overwrites explicit Search, Product Pack
+    override, or configured-constant evidence. Inferred defaults are not evidence.
     """
 
     if not classified.in_scope or context is None:
@@ -44,19 +47,39 @@ def complete_attributes_from_pdp(
     )
     pdp_classified = classifier.classify(enriched_offer)
     attributes = dict(classified.attributes)
-    provenance: JsonObject = {}
+    search_provenance = (
+        dict(attributes.get("_attribute_provenance", {}))
+        if isinstance(attributes.get("_attribute_provenance"), dict)
+        else {}
+    )
+    pdp_provenance = (
+        dict(pdp_classified.attributes.get("_attribute_provenance", {}))
+        if isinstance(pdp_classified.attributes.get("_attribute_provenance"), dict)
+        else {}
+    )
+    provenance: JsonObject = dict(search_provenance)
     for definition in pack.attributes:
         name = str(definition["name"])
         current = attributes.get(name)
         candidate = pdp_classified.attributes.get(name)
         unknown_values = definition.get("unknown_values", [])
-        current_unknown = current is None or current in unknown_values
-        candidate_known = candidate is not None and candidate not in unknown_values
+        current_source = str(search_provenance.get(name) or "unresolved")
+        candidate_source = str(pdp_provenance.get(name) or "unresolved")
+        current_unknown = (
+            current is None
+            or current in unknown_values
+            or current_source in {"unresolved", "product_pack_default"}
+        )
+        candidate_known = (
+            candidate is not None
+            and candidate not in unknown_values
+            and candidate_source not in {"unresolved", "product_pack_default"}
+        )
         if current_unknown and candidate_known:
             attributes[name] = candidate
             provenance[name] = "pdp"
         elif not current_unknown:
-            provenance[name] = "search"
+            provenance[name] = current_source
         else:
             provenance[name] = "unresolved"
     attributes["_attribute_provenance"] = provenance

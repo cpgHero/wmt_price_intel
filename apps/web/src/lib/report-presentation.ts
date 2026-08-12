@@ -63,6 +63,9 @@ export function comparisonBasisDescription(basis?: ComparisonBasis | null) {
     displayLabel(basis.comparison_metric),
     priceUnitLabel(basis.price_unit),
     displayLabel(basis.geography),
+    basis.population_basis === "market_floor"
+      ? "market-floor assortment view"
+      : "resolved product relationships",
   ].join(" · ");
 }
 

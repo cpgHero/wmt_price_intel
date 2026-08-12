@@ -15,9 +15,9 @@ from rci_analytics import (
     AssortmentAccumulator,
     CanonicalOfferNormalizer,
     ComparisonEngine,
-    ComparisonInputReducer,
     OfferClassifier,
     ProductPackLoader,
+    RelationshipInputReducer,
     benchmark_product_decisions,
     benchmark_product_evidence,
     benchmark_product_map_points,
@@ -302,14 +302,18 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         highlights = await PostgresProductDetailRepository(
             database.engine,
             repository_root,
-        ).publication_highlights(source_artifact_ids, limit=512, per_retailer_limit=256)
+        ).publication_highlights(
+            source_artifact_ids,
+            limit=1_000_000,
+            per_retailer_limit=1_000_000,
+        )
         pdp_context = product_context_index(highlights)
         reader = S3HistoricalCSVReader(bucket=bucket, client=client)
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
         )
         classifier = OfferClassifier(pack)
-        reducer = ComparisonInputReducer(
+        relationship_reducer = RelationshipInputReducer(
             pack,
             profile_ids={str(value["id"]) for value in review_profiles},
         )
@@ -358,14 +362,14 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                                 reason="; ".join(classified.review_reasons),
                             )
                         )
-                    reducer.add(classified)
+                    relationship_reducer.add(classified)
                     assortment_accumulator.add(classified)
-        offers = reducer.offers()
+        offers = relationship_reducer.offers()
         candidate_matches = [
             match
             for review_profile in review_profiles
             for competitor in competitors
-            for match in engine.compare(
+            for match in engine.compare_products(
                 offers,
                 benchmark_id=benchmark,
                 competitor_id=competitor,

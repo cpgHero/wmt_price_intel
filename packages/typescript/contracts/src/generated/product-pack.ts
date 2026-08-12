@@ -57,6 +57,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
       };
       true_terms?: string[];
       false_terms?: string[];
+      absence_policy?: "unknown" | "infer_default";
       default?: unknown;
     }[];
     [k: string]: unknown;

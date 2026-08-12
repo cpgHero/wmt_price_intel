@@ -1159,7 +1159,7 @@ function ComparisonBasisControl({
         <h2>{current?.label ?? "Configured comparison lens"}</h2>
         <p>
           {current
-            ? `${displayLabel(current.comparison_metric)} · ${displayLabel(current.package_basis)} · ${displayLabel(current.geography)}`
+            ? `${displayLabel(current.comparison_metric)} · ${displayLabel(current.package_basis)} · ${displayLabel(current.geography)} · ${current.population_basis === "market_floor" ? "market-floor assortment view" : "resolved product relationships—not market-floor items"}`
             : "Choose the deterministic basis used for the price and segment evidence below."}
         </p>
       </div>

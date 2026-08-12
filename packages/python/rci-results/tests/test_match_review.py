@@ -242,6 +242,85 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
     assert reviewed["connections"][0]["status"] == "confirmed"
 
 
+async def test_match_review_includes_complete_assortment_and_every_active_relationship() -> None:
+    results = FakeResults()
+    results.publication.presentation_context["assortment_analysis"] = {
+        "retailers": [
+            {
+                "retailer": "walmart_us",
+                "products": [
+                    {
+                        "product_id": "w3",
+                        "canonical_product_id": "walmart_us:w3",
+                        "name": "Walmart regional product",
+                        "location_scope_keys": ["walmart_us|72714|store-3"],
+                    }
+                ],
+            },
+            {
+                "retailer": "aldi_us",
+                "products": [
+                    {
+                        "product_id": "a3",
+                        "canonical_product_id": "aldi_us:a3",
+                        "name": "ALDI regional product",
+                    }
+                ],
+            },
+        ]
+    }
+    results.publication.presentation_context["match_relationships"] = [
+        {
+            "relationship_id": "relationship-w3-a3",
+            "competitor_id": "aldi_us",
+            "benchmark_product_id": "w3",
+            "competitor_product_id": "a3",
+            "status": "suggested",
+            "eligible_profile_ids": ["strict"],
+            "qa_status": "ready",
+            "suppression_reasons": [],
+            "scope_mode": "observed_benchmark_product_footprint",
+            "comparison_family_key": "profile:strict",
+            "benchmark_location_scope_keys": ["walmart_us|72714|store-3"],
+        },
+        {
+            "relationship_id": "relationship-w4-a4",
+            "competitor_id": "aldi_us",
+            "benchmark_product_id": "w4",
+            "competitor_product_id": "a4",
+            "status": "suggested",
+            "eligible_profile_ids": ["strict"],
+            "qa_status": "ready",
+            "suppression_reasons": [],
+            "scope_mode": "global",
+            "comparison_family_key": "profile:strict",
+            "benchmark_location_scope_keys": [],
+        },
+    ]
+    service = MatchReviewService(  # type: ignore[arg-type]
+        results,
+        InMemoryMatchReviewRepository(),
+    )
+
+    view = await service.view("analysis")
+    validate_instance(
+        REPOSITORY_ROOT,
+        "product-match-review.schema.json",
+        view,
+        label="complete-match-review",
+    )
+
+    product_ids = {(str(row["retailer_id"]), str(row["product_id"])) for row in view["products"]}
+    assert ("walmart_us", "w3") in product_ids
+    assert ("aldi_us", "a3") in product_ids
+    assert ("walmart_us", "w4") in product_ids
+    assert ("aldi_us", "a4") in product_ids
+    assert any(
+        row["benchmark_product_id"] == "w3" and row["competitor_product_id"] == "a3"
+        for row in view["connections"]
+    )
+
+
 async def test_match_review_is_optimistic_and_strictly_one_to_one() -> None:
     repository = InMemoryMatchReviewRepository()
     service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]

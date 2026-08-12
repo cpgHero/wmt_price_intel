@@ -217,6 +217,9 @@
                     "type": "string"
                   }
                 },
+                "absence_policy": {
+                  "enum": ["unknown", "infer_default"]
+                },
                 "default": {}
               },
               "additionalProperties": false

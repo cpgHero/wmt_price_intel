@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -71,6 +72,39 @@ def test_normalizes_aliases_prices_and_leading_zero_identifiers(
     assert offer.price == Decimal("2.3800")
 
 
+def test_recovers_lossy_scientific_product_identifier_from_retailer_url(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        {
+            "Retailer": "shoprite.com",
+            "Retailer Product Id": "8.15652E+11",
+            "Product Name": "Nellie's Free Range Large Fresh Brown Eggs, 12 count",
+            "Price": "5.49",
+            "Zipcode": "07083",
+            "Retailer Store Id": "262",
+            "Url": ("https://www.shoprite.com/sm/pickup/rsid/447/product/id-00815652004180"),
+        }
+    )
+
+    assert offer.retailer_product_id == "00815652004180"
+
+
+def test_rejects_lossy_scientific_product_identifier_without_recovery_source(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    with pytest.raises(ValueError, match="lossy scientific notation"):
+        normalizer.normalize(
+            {
+                "Retailer": "shoprite.com",
+                "Retailer Product Id": "8.15652E+11",
+                "Product Name": "Fresh Eggs, 12 count",
+                "Price": "5.49",
+                "Zipcode": "07083",
+            }
+        )
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
@@ -127,11 +161,11 @@ def test_normalize_many_deduplicates_identical_canonical_observations(
     assert len(normalizer.normalize_many([row, dict(row)])) == 1
 
 
-def test_classifies_scope_attributes_and_formula_metrics_without_category_branch(
+def test_classifies_scope_attributes_and_leaves_unproven_claims_unknown(
     normalizer: CanonicalOfferNormalizer, classifier: OfferClassifier
 ) -> None:
     conventional = classifier.classify(
-        normalizer.normalize(_row("Fresh Strawberries, 1 lb Container"))
+        normalizer.normalize(_row("Fresh Conventional Standard Strawberries, 1 lb Container"))
     )
     organic = classifier.classify(
         normalizer.normalize(
@@ -142,17 +176,43 @@ def test_classifies_scope_attributes_and_formula_metrics_without_category_branch
     assert conventional.in_scope
     assert conventional.attributes == {
         "weight_oz": 16.0,
-        "organic": False,
+        "organic": None,
         "form": "Fresh Whole",
-        "specialty_claim": "None",
+        "specialty_claim": None,
         "count_each": None,
         "brand": None,
+        "_attribute_provenance": {
+            "weight_oz": "search",
+            "organic": "unresolved",
+            "form": "product_pack_constant",
+            "specialty_claim": "unresolved",
+            "count_each": "unresolved",
+            "brand": "unresolved",
+        },
     }
     assert conventional.metrics["price_per_lb"] == Decimal("2.3800")
     assert organic.attributes["weight_oz"] == 32.0
     assert organic.attributes["organic"] is True
     assert organic.attributes["specialty_claim"] == "Hydroponic"
     assert organic.metrics["price_per_lb"] == Decimal("3.3300")
+
+
+def test_product_pack_must_explicitly_authorize_absence_as_default_evidence(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_strawberries")
+    document = deepcopy(pack.document)
+    document.pop("retailer_overrides")
+    organic = next(row for row in document["attributes"] if row["name"] == "organic")
+    organic["extraction_rules"][0]["absence_policy"] = "infer_default"
+    configured = ProductPackLoader(REPOSITORY_ROOT).load_document(document)
+
+    result = OfferClassifier(configured).classify(
+        normalizer.normalize(_row("Fresh Strawberries, 1 lb Container"))
+    )
+
+    assert result.attributes["organic"] is False
+    assert result.attributes["_attribute_provenance"]["organic"] == "product_pack_default"
 
 
 @pytest.mark.parametrize(

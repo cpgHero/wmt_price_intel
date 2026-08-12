@@ -81,6 +81,8 @@ def test_assortment_metrics_are_distinct_product_and_store_based() -> None:
 
     comparison = result["comparisons"][0]
     assert result["retailers"][0]["distinct_products"] == 2
+    assert {row["product_id"] for row in result["retailers"][0]["products"]} == {"w1", "w2"}
+    assert result["retailers"][0]["products"][0]["location_scope_keys"][0].startswith("walmart_us|")
     assert comparison["product_relationships"] == 1
     assert comparison["benchmark_only_products"] == 1
     assert comparison["competitor_whitespace_products"] == 1
@@ -118,7 +120,17 @@ def test_assortment_reports_brand_breadth_and_geographic_concentration() -> None
         competitors=["aldi_us"],
         profiles=[{"id": "strict", "label": "Exact package", "geography": "exact_zip"}],
         matches=[],
-        ambiguous_groups=[{"competitor_id": "aldi_us"}],
+        ambiguous_groups=[
+            {
+                "competitor_id": "aldi_us",
+                "candidates": [
+                    {
+                        "benchmark_product_id": "w1",
+                        "competitor_product_id": "a1",
+                    }
+                ],
+            }
+        ],
     )
 
     walmart = result["retailers"][0]
@@ -128,6 +140,10 @@ def test_assortment_reports_brand_breadth_and_geographic_concentration() -> None
     assert walmart["top_brands"][0]["brand"] == "National Dairy"
     assert walmart["geographically_concentrated_brands"][0]["brand"] == ("Regional Dairy")
     assert comparison["ambiguous_candidate_groups"] == 1
+    assert comparison["ambiguous_benchmark_products"] == 1
+    assert comparison["ambiguous_competitor_products"] == 1
+    assert comparison["benchmark_only_products"] == 5
+    assert comparison["competitor_whitespace_products"] == 0
 
 
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:

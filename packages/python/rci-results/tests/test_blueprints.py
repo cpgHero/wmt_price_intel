@@ -129,8 +129,9 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
         "aldi_us",
         "amazon_us_same_day",
     ]
-    assert view["schema_version"] == "1.0.0"
+    assert view["schema_version"] == "1.1.0"
     assert view["comparison_bases"][0]["profile_id"] == "strict_exact_package"
+    assert view["comparison_bases"][0]["population_basis"] == "relationship_resolved_products"
     assert view["retailer_scorecards"][0]["basis_status"] == "preferred"
     assert view["retailer_scorecards"][0]["dominant_outcome"] == "competitor_lower"
     assert view["retailer_scorecards"][0]["comparison_metric"] == "package_price"

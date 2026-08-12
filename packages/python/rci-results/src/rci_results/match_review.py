@@ -1112,6 +1112,43 @@ class MatchReviewService:
                 "canonical_product_id": f"{retailer}:{product_id}",
                 "name": str(row.get("name") or product_id),
             }
+        assortment = context.get("assortment_analysis", {})
+        if isinstance(assortment, dict):
+            for retailer_row in assortment.get("retailers", []):
+                if not isinstance(retailer_row, dict):
+                    continue
+                retailer = str(retailer_row.get("retailer") or "")
+                if retailer not in allowed:
+                    continue
+                for row in retailer_row.get("products", []):
+                    if not isinstance(row, dict):
+                        continue
+                    product_id = str(row.get("product_id") or "")
+                    if not product_id:
+                        continue
+                    current = products.setdefault(
+                        (retailer, product_id),
+                        {
+                            **dict(row),
+                            "retailer_id": retailer,
+                            "product_id": product_id,
+                            "canonical_product_id": f"{retailer}:{product_id}",
+                            "name": str(row.get("name") or product_id),
+                        },
+                    )
+                    for key in (
+                        "brand",
+                        "image_url",
+                        "url",
+                        "attributes",
+                        "attribute_variants",
+                        "attribute_conflict",
+                        "observed_locations",
+                        "observed_zipcodes",
+                        "location_scope_keys",
+                    ):
+                        if row.get(key) not in (None, "", [], {}):
+                            current[key] = copy.deepcopy(row[key])
         candidate_rows = context.get("match_candidates", context.get("product_decisions", [])) or []
         for row in candidate_rows:
             if not isinstance(row, dict):
@@ -1152,6 +1189,47 @@ class MatchReviewService:
                             ),
                         }
                     )
+        # A persisted relationship is itself sufficient reason to keep both product
+        # identities reviewable. Older publications may predate the full-assortment
+        # catalog, so fail visible with identifier placeholders instead of dropping
+        # an active relationship from the workbench.
+        for row in context.get("match_relationships", []):
+            if not isinstance(row, dict):
+                continue
+            competitor = str(row.get("competitor_id") or "")
+            benchmark_product_id = str(row.get("benchmark_product_id") or "")
+            competitor_product_id = str(row.get("competitor_product_id") or "")
+            for retailer, product_id in (
+                (benchmark, benchmark_product_id),
+                (competitor, competitor_product_id),
+            ):
+                if retailer not in allowed or not product_id:
+                    continue
+                products.setdefault(
+                    (retailer, product_id),
+                    {
+                        "retailer_id": retailer,
+                        "product_id": product_id,
+                        "canonical_product_id": f"{retailer}:{product_id}",
+                        "name": product_id,
+                    },
+                )
+            if benchmark_product_id and (benchmark, benchmark_product_id) in products:
+                current = products[(benchmark, benchmark_product_id)]
+                current["location_scope_keys"] = sorted(
+                    {
+                        *(
+                            str(value)
+                            for value in current.get("location_scope_keys", [])
+                            if str(value)
+                        ),
+                        *(
+                            str(value)
+                            for value in row.get("benchmark_location_scope_keys", [])
+                            if str(value)
+                        ),
+                    }
+                )
         for rule in rules:
             for retailer, product_id, snapshot in (
                 (benchmark, rule.benchmark_product_id, rule.benchmark_snapshot),
@@ -1281,6 +1359,78 @@ class MatchReviewService:
             if connection["match_basis"] != str(row.get("match_basis") or "exact_package"):
                 connection["match_basis"] = "multiple"
 
+        for row in context.get("match_relationships", []):
+            if not isinstance(row, dict):
+                continue
+            key = (
+                str(row.get("competitor_id") or ""),
+                str(row.get("benchmark_product_id") or ""),
+                str(row.get("competitor_product_id") or ""),
+            )
+            if not all(key):
+                continue
+            eligible = [
+                str(value)
+                for value in row.get("eligible_profile_ids", [])
+                if str(value) in profile_ids
+            ]
+            if not eligible and default_profile_id in profile_ids:
+                eligible = [default_profile_id]
+            if not eligible:
+                continue
+            scope_mode = str(row.get("scope_mode") or "global")
+            family_key = str(row.get("comparison_family_key") or f"profile:{eligible[0]}")
+            scope_definition = {
+                "benchmark_location_scope_keys": list(row.get("benchmark_location_scope_keys", []))
+            }
+            scope_checksum = (
+                str(row.get("scope_checksum") or "")
+                or hashlib.sha256(
+                    json.dumps(
+                        {
+                            "mode": scope_mode,
+                            "relationship_role": "primary",
+                            "comparison_family_key": family_key,
+                            "definition": scope_definition,
+                            "artifact_id": row.get("scope_artifact_id"),
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest()
+            )
+            connections.setdefault(
+                key,
+                {
+                    "id": str(row.get("relationship_id") or "automatic"),
+                    "relationship_id": row.get("relationship_id"),
+                    "candidate_group_id": None,
+                    "competitor_retailer_id": key[0],
+                    "source_profile_id": eligible[0],
+                    "eligible_profile_ids": eligible,
+                    "benchmark_product_id": key[1],
+                    "competitor_product_id": key[2],
+                    "status": str(row.get("status") or "suggested"),
+                    "origin": "automatic",
+                    "reason": "Active governed relationship used by the published analysis",
+                    "matches": None,
+                    "geographies": len(row.get("benchmark_location_scope_keys", [])) or None,
+                    "median_gap": None,
+                    "qa_status": str(row.get("qa_status") or "ready"),
+                    "suppression_reasons": list(row.get("suppression_reasons") or []),
+                    "match_basis": "exact_package",
+                    "profile_evidence": [],
+                    "scope": {
+                        "mode": scope_mode,
+                        "relationship_role": "primary",
+                        "comparison_family_key": family_key,
+                        "definition": scope_definition,
+                        "checksum": scope_checksum,
+                        "artifact_id": row.get("scope_artifact_id"),
+                    },
+                },
+            )
+
         for key, connection in connections.items():
             rule = persisted.get(key)
             connection["eligible_profile_ids"] = sorted(
@@ -1364,6 +1514,7 @@ class MatchReviewService:
                 {"confirmed": 0, "suggested": 1, "ambiguous": 2, "rejected": 3}[str(row["status"])],
                 -int(row.get("matches") or 0),
                 str(row["benchmark_product_id"]),
+                str(row["competitor_product_id"]),
             ),
         )
 

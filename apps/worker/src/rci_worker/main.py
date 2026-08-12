@@ -214,6 +214,10 @@ async def run() -> None:
                     repository_root,
                     product_pack_catalog,
                 ),
+                product_details=PostgresProductDetailRepository(
+                    database.engine,
+                    repository_root,
+                ),
             ),
             worker_id=f"{worker_id}-analysis",
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),

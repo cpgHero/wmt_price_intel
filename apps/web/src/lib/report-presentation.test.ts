@@ -134,8 +134,9 @@ describe("report presentation", () => {
         price_unit: "USD/gallon",
         package_basis: "normalized_unit",
         availability_policy: "search_presence",
+        population_basis: "relationship_resolved_products",
       }),
-    ).toContain("per gallon");
+    ).toContain("resolved product relationships");
   });
 
   it("derives full governed map outcomes from product decisions rather than sampled points", () => {
