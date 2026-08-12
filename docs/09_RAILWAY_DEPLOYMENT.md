@@ -179,8 +179,9 @@ MetricsCart uses query-parameter authentication.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
    ALDI counts and that Target contains only `Country=USA` rows.
-7. Deploy `worker` at one replica with `COLLECTION_PROVIDER=fake`; run a compact smoke collection,
-   confirm leases, completion, and zero external provider calls, then switch to `metricscart`.
+7. Run the fake-provider smoke test only in a non-production environment. Production workers fail
+   closed when `COLLECTION_PROVIDER=fake`; set `COLLECTION_PROVIDER=metricscart` before deploying a
+   production worker.
 8. Use the web collection wizard for a deliberately small one-location MetricsCart strawberry run.
    Verify the exact estimate and approval cap, ALDI availability gate, raw `json.gz` objects, actual
    credits, redacted logs, immutable Parquet datasets, canonical result, and no task duplication.
@@ -242,8 +243,8 @@ consume Walmart search capacity or ALDI PDP capacity.
   service. Avoid rolling application code behind an irreversible schema change.
 - Schema rollback: migrations are reversible and CI exercises `downgrade base`, but production
   downgrades require a database backup and explicit review of data-loss implications.
-- Provider incident: set `COLLECTION_PROVIDER=fake` only for controlled smoke testing, or scale worker
-  to zero to stop external calls. Pending tasks remain durable.
+- Provider incident: use `COLLECTION_PROVIDER=fake` only in a non-production environment, or scale
+  worker to zero to stop external calls. Pending tasks remain durable.
 - Bucket incident: pause workers; do not mark a task successful unless its raw provider response was
   persisted. Restore service only after authenticated put/head/presign checks pass.
 

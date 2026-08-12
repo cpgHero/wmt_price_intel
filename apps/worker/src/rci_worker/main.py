@@ -71,6 +71,20 @@ def _enabled(value: str | None, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _collection_provider_mode(*, app_env: str, configured: str | None) -> str:
+    """Resolve the provider without allowing an accidental production fake run."""
+
+    mode = (configured or "fake").strip().lower()
+    if mode not in {"fake", "metricscart"}:
+        raise ValueError("COLLECTION_PROVIDER must be 'fake' or 'metricscart'")
+    if app_env.strip().lower() == "production" and mode == "fake":
+        raise ValueError(
+            "COLLECTION_PROVIDER=fake is prohibited when APP_ENV=production; "
+            "use a non-production environment for simulated collections"
+        )
+    return mode
+
+
 async def run() -> None:
     # MetricsCart authenticates in the query string. Suppress dependency request logs so
     # the credential can never be emitted as part of a rendered URL.
@@ -104,7 +118,10 @@ async def run() -> None:
         claim_limit=int(os.getenv("PRODUCT_PACK_VALIDATION_CLAIM_LIMIT", "1")),
         lease_seconds=int(os.getenv("PRODUCT_PACK_VALIDATION_LEASE_SECONDS", "900")),
     )
-    provider_mode = os.getenv("COLLECTION_PROVIDER", "fake").strip().lower()
+    provider_mode = _collection_provider_mode(
+        app_env=settings.app_env,
+        configured=os.getenv("COLLECTION_PROVIDER"),
+    )
     metricscart_client: MetricsCartClient | None = None
     provider: CollectionProvider
     adapter_registry = MetricsCartAdapterRegistry.from_catalog(
@@ -136,8 +153,6 @@ async def run() -> None:
             object_store,
         )
         provider = metricscart_client
-    else:
-        raise ValueError("COLLECTION_PROVIDER must be 'fake' or 'metricscart'")
     worker = QueueWorker(
         collection_repository,
         provider,
