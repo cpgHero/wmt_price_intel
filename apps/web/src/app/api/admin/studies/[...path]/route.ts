@@ -24,10 +24,7 @@ async function proxy(request: Request, context: RouteContext) {
   }
   const { path = [] } = await context.params;
   if (path.some((segment) => !SAFE_SEGMENT.test(segment))) {
-    return NextResponse.json(
-      { error: "Invalid study path." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid study path." }, { status: 400 });
   }
   const suffix = path.length ? `/${path.join("/")}` : "";
   const upstreamUrl = new URL(

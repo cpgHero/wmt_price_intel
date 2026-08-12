@@ -393,7 +393,7 @@ function BlueprintAnalysisWorkspace({
       ? "review_required"
       : reportView.report_readiness.status === "limited"
         ? "limited_evidence"
-        : publication?.status ?? analysis.status;
+        : (publication?.status ?? analysis.status);
   return (
     <>
       <header className="workspace-header report-header">
@@ -418,9 +418,7 @@ function BlueprintAnalysisWorkspace({
           </div>
         </div>
         <div className="workspace-status">
-          <span
-            className={`status-badge ${visibleStatus}`}
-          >
+          <span className={`status-badge ${visibleStatus}`}>
             {displayLabel(visibleStatus)}
           </span>
           <ArtifactDownloadButton

@@ -72,9 +72,7 @@ const brandClassificationDecisionValidator = validator(
   "brand-classification-decision.schema.json",
 );
 const brandWorkbenchValidator = validator("brand-workbench.schema.json");
-const brandDiscoveryValidator = validator(
-  "brand-discovery-record.schema.json",
-);
+const brandDiscoveryValidator = validator("brand-discovery-record.schema.json");
 const brandFoundationValidator = validator("brand-foundation.schema.json");
 const retailerPackValidator = validator("retailer-pack.schema.json");
 const historicalInputManifestValidator = validator(
