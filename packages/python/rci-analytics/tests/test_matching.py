@@ -106,6 +106,114 @@ def test_strict_profile_never_crosses_package_weights() -> None:
     assert all(match.comparison_metric == "package_price" for match in matches)
 
 
+def test_exact_package_profile_separates_variable_weight_from_fixed_package() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    document = copy.deepcopy(pack.document)
+    package_format = next(
+        attribute for attribute in document["attributes"] if attribute["name"] == "package_format"
+    )
+    package_format.update(
+        {
+            "role": "matching",
+            "required_for_strict": True,
+            "unknown_policy": "reject_strict",
+            "allowed_values": [
+                "standard",
+                "roll_or_chub",
+                "tray_or_value_pack",
+                "multipack",
+                "variable_weight",
+            ],
+        }
+    )
+    package_format["extraction_rules"][0]["values"]["variable_weight"] = [
+        "per lb",
+        "per pound",
+    ]
+    strict = next(profile for profile in document["matching_profiles"] if profile["id"] == "strict")
+    strict["dimensions"].append("package_format")
+    pack = replace(pack, document=document)
+    normalizer = CanonicalOfferNormalizer(
+        RetailerIdentityMap.from_catalog(REPOSITORY_ROOT / "config" / "retailer-catalog.json")
+    )
+    classifier = OfferClassifier(pack)
+    engine = ComparisonEngine(pack)
+    rows = [
+        {
+            "retailer_id": "walmart_us",
+            "retailer_product_id": "15136795",
+            "title": "73% Lean / 27% Fat Ground Beef, 5 lb Roll, Fresh",
+            "url": "https://www.walmart.com/ip/ground-beef/15136795",
+            "price": "24.94",
+            "zipcode": "71111",
+            "store_number": "1",
+        },
+        {
+            "retailer_id": "aldi_us",
+            "retailer_product_id": "17499083",
+            "title": "73% Lean 27% Fat Ground Beef",
+            "url": ("https://www.aldi.us/store/aldi/products/17499083-ground-beef-chub-5-lb"),
+            "price": "14.39",
+            "zipcode": "71111",
+            "store_number": "475-107",
+        },
+        {
+            "retailer_id": "aldi_us",
+            "retailer_product_id": "19119422",
+            "title": "USDA 73% Lean 27% Fat Ground Beef, per lb",
+            "url": "https://www.aldi.us/store/aldi/products/19119422-ground-beef-per-lb",
+            "price": "25.95",
+            "zipcode": "71111",
+            "store_number": "475-107",
+        },
+    ]
+    offers = classifier.classify_many(normalizer.normalize_many(rows))
+    by_product = {offer.offer.retailer_product_id: offer for offer in offers}
+    assert by_product["15136795"].attributes["package_format"] == "roll_or_chub"
+    assert by_product["17499083"].attributes["package_format"] == "roll_or_chub"
+    assert by_product["19119422"].attributes["package_format"] == "variable_weight"
+
+    relationship_reducer = RelationshipInputReducer(
+        pack,
+        profile_ids={"strict", "unit_price"},
+    )
+    relationship_reducer.extend(offers)
+    relationship_offers = relationship_reducer.offers()
+    offer_products = {
+        offer.offer.offer_id: offer.offer.retailer_product_id for offer in relationship_offers
+    }
+    strict_pairs = {
+        (
+            offer_products[match.benchmark_offer_id],
+            offer_products[match.competitor_offer_id],
+        )
+        for match in engine.compare_products(
+            relationship_offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+    }
+    unit_pairs = {
+        (
+            offer_products[match.benchmark_offer_id],
+            offer_products[match.competitor_offer_id],
+        )
+        for match in engine.compare_products(
+            relationship_offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="unit_price",
+        )
+    }
+
+    assert strict_pairs == {("15136795", "17499083")}
+    assert unit_pairs == {
+        ("15136795", "17499083"),
+        ("15136795", "19119422"),
+    }
+
+
 def test_unit_price_profile_selects_lowest_positive_price_per_lb() -> None:
     offers, engine = _classified()
     aldi = engine.compare(
