@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -847,6 +848,8 @@ class ReportProjector:
         self,
         result: JsonObject,
         product_pack: JsonObject,
+        product_decisions: list[JsonObject] | None = None,
+        product_evidence: JsonObject | None = None,
     ) -> list[JsonObject]:
         """Project one governed comparison scorecard per competitor."""
 
@@ -998,6 +1001,128 @@ class ReportProjector:
                         benchmark_name,
                         self._retailer_name(competitor_id),
                         median_gap,
+                    ),
+                    "status": "ready" if evidence_ready else "limited_evidence",
+                }
+            )
+        return self.reconcile_scorecards_with_product_evidence(
+            scorecards,
+            product_decisions=product_decisions or [],
+            product_evidence=product_evidence or {},
+            benchmark_name=benchmark_name,
+        )
+
+    def reconcile_scorecards_with_product_evidence(
+        self,
+        scorecards: list[JsonObject],
+        *,
+        product_decisions: list[JsonObject],
+        product_evidence: JsonObject,
+        benchmark_name: str,
+    ) -> list[JsonObject]:
+        """Fill zero aggregate scorecards from governed relationship evidence."""
+
+        decisions_by_competitor: dict[str, list[JsonObject]] = defaultdict(list)
+        for decision in product_decisions:
+            competitor = str(decision.get("competitor") or "")
+            if competitor and decision.get("qa_status", "ready") == "ready":
+                decisions_by_competitor[competitor].append(decision)
+        for scorecard in scorecards:
+            competitor_id = str(scorecard.get("competitor_id") or "")
+            decisions = decisions_by_competitor.get(competitor_id, [])
+            if not decisions or float(scorecard.get("matches") or 0) > 0:
+                continue
+            matches = sum(int(row.get("matches") or 0) for row in decisions)
+            if matches <= 0:
+                continue
+            evidence_rows = [
+                evidence_row
+                for decision in decisions
+                for evidence_row in self._rows(
+                    (
+                        product_evidence.get(str(decision.get("id")), {})
+                        if isinstance(product_evidence.get(str(decision.get("id"))), dict)
+                        else {}
+                    ).get("rows")
+                )
+            ]
+            geographies = len(
+                {str(row.get("zipcode")) for row in evidence_rows if row.get("zipcode")}
+            )
+            if not geographies:
+                geographies = max(
+                    (int(row.get("geographies") or 0) for row in decisions), default=0
+                )
+            benchmark_lower = sum(int(row.get("benchmark_lower") or 0) for row in decisions)
+            competitor_lower = sum(int(row.get("competitor_lower") or 0) for row in decisions)
+            parity = sum(int(row.get("parity") or 0) for row in decisions)
+            outcome_total = benchmark_lower + competitor_lower + parity
+            rates_ready = outcome_total == matches
+            gaps = [
+                float(row["median_gap"])
+                for row in decisions
+                if isinstance(row.get("median_gap"), int | float)
+                and not isinstance(row.get("median_gap"), bool)
+            ]
+            median_gap = gaps[0] if len(decisions) == 1 and len(gaps) == 1 else None
+            minimum_observations = int(scorecard.get("minimum_observations") or 1)
+            minimum_geographies = int(scorecard.get("minimum_geographies") or 1)
+            evidence_ready = (
+                matches >= minimum_observations
+                and geographies >= minimum_geographies
+                and rates_ready
+            )
+            shortfalls = []
+            if matches < minimum_observations:
+                shortfalls.append(f"{matches:,} of {minimum_observations:,} required observations")
+            if geographies < minimum_geographies:
+                shortfalls.append(f"{geographies:,} of {minimum_geographies:,} required geographies")
+            if not rates_ready:
+                shortfalls.append("complete price outcomes unavailable")
+            comparison_metrics = {str(row.get("comparison_metric")) for row in decisions}
+            profile_ids = {str(row.get("profile_id")) for row in decisions}
+            comparison_metric = (
+                next(iter(comparison_metrics)) if len(comparison_metrics) == 1 else "package_price"
+            )
+            scorecard.update(
+                {
+                    "profile_id": next(iter(profile_ids)) if len(profile_ids) == 1 else "governed_products",
+                    "comparison_lens": "Governed product relationships",
+                    "comparison_metric": comparison_metric,
+                    "price_unit": self._price_unit(comparison_metric),
+                    "package_basis": (
+                        "exact_package" if comparison_metric == "package_price" else "normalized_unit"
+                    ),
+                    "geography": "exact_zip",
+                    "basis_status": "fallback",
+                    "matches": matches,
+                    "matched_geographies": geographies,
+                    "benchmark_lower_rate": benchmark_lower / matches if rates_ready else None,
+                    "competitor_lower_rate": competitor_lower / matches if rates_ready else None,
+                    "parity_rate": parity / matches if rates_ready else None,
+                    "benchmark_median": None,
+                    "competitor_median": None,
+                    "median_gap": median_gap,
+                    "readiness_reason": (
+                        f"Governed product evidence meets the Product Pack minimum of "
+                        f"{minimum_observations:,} observations across "
+                        f"{minimum_geographies:,} geographies"
+                        if evidence_ready
+                        else "Limited governed product evidence: " + "; ".join(shortfalls)
+                    ),
+                    "dominant_outcome": self._dominant_outcome(
+                        benchmark_lower / matches if rates_ready else None,
+                        competitor_lower / matches if rates_ready else None,
+                        parity / matches if rates_ready else None,
+                    ),
+                    "price_position": (
+                        self._price_position(
+                            benchmark_name,
+                            str(scorecard.get("competitor") or competitor_id),
+                            median_gap,
+                        )
+                        if len(decisions) == 1
+                        else "Price position varies by governed product; open product detail"
                     ),
                     "status": "ready" if evidence_ready else "limited_evidence",
                 }

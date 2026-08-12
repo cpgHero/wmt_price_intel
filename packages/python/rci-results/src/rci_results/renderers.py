@@ -20,7 +20,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.14.0"
+RENDERER_VERSION = "2.15.0"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -2054,6 +2054,12 @@ class ArtifactRenderer:
         )
         if presentation_context:
             view.update(presentation_context)
+        view["retailer_scorecards"] = self._projector.reconcile_scorecards_with_product_evidence(
+            _rows(view, "retailer_scorecards"),
+            product_decisions=_rows(view, "product_decisions"),
+            product_evidence=_mapping(view, "product_evidence"),
+            benchmark_name=_display(view.get("benchmark_retailer") or "Reference retailer"),
+        )
         self._apply_report_integrity(view, result)
         view["result_checksum"] = _result_checksum(result)
         view["publication"] = None

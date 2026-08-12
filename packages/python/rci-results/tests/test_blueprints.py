@@ -454,6 +454,45 @@ def test_retailer_scorecard_contract_scales_to_thirteen_competitors() -> None:
     assert all("required geographies" in row["readiness_reason"] for row in scorecards)
 
 
+def test_zero_scorecard_reconciles_to_governed_product_evidence() -> None:
+    result = _result()
+    result["competitors"] = ["safeway_us"]
+    result["comparisons"] = []
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        result,
+        presentation_context={
+            "product_decisions": [
+                {
+                    "id": "relationship-decision",
+                    "competitor": "safeway_us",
+                    "benchmark_product_id": "walmart-eggs",
+                    "competitor_product_id": "safeway-eggs",
+                    "profile_id": "strict",
+                    "comparison_metric": "price_per_dozen",
+                    "matches": 40,
+                    "geographies": 40,
+                    "benchmark_lower": 30,
+                    "competitor_lower": 5,
+                    "parity": 5,
+                    "median_gap": 0.5,
+                    "qa_status": "ready",
+                }
+            ]
+        },
+    )
+
+    scorecard = view["retailer_scorecards"][0]
+    assert scorecard["basis_status"] == "fallback"
+    assert scorecard["comparison_lens"] == "Governed product relationships"
+    assert scorecard["comparison_metric"] == "price_per_dozen"
+    assert scorecard["matches"] == 40
+    assert scorecard["matched_geographies"] == 40
+    assert scorecard["benchmark_lower_rate"] == 0.75
+    assert scorecard["competitor_lower_rate"] == 0.125
+    assert scorecard["parity_rate"] == 0.125
+    assert scorecard["status"] == "ready"
+
+
 def test_retailer_scorecard_is_limited_when_outcome_shares_do_not_reconcile() -> None:
     result = _result()
     result["metrics"].append(
