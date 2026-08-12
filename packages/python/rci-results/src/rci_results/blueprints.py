@@ -1076,7 +1076,9 @@ class ReportProjector:
             if matches < minimum_observations:
                 shortfalls.append(f"{matches:,} of {minimum_observations:,} required observations")
             if geographies < minimum_geographies:
-                shortfalls.append(f"{geographies:,} of {minimum_geographies:,} required geographies")
+                shortfalls.append(
+                    f"{geographies:,} of {minimum_geographies:,} required geographies"
+                )
             if not rates_ready:
                 shortfalls.append("complete price outcomes unavailable")
             comparison_metrics = {str(row.get("comparison_metric")) for row in decisions}
@@ -1086,12 +1088,16 @@ class ReportProjector:
             )
             scorecard.update(
                 {
-                    "profile_id": next(iter(profile_ids)) if len(profile_ids) == 1 else "governed_products",
+                    "profile_id": next(iter(profile_ids))
+                    if len(profile_ids) == 1
+                    else "governed_products",
                     "comparison_lens": "Governed product relationships",
                     "comparison_metric": comparison_metric,
                     "price_unit": self._price_unit(comparison_metric),
                     "package_basis": (
-                        "exact_package" if comparison_metric == "package_price" else "normalized_unit"
+                        "exact_package"
+                        if comparison_metric == "package_price"
+                        else "normalized_unit"
                     ),
                     "geography": "exact_zip",
                     "basis_status": "fallback",

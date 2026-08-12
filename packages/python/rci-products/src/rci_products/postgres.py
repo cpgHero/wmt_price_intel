@@ -303,6 +303,7 @@ class PostgresProductDetailRepository:
                             WHERE s.canonical_product_id::text = :product_id
                               AND s.request_checksum = :checksum
                               AND s.normalized
+                              AND s.http_status = 200
                               AND s.cache_expires_at > now()
                             ORDER BY s.observed_at DESC, s.id DESC LIMIT 1
                             """
@@ -879,7 +880,8 @@ class PostgresProductDetailRepository:
                               LEFT JOIN LATERAL (
                                 SELECT s.id, s.document
                                 FROM product_detail_snapshot s
-                                WHERE s.canonical_product_id = matched.id AND s.normalized
+                                WHERE s.canonical_product_id = matched.id
+                                  AND s.normalized AND s.http_status = 200
                                 ORDER BY s.observed_at DESC, s.id DESC LIMIT 1
                               ) snapshot ON true
                             )
