@@ -187,3 +187,41 @@ def test_walmart_request_matches_verified_zipcode_contract() -> None:
         "store": "1753",
         "fulfillment_type": "pickup",
     }
+
+
+@pytest.mark.parametrize(
+    ("retailer_id", "product_id", "zipcode", "store", "expected_path"),
+    [
+        ("heb_us", "5819025", "77084", "497", "/mc/heb/pdp/zipcode/"),
+        (
+            "safeway_us",
+            "105300071",
+            "94611",
+            "3132",
+            "/mc/safeway/pdp/zipcode/",
+        ),
+    ],
+)
+def test_regional_retailer_requests_preserve_verified_trailing_slash(
+    retailer_id: str,
+    product_id: str,
+    zipcode: str,
+    store: str,
+    expected_path: str,
+) -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(
+        ProductDetailRequestContext(
+            product_id=product_id,
+            zipcode=zipcode,
+            store=store,
+        )
+    )
+
+    assert request.method == "GET"
+    assert request.path == expected_path
+    assert request.params == {
+        "product_id": product_id,
+        "zipcode": zipcode,
+        "store": store,
+    }

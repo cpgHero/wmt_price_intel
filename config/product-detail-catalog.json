@@ -54,7 +54,7 @@
       "domain": "heb.com",
       "endpoint_id": "93",
       "method": "GET",
-      "path": "/mc/heb/pdp/zipcode",
+      "path": "/mc/heb/pdp/zipcode/",
       "credits_per_successful_page": 1,
       "required_params": ["zipcode", "store"],
       "supported_params": ["url", "product_id", "zipcode", "store"]
@@ -76,7 +76,7 @@
       "domain": "safeway.com",
       "endpoint_id": "151",
       "method": "GET",
-      "path": "/mc/safeway/pdp/zipcode",
+      "path": "/mc/safeway/pdp/zipcode/",
       "credits_per_successful_page": 3,
       "required_params": ["zipcode", "store"],
       "supported_params": ["url", "product_id", "zipcode", "store"]
