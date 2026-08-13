@@ -276,6 +276,7 @@ class PriceMonitoringProjector:
         generated_at: str,
         filters: PriceMonitoringFilters,
         location_index: dict[tuple[str, str], JsonObject] | None = None,
+        eligible_location_index: dict[tuple[str, str], JsonObject] | None = None,
         expected_location_count: int = 0,
         source_rows: int = 0,
         artifact_checksums: Iterable[str] = (),
@@ -283,6 +284,7 @@ class PriceMonitoringProjector:
         retailer_options: Iterable[str] = (),
     ) -> JsonObject:
         location_lookup = location_index or {}
+        eligible_location_lookup = eligible_location_index or location_lookup
         context = product_context or {}
         admitted: list[JsonObject] = []
         excluded = Counter[str]()
@@ -295,7 +297,7 @@ class PriceMonitoringProjector:
         source_locations: dict[str, PriceLocation] = {}
         all_retailers: set[str] = set(retailer_options)
 
-        for (retailer_id, location_key), lookup in location_lookup.items():
+        for (retailer_id, location_key), lookup in eligible_location_lookup.items():
             if retailer_id != filters.retailer_id:
                 continue
             service_area = location_key.startswith("zip:")

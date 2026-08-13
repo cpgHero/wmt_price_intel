@@ -171,34 +171,22 @@ class PostgresPriceMonitoringRepository:
         self,
         collection_run_id: str,
         retailer_id: str,
-    ) -> tuple[dict[tuple[str, str], dict[str, Any]], int]:
+    ) -> tuple[
+        dict[tuple[str, str], dict[str, Any]],
+        dict[tuple[str, str], dict[str, Any]],
+        int,
+    ]:
         locations = text(
             """
-            SELECT DISTINCT ct.retailer_id, ct.store_number,
-                   rl.store_name, ct.zipcode,
-                   rl.city, rl.state, rl.country, rl.latitude, rl.longitude
-            FROM collection_task ct
-            LEFT JOIN LATERAL (
-              SELECT candidate.store_name, candidate.city, candidate.state,
-                     candidate.country, candidate.latitude, candidate.longitude
-              FROM retailer_location candidate
-              WHERE candidate.id = ct.retailer_location_id
-                 OR (
-                   ct.retailer_location_id IS NULL
-                   AND candidate.retailer_id = ct.retailer_id
-                   AND candidate.store_number = ct.store_number
-                 )
-              ORDER BY (candidate.id = ct.retailer_location_id) DESC,
-                       candidate.imported_at DESC
-              LIMIT 1
-            ) rl ON true
-            WHERE ct.collection_run_id::text = :collection_run_id
-              AND ct.retailer_id = :retailer_id
+            SELECT retailer_id, store_number, store_name, zipcode, city, state, country,
+                   latitude, longitude
+            FROM retailer_location
+            WHERE retailer_id = :retailer_id
             """
         )
         planned = text(
             """
-            SELECT count(DISTINCT location_scope_key)::integer
+            SELECT DISTINCT location_scope_key, store_number, zipcode
             FROM collection_task
             WHERE collection_run_id::text = :collection_run_id
               AND retailer_id = :retailer_id
@@ -218,31 +206,35 @@ class PostgresPriceMonitoringRepository:
                 "collection_run_id": collection_run_id,
                 "retailer_id": retailer_id,
             }
-            rows = (await connection.execute(locations, parameters)).mappings()
-            index = {
-                (
-                    str(row["retailer_id"]),
-                    str(row["store_number"])
-                    if row["store_number"] is not None
-                    else f"zip:{row['zipcode']}",
-                ): dict(row)
-                for row in rows
+            rows = (await connection.execute(locations, parameters)).mappings().all()
+            location_index = {
+                (str(row["retailer_id"]), str(row["store_number"])): dict(row) for row in rows
             }
             if retailer_id == "amazon_us_same_day":
                 zip_rows = (await connection.execute(zip_geography)).mappings()
-                geography = {str(row["zipcode"]): dict(row) for row in zip_rows}
-                for value in index.values():
-                    zipcode = str(value["zipcode"])
-                    value.update(geography.get(zipcode, {}))
-                    value["store_name"] = None
-            planned_count = int(
-                await connection.scalar(
-                    planned,
-                    {"collection_run_id": collection_run_id, "retailer_id": retailer_id},
+                location_index.update(
+                    {
+                        (retailer_id, f"zip:{row['zipcode']}"): {
+                            **dict(row),
+                            "store_name": None,
+                        }
+                        for row in zip_rows
+                    }
                 )
-                or 0
-            )
-        return index, planned_count
+            planned_rows = (await connection.execute(planned, parameters)).mappings().all()
+        eligible_index: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in planned_rows:
+            store_number = str(row["store_number"]) if row["store_number"] is not None else None
+            zipcode = str(row["zipcode"]) if row["zipcode"] is not None else None
+            location_key = store_number or (f"zip:{zipcode}" if zipcode else None)
+            if location_key is None:
+                continue
+            context = dict(location_index.get((retailer_id, location_key), {}))
+            context.setdefault("retailer_id", retailer_id)
+            context.setdefault("store_number", store_number)
+            context.setdefault("zipcode", zipcode)
+            eligible_index[(retailer_id, location_key)] = context
+        return location_index, eligible_index, len(planned_rows)
 
     async def product_context(
         self,
@@ -378,7 +370,11 @@ class PriceMonitoringService:
                 if offer.offer.retailer_id == filters.retailer_id and offer.in_scope
             }
         )
-        location_index, expected_locations = await self._repository.location_context(
+        (
+            location_index,
+            eligible_location_index,
+            expected_locations,
+        ) = await self._repository.location_context(
             analysis.collection_run_id,
             filters.retailer_id,
         )
@@ -409,6 +405,7 @@ class PriceMonitoringService:
             generated_at=analysis.created_at.isoformat(),
             filters=filters,
             location_index=location_index,
+            eligible_location_index=eligible_location_index,
             expected_location_count=expected_locations,
             source_rows=(
                 await self._repository.source_rows(
