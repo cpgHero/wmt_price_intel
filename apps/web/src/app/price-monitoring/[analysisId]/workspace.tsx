@@ -138,6 +138,12 @@ function updateQuery(parameters: Record<string, string | null>) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function updateTab(tab: TabId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", tab);
+  window.history.pushState(window.history.state, "", url);
+}
+
 function projectCoordinate(longitude: number, latitude: number) {
   return {
     x: ((longitude + 125) / 59) * 900 + 30,
@@ -801,7 +807,10 @@ export function PriceMonitoringWorkspace({
           <button
             aria-current={tab === item.id ? "page" : undefined}
             key={item.id}
-            onClick={() => updateQuery({ tab: item.id })}
+            onClick={() => {
+              updateTab(item.id);
+              setTab(item.id);
+            }}
             type="button"
           >
             {item.label}
@@ -926,7 +935,10 @@ export function PriceMonitoringWorkspace({
                 </div>
                 <button
                   className="text-link"
-                  onClick={() => updateQuery({ tab: "footprint" })}
+                  onClick={() => {
+                    updateTab("footprint");
+                    setTab("footprint");
+                  }}
                   type="button"
                 >
                   Open footprint →
@@ -942,7 +954,10 @@ export function PriceMonitoringWorkspace({
                 </div>
                 <button
                   className="text-link"
-                  onClick={() => updateQuery({ tab: "price-architecture" })}
+                  onClick={() => {
+                    updateTab("price-architecture");
+                    setTab("price-architecture");
+                  }}
                   type="button"
                 >
                   Open architecture →

@@ -3862,10 +3862,13 @@ tbody tr:last-child td {
   min-width: 0;
 }
 .pi-product-title h1 {
+  display: -webkit-box;
   font-size: clamp(1.25rem, 2.1vw, 2rem);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .pi-tabs {
   overflow-x: auto;
