@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type {
   ApplicationContextControl,
@@ -58,7 +59,6 @@ export function ContextControlBar({
   definition,
 }: Readonly<{ definition: ApplicationContextDefinition }>) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draftValue, setDraftValue] = useState("");
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -104,7 +104,6 @@ export function ContextControlBar({
   }, [activeControl]);
 
   function openControl(control: ApplicationContextControl) {
-    setDraftValue(control.selectedValue ?? control.value);
     setActiveId(control.id);
   }
 
@@ -116,11 +115,10 @@ export function ContextControlBar({
     }
   }
 
-  function applySelection() {
-    if (activeControl?.queryParameter && draftValue) {
+  function selectOption(control: ApplicationContextControl, value: string) {
+    if (control.queryParameter) {
       updateLocation({
-        [activeControl.queryParameter]:
-          draftValue === activeControl.defaultValue ? null : draftValue,
+        [control.queryParameter]: value === control.defaultValue ? null : value,
       });
     }
     closeDrawer();
@@ -165,114 +163,117 @@ export function ContextControlBar({
         ))}
       </div>
 
-      {activeControl ? (
-        <>
-          <button
-            aria-label="Dismiss report context"
-            className={styles.backdrop}
-            onClick={() => closeDrawer()}
-            type="button"
-          />
-          <section
-            aria-labelledby={titleId}
-            aria-modal="true"
-            className={styles.drawer}
-            ref={drawerRef}
-            role="dialog"
-          >
-            <div className={styles.drawerInner}>
-              <header className={styles.drawerHeader}>
-                <div>
-                  <p>{activeControl.label}</p>
-                  <h2 id={titleId}>{activeControl.title}</h2>
-                  <span>{activeControl.description}</span>
-                </div>
-                <button
-                  aria-label="Close report context"
-                  className={styles.closeButton}
-                  onClick={() => closeDrawer()}
-                  ref={closeButtonRef}
-                  type="button"
-                >
-                  <CloseIcon />
-                </button>
-              </header>
-
-              {activeControl.options?.length ? (
-                <div className={styles.optionGrid}>
-                  {activeControl.options.map((option) => (
+      {activeControl
+        ? createPortal(
+            <>
+              <button
+                aria-label="Dismiss report context"
+                className={styles.backdrop}
+                onClick={() => closeDrawer()}
+                type="button"
+              />
+              <section
+                aria-labelledby={titleId}
+                aria-modal="true"
+                className={styles.drawer}
+                ref={drawerRef}
+                role="dialog"
+              >
+                <div className={styles.drawerInner}>
+                  <header className={styles.drawerHeader}>
+                    <div>
+                      <p>{activeControl.label}</p>
+                      <h2 id={titleId}>{activeControl.title}</h2>
+                      <span>{activeControl.description}</span>
+                    </div>
                     <button
-                      aria-pressed={draftValue === option.value}
-                      className={
-                        draftValue === option.value
-                          ? styles.selected
-                          : undefined
-                      }
-                      key={option.value}
-                      onClick={() => setDraftValue(option.value)}
+                      aria-label="Close report context"
+                      className={styles.closeButton}
+                      onClick={() => closeDrawer()}
+                      ref={closeButtonRef}
                       type="button"
                     >
-                      <span className={styles.choiceMark} aria-hidden="true" />
-                      <span>
-                        <strong>{option.label}</strong>
-                        <small>{option.description}</small>
-                      </span>
+                      <CloseIcon />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                  </header>
 
-              {activeControl.facts?.length ? (
-                <dl className={styles.facts}>
-                  {activeControl.facts.map((fact) => (
-                    <div key={fact.label}>
-                      <dt>{fact.label}</dt>
-                      <dd>{fact.value}</dd>
+                  {activeControl.options?.length ? (
+                    <div className={styles.optionGrid}>
+                      {activeControl.options.map((option) => (
+                        <button
+                          aria-pressed={
+                            activeControl.selectedValue === option.value
+                          }
+                          className={
+                            activeControl.selectedValue === option.value
+                              ? styles.selected
+                              : undefined
+                          }
+                          key={option.value}
+                          onClick={() =>
+                            selectOption(activeControl, option.value)
+                          }
+                          type="button"
+                        >
+                          <span
+                            className={styles.choiceMark}
+                            aria-hidden="true"
+                          />
+                          <span>
+                            <strong>{option.label}</strong>
+                            <small>{option.description}</small>
+                          </span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </dl>
-              ) : null}
+                  ) : null}
 
-              {activeControl.messages?.length ? (
-                <div className={styles.messages}>
-                  {activeControl.messages.map((message) => (
-                    <p key={message}>{message}</p>
-                  ))}
+                  {activeControl.facts?.length ? (
+                    <dl className={styles.facts}>
+                      {activeControl.facts.map((fact) => (
+                        <div key={fact.label}>
+                          <dt>{fact.label}</dt>
+                          <dd>{fact.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+
+                  {activeControl.messages?.length ? (
+                    <div className={styles.messages}>
+                      {activeControl.messages.map((message) => (
+                        <p key={message}>{message}</p>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {activeControl.action || !activeControl.options?.length ? (
+                    <footer className={styles.drawerActions}>
+                      {activeControl.action ? (
+                        <button
+                          className={styles.secondaryAction}
+                          onClick={() => {
+                            closeDrawer(false);
+                            if (activeControl.action) {
+                              updateLocation(activeControl.action.parameters);
+                            }
+                          }}
+                          type="button"
+                        >
+                          {activeControl.action.label}
+                        </button>
+                      ) : null}
+                      <button onClick={() => closeDrawer()} type="button">
+                        Close
+                      </button>
+                    </footer>
+                  ) : null}
                 </div>
-              ) : null}
-
-              <footer className={styles.drawerActions}>
-                {activeControl.action ? (
-                  <button
-                    className={styles.secondaryAction}
-                    onClick={() => {
-                      closeDrawer(false);
-                      if (activeControl.action) {
-                        updateLocation(activeControl.action.parameters);
-                      }
-                    }}
-                    type="button"
-                  >
-                    {activeControl.action.label}
-                  </button>
-                ) : null}
-                <button onClick={() => closeDrawer()} type="button">
-                  {activeControl.options?.length ? "Cancel" : "Close"}
-                </button>
-                {activeControl.options?.length ? (
-                  <button
-                    className={styles.primaryAction}
-                    onClick={applySelection}
-                    type="button"
-                  >
-                    Apply context
-                  </button>
-                ) : null}
-              </footer>
-            </div>
-          </section>
-        </>
-      ) : null}
+              </section>
+            </>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

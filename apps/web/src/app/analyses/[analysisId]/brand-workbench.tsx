@@ -212,16 +212,13 @@ export function BrandWorkbenchPanel({
 
   return (
     <section className="brand-workbench-shell">
-      <div className="brand-workbench-intro">
-        <div>
-          <p className="eyebrow">Human-governed brand intelligence</p>
-          <h2>Confirm how every observed brand should be understood</h2>
-          <p>
-            Product Packs propose private-label, regional, and national brand
-            roles. Search evidence determines where each brand is actually
-            distributed; a broad footprint alone never proves a national role.
-          </p>
-        </div>
+      <div className="specialist-context-strip">
+        <p>
+          <strong>Human-governed brand intelligence</strong>
+          Product Packs propose private-label, regional, and national brand
+          roles. Search evidence determines where each brand is actually
+          distributed; a broad footprint alone never proves a national role.
+        </p>
         <div className="brand-revision-card">
           <small>Current decision set</small>
           <strong>Revision {workbench.revision}</strong>

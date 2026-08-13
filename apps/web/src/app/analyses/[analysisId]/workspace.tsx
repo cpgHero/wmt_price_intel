@@ -860,19 +860,13 @@ function AssortmentAnalysisPanel({
   );
   return (
     <div className="assortment-analysis">
-      <header className="assortment-hero">
-        <div>
-          <p className="eyebrow">Assortment intelligence</p>
-          <h2>
-            Where {benchmark.name} overlaps—and where each retailer stands alone
-          </h2>
-          <p>
-            Product counts come from in-scope Search results. Matches are
-            admitted by Product Pack rules across the available comparison
-            lenses; unmatched products are whitespace signals for review, not
-            assumed substitutes.
-          </p>
-        </div>
+      <div className="specialist-context-strip assortment-context-strip">
+        <p>
+          <strong>{benchmark.name} assortment scope</strong>
+          Product counts come from in-scope Search results. Product Pack rules
+          admit relationships across the available comparison lenses; unmatched
+          products are whitespace signals for review, not assumed substitutes.
+        </p>
         <aside>
           <small>{benchmark.name} observed assortment</small>
           <strong>
@@ -884,7 +878,7 @@ function AssortmentAnalysisPanel({
             locations
           </span>
         </aside>
-      </header>
+      </div>
       <div className="assortment-model-guide">
         <article>
           <small>Item relationship</small>

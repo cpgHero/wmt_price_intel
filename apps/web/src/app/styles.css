@@ -4898,6 +4898,53 @@ tbody tr:last-child td {
   display: grid;
   gap: 1.25rem;
 }
+.specialist-context-strip {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.85rem 1rem;
+}
+.specialist-context-strip > p {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 90ch;
+}
+.specialist-context-strip > p strong {
+  color: var(--ink);
+  display: block;
+  font-size: 0.76rem;
+  margin-bottom: 0.12rem;
+}
+.specialist-context-strip .match-revision-card,
+.specialist-context-strip .brand-revision-card,
+.assortment-context-strip aside {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  gap: 0.35rem;
+  min-width: 230px;
+  padding: 0.7rem 0.8rem;
+}
+.specialist-context-strip .match-revision-card span,
+.specialist-context-strip .brand-revision-card span,
+.assortment-context-strip aside span,
+.assortment-context-strip aside small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.assortment-context-strip aside {
+  display: grid;
+}
+.assortment-context-strip aside strong {
+  font-size: 1.35rem;
+}
 .match-review-intro {
   align-items: stretch;
   background: linear-gradient(135deg, #071b2a 0%, #0b3545 62%, #075c71 100%);
@@ -5277,7 +5324,8 @@ tbody tr:last-child td {
   }
 }
 @media (max-width: 700px) {
-  .match-review-intro {
+  .match-review-intro,
+  .specialist-context-strip {
     grid-template-columns: 1fr;
   }
   .match-summary-strip {

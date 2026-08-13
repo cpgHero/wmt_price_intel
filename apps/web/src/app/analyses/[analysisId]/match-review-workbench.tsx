@@ -781,16 +781,13 @@ export function MatchReviewWorkbench({
 
   return (
     <section className="match-review-shell">
-      <div className="match-review-intro">
-        <div>
-          <p className="eyebrow">Governed one-to-one matching</p>
-          <h2>Review exactly which products should be compared</h2>
-          <p>
-            Suggested pairs are the deterministic Product Pack relationships
-            used by the current automated analysis. Confirm a pair to lock it,
-            or reject it to remove it from the next governed analysis.
-          </p>
-        </div>
+      <div className="specialist-context-strip">
+        <p>
+          <strong>Governed product relationships</strong>
+          Suggested pairs are the deterministic Product Pack relationships used
+          by the current analysis. Confirm a pair to lock it, or reject it to
+          remove it from the next governed analysis.
+        </p>
         <div className="match-revision-card">
           <small>Current decision set</small>
           <strong>Revision {review.revision}</strong>

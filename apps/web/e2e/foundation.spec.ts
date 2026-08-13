@@ -88,6 +88,12 @@ test("supports the responsive application navigation", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Expand sidebar" }),
   ).toBeVisible();
+  await sidebar.getByRole("button", { name: "Operations" }).hover();
+  const operationsFlyout = page.getByLabel("Operations navigation");
+  await expect(operationsFlyout).toBeVisible();
+  await expect(
+    operationsFlyout.getByRole("link", { name: /Schedules & Alerts/ }),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(sidebar).toBeHidden();

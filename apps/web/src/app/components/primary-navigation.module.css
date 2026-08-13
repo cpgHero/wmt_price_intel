@@ -1,6 +1,8 @@
 .navigation {
+  align-content: start;
   display: grid;
   gap: 0.3rem;
+  grid-auto-rows: max-content;
   padding: 0.7rem 0.55rem 1.2rem;
 }
 
@@ -189,11 +191,14 @@
 }
 
 :global(.shell-compact) .groupButton {
-  display: none;
+  display: flex;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0;
 }
 
 :global(.shell-compact) .children {
-  grid-template-rows: 1fr;
+  display: none;
 }
 
 :global(.shell-compact) .links {
@@ -225,6 +230,87 @@
   display: none;
 }
 
+:global(.shell-compact) .groupLabel,
+:global(.shell-compact) .groupChevron {
+  display: none;
+}
+
+:global(.shell-compact) .groupIcon {
+  flex-basis: 32px;
+  height: 32px;
+  width: 32px;
+}
+
+.compactFlyout {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(5, 18, 24, 0.22);
+  color: var(--ink);
+  left: 84px;
+  min-width: 275px;
+  padding: 0.55rem;
+  position: fixed;
+  z-index: 90;
+}
+
+.compactFlyout > header {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.35rem 0.4rem 0.6rem;
+}
+
+.compactFlyout > header strong {
+  font-size: 0.68rem;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.compactFlyout > div {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.4rem;
+}
+
+.compactFlyout a {
+  align-items: center;
+  border-radius: 9px;
+  color: var(--ink);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 30px minmax(0, 1fr);
+  min-height: 44px;
+  padding: 0.42rem 0.5rem;
+}
+
+.compactFlyout a:hover,
+.compactFlyout a:focus-visible {
+  background: var(--surface-alt);
+}
+
+.compactFlyout a.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.compactFlyout a > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.compactFlyout a strong {
+  font-size: 0.72rem;
+}
+
+.compactFlyout a small {
+  color: var(--muted);
+  font-size: 0.59rem;
+  line-height: 1.25;
+}
+
 @media (max-width: 1180px) and (min-width: 901px) {
   .navigation {
     gap: 0.15rem;
@@ -236,11 +322,14 @@
   }
 
   .groupButton {
-    display: none;
+    display: flex;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0;
   }
 
   .children {
-    grid-template-rows: 1fr;
+    display: none;
   }
 
   .links {
@@ -271,6 +360,17 @@
   .copy {
     display: none;
   }
+
+  .groupLabel,
+  .groupChevron {
+    display: none;
+  }
+
+  .groupIcon {
+    flex-basis: 32px;
+    height: 32px;
+    width: 32px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -289,6 +389,7 @@
   }
 
   :global(.shell-compact) .children {
+    display: grid;
     grid-template-rows: 0fr;
   }
 
@@ -323,6 +424,21 @@
 
   :global(.shell-compact) .copy {
     display: inline;
+  }
+
+  :global(.shell-compact) .groupLabel,
+  :global(.shell-compact) .groupChevron {
+    display: flex;
+  }
+
+  :global(.shell-compact) .groupIcon {
+    flex-basis: 24px;
+    height: 24px;
+    width: 24px;
+  }
+
+  .compactFlyout {
+    display: none;
   }
 }
 

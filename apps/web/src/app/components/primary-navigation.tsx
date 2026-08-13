@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   applicationNavigation,
@@ -40,6 +41,44 @@ export function PrimaryNavigation({
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(["workspace", "intelligence", activeGroupId]),
   );
+  const [flyout, setFlyout] = useState<{
+    group: NavigationGroup;
+    top: number;
+  } | null>(null);
+  const closeTimer = useRef<number | null>(null);
+
+  function navigationIsCompact(element: HTMLElement) {
+    return (
+      !window.matchMedia("(max-width: 900px)").matches &&
+      (element.closest(".shell-compact") !== null ||
+        window.matchMedia("(max-width: 1180px)").matches)
+    );
+  }
+
+  function cancelFlyoutClose() {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }
+
+  function openFlyout(group: NavigationGroup, element: HTMLElement) {
+    if (!navigationIsCompact(element)) return false;
+    cancelFlyoutClose();
+    const bounds = element.getBoundingClientRect();
+    const estimatedHeight = 66 + group.items.length * 42;
+    setFlyout({
+      group,
+      top: Math.max(
+        8,
+        Math.min(bounds.top - 8, window.innerHeight - estimatedHeight - 8),
+      ),
+    });
+    return true;
+  }
+
+  function scheduleFlyoutClose() {
+    cancelFlyoutClose();
+    closeTimer.current = window.setTimeout(() => setFlyout(null), 120);
+  }
 
   function toggleGroup(groupId: string) {
     setOpenGroups((current) => {
@@ -60,12 +99,19 @@ export function PrimaryNavigation({
           <section
             className={`${styles.group} ${open ? styles.open : ""} ${containsActive ? styles.containsActive : ""}`}
             key={group.id}
+            onMouseLeave={scheduleFlyoutClose}
           >
             <button
               aria-controls={childrenId}
               aria-expanded={open}
               className={styles.groupButton}
-              onClick={() => toggleGroup(group.id)}
+              onClick={(event) => {
+                if (!openFlyout(group, event.currentTarget)) {
+                  toggleGroup(group.id);
+                }
+              }}
+              onFocus={(event) => openFlyout(group, event.currentTarget)}
+              onMouseEnter={(event) => openFlyout(group, event.currentTarget)}
               title={group.label}
               type="button"
             >
@@ -102,6 +148,50 @@ export function PrimaryNavigation({
           </section>
         );
       })}
+      {flyout
+        ? createPortal(
+            <aside
+              aria-label={`${flyout.group.label} navigation`}
+              className={styles.compactFlyout}
+              onMouseEnter={cancelFlyoutClose}
+              onMouseLeave={scheduleFlyoutClose}
+              style={{ top: flyout.top }}
+            >
+              <header>
+                <span className={styles.groupIcon}>
+                  <NavigationIcon name={groupIcons[flyout.group.id]} />
+                </span>
+                <strong>{flyout.group.label}</strong>
+              </header>
+              <div>
+                {flyout.group.items.map((item) => {
+                  const active = navigationItemIsActive(pathname, item);
+                  return (
+                    <Link
+                      aria-current={active ? "page" : undefined}
+                      className={active ? styles.active : undefined}
+                      href={item.href}
+                      key={item.href}
+                      onClick={() => {
+                        setFlyout(null);
+                        onNavigate?.();
+                      }}
+                    >
+                      <span className={styles.icon}>
+                        <NavigationIcon name={item.icon} />
+                      </span>
+                      <span>
+                        <strong>{item.label}</strong>
+                        <small>{item.description}</small>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </aside>,
+            document.body,
+          )
+        : null}
     </nav>
   );
 }

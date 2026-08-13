@@ -316,12 +316,6 @@
   margin-right: auto;
 }
 
-.drawerActions .primaryAction {
-  background: var(--green-dark);
-  border-color: var(--green-dark);
-  color: #ffffff;
-}
-
 @media (max-width: 1180px) {
   .copy small,
   .icon {
