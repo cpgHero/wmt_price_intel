@@ -4624,12 +4624,42 @@ tbody tr:last-child td {
 .workbench-index-card > .button {
   justify-self: start;
 }
+.governance-detail-page {
+  display: grid;
+  gap: 1rem;
+}
+.governance-detail-actions {
+  align-items: center;
+}
+.governance-detail-actions p {
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.match-builder.read-only {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.match-row-actions a {
+  background: var(--green-soft);
+  border-radius: 8px;
+  color: var(--green);
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 0.58rem 0.7rem;
+  text-align: center;
+}
+.brand-card footer.read-only {
+  display: flex;
+  justify-content: flex-end;
+}
 @media (max-width: 760px) {
   .workbench-index-guide,
   .workbench-index-grid {
     grid-template-columns: 1fr;
   }
   .workbench-index-card dl {
+    grid-template-columns: 1fr;
+  }
+  .match-builder.read-only {
     grid-template-columns: 1fr;
   }
 }

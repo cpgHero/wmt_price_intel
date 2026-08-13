@@ -17,6 +17,7 @@ export interface ApplicationContextFact {
 
 export interface ApplicationContextControl {
   action?: {
+    href?: string;
     label: string;
     parameters: Record<string, string | null>;
   };

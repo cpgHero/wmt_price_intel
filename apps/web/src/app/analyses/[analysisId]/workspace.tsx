@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
@@ -219,6 +220,7 @@ function BlueprintAnalysisWorkspace({
   analysis: AnalysisRecord;
   reportView: AnalysisReportView;
 }>) {
+  const router = useRouter();
   const groupedSections = groupReportSections(
     reportView.sections,
     reportView.groups,
@@ -305,23 +307,25 @@ function BlueprintAnalysisWorkspace({
     const pairReference =
       decision.relationship_id ||
       `${decision.benchmark_product_id}::${decision.competitor_product_id}`;
-    setActiveGroup("match-review");
-    setSelectedCompetitor(
-      competitorOptions.find((option) =>
-        matchesRetailer(decision.competitor, option),
-      )?.id ?? selectedCompetitor,
+    const parameters = new URLSearchParams();
+    const competitor = competitorOptions.find((option) =>
+      matchesRetailer(decision.competitor, option),
+    )?.id;
+    if (competitor) parameters.set("competitor", competitor);
+    if (decision.profile_id) parameters.set("lens", decision.profile_id);
+    parameters.set("pair", pairReference);
+    router.push(
+      `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}?${parameters.toString()}`,
     );
-    setSelectedLens(decision.profile_id || preferredBasis);
-    setSelectedPair(pairReference);
-    updateRoute({
-      tab: "match-review",
-      competitor:
-        competitorOptions.find((option) =>
-          matchesRetailer(decision.competitor, option),
-        )?.id ?? null,
-      lens: decision.profile_id || null,
-      pair: pairReference,
-    });
+  };
+  const openMatchWorkbench = () => {
+    const parameters = new URLSearchParams();
+    if (selectedCompetitor !== "all")
+      parameters.set("competitor", selectedCompetitor);
+    if (selectedLens) parameters.set("lens", selectedLens);
+    router.push(
+      `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}?${parameters.toString()}`,
+    );
   };
   const selectedRetailer =
     competitorOptions.find((option) => option.id === selectedCompetitor) ??
@@ -488,7 +492,12 @@ function BlueprintAnalysisWorkspace({
           action: reportView.match_governance.ambiguous
             ? {
                 label: `Review ${reportView.match_governance.ambiguous.toLocaleString()} ambiguous matches`,
-                parameters: { tab: "match-review", pair: null },
+                href: `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}`,
+                parameters: {
+                  competitor:
+                    selectedCompetitor === "all" ? null : selectedCompetitor,
+                  lens: selectedLens || null,
+                },
               }
             : undefined,
         },
@@ -496,6 +505,7 @@ function BlueprintAnalysisWorkspace({
     };
   }, [
     competitorOptions,
+    analysis.analysis_id,
     readiness,
     reportView.comparison_bases,
     reportView.match_governance,
@@ -554,7 +564,7 @@ function BlueprintAnalysisWorkspace({
             onClick={() => selectGroup(group.id)}
             key={group.id}
           >
-            {group.label}
+            {group.id === "match-review" ? "Match Evidence" : group.label}
           </button>
         ))}
         <button
@@ -564,7 +574,7 @@ function BlueprintAnalysisWorkspace({
           className={activeGroup === "brand-workbench" ? "active" : ""}
           onClick={() => selectGroup("brand-workbench")}
         >
-          Brand Workbench
+          Brand Evidence
         </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
@@ -576,9 +586,10 @@ function BlueprintAnalysisWorkspace({
             focusedRelationshipId={selectedPair}
             onCompetitorSelect={selectCompetitor}
             onProfileSelect={selectLens}
+            readOnly
           />
         ) : activeGroup === "brand-workbench" ? (
-          <BrandWorkbenchPanel analysisId={analysis.analysis_id} />
+          <BrandWorkbenchPanel analysisId={analysis.analysis_id} readOnly />
         ) : activeGroup === "exports" ? (
           <Section
             title="Delivery artifacts"
@@ -613,7 +624,7 @@ function BlueprintAnalysisWorkspace({
                   reportView.product_pack.minimum_cohort_geographies ?? 1
                 }
                 ambiguousMatches={reportView.match_governance.ambiguous}
-                onReviewMatches={() => selectGroup("match-review")}
+                onReviewMatches={openMatchWorkbench}
               />
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
@@ -1883,7 +1894,7 @@ function ProductEvidenceDrawer({
                     </p>
                     <span>
                       <button type="button" onClick={onReviewMatch}>
-                        Review or change this match
+                        Open in Match Workbench
                       </button>
                       <a
                         href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}

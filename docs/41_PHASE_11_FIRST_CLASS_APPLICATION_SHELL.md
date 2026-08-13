@@ -119,6 +119,9 @@ rule.
 - Compact report mastheads and dense tab rails preserve vertical space for decision content.
 - The report route owns the single page masthead. Specialist tabs may add compact context strips,
   but not a second hero or page masthead.
+- Reports own read-only match and brand evidence: coverage, status, pair or brand details, unmatched
+  products, and governed handoffs. Workspace owns all confirm, reject, reset, manual pairing,
+  classification, revision, and re-evaluation mutations.
 - Light/dark theme and reduced-motion support.
 - URL and route continuity for all existing pages.
 - Presentation preferences may use browser storage; analytical scope never does.

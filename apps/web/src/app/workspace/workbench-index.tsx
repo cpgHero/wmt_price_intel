@@ -14,7 +14,7 @@ const copy = {
     description:
       "Choose a category to review, confirm, reject, or manually create product relationships. Decisions remain analysis-scoped until you explicitly apply a revision to later collections.",
     action: "Open match review",
-    tab: "match-review",
+    path: "matches",
     availability: "Match review available",
   },
   brands: {
@@ -23,7 +23,7 @@ const copy = {
     description:
       "Choose a category to review private-label, regional, and national brand classifications. Search and PDP evidence remain attached to each governed decision.",
     action: "Open brand workbench",
-    tab: "brand-workbench",
+    path: "brands",
     availability: "Brand review available",
   },
 } as const;
@@ -129,7 +129,7 @@ export async function WorkbenchIndex({
                 </dl>
                 <Link
                   className="button primary"
-                  href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}?tab=${content.tab}`}
+                  href={`/workspace/${content.path}/${encodeURIComponent(summary.analysis.analysis_id)}`}
                 >
                   {content.action}
                 </Link>

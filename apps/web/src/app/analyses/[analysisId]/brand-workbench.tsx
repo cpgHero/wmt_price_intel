@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { BrandWorkbench, BrandWorkbenchBrand } from "@/lib/api";
@@ -41,7 +42,17 @@ function originLabel(origin: BrandWorkbenchBrand["origin"]) {
 
 export function BrandWorkbenchPanel({
   analysisId,
-}: Readonly<{ analysisId: string }>) {
+  readOnly = false,
+  scopedRetailerId,
+  focusedBrand,
+  routeBasePath,
+}: Readonly<{
+  analysisId: string;
+  readOnly?: boolean;
+  scopedRetailerId?: string | null;
+  focusedBrand?: string | null;
+  routeBasePath?: string;
+}>) {
   const [workbench, setWorkbench] = useState<BrandWorkbench | null>(null);
   const [retailerId, setRetailerId] = useState("");
   const [query, setQuery] = useState("");
@@ -61,9 +72,12 @@ export function BrandWorkbenchPanel({
       throw new Error(body.error || "Brand governance is unavailable.");
     setWorkbench(body);
     setRetailerId((current) =>
-      body.retailers.some((row) => row.id === current)
-        ? current
-        : body.retailers[0]?.id || "",
+      scopedRetailerId &&
+      body.retailers.some((row) => row.id === scopedRetailerId)
+        ? scopedRetailerId
+        : body.retailers.some((row) => row.id === current)
+          ? current
+          : body.retailers[0]?.id || "",
     );
     setRoles(
       Object.fromEntries(
@@ -74,7 +88,25 @@ export function BrandWorkbenchPanel({
       ),
     );
     setMessage("");
-  }, [analysisId]);
+  }, [analysisId, scopedRetailerId]);
+
+  function updateWorkbenchRoute(retailer: string) {
+    if (!routeBasePath) return;
+    const url = new URL(window.location.href);
+    url.pathname = routeBasePath;
+    url.searchParams.set("retailer", retailer);
+    url.searchParams.delete("brand");
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  function brandWorkbenchHref(brand?: BrandWorkbenchBrand) {
+    const base =
+      routeBasePath ?? `/workspace/brands/${encodeURIComponent(analysisId)}`;
+    const parameters = new URLSearchParams();
+    if (retailerId) parameters.set("retailer", retailerId);
+    if (brand) parameters.set("brand", brand.normalized_brand);
+    return `${base}?${parameters.toString()}`;
+  }
 
   useEffect(() => {
     // Loading is the external synchronization performed by this effect.
@@ -96,7 +128,7 @@ export function BrandWorkbenchPanel({
     [retailerId, workbench],
   );
   const visibleBrands = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = (query || focusedBrand || "").trim().toLocaleLowerCase();
     return retailerBrands.filter((brand) => {
       if (status !== "all" && brand.status !== status) return false;
       if (!needle) return true;
@@ -110,7 +142,7 @@ export function BrandWorkbenchPanel({
         .toLocaleLowerCase()
         .includes(needle);
     });
-  }, [query, retailerBrands, status]);
+  }, [focusedBrand, query, retailerBrands, status]);
   const retailerName =
     workbench?.retailers.find((retailer) => retailer.id === retailerId)?.name ||
     retailerId;
@@ -217,18 +249,27 @@ export function BrandWorkbenchPanel({
           <strong>Human-governed brand intelligence</strong>
           Product Packs propose private-label, regional, and national brand
           roles. Search evidence determines where each brand is actually
-          distributed; a broad footprint alone never proves a national role.
+          distributed; a broad footprint alone never proves a national role.{" "}
+          {readOnly
+            ? "This report view is read-only; open Workspace to govern classifications."
+            : ""}
         </p>
         <div className="brand-revision-card">
           <small>Current decision set</small>
           <strong>Revision {workbench.revision}</strong>
-          <button
-            type="button"
-            disabled={busyKey !== null || workbench.revision < 1}
-            onClick={() => setShowRecompute(true)}
-          >
-            Re-evaluate report
-          </button>
+          {readOnly ? (
+            <Link className="button secondary" href={brandWorkbenchHref()}>
+              Open Brand Workbench
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={busyKey !== null || workbench.revision < 1}
+              onClick={() => setShowRecompute(true)}
+            >
+              Re-evaluate report
+            </button>
+          )}
           <span>
             {workbench.future_application
               ? `Future collections use revision ${workbench.future_application.revision}`
@@ -255,7 +296,10 @@ export function BrandWorkbenchPanel({
               role="tab"
               aria-selected={retailer.id === retailerId}
               className={retailer.id === retailerId ? "active" : ""}
-              onClick={() => setRetailerId(retailer.id)}
+              onClick={() => {
+                setRetailerId(retailer.id);
+                updateWorkbenchRoute(retailer.id);
+              }}
               key={retailer.id}
             >
               {retailer.name}
@@ -404,52 +448,63 @@ export function BrandWorkbenchPanel({
                 </p>
               )}
 
-              <footer>
-                <label>
-                  Brand role
-                  <select
-                    value={roles[key] || brand.role}
-                    onChange={(event) =>
-                      setRoles((current) => ({
-                        ...current,
-                        [key]: event.target.value as BrandRole,
-                      }))
-                    }
+              <footer className={readOnly ? "read-only" : undefined}>
+                {readOnly ? (
+                  <Link
+                    className="button secondary"
+                    href={brandWorkbenchHref(brand)}
                   >
-                    {Object.entries(roleLabels).map(([value, label]) => (
-                      <option value={value} key={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <span>
-                  <button
-                    type="button"
-                    disabled={busyKey !== null}
-                    onClick={() => void decide(brand, "confirmed")}
-                  >
-                    Confirm role
-                  </button>
-                  <button
-                    type="button"
-                    className="quiet"
-                    disabled={busyKey !== null}
-                    onClick={() => void decide(brand, "rejected")}
-                  >
-                    Reject
-                  </button>
-                  {brand.origin === "user" ? (
-                    <button
-                      type="button"
-                      className="quiet"
-                      disabled={busyKey !== null}
-                      onClick={() => void decide(brand, "reset")}
-                    >
-                      Reset
-                    </button>
-                  ) : null}
-                </span>
+                    Open in Brand Workbench
+                  </Link>
+                ) : (
+                  <>
+                    <label>
+                      Brand role
+                      <select
+                        value={roles[key] || brand.role}
+                        onChange={(event) =>
+                          setRoles((current) => ({
+                            ...current,
+                            [key]: event.target.value as BrandRole,
+                          }))
+                        }
+                      >
+                        {Object.entries(roleLabels).map(([value, label]) => (
+                          <option value={value} key={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span>
+                      <button
+                        type="button"
+                        disabled={busyKey !== null}
+                        onClick={() => void decide(brand, "confirmed")}
+                      >
+                        Confirm role
+                      </button>
+                      <button
+                        type="button"
+                        className="quiet"
+                        disabled={busyKey !== null}
+                        onClick={() => void decide(brand, "rejected")}
+                      >
+                        Reject
+                      </button>
+                      {brand.origin === "user" ? (
+                        <button
+                          type="button"
+                          className="quiet"
+                          disabled={busyKey !== null}
+                          onClick={() => void decide(brand, "reset")}
+                        >
+                          Reset
+                        </button>
+                      ) : null}
+                    </span>
+                  </>
+                )}
               </footer>
             </article>
           );
@@ -468,7 +523,7 @@ export function BrandWorkbenchPanel({
         imagery. Role changes are staged until a user explicitly re-evaluates.
       </p>
 
-      {showRecompute ? (
+      {!readOnly && showRecompute ? (
         <div
           className="match-drawer-backdrop match-recompute-backdrop"
           role="presentation"

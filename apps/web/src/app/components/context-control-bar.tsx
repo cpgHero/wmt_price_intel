@@ -255,7 +255,21 @@ export function ContextControlBar({
                           onClick={() => {
                             closeDrawer(false);
                             if (activeControl.action) {
-                              updateLocation(activeControl.action.parameters);
+                              if (activeControl.action.href) {
+                                const destination = new URL(
+                                  activeControl.action.href,
+                                  window.location.origin,
+                                );
+                                for (const [key, value] of Object.entries(
+                                  activeControl.action.parameters,
+                                )) {
+                                  if (value)
+                                    destination.searchParams.set(key, value);
+                                }
+                                window.location.assign(destination);
+                              } else {
+                                updateLocation(activeControl.action.parameters);
+                              }
                             }
                           }}
                           type="button"

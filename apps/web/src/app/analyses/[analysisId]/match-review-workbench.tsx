@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -119,6 +120,7 @@ function MatchBuilderProduct({
   draggable = false,
   onDropProduct,
   crossLensMemberships = [],
+  readOnly = false,
 }: Readonly<{
   product: MatchReviewProduct;
   retailerName: string;
@@ -128,6 +130,7 @@ function MatchBuilderProduct({
   draggable?: boolean;
   onDropProduct?: (productId: string) => void;
   crossLensMemberships?: CrossLensMembership[];
+  readOnly?: boolean;
 }>) {
   return (
     <article
@@ -150,7 +153,7 @@ function MatchBuilderProduct({
         type="button"
         className="match-product-select"
         aria-pressed={selected}
-        onClick={onSelect}
+        onClick={readOnly ? onView : onSelect}
       >
         <ProductImage product={product} retailerName={retailerName} />
         <span className="match-product-copy">
@@ -300,6 +303,8 @@ function MatchEvidenceDrawer({
   busy,
   message,
   onDecide,
+  readOnly,
+  workbenchHref,
 }: Readonly<{
   selection: DetailSelection;
   profileId: string;
@@ -309,6 +314,8 @@ function MatchEvidenceDrawer({
   busy: boolean;
   message: string;
   onDecide: (decision: Decision) => void;
+  readOnly: boolean;
+  workbenchHref: string;
 }>) {
   const evidence = selection.connection
     ? evidenceForProfile(selection.connection, profileId)
@@ -444,35 +451,43 @@ function MatchEvidenceDrawer({
           </p>
           {selection.connection ? (
             <span>
-              {selection.connection.status !== "confirmed" ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onDecide("confirmed")}
-                >
-                  Confirm relationship
-                </button>
-              ) : null}
-              {selection.connection.status !== "rejected" ? (
-                <button
-                  type="button"
-                  className="quiet"
-                  disabled={busy}
-                  onClick={() => onDecide("rejected")}
-                >
-                  Reject relationship
-                </button>
-              ) : null}
-              {selection.connection.origin === "user" ? (
-                <button
-                  type="button"
-                  className="quiet"
-                  disabled={busy}
-                  onClick={() => onDecide("reset")}
-                >
-                  Reset to automatic
-                </button>
-              ) : null}
+              {readOnly ? (
+                <Link className="button primary" href={workbenchHref}>
+                  Open relationship in Match Workbench
+                </Link>
+              ) : (
+                <>
+                  {selection.connection.status !== "confirmed" ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onDecide("confirmed")}
+                    >
+                      Confirm relationship
+                    </button>
+                  ) : null}
+                  {selection.connection.status !== "rejected" ? (
+                    <button
+                      type="button"
+                      className="quiet"
+                      disabled={busy}
+                      onClick={() => onDecide("rejected")}
+                    >
+                      Reject relationship
+                    </button>
+                  ) : null}
+                  {selection.connection.origin === "user" ? (
+                    <button
+                      type="button"
+                      className="quiet"
+                      disabled={busy}
+                      onClick={() => onDecide("reset")}
+                    >
+                      Reset to automatic
+                    </button>
+                  ) : null}
+                </>
+              )}
             </span>
           ) : null}
         </footer>
@@ -488,6 +503,8 @@ export function MatchReviewWorkbench({
   focusedRelationshipId,
   onCompetitorSelect,
   onProfileSelect,
+  readOnly = false,
+  routeBasePath,
 }: Readonly<{
   analysisId: string;
   scopedCompetitorId: string | null;
@@ -495,6 +512,8 @@ export function MatchReviewWorkbench({
   focusedRelationshipId: string | null;
   onCompetitorSelect?: (competitorId: string) => void;
   onProfileSelect?: (profileId: string) => void;
+  readOnly?: boolean;
+  routeBasePath?: string;
 }>) {
   const [review, setReview] = useState<MatchReview | null>(null);
   const [competitorId, setCompetitorId] = useState("");
@@ -511,6 +530,34 @@ export function MatchReviewWorkbench({
   const [showRecompute, setShowRecompute] = useState(false);
   const [message, setMessage] = useState("Loading governed match review…");
   const [openedFocus, setOpenedFocus] = useState<string | null>(null);
+
+  function updateWorkbenchRoute(updates: Record<string, string | null>) {
+    if (!routeBasePath) return;
+    const url = new URL(window.location.href);
+    url.pathname = routeBasePath;
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  function workbenchHref(connection?: MatchReviewConnection) {
+    const base =
+      routeBasePath ?? `/workspace/matches/${encodeURIComponent(analysisId)}`;
+    const parameters = new URLSearchParams();
+    if (competitorId) parameters.set("competitor", competitorId);
+    if (profileId) parameters.set("lens", profileId);
+    if (connection) {
+      parameters.set(
+        "pair",
+        connection.relationship_id ||
+          connection.id ||
+          `${connection.benchmark_product_id}::${connection.competitor_product_id}`,
+      );
+    }
+    return `${base}?${parameters.toString()}`;
+  }
 
   const load = useCallback(async () => {
     const response = await fetch(
@@ -785,19 +832,27 @@ export function MatchReviewWorkbench({
         <p>
           <strong>Governed product relationships</strong>
           Suggested pairs are the deterministic Product Pack relationships used
-          by the current analysis. Confirm a pair to lock it, or reject it to
-          remove it from the next governed analysis.
+          by the current analysis.{" "}
+          {readOnly
+            ? "This report view is read-only; open Workspace to change governed relationships."
+            : "Confirm a pair to lock it, or reject it to remove it from the next governed analysis."}
         </p>
         <div className="match-revision-card">
           <small>Current decision set</small>
           <strong>Revision {review.revision}</strong>
-          <button
-            type="button"
-            onClick={() => setShowRecompute(true)}
-            disabled={busy || review.revision < 1}
-          >
-            Re-evaluate report
-          </button>
+          {readOnly ? (
+            <Link className="button secondary" href={workbenchHref()}>
+              Open Match Workbench
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowRecompute(true)}
+              disabled={busy || review.revision < 1}
+            >
+              Re-evaluate report
+            </button>
+          )}
           <span>
             {review.future_application
               ? `Future collections use revision ${review.future_application.revision}`
@@ -830,6 +885,7 @@ export function MatchReviewWorkbench({
               onClick={() => {
                 setCompetitorId(retailer.id);
                 onCompetitorSelect?.(retailer.id);
+                updateWorkbenchRoute({ competitor: retailer.id, pair: null });
                 setBenchmarkId(null);
                 setCompetitorProductId(null);
               }}
@@ -846,6 +902,7 @@ export function MatchReviewWorkbench({
             onChange={(event) => {
               setProfileId(event.target.value);
               onProfileSelect?.(event.target.value);
+              updateWorkbenchRoute({ lens: event.target.value, pair: null });
               const next = review.profiles.find(
                 (profile) => profile.id === event.target.value,
               );
@@ -1056,59 +1113,67 @@ export function MatchReviewWorkbench({
                 onView={() => setDetails({ benchmark, competitor, connection })}
               />
               <span className="match-row-actions">
-                {connection.status !== "confirmed" ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      decide(
-                        "confirmed",
-                        connection.benchmark_product_id,
-                        connection.competitor_product_id,
-                        false,
-                        connection,
-                      )
-                    }
-                  >
-                    Confirm
-                  </button>
-                ) : null}
-                {connection.status !== "rejected" ? (
-                  <button
-                    type="button"
-                    className="quiet"
-                    disabled={busy}
-                    onClick={() =>
-                      decide(
-                        "rejected",
-                        connection.benchmark_product_id,
-                        connection.competitor_product_id,
-                        false,
-                        connection,
-                      )
-                    }
-                  >
-                    Reject
-                  </button>
-                ) : null}
-                {connection.origin === "user" ? (
-                  <button
-                    type="button"
-                    className="quiet"
-                    disabled={busy}
-                    onClick={() =>
-                      decide(
-                        "reset",
-                        connection.benchmark_product_id,
-                        connection.competitor_product_id,
-                        false,
-                        connection,
-                      )
-                    }
-                  >
-                    Reset
-                  </button>
-                ) : null}
+                {readOnly ? (
+                  <Link href={workbenchHref(connection)}>
+                    Open in Workspace
+                  </Link>
+                ) : (
+                  <>
+                    {connection.status !== "confirmed" ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          decide(
+                            "confirmed",
+                            connection.benchmark_product_id,
+                            connection.competitor_product_id,
+                            false,
+                            connection,
+                          )
+                        }
+                      >
+                        Confirm
+                      </button>
+                    ) : null}
+                    {connection.status !== "rejected" ? (
+                      <button
+                        type="button"
+                        className="quiet"
+                        disabled={busy}
+                        onClick={() =>
+                          decide(
+                            "rejected",
+                            connection.benchmark_product_id,
+                            connection.competitor_product_id,
+                            false,
+                            connection,
+                          )
+                        }
+                      >
+                        Reject
+                      </button>
+                    ) : null}
+                    {connection.origin === "user" ? (
+                      <button
+                        type="button"
+                        className="quiet"
+                        disabled={busy}
+                        onClick={() =>
+                          decide(
+                            "reset",
+                            connection.benchmark_product_id,
+                            connection.competitor_product_id,
+                            false,
+                            connection,
+                          )
+                        }
+                      >
+                        Reset
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </span>
             </article>
           );
@@ -1143,7 +1208,11 @@ export function MatchReviewWorkbench({
         <summary>
           <span>
             <small>Manual matching</small>
-            <strong>Create a relationship from unmatched products</strong>
+            <strong>
+              {readOnly
+                ? "View products without an active relationship"
+                : "Create a relationship from unmatched products"}
+            </strong>
           </span>
           <em>
             {unmatchedBenchmark.length} {review.benchmark_retailer.name} ·{" "}
@@ -1153,9 +1222,12 @@ export function MatchReviewWorkbench({
         <p className="manual-match-explainer">
           These lists contain only products without a suggested or confirmed
           relationship for the selected competitor and lens. Their alphabetical
-          positions do not imply a pairing.
+          positions do not imply a pairing.{" "}
+          {readOnly
+            ? "Open a product for identity details or continue to Workspace to create a relationship."
+            : ""}
         </p>
-        <div className="match-builder">
+        <div className={`match-builder ${readOnly ? "read-only" : ""}`}>
           <div>
             <header>
               <span>Primary retailer products</span>
@@ -1175,10 +1247,15 @@ export function MatchReviewWorkbench({
                       `${review.benchmark_retailer.id}:${product.product_id}`
                     ]
                   }
-                  onDropProduct={(productId) => {
-                    setBenchmarkId(product.product_id);
-                    setCompetitorProductId(productId);
-                  }}
+                  onDropProduct={
+                    readOnly
+                      ? undefined
+                      : (productId) => {
+                          setBenchmarkId(product.product_id);
+                          setCompetitorProductId(productId);
+                        }
+                  }
+                  readOnly={readOnly}
                 />
               ))}
               {!unmatchedBenchmark.length ? (
@@ -1188,26 +1265,28 @@ export function MatchReviewWorkbench({
               ) : null}
             </div>
           </div>
-          <div className="match-builder-center">
-            <span className="match-line" />
-            <strong>
-              {competitorProductId && benchmarkId
-                ? "Ready to connect"
-                : "Select one product on each side"}
-            </strong>
-            <button
-              type="button"
-              disabled={busy || !competitorProductId || !benchmarkId}
-              onClick={() => decide("confirmed")}
-            >
-              Confirm relationship
-            </button>
-            <small>
-              One primary match is allowed per overlapping store footprint. The
-              same item may support another relationship only where the
-              primary-product footprints are disjoint.
-            </small>
-          </div>
+          {!readOnly ? (
+            <div className="match-builder-center">
+              <span className="match-line" />
+              <strong>
+                {competitorProductId && benchmarkId
+                  ? "Ready to connect"
+                  : "Select one product on each side"}
+              </strong>
+              <button
+                type="button"
+                disabled={busy || !competitorProductId || !benchmarkId}
+                onClick={() => decide("confirmed")}
+              >
+                Confirm relationship
+              </button>
+              <small>
+                One primary match is allowed per overlapping store footprint.
+                The same item may support another relationship only where the
+                primary-product footprints are disjoint.
+              </small>
+            </div>
+          ) : null}
           <div>
             <header>
               <span>Competitor products</span>
@@ -1227,7 +1306,8 @@ export function MatchReviewWorkbench({
                       `${competitorId}:${product.product_id}`
                     ]
                   }
-                  draggable
+                  draggable={!readOnly}
+                  readOnly={readOnly}
                 />
               ))}
               {!unmatchedCompetitor.length ? (
@@ -1249,6 +1329,12 @@ export function MatchReviewWorkbench({
           onClose={() => setDetails(null)}
           busy={busy}
           message={message}
+          readOnly={readOnly}
+          workbenchHref={
+            details.connection
+              ? workbenchHref(details.connection)
+              : workbenchHref()
+          }
           onDecide={(decision) => {
             if (!details.connection) return;
             void decide(
@@ -1261,7 +1347,7 @@ export function MatchReviewWorkbench({
           }}
         />
       ) : null}
-      {showRecompute ? (
+      {!readOnly && showRecompute ? (
         <div
           className="match-drawer-backdrop match-recompute-backdrop"
           role="presentation"
