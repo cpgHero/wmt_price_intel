@@ -72,6 +72,18 @@ def test_normalizes_aliases_prices_and_leading_zero_identifiers(
     assert offer.price == Decimal("2.3800")
 
 
+def test_normalizes_search_sponsorship_boolean(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    sponsored = normalizer.normalize(_row("Fresh Strawberries, 1 lb", is_sponsored=True))
+    organic = normalizer.normalize(
+        _row("Fresh Strawberries, 2 lb", product_id="product-2", is_sponsored=False)
+    )
+
+    assert sponsored.is_sponsored is True
+    assert organic.is_sponsored is False
+
+
 def test_recovers_lossy_scientific_product_identifier_from_retailer_url(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:

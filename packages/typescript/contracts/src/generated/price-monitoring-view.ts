@@ -5,6 +5,7 @@ export type EvidenceRate = EvidenceRate1 & {
   known_observations: number;
   in_stock_observations?: number;
   promotion_observations?: number;
+  sponsorship_observations?: number;
   rate: number | null;
   definition: string;
 };
@@ -13,7 +14,7 @@ export type EvidenceRate1 = {
 };
 
 export interface RetailCompetitiveIntelligencePriceMonitoringView {
-  schema_version: "1.1.0";
+  schema_version: "1.2.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
@@ -24,6 +25,7 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
   };
   source: {
     authority: "Search";
+    location_authority: "Retailer location master";
     grain: "retailer product x retailer location x latest observation in run";
     observed_start: string | null;
     observed_end: string | null;
@@ -36,6 +38,7 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     brand_type: "all" | "private_label" | "regional" | "national" | "unclassified";
     state: string | null;
     city: string | null;
+    zipcode: string | null;
     product_id: string | null;
   };
   filter_options: {
@@ -43,6 +46,7 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     brand_types: ValueLabelCount[];
     states: ValueLabelCount[];
     cities: ValueLabelCount[];
+    zipcodes: ValueLabelCount[];
     products: ProductOption[];
   };
   summary: {
@@ -62,6 +66,18 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     not_observed_locations: number;
     confirmed_gap_locations: number;
     definition: string;
+  };
+  distribution_gaps: {
+    status: "search_non_observation";
+    definition: string;
+    location_display: {
+      returned: number;
+      total: number;
+      sampled: boolean;
+      missing_location_details: number;
+    };
+    geographies: GapGeography[];
+    locations: GapLocation[];
   };
   price_distribution: PriceStats;
   price_histogram: PriceBin[];
@@ -122,6 +138,30 @@ export interface ProductOption {
   brand_type: "private_label" | "regional" | "national" | "unclassified";
   image_url: string | null;
 }
+export interface GapGeography {
+  level: "state" | "city" | "zipcode";
+  key: string;
+  label: string;
+  state: string | null;
+  city: string | null;
+  zipcode: string | null;
+  eligible_locations: number;
+  observed_locations: number;
+  not_observed_locations: number;
+  observed_rate: number | null;
+}
+export interface GapLocation {
+  scope_key: string;
+  kind: "store" | "service_area";
+  store_number: string | null;
+  store_name: string | null;
+  zipcode: string | null;
+  city: string | null;
+  state: string | null;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+}
 export interface PriceStats {
   minimum: number | null;
   q1: number | null;
@@ -141,11 +181,12 @@ export interface PriceBin {
   share: number;
 }
 export interface Geography {
-  level: "country" | "state" | "city";
+  level: "country" | "state" | "city" | "zipcode";
   key: string;
   label: string;
   state: string | null;
   city: string | null;
+  zipcode?: string | null;
   locations: number;
   products: number;
   observations: number;
@@ -169,6 +210,7 @@ export interface LocationSummary {
   minimum_price: number | null;
   median_price: number | null;
   maximum_price: number | null;
+  sponsorship_status: "sponsored" | "organic" | "mixed" | "unknown";
 }
 export interface ProductSummary {
   product_id: string;
@@ -186,6 +228,7 @@ export interface ProductSummary {
   consistency_rate: number | null;
   availability: EvidenceRate;
   promotion: EvidenceRate;
+  sponsorship: EvidenceRate;
   price_histogram: PriceBin[];
   sample_locations: ProductLocation[];
 }
@@ -197,6 +240,7 @@ export interface ProductLocation {
   city: string | null;
   state: string | null;
   price: number;
+  is_sponsored: boolean | null;
   observed_at: string | null;
 }
 export interface StoreException {

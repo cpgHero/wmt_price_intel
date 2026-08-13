@@ -26,6 +26,8 @@ def _classified(
     price: str | None,
     collected_at: str,
     in_scope: bool = True,
+    in_stock: bool | None = True,
+    is_sponsored: bool | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
         offer=NormalizedOffer(
@@ -40,11 +42,12 @@ def _classified(
             store_number=store,
             latitude=36.37,
             longitude=-94.21,
-            in_stock=True,
+            in_stock=in_stock,
             product_url=f"https://www.walmart.com/ip/{product_id}",
             image_url=None,
             collected_at=collected_at,
             raw={},
+            is_sponsored=is_sponsored,
         ),
         in_scope=in_scope,
         scope_reason=None if in_scope else "excluded by Product Pack",
@@ -246,6 +249,7 @@ def test_classified_parquet_record_preserves_explicit_price_components() -> None
             source.offer,
             regular_price=Decimal("5.99"),
             discounted_price=Decimal("5.49"),
+            is_sponsored=True,
         ),
     )
 
@@ -253,6 +257,90 @@ def test_classified_parquet_record_preserves_explicit_price_components() -> None
 
     assert restored.offer.regular_price == Decimal("5.99")
     assert restored.offer.discounted_price == Decimal("5.49")
+    assert restored.offer.is_sponsored is True
+
+
+def test_price_monitoring_uses_positive_search_price_for_stock_and_boolean_for_sponsorship() -> (
+    None
+):
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    projector = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offers = [
+        _classified(
+            offer_id="sponsored",
+            product_id="100",
+            store="1",
+            price="5.00",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=False,
+            is_sponsored=True,
+        ),
+        _classified(
+            offer_id="organic",
+            product_id="100",
+            store="2",
+            price="5.25",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=None,
+            is_sponsored=False,
+        ),
+    ]
+    locations = {
+        ("walmart_us", "1"): {
+            "store_name": "Store One",
+            "zipcode": "72712",
+            "city": "Bentonville",
+            "state": "AR",
+            "country": "USA",
+        },
+        ("walmart_us", "2"): {
+            "store_name": "Store Two",
+            "zipcode": "72756",
+            "city": "Rogers",
+            "state": "AR",
+            "country": "USA",
+        },
+        ("walmart_us", "3"): {
+            "store_name": "Store Three",
+            "zipcode": "75201",
+            "city": "Dallas",
+            "state": "TX",
+            "country": "USA",
+        },
+    }
+    view = projector.build(
+        offers,
+        analysis_id="signals-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(
+            retailer_id="walmart_us",
+            product_id="100",
+        ),
+        location_index=locations,
+        eligible_location_index=locations,
+        expected_location_count=3,
+    )
+
+    product = view["products"][0]
+    assert product["availability"] == {
+        "status": "observed",
+        "known_observations": 2,
+        "in_stock_observations": 2,
+        "rate": 1.0,
+        "definition": (
+            "A product observed in Search with a price greater than zero is treated "
+            "as available/in stock at that location."
+        ),
+    }
+    assert product["sponsorship"]["rate"] == 0.5
+    assert view["presence"]["not_observed_locations"] == 1
+    assert view["distribution_gaps"]["locations"][0]["store_name"] == "Store Three"
+    tx_gap = next(row for row in view["distribution_gaps"]["geographies"] if row["key"] == "TX")
+    assert tx_gap["not_observed_locations"] == 1
+    assert tx_gap["observed_rate"] == 0.0
 
 
 def test_price_monitoring_flags_exact_product_modal_price_exception() -> None:

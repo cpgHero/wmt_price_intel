@@ -228,6 +228,7 @@ class CanonicalOfferNormalizer:
             raw=dict(source),
             regular_price=regular_price,
             discounted_price=discounted_price,
+            is_sponsored=_boolean(_first(source, "is_sponsored", "sponsored", "Is Sponsored")),
         )
 
     def normalize_many(self, rows: list[JsonObject]) -> list[NormalizedOffer]:

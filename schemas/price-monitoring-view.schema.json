@@ -15,6 +15,7 @@
     "filter_options",
     "summary",
     "presence",
+    "distribution_gaps",
     "price_distribution",
     "price_histogram",
     "brand_portfolio",
@@ -27,7 +28,7 @@
     "movement"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "product_pack": { "$ref": "#/$defs/idNameVersion" },
@@ -46,6 +47,7 @@
       "additionalProperties": false,
       "required": [
         "authority",
+        "location_authority",
         "grain",
         "observed_start",
         "observed_end",
@@ -55,6 +57,7 @@
       ],
       "properties": {
         "authority": { "const": "Search" },
+        "location_authority": { "const": "Retailer location master" },
         "grain": { "const": "retailer product x retailer location x latest observation in run" },
         "observed_start": { "type": ["string", "null"], "format": "date-time" },
         "observed_end": { "type": ["string", "null"], "format": "date-time" },
@@ -70,7 +73,7 @@
     "filters": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["retailer_id", "brand_type", "state", "city", "product_id"],
+      "required": ["retailer_id", "brand_type", "state", "city", "zipcode", "product_id"],
       "properties": {
         "retailer_id": { "type": "string" },
         "brand_type": {
@@ -78,18 +81,20 @@
         },
         "state": { "type": ["string", "null"] },
         "city": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
         "product_id": { "type": ["string", "null"] }
       }
     },
     "filter_options": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["retailers", "brand_types", "states", "cities", "products"],
+      "required": ["retailers", "brand_types", "states", "cities", "zipcodes", "products"],
       "properties": {
         "retailers": { "type": "array", "items": { "$ref": "#/$defs/idName" } },
         "brand_types": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
         "states": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
         "cities": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
+        "zipcodes": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
         "products": { "type": "array", "items": { "$ref": "#/$defs/productOption" } }
       }
     },
@@ -127,6 +132,28 @@
         "not_observed_locations": { "type": "integer", "minimum": 0 },
         "confirmed_gap_locations": { "type": "integer", "minimum": 0 },
         "definition": { "type": "string" }
+      }
+    },
+    "distribution_gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "definition", "location_display", "geographies", "locations"],
+      "properties": {
+        "status": { "const": "search_non_observation" },
+        "definition": { "type": "string" },
+        "location_display": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["returned", "total", "sampled", "missing_location_details"],
+          "properties": {
+            "returned": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 },
+            "sampled": { "type": "boolean" },
+            "missing_location_details": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "geographies": { "type": "array", "items": { "$ref": "#/$defs/gapGeography" } },
+        "locations": { "type": "array", "items": { "$ref": "#/$defs/gapLocation" } }
       }
     },
     "price_distribution": { "$ref": "#/$defs/priceStats" },
@@ -260,12 +287,14 @@
         "known_observations": { "type": "integer", "minimum": 0 },
         "in_stock_observations": { "type": "integer", "minimum": 0 },
         "promotion_observations": { "type": "integer", "minimum": 0 },
+        "sponsorship_observations": { "type": "integer", "minimum": 0 },
         "rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "definition": { "type": "string" }
       },
       "anyOf": [
         { "required": ["in_stock_observations"] },
-        { "required": ["promotion_observations"] }
+        { "required": ["promotion_observations"] },
+        { "required": ["sponsorship_observations"] }
       ]
     },
     "priceStats": {
@@ -301,11 +330,12 @@
       "additionalProperties": false,
       "required": ["level", "key", "label", "state", "city", "locations", "products", "observations", "price_stats"],
       "properties": {
-        "level": { "enum": ["country", "state", "city"] },
+        "level": { "enum": ["country", "state", "city", "zipcode"] },
         "key": { "type": "string" },
         "label": { "type": "string" },
         "state": { "type": ["string", "null"] },
         "city": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
         "locations": { "type": "integer", "minimum": 0 },
         "products": { "type": "integer", "minimum": 0 },
         "observations": { "type": "integer", "minimum": 0 },
@@ -317,7 +347,7 @@
     "locationSummary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scope_key", "kind", "store_number", "store_name", "zipcode", "city", "state", "country", "latitude", "longitude", "products", "observations", "minimum_price", "median_price", "maximum_price"],
+      "required": ["scope_key", "kind", "store_number", "store_name", "zipcode", "city", "state", "country", "latitude", "longitude", "products", "observations", "minimum_price", "median_price", "maximum_price", "sponsorship_status"],
       "properties": {
         "scope_key": { "type": "string" },
         "kind": { "enum": ["store", "service_area"] },
@@ -334,12 +364,13 @@
         "minimum_price": { "type": ["number", "null"], "minimum": 0 },
         "median_price": { "type": ["number", "null"], "minimum": 0 },
         "maximum_price": { "type": ["number", "null"], "minimum": 0 }
+        ,"sponsorship_status": { "enum": ["sponsored", "organic", "mixed", "unknown"] }
       }
     },
     "productSummary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["product_id", "name", "brand", "brand_type", "brand_origin", "brand_status", "image_url", "url", "locations", "states", "cities", "price_stats", "consistency_rate", "availability", "promotion", "price_histogram", "sample_locations"],
+      "required": ["product_id", "name", "brand", "brand_type", "brand_origin", "brand_status", "image_url", "url", "locations", "states", "cities", "price_stats", "consistency_rate", "availability", "promotion", "sponsorship", "price_histogram", "sample_locations"],
       "properties": {
         "product_id": { "type": "string" },
         "name": { "type": "string" },
@@ -356,6 +387,7 @@
         "consistency_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "availability": { "$ref": "#/$defs/evidenceRate" },
         "promotion": { "$ref": "#/$defs/evidenceRate" },
+        "sponsorship": { "$ref": "#/$defs/evidenceRate" },
         "price_histogram": { "type": "array", "items": { "$ref": "#/$defs/priceBin" } },
         "sample_locations": { "type": "array", "items": { "$ref": "#/$defs/productLocation" } }
       }
@@ -381,10 +413,44 @@
         "reason": { "type": "string" }
       }
     },
+    "gapGeography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "key", "label", "state", "city", "zipcode", "eligible_locations", "observed_locations", "not_observed_locations", "observed_rate"],
+      "properties": {
+        "level": { "enum": ["state", "city", "zipcode"] },
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "eligible_locations": { "type": "integer", "minimum": 0 },
+        "observed_locations": { "type": "integer", "minimum": 0 },
+        "not_observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "gapLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_key", "kind", "store_number", "store_name", "zipcode", "city", "state", "country", "latitude", "longitude"],
+      "properties": {
+        "scope_key": { "type": "string" },
+        "kind": { "enum": ["store", "service_area"] },
+        "store_number": { "type": ["string", "null"] },
+        "store_name": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"] },
+        "country": { "type": "string" },
+        "latitude": { "type": ["number", "null"] },
+        "longitude": { "type": ["number", "null"] }
+      }
+    },
     "productLocation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scope_key", "store_number", "store_name", "zipcode", "city", "state", "price", "observed_at"],
+      "required": ["scope_key", "store_number", "store_name", "zipcode", "city", "state", "price", "is_sponsored", "observed_at"],
       "properties": {
         "scope_key": { "type": "string" },
         "store_number": { "type": ["string", "null"] },
@@ -393,6 +459,7 @@
         "city": { "type": ["string", "null"] },
         "state": { "type": ["string", "null"] },
         "price": { "type": "number", "minimum": 0 },
+        "is_sponsored": { "type": ["boolean", "null"] },
         "observed_at": { "type": ["string", "null"], "format": "date-time" }
       }
     }

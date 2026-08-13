@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "analysis_id": "fresh_ground_beef-example",
   "generated_at": "2026-08-13T12:00:00Z",
   "product_pack": {
@@ -14,6 +14,7 @@
   },
   "source": {
     "authority": "Search",
+    "location_authority": "Retailer location master",
     "grain": "retailer product x retailer location x latest observation in run",
     "observed_start": null,
     "observed_end": null,
@@ -26,6 +27,7 @@
     "brand_type": "all",
     "state": null,
     "city": null,
+    "zipcode": null,
     "product_id": null
   },
   "filter_options": {
@@ -38,6 +40,7 @@
     ],
     "states": [],
     "cities": [],
+    "zipcodes": [],
     "products": []
   },
   "summary": {
@@ -57,6 +60,18 @@
     "not_observed_locations": 0,
     "confirmed_gap_locations": 0,
     "definition": "Observed presence means the selected product appeared in successful Search evidence. A Search non-observation is not proof that a store does not carry the product."
+  },
+  "distribution_gaps": {
+    "status": "search_non_observation",
+    "definition": "Not observed means the selected product did not appear in the successful Search result for a planned location. It is a location review signal, not proof that the retailer does not carry the item.",
+    "location_display": {
+      "returned": 0,
+      "total": 0,
+      "sampled": false,
+      "missing_location_details": 0
+    },
+    "geographies": [],
+    "locations": []
   },
   "price_distribution": {
     "minimum": null,

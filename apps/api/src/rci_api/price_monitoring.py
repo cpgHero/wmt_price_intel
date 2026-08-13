@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
 import json
 import os
 from dataclasses import dataclass
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import polars as pl
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -38,6 +39,20 @@ class ClassifiedArtifact:
     storage_uri: str
     checksum: str
     row_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedPriceMonitoringData:
+    analysis: Any
+    projector: PriceMonitoringProjector
+    offers: tuple[Any, ...]
+    location_index: dict[tuple[str, str], dict[str, Any]]
+    eligible_location_index: dict[tuple[str, str], dict[str, Any]]
+    expected_locations: int
+    source_rows: int
+    artifact_checksums: tuple[str, ...]
+    product_context: dict[str, dict[str, Any]]
+    retailer_options: tuple[str, ...]
 
 
 class S3ParquetReader:
@@ -108,6 +123,7 @@ class S3ParquetReader:
             "price",
             "regular_price",
             "discounted_price",
+            "is_sponsored",
             "currency",
             "zipcode",
             "store_number",
@@ -335,6 +351,9 @@ class PriceMonitoringService:
         self._repository = repository
         self._packs = product_pack_loader
         self._reader = reader
+        self._prepared_cache: dict[tuple[str, str], PreparedPriceMonitoringData] = {}
+        self._prepared_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         catalog = json.loads((repository_root / "config" / "retailer-catalog.json").read_text())
         self._retailer_names = {
             str(row["id"]): str(row["display_name"])
@@ -342,88 +361,204 @@ class PriceMonitoringService:
             if isinstance(row, dict) and row.get("id") and row.get("display_name")
         }
 
-    async def view(self, analysis_id: str, filters: PriceMonitoringFilters) -> dict[str, Any]:
-        if filters.city is not None and filters.state is None:
-            raise ValueError("a city filter requires its state")
-        analysis = await self._analyses.get(analysis_id)
-        result = analysis.result
-        benchmark = str(result["benchmark_retailer"])
-        retailer_options = [benchmark, *(str(value) for value in result["competitors"])]
-        if filters.retailer_id not in retailer_options:
-            raise ValueError(f"retailer {filters.retailer_id!r} is not in this analysis")
-        artifacts = await self._repository.artifacts(
-            analysis.collection_run_id,
-            filters.retailer_id,
-        )
-        if not artifacts:
-            raise LookupError(
-                f"classified Search evidence for {filters.retailer_id!r} is unavailable"
+    async def _prepare(
+        self,
+        analysis_id: str,
+        retailer_id: str,
+    ) -> PreparedPriceMonitoringData:
+        cache_key = (analysis_id, retailer_id)
+        cached = self._prepared_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        lock = self._prepared_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            cached = self._prepared_cache.get(cache_key)
+            if cached is not None:
+                return cached
+            analysis = await self._analyses.get(analysis_id)
+            result = analysis.result
+            benchmark = str(result["benchmark_retailer"])
+            retailer_options = (benchmark, *(str(value) for value in result["competitors"]))
+            if retailer_id not in retailer_options:
+                raise ValueError(f"retailer {retailer_id!r} is not in this analysis")
+            artifacts = await self._repository.artifacts(
+                analysis.collection_run_id,
+                retailer_id,
             )
-        records: list[dict[str, Any]] = []
-        for artifact in artifacts:
-            records.extend(await self._reader.read(artifact))
-        offers = [classified_offer_from_record(record) for record in records]
-        product_ids = sorted(
-            {
-                offer.offer.retailer_product_id
-                for offer in offers
-                if offer.offer.retailer_id == filters.retailer_id and offer.in_scope
-            }
-        )
-        (
-            location_index,
-            eligible_location_index,
-            expected_locations,
-        ) = await self._repository.location_context(
-            analysis.collection_run_id,
+            if not artifacts:
+                raise LookupError(f"classified Search evidence for {retailer_id!r} is unavailable")
+            records: list[dict[str, Any]] = []
+            for artifact in artifacts:
+                records.extend(await self._reader.read(artifact))
+            offers = tuple(classified_offer_from_record(record) for record in records)
+            product_ids = sorted(
+                {
+                    offer.offer.retailer_product_id
+                    for offer in offers
+                    if offer.offer.retailer_id == retailer_id and offer.in_scope
+                }
+            )
+            (
+                location_index,
+                eligible_location_index,
+                expected_locations,
+            ) = await self._repository.location_context(
+                analysis.collection_run_id,
+                retailer_id,
+            )
+            product_context = await self._repository.product_context(
+                retailer_id,
+                product_ids,
+            )
+            source = result.get("source", {})
+            revision_id = (
+                str(source["brand_revision_id"]) if source.get("brand_revision_id") else None
+            )
+            overrides = await self._repository.brand_overrides(
+                revision_id=revision_id,
+                product_pack_id=analysis.product_pack_id,
+                product_pack_version=analysis.product_pack_version,
+                benchmark_retailer_id=benchmark,
+            )
+            resolver = GovernedBrandResolver.from_repository(self._root).with_overrides(overrides)
+            pack = await self._packs.load(
+                analysis.product_pack_id,
+                analysis.product_pack_version,
+            )
+            prepared = PreparedPriceMonitoringData(
+                analysis=analysis,
+                projector=PriceMonitoringProjector(
+                    pack,
+                    resolver,
+                    retailer_names=self._retailer_names,
+                ),
+                offers=offers,
+                location_index=location_index,
+                eligible_location_index=eligible_location_index,
+                expected_locations=expected_locations,
+                source_rows=await self._repository.source_rows(
+                    analysis.collection_run_id,
+                    retailer_id,
+                ),
+                artifact_checksums=tuple(artifact.checksum for artifact in artifacts),
+                product_context=product_context,
+                retailer_options=retailer_options,
+            )
+            if len(self._prepared_cache) >= 8:
+                self._prepared_cache.pop(next(iter(self._prepared_cache)))
+            self._prepared_cache[cache_key] = prepared
+            return prepared
+
+    @staticmethod
+    def _view_key(analysis_id: str, filters: PriceMonitoringFilters) -> tuple[str, ...]:
+        return (
+            analysis_id,
             filters.retailer_id,
+            filters.brand_type,
+            filters.state or "",
+            filters.city or "",
+            filters.zipcode or "",
+            filters.product_id or "",
         )
-        product_context = await self._repository.product_context(
-            filters.retailer_id,
-            product_ids,
-        )
-        source = result.get("source", {})
-        revision_id = str(source["brand_revision_id"]) if source.get("brand_revision_id") else None
-        overrides = await self._repository.brand_overrides(
-            revision_id=revision_id,
-            product_pack_id=analysis.product_pack_id,
-            product_pack_version=analysis.product_pack_version,
-            benchmark_retailer_id=benchmark,
-        )
-        resolver = GovernedBrandResolver.from_repository(self._root).with_overrides(overrides)
-        pack = await self._packs.load(
-            analysis.product_pack_id,
-            analysis.product_pack_version,
-        )
-        view = PriceMonitoringProjector(
-            pack,
-            resolver,
-            retailer_names=self._retailer_names,
-        ).build(
-            offers,
+
+    def _project(
+        self,
+        prepared: PreparedPriceMonitoringData,
+        filters: PriceMonitoringFilters,
+        *,
+        location_limit: int | None = 1_200,
+        product_location_limit: int | None = 200,
+    ) -> dict[str, Any]:
+        analysis = prepared.analysis
+        return prepared.projector.build(
+            prepared.offers,
             analysis_id=analysis.analysis_id,
             generated_at=analysis.created_at.isoformat(),
             filters=filters,
-            location_index=location_index,
-            eligible_location_index=eligible_location_index,
-            expected_location_count=expected_locations,
-            source_rows=(
-                await self._repository.source_rows(
-                    analysis.collection_run_id,
-                    filters.retailer_id,
-                )
-            ),
-            artifact_checksums=[artifact.checksum for artifact in artifacts],
-            product_context=product_context,
-            retailer_options=retailer_options,
+            location_index=prepared.location_index,
+            eligible_location_index=prepared.eligible_location_index,
+            expected_location_count=prepared.expected_locations,
+            source_rows=prepared.source_rows,
+            artifact_checksums=prepared.artifact_checksums,
+            product_context=prepared.product_context,
+            retailer_options=prepared.retailer_options,
+            location_limit=location_limit,
+            product_location_limit=product_location_limit,
+        )
+
+    async def view(self, analysis_id: str, filters: PriceMonitoringFilters) -> dict[str, Any]:
+        if filters.city is not None and filters.state is None:
+            raise ValueError("a city filter requires its state")
+        cache_key = self._view_key(analysis_id, filters)
+        cached = self._view_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        prepared = await self._prepare(analysis_id, filters.retailer_id)
+        view = self._project(
+            prepared,
+            filters,
+            product_location_limit=200 if filters.product_id else 0,
         )
         validate_instance(
             self._root,
             "price-monitoring-view.schema.json",
             view,
-            label=f"price-monitoring:{analysis.analysis_id}:{filters.retailer_id}",
+            label=f"price-monitoring:{prepared.analysis.analysis_id}:{filters.retailer_id}",
         )
+        if len(self._view_cache) >= 96:
+            self._view_cache.pop(next(iter(self._view_cache)))
+        self._view_cache[cache_key] = view
         return view
+
+    async def evidence_csv(
+        self,
+        analysis_id: str,
+        filters: PriceMonitoringFilters,
+    ) -> str:
+        if not filters.product_id:
+            raise ValueError("a product_id is required for evidence export")
+        prepared = await self._prepare(analysis_id, filters.retailer_id)
+        view = self._project(
+            prepared,
+            filters,
+            location_limit=None,
+            product_location_limit=None,
+        )
+        products = view["products"]
+        if not products:
+            raise LookupError("no exact-product Search evidence matched the export filters")
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "retailer",
+                "product_id",
+                "store_number",
+                "store_name",
+                "zipcode",
+                "city",
+                "state",
+                "price",
+                "is_sponsored",
+                "observed_at",
+            ]
+        )
+        for row in products[0]["sample_locations"]:
+            writer.writerow(
+                [
+                    view["retailer"]["name"],
+                    filters.product_id,
+                    row["store_number"],
+                    row["store_name"],
+                    row["zipcode"],
+                    row["city"],
+                    row["state"],
+                    row["price"],
+                    row["is_sponsored"],
+                    row["observed_at"],
+                ]
+            )
+        return output.getvalue()
 
 
 def get_price_monitoring_service(request: Request) -> PriceMonitoringService:
@@ -457,6 +592,7 @@ async def price_monitoring_view(
     brand_type: BrandFilter = "all",
     state_filter: str | None = Query(default=None, alias="state"),
     city: str | None = None,
+    zipcode: str | None = None,
     product_id: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -467,6 +603,7 @@ async def price_monitoring_view(
                 brand_type=brand_type,
                 state=state_filter,
                 city=city,
+                zipcode=zipcode,
                 product_id=product_id,
             ),
         )
@@ -482,5 +619,51 @@ async def price_monitoring_view(
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/analyses/{analysis_id}/price-monitoring/evidence.csv")
+async def price_monitoring_evidence_csv(
+    analysis_id: str,
+    service: ServiceDependency,
+    retailer: str = Query(min_length=1),
+    product_id: str = Query(min_length=1),
+    brand_type: BrandFilter = "all",
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+    zipcode: str | None = None,
+) -> Response:
+    try:
+        body = await service.evidence_csv(
+            analysis_id,
+            PriceMonitoringFilters(
+                retailer_id=retailer,
+                brand_type=brand_type,
+                state=state_filter,
+                city=city,
+                zipcode=zipcode,
+                product_id=product_id,
+            ),
+        )
+        safe_retailer = "".join(
+            character for character in retailer if character.isalnum() or character in "_-"
+        )
+        safe_product_id = "".join(
+            character for character in product_id if character.isalnum() or character in "_-"
+        )
+        filename = f"{safe_retailer or 'retailer'}-{safe_product_id or 'product'}-price-evidence.csv"
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc

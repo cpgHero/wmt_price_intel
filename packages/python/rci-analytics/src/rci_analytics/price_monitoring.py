@@ -39,6 +39,7 @@ class PriceMonitoringFilters:
     brand_type: BrandType | Literal["all"] = "all"
     state: str | None = None
     city: str | None = None
+    zipcode: str | None = None
     product_id: str | None = None
 
 
@@ -143,23 +144,15 @@ def _location_from_offer(
         kind=kind,
         store_number=value.store_number,
         store_name=(str(lookup["store_name"]) if lookup.get("store_name") else None),
-        zipcode=value.zipcode or (str(lookup["zipcode"]) if lookup.get("zipcode") else None),
+        zipcode=(str(lookup["zipcode"]) if lookup.get("zipcode") else value.zipcode),
         city=str(lookup["city"]) if lookup.get("city") else None,
         state=str(lookup["state"]) if lookup.get("state") else None,
         country=str(lookup.get("country") or "USA"),
         latitude=(
-            value.latitude
-            if value.latitude is not None
-            else float(lookup["latitude"])
-            if lookup.get("latitude") is not None
-            else None
+            float(lookup["latitude"]) if lookup.get("latitude") is not None else value.latitude
         ),
         longitude=(
-            value.longitude
-            if value.longitude is not None
-            else float(lookup["longitude"])
-            if lookup.get("longitude") is not None
-            else None
+            float(lookup["longitude"]) if lookup.get("longitude") is not None else value.longitude
         ),
     )
 
@@ -235,6 +228,9 @@ def classified_offer_from_record(record: JsonObject) -> ClassifiedOffer:
                 if record.get("discounted_price") not in (None, "")
                 else None
             ),
+            is_sponsored=(
+                bool(record["is_sponsored"]) if record.get("is_sponsored") is not None else None
+            ),
         ),
         in_scope=bool(record.get("in_scope")),
         scope_reason=(
@@ -282,6 +278,8 @@ class PriceMonitoringProjector:
         artifact_checksums: Iterable[str] = (),
         product_context: dict[str, JsonObject] | None = None,
         retailer_options: Iterable[str] = (),
+        location_limit: int | None = 1_200,
+        product_location_limit: int | None = 200,
     ) -> JsonObject:
         location_lookup = location_index or {}
         eligible_location_lookup = eligible_location_index or location_lookup
@@ -295,6 +293,7 @@ class PriceMonitoringProjector:
         eligible_input_rows = 0
         excluded_rows = 0
         source_locations: dict[str, PriceLocation] = {}
+        eligible_scope_keys: set[str] = set()
         all_retailers: set[str] = set(retailer_options)
 
         for (retailer_id, location_key), lookup in eligible_location_lookup.items():
@@ -323,6 +322,7 @@ class PriceMonitoringProjector:
                 ),
             )
             source_locations[location.scope_key] = location
+            eligible_scope_keys.add(location.scope_key)
 
         for classified in offers:
             offer = classified.offer
@@ -412,6 +412,7 @@ class PriceMonitoringProjector:
                     float(offer.discounted_price) if offer.discounted_price is not None else None
                 ),
                 "in_stock": offer.in_stock,
+                "is_sponsored": offer.is_sponsored,
                 "observed_at": offer.collected_at,
                 "offer_id": offer.offer_id,
             }
@@ -439,12 +440,21 @@ class PriceMonitoringProjector:
             if filters.state is None or row["location"].state == filters.state
         ]
         cities = Counter(row["location"].city for row in state_scoped if row["location"].city)
+        city_scoped = [
+            row
+            for row in state_scoped
+            if filters.city is None or row["location"].city == filters.city
+        ]
+        zipcodes = Counter(
+            row["location"].zipcode for row in city_scoped if row["location"].zipcode
+        )
         product_option_rows = [
             row
             for row in admitted
             if (filters.brand_type == "all" or row["brand_type"] == filters.brand_type)
             and (filters.state is None or row["location"].state == filters.state)
             and (filters.city is None or row["location"].city == filters.city)
+            and (filters.zipcode is None or row["location"].zipcode == filters.zipcode)
         ]
         visible = [
             row
@@ -452,6 +462,7 @@ class PriceMonitoringProjector:
             if (filters.brand_type == "all" or row["brand_type"] == filters.brand_type)
             and (filters.state is None or row["location"].state == filters.state)
             and (filters.city is None or row["location"].city == filters.city)
+            and (filters.zipcode is None or row["location"].zipcode == filters.zipcode)
             and (filters.product_id is None or row["product_id"] == filters.product_id)
         ]
 
@@ -502,7 +513,13 @@ class PriceMonitoringProjector:
                 else 0
             )
             consistent_observations += consistent
-            sample_limit = len(rows) if filters.product_id == product_id else 20
+            sample_limit = (
+                len(rows)
+                if product_location_limit is None and filters.product_id == product_id
+                else product_location_limit
+                if filters.product_id == product_id
+                else 20
+            )
             sample = sorted(
                 rows,
                 key=lambda row: (
@@ -535,6 +552,7 @@ class PriceMonitoringProjector:
                     "consistency_rate": _round(consistent / len(rows)) if rows else None,
                     "availability": self._availability_summary(rows),
                     "promotion": self._promotion_summary(rows),
+                    "sponsorship": self._sponsorship_summary(rows),
                     "price_histogram": _price_histogram(prices),
                     "sample_locations": [
                         {
@@ -545,6 +563,7 @@ class PriceMonitoringProjector:
                             "city": row["location"].city,
                             "state": row["location"].state,
                             "price": _round(float(row["price"])),
+                            "is_sponsored": row["is_sponsored"],
                             "observed_at": row["observed_at"],
                         }
                         for row in sample
@@ -559,7 +578,11 @@ class PriceMonitoringProjector:
                 str(row["product_id"]),
             )
         )
-        location_summaries = [self._location_summary(rows) for rows in location_groups.values()]
+        location_summaries = (
+            [self._location_summary(rows) for rows in location_groups.values()]
+            if filters.product_id is not None
+            else []
+        )
         location_summaries.sort(
             key=lambda row: (
                 str(row["state"] or ""),
@@ -567,21 +590,29 @@ class PriceMonitoringProjector:
                 str(row["store_number"] or row["zipcode"] or ""),
             )
         )
-        location_limit = 3_000
         location_display = {
-            "returned": min(len(location_summaries), location_limit),
+            "returned": (
+                len(location_summaries)
+                if location_limit is None
+                else min(len(location_summaries), location_limit)
+            ),
             "total": len(location_summaries),
-            "sampled": len(location_summaries) > location_limit,
+            "sampled": location_limit is not None and len(location_summaries) > location_limit,
         }
-        location_summaries = location_summaries[:location_limit]
+        if location_limit is not None:
+            location_summaries = location_summaries[:location_limit]
 
-        geography_level: Literal["state", "city"] = "city" if filters.state else "state"
+        geography_level: Literal["state", "city", "zipcode"] = (
+            "zipcode" if filters.city else "city" if filters.state else "state"
+        )
         geography_groups: dict[str, list[JsonObject]] = defaultdict(list)
         for row in visible:
             if geography_level == "state":
                 geography_key = row["location"].state or "Unknown state"
-            else:
+            elif geography_level == "city":
                 geography_key = row["location"].city or "Unknown city"
+            else:
+                geography_key = row["location"].zipcode or "Unknown ZIP"
             geography_groups[str(geography_key)].append(row)
         geographies = [
             self._geography_summary(geography_level, key, rows, state=filters.state)
@@ -641,27 +672,84 @@ class PriceMonitoringProjector:
             ),
         ]
         quality_status = "warning" if any(row["count"] for row in quality_checks) else "ready"
-        observed_locations = len(location_groups)
-        scoped_expected_location_count = expected_location_count or len(source_locations)
-        if filters.state is not None:
-            scoped_expected_location_count = len(
-                {
-                    location.scope_key
-                    for location in source_locations.values()
-                    if location.state == filters.state
-                    and (filters.city is None or location.city == filters.city)
-                }
-            )
+        observed_location_keys = set(location_groups)
+        observed_locations = len(observed_location_keys)
+        scoped_eligible_locations = [
+            source_locations[key]
+            for key in eligible_scope_keys
+            if key in source_locations
+            and (filters.state is None or source_locations[key].state == filters.state)
+            and (filters.city is None or source_locations[key].city == filters.city)
+            and (filters.zipcode is None or source_locations[key].zipcode == filters.zipcode)
+        ]
+        scoped_expected_location_count = (
+            len(scoped_eligible_locations)
+            if filters.state is not None or filters.city is not None or filters.zipcode is not None
+            else expected_location_count or len(scoped_eligible_locations)
+        )
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]
         presence_rate = (
             _round(observed_locations / scoped_expected_location_count)
             if scoped_expected_location_count
             else None
         )
+        not_observed_count = max(0, scoped_expected_location_count - observed_locations)
+        known_not_observed = [
+            location
+            for location in scoped_eligible_locations
+            if location.scope_key not in observed_location_keys
+        ]
+        known_not_observed.sort(
+            key=lambda location: (
+                str(location.state or ""),
+                str(location.city or ""),
+                str(location.zipcode or ""),
+                str(location.store_number or ""),
+            )
+        )
+        gap_groups: dict[str, list[PriceLocation]] = defaultdict(list)
+        eligible_groups: dict[str, list[PriceLocation]] = defaultdict(list)
+        for location in scoped_eligible_locations:
+            if geography_level == "state":
+                gap_key = location.state or "Unknown state"
+            elif geography_level == "city":
+                gap_key = location.city or "Unknown city"
+            else:
+                gap_key = location.zipcode or "Unknown ZIP"
+            eligible_groups[gap_key].append(location)
+            if location.scope_key not in observed_location_keys:
+                gap_groups[gap_key].append(location)
+        gap_geographies = [
+            self._gap_geography_summary(
+                geography_level,
+                key,
+                eligible_rows,
+                gap_groups.get(key, []),
+                state=filters.state,
+                city=filters.city,
+            )
+            for key, eligible_rows in eligible_groups.items()
+        ]
+        gap_geographies.sort(
+            key=lambda row: (
+                -int(row["not_observed_locations"]),
+                float(row["observed_rate"] or 0),
+                str(row["label"]),
+            )
+        )
+        gap_location_limit = 1_000
+        gap_locations = [self._gap_location(location) for location in known_not_observed]
+        gap_display = {
+            "returned": min(len(gap_locations), gap_location_limit),
+            "total": not_observed_count,
+            "sampled": len(gap_locations) > gap_location_limit,
+            "missing_location_details": max(0, not_observed_count - len(gap_locations)),
+        }
+        gap_locations = gap_locations[:gap_location_limit]
         exceptions = self._price_exceptions(visible) if filters.product_id else []
         all_retailer_options = sorted(all_retailers or {filters.retailer_id})
         return {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": {
@@ -680,6 +768,7 @@ class PriceMonitoringProjector:
             },
             "source": {
                 "authority": "Search",
+                "location_authority": "Retailer location master",
                 "grain": "retailer product x retailer location x latest observation in run",
                 "observed_start": min(source_values) if source_values else None,
                 "observed_end": max(source_values) if source_values else None,
@@ -692,6 +781,7 @@ class PriceMonitoringProjector:
                 "brand_type": filters.brand_type,
                 "state": filters.state,
                 "city": filters.city,
+                "zipcode": filters.zipcode,
                 "product_id": filters.product_id,
             },
             "filter_options": {
@@ -718,6 +808,10 @@ class PriceMonitoringProjector:
                     {"value": str(value), "label": str(value), "count": count}
                     for value, count in sorted(cities.items())
                 ],
+                "zipcodes": [
+                    {"value": str(value), "label": str(value), "count": count}
+                    for value, count in sorted(zipcodes.items())
+                ],
                 "products": product_options,
             },
             "summary": {
@@ -740,15 +834,24 @@ class PriceMonitoringProjector:
                 "observed_locations": observed_locations,
                 "eligible_locations": max(0, scoped_expected_location_count),
                 "observed_presence_rate": presence_rate,
-                "not_observed_locations": max(
-                    0, scoped_expected_location_count - observed_locations
-                ),
+                "not_observed_locations": not_observed_count,
                 "confirmed_gap_locations": 0,
                 "definition": (
                     "Observed presence means the selected product appeared in successful "
                     "Search evidence. A Search non-observation is not proof that a store "
                     "does not carry the product."
                 ),
+            },
+            "distribution_gaps": {
+                "status": "search_non_observation",
+                "definition": (
+                    "Not observed means the selected product did not appear in the "
+                    "successful Search result for a planned location. It is a location "
+                    "review signal, not proof that the retailer does not carry the item."
+                ),
+                "location_display": gap_display,
+                "geographies": gap_geographies,
+                "locations": gap_locations,
             },
             "price_distribution": distribution,
             "price_histogram": _price_histogram(float(row["price"]) for row in visible),
@@ -782,15 +885,16 @@ class PriceMonitoringProjector:
 
     @staticmethod
     def _availability_summary(rows: list[JsonObject]) -> JsonObject:
-        known = [bool(row["in_stock"]) for row in rows if row.get("in_stock") is not None]
+        # A positive Search price is the governed in-stock signal for this module.
+        # Rows reach this projection only after the positive-price admission rule.
         return {
-            "status": "observed" if known else "unavailable",
-            "known_observations": len(known),
-            "in_stock_observations": sum(known),
-            "rate": _round(sum(known) / len(known)) if known else None,
+            "status": "observed" if rows else "unavailable",
+            "known_observations": len(rows),
+            "in_stock_observations": len(rows),
+            "rate": 1.0 if rows else None,
             "definition": (
-                "Availability reflects explicit Search fields only; missing values are not "
-                "treated as out of stock."
+                "A product observed in Search with a price greater than zero is treated "
+                "as available/in stock at that location."
             ),
         }
 
@@ -818,6 +922,21 @@ class PriceMonitoringProjector:
             "definition": (
                 "Promotion requires an explicit regular or discounted price from Search; "
                 "price variation alone is not called a promotion."
+            ),
+        }
+
+    @staticmethod
+    def _sponsorship_summary(rows: list[JsonObject]) -> JsonObject:
+        known = [bool(row["is_sponsored"]) for row in rows if row.get("is_sponsored") is not None]
+        sponsored = sum(known)
+        return {
+            "status": "observed" if known else "unavailable",
+            "known_observations": len(known),
+            "sponsorship_observations": sponsored,
+            "rate": _round(sponsored / len(known)) if known else None,
+            "definition": (
+                "Sponsorship uses the Search result is_sponsored boolean. Missing values "
+                "remain unavailable and are not inferred from rank or title."
             ),
         }
 
@@ -893,6 +1012,18 @@ class PriceMonitoringProjector:
     def _location_summary(rows: list[JsonObject]) -> JsonObject:
         location: PriceLocation = rows[0]["location"]
         prices = [float(row["price"]) for row in rows]
+        sponsorship = [
+            bool(row["is_sponsored"]) for row in rows if row.get("is_sponsored") is not None
+        ]
+        sponsorship_status = (
+            "unknown"
+            if not sponsorship
+            else "sponsored"
+            if all(sponsorship)
+            else "organic"
+            if not any(sponsorship)
+            else "mixed"
+        )
         return {
             "scope_key": location.scope_key,
             "kind": location.kind,
@@ -909,11 +1040,12 @@ class PriceMonitoringProjector:
             "minimum_price": _round(min(prices)),
             "median_price": _round(median(prices)),
             "maximum_price": _round(max(prices)),
+            "sponsorship_status": sponsorship_status,
         }
 
     @staticmethod
     def _geography_summary(
-        level: Literal["state", "city"],
+        level: Literal["state", "city", "zipcode"],
         key: str,
         rows: list[JsonObject],
         *,
@@ -932,10 +1064,52 @@ class PriceMonitoringProjector:
             "label": key,
             "state": key if level == "state" else state,
             "city": key if level == "city" else None,
+            "zipcode": key if level == "zipcode" else None,
             "locations": len({row["location"].scope_key for row in rows}),
             "products": len({row["product_id"] for row in rows}),
             "observations": len(rows),
             "latitude": _round(median(latitudes), 6) if latitudes else None,
             "longitude": _round(median(longitudes), 6) if longitudes else None,
             "price_stats": _price_stats(prices),
+        }
+
+    @staticmethod
+    def _gap_location(location: PriceLocation) -> JsonObject:
+        return {
+            "scope_key": location.scope_key,
+            "kind": location.kind,
+            "store_number": location.store_number,
+            "store_name": location.store_name,
+            "zipcode": location.zipcode,
+            "city": location.city,
+            "state": location.state,
+            "country": location.country,
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+        }
+
+    @staticmethod
+    def _gap_geography_summary(
+        level: Literal["state", "city", "zipcode"],
+        key: str,
+        eligible: list[PriceLocation],
+        not_observed: list[PriceLocation],
+        *,
+        state: str | None,
+        city: str | None,
+    ) -> JsonObject:
+        eligible_count = len(eligible)
+        not_observed_count = len(not_observed)
+        observed_count = max(0, eligible_count - not_observed_count)
+        return {
+            "level": level,
+            "key": key,
+            "label": key,
+            "state": key if level == "state" else state,
+            "city": key if level == "city" else city,
+            "zipcode": key if level == "zipcode" else None,
+            "eligible_locations": eligible_count,
+            "observed_locations": observed_count,
+            "not_observed_locations": not_observed_count,
+            "observed_rate": _round(observed_count / eligible_count) if eligible_count else None,
         }

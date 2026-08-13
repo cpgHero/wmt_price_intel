@@ -86,6 +86,7 @@ class MetricsCartRetailerAdapter:
             "price_discounted": result.get("price_discounted"),
             "rating": result.get("rating"),
             "rating_count": result.get("rating_count") or result.get("reviews_count"),
+            "is_sponsored": result.get("is_sponsored"),
             "retailer_product_id": (
                 str(result["retailer_product_id"])
                 if result.get("retailer_product_id") is not None

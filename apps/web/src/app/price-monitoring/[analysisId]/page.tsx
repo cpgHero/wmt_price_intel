@@ -16,7 +16,9 @@ interface PriceSearchParams {
   brand_type?: string;
   state?: string;
   city?: string;
+  zipcode?: string;
   product_id?: string;
+  tab?: string;
 }
 
 export default async function PriceMonitoringDetailPage({
@@ -52,7 +54,13 @@ export default async function PriceMonitoringDetailPage({
         : "walmart_us"),
   );
   const request = new URLSearchParams({ retailer: defaultRetailer });
-  for (const key of ["brand_type", "state", "city", "product_id"] as const) {
+  for (const key of [
+    "brand_type",
+    "state",
+    "city",
+    "zipcode",
+    "product_id",
+  ] as const) {
     if (query[key]) request.set(key, String(query[key]));
   }
   const viewResponse = await getApi<PriceMonitoringView>(
@@ -74,7 +82,10 @@ export default async function PriceMonitoringDetailPage({
   }
   return (
     <main className="price-monitoring-page">
-      <PriceMonitoringWorkspace initialView={viewResponse.data} />
+      <PriceMonitoringWorkspace
+        initialTab={query.tab}
+        initialView={viewResponse.data}
+      />
     </main>
   );
 }

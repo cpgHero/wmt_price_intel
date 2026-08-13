@@ -29,6 +29,7 @@ class NormalizedOffer:
     raw: JsonObject
     regular_price: Decimal | None = None
     discounted_price: Decimal | None = None
+    is_sponsored: bool | None = None
 
     def to_record(self) -> JsonObject:
         return {
@@ -53,6 +54,7 @@ class NormalizedOffer:
             "discounted_price": (
                 float(self.discounted_price) if self.discounted_price is not None else None
             ),
+            "is_sponsored": self.is_sponsored,
         }
 
 

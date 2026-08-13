@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
@@ -15,6 +15,7 @@ import { displayDate } from "@/lib/presentation";
 type Product = PriceMonitoringView["products"][number];
 type Location = PriceMonitoringView["locations"][number];
 type TabId =
+  | "home"
   | "overview"
   | "footprint"
   | "price-architecture"
@@ -22,6 +23,17 @@ type TabId =
   | "store-exceptions"
   | "market-benchmarks"
   | "history";
+
+const tabIds: readonly TabId[] = [
+  "home",
+  "overview",
+  "footprint",
+  "price-architecture",
+  "distribution-gaps",
+  "store-exceptions",
+  "market-benchmarks",
+  "history",
+];
 
 const brandLabels: Record<string, string> = {
   all: "All brand types",
@@ -179,46 +191,20 @@ function geometryPath(geometry: { type: string; coordinates: unknown }) {
     .join(" ");
 }
 
-function downloadCsv(
-  retailer: string,
-  product: Product,
-  rows: Product["sample_locations"],
-) {
-  const header = [
-    "retailer",
-    "product_id",
-    "store_number",
-    "store_name",
-    "zipcode",
-    "city",
-    "state",
-    "price",
-    "observed_at",
-  ];
-  const values = rows.map((row) => [
-    retailer,
-    product.product_id,
-    row.store_number,
-    row.store_name,
-    row.zipcode,
-    row.city,
-    row.state,
-    row.price,
-    row.observed_at,
-  ]);
-  const csv = [header, ...values]
-    .map((row) =>
-      row
-        .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+function downloadCsv(analysisId: string, retailerId: string, product: Product) {
+  const parameters = new URLSearchParams({
+    retailer: retailerId,
+    product_id: product.product_id,
+  });
+  const current = new URL(window.location.href).searchParams;
+  for (const key of ["brand_type", "state", "city", "zipcode"]) {
+    const value = current.get(key);
+    if (value) parameters.set(key, value);
+  }
   const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${retailer}-${product.product_id}-price-evidence.csv`;
+  anchor.href = `/api/price-monitoring/${encodeURIComponent(analysisId)}/evidence.csv?${parameters.toString()}`;
+  anchor.download = `${retailerId}-${product.product_id}-price-evidence.csv`;
   anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function PriceHistogram({ product }: Readonly<{ product: Product }>) {
@@ -256,6 +242,40 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
   const minimum = medians.length ? Math.min(...medians) : 0;
   const maximum = medians.length ? Math.max(...medians) : minimum;
   const span = Math.max(0.01, maximum - minimum);
+  const marketPoints = view.filters.state
+    ? view.filters.city
+      ? view.locations
+          .filter((row) => row.latitude !== null && row.longitude !== null)
+          .slice(0, 600)
+          .map((row) => ({
+            key: row.scope_key,
+            label:
+              row.store_name ?? row.store_number ?? row.zipcode ?? "Location",
+            latitude: row.latitude!,
+            longitude: row.longitude!,
+            price: row.median_price,
+            locations: 1,
+            city: null,
+          }))
+      : view.geographies
+          .filter(
+            (row) =>
+              row.level === "city" &&
+              row.latitude !== null &&
+              row.latitude !== undefined &&
+              row.longitude !== null &&
+              row.longitude !== undefined,
+          )
+          .map((row) => ({
+            key: row.key,
+            label: row.label,
+            latitude: row.latitude!,
+            longitude: row.longitude!,
+            price: row.price_stats.observation_median,
+            locations: row.locations,
+            city: row.key,
+          }))
+    : [];
   return (
     <div className="pm-map-stage pi-map-stage">
       <svg
@@ -269,51 +289,93 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             const fips = String(state.id ?? "").padStart(2, "0");
             const stateCode = stateByFips[fips];
             const geography = stateRows.get(stateCode);
+            const selectedAggregate =
+              view.filters.state === stateCode && view.products[0]
+                ? {
+                    locations: view.summary.observed_locations,
+                    price_stats: view.products[0].price_stats,
+                  }
+                : undefined;
+            const stateEvidence = geography ?? selectedAggregate;
             const medianPrice =
-              geography?.price_stats.observation_median ?? null;
-            const intensity =
-              medianPrice === null
-                ? 0
-                : 0.2 + 0.72 * ((medianPrice - minimum) / span);
+              stateEvidence?.price_stats.observation_median ?? null;
+            const ratio =
+              medianPrice === null ? 0 : (medianPrice - minimum) / span;
+            const hasData = Boolean(stateEvidence);
             return (
               <path
                 aria-label={
-                  geography
-                    ? `${stateCode}: ${count(geography.locations)} observed locations, ${currency(medianPrice)} median price`
+                  stateEvidence
+                    ? `${stateCode}: ${count(stateEvidence.locations)} observed locations, ${currency(medianPrice)} median price`
                     : stateCode
                 }
-                className={`${geography ? "has-data" : ""} ${view.filters.state === stateCode ? "selected" : ""}`}
+                className={`${hasData ? "has-data" : ""} ${view.filters.state === stateCode ? "selected" : ""}`}
                 d={geometryPath(state.geometry)}
                 key={fips}
                 onClick={() => {
-                  if (geography) updateQuery({ state: stateCode, city: null });
+                  if (hasData) {
+                    updateQuery({
+                      state: stateCode,
+                      city: null,
+                      zipcode: null,
+                    });
+                  }
                 }}
-                role={geography ? "button" : undefined}
-                style={geography ? { fillOpacity: intensity } : undefined}
-                tabIndex={geography ? 0 : undefined}
+                onKeyDown={(event) => {
+                  if (hasData && (event.key === "Enter" || event.key === " ")) {
+                    updateQuery({
+                      state: stateCode,
+                      city: null,
+                      zipcode: null,
+                    });
+                  }
+                }}
+                role={hasData ? "button" : undefined}
+                style={
+                  hasData
+                    ? {
+                        fill: `hsl(190 62% ${Math.round(88 - ratio * 34)}%)`,
+                        fillOpacity: 1,
+                      }
+                    : undefined
+                }
+                tabIndex={hasData ? 0 : undefined}
               />
             );
           })}
         </g>
         <g className="pm-location-layer">
-          {view.locations
-            .filter((row) => row.latitude !== null && row.longitude !== null)
-            .map((row) => {
-              const point = projectCoordinate(row.longitude!, row.latitude!);
-              return (
-                <circle
-                  aria-label={`${row.store_name ?? row.store_number ?? row.zipcode}: ${currency(row.median_price)}`}
-                  cx={point.x}
-                  cy={point.y}
-                  key={row.scope_key}
-                  r={3.2}
-                />
-              );
-            })}
+          {marketPoints.map((row) => {
+            const point = projectCoordinate(row.longitude, row.latitude);
+            return (
+              <circle
+                aria-label={`${row.label}: ${count(row.locations)} observed ${row.locations === 1 ? "location" : "locations"}, ${currency(row.price)}`}
+                cx={point.x}
+                cy={point.y}
+                key={row.key}
+                onClick={() => {
+                  if (row.city) updateQuery({ city: row.city, zipcode: null });
+                }}
+                r={
+                  row.city
+                    ? Math.min(9, 3.5 + Math.sqrt(row.locations) / 2)
+                    : 3.8
+                }
+                role={row.city ? "button" : undefined}
+                tabIndex={row.city ? 0 : undefined}
+              />
+            );
+          })}
         </g>
       </svg>
       <aside className="pm-map-legend">
-        <span>Median observed price for this exact product</span>
+        <span>
+          {view.filters.city
+            ? "Observed stores in the selected city"
+            : view.filters.state
+              ? "Select a city to drill into stores and ZIPs"
+              : "Select a state to drill into cities, ZIPs, and stores"}
+        </span>
         <div>
           <i />
           <i />
@@ -323,8 +385,8 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
         <small>{currency(minimum)}</small>
         <small>{currency(maximum)}</small>
         <p>
-          Colored states contain observed Search evidence. Uncolored states are
-          not evidence that the product is not carried.
+          Teal shading shows median Search price for the exact product. Location
+          names and geography come from the retailer location master.
         </p>
       </aside>
     </div>
@@ -391,7 +453,14 @@ function StoreDrawer({
           </div>
           <div>
             <span>Evidence</span>
-            <strong>Search</strong>
+            <strong>
+              Search ·{" "}
+              {location.sponsorship_status === "sponsored"
+                ? "Sponsored"
+                : location.sponsorship_status === "organic"
+                  ? "Organic"
+                  : "Sponsorship unknown"}
+            </strong>
           </div>
         </section>
         <section className="pm-drawer-section">
@@ -455,7 +524,15 @@ function LocationTable({
                   <strong>{currency(row.median_price)}</strong>
                 </td>
                 <td>
-                  <span className="pi-evidence-pill">Observed</span>
+                  <span
+                    className={`pi-evidence-pill ${row.sponsorship_status}`}
+                  >
+                    {row.sponsorship_status === "sponsored"
+                      ? "Sponsored"
+                      : row.sponsorship_status === "organic"
+                        ? "Organic"
+                        : "Observed"}
+                  </span>
                 </td>
               </tr>
             ))}
@@ -474,12 +551,17 @@ function LocationTable({
 }
 
 function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  const geographyLabel = view.filters.city
+    ? "ZIP code"
+    : view.filters.state
+      ? "City"
+      : "State";
   return (
     <div className="pm-location-table-wrap">
       <table className="pm-location-table pi-market-table">
         <thead>
           <tr>
-            <th>{view.filters.state ? "City" : "State"}</th>
+            <th>{geographyLabel}</th>
             <th>Observed locations</th>
             <th>Median</th>
             <th>Range</th>
@@ -495,8 +577,10 @@ function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
                   onClick={() =>
                     updateQuery(
                       row.level === "state"
-                        ? { state: row.key, city: null }
-                        : { city: row.key },
+                        ? { state: row.key, city: null, zipcode: null }
+                        : row.level === "city"
+                          ? { city: row.key, zipcode: null }
+                          : { zipcode: row.key },
                     )
                   }
                   type="button"
@@ -518,6 +602,109 @@ function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function GapMarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  return (
+    <div className="pm-location-table-wrap">
+      <table className="pm-location-table pi-gap-market-table">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Planned locations</th>
+            <th>Observed</th>
+            <th>Not observed</th>
+            <th>Observed rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {view.distribution_gaps.geographies.slice(0, 100).map((row) => (
+            <tr key={`${row.level}-${row.key}`}>
+              <td>
+                <button
+                  className="pi-table-link"
+                  onClick={() =>
+                    updateQuery(
+                      row.level === "state"
+                        ? { state: row.key, city: null, zipcode: null }
+                        : row.level === "city"
+                          ? { city: row.key, zipcode: null }
+                          : { zipcode: row.key },
+                    )
+                  }
+                  type="button"
+                >
+                  <strong>{row.label}</strong>
+                  <small>Review locations</small>
+                </button>
+              </td>
+              <td>{count(row.eligible_locations)}</td>
+              <td>{count(row.observed_locations)}</td>
+              <td>
+                <strong className="pi-gap-count">
+                  {count(row.not_observed_locations)}
+                </strong>
+              </td>
+              <td>{percent(row.observed_rate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function GapLocationTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  const locations = view.distribution_gaps.locations.slice(0, 200);
+  return (
+    <div className="pi-location-evidence-table">
+      <div className="pm-location-table-wrap">
+        <table className="pm-location-table pi-location-table">
+          <thead>
+            <tr>
+              <th>Planned location</th>
+              <th>City</th>
+              <th>State</th>
+              <th>ZIP code</th>
+              <th>Search result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {locations.map((row) => (
+              <tr key={row.scope_key}>
+                <td>
+                  <strong>
+                    {row.store_name ??
+                      (row.store_number
+                        ? `Store ${row.store_number}`
+                        : `Service area ${row.zipcode ?? ""}`)}
+                  </strong>
+                  <small>
+                    {row.store_number ? `#${row.store_number}` : row.kind}
+                  </small>
+                </td>
+                <td>{row.city ?? "—"}</td>
+                <td>{row.state ?? "—"}</td>
+                <td>{row.zipcode ?? "—"}</td>
+                <td>
+                  <span className="pi-gap-pill">Product not observed</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {view.distribution_gaps.location_display.total > locations.length ? (
+        <p className="pi-table-summary">
+          Showing {count(locations.length)} of{" "}
+          {count(view.distribution_gaps.location_display.total)}
+          {view.distribution_gaps.location_display.missing_location_details
+            ? ` non-observations; ${count(view.distribution_gaps.location_display.missing_location_details)} planned locations lack complete location-master detail.`
+            : " non-observations."}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -564,29 +751,45 @@ function ProductCatalog({ view }: Readonly<{ view: PriceMonitoringView }>) {
 
 export function PriceMonitoringWorkspace({
   initialView,
-}: Readonly<{ initialView: PriceMonitoringView }>) {
+  initialTab,
+}: Readonly<{ initialView: PriceMonitoringView; initialTab?: string }>) {
   const [view, setView] = useState(initialView);
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTab] = useState<TabId>(
+    tabIds.includes(initialTab as TabId) ? (initialTab as TabId) : "overview",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openLocation, setOpenLocation] = useState<Location | null>(null);
+  const viewCache = useRef(new Map<string, PriceMonitoringView>());
 
   useEffect(() => {
     function loadView() {
       const url = new URL(window.location.href);
       const nextTab = url.searchParams.get("tab") as TabId | null;
       if (nextTab) setTab(nextTab);
+      const requestParameters = new URLSearchParams(url.searchParams);
+      requestParameters.delete("tab");
+      const cacheKey = requestParameters.toString();
+      const cachedView = viewCache.current.get(cacheKey);
+      if (cachedView) {
+        setView(cachedView);
+        setLoading(false);
+        setError(null);
+        return () => {};
+      }
       const controller = new AbortController();
       setLoading(true);
       setError(null);
       fetch(
-        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}?${url.searchParams.toString()}`,
-        { cache: "no-store", signal: controller.signal },
+        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}?${requestParameters.toString()}`,
+        { signal: controller.signal },
       )
         .then(async (response) => {
           if (!response.ok)
             throw new Error(`Price view returned ${response.status}`);
-          setView((await response.json()) as PriceMonitoringView);
+          const nextView = (await response.json()) as PriceMonitoringView;
+          viewCache.current.set(cacheKey, nextView);
+          setView(nextView);
         })
         .catch((reason: unknown) => {
           if (reason instanceof DOMException && reason.name === "AbortError")
@@ -600,18 +803,20 @@ export function PriceMonitoringWorkspace({
         .finally(() => setLoading(false));
       return () => controller.abort();
     }
+    const initialParameters = new URL(window.location.href).searchParams;
+    initialParameters.delete("tab");
+    viewCache.current.set(initialParameters.toString(), initialView);
     let cancel = () => {};
     const listener = () => {
       cancel();
       cancel = loadView();
     };
-    listener();
     window.addEventListener("popstate", listener);
     return () => {
       cancel();
       window.removeEventListener("popstate", listener);
     };
-  }, [initialView.analysis_id]);
+  }, [initialView]);
 
   const contextDefinition = useMemo<ApplicationContextDefinition>(
     () => ({
@@ -627,7 +832,7 @@ export function PriceMonitoringWorkspace({
           selectedValue: view.filters.retailer_id,
           defaultValue: "",
           queryParameter: "retailer",
-          resetQueryParameters: ["state", "city", "product_id"],
+          resetQueryParameters: ["state", "city", "zipcode", "product_id"],
           options: view.filter_options.retailers.map((row) => ({
             value: row.id,
             label: row.name,
@@ -660,13 +865,13 @@ export function PriceMonitoringWorkspace({
           description:
             "Geography filters apply consistently to every workspace tab and export.",
           value:
-            [view.filters.city, view.filters.state]
+            [view.filters.zipcode, view.filters.city, view.filters.state]
               .filter(Boolean)
               .join(", ") || "United States",
           selectedValue: view.filters.state ?? "",
           defaultValue: "",
           queryParameter: "state",
-          resetQueryParameters: ["city"],
+          resetQueryParameters: ["city", "zipcode"],
           options: view.filter_options.states.map((row) => ({
             value: row.value,
             label: row.label,
@@ -716,6 +921,7 @@ export function PriceMonitoringWorkspace({
     ? (view.products[0] ?? null)
     : null;
   const tabs: Array<{ id: TabId; label: string }> = [
+    { id: "home", label: "Home" },
     { id: "overview", label: "Product Overview" },
     { id: "footprint", label: "Product Footprint" },
     { id: "price-architecture", label: "Price Architecture" },
@@ -738,6 +944,14 @@ export function PriceMonitoringWorkspace({
             </p>
           </div>
         </header>
+        <nav
+          className="pm-tabs pi-tabs"
+          aria-label="Price intelligence workspaces"
+        >
+          <button aria-current="page" type="button">
+            Home
+          </button>
+        </nav>
         <section className="pm-filter-row">
           <label>
             <span>Product</span>
@@ -767,6 +981,8 @@ export function PriceMonitoringWorkspace({
   const stats = selectedProduct.price_stats;
   const availability = selectedProduct.availability;
   const promotion = selectedProduct.promotion;
+  const sponsorship = selectedProduct.sponsorship;
+  const topGapMarket = view.distribution_gaps.geographies[0] ?? null;
   const assessment = view.exceptions.length
     ? `${count(view.exceptions.length)} store prices fall outside the exact product's 1.5×IQR range and merit review.`
     : stats.range === 0
@@ -853,7 +1069,11 @@ export function PriceMonitoringWorkspace({
           <select
             value={view.filters.state ?? ""}
             onChange={(event) =>
-              updateQuery({ state: event.target.value || null, city: null })
+              updateQuery({
+                state: event.target.value || null,
+                city: null,
+                zipcode: null,
+              })
             }
           >
             <option value="">All states</option>
@@ -870,7 +1090,10 @@ export function PriceMonitoringWorkspace({
             disabled={!view.filters.state}
             value={view.filters.city ?? ""}
             onChange={(event) =>
-              updateQuery({ city: event.target.value || null })
+              updateQuery({
+                city: event.target.value || null,
+                zipcode: null,
+              })
             }
           >
             <option value="">All cities</option>
@@ -881,10 +1104,29 @@ export function PriceMonitoringWorkspace({
             ))}
           </select>
         </label>
-        {view.filters.state || view.filters.city ? (
+        <label>
+          <span>ZIP code</span>
+          <select
+            disabled={!view.filters.city}
+            value={view.filters.zipcode ?? ""}
+            onChange={(event) =>
+              updateQuery({ zipcode: event.target.value || null })
+            }
+          >
+            <option value="">All ZIP codes</option>
+            {view.filter_options.zipcodes.map((row) => (
+              <option value={row.value} key={row.value}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {view.filters.state || view.filters.city || view.filters.zipcode ? (
           <button
             className="text-link"
-            onClick={() => updateQuery({ state: null, city: null })}
+            onClick={() =>
+              updateQuery({ state: null, city: null, zipcode: null })
+            }
             type="button"
           >
             Reset geography
@@ -897,6 +1139,8 @@ export function PriceMonitoringWorkspace({
               `${count(view.summary.eligible_observations)} exact-product observations`)}
         </span>
       </section>
+
+      {tab === "home" ? <ProductCatalog view={view} /> : null}
 
       {tab === "overview" ? (
         <section className="pm-tab-content pi-tab-content">
@@ -937,6 +1181,48 @@ export function PriceMonitoringWorkspace({
               </h2>
             </div>
             <p>{assessment}</p>
+          </article>
+          <article className="pm-panel pi-retail-signals">
+            <header>
+              <div>
+                <p className="section-kicker">Retail signals</p>
+                <h2>What else this Search snapshot reveals</h2>
+              </div>
+            </header>
+            <div className="pi-signal-grid">
+              <div>
+                <span>Geographic breadth</span>
+                <strong>
+                  {count(selectedProduct.states)} states ·{" "}
+                  {count(selectedProduct.cities)} cities
+                </strong>
+                <small>
+                  Location hierarchy is sourced from the retailer location
+                  master.
+                </small>
+              </div>
+              <div>
+                <span>Sponsored visibility</span>
+                <strong>
+                  {sponsorship.status === "observed"
+                    ? percent(sponsorship.rate)
+                    : "Not captured in this snapshot"}
+                </strong>
+                <small>{sponsorship.definition}</small>
+              </div>
+              <div>
+                <span>Largest non-observation market</span>
+                <strong>
+                  {topGapMarket
+                    ? `${topGapMarket.label} · ${count(topGapMarket.not_observed_locations)}`
+                    : "No known non-observations"}
+                </strong>
+                <small>
+                  Review signal only; a Search omission is not proof of
+                  non-carriage.
+                </small>
+              </div>
+            </div>
           </article>
           <div className="pm-two-column pi-overview-grid">
             <article className="pm-panel">
@@ -1025,9 +1311,9 @@ export function PriceMonitoringWorkspace({
                 className="button secondary"
                 onClick={() =>
                   downloadCsv(
-                    view.retailer.name,
+                    view.analysis_id,
+                    view.retailer.id,
                     selectedProduct,
-                    selectedProduct.sample_locations,
                   )
                 }
                 type="button"
@@ -1107,6 +1393,15 @@ export function PriceMonitoringWorkspace({
                 </strong>
                 <small>{promotion.definition}</small>
               </div>
+              <div>
+                <span>Sponsorship</span>
+                <strong>
+                  {sponsorship.status === "observed"
+                    ? percent(sponsorship.rate)
+                    : "Unavailable"}
+                </strong>
+                <small>{sponsorship.definition}</small>
+              </div>
             </div>
           </article>
           <article className="pm-panel">
@@ -1163,11 +1458,23 @@ export function PriceMonitoringWorkspace({
           <article className="pm-panel">
             <header>
               <div>
-                <p className="section-kicker">Positive presence evidence</p>
-                <h2>Locations where the product was seen</h2>
+                <p className="section-kicker">Market concentration</p>
+                <h2>Where product non-observations are concentrated</h2>
               </div>
             </header>
-            <LocationTable view={view} onOpen={setOpenLocation} />
+            <GapMarketTable view={view} />
+          </article>
+          <article className="pm-panel">
+            <header>
+              <div>
+                <p className="section-kicker">Location review list</p>
+                <h2>
+                  {count(view.distribution_gaps.location_display.total)} planned
+                  locations where the product was not observed
+                </h2>
+              </div>
+            </header>
+            <GapLocationTable view={view} />
           </article>
         </section>
       ) : null}
