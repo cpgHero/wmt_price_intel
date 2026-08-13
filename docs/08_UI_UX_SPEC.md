@@ -3,27 +3,32 @@
 ## Navigation
 
 - Dashboard
-- Collections
-  - New Collection
-  - Definitions
-  - Run History
-  - Scheduling
-- Analyses
-  - Current
-  - Historical
-  - Compare Runs
-- Product Packs
-- Reports
-- Data Quality
-- Automation
-  - Collection schedules
-  - Alert definitions and evidence-backed events
-  - Email delivery status
+- Intelligence
+  - Competitive Intelligence
+    - Current and historical reports
+    - Price and segment position
+    - Products, assortment, geography, matching, brands, evidence, and exports
+  - Price Monitoring / Price Intelligence (future governed vertical slice)
+    - Retailer products by location distribution
+    - Price position, promotions, anomalies, geography, and trends
+    - Does not require a cross-retailer product match
+  - Search Intelligence (future governed vertical slice)
+  - Review Intelligence (future governed vertical slice)
+- Operations
+  - Collections
+    - New Collection
+    - Definitions
+    - Run History
+  - Schedules & Alerts
+  - Data Quality
 - Admin
-  - Retailers / Adapters
-  - Location Master
-  - Provider Usage / Credits
-  - Users / Settings
+  - Study Discovery
+  - Product Packs
+  - Additional governed administration as implemented
+
+Price Monitoring and Competitive Intelligence share product identity, location, immutable price
+observations, PDP enrichment, maps, evidence, and quality primitives. Competitive Intelligence adds
+governed product matching, comparison bases, overlapping store footprints, and win/loss outcomes.
 
 ## New Collection wizard
 

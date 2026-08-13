@@ -44,3 +44,11 @@ collections remain pinned to their original version.
 One-to-one integrity at overlapping primary-store-footprint grain, reusable competitor products
 across disjoint regional distributions, immutable human brand classifications, explicit
 current/future application, and Milk 1.2.0 as the first configuration-only adopter.
+
+## Phase 11 - First-Class Application Shell and Intelligence Navigation
+Responsive sidebar/topbar shell, route-aware grouped navigation, theme and accessibility behavior,
+and additive migration of the current Dashboard, Competitive Intelligence, Collections,
+Schedules & Alerts, Data Quality, Study Discovery, and Product Pack experiences. Future modules are
+not exposed until their governed vertical slices exist. Price Monitoring is a separate
+retailer-product/location/time workflow that shares source and presentation primitives with, but
+does not duplicate, cross-retailer Competitive Intelligence.

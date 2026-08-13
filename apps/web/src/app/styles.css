@@ -458,10 +458,10 @@
 /* Governed Product Pack authoring */
 .product-pack-page-header {
   gap: 2rem;
-  padding: 2.75rem 0 2.25rem;
+  padding: 1.6rem 0 1.75rem;
 }
 .product-pack-page-header.compact h1 {
-  font-size: clamp(2.9rem, 4.5vw, 4.4rem);
+  font-size: clamp(2rem, 3.5vw, 3rem);
 }
 .product-pack-page-header h1 {
   max-width: 760px;
@@ -1179,96 +1179,6 @@ textarea {
   font: inherit;
 }
 
-.app-frame {
-  min-height: 100vh;
-}
-.topbar {
-  align-items: center;
-  background: var(--topbar);
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: 2rem;
-  grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
-  min-height: 76px;
-  padding: 0 4vw;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  backdrop-filter: blur(16px);
-}
-.brand {
-  align-items: center;
-  display: inline-flex;
-  gap: 0.75rem;
-  width: max-content;
-}
-.brand-mark {
-  align-items: center;
-  background: var(--ink);
-  border-radius: 11px;
-  color: var(--card);
-  display: flex;
-  font-size: 1.05rem;
-  font-weight: 900;
-  height: 38px;
-  justify-content: center;
-  letter-spacing: -0.02em;
-  width: 38px;
-}
-.brand strong,
-.brand small {
-  display: block;
-}
-.brand strong {
-  font-size: 1rem;
-  letter-spacing: -0.045em;
-}
-.brand strong span {
-  color: var(--green);
-}
-.brand small {
-  color: var(--muted);
-  font-size: 0.68rem;
-  margin-top: 1px;
-}
-.topbar nav {
-  display: flex;
-  gap: 0.25rem;
-}
-.topbar nav a {
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  font-weight: 650;
-  padding: 0.65rem 0.85rem;
-}
-.topbar nav a:hover {
-  background: var(--green-soft);
-  color: var(--green);
-}
-.topbar nav a[aria-current="page"] {
-  background: var(--green-soft);
-  box-shadow: inset 0 -2px 0 var(--green);
-  color: var(--green);
-}
-.shell-actions {
-  align-items: center;
-  display: flex;
-  gap: 0.6rem;
-  justify-self: end;
-}
-.environment-pill {
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  color: var(--muted);
-  display: flex;
-  font-size: 0.72rem;
-  gap: 0.45rem;
-  justify-self: end;
-  padding: 0.45rem 0.75rem;
-}
-.environment-pill span,
 .live-indicator i {
   background: var(--success);
   border-radius: 50%;
@@ -1316,13 +1226,8 @@ textarea {
 :root[data-theme="dark"] .theme-icon-moon {
   display: block;
 }
-.page-shell {
-  margin: 0 auto;
-  max-width: 1540px;
-  padding: 0 4vw 5rem;
-}
 main {
-  padding-top: 3.5rem;
+  padding-top: 2rem;
 }
 
 .eyebrow,
@@ -1532,10 +1437,10 @@ p {
   display: flex;
   gap: 3rem;
   justify-content: space-between;
-  padding: 4rem 0 3rem;
+  padding: 1.65rem 0 1.8rem;
 }
 .page-header.compact h1 {
-  font-size: clamp(3.2rem, 5vw, 5rem);
+  font-size: clamp(2rem, 3.5vw, 3rem);
   margin-bottom: 0;
 }
 .page-header > p {
@@ -2860,12 +2765,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 1050px) {
-  .topbar {
-    grid-template-columns: 1fr auto;
-  }
-  .topbar nav {
-    display: none;
-  }
   .hero-panel {
     grid-template-columns: 1fr;
   }
@@ -2900,16 +2799,6 @@ tbody tr:last-child td {
   .product-pack-page-header {
     gap: 1.25rem;
     padding: 2rem 0 1.5rem;
-  }
-  .topbar {
-    min-height: 66px;
-    padding: 0 1rem;
-  }
-  .environment-pill {
-    display: none;
-  }
-  .page-shell {
-    padding: 0 1rem 3rem;
   }
   main {
     padding-top: 1.5rem;
@@ -4129,15 +4018,15 @@ tbody tr:last-child td {
   display: grid;
   gap: 2rem;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 3.5rem 0 2.5rem;
+  padding: 1.65rem 0 1.8rem;
 }
 .dashboard-welcome h1 {
-  font-size: clamp(3.2rem, 5vw, 5rem);
-  margin-bottom: 1rem;
-  max-width: 13ch;
+  font-size: clamp(2.1rem, 3.4vw, 3.25rem);
+  margin-bottom: 0.65rem;
+  max-width: 18ch;
 }
 .dashboard-welcome > div > p:last-child {
-  font-size: 1.02rem;
+  font-size: 0.92rem;
   margin: 0;
   max-width: 660px;
 }
@@ -4884,25 +4773,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 1050px) {
-  .topbar {
-    gap: 0.55rem 1rem;
-    grid-template-columns: 1fr auto;
-    padding-bottom: 0.55rem;
-    padding-top: 0.55rem;
-  }
-  .topbar nav {
-    display: flex;
-    gap: 0.15rem;
-    grid-column: 1 / -1;
-    max-width: 100%;
-    overflow-x: auto;
-    padding-bottom: 0.1rem;
-    scrollbar-width: thin;
-  }
-  .topbar nav a {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
   .dashboard-priority-grid {
     grid-template-columns: 1fr;
   }
@@ -4915,19 +4785,13 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 760px) {
-  .topbar {
-    min-height: auto;
-  }
-  .topbar nav a {
-    padding: 0.55rem 0.65rem;
-  }
   .dashboard-welcome,
   .dashboard-operations-grid {
     grid-template-columns: 1fr;
   }
   .dashboard-welcome {
     align-items: start;
-    padding-top: 2.4rem;
+    padding-top: 1.5rem;
   }
   .dashboard-welcome .button-row {
     justify-content: flex-start;
@@ -4980,12 +4844,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 520px) {
-  .brand small {
-    display: none;
-  }
-  .shell-actions {
-    gap: 0.35rem;
-  }
   .latest-report-grid,
   .collection-run-row dl {
     grid-template-columns: 1fr;

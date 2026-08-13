@@ -1,0 +1,206 @@
+.navigation {
+  display: grid;
+  gap: 1.15rem;
+  padding: 0.35rem 0.75rem 1.5rem;
+}
+
+.group {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.group h2 {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0;
+  min-height: 1rem;
+  padding: 0 0.7rem;
+  text-transform: uppercase;
+}
+
+.links {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.links a {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  min-height: 48px;
+  padding: 0.48rem 0.55rem;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.links a:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.links a:focus-visible {
+  outline: 3px solid rgba(88, 210, 248, 0.42);
+  outline-offset: 2px;
+}
+
+.links a.active {
+  background: rgba(88, 210, 248, 0.14);
+  border-color: rgba(88, 210, 248, 0.22);
+  color: #ffffff;
+}
+
+.icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  display: flex;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.active .icon {
+  background: #58d2f8;
+  color: #071116;
+}
+
+.icon svg {
+  height: 1.08rem;
+  width: 1.08rem;
+}
+
+.copy {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.copy strong,
+.copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy strong {
+  font-size: 0.79rem;
+  font-weight: 760;
+}
+
+.copy small {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.62rem;
+  line-height: 1.25;
+}
+
+.active .copy small {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+:global(.shell-compact) .navigation {
+  padding-inline: 0.55rem;
+}
+
+:global(.shell-compact) .group {
+  gap: 0.5rem;
+}
+
+:global(.shell-compact) .group h2 {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0;
+  margin: 0 0.42rem;
+  min-height: 1px;
+  padding: 0;
+}
+
+:global(.shell-compact) .group:first-child h2 {
+  display: none;
+}
+
+:global(.shell-compact) .links a {
+  gap: 0;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding-inline: 0;
+}
+
+:global(.shell-compact) .copy {
+  display: none;
+}
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .navigation {
+    padding-inline: 0.55rem;
+  }
+
+  .group h2 {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0;
+    margin: 0 0.42rem;
+    min-height: 1px;
+    padding: 0;
+  }
+
+  .group:first-child h2 {
+    display: none;
+  }
+
+  .links a {
+    gap: 0;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding-inline: 0;
+  }
+
+  .copy {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .navigation {
+    padding-inline: 0.75rem;
+  }
+
+  :global(.shell-compact) .navigation {
+    padding-inline: 0.75rem;
+  }
+
+  :global(.shell-compact) .group {
+    gap: 0.4rem;
+  }
+
+  :global(.shell-compact) .group h2 {
+    border-top: 0;
+    display: block;
+    font-size: 0.67rem;
+    margin: 0;
+    min-height: 1rem;
+    padding: 0 0.7rem;
+  }
+
+  :global(.shell-compact) .links a {
+    gap: 0.7rem;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    justify-items: stretch;
+    padding: 0.48rem 0.55rem;
+  }
+
+  :global(.shell-compact) .copy {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .links a {
+    transition: none;
+  }
+}

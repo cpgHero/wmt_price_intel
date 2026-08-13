@@ -56,7 +56,49 @@ test("serves the branded shell and no-flash theme controls", async ({
 
   expect(response.ok()).toBe(true);
   expect(html).toContain("CPGHero");
+  expect(html).toContain("Application navigation");
+  expect(html).toContain("Competitive Intelligence");
+  expect(html).toContain("Study Discovery");
+  expect(html).not.toContain("Price Intelligence (Coming soon)");
   expect(html).toContain("theme-init");
   expect(html).toContain("rci-theme");
   expect(html).toContain("Toggle light and dark theme");
+});
+
+test("supports the responsive application navigation", async ({ page }) => {
+  await page.goto("/");
+
+  const sidebar = page.getByLabel("Application sidebar");
+  await expect(sidebar).toBeVisible();
+  await expect(
+    sidebar.getByRole("link", { name: "Dashboard" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await sidebar.getByRole("link", { name: "Collections" }).click();
+  await expect(page).toHaveURL(/\/collections$/);
+  await expect(
+    sidebar.getByRole("link", { name: "Collections" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(
+    page.getByRole("button", { name: "Expand sidebar" }),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sidebar).toBeHidden();
+  const menuButton = page.getByRole("button", {
+    name: "Open application navigation",
+  });
+  await menuButton.click();
+  const mobileNavigation = page.getByRole("dialog", {
+    name: "Mobile application navigation",
+  });
+  await expect(mobileNavigation).toBeVisible();
+  await expect(
+    mobileNavigation.getByText("Competitive Intelligence", { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(mobileNavigation).toBeHidden();
+  await expect(menuButton).toBeFocused();
 });
