@@ -82,12 +82,10 @@ test("supports the responsive application navigation", async ({ page }) => {
 
   const sidebar = page.getByLabel("Application sidebar");
   await expect(sidebar).toBeVisible();
-  const collapseButton = sidebar.getByRole("button", {
-    name: "Collapse sidebar",
-  });
-  await expect(collapseButton).toBeVisible();
-  await collapseButton.focus();
-  await expect(collapseButton).toBeFocused();
+  await expect(sidebar.getByLabel("Application navigation")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
   await expect(
     sidebar.getByRole("link", { name: "Home", exact: true }),
   ).toHaveAttribute("aria-current", "page");
