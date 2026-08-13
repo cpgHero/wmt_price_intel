@@ -118,11 +118,7 @@ export function PrimaryNavigation({
               aria-controls={childrenId}
               aria-expanded={open}
               className={styles.groupButton}
-              onClick={(event) => {
-                if (!openFlyout(group, event.currentTarget)) {
-                  toggleGroup(group.id);
-                }
-              }}
+              onClick={() => toggleGroup(group.id)}
               onFocus={(event) => openFlyout(group, event.currentTarget)}
               onMouseEnter={(event) => openFlyout(group, event.currentTarget)}
               title={group.label}
