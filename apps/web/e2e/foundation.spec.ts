@@ -77,6 +77,7 @@ test("serves the branded shell and no-flash theme controls", async ({
 });
 
 test("supports the responsive application navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
   const sidebar = page.getByLabel("Application sidebar");
