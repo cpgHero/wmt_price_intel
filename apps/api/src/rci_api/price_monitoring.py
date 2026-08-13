@@ -268,9 +268,12 @@ class PostgresPriceMonitoringRepository:
               SELECT id
               FROM brand_classification_revision
               WHERE (
-                (:revision_id IS NOT NULL AND id::text = :revision_id)
+                (
+                  CAST(:revision_id AS text) IS NOT NULL
+                  AND id::text = CAST(:revision_id AS text)
+                )
                 OR (
-                  :revision_id IS NULL
+                  CAST(:revision_id AS text) IS NULL
                   AND product_pack_id = :product_pack_id
                   AND product_pack_version = :product_pack_version
                   AND benchmark_retailer_id = :benchmark_retailer_id
