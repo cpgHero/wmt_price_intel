@@ -411,52 +411,64 @@ function LocationTable({
   view,
   onOpen,
 }: Readonly<{ view: PriceMonitoringView; onOpen: (row: Location) => void }>) {
+  const visibleLocations = view.locations.slice(0, 200);
   return (
-    <div className="pm-location-table-wrap">
-      <table className="pm-location-table pi-location-table">
-        <thead>
-          <tr>
-            <th>Location</th>
-            <th>Market</th>
-            <th>Observed price</th>
-            <th>Evidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {view.locations.map((row) => (
-            <tr key={row.scope_key}>
-              <td>
-                <button
-                  className="pi-table-link"
-                  onClick={() => onOpen(row)}
-                  type="button"
-                >
-                  <strong>
-                    {row.store_name ??
-                      (row.store_number
-                        ? `Store ${row.store_number}`
-                        : `ZIP ${row.zipcode}`)}
-                  </strong>
-                  <small>
-                    {row.store_number ? `#${row.store_number}` : "Service area"}
-                  </small>
-                </button>
-              </td>
-              <td>
-                {[row.city, row.state, row.zipcode]
-                  .filter(Boolean)
-                  .join(", ") || "—"}
-              </td>
-              <td>
-                <strong>{currency(row.median_price)}</strong>
-              </td>
-              <td>
-                <span className="pi-evidence-pill">Observed</span>
-              </td>
+    <div className="pi-location-evidence-table">
+      <div className="pm-location-table-wrap">
+        <table className="pm-location-table pi-location-table">
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>Market</th>
+              <th>Observed price</th>
+              <th>Evidence</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visibleLocations.map((row) => (
+              <tr key={row.scope_key}>
+                <td>
+                  <button
+                    className="pi-table-link"
+                    onClick={() => onOpen(row)}
+                    type="button"
+                  >
+                    <strong>
+                      {row.store_name ??
+                        (row.store_number
+                          ? `Store ${row.store_number}`
+                          : `ZIP ${row.zipcode}`)}
+                    </strong>
+                    <small>
+                      {row.store_number
+                        ? `#${row.store_number}`
+                        : "Service area"}
+                    </small>
+                  </button>
+                </td>
+                <td>
+                  {[row.city, row.state, row.zipcode]
+                    .filter(Boolean)
+                    .join(", ") || "—"}
+                </td>
+                <td>
+                  <strong>{currency(row.median_price)}</strong>
+                </td>
+                <td>
+                  <span className="pi-evidence-pill">Observed</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {view.location_display.total > visibleLocations.length ? (
+        <p className="pi-table-summary">
+          Showing the first {count(visibleLocations.length)} of{" "}
+          {count(view.location_display.total)} locations. Download the governed
+          evidence for the complete store-level file.
+        </p>
+      ) : null}
     </div>
   );
 }

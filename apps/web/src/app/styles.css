@@ -4039,6 +4039,14 @@ tbody tr:last-child td {
   padding: 0;
   text-align: left;
 }
+.pi-table-summary {
+  background: var(--surface-alt);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.6rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+}
 .pi-table-link:hover strong {
   color: var(--green);
 }
