@@ -606,7 +606,11 @@ function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
   );
 }
 
-function GapMarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+function GapMarketTable({
+  gaps,
+}: Readonly<{
+  gaps: PriceMonitoringView["distribution_gaps"];
+}>) {
   return (
     <div className="pm-location-table-wrap">
       <table className="pm-location-table pi-gap-market-table">
@@ -620,7 +624,7 @@ function GapMarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
           </tr>
         </thead>
         <tbody>
-          {view.distribution_gaps.geographies.slice(0, 100).map((row) => (
+          {gaps.geographies.slice(0, 100).map((row) => (
             <tr key={`${row.level}-${row.key}`}>
               <td>
                 <button
@@ -656,8 +660,10 @@ function GapMarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
   );
 }
 
-function GapLocationTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
-  const locations = view.distribution_gaps.locations.slice(0, 200);
+function GapLocationTable({
+  gaps,
+}: Readonly<{ gaps: PriceMonitoringView["distribution_gaps"] }>) {
+  const locations = gaps.locations.slice(0, 200);
   return (
     <div className="pi-location-evidence-table">
       <div className="pm-location-table-wrap">
@@ -696,12 +702,12 @@ function GapLocationTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
           </tbody>
         </table>
       </div>
-      {view.distribution_gaps.location_display.total > locations.length ? (
+      {gaps.location_display.total > locations.length ? (
         <p className="pi-table-summary">
           Showing {count(locations.length)} of{" "}
-          {count(view.distribution_gaps.location_display.total)}
-          {view.distribution_gaps.location_display.missing_location_details
-            ? ` non-observations; ${count(view.distribution_gaps.location_display.missing_location_details)} planned locations lack complete location-master detail.`
+          {count(gaps.location_display.total)}
+          {gaps.location_display.missing_location_details
+            ? ` non-observations; ${count(gaps.location_display.missing_location_details)} planned locations lack complete location-master detail.`
             : " non-observations."}
         </p>
       ) : null}
@@ -981,8 +987,28 @@ export function PriceMonitoringWorkspace({
   const stats = selectedProduct.price_stats;
   const availability = selectedProduct.availability;
   const promotion = selectedProduct.promotion;
-  const sponsorship = selectedProduct.sponsorship;
-  const topGapMarket = view.distribution_gaps.geographies[0] ?? null;
+  const sponsorship = selectedProduct.sponsorship ?? {
+    status: "unavailable" as const,
+    known_observations: 0,
+    sponsorship_observations: 0,
+    rate: null,
+    definition:
+      "Sponsorship was not retained in this analysis snapshot. Future collections use the Search is_sponsored boolean.",
+  };
+  const distributionGaps = view.distribution_gaps ?? {
+    status: "search_non_observation" as const,
+    definition:
+      "This analysis predates location-level Search non-observation evidence.",
+    location_display: {
+      returned: 0,
+      total: view.presence.not_observed_locations,
+      sampled: false,
+      missing_location_details: view.presence.not_observed_locations,
+    },
+    geographies: [],
+    locations: [],
+  };
+  const topGapMarket = distributionGaps.geographies[0] ?? null;
   const assessment = view.exceptions.length
     ? `${count(view.exceptions.length)} store prices fall outside the exact product's 1.5×IQR range and merit review.`
     : stats.range === 0
@@ -1114,7 +1140,7 @@ export function PriceMonitoringWorkspace({
             }
           >
             <option value="">All ZIP codes</option>
-            {view.filter_options.zipcodes.map((row) => (
+            {(view.filter_options.zipcodes ?? []).map((row) => (
               <option value={row.value} key={row.value}>
                 {row.label}
               </option>
@@ -1462,19 +1488,19 @@ export function PriceMonitoringWorkspace({
                 <h2>Where product non-observations are concentrated</h2>
               </div>
             </header>
-            <GapMarketTable view={view} />
+            <GapMarketTable gaps={distributionGaps} />
           </article>
           <article className="pm-panel">
             <header>
               <div>
                 <p className="section-kicker">Location review list</p>
                 <h2>
-                  {count(view.distribution_gaps.location_display.total)} planned
+                  {count(distributionGaps.location_display.total)} planned
                   locations where the product was not observed
                 </h2>
               </div>
             </header>
-            <GapLocationTable view={view} />
+            <GapLocationTable gaps={distributionGaps} />
           </article>
         </section>
       ) : null}
