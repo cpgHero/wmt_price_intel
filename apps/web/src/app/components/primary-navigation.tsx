@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -23,10 +23,6 @@ const groupIcons: Record<NavigationGroup["id"], NavigationIconName> = {
   administration: "studies",
 };
 
-function subscribeToHydration() {
-  return () => undefined;
-}
-
 function ChevronIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -39,11 +35,6 @@ export function PrimaryNavigation({
   onNavigate,
 }: Readonly<{ onNavigate?: () => void }>) {
   const pathname = usePathname();
-  const hydrated = useSyncExternalStore(
-    subscribeToHydration,
-    () => true,
-    () => false,
-  );
   const activeGroupId =
     applicationNavigation.find((group) =>
       group.items.some((item) => navigationItemIsActive(pathname, item)),
@@ -100,11 +91,7 @@ export function PrimaryNavigation({
   }
 
   return (
-    <nav
-      className={styles.navigation}
-      aria-label="Application navigation"
-      data-hydrated={hydrated}
-    >
+    <nav className={styles.navigation} aria-label="Application navigation">
       <Link
         aria-current={pathname === homeNavigationItem.href ? "page" : undefined}
         className={`${styles.homeLink} ${pathname === homeNavigationItem.href ? styles.active : ""}`}
