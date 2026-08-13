@@ -13,7 +13,7 @@ from rci_analytics import (
 )
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
 from rci_contracts import validate_instance
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import BrandDecisionOverride, GovernedBrandResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -250,3 +250,52 @@ def test_price_monitoring_uses_governed_canonical_external_brand_identity() -> N
     assert view["products"][0]["brand"] == "fairlife"
     assert view["products"][0]["brand_type"] == "national"
     assert view["brand_portfolio"][0]["brand_type"] == "national"
+
+
+def test_price_monitoring_applies_a_confirmed_canonical_brand_mapping() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT).with_overrides(
+        [
+            BrandDecisionOverride(
+                retailer_id="walmart_us",
+                normalized_brand="mayfield",
+                display_brand="Mayfield",
+                role="regional",
+                decision="confirmed",
+                canonical_brand_id="regional__mayfield_dairy_farms",
+                canonical_brand_name="Mayfield Dairy Farms",
+            )
+        ]
+    )
+    projector = PriceMonitoringProjector(
+        pack,
+        resolver,
+        retailer_names={"walmart_us": "Walmart (US)"},
+    )
+    offer = _classified(
+        offer_id="mayfield-1",
+        product_id="mayfield-product",
+        store="1",
+        price="4.12",
+        collected_at="2026-08-07T06:00:00Z",
+    )
+    offer = replace(offer, offer=replace(offer.offer, brand="Mayfield"))
+
+    view = projector.build(
+        [offer],
+        analysis_id="milk-governed-brand-mapping-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us"),
+        location_index={
+            ("walmart_us", "1"): {
+                "zipcode": "72712",
+                "city": "Bentonville",
+                "state": "AR",
+                "country": "USA",
+            }
+        },
+    )
+
+    assert view["products"][0]["brand"] == "Mayfield Dairy Farms"
+    assert view["products"][0]["brand_type"] == "regional"
+    assert view["products"][0]["brand_origin"] == "user"

@@ -117,6 +117,30 @@ def test_category_gated_global_alias_fails_closed_without_matching_category() ->
     assert beef.status == "unresolved"
 
 
+def test_unresolved_observed_names_receive_review_only_canonical_candidates() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    mayfield = resolver.suggest("walmart_us", "Mayfield", category="Fresh Fluid Milk")
+    prairie = resolver.suggest("walmart_us", "Prairie farms dairy", category="Fresh Fluid Milk")
+
+    assert mayfield[0].canonical_brand_id == "regional__mayfield_dairy_farms"
+    assert mayfield[0].role == "regional"
+    assert mayfield[0].confidence_score >= 80
+    assert prairie[0].canonical_brand_name == "Prairie Farms"
+    assert resolver.resolve("walmart_us", "Mayfield").status == "unresolved"
+    assert resolver.suggest("walmart_us", "Unknown", category="Fresh Fluid Milk") == ()
+
+
+def test_quarantined_alias_conflict_stays_ambiguous_for_human_review() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    suggestions = resolver.suggest("whole_foods_market_us", "Whole Foods Market Kitchen")
+
+    assert len(suggestions) == 2
+    assert {row.rationale for row in suggestions} == {"quarantined_alias_conflict"}
+    assert {row.confidence_score for row in suggestions} == {100}
+
+
 def test_exclusive_without_retailer_ownership_is_not_strict_private_label() -> None:
     resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
     exclusive = next(
@@ -149,3 +173,29 @@ def test_governed_rejection_overrides_foundation_without_mutating_it() -> None:
 
     assert governed.resolve("walmart_us", "Great Value").strict_private_label is False
     assert resolver.resolve("walmart_us", "Great Value").strict_private_label is True
+
+
+def test_governed_candidate_mapping_canonicalizes_without_mutating_foundation() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+    governed = resolver.with_overrides(
+        [
+            BrandDecisionOverride(
+                retailer_id="walmart_us",
+                normalized_brand="mayfield",
+                display_brand="Mayfield",
+                role="regional",
+                decision="confirmed",
+                canonical_brand_id="regional__mayfield_dairy_farms",
+                canonical_brand_name="Mayfield Dairy Farms",
+            )
+        ]
+    )
+
+    resolution = governed.resolve("walmart_us", "Mayfield", category="Fresh Fluid Milk")
+
+    assert resolution.status == "resolved"
+    assert resolution.resolution_method == "governed_override"
+    assert resolution.canonical_brand_id == "regional__mayfield_dairy_farms"
+    assert resolution.canonical_brand_name == "Mayfield Dairy Farms"
+    assert resolution.role == "regional"
+    assert resolver.resolve("walmart_us", "Mayfield").status == "unresolved"

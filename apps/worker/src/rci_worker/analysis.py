@@ -627,6 +627,16 @@ class AnalysisProcessor:
                         display_brand=rule.display_brand,
                         role=rule.role,  # type: ignore[arg-type]
                         decision=rule.decision,  # type: ignore[arg-type]
+                        canonical_brand_id=(
+                            str(rule.evidence["canonical_brand_id"])
+                            if rule.evidence.get("canonical_brand_id")
+                            else None
+                        ),
+                        canonical_brand_name=(
+                            str(rule.evidence["canonical_brand_name"])
+                            if rule.evidence.get("canonical_brand_name")
+                            else None
+                        ),
                     )
                     for rule in brand_rules
                 ]

@@ -40,6 +40,20 @@ function originLabel(origin: BrandWorkbenchBrand["origin"]) {
   return "Observed data";
 }
 
+function candidateRationale(
+  rationale: BrandWorkbenchBrand["candidate_matches"][number]["rationale"],
+) {
+  if (rationale === "quarantined_alias_conflict")
+    return "The approved foundation contains a known alias conflict; choose the correct identity.";
+  if (rationale === "same_core_name")
+    return "The observed and canonical names share the same core brand name.";
+  if (rationale === "name_prefix")
+    return "One name is a qualified form of the other.";
+  if (rationale === "token_overlap")
+    return "The names share a strong set of brand-name terms.";
+  return "The normalized names are similar enough to warrant human review.";
+}
+
 export function BrandWorkbenchPanel({
   analysisId,
   readOnly = false,
@@ -58,6 +72,9 @@ export function BrandWorkbenchPanel({
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<BrandStatus>("all");
   const [roles, setRoles] = useState<Record<string, BrandRole>>({});
+  const [canonicalSelections, setCanonicalSelections] = useState<
+    Record<string, string>
+  >({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("Loading brand governance…");
   const [showRecompute, setShowRecompute] = useState(false);
@@ -85,6 +102,18 @@ export function BrandWorkbenchPanel({
           `${brand.retailer_id}:${brand.normalized_brand}`,
           brand.role,
         ]),
+      ),
+    );
+    setCanonicalSelections(
+      Object.fromEntries(
+        body.brands.map((brand) => {
+          const key = `${brand.retailer_id}:${brand.normalized_brand}`;
+          const selected =
+            brand.candidate_status === "candidate"
+              ? brand.candidate_matches[0]?.canonical_brand_id || ""
+              : "";
+          return [key, selected];
+        }),
       ),
     );
     setMessage("");
@@ -134,6 +163,10 @@ export function BrandWorkbenchPanel({
       if (!needle) return true;
       return [
         brand.display_brand,
+        brand.canonical_brand_name || "",
+        ...brand.candidate_matches.map((candidate) =>
+          [candidate.canonical_brand_name, candidate.role].join(" "),
+        ),
         roleLabels[brand.role],
         distributionLabels[brand.distribution_tier],
         ...brand.product_examples.map((product) => product.name),
@@ -159,15 +192,25 @@ export function BrandWorkbenchPanel({
       needsReview: retailerBrands.filter((brand) =>
         ["suggested", "unclassified"].includes(brand.status),
       ).length,
+      candidateMatches: retailerBrands.filter(
+        (brand) => brand.candidate_status === "candidate",
+      ).length,
     }),
     [retailerBrands],
   );
 
-  async function decide(brand: BrandWorkbenchBrand, decision: BrandDecision) {
+  async function decide(
+    brand: BrandWorkbenchBrand,
+    decision: BrandDecision,
+    canonicalBrandId?: string,
+  ) {
     if (!workbench) return;
     const key = `${brand.retailer_id}:${brand.normalized_brand}`;
     setBusyKey(key);
     setMessage("");
+    const candidate = brand.candidate_matches.find(
+      (value) => value.canonical_brand_id === canonicalBrandId,
+    );
     const response = await fetch(
       `/api/analyses/${encodeURIComponent(analysisId)}/brand-workbench/decisions`,
       {
@@ -177,8 +220,9 @@ export function BrandWorkbenchPanel({
           expected_revision: workbench.revision,
           retailer_id: brand.retailer_id,
           normalized_brand: brand.normalized_brand,
-          role: roles[key] || brand.role,
+          role: candidate?.role || roles[key] || brand.role,
           decision,
+          canonical_brand_id: canonicalBrandId || null,
         }),
       },
     );
@@ -331,6 +375,10 @@ export function BrandWorkbenchPanel({
           <b>{retailerSummary.needsReview}</b>
           Classifications to review
         </span>
+        <span className={retailerSummary.candidateMatches ? "ready" : ""}>
+          <b>{retailerSummary.candidateMatches}</b>
+          Foundation matches ready
+        </span>
       </div>
 
       <div className="brand-status-tabs" role="group" aria-label="Brand status">
@@ -358,6 +406,10 @@ export function BrandWorkbenchPanel({
       <div className="brand-card-grid">
         {visibleBrands.map((brand) => {
           const key = `${brand.retailer_id}:${brand.normalized_brand}`;
+          const selectedCandidate = brand.candidate_matches.find(
+            (candidate) =>
+              candidate.canonical_brand_id === canonicalSelections[key],
+          );
           return (
             <article className={`brand-card ${brand.status}`} key={key}>
               <header>
@@ -448,6 +500,85 @@ export function BrandWorkbenchPanel({
                 </p>
               )}
 
+              {brand.candidate_matches.length ? (
+                <div
+                  className={`brand-candidate-panel ${brand.candidate_status}`}
+                >
+                  <small>
+                    {brand.candidate_status === "ambiguous"
+                      ? "Identity needs a choice"
+                      : "Canonical match candidate"}
+                  </small>
+                  <label>
+                    Approved Brand Foundation identity
+                    <select
+                      value={canonicalSelections[key] || ""}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        setCanonicalSelections((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Select a canonical brand</option>
+                      {brand.candidate_matches.map((candidate) => (
+                        <option
+                          value={candidate.canonical_brand_id}
+                          key={candidate.canonical_brand_id}
+                        >
+                          {candidate.canonical_brand_name} ·{" "}
+                          {candidate.confidence_score}%
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedCandidate ? (
+                    <div>
+                      <strong>{selectedCandidate.canonical_brand_name}</strong>
+                      <span>
+                        {roleLabels[selectedCandidate.role]} ·{" "}
+                        {selectedCandidate.brand_bucket} ·{" "}
+                        {selectedCandidate.confidence_score}% name confidence
+                      </span>
+                      <p>{candidateRationale(selectedCandidate.rationale)}</p>
+                      {!readOnly ? (
+                        <button
+                          type="button"
+                          disabled={busyKey !== null}
+                          onClick={() =>
+                            void decide(
+                              brand,
+                              "confirmed",
+                              selectedCandidate.canonical_brand_id,
+                            )
+                          }
+                        >
+                          Confirm canonical match
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p>
+                      Review the candidates and select the identity supported by
+                      the product evidence. No mapping is applied automatically.
+                    </p>
+                  )}
+                </div>
+              ) : brand.canonical_brand_name ? (
+                <div
+                  className={`brand-canonical-resolution ${brand.candidate_status}`}
+                >
+                  <small>
+                    {brand.candidate_status === "governed"
+                      ? "Human-governed canonical identity"
+                      : "Resolved by Brand Foundation"}
+                  </small>
+                  <strong>{brand.canonical_brand_name}</strong>
+                  <span>{roleLabels[brand.role]}</span>
+                </div>
+              ) : null}
+
               <footer className={readOnly ? "read-only" : undefined}>
                 {readOnly ? (
                   <Link
@@ -459,7 +590,7 @@ export function BrandWorkbenchPanel({
                 ) : (
                   <>
                     <label>
-                      Brand role
+                      Classify without canonical mapping
                       <select
                         value={roles[key] || brand.role}
                         onChange={(event) =>
@@ -482,7 +613,7 @@ export function BrandWorkbenchPanel({
                         disabled={busyKey !== null}
                         onClick={() => void decide(brand, "confirmed")}
                       >
-                        Confirm role
+                        Confirm role only
                       </button>
                       <button
                         type="button"

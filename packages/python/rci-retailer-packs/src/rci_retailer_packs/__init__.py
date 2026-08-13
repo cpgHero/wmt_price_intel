@@ -1,6 +1,7 @@
 """Versioned retailer semantics and conservative retailer-scoped brand resolution."""
 
 from rci_retailer_packs.catalog import (
+    BrandCandidateSuggestion,
     BrandDecisionOverride,
     BrandFoundation,
     BrandFoundationLoader,
@@ -13,6 +14,7 @@ from rci_retailer_packs.catalog import (
 )
 
 __all__ = [
+    "BrandCandidateSuggestion",
     "BrandDecisionOverride",
     "BrandFoundation",
     "BrandFoundationLoader",

@@ -61,6 +61,7 @@ class BrandDecisionCommand:
     role: str
     decision: str
     reason: str | None = None
+    canonical_brand_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -706,8 +707,12 @@ class BrandReviewService:
             ],
             "brands": brands,
             "summary": {
-                status: sum(row["status"] == status for row in brands)
-                for status in ("suggested", "confirmed", "rejected", "unclassified")
+                **{
+                    status: sum(row["status"] == status for row in brands)
+                    for status in ("suggested", "confirmed", "rejected", "unclassified")
+                },
+                "candidate_matches": sum(row["candidate_status"] == "candidate" for row in brands),
+                "ambiguous_matches": sum(row["candidate_status"] == "ambiguous" for row in brands),
             },
         }
 
@@ -726,6 +731,24 @@ class BrandReviewService:
         )
         if target is None:
             raise ValueError("brand is not present in this analysis")
+        selected_candidate = None
+        if command.canonical_brand_id is not None:
+            if command.decision != "confirmed":
+                raise ValueError("canonical mapping is allowed only for a confirmed decision")
+            selected_candidate = next(
+                (
+                    row
+                    for row in target["candidate_matches"]
+                    if row["canonical_brand_id"] == command.canonical_brand_id
+                ),
+                None,
+            )
+            if selected_candidate is None:
+                raise ValueError(
+                    "canonical brand is not an eligible candidate for this observation"
+                )
+            if selected_candidate["role"] != command.role:
+                raise ValueError("canonical brand role must match the governed foundation")
         analysis = await self._results.get(analysis_id)
         revision = await self._repository.save_decision(
             analysis,
@@ -741,6 +764,20 @@ class BrandReviewService:
                     "location_share",
                     "distribution_tier",
                 )
+            }
+            | {
+                "canonical_brand_id": (
+                    selected_candidate["canonical_brand_id"] if selected_candidate else None
+                ),
+                "canonical_brand_name": (
+                    selected_candidate["canonical_brand_name"] if selected_candidate else None
+                ),
+                "candidate_confidence_score": (
+                    selected_candidate["confidence_score"] if selected_candidate else None
+                ),
+                "candidate_rationale": (
+                    selected_candidate["rationale"] if selected_candidate else None
+                ),
             },
             actor=actor,
         )
@@ -973,6 +1010,45 @@ class BrandReviewService:
                     if share >= 0.25
                     else "concentrated"
                 )
+                observed_resolution = (
+                    brand_resolver.resolve(retailer_id, display, category=pack.name)
+                    if brand_resolver is not None
+                    else None
+                )
+                suggestions = (
+                    brand_resolver.suggest(retailer_id, display, category=pack.name)
+                    if brand_resolver is not None
+                    and observed_resolution is not None
+                    and observed_resolution.status == "unresolved"
+                    else ()
+                )
+                candidate_rows = [value.to_record() for value in suggestions]
+                governed_canonical_id = (
+                    str(rule.evidence.get("canonical_brand_id"))
+                    if rule is not None and rule.evidence.get("canonical_brand_id")
+                    else None
+                )
+                governed_canonical_name = (
+                    str(rule.evidence.get("canonical_brand_name"))
+                    if rule is not None and rule.evidence.get("canonical_brand_name")
+                    else None
+                )
+                if governed_canonical_id and rule is not None and rule.decision == "confirmed":
+                    candidate_status = "governed"
+                elif observed_resolution is not None and observed_resolution.status == "resolved":
+                    candidate_status = "resolved"
+                elif candidate_rows:
+                    top_score = int(candidate_rows[0]["confidence_score"])
+                    close_second = (
+                        len(candidate_rows) > 1
+                        and top_score - int(candidate_rows[1]["confidence_score"]) <= 4
+                    )
+                    conflict = candidate_rows[0]["rationale"] == "quarantined_alias_conflict"
+                    candidate_status = (
+                        "ambiguous" if conflict or close_second or top_score < 80 else "candidate"
+                    )
+                else:
+                    candidate_status = "none"
                 output.append(
                     {
                         "retailer_id": retailer_id,
@@ -988,6 +1064,20 @@ class BrandReviewService:
                         ),
                         "origin": rule.origin if rule else configured_origin,
                         "reason": rule.reason if rule else None,
+                        "canonical_brand_id": governed_canonical_id
+                        or (
+                            observed_resolution.canonical_brand_id
+                            if observed_resolution is not None
+                            else None
+                        ),
+                        "canonical_brand_name": governed_canonical_name
+                        or (
+                            observed_resolution.canonical_brand_name
+                            if observed_resolution is not None
+                            else None
+                        ),
+                        "candidate_status": candidate_status,
+                        "candidate_matches": candidate_rows,
                         "observed_products": products,
                         "observed_locations": locations,
                         "observed_zipcodes": zipcodes,

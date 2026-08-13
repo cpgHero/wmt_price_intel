@@ -58,12 +58,21 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["suggested", "confirmed", "rejected", "unclassified"],
+      "required": [
+        "suggested",
+        "confirmed",
+        "rejected",
+        "unclassified",
+        "candidate_matches",
+        "ambiguous_matches"
+      ],
       "properties": {
         "suggested": { "type": "integer", "minimum": 0 },
         "confirmed": { "type": "integer", "minimum": 0 },
         "rejected": { "type": "integer", "minimum": 0 },
-        "unclassified": { "type": "integer", "minimum": 0 }
+        "unclassified": { "type": "integer", "minimum": 0 },
+        "candidate_matches": { "type": "integer", "minimum": 0 },
+        "ambiguous_matches": { "type": "integer", "minimum": 0 }
       }
     }
   },
@@ -84,6 +93,10 @@
         "location_share",
         "distribution_tier",
         "distribution_evidence",
+        "canonical_brand_id",
+        "canonical_brand_name",
+        "candidate_status",
+        "candidate_matches",
         "product_examples"
       ],
       "properties": {
@@ -94,6 +107,16 @@
         "status": { "enum": ["suggested", "confirmed", "rejected", "unclassified"] },
         "origin": { "enum": ["product_pack", "deterministic", "user"] },
         "reason": { "type": ["string", "null"] },
+        "canonical_brand_id": { "type": ["string", "null"] },
+        "canonical_brand_name": { "type": ["string", "null"] },
+        "candidate_status": {
+          "enum": ["resolved", "governed", "candidate", "ambiguous", "none"]
+        },
+        "candidate_matches": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/candidate" }
+        },
         "observed_products": { "type": "integer", "minimum": 1 },
         "observed_locations": { "type": "integer", "minimum": 0 },
         "observed_zipcodes": { "type": "integer", "minimum": 0 },
@@ -121,6 +144,44 @@
             }
           }
         }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical_brand_id",
+        "canonical_brand_name",
+        "role",
+        "strict_private_label",
+        "retailer_scope",
+        "confidence_score",
+        "rationale",
+        "brand_bucket",
+        "brand_class",
+        "primary_category",
+        "core_region"
+      ],
+      "properties": {
+        "canonical_brand_id": { "type": "string", "minLength": 1 },
+        "canonical_brand_name": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "strict_private_label": { "type": "boolean" },
+        "retailer_scope": { "type": "string", "minLength": 1 },
+        "confidence_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "rationale": {
+          "enum": [
+            "quarantined_alias_conflict",
+            "same_core_name",
+            "name_prefix",
+            "token_overlap",
+            "spelling_similarity"
+          ]
+        },
+        "brand_bucket": { "type": "string", "minLength": 1 },
+        "brand_class": { "type": "string", "minLength": 1 },
+        "primary_category": { "type": ["string", "null"] },
+        "core_region": { "type": ["string", "null"] }
       }
     }
   }

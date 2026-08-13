@@ -207,6 +207,8 @@ async def test_brand_workbench_api_stages_decisions_and_zero_provider_reanalysis
                     "confirmed": 0,
                     "rejected": 0,
                     "unclassified": 0,
+                    "candidate_matches": 0,
+                    "ambiguous_matches": 0,
                 },
             }
 

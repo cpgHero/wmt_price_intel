@@ -113,6 +113,7 @@ class BrandDecisionRequest(BaseModel):
     normalized_brand: str = Field(min_length=1)
     role: Literal["private_label", "regional", "national", "unclassified"]
     decision: Literal["confirmed", "rejected", "reset"]
+    canonical_brand_id: str | None = Field(default=None, min_length=1)
     reason: str | None = Field(default=None, max_length=1000)
 
 

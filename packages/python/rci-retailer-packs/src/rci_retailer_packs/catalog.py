@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Literal
 
@@ -132,6 +133,44 @@ class BrandDecisionOverride:
     display_brand: str
     role: BrandRole
     decision: Literal["confirmed", "rejected"]
+    canonical_brand_id: str | None = None
+    canonical_brand_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BrandCandidateSuggestion:
+    canonical_brand_id: str
+    canonical_brand_name: str
+    role: BrandRole
+    strict_private_label: bool
+    retailer_scope: str
+    confidence_score: int
+    rationale: Literal[
+        "quarantined_alias_conflict",
+        "same_core_name",
+        "name_prefix",
+        "token_overlap",
+        "spelling_similarity",
+    ]
+    brand_bucket: str
+    brand_class: str
+    primary_category: str | None
+    core_region: str | None
+
+    def to_record(self) -> JsonObject:
+        return {
+            "canonical_brand_id": self.canonical_brand_id,
+            "canonical_brand_name": self.canonical_brand_name,
+            "role": self.role,
+            "strict_private_label": self.strict_private_label,
+            "retailer_scope": self.retailer_scope,
+            "confidence_score": self.confidence_score,
+            "rationale": self.rationale,
+            "brand_bucket": self.brand_bucket,
+            "brand_class": self.brand_class,
+            "primary_category": self.primary_category,
+            "core_region": self.core_region,
+        }
 
 
 class FileRetailerPackCatalog:
@@ -340,6 +379,12 @@ class GovernedBrandResolver:
         for row in foundation.document.get("aliases", []):
             if str(row["retailer_id"]) == "__global__":
                 self._global_aliases.setdefault(str(row["alias_normalized"]), dict(row))
+        self._alias_conflicts = {
+            (str(row["retailer_id"]), str(row["alias_normalized"])): tuple(
+                str(value) for value in row["candidate_brand_ids"]
+            )
+            for row in foundation.document.get("alias_conflicts", [])
+        }
 
     @classmethod
     def from_repository(
@@ -409,6 +454,197 @@ class GovernedBrandResolver:
             return self._unresolved(retailer_id, observed, normalized)
         eligible = self._strict_eligible(row) and method != "legacy_alias"
         return self._resolved(retailer_id, observed, normalized, row, method, eligible)
+
+    def suggest(
+        self,
+        retailer_id: str,
+        observed_brand: str | None,
+        *,
+        category: str | None = None,
+        limit: int = 3,
+    ) -> tuple[BrandCandidateSuggestion, ...]:
+        """Return inspectable candidates without changing resolution authority.
+
+        Suggestions are deliberately separate from :meth:`resolve`. Even a very high
+        score remains review evidence until a human confirms a governed override.
+        Retailer-owned candidates are visible only within their owning retailer.
+        """
+
+        if limit < 1:
+            return ()
+        observed = str(observed_brand or "").strip()
+        normalized = normalize_brand_name(observed)
+        if (
+            not normalized
+            or self.resolve(retailer_id, observed, category=category).status == "resolved"
+        ):
+            return ()
+
+        conflict_ids = self._alias_conflicts.get((retailer_id, normalized), ())
+        if conflict_ids:
+            return tuple(
+                self._suggestion(
+                    retailer_id,
+                    self._brands_by_id[brand_id],
+                    score=100,
+                    rationale="quarantined_alias_conflict",
+                )
+                for brand_id in conflict_ids[:limit]
+            )
+
+        candidates = [
+            row
+            for (candidate_retailer_id, _), row in self._canonical.items()
+            if candidate_retailer_id == retailer_id
+        ]
+        candidates.extend(self._global_canonical.values())
+        scored: list[BrandCandidateSuggestion] = []
+        for row in candidates:
+            score, rationale = self._candidate_score(
+                normalized,
+                str(row["brand_name_normalized"]),
+                category=category,
+                row=row,
+            )
+            # Below 75, shared retail words such as "dairy", "farm", or "quality"
+            # create more review noise than useful identity evidence. Keep those
+            # observations unclassified instead of presenting a weak candidate.
+            if score < 75:
+                continue
+            scored.append(
+                self._suggestion(
+                    retailer_id,
+                    row,
+                    score=score,
+                    rationale=rationale,
+                )
+            )
+        scored.sort(
+            key=lambda value: (
+                -value.confidence_score,
+                value.canonical_brand_name.casefold(),
+                value.canonical_brand_id,
+            )
+        )
+        return tuple(scored[:limit])
+
+    @staticmethod
+    def _candidate_score(
+        observed: str,
+        canonical: str,
+        *,
+        category: str | None,
+        row: JsonObject,
+    ) -> tuple[
+        int, Literal["same_core_name", "name_prefix", "token_overlap", "spelling_similarity"]
+    ]:
+        observed_tokens = tuple(value for value in observed.split("_") if value)
+        canonical_tokens = tuple(value for value in canonical.split("_") if value)
+        if not observed_tokens or not canonical_tokens:
+            return 0, "spelling_similarity"
+
+        suffixes = {
+            "brand",
+            "brands",
+            "co",
+            "company",
+            "dairy",
+            "farm",
+            "farms",
+            "food",
+            "foods",
+            "inc",
+            "llc",
+        }
+
+        def core(tokens: tuple[str, ...]) -> tuple[str, ...]:
+            values = list(tokens)
+            while len(values) > 1 and values[-1] in suffixes:
+                values.pop()
+            return tuple(values)
+
+        observed_core = core(observed_tokens)
+        canonical_core = core(canonical_tokens)
+        sequence_score = round(100 * SequenceMatcher(None, observed, canonical).ratio())
+        observed_set = set(observed_tokens)
+        canonical_set = set(canonical_tokens)
+        overlap = len(observed_set & canonical_set) / max(len(observed_set | canonical_set), 1)
+        token_score = round(100 * overlap)
+        score = max(sequence_score, token_score)
+        rationale: Literal[
+            "same_core_name", "name_prefix", "token_overlap", "spelling_similarity"
+        ] = "spelling_similarity"
+        if observed_core == canonical_core:
+            score = max(score, 94 - 2 * abs(len(observed_tokens) - len(canonical_tokens)))
+            rationale = "same_core_name"
+        elif (
+            observed_tokens == canonical_tokens[: len(observed_tokens)]
+            or canonical_tokens == observed_tokens[: len(canonical_tokens)]
+        ):
+            score = max(score, 91 - 2 * abs(len(observed_tokens) - len(canonical_tokens)))
+            rationale = "name_prefix"
+        elif observed_set <= canonical_set or canonical_set <= observed_set:
+            score = max(score, 84 - abs(len(observed_tokens) - len(canonical_tokens)))
+            rationale = "token_overlap"
+        elif token_score >= sequence_score:
+            rationale = "token_overlap"
+
+        category_key = normalize_brand_name(category or "")
+        category_values = normalize_brand_name(
+            " ".join(str(row.get(value) or "") for value in ("primary_category", "category_tags"))
+        )
+        if category_key and category_values:
+            category_tokens = set(category_key.split("_"))
+            if category_tokens & set(category_values.split("_")):
+                score = min(100, score + 2)
+        if bool(row.get("is_priority_brand")):
+            score = min(100, score + 1)
+        return score, rationale
+
+    def _suggestion(
+        self,
+        retailer_id: str,
+        row: JsonObject,
+        *,
+        score: int,
+        rationale: Literal[
+            "quarantined_alias_conflict",
+            "same_core_name",
+            "name_prefix",
+            "token_overlap",
+            "spelling_similarity",
+        ],
+    ) -> BrandCandidateSuggestion:
+        strict_private_label = self._strict_eligible(row)
+        bucket = str(row["brand_bucket"])
+        role: BrandRole = (
+            "private_label"
+            if strict_private_label
+            else "regional"
+            if bucket == "Regional"
+            else "national"
+            if bucket == "National"
+            else "unclassified"
+        )
+        return BrandCandidateSuggestion(
+            canonical_brand_id=str(row["brand_id"]),
+            canonical_brand_name=str(row["brand_name"]),
+            role=role,
+            strict_private_label=strict_private_label,
+            retailer_scope=(
+                str(row.get("retailer_id") or "global")
+                if str(row.get("retailer_id") or "__global__") != "__global__"
+                else "global"
+            ),
+            confidence_score=max(0, min(100, score)),
+            rationale=rationale,
+            brand_bucket=bucket,
+            brand_class=str(row["brand_class"]),
+            primary_category=(
+                str(row["primary_category"]) if row.get("primary_category") else None
+            ),
+            core_region=str(row["core_region"]) if row.get("core_region") else None,
+        )
 
     @staticmethod
     def _category_alias_allowed(alias: JsonObject, category: str | None) -> bool:
@@ -517,8 +753,26 @@ class GovernedBrandResolver:
         row: JsonObject | None,
         override: BrandDecisionOverride,
     ) -> BrandResolution:
+        governed_row = (
+            self._brands_by_id.get(override.canonical_brand_id)
+            if override.canonical_brand_id
+            else None
+        )
+        if governed_row is not None:
+            governed_retailer = str(governed_row.get("retailer_id") or "__global__")
+            if governed_retailer not in {"__global__", retailer_id}:
+                governed_row = None
+        if governed_row is not None and override.decision == "confirmed":
+            row = governed_row
         base = (
-            self._resolved(retailer_id, observed, normalized, row, "exact_canonical", False)
+            self._resolved(
+                retailer_id,
+                observed,
+                normalized,
+                row,
+                "exact_canonical",
+                self._strict_eligible(row),
+            )
             if row is not None
             else self._unresolved(retailer_id, observed, normalized)
         )
@@ -528,7 +782,11 @@ class GovernedBrandResolver:
             status="resolved" if confirmed or row is not None else "unresolved",
             resolution_method="governed_override",
             canonical_brand_name=(
-                (base.canonical_brand_name or override.display_brand)
+                (
+                    base.canonical_brand_name
+                    or override.canonical_brand_name
+                    or override.display_brand
+                )
                 if confirmed
                 else base.canonical_brand_name
             ),

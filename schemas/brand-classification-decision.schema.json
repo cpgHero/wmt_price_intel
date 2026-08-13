@@ -17,6 +17,7 @@
     "normalized_brand": { "type": "string", "minLength": 1 },
     "role": { "enum": ["private_label", "regional", "national", "unclassified"] },
     "decision": { "enum": ["confirmed", "rejected", "reset"] },
+    "canonical_brand_id": { "type": ["string", "null"], "minLength": 1 },
     "reason": { "type": ["string", "null"], "maxLength": 1000 }
   }
 }

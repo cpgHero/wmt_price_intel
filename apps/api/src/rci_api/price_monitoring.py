@@ -283,7 +283,9 @@ class PostgresPriceMonitoringRepository:
               ORDER BY revision DESC
               LIMIT 1
             )
-            SELECT retailer_id, normalized_brand, display_brand, role, decision
+            SELECT retailer_id, normalized_brand, display_brand, role, decision,
+              NULLIF(evidence->>'canonical_brand_id', '') AS canonical_brand_id,
+              NULLIF(evidence->>'canonical_brand_name', '') AS canonical_brand_name
             FROM brand_classification_rule
             WHERE revision_id = (SELECT id FROM selected)
             """

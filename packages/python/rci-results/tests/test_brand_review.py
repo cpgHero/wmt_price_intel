@@ -15,6 +15,7 @@ from rci_results.brand_review import (
     InMemoryBrandReviewRepository,
 )
 from rci_results.models import AnalysisRecord
+from rci_retailer_packs import GovernedBrandResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -59,6 +60,13 @@ class FakeResults:
                                     "observed_locations": 14,
                                     "observed_zipcodes": 12,
                                     "location_share": 0.14,
+                                },
+                                {
+                                    "brand": "Mayfield",
+                                    "distinct_products": 2,
+                                    "observed_locations": 10,
+                                    "observed_zipcodes": 9,
+                                    "location_share": 0.1,
                                 },
                             ],
                         },
@@ -159,6 +167,7 @@ async def test_brand_workbench_stages_human_roles_without_immediate_reanalysis()
         repository,
         FakePackLoader(),
         retailer_names={"walmart_us": "Walmart", "aldi_us": "ALDI"},
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
     )
 
     initial = await service.view("fresh-milk-example")
@@ -170,6 +179,12 @@ async def test_brand_workbench_stages_human_roles_without_immediate_reanalysis()
     assert hiland["role"] == "regional"
     assert hiland["status"] == "suggested"
     assert hiland["distribution_tier"] == "concentrated"
+    mayfield = next(row for row in initial["brands"] if row["display_brand"] == "Mayfield")
+    assert mayfield["role"] == "unclassified"
+    assert mayfield["candidate_status"] == "candidate"
+    assert mayfield["candidate_matches"][0]["canonical_brand_id"] == (
+        "regional__mayfield_dairy_farms"
+    )
 
     saved = await service.decide(
         "fresh-milk-example",
@@ -212,6 +227,77 @@ async def test_brand_workbench_stages_human_roles_without_immediate_reanalysis()
     assert reanalysis.status == "queued"
     future = await service.view("fresh-milk-example")
     assert future["future_application"]["revision"] == 1
+
+
+@pytest.mark.asyncio
+async def test_brand_workbench_persists_a_validated_canonical_mapping() -> None:
+    repository = InMemoryBrandReviewRepository()
+    service = BrandReviewService(  # type: ignore[arg-type]
+        FakeResults(),
+        repository,
+        FakePackLoader(),
+        retailer_names={"walmart_us": "Walmart", "aldi_us": "ALDI"},
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    saved = await service.decide(
+        "fresh-milk-example",
+        BrandDecisionCommand(
+            expected_revision=0,
+            retailer_id="walmart_us",
+            normalized_brand="mayfield",
+            role="regional",
+            decision="confirmed",
+            canonical_brand_id="regional__mayfield_dairy_farms",
+        ),
+        actor="reviewer",
+    )
+    rules = await repository.rules(saved["revision_id"])
+    view = await service.view("fresh-milk-example")
+    mayfield = next(row for row in view["brands"] if row["display_brand"] == "Mayfield")
+
+    assert rules[0].evidence["canonical_brand_id"] == "regional__mayfield_dairy_farms"
+    assert rules[0].evidence["canonical_brand_name"] == "Mayfield Dairy Farms"
+    assert mayfield["status"] == "confirmed"
+    assert mayfield["candidate_status"] == "governed"
+    assert mayfield["canonical_brand_name"] == "Mayfield Dairy Farms"
+
+
+@pytest.mark.asyncio
+async def test_brand_workbench_rejects_unoffered_or_role_mismatched_mappings() -> None:
+    service = BrandReviewService(  # type: ignore[arg-type]
+        FakeResults(),
+        InMemoryBrandReviewRepository(),
+        FakePackLoader(),
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    with pytest.raises(ValueError, match="not an eligible candidate"):
+        await service.decide(
+            "fresh-milk-example",
+            BrandDecisionCommand(
+                expected_revision=0,
+                retailer_id="walmart_us",
+                normalized_brand="mayfield",
+                role="regional",
+                decision="confirmed",
+                canonical_brand_id="national__fairlife",
+            ),
+            actor="reviewer",
+        )
+    with pytest.raises(ValueError, match="role must match"):
+        await service.decide(
+            "fresh-milk-example",
+            BrandDecisionCommand(
+                expected_revision=0,
+                retailer_id="walmart_us",
+                normalized_brand="mayfield",
+                role="national",
+                decision="confirmed",
+                canonical_brand_id="regional__mayfield_dairy_farms",
+            ),
+            actor="reviewer",
+        )
 
 
 @pytest.mark.asyncio
