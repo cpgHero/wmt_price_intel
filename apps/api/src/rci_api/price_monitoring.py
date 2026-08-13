@@ -178,7 +178,20 @@ class PostgresPriceMonitoringRepository:
                    rl.store_name, ct.zipcode,
                    rl.city, rl.state, rl.country, rl.latitude, rl.longitude
             FROM collection_task ct
-            LEFT JOIN retailer_location rl ON rl.id = ct.retailer_location_id
+            LEFT JOIN LATERAL (
+              SELECT candidate.store_name, candidate.city, candidate.state,
+                     candidate.country, candidate.latitude, candidate.longitude
+              FROM retailer_location candidate
+              WHERE candidate.id = ct.retailer_location_id
+                 OR (
+                   ct.retailer_location_id IS NULL
+                   AND candidate.retailer_id = ct.retailer_id
+                   AND candidate.store_number = ct.store_number
+                 )
+              ORDER BY (candidate.id = ct.retailer_location_id) DESC,
+                       candidate.imported_at DESC
+              LIMIT 1
+            ) rl ON true
             WHERE ct.collection_run_id::text = :collection_run_id
               AND ct.retailer_id = :retailer_id
             """
