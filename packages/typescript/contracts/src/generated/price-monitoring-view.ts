@@ -1,7 +1,19 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
+export type EvidenceRate = EvidenceRate1 & {
+  status: "observed" | "unavailable";
+  known_observations: number;
+  in_stock_observations?: number;
+  promotion_observations?: number;
+  rate: number | null;
+  definition: string;
+};
+export type EvidenceRate1 = {
+  [k: string]: unknown;
+};
+
 export interface RetailCompetitiveIntelligencePriceMonitoringView {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
@@ -31,6 +43,7 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     brand_types: ValueLabelCount[];
     states: ValueLabelCount[];
     cities: ValueLabelCount[];
+    products: ProductOption[];
   };
   summary: {
     observed_locations: number;
@@ -41,7 +54,17 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     usable_price_rate: number;
     price_consistency_rate: number | null;
   };
+  presence: {
+    status: "observed_only";
+    observed_locations: number;
+    eligible_locations: number;
+    observed_presence_rate: number | null;
+    not_observed_locations: number;
+    confirmed_gap_locations: number;
+    definition: string;
+  };
   price_distribution: PriceStats;
+  price_histogram: PriceBin[];
   brand_portfolio: {
     brand_type: "private_label" | "regional" | "national" | "unclassified";
     products: number;
@@ -57,6 +80,7 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     sampled: boolean;
   };
   products: ProductSummary[];
+  exceptions: StoreException[];
   quality: {
     status: "ready" | "warning" | "blocked";
     checks: {
@@ -90,6 +114,14 @@ export interface ValueLabelCount {
   label: string;
   count: number;
 }
+export interface ProductOption {
+  value: string;
+  label: string;
+  count: number;
+  brand: string | null;
+  brand_type: "private_label" | "regional" | "national" | "unclassified";
+  image_url: string | null;
+}
 export interface PriceStats {
   minimum: number | null;
   q1: number | null;
@@ -101,6 +133,12 @@ export interface PriceStats {
   modal_price: number | null;
   modal_share: number | null;
   observation_count: number;
+}
+export interface PriceBin {
+  lower: number;
+  upper: number;
+  count: number;
+  share: number;
 }
 export interface Geography {
   level: "country" | "state" | "city";
@@ -146,6 +184,9 @@ export interface ProductSummary {
   cities: number;
   price_stats: PriceStats;
   consistency_rate: number | null;
+  availability: EvidenceRate;
+  promotion: EvidenceRate;
+  price_histogram: PriceBin[];
   sample_locations: ProductLocation[];
 }
 export interface ProductLocation {
@@ -157,4 +198,20 @@ export interface ProductLocation {
   state: string | null;
   price: number;
   observed_at: string | null;
+}
+export interface StoreException {
+  id: string;
+  type: "price_outlier";
+  severity: "high" | "review";
+  scope_key: string;
+  store_number: string | null;
+  store_name: string | null;
+  zipcode: string | null;
+  city: string | null;
+  state: string | null;
+  price: number;
+  reference_price: number;
+  difference: number;
+  observed_at: string | null;
+  reason: string;
 }

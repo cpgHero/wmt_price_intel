@@ -27,6 +27,8 @@ class NormalizedOffer:
     image_url: str | None
     collected_at: str | None
     raw: JsonObject
+    regular_price: Decimal | None = None
+    discounted_price: Decimal | None = None
 
     def to_record(self) -> JsonObject:
         return {
@@ -45,6 +47,12 @@ class NormalizedOffer:
             "product_url": self.product_url,
             "image_url": self.image_url,
             "collected_at": self.collected_at,
+            "regular_price": (
+                float(self.regular_price) if self.regular_price is not None else None
+            ),
+            "discounted_price": (
+                float(self.discounted_price) if self.discounted_price is not None else None
+            ),
         }
 
 

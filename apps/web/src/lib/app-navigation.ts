@@ -58,9 +58,9 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     label: "Intelligence",
     items: [
       {
-        label: "Price Monitoring",
+        label: "Price Intelligence",
         description: "Store-level price distribution within each retailer",
-        href: "/price-monitoring",
+        href: "/price-intelligence",
         icon: "prices",
         match: "prefix",
       },

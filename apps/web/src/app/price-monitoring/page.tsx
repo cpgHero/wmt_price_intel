@@ -28,7 +28,7 @@ export default async function PriceMonitoringPage() {
       <header className="page-header compact price-index-header">
         <div>
           <p className="eyebrow">Price intelligence</p>
-          <h1>Price Monitoring</h1>
+          <h1>Price Intelligence</h1>
         </div>
         <p>
           Track the package prices each retailer presents at each observed store
@@ -88,7 +88,7 @@ export default async function PriceMonitoringPage() {
                 <div className="price-study-retailers">
                   {[benchmark, ...competitorIds].map((retailerId) => (
                     <Link
-                      href={`/price-monitoring/${encodeURIComponent(summary.analysis.analysis_id)}?retailer=${encodeURIComponent(retailerId)}`}
+                      href={`/price-intelligence/${encodeURIComponent(summary.analysis.analysis_id)}?retailer=${encodeURIComponent(retailerId)}`}
                       key={retailerId}
                     >
                       <span>{displayLabel(retailerId)}</span>

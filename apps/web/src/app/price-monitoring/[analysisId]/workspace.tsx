@@ -13,7 +13,15 @@ import type { PriceMonitoringView } from "@/lib/api";
 import { displayDate } from "@/lib/presentation";
 
 type Product = PriceMonitoringView["products"][number];
-type TabId = "overview" | "products" | "geography" | "brands" | "quality";
+type Location = PriceMonitoringView["locations"][number];
+type TabId =
+  | "overview"
+  | "footprint"
+  | "price-architecture"
+  | "distribution-gaps"
+  | "store-exceptions"
+  | "market-benchmarks"
+  | "history";
 
 const brandLabels: Record<string, string> = {
   all: "All brand types",
@@ -91,6 +99,45 @@ const stateFeatures = (
   }
 ).features;
 
+function currency(value: number | null) {
+  return value === null
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+}
+
+function percent(value: number | null) {
+  return value === null
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "percent",
+        maximumFractionDigits: 1,
+      }).format(value);
+}
+
+function count(value: number) {
+  return value.toLocaleString("en-US");
+}
+
+function signedCurrency(value: number) {
+  if (value === 0) return "$0.00";
+  return `${value > 0 ? "+" : "−"}${currency(Math.abs(value))}`;
+}
+
+function updateQuery(parameters: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  for (const [key, value] of Object.entries(parameters)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  window.history.pushState(window.history.state, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 function projectCoordinate(longitude: number, latitude: number) {
   return {
     x: ((longitude + 125) / 59) * 900 + 30,
@@ -126,58 +173,67 @@ function geometryPath(geometry: { type: string; coordinates: unknown }) {
     .join(" ");
 }
 
-function currency(value: number | null) {
-  return value === null
-    ? "—"
-    : new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value);
+function downloadCsv(
+  retailer: string,
+  product: Product,
+  rows: Product["sample_locations"],
+) {
+  const header = [
+    "retailer",
+    "product_id",
+    "store_number",
+    "store_name",
+    "zipcode",
+    "city",
+    "state",
+    "price",
+    "observed_at",
+  ];
+  const values = rows.map((row) => [
+    retailer,
+    product.product_id,
+    row.store_number,
+    row.store_name,
+    row.zipcode,
+    row.city,
+    row.state,
+    row.price,
+    row.observed_at,
+  ]);
+  const csv = [header, ...values]
+    .map((row) =>
+      row
+        .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`)
+        .join(","),
+    )
+    .join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${retailer}-${product.product_id}-price-evidence.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
-function percent(value: number | null) {
-  return value === null
-    ? "—"
-    : new Intl.NumberFormat("en-US", {
-        style: "percent",
-        maximumFractionDigits: 1,
-      }).format(value);
-}
-
-function count(value: number) {
-  return value.toLocaleString("en-US");
-}
-
-function updateQuery(parameters: Record<string, string | null>) {
-  const url = new URL(window.location.href);
-  for (const [key, value] of Object.entries(parameters)) {
-    if (value) url.searchParams.set(key, value);
-    else url.searchParams.delete(key);
-  }
-  window.history.replaceState(window.history.state, "", url);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-function PriceRange({ product }: Readonly<{ product: Product }>) {
-  const stats = product.price_stats;
-  const span = Math.max((stats.maximum ?? 0) - (stats.minimum ?? 0), 0);
-  const modalPosition =
-    span > 0 && stats.modal_price !== null && stats.minimum !== null
-      ? ((stats.modal_price - stats.minimum) / span) * 100
-      : 50;
+function PriceHistogram({ product }: Readonly<{ product: Product }>) {
+  const maximum = Math.max(
+    1,
+    ...product.price_histogram.map((bin) => bin.count),
+  );
   return (
-    <div className="pm-price-range">
-      <div>
-        <span>{currency(stats.minimum)}</span>
-        <i style={{ left: `${modalPosition}%` }} title="Most common price" />
-        <span>{currency(stats.maximum)}</span>
-      </div>
-      <small>
-        Most common {currency(stats.modal_price)} · {percent(stats.modal_share)}{" "}
-        of observations
-      </small>
+    <div
+      className="pi-histogram"
+      aria-label="Observed store price distribution"
+    >
+      {product.price_histogram.map((bin) => (
+        <div key={`${bin.lower}-${bin.upper}`}>
+          <span>{count(bin.count)}</span>
+          <i
+            style={{ height: `${Math.max(8, (bin.count / maximum) * 100)}%` }}
+          />
+          <small>{currency(bin.lower)}</small>
+        </div>
+      ))}
     </div>
   );
 }
@@ -188,17 +244,18 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
       .filter((row) => row.level === "state")
       .map((row) => [row.key, row]),
   );
-  const maximumRange = Math.max(
-    0.01,
-    ...view.geographies.map((row) => row.price_stats.range ?? 0),
-  );
-  const points = view.filters.state ? view.locations : [];
+  const medians = view.geographies
+    .map((row) => row.price_stats.observation_median)
+    .filter((value): value is number => value !== null);
+  const minimum = medians.length ? Math.min(...medians) : 0;
+  const maximum = medians.length ? Math.max(...medians) : minimum;
+  const span = Math.max(0.01, maximum - minimum);
   return (
-    <div className="pm-map-stage">
+    <div className="pm-map-stage pi-map-stage">
       <svg
         className="pm-map"
         role="img"
-        aria-label={`${view.retailer.name} observed price geography`}
+        aria-label={`${view.retailer.name} exact-product observed price footprint`}
         viewBox="0 0 960 520"
       >
         <g className="pm-state-layer">
@@ -206,14 +263,17 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             const fips = String(state.id ?? "").padStart(2, "0");
             const stateCode = stateByFips[fips];
             const geography = stateRows.get(stateCode);
-            const intensity = geography
-              ? 0.18 + 0.7 * ((geography.price_stats.range ?? 0) / maximumRange)
-              : 0;
+            const medianPrice =
+              geography?.price_stats.observation_median ?? null;
+            const intensity =
+              medianPrice === null
+                ? 0
+                : 0.2 + 0.72 * ((medianPrice - minimum) / span);
             return (
               <path
                 aria-label={
                   geography
-                    ? `${stateCode}: ${count(geography.locations)} locations, ${currency(geography.price_stats.observation_median)} median package price`
+                    ? `${stateCode}: ${count(geography.locations)} observed locations, ${currency(medianPrice)} median price`
                     : stateCode
                 }
                 className={`${geography ? "has-data" : ""} ${view.filters.state === stateCode ? "selected" : ""}`}
@@ -230,119 +290,80 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
           })}
         </g>
         <g className="pm-location-layer">
-          {points
+          {view.locations
             .filter((row) => row.latitude !== null && row.longitude !== null)
             .map((row) => {
               const point = projectCoordinate(row.longitude!, row.latitude!);
               return (
                 <circle
-                  aria-label={`${row.store_name ?? row.store_number ?? row.zipcode}: median ${currency(row.median_price)}`}
+                  aria-label={`${row.store_name ?? row.store_number ?? row.zipcode}: ${currency(row.median_price)}`}
                   cx={point.x}
                   cy={point.y}
                   key={row.scope_key}
-                  r={view.filters.city === row.city ? 4.5 : 2.8}
+                  r={3.2}
                 />
               );
             })}
         </g>
       </svg>
       <aside className="pm-map-legend">
-        <span>Price range across observed products</span>
+        <span>Median observed price for this exact product</span>
         <div>
-          <i /> <i /> <i /> <i />
+          <i />
+          <i />
+          <i />
+          <i />
         </div>
-        <small>Lower variation</small>
-        <small>Higher variation</small>
+        <small>{currency(minimum)}</small>
+        <small>{currency(maximum)}</small>
         <p>
-          {view.filters.state
-            ? `${count(points.length)} observed locations in ${view.filters.city ?? view.filters.state}. Dots represent stores or service areas.`
-            : "Select a colored state to inspect cities and individual retailer locations."}
+          Colored states contain observed Search evidence. Uncolored states are
+          not evidence that the product is not carried.
         </p>
       </aside>
     </div>
   );
 }
 
-function ProductDrawer({
+function StoreDrawer({
+  location,
   product,
-  retailer,
   onClose,
 }: Readonly<{
+  location: Location;
   product: Product;
-  retailer: string;
   onClose: () => void;
 }>) {
-  function downloadLocations() {
-    const header = [
-      "retailer",
-      "product_id",
-      "store_number",
-      "store_name",
-      "zipcode",
-      "city",
-      "state",
-      "price",
-      "observed_at",
-    ];
-    const rows = product.sample_locations.map((location) => [
-      retailer,
-      product.product_id,
-      location.store_number,
-      location.store_name,
-      location.zipcode,
-      location.city,
-      location.state,
-      location.price,
-      location.observed_at,
-    ]);
-    const csv = [header, ...rows]
-      .map((row) =>
-        row
-          .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`)
-          .join(","),
-      )
-      .join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${retailer}-${product.product_id}-locations.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
   return (
     <div className="pm-drawer-layer">
       <button
-        aria-label="Close product details"
+        aria-label="Close store details"
         className="pm-drawer-backdrop"
         onClick={onClose}
         type="button"
       />
       <aside
-        className="pm-product-drawer"
+        className="pm-product-drawer pi-store-drawer"
         role="dialog"
         aria-modal="true"
-        aria-label={`${product.name} price details`}
       >
         <header>
-          <div className="pm-product-identity">
-            {product.image_url ? (
-              <img src={product.image_url} alt="" />
-            ) : (
-              <span aria-hidden="true">P</span>
-            )}
-            <div>
-              <p>
-                {retailer} · {brandLabels[product.brand_type]}
-              </p>
-              <h2>{product.name}</h2>
-              <small>
-                {product.brand ?? "Brand not classified"} · ID{" "}
-                {product.product_id}
-              </small>
-            </div>
+          <div>
+            <p className="section-kicker">Store-level Search evidence</p>
+            <h2>
+              {location.store_name ??
+                (location.store_number
+                  ? `Store ${location.store_number}`
+                  : `ZIP ${location.zipcode}`)}
+            </h2>
+            <small>
+              {[location.city, location.state, location.zipcode]
+                .filter(Boolean)
+                .join(" · ")}
+            </small>
           </div>
           <button
-            aria-label="Close product details"
+            aria-label="Close store details"
             onClick={onClose}
             type="button"
           >
@@ -351,141 +372,175 @@ function ProductDrawer({
         </header>
         <section className="pm-drawer-metrics">
           <div>
-            <span>Observed locations</span>
-            <strong>{count(product.locations)}</strong>
+            <span>Observed price</span>
+            <strong>{currency(location.median_price)}</strong>
           </div>
           <div>
-            <span>Most common price</span>
-            <strong>{currency(product.price_stats.modal_price)}</strong>
+            <span>Selected product</span>
+            <strong>{product.name}</strong>
           </div>
           <div>
-            <span>Observed range</span>
-            <strong>
-              {currency(product.price_stats.minimum)}–
-              {currency(product.price_stats.maximum)}
-            </strong>
+            <span>Store ID</span>
+            <strong>{location.store_number ?? "Service area"}</strong>
           </div>
           <div>
-            <span>Price consistency</span>
-            <strong>{percent(product.consistency_rate)}</strong>
+            <span>Evidence</span>
+            <strong>Search</strong>
           </div>
         </section>
         <section className="pm-drawer-section">
-          <header>
-            <div>
-              <p className="section-kicker">Store-level evidence</p>
-              <h3>Where this price was observed</h3>
-            </div>
-            <button
-              className="button secondary"
-              onClick={downloadLocations}
-              type="button"
-            >
-              Download CSV
-            </button>
-          </header>
-          <div className="pm-location-table-wrap">
-            <table className="pm-location-table">
-              <thead>
-                <tr>
-                  <th>Location</th>
-                  <th>ZIP</th>
-                  <th>City</th>
-                  <th>Price</th>
-                  <th>Observed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {product.sample_locations.map((location) => (
-                  <tr key={location.scope_key}>
-                    <td>
-                      <strong>
-                        {location.store_name ??
-                          (location.store_number
-                            ? `Store ${location.store_number}`
-                            : "Service area")}
-                      </strong>
-                      <small>
-                        {location.store_number
-                          ? `#${location.store_number}`
-                          : "ZIP-based"}
-                      </small>
-                    </td>
-                    <td>{location.zipcode ?? "—"}</td>
-                    <td>
-                      {[location.city, location.state]
-                        .filter(Boolean)
-                        .join(", ") || "—"}
-                    </td>
-                    <td>
-                      <strong>{currency(location.price)}</strong>
-                    </td>
-                    <td>
-                      {location.observed_at
-                        ? displayDate(location.observed_at)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <footer>
+          <h3>What this record means</h3>
           <p>
-            Price and location come from Search. PDP contributes identity only.
+            The selected retailer product was observed at this location in the
+            current collection. Price and location come from Search; PDP data
+            contributes only product identity and imagery.
           </p>
-          {product.url ? (
-            <a
-              className="text-link"
-              href={product.url}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Open retailer product page ↗
-            </a>
-          ) : null}
-        </footer>
+        </section>
       </aside>
     </div>
   );
 }
 
-function ProductGrid({ view }: Readonly<{ view: PriceMonitoringView }>) {
+function LocationTable({
+  view,
+  onOpen,
+}: Readonly<{ view: PriceMonitoringView; onOpen: (row: Location) => void }>) {
   return (
-    <div className="pm-product-grid">
-      {view.products.map((product) => (
-        <button
-          className="pm-product-card"
-          key={product.product_id}
-          onClick={() => updateQuery({ product_id: product.product_id })}
-          type="button"
-        >
-          <header>
+    <div className="pm-location-table-wrap">
+      <table className="pm-location-table pi-location-table">
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th>Market</th>
+            <th>Observed price</th>
+            <th>Evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {view.locations.map((row) => (
+            <tr key={row.scope_key}>
+              <td>
+                <button
+                  className="pi-table-link"
+                  onClick={() => onOpen(row)}
+                  type="button"
+                >
+                  <strong>
+                    {row.store_name ??
+                      (row.store_number
+                        ? `Store ${row.store_number}`
+                        : `ZIP ${row.zipcode}`)}
+                  </strong>
+                  <small>
+                    {row.store_number ? `#${row.store_number}` : "Service area"}
+                  </small>
+                </button>
+              </td>
+              <td>
+                {[row.city, row.state, row.zipcode]
+                  .filter(Boolean)
+                  .join(", ") || "—"}
+              </td>
+              <td>
+                <strong>{currency(row.median_price)}</strong>
+              </td>
+              <td>
+                <span className="pi-evidence-pill">Observed</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  return (
+    <div className="pm-location-table-wrap">
+      <table className="pm-location-table pi-market-table">
+        <thead>
+          <tr>
+            <th>{view.filters.state ? "City" : "State"}</th>
+            <th>Observed locations</th>
+            <th>Median</th>
+            <th>Range</th>
+            <th>Consistency</th>
+          </tr>
+        </thead>
+        <tbody>
+          {view.geographies.map((row) => (
+            <tr key={`${row.level}-${row.key}`}>
+              <td>
+                <button
+                  className="pi-table-link"
+                  onClick={() =>
+                    updateQuery(
+                      row.level === "state"
+                        ? { state: row.key, city: null }
+                        : { city: row.key },
+                    )
+                  }
+                  type="button"
+                >
+                  <strong>{row.label}</strong>
+                  <small>Open market</small>
+                </button>
+              </td>
+              <td>{count(row.locations)}</td>
+              <td>
+                <strong>{currency(row.price_stats.observation_median)}</strong>
+              </td>
+              <td>
+                {currency(row.price_stats.minimum)}–
+                {currency(row.price_stats.maximum)}
+              </td>
+              <td>{percent(row.price_stats.modal_share)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ProductCatalog({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  return (
+    <section className="pi-product-catalog">
+      <header>
+        <div>
+          <p className="section-kicker">Single-retailer product intelligence</p>
+          <h2>Select a product to open its workspace</h2>
+        </div>
+        <p>
+          Products are ranked by the number of locations where they appeared in
+          governed Search evidence.
+        </p>
+      </header>
+      <div>
+        {view.filter_options.products.map((product) => (
+          <button
+            key={product.value}
+            onClick={() =>
+              updateQuery({ product_id: product.value, tab: "overview" })
+            }
+            type="button"
+          >
             {product.image_url ? (
-              <img src={product.image_url} alt="" loading="lazy" />
+              <img src={product.image_url} alt="" />
             ) : (
-              <span className="pm-product-fallback" aria-hidden="true">
-                P
-              </span>
+              <span aria-hidden="true">P</span>
             )}
             <div>
-              <span>{brandLabels[product.brand_type]}</span>
-              <strong>{product.name}</strong>
-              <small>{product.brand ?? "Brand not classified"}</small>
+              <small>{brandLabels[product.brand_type]}</small>
+              <strong>{product.label}</strong>
+              <p>{product.brand ?? "Brand unresolved"}</p>
             </div>
-          </header>
-          <PriceRange product={product} />
-          <footer>
-            <span>
-              {count(product.locations)} locations · {count(product.states)}{" "}
-              states
-            </span>
-            <strong>View locations →</strong>
-          </footer>
-        </button>
-      ))}
-    </div>
+            <b>{count(product.count)} locations →</b>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -496,19 +551,19 @@ export function PriceMonitoringWorkspace({
   const [tab, setTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openLocation, setOpenLocation] = useState<Location | null>(null);
 
   useEffect(() => {
     function loadView() {
+      const url = new URL(window.location.href);
+      const nextTab = url.searchParams.get("tab") as TabId | null;
+      if (nextTab) setTab(nextTab);
       const controller = new AbortController();
       setLoading(true);
       setError(null);
-      const query = new URL(window.location.href).searchParams.toString();
       fetch(
-        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}?${query}`,
-        {
-          cache: "no-store",
-          signal: controller.signal,
-        },
+        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}?${url.searchParams.toString()}`,
+        { cache: "no-store", signal: controller.signal },
       )
         .then(async (response) => {
           if (!response.ok)
@@ -532,6 +587,7 @@ export function PriceMonitoringWorkspace({
       cancel();
       cancel = loadView();
     };
+    listener();
     window.addEventListener("popstate", listener);
     return () => {
       cancel();
@@ -541,14 +597,14 @@ export function PriceMonitoringWorkspace({
 
   const contextDefinition = useMemo<ApplicationContextDefinition>(
     () => ({
-      label: "Price-monitoring context",
+      label: "Price intelligence context",
       controls: [
         {
           id: "retailer-view",
-          label: "Retailer view",
+          label: "Retailer",
           title: "Choose the retailer to monitor",
           description:
-            "Each view is retailer-specific. No cross-retailer matching is used here.",
+            "This module examines one retailer product across its observed location footprint.",
           value: view.retailer.name,
           selectedValue: view.filters.retailer_id,
           defaultValue: "",
@@ -557,40 +613,54 @@ export function PriceMonitoringWorkspace({
           options: view.filter_options.retailers.map((row) => ({
             value: row.id,
             label: row.name,
-            description:
-              "View this retailer's observed products, stores, and package prices.",
+            description: "Open this retailer's governed Search evidence.",
           })),
         },
         {
-          id: "brand-portfolio",
-          label: "Brand portfolio",
-          title: "Filter by governed brand type",
+          id: "product-view",
+          label: "Product",
+          title: "Choose one retailer product",
           description:
-            "Brand classifications come from Retailer Packs, the brand foundation, and confirmed Brand Workbench decisions.",
-          value: brandLabels[view.filters.brand_type],
-          selectedValue: view.filters.brand_type,
-          defaultValue: "all",
-          queryParameter: "brand_type",
-          resetQueryParameters: ["product_id"],
-          options: [
-            {
-              value: "all",
-              label: "All brand types",
-              description: `${count(view.source.classified_rows)} classified Search rows in the source view.`,
-            },
-            ...view.filter_options.brand_types.map((row) => ({
-              value: row.value,
-              label: row.label,
-              description: `${count(row.count)} eligible product-location observations before geography filters.`,
-            })),
-          ],
+            "Prices are compared only across locations carrying this exact retailer product ID.",
+          value:
+            view.filter_options.products.find(
+              (row) => row.value === view.filters.product_id,
+            )?.label ?? "Select a product",
+          selectedValue: view.filters.product_id ?? "",
+          defaultValue: "",
+          queryParameter: "product_id",
+          options: view.filter_options.products.map((row) => ({
+            value: row.value,
+            label: row.label,
+            description: `${row.brand ?? "Brand unresolved"} · ${count(row.count)} observed locations`,
+          })),
+        },
+        {
+          id: "geography-view",
+          label: "Geography",
+          title: "Scope the visible location footprint",
+          description:
+            "Geography filters apply consistently to every workspace tab and export.",
+          value:
+            [view.filters.city, view.filters.state]
+              .filter(Boolean)
+              .join(", ") || "United States",
+          selectedValue: view.filters.state ?? "",
+          defaultValue: "",
+          queryParameter: "state",
+          resetQueryParameters: ["city"],
+          options: view.filter_options.states.map((row) => ({
+            value: row.value,
+            label: row.label,
+            description: `${count(row.count)} eligible product-location observations`,
+          })),
         },
         {
           id: "source-readiness",
           label: "Source readiness",
-          title: "Price-monitoring evidence and quality",
+          title: "Evidence, quality, and metric eligibility",
           description:
-            "Search price and location are authoritative. Quality checks remain visible rather than silently dropping evidence.",
+            "Unsupported measures remain unavailable rather than being inferred.",
           value: view.quality.status === "ready" ? "Ready" : "Review caveats",
           tone: view.quality.status === "ready" ? "ready" : "attention",
           facts: [
@@ -599,18 +669,23 @@ export function PriceMonitoringWorkspace({
               value: percent(view.summary.usable_price_rate),
             },
             {
-              label: "Location coverage",
-              value: percent(view.summary.coverage_rate),
+              label: "Observed presence",
+              value: percent(view.presence.observed_presence_rate),
             },
             {
               label: "Immutable artifacts",
               value: count(view.source.artifact_checksums.length),
             },
-            { label: "Analytical grain", value: "Product × retailer location" },
+            {
+              label: "Observed through",
+              value: view.source.observed_end
+                ? displayDate(view.source.observed_end)
+                : "—",
+            },
           ],
           messages: [
-            view.source.grain,
-            "PDP identity enrichment cannot override Search price or location.",
+            view.presence.definition,
+            "PDP identity enrichment never overrides Search price or location.",
           ],
         },
       ],
@@ -622,31 +697,86 @@ export function PriceMonitoringWorkspace({
   const selectedProduct = view.filters.product_id
     ? (view.products[0] ?? null)
     : null;
-  const geographyLabel = ["USA", view.filters.state, view.filters.city]
-    .filter(Boolean)
-    .join(" / ");
   const tabs: Array<{ id: TabId; label: string }> = [
-    { id: "overview", label: "Overview" },
-    { id: "products", label: "Products" },
-    { id: "geography", label: "Geography" },
-    { id: "brands", label: "Brand portfolio" },
-    { id: "quality", label: "Quality & definitions" },
+    { id: "overview", label: "Product Overview" },
+    { id: "footprint", label: "Product Footprint" },
+    { id: "price-architecture", label: "Price Architecture" },
+    { id: "distribution-gaps", label: "Distribution Gaps" },
+    { id: "store-exceptions", label: "Store Exceptions" },
+    { id: "market-benchmarks", label: "Market Benchmarks" },
+    { id: "history", label: "Product History" },
   ];
+
+  if (!selectedProduct) {
+    return (
+      <>
+        <header className="pm-masthead pi-masthead">
+          <div>
+            <p className="eyebrow">Price Intelligence · {view.retailer.name}</p>
+            <h1>{view.product_pack.name}</h1>
+            <p>
+              Select one retailer product to examine its store-level price
+              footprint.
+            </p>
+          </div>
+        </header>
+        <section className="pm-filter-row">
+          <label>
+            <span>Product</span>
+            <select
+              value=""
+              onChange={(event) =>
+                updateQuery({ product_id: event.target.value || null })
+              }
+            >
+              <option value="">Select a product</option>
+              {view.filter_options.products.map((row) => (
+                <option value={row.value} key={row.value}>
+                  {row.label} · {count(row.count)} locations
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="pm-loading-status">
+            {loading ? "Refreshing evidence…" : error}
+          </span>
+        </section>
+        <ProductCatalog view={view} />
+      </>
+    );
+  }
+
+  const stats = selectedProduct.price_stats;
+  const availability = selectedProduct.availability;
+  const promotion = selectedProduct.promotion;
+  const assessment = view.exceptions.length
+    ? `${count(view.exceptions.length)} store prices fall outside the exact product's 1.5×IQR range and merit review.`
+    : stats.range === 0
+      ? "The selected product was observed at one consistent price across the visible store footprint."
+      : `The selected product spans ${currency(stats.minimum)} to ${currency(stats.maximum)} across ${count(selectedProduct.locations)} observed locations.`;
 
   return (
     <>
-      <header className="pm-masthead">
-        <div>
-          <p className="eyebrow">Price monitoring · {view.retailer.name}</p>
-          <h1>{view.product_pack.name}</h1>
-          <p>
-            Where this retailer&apos;s package prices vary—and which products
-            and locations explain the range.
-          </p>
+      <header className="pm-masthead pi-masthead">
+        <div className="pi-product-title">
+          {selectedProduct.image_url ? (
+            <img src={selectedProduct.image_url} alt="" />
+          ) : (
+            <span aria-hidden="true">P</span>
+          )}
+          <div>
+            <p className="eyebrow">Price Intelligence · {view.retailer.name}</p>
+            <h1>{selectedProduct.name}</h1>
+            <p>
+              {selectedProduct.brand ?? "Brand unresolved"} ·{" "}
+              {brandLabels[selectedProduct.brand_type]} · Retailer ID{" "}
+              {selectedProduct.product_id}
+            </p>
+          </div>
         </div>
         <dl>
           <div>
-            <dt>Observed</dt>
+            <dt>Observed through</dt>
             <dd>
               {view.source.observed_end
                 ? displayDate(view.source.observed_end)
@@ -654,28 +784,49 @@ export function PriceMonitoringWorkspace({
             </dd>
           </div>
           <div>
-            <dt>Geography</dt>
-            <dd>{geographyLabel}</dd>
+            <dt>Locations</dt>
+            <dd>{count(selectedProduct.locations)}</dd>
           </div>
           <div>
-            <dt>Product Pack</dt>
-            <dd>v{view.product_pack.version}</dd>
+            <dt>Source</dt>
+            <dd>Search price</dd>
           </div>
         </dl>
       </header>
-      <nav className="pm-tabs" aria-label="Price monitoring sections">
+      <nav
+        className="pm-tabs pi-tabs"
+        aria-label="Price intelligence workspaces"
+      >
         {tabs.map((item) => (
           <button
             aria-current={tab === item.id ? "page" : undefined}
             key={item.id}
-            onClick={() => setTab(item.id)}
+            onClick={() => updateQuery({ tab: item.id })}
             type="button"
           >
             {item.label}
           </button>
         ))}
       </nav>
-      <section className="pm-filter-row" aria-label="Geography filters">
+      <section
+        className="pm-filter-row"
+        aria-label="Product and geography filters"
+      >
+        <label>
+          <span>Product</span>
+          <select
+            value={view.filters.product_id ?? ""}
+            onChange={(event) =>
+              updateQuery({ product_id: event.target.value || null })
+            }
+          >
+            {view.filter_options.products.map((row) => (
+              <option value={row.value} key={row.value}>
+                {row.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           <span>State</span>
           <select
@@ -687,7 +838,7 @@ export function PriceMonitoringWorkspace({
             <option value="">All states</option>
             {view.filter_options.states.map((row) => (
               <option value={row.value} key={row.value}>
-                {row.label} · {count(row.count)}
+                {row.label}
               </option>
             ))}
           </select>
@@ -704,7 +855,7 @@ export function PriceMonitoringWorkspace({
             <option value="">All cities</option>
             {view.filter_options.cities.map((row) => (
               <option value={row.value} key={row.value}>
-                {row.label} · {count(row.count)}
+                {row.label}
               </option>
             ))}
           </select>
@@ -722,370 +873,420 @@ export function PriceMonitoringWorkspace({
           {loading
             ? "Refreshing evidence…"
             : (error ??
-              `${count(view.summary.eligible_observations)} eligible observations`)}
+              `${count(view.summary.eligible_observations)} exact-product observations`)}
         </span>
       </section>
 
       {tab === "overview" ? (
-        <section className="pm-tab-content">
-          <div className="pm-metric-grid">
+        <section className="pm-tab-content pi-tab-content">
+          <div className="pm-metric-grid pi-metric-grid">
             <article>
-              <span>Observed locations</span>
-              <strong>{count(view.summary.observed_locations)}</strong>
+              <span>Observed presence</span>
+              <strong>{percent(view.presence.observed_presence_rate)}</strong>
               <small>
-                {view.summary.expected_locations
-                  ? `${percent(view.summary.coverage_rate)} of ${count(view.summary.expected_locations)} expected`
-                  : "Observed Search footprint"}
+                {count(view.presence.observed_locations)} of{" "}
+                {count(view.presence.eligible_locations)} planned locations
               </small>
             </article>
             <article>
-              <span>Observed products</span>
-              <strong>{count(view.summary.observed_products)}</strong>
-              <small>Product Pack-admitted assortment</small>
-            </article>
-            <article>
-              <span>Typical package price</span>
-              <strong>
-                {currency(view.price_distribution.observation_median)}
-              </strong>
-              <small>Observation-weighted; mix-sensitive</small>
+              <span>Median shelf price</span>
+              <strong>{currency(stats.observation_median)}</strong>
+              <small>
+                {count(stats.observation_count)} exact-product observations
+              </small>
             </article>
             <article>
               <span>Price consistency</span>
-              <strong>{percent(view.summary.price_consistency_rate)}</strong>
-              <small>
-                At each product&apos;s most common price ± Product Pack
-                tolerance
-              </small>
+              <strong>{percent(selectedProduct.consistency_rate)}</strong>
+              <small>At modal price ± Product Pack tolerance</small>
+            </article>
+            <article>
+              <span>Store exceptions</span>
+              <strong>{count(view.exceptions.length)}</strong>
+              <small>Governed IQR/modal rule</small>
             </article>
           </div>
-          <div className="pm-two-column">
-            <article className="pm-panel pm-distribution-panel">
+          <article className="pi-assessment">
+            <div>
+              <p className="section-kicker">Current assessment</p>
+              <h2>
+                {view.exceptions.length
+                  ? "Price exceptions are concentrated in a limited store set"
+                  : "The current exact-product footprint is ready to explore"}
+              </h2>
+            </div>
+            <p>{assessment}</p>
+          </article>
+          <div className="pm-two-column pi-overview-grid">
+            <article className="pm-panel">
               <header>
                 <div>
-                  <p className="section-kicker">Portfolio distribution</p>
-                  <h2>Observed package-price spread</h2>
-                </div>
-                <span>Mix-sensitive</span>
-              </header>
-              <p>
-                These values describe every admitted package sold by{" "}
-                {view.retailer.name}. Use a product drill-down for a
-                like-product store range.
-              </p>
-              <div className="pm-distribution-scale">
-                <i style={{ left: "0%" }} />
-                <i style={{ left: "25%" }} />
-                <i className="median" style={{ left: "50%" }} />
-                <i style={{ left: "75%" }} />
-                <i style={{ left: "100%" }} />
-              </div>
-              <dl className="pm-five-number">
-                <div>
-                  <dt>Low</dt>
-                  <dd>{currency(view.price_distribution.minimum)}</dd>
-                </div>
-                <div>
-                  <dt>Q1</dt>
-                  <dd>{currency(view.price_distribution.q1)}</dd>
-                </div>
-                <div>
-                  <dt>Median</dt>
-                  <dd>
-                    {currency(view.price_distribution.observation_median)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Q3</dt>
-                  <dd>{currency(view.price_distribution.q3)}</dd>
-                </div>
-                <div>
-                  <dt>High</dt>
-                  <dd>{currency(view.price_distribution.maximum)}</dd>
-                </div>
-              </dl>
-              <footer>
-                <span>Equal-weighted product median</span>
-                <strong>
-                  {currency(
-                    view.price_distribution.product_equal_weighted_median,
-                  )}
-                </strong>
-              </footer>
-            </article>
-            <article className="pm-panel pm-brand-summary">
-              <header>
-                <div>
-                  <p className="section-kicker">Portfolio composition</p>
-                  <h2>Price and breadth by brand type</h2>
+                  <p className="section-kicker">Exact-product footprint</p>
+                  <h2>Where the product was observed</h2>
                 </div>
                 <button
                   className="text-link"
-                  onClick={() => setTab("brands")}
+                  onClick={() => updateQuery({ tab: "footprint" })}
                   type="button"
                 >
-                  Open portfolio →
+                  Open footprint →
                 </button>
               </header>
-              <div>
-                {view.brand_portfolio.map((row) => (
-                  <button
-                    key={row.brand_type}
-                    onClick={() => updateQuery({ brand_type: row.brand_type })}
-                    type="button"
-                  >
-                    <span>{brandLabels[row.brand_type]}</span>
-                    <strong>{count(row.products)} products</strong>
-                    <small>
-                      {count(row.locations)} locations · median{" "}
-                      {currency(row.median_price)}
-                    </small>
-                  </button>
-                ))}
-              </div>
+              <RetailMap view={view} />
             </article>
-          </div>
-          <article className="pm-panel pm-overview-products">
-            <header>
-              <div>
-                <p className="section-kicker">Products driving the footprint</p>
-                <h2>Most broadly distributed products</h2>
-              </div>
-              <button
-                className="text-link"
-                onClick={() => setTab("products")}
-                type="button"
-              >
-                View all products →
-              </button>
-            </header>
-            <ProductGrid
-              view={{ ...view, products: view.products.slice(0, 6) }}
-            />
-          </article>
-        </section>
-      ) : null}
-
-      {tab === "products" ? (
-        <section className="pm-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Product-level price evidence</p>
-              <h2>Which products vary by location?</h2>
-            </div>
-            <p>
-              Each range compares the same retailer product ID across observed
-              locations. Select a product for its store-level evidence and CSV
-              download.
-            </p>
-          </article>
-          <ProductGrid view={view} />
-        </section>
-      ) : null}
-
-      {tab === "geography" ? (
-        <section className="pm-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">
-                Country → state → city → location
-              </p>
-              <h2>Where price and assortment vary</h2>
-            </div>
-            <p>
-              Map color reflects the package-price range across the visible
-              product mix, not a same-product price index. Choose a product to
-              isolate its footprint.
-            </p>
-          </article>
-          <RetailMap view={view} />
-          <div className="pm-geography-table">
-            <header>
-              <h2>
-                {view.filters.state ? "Cities in scope" : "States in scope"}
-              </h2>
-              <span>{count(view.geographies.length)} geographies</span>
-            </header>
-            <table>
-              <thead>
-                <tr>
-                  <th>Geography</th>
-                  <th>Locations</th>
-                  <th>Products</th>
-                  <th>Median package price</th>
-                  <th>Range</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.geographies.map((row) => (
-                  <tr
-                    key={row.key}
-                    onClick={() =>
-                      updateQuery(
-                        row.level === "state"
-                          ? { state: row.key, city: null }
-                          : { city: row.key },
-                      )
-                    }
-                  >
-                    <td>
-                      <strong>{row.label}</strong>
-                    </td>
-                    <td>{count(row.locations)}</td>
-                    <td>{count(row.products)}</td>
-                    <td>{currency(row.price_stats.observation_median)}</td>
-                    <td>
-                      {currency(row.price_stats.minimum)}–
-                      {currency(row.price_stats.maximum)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "brands" ? (
-        <section className="pm-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Governed brand roles</p>
-              <h2>Private label, regional, and national portfolio</h2>
-            </div>
-            <p>
-              Brand types use retailer-aware exact governance. Unclassified
-              brands remain visible so they can be resolved in Brand Workbench.
-            </p>
-          </article>
-          <div className="pm-brand-portfolio-grid">
-            {view.brand_portfolio.map((row) => (
-              <button
-                className="pm-brand-portfolio-card"
-                key={row.brand_type}
-                onClick={() => updateQuery({ brand_type: row.brand_type })}
-                type="button"
-              >
-                <span>{brandLabels[row.brand_type]}</span>
-                <strong>{count(row.products)}</strong>
-                <p>products across {count(row.locations)} locations</p>
-                <dl>
-                  <div>
-                    <dt>Observations</dt>
-                    <dd>{count(row.observations)}</dd>
-                  </div>
-                  <div>
-                    <dt>Median package price</dt>
-                    <dd>{currency(row.median_price)}</dd>
-                  </div>
-                </dl>
-                <small>Open filtered product portfolio →</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "quality" ? (
-        <section className="pm-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Trust and interpretation</p>
-              <h2>Quality checks and metric definitions</h2>
-            </div>
-            <p>
-              Every exception is disclosed. The dashboard does not use PDP
-              price, infer missing location identities, or create AI-computed
-              metrics.
-            </p>
-          </article>
-          <div className="pm-two-column">
-            <article className="pm-panel pm-quality-list">
+            <article className="pm-panel">
               <header>
                 <div>
-                  <p className="section-kicker">Data checks</p>
-                  <h2>
-                    {view.quality.status === "ready"
-                      ? "No recorded caveats"
-                      : "Review these caveats"}
-                  </h2>
+                  <p className="section-kicker">Price distribution</p>
+                  <h2>How store prices are structured</h2>
                 </div>
-                <span
-                  className={`readiness-pill ${view.quality.status === "ready" ? "ready" : "caveat"}`}
+                <button
+                  className="text-link"
+                  onClick={() => updateQuery({ tab: "price-architecture" })}
+                  type="button"
                 >
-                  {view.quality.status}
-                </span>
+                  Open architecture →
+                </button>
               </header>
-              <div>
-                {view.quality.checks.map((check) => (
-                  <article key={check.id}>
-                    <span>{check.count ? "!" : "✓"}</span>
-                    <div>
-                      <strong>{check.label}</strong>
-                      <p>{check.definition}</p>
-                    </div>
-                    <b>
-                      {count(check.count)} · {percent(check.rate)}
-                    </b>
-                  </article>
-                ))}
-              </div>
-            </article>
-            <article className="pm-panel pm-definitions">
-              <p className="section-kicker">Metric contract</p>
-              <h2>How to read this view</h2>
-              <dl>
+              <PriceHistogram product={selectedProduct} />
+              <dl className="pi-summary-list">
                 <div>
-                  <dt>Grain</dt>
-                  <dd>{view.source.grain}</dd>
+                  <dt>Most common price</dt>
+                  <dd>{currency(stats.modal_price)}</dd>
                 </div>
                 <div>
-                  <dt>Current observation</dt>
+                  <dt>Observed range</dt>
                   <dd>
-                    The latest Search row within this run for one
-                    product-location pair.
+                    {currency(stats.minimum)}–{currency(stats.maximum)}
                   </dd>
                 </div>
                 <div>
-                  <dt>Location coverage</dt>
+                  <dt>Availability signal</dt>
                   <dd>
-                    Distinct observed retailer locations divided by the
-                    run&apos;s planned location scope.
-                  </dd>
-                </div>
-                <div>
-                  <dt>Price consistency</dt>
-                  <dd>
-                    Share of product-location observations at that
-                    product&apos;s modal price within Product Pack tolerance.
-                  </dd>
-                </div>
-                <div>
-                  <dt>Portfolio median</dt>
-                  <dd>
-                    Mix-sensitive median across visible product-location
-                    observations; not a competitive index.
+                    {availability.status === "observed"
+                      ? percent(availability.rate)
+                      : "Not supported"}
                   </dd>
                 </div>
               </dl>
-              <footer>
-                <span>Immutable evidence</span>
-                <code>
-                  {view.source.artifact_checksums.length
-                    ? `${view.source.artifact_checksums[0].slice(0, 16)}…`
-                    : "No artifact checksum"}
-                </code>
-              </footer>
             </article>
           </div>
         </section>
       ) : null}
 
-      {selectedProduct ? (
-        <ProductDrawer
+      {tab === "footprint" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">Country → state → city → store</p>
+              <h2>Exact-product observed footprint</h2>
+            </div>
+            <p>
+              Map color represents this product&apos;s median observed price. It
+              does not mix products or imply that an uncolored location does not
+              carry the item.
+            </p>
+          </article>
+          <RetailMap view={view} />
+          <article className="pm-panel">
+            <header>
+              <div>
+                <p className="section-kicker">Store evidence</p>
+                <h2>{count(view.location_display.total)} observed locations</h2>
+              </div>
+              <button
+                className="button secondary"
+                onClick={() =>
+                  downloadCsv(
+                    view.retailer.name,
+                    selectedProduct,
+                    selectedProduct.sample_locations,
+                  )
+                }
+                type="button"
+              >
+                Download evidence
+              </button>
+            </header>
+            <LocationTable view={view} onOpen={setOpenLocation} />
+          </article>
+        </section>
+      ) : null}
+
+      {tab === "price-architecture" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">One product · many stores</p>
+              <h2>Price architecture</h2>
+            </div>
+            <p>
+              All statistics compare the same retailer product ID. Package mix
+              and competitor matching are excluded.
+            </p>
+          </article>
+          <div className="pi-five-stat">
+            <article>
+              <span>Minimum</span>
+              <strong>{currency(stats.minimum)}</strong>
+            </article>
+            <article>
+              <span>Q1</span>
+              <strong>{currency(stats.q1)}</strong>
+            </article>
+            <article>
+              <span>Median</span>
+              <strong>{currency(stats.observation_median)}</strong>
+            </article>
+            <article>
+              <span>Q3</span>
+              <strong>{currency(stats.q3)}</strong>
+            </article>
+            <article>
+              <span>Maximum</span>
+              <strong>{currency(stats.maximum)}</strong>
+            </article>
+          </div>
+          <article className="pm-panel pi-architecture-panel">
+            <header>
+              <div>
+                <p className="section-kicker">Store price distribution</p>
+                <h2>{count(stats.observation_count)} observed prices</h2>
+              </div>
+              <span className="pi-evidence-pill">Search authoritative</span>
+            </header>
+            <PriceHistogram product={selectedProduct} />
+            <div className="pi-signal-grid">
+              <div>
+                <span>Modal price</span>
+                <strong>{currency(stats.modal_price)}</strong>
+                <small>{percent(stats.modal_share)} of observations</small>
+              </div>
+              <div>
+                <span>Availability</span>
+                <strong>
+                  {availability.status === "observed"
+                    ? percent(availability.rate)
+                    : "Unavailable"}
+                </strong>
+                <small>{availability.definition}</small>
+              </div>
+              <div>
+                <span>Promotion</span>
+                <strong>
+                  {promotion.status === "observed"
+                    ? percent(promotion.rate)
+                    : "Unavailable"}
+                </strong>
+                <small>{promotion.definition}</small>
+              </div>
+            </div>
+          </article>
+          <article className="pm-panel">
+            <header>
+              <div>
+                <p className="section-kicker">Geographic structure</p>
+                <h2>Price ranges by visible market</h2>
+              </div>
+            </header>
+            <MarketTable view={view} />
+          </article>
+        </section>
+      ) : null}
+
+      {tab === "distribution-gaps" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">Evidence-aware presence</p>
+              <h2>Presence and distribution gaps</h2>
+            </div>
+            <p>{view.presence.definition}</p>
+          </article>
+          <div className="pm-metric-grid pi-metric-grid">
+            <article>
+              <span>Observed locations</span>
+              <strong>{count(view.presence.observed_locations)}</strong>
+              <small>Product appeared in Search</small>
+            </article>
+            <article>
+              <span>Planned locations</span>
+              <strong>{count(view.presence.eligible_locations)}</strong>
+              <small>Collection scope denominator</small>
+            </article>
+            <article>
+              <span>Not observed</span>
+              <strong>{count(view.presence.not_observed_locations)}</strong>
+              <small>Inconclusive—not called a gap</small>
+            </article>
+            <article>
+              <span>Confirmed gaps</span>
+              <strong>{count(view.presence.confirmed_gap_locations)}</strong>
+              <small>Requires explicit product-specific evidence</small>
+            </article>
+          </div>
+          <article className="pi-governance-callout">
+            <strong>Why “not observed” is different from “not carried”</strong>
+            <p>
+              A keyword Search call returns a bounded result set. A product can
+              be carried but omitted from that result, so this view will not
+              convert absence into a confirmed distribution gap.
+            </p>
+          </article>
+          <article className="pm-panel">
+            <header>
+              <div>
+                <p className="section-kicker">Positive presence evidence</p>
+                <h2>Locations where the product was seen</h2>
+              </div>
+            </header>
+            <LocationTable view={view} onOpen={setOpenLocation} />
+          </article>
+        </section>
+      ) : null}
+
+      {tab === "store-exceptions" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">Deterministic review queue</p>
+              <h2>Store price exceptions</h2>
+            </div>
+            <p>
+              Exceptions use the exact-product 1.5×IQR range, with the Product
+              Pack modal-price tolerance when IQR is zero. They identify
+              evidence to review, not prescribed actions.
+            </p>
+          </article>
+          {view.exceptions.length ? (
+            <article className="pm-panel">
+              <div className="pm-location-table-wrap">
+                <table className="pm-location-table">
+                  <thead>
+                    <tr>
+                      <th>Store</th>
+                      <th>Observed price</th>
+                      <th>Median reference</th>
+                      <th>Difference</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.exceptions.map((row) => (
+                      <tr key={row.id}>
+                        <td>
+                          <strong>
+                            {row.store_name ??
+                              (row.store_number
+                                ? `Store ${row.store_number}`
+                                : row.zipcode)}
+                          </strong>
+                          <small>
+                            {[row.city, row.state].filter(Boolean).join(", ")}
+                          </small>
+                        </td>
+                        <td>
+                          <strong>{currency(row.price)}</strong>
+                        </td>
+                        <td>{currency(row.reference_price)}</td>
+                        <td
+                          className={row.difference > 0 ? "pi-up" : "pi-down"}
+                        >
+                          {signedCurrency(row.difference)}
+                        </td>
+                        <td>
+                          <span className={`pi-severity ${row.severity}`}>
+                            {row.severity}
+                          </span>
+                          <small>{row.reason}</small>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          ) : (
+            <article className="pi-empty-workspace">
+              <span>✓</span>
+              <div>
+                <h2>No IQR price exceptions in the visible footprint</h2>
+                <p>
+                  This does not assert that every price is correct; it means
+                  none meets the current deterministic outlier rule.
+                </p>
+              </div>
+            </article>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "market-benchmarks" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">Internal retailer benchmarks</p>
+              <h2>How the same product varies by market</h2>
+            </div>
+            <p>
+              Price is presented neutrally. A lower internal shelf price is not
+              automatically labeled better or worse.
+            </p>
+          </article>
+          <article className="pm-panel">
+            <MarketTable view={view} />
+          </article>
+        </section>
+      ) : null}
+
+      {tab === "history" ? (
+        <section className="pm-tab-content pi-tab-content">
+          <article className="pm-section-intro">
+            <div>
+              <p className="section-kicker">Comparable snapshots only</p>
+              <h2>Product history</h2>
+            </div>
+            <p>
+              History will compare the same retailer, product, Product Pack,
+              location scope, and collection method.
+            </p>
+          </article>
+          <article className="pi-empty-workspace">
+            <span>↗</span>
+            <div>
+              <h2>More comparable snapshots are required</h2>
+              <p>
+                {view.movement.reason} No synthetic prior periods or inferred
+                events are shown.
+              </p>
+              <dl>
+                <div>
+                  <dt>Current observation</dt>
+                  <dd>
+                    {view.source.observed_end
+                      ? displayDate(view.source.observed_end)
+                      : "Available"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Comparability</dt>
+                  <dd>Current snapshot only</dd>
+                </div>
+                <div>
+                  <dt>Future windows</dt>
+                  <dd>Prior · 4 · 13 · 26 periods</dd>
+                </div>
+              </dl>
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {openLocation ? (
+        <StoreDrawer
+          location={openLocation}
           product={selectedProduct}
-          retailer={view.retailer.name}
-          onClose={() => updateQuery({ product_id: null })}
+          onClose={() => setOpenLocation(null)}
         />
       ) : null}
     </>

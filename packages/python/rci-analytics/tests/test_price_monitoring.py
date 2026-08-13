@@ -163,6 +163,21 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     assert view["price_distribution"]["observation_median"] == 6.0
     assert view["price_distribution"]["product_equal_weighted_median"] == 5.0
     assert view["products"][0]["price_stats"]["minimum"] == 6.0
+    assert view["presence"] == {
+        "status": "observed_only",
+        "observed_locations": 2,
+        "eligible_locations": 2,
+        "observed_presence_rate": 1.0,
+        "not_observed_locations": 0,
+        "confirmed_gap_locations": 0,
+        "definition": (
+            "Observed presence means the selected product appeared in successful Search "
+            "evidence. A Search non-observation is not proof that a store does not carry "
+            "the product."
+        ),
+    }
+    assert view["filter_options"]["products"][0]["value"] == "100"
+    assert sum(row["count"] for row in view["price_histogram"]) == 3
     checks = {row["id"]: row for row in view["quality"]["checks"]}
     assert checks["duplicate-product-location"]["count"] == 1
     assert checks["conflicting-product-location-price"]["count"] == 1
@@ -215,6 +230,70 @@ def test_classified_parquet_record_round_trip_preserves_provider_ids() -> None:
     assert restored.offer.store_number == "0042"
     assert restored.offer.zipcode == "72712"
     assert restored.offer.price == Decimal("6.59")
+
+
+def test_classified_parquet_record_preserves_explicit_price_components() -> None:
+    source = _classified(
+        offer_id="offer-promo",
+        product_id="100",
+        store="0042",
+        price="5.49",
+        collected_at="2026-08-07T06:00:00Z",
+    )
+    source = replace(
+        source,
+        offer=replace(
+            source.offer,
+            regular_price=Decimal("5.99"),
+            discounted_price=Decimal("5.49"),
+        ),
+    )
+
+    restored = classified_offer_from_record(source.to_record())
+
+    assert restored.offer.regular_price == Decimal("5.99")
+    assert restored.offer.discounted_price == Decimal("5.49")
+
+
+def test_price_monitoring_flags_exact_product_modal_price_exception() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    projector = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offers = [
+        _classified(
+            offer_id=f"offer-{store}",
+            product_id="100",
+            store=store,
+            price="5.00" if store != "5" else "8.00",
+            collected_at="2026-08-07T06:00:00Z",
+        )
+        for store in ("1", "2", "3", "4", "5")
+    ]
+    locations = {
+        ("walmart_us", store): {
+            "zipcode": f"7271{store}",
+            "city": "Bentonville",
+            "state": "AR",
+            "country": "USA",
+        }
+        for store in ("1", "2", "3", "4", "5")
+    }
+
+    view = projector.build(
+        offers,
+        analysis_id="price-exception-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us", product_id="100"),
+        location_index=locations,
+        expected_location_count=5,
+    )
+
+    assert len(view["exceptions"]) == 1
+    assert view["exceptions"][0]["store_number"] == "5"
+    assert view["exceptions"][0]["difference"] == 3.0
+    assert "Product Pack tolerance" in view["exceptions"][0]["reason"]
 
 
 def test_price_monitoring_uses_governed_canonical_external_brand_identity() -> None:

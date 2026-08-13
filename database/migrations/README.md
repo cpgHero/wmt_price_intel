@@ -33,3 +33,7 @@ classification revisions/application policy for the Brand Workbench.
 `0025_retailer_pack_brand` adds immutable Retailer Pack and brand-foundation runtime tables plus
 the fail-closed unknown-brand discovery queue. Repository bundles remain the reviewed seed source;
 application analyses record exact checksums for reproducibility.
+`0026_study_discovery_control_plane` adds governed query discovery, candidate profiling, and paid
+work approvals. `0027_price_intelligence_foundation` adds nullable, source-governed retailer
+location hierarchy fields plus immutable single-retailer product-price snapshots, exact-product
+store observations, deterministic aggregates, and an auditable exception-review foundation.

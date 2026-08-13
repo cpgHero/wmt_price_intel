@@ -83,6 +83,7 @@ class MetricsCartRetailerAdapter:
             "brand": result.get("brand"),
             "price": result.get("price"),
             "price_regular": result.get("price_regular"),
+            "price_discounted": result.get("price_discounted"),
             "rating": result.get("rating"),
             "rating_count": result.get("rating_count") or result.get("reviews_count"),
             "retailer_product_id": (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -87,6 +88,38 @@ def _price_stats(values: Iterable[float], *, product_medians: Iterable[float] = 
         "modal_share": _round(modal_count / len(prices)),
         "observation_count": len(prices),
     }
+
+
+def _price_histogram(values: Iterable[float], *, maximum_bins: int = 8) -> list[JsonObject]:
+    """Return deterministic equal-width bins for one product's observed store prices."""
+
+    prices = sorted(round(float(value), 4) for value in values)
+    if not prices:
+        return []
+    if prices[0] == prices[-1]:
+        return [
+            {
+                "lower": prices[0],
+                "upper": prices[-1],
+                "count": len(prices),
+                "share": 1.0,
+            }
+        ]
+    bin_count = min(maximum_bins, max(2, math.ceil(math.sqrt(len(prices)))))
+    width = (prices[-1] - prices[0]) / bin_count
+    counts = [0] * bin_count
+    for price in prices:
+        index = min(bin_count - 1, int((price - prices[0]) / width))
+        counts[index] += 1
+    return [
+        {
+            "lower": _round(prices[0] + index * width),
+            "upper": _round(prices[0] + (index + 1) * width),
+            "count": count,
+            "share": _round(count / len(prices)),
+        }
+        for index, count in enumerate(counts)
+    ]
 
 
 def _location_from_offer(
@@ -192,6 +225,16 @@ def classified_offer_from_record(record: JsonObject) -> ClassifiedOffer:
                 else None
             ),
             raw={},
+            regular_price=(
+                Decimal(str(record["regular_price"]))
+                if record.get("regular_price") not in (None, "")
+                else None
+            ),
+            discounted_price=(
+                Decimal(str(record["discounted_price"]))
+                if record.get("discounted_price") not in (None, "")
+                else None
+            ),
         ),
         in_scope=bool(record.get("in_scope")),
         scope_reason=(
@@ -251,6 +294,33 @@ class PriceMonitoringProjector:
         excluded_rows = 0
         source_locations: dict[str, PriceLocation] = {}
         all_retailers: set[str] = set(retailer_options)
+
+        for (retailer_id, location_key), lookup in location_lookup.items():
+            if retailer_id != filters.retailer_id:
+                continue
+            service_area = location_key.startswith("zip:")
+            scope_value = location_key.removeprefix("zip:") if service_area else location_key
+            location = PriceLocation(
+                scope_key=(
+                    f"{retailer_id}|service_area|{scope_value}"
+                    if service_area
+                    else f"{retailer_id}|store|{scope_value}"
+                ),
+                kind="service_area" if service_area else "store",
+                store_number=None if service_area else location_key,
+                store_name=str(lookup["store_name"]) if lookup.get("store_name") else None,
+                zipcode=str(lookup["zipcode"]) if lookup.get("zipcode") else None,
+                city=str(lookup["city"]) if lookup.get("city") else None,
+                state=str(lookup["state"]) if lookup.get("state") else None,
+                country=str(lookup.get("country") or "USA"),
+                latitude=(
+                    float(lookup["latitude"]) if lookup.get("latitude") is not None else None
+                ),
+                longitude=(
+                    float(lookup["longitude"]) if lookup.get("longitude") is not None else None
+                ),
+            )
+            source_locations[location.scope_key] = location
 
         for classified in offers:
             offer = classified.offer
@@ -333,6 +403,13 @@ class PriceMonitoringProjector:
                 "url": product.get("url") or offer.product_url,
                 "location": location,
                 "price": float(offer.price),
+                "regular_price": (
+                    float(offer.regular_price) if offer.regular_price is not None else None
+                ),
+                "discounted_price": (
+                    float(offer.discounted_price) if offer.discounted_price is not None else None
+                ),
+                "in_stock": offer.in_stock,
                 "observed_at": offer.collected_at,
                 "offer_id": offer.offer_id,
             }
@@ -360,6 +437,13 @@ class PriceMonitoringProjector:
             if filters.state is None or row["location"].state == filters.state
         ]
         cities = Counter(row["location"].city for row in state_scoped if row["location"].city)
+        product_option_rows = [
+            row
+            for row in admitted
+            if (filters.brand_type == "all" or row["brand_type"] == filters.brand_type)
+            and (filters.state is None or row["location"].state == filters.state)
+            and (filters.city is None or row["location"].city == filters.city)
+        ]
         visible = [
             row
             for row in admitted
@@ -384,6 +468,23 @@ class PriceMonitoringProjector:
             (float(row["price"]) for row in visible),
             product_medians=product_medians,
         )
+        product_options: list[JsonObject] = []
+        option_groups: dict[str, list[JsonObject]] = defaultdict(list)
+        for row in product_option_rows:
+            option_groups[str(row["product_id"])].append(row)
+        for product_id, rows in option_groups.items():
+            identity = rows[0]
+            product_options.append(
+                {
+                    "value": product_id,
+                    "label": str(identity["name"]),
+                    "count": len({row["location"].scope_key for row in rows}),
+                    "brand": identity["brand"],
+                    "brand_type": identity["brand_type"],
+                    "image_url": identity["image_url"],
+                }
+            )
+        product_options.sort(key=lambda row: (-int(row["count"]), str(row["label"]).casefold()))
         product_summaries: list[JsonObject] = []
         consistent_observations = 0
         for product_id, rows in product_groups.items():
@@ -430,6 +531,9 @@ class PriceMonitoringProjector:
                     ),
                     "price_stats": stats,
                     "consistency_rate": _round(consistent / len(rows)) if rows else None,
+                    "availability": self._availability_summary(rows),
+                    "promotion": self._promotion_summary(rows),
+                    "price_histogram": _price_histogram(prices),
                     "sample_locations": [
                         {
                             "scope_key": row["location"].scope_key,
@@ -547,9 +651,15 @@ class PriceMonitoringProjector:
                 }
             )
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]
+        presence_rate = (
+            _round(observed_locations / scoped_expected_location_count)
+            if scoped_expected_location_count
+            else None
+        )
+        exceptions = self._price_exceptions(visible) if filters.product_id else []
         all_retailer_options = sorted(all_retailers or {filters.retailer_id})
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": {
@@ -606,6 +716,7 @@ class PriceMonitoringProjector:
                     {"value": str(value), "label": str(value), "count": count}
                     for value, count in sorted(cities.items())
                 ],
+                "products": product_options,
             },
             "summary": {
                 "observed_locations": observed_locations,
@@ -622,7 +733,23 @@ class PriceMonitoringProjector:
                 if visible
                 else None,
             },
+            "presence": {
+                "status": "observed_only",
+                "observed_locations": observed_locations,
+                "eligible_locations": max(0, scoped_expected_location_count),
+                "observed_presence_rate": presence_rate,
+                "not_observed_locations": max(
+                    0, scoped_expected_location_count - observed_locations
+                ),
+                "confirmed_gap_locations": 0,
+                "definition": (
+                    "Observed presence means the selected product appeared in successful "
+                    "Search evidence. A Search non-observation is not proof that a store "
+                    "does not carry the product."
+                ),
+            },
             "price_distribution": distribution,
+            "price_histogram": _price_histogram(float(row["price"]) for row in visible),
             "brand_portfolio": [
                 {
                     "brand_type": value,
@@ -640,6 +767,7 @@ class PriceMonitoringProjector:
             "locations": location_summaries,
             "location_display": location_display,
             "products": product_summaries,
+            "exceptions": exceptions,
             "quality": {"status": quality_status, "checks": quality_checks},
             "movement": {
                 "status": "unavailable",
@@ -649,6 +777,97 @@ class PriceMonitoringProjector:
                 ),
             },
         }
+
+    @staticmethod
+    def _availability_summary(rows: list[JsonObject]) -> JsonObject:
+        known = [bool(row["in_stock"]) for row in rows if row.get("in_stock") is not None]
+        return {
+            "status": "observed" if known else "unavailable",
+            "known_observations": len(known),
+            "in_stock_observations": sum(known),
+            "rate": _round(sum(known) / len(known)) if known else None,
+            "definition": (
+                "Availability reflects explicit Search fields only; missing values are not "
+                "treated as out of stock."
+            ),
+        }
+
+    @staticmethod
+    def _promotion_summary(rows: list[JsonObject]) -> JsonObject:
+        known = [
+            row
+            for row in rows
+            if row.get("regular_price") is not None or row.get("discounted_price") is not None
+        ]
+        promoted = [
+            row
+            for row in known
+            if (
+                row.get("regular_price") is not None
+                and float(row["regular_price"]) > float(row["price"])
+            )
+            or row.get("discounted_price") is not None
+        ]
+        return {
+            "status": "observed" if known else "unavailable",
+            "known_observations": len(known),
+            "promotion_observations": len(promoted),
+            "rate": _round(len(promoted) / len(known)) if known else None,
+            "definition": (
+                "Promotion requires an explicit regular or discounted price from Search; "
+                "price variation alone is not called a promotion."
+            ),
+        }
+
+    def _price_exceptions(self, rows: list[JsonObject]) -> list[JsonObject]:
+        if len(rows) < 4:
+            return []
+        prices = [float(row["price"]) for row in rows]
+        q1 = _quantile(prices, 0.25)
+        q3 = _quantile(prices, 0.75)
+        if q1 is None or q3 is None:
+            return []
+        if q3 > q1:
+            iqr = q3 - q1
+            lower = max(0.0, q1 - 1.5 * iqr)
+            upper = q3 + 1.5 * iqr
+            rule_description = "the 1.5x IQR range"
+        else:
+            modal = Counter(prices).most_common(1)[0][0]
+            tolerance = float(self._parity_tolerance)
+            lower = max(0.0, modal - tolerance)
+            upper = modal + tolerance
+            rule_description = "the Product Pack tolerance around the modal price"
+        center = float(median(prices))
+        exceptions: list[JsonObject] = []
+        for row in rows:
+            price = float(row["price"])
+            if lower <= price <= upper:
+                continue
+            location: PriceLocation = row["location"]
+            exceptions.append(
+                {
+                    "id": f"price-outlier:{row['product_id']}:{location.scope_key}",
+                    "type": "price_outlier",
+                    "severity": "high" if abs(price - center) / center >= 0.1 else "review",
+                    "scope_key": location.scope_key,
+                    "store_number": location.store_number,
+                    "store_name": location.store_name,
+                    "zipcode": location.zipcode,
+                    "city": location.city,
+                    "state": location.state,
+                    "price": _round(price),
+                    "reference_price": _round(center),
+                    "difference": _round(price - center),
+                    "observed_at": row["observed_at"],
+                    "reason": (
+                        f"Observed price falls outside {rule_description} for this exact "
+                        "retailer product across visible locations."
+                    ),
+                }
+            )
+        exceptions.sort(key=lambda row: (-abs(float(row["difference"])), str(row["scope_key"])))
+        return exceptions[:200]
 
     @staticmethod
     def _quality_check(

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "analysis_id": "fresh_ground_beef-example",
   "generated_at": "2026-08-13T12:00:00Z",
   "product_pack": {
@@ -37,7 +37,8 @@
       { "value": "unclassified", "label": "Unclassified", "count": 0 }
     ],
     "states": [],
-    "cities": []
+    "cities": [],
+    "products": []
   },
   "summary": {
     "observed_locations": 0,
@@ -47,6 +48,15 @@
     "eligible_observations": 0,
     "usable_price_rate": 0,
     "price_consistency_rate": null
+  },
+  "presence": {
+    "status": "observed_only",
+    "observed_locations": 0,
+    "eligible_locations": 0,
+    "observed_presence_rate": null,
+    "not_observed_locations": 0,
+    "confirmed_gap_locations": 0,
+    "definition": "Observed presence means the selected product appeared in successful Search evidence. A Search non-observation is not proof that a store does not carry the product."
   },
   "price_distribution": {
     "minimum": null,
@@ -60,11 +70,13 @@
     "modal_share": null,
     "observation_count": 0
   },
+  "price_histogram": [],
   "brand_portfolio": [],
   "geographies": [],
   "locations": [],
   "location_display": { "returned": 0, "total": 0, "sampled": false },
   "products": [],
+  "exceptions": [],
   "quality": {
     "status": "ready",
     "checks": []

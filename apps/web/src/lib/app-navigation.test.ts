@@ -20,7 +20,7 @@ describe("application navigation", () => {
       "/",
       "/workspace/matches",
       "/workspace/brands",
-      "/price-monitoring",
+      "/price-intelligence",
       "/analyses",
       "/collections",
       "/automation",
@@ -44,9 +44,9 @@ describe("application navigation", () => {
     expect(activeNavigationItem("/workspace/matches")?.label).toBe(
       "Match Workbench",
     );
-    expect(activeNavigationItem("/price-monitoring/analysis-123")?.label).toBe(
-      "Price Monitoring",
-    );
+    expect(
+      activeNavigationItem("/price-intelligence/analysis-123")?.label,
+    ).toBe("Price Intelligence");
   });
 
   it("returns the page context for detail routes", () => {

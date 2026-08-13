@@ -187,6 +187,16 @@ class CanonicalOfferNormalizer:
         )
         currency = (_text(source, "currency", "Price Currency") or "USD").upper()
         price = _decimal(_first(source, "price", "Price")) if currency == "USD" else None
+        regular_price = (
+            _decimal(_first(source, "price_regular", "regular_price", "Price Regular"))
+            if currency == "USD"
+            else None
+        )
+        discounted_price = (
+            _decimal(_first(source, "price_discounted", "discounted_price", "Price Discounted"))
+            if currency == "USD"
+            else None
+        )
         identity = "|".join(
             [
                 retailer_id,
@@ -216,6 +226,8 @@ class CanonicalOfferNormalizer:
             image_url=_text(source, "image_url", "image_primary", "Image Url"),
             collected_at=_datetime_utc(_first(source, "collected_at", "Date", "Time Created")),
             raw=dict(source),
+            regular_price=regular_price,
+            discounted_price=discounted_price,
         )
 
     def normalize_many(self, rows: list[JsonObject]) -> list[NormalizedOffer]:

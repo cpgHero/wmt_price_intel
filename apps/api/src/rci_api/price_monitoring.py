@@ -106,6 +106,8 @@ class S3ParquetReader:
             "title",
             "brand",
             "price",
+            "regular_price",
+            "discounted_price",
             "currency",
             "zipcode",
             "store_number",
@@ -119,12 +121,9 @@ class S3ParquetReader:
             "scope_reason",
             "attributes_json",
         ]
-        frame = await asyncio.to_thread(
-            pl.read_parquet,
-            BytesIO(body),
-            columns=columns,
-        )
-        return frame.to_dicts()
+        frame = await asyncio.to_thread(pl.read_parquet, BytesIO(body))
+        available = [column for column in columns if column in frame.columns]
+        return frame.select(available).to_dicts()
 
 
 class PostgresPriceMonitoringRepository:
@@ -175,10 +174,13 @@ class PostgresPriceMonitoringRepository:
     ) -> tuple[dict[tuple[str, str], dict[str, Any]], int]:
         locations = text(
             """
-            SELECT retailer_id, store_number, store_name, zipcode, city, state, country,
-                   latitude, longitude
-            FROM retailer_location
-            WHERE retailer_id = :retailer_id
+            SELECT DISTINCT ct.retailer_id, ct.store_number,
+                   rl.store_name, ct.zipcode,
+                   rl.city, rl.state, rl.country, rl.latitude, rl.longitude
+            FROM collection_task ct
+            LEFT JOIN retailer_location rl ON rl.id = ct.retailer_location_id
+            WHERE ct.collection_run_id::text = :collection_run_id
+              AND ct.retailer_id = :retailer_id
             """
         )
         planned = text(
@@ -199,19 +201,27 @@ class PostgresPriceMonitoringRepository:
             """
         )
         async with self._engine.connect() as connection:
-            rows = (await connection.execute(locations, {"retailer_id": retailer_id})).mappings()
-            index = {(str(row["retailer_id"]), str(row["store_number"])): dict(row) for row in rows}
+            parameters = {
+                "collection_run_id": collection_run_id,
+                "retailer_id": retailer_id,
+            }
+            rows = (await connection.execute(locations, parameters)).mappings()
+            index = {
+                (
+                    str(row["retailer_id"]),
+                    str(row["store_number"])
+                    if row["store_number"] is not None
+                    else f"zip:{row['zipcode']}",
+                ): dict(row)
+                for row in rows
+            }
             if retailer_id == "amazon_us_same_day":
                 zip_rows = (await connection.execute(zip_geography)).mappings()
-                index.update(
-                    {
-                        (retailer_id, f"zip:{row['zipcode']}"): {
-                            **dict(row),
-                            "store_name": None,
-                        }
-                        for row in zip_rows
-                    }
-                )
+                geography = {str(row["zipcode"]): dict(row) for row in zip_rows}
+                for value in index.values():
+                    zipcode = str(value["zipcode"])
+                    value.update(geography.get(zipcode, {}))
+                    value["store_name"] = None
             planned_count = int(
                 await connection.scalar(
                     planned,
