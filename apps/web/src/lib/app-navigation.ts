@@ -3,7 +3,9 @@ export type NavigationIcon =
   | "intelligence"
   | "collections"
   | "automation"
+  | "brands"
   | "quality"
+  | "matches"
   | "studies"
   | "product-packs";
 
@@ -21,17 +23,32 @@ export interface NavigationGroup {
   label: string;
 }
 
+export const homeNavigationItem: NavigationItem = {
+  label: "Home",
+  description: "Decisions, activity, and operational health",
+  href: "/",
+  icon: "dashboard",
+  match: "exact",
+};
+
 export const applicationNavigation: readonly NavigationGroup[] = [
   {
     id: "workspace",
     label: "Workspace",
     items: [
       {
-        label: "Dashboard",
-        description: "Decisions, activity, and operational health",
-        href: "/",
-        icon: "dashboard",
-        match: "exact",
+        label: "Match Workbench",
+        description: "Review and govern product relationships across reports",
+        href: "/workspace/matches",
+        icon: "matches",
+        match: "prefix",
+      },
+      {
+        label: "Brand Workbench",
+        description: "Classify and govern observed brands across reports",
+        href: "/workspace/brands",
+        icon: "brands",
+        match: "prefix",
       },
     ],
   },
@@ -106,6 +123,9 @@ export function navigationItemIsActive(
 }
 
 export function activeNavigationItem(pathname: string): NavigationItem | null {
+  if (navigationItemIsActive(pathname, homeNavigationItem)) {
+    return homeNavigationItem;
+  }
   for (const group of applicationNavigation) {
     const item = group.items.find((candidate) =>
       navigationItemIsActive(pathname, candidate),

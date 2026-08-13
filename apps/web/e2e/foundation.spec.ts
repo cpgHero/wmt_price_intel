@@ -30,6 +30,14 @@ test("serves the application shell, workflow routes, and health route", async ({
   expect(reports.ok()).toBe(true);
   expect(await reports.text()).toContain("Competitive intelligence library");
 
+  const matchWorkbench = await request.get("/workspace/matches");
+  expect(matchWorkbench.ok()).toBe(true);
+  expect(await matchWorkbench.text()).toContain("Match Workbench");
+
+  const brandWorkbench = await request.get("/workspace/brands");
+  expect(brandWorkbench.ok()).toBe(true);
+  expect(await brandWorkbench.text()).toContain("Brand Workbench");
+
   const quality = await request.get("/data-quality");
   expect(quality.ok()).toBe(true);
   expect(await quality.text()).toContain("Decision readiness");
@@ -57,6 +65,9 @@ test("serves the branded shell and no-flash theme controls", async ({
   expect(response.ok()).toBe(true);
   expect(html).toContain("CPGHero");
   expect(html).toContain("Application navigation");
+  expect(html).toContain("Home");
+  expect(html).toContain("Match Workbench");
+  expect(html).toContain("Brand Workbench");
   expect(html).toContain("Competitive Intelligence");
   expect(html).toContain("Study Discovery");
   expect(html).not.toContain("Price Intelligence (Coming soon)");
@@ -70,9 +81,13 @@ test("supports the responsive application navigation", async ({ page }) => {
 
   const sidebar = page.getByLabel("Application sidebar");
   await expect(sidebar).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "Home" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(
-    sidebar.getByRole("link", { name: "Dashboard" }),
-  ).toHaveAttribute("aria-current", "page");
+    sidebar.getByRole("link", { name: "Match Workbench" }),
+  ).toBeVisible();
 
   const operationsGroup = sidebar.getByRole("button", { name: "Operations" });
   await expect(operationsGroup).toHaveAttribute("aria-expanded", "false");

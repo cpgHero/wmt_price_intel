@@ -11,6 +11,28 @@
   min-width: 0;
 }
 
+.homeLink {
+  align-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.73rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  min-height: 38px;
+  padding: 0.35rem 0.5rem;
+}
+
+.homeLink:hover {
+  background: var(--surface-alt);
+  color: var(--ink);
+}
+
+.homeLink.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 .group.open {
   background: color-mix(in srgb, var(--surface-alt) 38%, transparent);
 }
@@ -230,6 +252,18 @@
   display: none;
 }
 
+:global(.shell-compact) .homeLink {
+  justify-content: center;
+  min-height: 42px;
+  padding: 0;
+}
+
+:global(.shell-compact) .homeLink .icon {
+  flex-basis: 32px;
+  height: 32px;
+  width: 32px;
+}
+
 :global(.shell-compact) .groupLabel,
 :global(.shell-compact) .groupChevron {
   display: none;
@@ -361,6 +395,12 @@
     display: none;
   }
 
+  .homeLink {
+    justify-content: center;
+    min-height: 42px;
+    padding: 0;
+  }
+
   .groupLabel,
   .groupChevron {
     display: none;
@@ -424,6 +464,18 @@
 
   :global(.shell-compact) .copy {
     display: inline;
+  }
+
+  :global(.shell-compact) .homeLink {
+    justify-content: flex-start;
+    min-height: 38px;
+    padding: 0.35rem 0.5rem;
+  }
+
+  :global(.shell-compact) .homeLink .icon {
+    flex-basis: 24px;
+    height: 24px;
+    width: 24px;
   }
 
   :global(.shell-compact) .groupLabel,

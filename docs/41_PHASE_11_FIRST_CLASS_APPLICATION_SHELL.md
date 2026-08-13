@@ -74,8 +74,11 @@ sidebar links.
 Initial navigation:
 
 ```text
+Home
+
 Workspace
-└── Dashboard
+├── Match Workbench
+└── Brand Workbench
 
 Intelligence
 └── Competitive Intelligence
@@ -89,6 +92,10 @@ Administration
 ├── Study Discovery
 └── Product Packs
 ```
+
+Home is the top first-class destination and is not contained in an accordion. Workspace owns
+cross-report governance entry points; each workbench selects a current category analysis before
+opening the analysis-scoped decision surface.
 
 Price Monitoring becomes visible only after its first governed vertical slice has a useful landing
 view, product/location drill-through, freshness and quality treatment, and stable API contracts.

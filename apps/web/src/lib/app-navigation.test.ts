@@ -3,17 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   activeNavigationItem,
   applicationNavigation,
+  homeNavigationItem,
   navigationItemIsActive,
 } from "./app-navigation";
 
 describe("application navigation", () => {
   it("exposes only routes that currently have usable application pages", () => {
-    const hrefs = applicationNavigation.flatMap((group) =>
-      group.items.map((item) => item.href),
-    );
+    const hrefs = [
+      homeNavigationItem.href,
+      ...applicationNavigation.flatMap((group) =>
+        group.items.map((item) => item.href),
+      ),
+    ];
 
     expect(hrefs).toEqual([
       "/",
+      "/workspace/matches",
+      "/workspace/brands",
       "/analyses",
       "/collections",
       "/automation",
@@ -25,7 +31,7 @@ describe("application navigation", () => {
   });
 
   it("keeps the dashboard exact and activates nested workspaces by prefix", () => {
-    const dashboard = applicationNavigation[0].items[0];
+    const dashboard = homeNavigationItem;
     const competitive = applicationNavigation[1].items[0];
 
     expect(navigationItemIsActive("/", dashboard)).toBe(true);
@@ -33,6 +39,9 @@ describe("application navigation", () => {
     expect(navigationItemIsActive("/analyses", competitive)).toBe(true);
     expect(navigationItemIsActive("/analyses/analysis-123", competitive)).toBe(
       true,
+    );
+    expect(activeNavigationItem("/workspace/matches")?.label).toBe(
+      "Match Workbench",
     );
   });
 

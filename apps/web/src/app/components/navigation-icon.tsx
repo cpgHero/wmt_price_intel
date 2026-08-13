@@ -32,6 +32,20 @@ const iconPaths: Record<NavigationIconName, React.ReactNode> = {
       <path d="M5.5 3.5 3 6M18.5 3.5 21 6" />
     </>
   ),
+  matches: (
+    <>
+      <rect x="3" y="5" width="6" height="6" rx="1.5" />
+      <rect x="15" y="13" width="6" height="6" rx="1.5" />
+      <path d="M9 8h3a3 3 0 0 1 3 3v5" />
+      <path d="m12.5 13.5 2.5 2.5 2.5-2.5" />
+    </>
+  ),
+  brands: (
+    <>
+      <path d="M4 8.5 10 3h8l2 2v8l-6 6a2.2 2.2 0 0 1-3.1 0L4 12.1a2.5 2.5 0 0 1 0-3.6Z" />
+      <circle cx="15.5" cy="7.5" r="1.25" />
+    </>
+  ),
   quality: (
     <>
       <path d="m12 3 8 3v5c0 5-3.2 8.4-8 10-4.8-1.6-8-5-8-10V6Z" />

@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 
 import {
   applicationNavigation,
+  homeNavigationItem,
   navigationItemIsActive,
   type NavigationGroup,
   type NavigationIcon as NavigationIconName,
@@ -91,6 +92,18 @@ export function PrimaryNavigation({
 
   return (
     <nav className={styles.navigation} aria-label="Application navigation">
+      <Link
+        aria-current={pathname === homeNavigationItem.href ? "page" : undefined}
+        className={`${styles.homeLink} ${pathname === homeNavigationItem.href ? styles.active : ""}`}
+        href={homeNavigationItem.href}
+        onClick={onNavigate}
+        title={homeNavigationItem.label}
+      >
+        <span className={styles.icon}>
+          <NavigationIcon name={homeNavigationItem.icon} />
+        </span>
+        <span className={styles.copy}>{homeNavigationItem.label}</span>
+      </Link>
       {applicationNavigation.map((group) => {
         const open = openGroups.has(group.id);
         const containsActive = group.id === activeGroupId;

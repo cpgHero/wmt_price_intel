@@ -4534,6 +4534,105 @@ tbody tr:last-child td {
 .report-library-meta dd {
   font-size: 0.74rem;
 }
+.governance-workspace-index {
+  display: grid;
+  gap: 1rem;
+}
+.workbench-index-guide {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(220px, 0.4fr) minmax(0, 1fr);
+  padding: 1rem 1.1rem;
+}
+.workbench-index-guide > div {
+  display: grid;
+  gap: 0.16rem;
+}
+.workbench-index-guide small,
+.workbench-index-card header small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.workbench-index-guide strong {
+  font-size: 1rem;
+}
+.workbench-index-guide span,
+.workbench-index-guide p {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.workbench-index-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.workbench-index-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+.workbench-index-card:hover {
+  border-color: color-mix(in srgb, var(--green) 40%, var(--line));
+}
+.workbench-index-card > header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.workbench-index-card h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.workbench-index-card p {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin: 0.25rem 0 0;
+}
+.workbench-index-card dl {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+.workbench-index-card dl > div {
+  background: var(--surface-alt);
+  border-radius: 9px;
+  padding: 0.65rem;
+}
+.workbench-index-card dt {
+  color: var(--muted);
+  font-size: 0.57rem;
+}
+.workbench-index-card dd {
+  font-size: 0.69rem;
+  font-weight: 750;
+  margin: 0.18rem 0 0;
+}
+.workbench-index-card > .button {
+  justify-self: start;
+}
+@media (max-width: 760px) {
+  .workbench-index-guide,
+  .workbench-index-grid {
+    grid-template-columns: 1fr;
+  }
+  .workbench-index-card dl {
+    grid-template-columns: 1fr;
+  }
+}
 .automation-summary,
 .quality-summary {
   display: flex;
