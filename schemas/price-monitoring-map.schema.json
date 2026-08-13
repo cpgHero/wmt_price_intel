@@ -16,7 +16,7 @@
     "points"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "retailer": { "$ref": "#/$defs/idName" },
     "product": { "$ref": "#/$defs/idName" },
@@ -50,6 +50,9 @@
         "observed_points",
         "observed_missing_coordinates",
         "observed_sampled",
+        "below_reference_locations",
+        "at_reference_locations",
+        "above_reference_locations",
         "not_observed_locations",
         "not_observed_points",
         "not_observed_missing_coordinates",
@@ -60,6 +63,9 @@
         "observed_points": { "type": "integer", "minimum": 0 },
         "observed_missing_coordinates": { "type": "integer", "minimum": 0 },
         "observed_sampled": { "type": "boolean" },
+        "below_reference_locations": { "type": "integer", "minimum": 0 },
+        "at_reference_locations": { "type": "integer", "minimum": 0 },
+        "above_reference_locations": { "type": "integer", "minimum": 0 },
         "not_observed_locations": { "type": "integer", "minimum": 0 },
         "not_observed_points": { "type": "integer", "minimum": 0 },
         "not_observed_missing_coordinates": { "type": "integer", "minimum": 0 },

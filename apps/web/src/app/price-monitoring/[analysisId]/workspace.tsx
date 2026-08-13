@@ -12,6 +12,8 @@ import {
 import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
 import { displayDate } from "@/lib/presentation";
 
+import { EvidenceRetailMap as InteractiveEvidenceRetailMap } from "./evidence-retail-map";
+
 type Product = PriceMonitoringView["products"][number];
 type Location = PriceMonitoringView["locations"][number];
 type MapPoint = PriceMonitoringMap["points"][number];
@@ -1246,11 +1248,19 @@ export function PriceMonitoringWorkspace({
           defaultValue: "",
           queryParameter: "state",
           resetQueryParameters: ["city", "zipcode"],
-          options: view.filter_options.states.map((row) => ({
-            value: row.value,
-            label: row.label,
-            description: `${count(row.count)} eligible product-location observations`,
-          })),
+          options: [
+            {
+              value: "",
+              label: "All states",
+              description:
+                "Select the complete United States location footprint.",
+            },
+            ...view.filter_options.states.map((row) => ({
+              value: row.value,
+              label: row.label,
+              description: `${count(row.count)} eligible product-location observations`,
+            })),
+          ],
         },
         {
           id: "source-readiness",
@@ -1326,27 +1336,11 @@ export function PriceMonitoringWorkspace({
             Home
           </button>
         </nav>
-        <section className="pm-filter-row">
-          <label>
-            <span>Product</span>
-            <select
-              value=""
-              onChange={(event) =>
-                updateQuery({ product_id: event.target.value || null })
-              }
-            >
-              <option value="">Select a product</option>
-              {view.filter_options.products.map((row) => (
-                <option value={row.value} key={row.value}>
-                  {row.label} · {count(row.count)} locations
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="pm-loading-status">
+        {loading || error ? (
+          <p className="pi-context-status" aria-live="polite">
             {loading ? "Refreshing evidence…" : error}
-          </span>
-        </section>
+          </p>
+        ) : null}
         <ProductCatalog view={view} />
       </>
     );
@@ -1439,100 +1433,11 @@ export function PriceMonitoringWorkspace({
           </button>
         ))}
       </nav>
-      <section
-        className="pm-filter-row"
-        aria-label="Product and geography filters"
-      >
-        <label>
-          <span>Product</span>
-          <select
-            value={view.filters.product_id ?? ""}
-            onChange={(event) =>
-              updateQuery({ product_id: event.target.value || null })
-            }
-          >
-            {view.filter_options.products.map((row) => (
-              <option value={row.value} key={row.value}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>State</span>
-          <select
-            value={view.filters.state ?? ""}
-            onChange={(event) =>
-              updateQuery({
-                state: event.target.value || null,
-                city: null,
-                zipcode: null,
-              })
-            }
-          >
-            <option value="">All states</option>
-            {view.filter_options.states.map((row) => (
-              <option value={row.value} key={row.value}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>City</span>
-          <select
-            disabled={!view.filters.state}
-            value={view.filters.city ?? ""}
-            onChange={(event) =>
-              updateQuery({
-                city: event.target.value || null,
-                zipcode: null,
-              })
-            }
-          >
-            <option value="">All cities</option>
-            {view.filter_options.cities.map((row) => (
-              <option value={row.value} key={row.value}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>ZIP code</span>
-          <select
-            disabled={!view.filters.city}
-            value={view.filters.zipcode ?? ""}
-            onChange={(event) =>
-              updateQuery({ zipcode: event.target.value || null })
-            }
-          >
-            <option value="">All ZIP codes</option>
-            {(view.filter_options.zipcodes ?? []).map((row) => (
-              <option value={row.value} key={row.value}>
-                {row.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {view.filters.state || view.filters.city || view.filters.zipcode ? (
-          <button
-            className="text-link"
-            onClick={() =>
-              updateQuery({ state: null, city: null, zipcode: null })
-            }
-            type="button"
-          >
-            Reset geography
-          </button>
-        ) : null}
-        <span className="pm-loading-status" aria-live="polite">
-          {loading
-            ? "Refreshing evidence…"
-            : (error ??
-              `${count(view.summary.eligible_observations)} exact-product observations`)}
-        </span>
-      </section>
+      {loading || error ? (
+        <p className="pi-context-status" aria-live="polite">
+          {loading ? "Refreshing evidence…" : error}
+        </p>
+      ) : null}
 
       {tab === "home" ? <ProductCatalog view={view} /> : null}
 
@@ -1636,9 +1541,10 @@ export function PriceMonitoringWorkspace({
                   Open footprint →
                 </button>
               </header>
-              <EvidenceRetailMap
+              <InteractiveEvidenceRetailMap
                 detail="summary"
                 key={"summary:" + JSON.stringify(view.filters)}
+                onScopeChange={updateQuery}
                 view={view}
               />
             </article>
@@ -1698,8 +1604,9 @@ export function PriceMonitoringWorkspace({
               show each price relative to the visible-footprint median.
             </p>
           </article>
-          <EvidenceRetailMap
+          <InteractiveEvidenceRetailMap
             key={"full:" + JSON.stringify(view.filters)}
+            onScopeChange={updateQuery}
             view={view}
           />
           <article className="pm-panel">

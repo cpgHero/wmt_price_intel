@@ -245,6 +245,15 @@
   font-size: 0.6rem;
   margin: 0 0 0.52rem auto;
 }
+.pi-context-status {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.61rem;
+  margin: 0;
+  padding: 0.58rem 0.72rem;
+}
 .pm-tab-content {
   display: grid;
   gap: 1rem;

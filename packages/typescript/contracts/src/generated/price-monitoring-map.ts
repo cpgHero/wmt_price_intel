@@ -1,7 +1,7 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
 export interface RetailCompetitiveIntelligencePriceMonitoringMap {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   retailer: IdName;
   product: IdName;
@@ -22,6 +22,9 @@ export interface RetailCompetitiveIntelligencePriceMonitoringMap {
     observed_points: number;
     observed_missing_coordinates: number;
     observed_sampled: boolean;
+    below_reference_locations: number;
+    at_reference_locations: number;
+    above_reference_locations: number;
     not_observed_locations: number;
     not_observed_points: number;
     not_observed_missing_coordinates: number;

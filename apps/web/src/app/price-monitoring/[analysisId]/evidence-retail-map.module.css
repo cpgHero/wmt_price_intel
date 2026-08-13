@@ -1,0 +1,295 @@
+.stage {
+  background: #eef4f5;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  min-height: 620px;
+  overflow: hidden;
+}
+
+.mapShell {
+  min-height: 620px;
+  position: relative;
+}
+
+.map {
+  height: 100%;
+  inset: 0;
+  min-height: 620px;
+  position: absolute;
+  width: 100%;
+}
+
+.loading {
+  align-items: center;
+  background: #eef4f5;
+  color: #536d76;
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 750;
+  inset: 0;
+  justify-content: center;
+  padding: 2rem;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+
+.mapHint {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(50, 75, 84, 0.18);
+  border-radius: 8px;
+  bottom: 0.75rem;
+  color: #425b64;
+  font-size: 0.54rem;
+  left: 50%;
+  padding: 0.42rem 0.62rem;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.inspector {
+  background: var(--card);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.9rem;
+}
+
+.mode {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+}
+
+.mode button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  display: grid;
+  font: inherit;
+  font-size: 0.61rem;
+  font-weight: 850;
+  gap: 0.12rem;
+  padding: 0.55rem 0.35rem;
+}
+
+.mode button small {
+  color: inherit;
+  font-size: 0.52rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.mode button.active {
+  background: var(--card);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+
+.positionSummary {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 0.75rem;
+}
+
+.positionSummary header {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.positionSummary header span {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.positionSummary header strong {
+  font-size: 0.68rem;
+}
+
+.positionSummary dl {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0.7rem 0 0;
+}
+
+.positionSummary dl div {
+  border-radius: 8px;
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.5rem;
+}
+
+.positionSummary dt {
+  font-size: 0.48rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.positionSummary dd {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  margin: 0;
+}
+
+.below {
+  background: color-mix(in srgb, #087da1 12%, var(--card));
+  color: #08718f;
+}
+
+.at {
+  background: color-mix(in srgb, #26383f 9%, var(--card));
+  color: var(--ink);
+}
+
+.above {
+  background: color-mix(in srgb, #db7512 12%, var(--card));
+  color: #b85d08;
+}
+
+.coverage {
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.45;
+  margin: -0.1rem 0 0;
+}
+
+.coverage strong {
+  color: var(--ink);
+}
+
+.pointDetail {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.34rem;
+  padding: 0.75rem;
+}
+
+.pointDetail > small {
+  color: var(--green);
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pointDetail > strong {
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.pointDetail > span,
+.pointDetail > b,
+.pointDetail > p {
+  color: var(--muted);
+  font-size: 0.57rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pointDetail > b {
+  color: var(--ink);
+}
+
+.drillActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.28rem;
+}
+
+.drillActions button {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.5rem;
+  font-weight: 780;
+  padding: 0.36rem 0.5rem;
+}
+
+.drillActions button:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.prompt {
+  background: var(--surface-alt);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.inspector footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.51rem;
+  line-height: 1.5;
+  margin-top: auto;
+  padding-top: 0.75rem;
+}
+
+.summary {
+  grid-template-columns: minmax(0, 1fr) 260px;
+  min-height: 430px;
+}
+
+.summary .mapShell,
+.summary .map {
+  min-height: 430px;
+}
+
+@media (max-width: 950px) {
+  .stage,
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .mapShell,
+  .map,
+  .summary .mapShell,
+  .summary .map {
+    min-height: 460px;
+  }
+}
+
+@media (max-width: 560px) {
+  .mapShell,
+  .map,
+  .summary .mapShell,
+  .summary .map {
+    min-height: 390px;
+  }
+
+  .mapHint {
+    display: none;
+  }
+}

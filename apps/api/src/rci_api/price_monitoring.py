@@ -572,7 +572,7 @@ class PriceMonitoringService:
             raise ValueError("a product_id is required for the price footprint map")
         if filters.city is not None and filters.state is None:
             raise ValueError("a city filter requires its state")
-        cache_key = (*self._view_key(analysis_id, filters), "map-v1", detail)
+        cache_key = (*self._view_key(analysis_id, filters), "map-v2", detail)
         cached = self._map_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -626,6 +626,19 @@ class PriceMonitoringService:
             for row in not_observed_rows
             if row.get("latitude") is not None and row.get("longitude") is not None
         ]
+        price_positions = {"below": 0, "at": 0, "above": 0}
+        if reference_price is not None:
+            for row in observed_rows:
+                price = row.get("median_price")
+                if price is None:
+                    continue
+                difference = float(price) - float(reference_price)
+                if difference < -0.005:
+                    price_positions["below"] += 1
+                elif difference > 0.005:
+                    price_positions["above"] += 1
+                else:
+                    price_positions["at"] += 1
 
         def evenly_sample(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if len(rows) <= point_limit:
@@ -640,7 +653,7 @@ class PriceMonitoringService:
             map_point(row, "not_observed") for row in evenly_sample(not_observed_with_coordinates)
         ]
         result = {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis_id,
             "retailer": {
                 "id": view["retailer"]["id"],
@@ -675,6 +688,9 @@ class PriceMonitoringService:
                     int(view["location_display"]["total"]) - len(observed_with_coordinates),
                 ),
                 "observed_sampled": len(observed_with_coordinates) > point_limit,
+                "below_reference_locations": price_positions["below"],
+                "at_reference_locations": price_positions["at"],
+                "above_reference_locations": price_positions["above"],
                 "not_observed_locations": int(
                     view["distribution_gaps"]["location_display"]["total"]
                 ),

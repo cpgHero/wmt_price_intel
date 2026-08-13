@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "analysis_id": "fresh_ground_beef-example",
   "retailer": { "id": "walmart_us", "name": "Walmart (US)" },
   "product": { "id": "959024059", "name": "80% Lean Ground Beef" },
@@ -20,6 +20,9 @@
     "observed_points": 2,
     "observed_missing_coordinates": 0,
     "observed_sampled": false,
+    "below_reference_locations": 1,
+    "at_reference_locations": 0,
+    "above_reference_locations": 1,
     "not_observed_locations": 1,
     "not_observed_points": 1,
     "not_observed_missing_coordinates": 0,
