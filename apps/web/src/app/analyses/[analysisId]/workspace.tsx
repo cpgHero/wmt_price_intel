@@ -6,6 +6,10 @@ import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
 
 import { DataTable } from "@/app/components/data-table";
+import {
+  type ApplicationContextDefinition,
+  useApplicationContextDefinition,
+} from "@/app/components/application-context";
 import { BrandWorkbenchPanel } from "./brand-workbench";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { MatchReviewWorkbench } from "./match-review-workbench";
@@ -394,6 +398,114 @@ function BlueprintAnalysisWorkspace({
       : reportView.report_readiness.status === "limited"
         ? "limited_evidence"
         : (publication?.status ?? analysis.status);
+  const readiness = reportView.report_readiness;
+  const contextDefinition = useMemo<ApplicationContextDefinition>(() => {
+    const selectedRetailerName =
+      competitorOptions.find(
+        (competitor) => competitor.id === selectedCompetitor,
+      )?.name ?? null;
+    const readinessLabel =
+      readiness.status === "ready"
+        ? "Ready for decision use"
+        : readiness.status === "review_required"
+          ? "Match review required"
+          : "Use with limitations";
+    return {
+      label: "Competitive report context",
+      controls: [
+        {
+          id: "competitive-view",
+          label: "Competitive View",
+          title: "Choose the competitive view",
+          description:
+            "Scope every report tab to the complete competitor portfolio or one benchmark-versus-competitor view.",
+          value: selectedRetailerName
+            ? `${reportView.retailer_scope.benchmark.name} vs. ${selectedRetailerName}`
+            : `${reportView.retailer_scope.benchmark.name} vs. all competitors`,
+          options: [
+            {
+              value: "all",
+              label: `All competitors (${competitorOptions.length})`,
+              description: `Portfolio view across every configured competitor against ${reportView.retailer_scope.benchmark.name}.`,
+            },
+            ...competitorOptions.map((competitor) => ({
+              value: competitor.id,
+              label: `${reportView.retailer_scope.benchmark.name} vs. ${competitor.name}`,
+              description:
+                "Apply this retailer pair consistently to all report tabs and evidence.",
+            })),
+          ],
+          queryParameter: "competitor",
+          defaultValue: "all",
+          selectedValue: selectedCompetitor,
+        },
+        {
+          id: "comparison-basis",
+          label: "Comparison Basis",
+          title: "Choose the governed comparison basis",
+          description:
+            "Change the deterministic eligibility, geography, and price unit used by the report. This selection is persisted in the URL.",
+          value: selectedBasis?.label ?? "Configured comparison basis",
+          options: reportView.comparison_bases.map((basis) => ({
+            value: basis.profile_id,
+            label: `${basis.label}${basis.scorecard_role === "preferred" ? " · preferred" : ""}`,
+            description: comparisonBasisDescription(basis),
+          })),
+          queryParameter: "lens",
+          defaultValue: preferredBasis,
+          selectedValue: selectedLens,
+        },
+        {
+          id: "decision-readiness",
+          label: "Decision Readiness",
+          title: readinessLabel,
+          description:
+            "Readiness is calculated from deterministic evidence and match-governance checks. It is context, not a user-selectable status.",
+          value: readinessLabel,
+          tone: readiness.status === "ready" ? "ready" : "attention",
+          facts: [
+            {
+              label: "Confirmed matches",
+              value: reportView.match_governance.confirmed.toLocaleString(),
+            },
+            {
+              label: "Suggested matches",
+              value: reportView.match_governance.suggested.toLocaleString(),
+            },
+            {
+              label: "Ambiguous matches",
+              value: reportView.match_governance.ambiguous.toLocaleString(),
+            },
+            {
+              label: "Suppressed decisions",
+              value: readiness.suppressed_decisions.toLocaleString(),
+            },
+          ],
+          messages: [
+            ...readiness.blocking_reasons.map((reason) => reason.message),
+            ...readiness.warnings.map((warning) => warning.message),
+          ],
+          action: reportView.match_governance.ambiguous
+            ? {
+                label: `Review ${reportView.match_governance.ambiguous.toLocaleString()} ambiguous matches`,
+                parameters: { tab: "match-review", pair: null },
+              }
+            : undefined,
+        },
+      ],
+    };
+  }, [
+    competitorOptions,
+    readiness,
+    reportView.comparison_bases,
+    reportView.match_governance,
+    reportView.retailer_scope.benchmark.name,
+    preferredBasis,
+    selectedBasis,
+    selectedCompetitor,
+    selectedLens,
+  ]);
+  useApplicationContextDefinition(contextDefinition);
   return (
     <>
       <header className="workspace-header report-header">
@@ -432,16 +544,6 @@ function BlueprintAnalysisWorkspace({
           </small>
         </div>
       </header>
-      <RetailerScopeControl
-        benchmark={reportView.retailer_scope.benchmark}
-        competitors={competitorOptions}
-        selected={selectedCompetitor}
-        onSelect={selectCompetitor}
-      />
-      <ReportReadinessBanner
-        reportView={reportView}
-        onReviewMatches={() => selectGroup("match-review")}
-      />
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
         {groupedSections.map((group) => (
           <button
@@ -501,25 +603,18 @@ function BlueprintAnalysisWorkspace({
               />
             ) : null}
             {activeGroup === "price-segments" ? (
-              <>
-                <ComparisonBasisControl
-                  bases={reportView.comparison_bases}
-                  selected={selectedLens}
-                  onSelect={selectLens}
-                />
-                <ComparableCohortExplorer
-                  records={cohortRecords}
-                  benchmarkName={reportView.retailer_scope.benchmark.name}
-                  cohortDimensions={
-                    reportView.product_pack.cohort_dimensions ?? []
-                  }
-                  minimumGeographies={
-                    reportView.product_pack.minimum_cohort_geographies ?? 1
-                  }
-                  ambiguousMatches={reportView.match_governance.ambiguous}
-                  onReviewMatches={() => selectGroup("match-review")}
-                />
-              </>
+              <ComparableCohortExplorer
+                records={cohortRecords}
+                benchmarkName={reportView.retailer_scope.benchmark.name}
+                cohortDimensions={
+                  reportView.product_pack.cohort_dimensions ?? []
+                }
+                minimumGeographies={
+                  reportView.product_pack.minimum_cohort_geographies ?? 1
+                }
+                ambiguousMatches={reportView.match_governance.ambiguous}
+                onReviewMatches={() => selectGroup("match-review")}
+              />
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
               <AnalysisMap
@@ -1106,85 +1201,6 @@ function scopeReportRows(
   });
 }
 
-function ReportReadinessBanner({
-  reportView,
-  onReviewMatches,
-}: Readonly<{
-  reportView: AnalysisReportView;
-  onReviewMatches: () => void;
-}>) {
-  const readiness = reportView.report_readiness;
-  const relationshipCounts = reportView.match_governance;
-  return (
-    <section className={`report-readiness ${readiness.status}`}>
-      <div>
-        <small>Decision readiness</small>
-        <strong>
-          {readiness.status === "ready"
-            ? "Ready for decision use"
-            : readiness.status === "review_required"
-              ? "Match review required"
-              : "Use with stated limitations"}
-        </strong>
-        <span>
-          {relationshipCounts.confirmed.toLocaleString()} confirmed ·{" "}
-          {relationshipCounts.suggested.toLocaleString()} suggested ·{" "}
-          {relationshipCounts.ambiguous.toLocaleString()} ambiguous
-        </span>
-      </div>
-      <p>
-        {readiness.blocking_reasons[0]?.message ??
-          readiness.warnings[0]?.message ??
-          `${readiness.suppressed_decisions.toLocaleString()} product decisions were withheld by deterministic evidence guardrails.`}
-      </p>
-      {relationshipCounts.ambiguous ? (
-        <button type="button" onClick={onReviewMatches}>
-          Review {relationshipCounts.ambiguous.toLocaleString()} ambiguous pairs
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-function ComparisonBasisControl({
-  bases,
-  selected,
-  onSelect,
-}: Readonly<{
-  bases: AnalysisReportView["comparison_bases"];
-  selected: string;
-  onSelect: (profileId: string) => void;
-}>) {
-  const current = bases.find((basis) => basis.profile_id === selected);
-  return (
-    <section className="comparison-basis-control">
-      <div>
-        <p className="eyebrow">Comparison basis</p>
-        <h2>{current?.label ?? "Configured comparison lens"}</h2>
-        <p>
-          {current
-            ? `${displayLabel(current.comparison_metric)} · ${displayLabel(current.package_basis)} · ${displayLabel(current.geography)} · ${current.population_basis === "market_floor" ? "market-floor assortment view" : "resolved product relationships—not market-floor items"}`
-            : "Choose the deterministic basis used for the price and segment evidence below."}
-        </p>
-      </div>
-      <label>
-        <span>Lens</span>
-        <select
-          value={selected}
-          onChange={(event) => onSelect(event.target.value)}
-        >
-          {bases.map((basis) => (
-            <option value={basis.profile_id} key={basis.profile_id}>
-              {basis.label}
-              {basis.scorecard_role === "preferred" ? " · preferred" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
-    </section>
-  );
-}
-
 function rowReferencesRetailer(row: JsonObject, retailer: RetailerOption) {
   const aliases = [retailer.id, retailer.name]
     .map(retailerToken)
@@ -1212,50 +1228,6 @@ function scopeEvidenceRows(
     if (referencedCompetitor) return referencedCompetitor.id === selected.id;
     return true;
   });
-}
-
-function RetailerScopeControl({
-  benchmark,
-  competitors,
-  selected,
-  onSelect,
-}: Readonly<{
-  benchmark: RetailerOption;
-  competitors: RetailerOption[];
-  selected: string;
-  onSelect: (retailerId: string) => void;
-}>) {
-  const current = competitors.find((option) => option.id === selected);
-  return (
-    <div className="retailer-scope-control">
-      <div>
-        <span>Competitive view</span>
-        <strong>
-          {current
-            ? `${benchmark.name} vs. ${current.name}`
-            : `${benchmark.name} vs. all ${competitors.length} competitors`}
-        </strong>
-        <p>
-          This selection follows you across every report tab and is saved in the
-          page URL.
-        </p>
-      </div>
-      <label>
-        <span>Competitor</span>
-        <select
-          value={selected}
-          onChange={(event) => onSelect(event.target.value)}
-        >
-          <option value="all">All competitors ({competitors.length})</option>
-          {competitors.map((competitor) => (
-            <option value={competitor.id} key={competitor.id}>
-              {competitor.name}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
-  );
 }
 
 function formatScorecardRate(value: number | null) {

@@ -12,6 +12,8 @@ import {
 
 import { activeNavigationItem } from "@/lib/app-navigation";
 
+import { useApplicationContext } from "./application-context";
+import { ContextControlBar } from "./context-control-bar";
 import { PrimaryNavigation } from "./primary-navigation";
 import { ThemeToggle } from "./theme-toggle";
 import styles from "./app-shell.module.css";
@@ -89,6 +91,7 @@ export function AppShell({
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const activeItem = activeNavigationItem(pathname);
+  const { definition: contextDefinition } = useApplicationContext();
   const compact = useSyncExternalStore(
     subscribeToSidebarPreference,
     sidebarPreferenceSnapshot,
@@ -194,10 +197,16 @@ export function AppShell({
           >
             <MenuIcon />
           </button>
-          <div className={styles.pageContext}>
-            <span>{activeItem ? activeItem.label : "Retail intelligence"}</span>
-            <small>{activeItem?.description ?? "Standalone workspace"}</small>
-          </div>
+          {contextDefinition ? (
+            <ContextControlBar definition={contextDefinition} />
+          ) : (
+            <div className={styles.pageContext}>
+              <span>
+                {activeItem ? activeItem.label : "Retail intelligence"}
+              </span>
+              <small>{activeItem?.description ?? "Standalone workspace"}</small>
+            </div>
+          )}
           <div className={styles.topbarActions}>
             <span className={styles.statusPill}>
               <span className={styles.liveDot} aria-hidden="true" />

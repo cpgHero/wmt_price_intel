@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 
+import { ApplicationContextProvider } from "./components/application-context";
 import { AppShell } from "./components/app-shell";
 import "./styles.css";
 
@@ -30,7 +31,9 @@ export default function RootLayout({
             } catch (_) {}
           })();`}
         </Script>
-        <AppShell>{children}</AppShell>
+        <ApplicationContextProvider>
+          <AppShell>{children}</AppShell>
+        </ApplicationContextProvider>
       </body>
     </html>
   );

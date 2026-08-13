@@ -101,6 +101,12 @@ rule.
 - Compact rail at intermediate laptop widths.
 - Modal slide-over navigation on mobile with focus containment and Escape dismissal.
 - Sticky top context bar with current destination, environment state, and theme control.
+- Report routes replace the destination label with a persistent context rail. Competitive View and
+  Comparison Basis open full-width selection drawers and update the existing URL-governed report
+  scope; Decision Readiness opens a read-only evidence and governance drawer.
+- Label-only accordion navigation on the expanded sidebar. Descriptions belong in page context and
+  help surfaces, not under every destination name.
+- Compact report mastheads and dense tab rails preserve vertical space for decision content.
 - Light/dark theme and reduced-motion support.
 - URL and route continuity for all existing pages.
 - Presentation preferences may use browser storage; analytical scope never does.

@@ -1,135 +1,224 @@
 .navigation {
   display: grid;
-  gap: 1.15rem;
-  padding: 0.35rem 0.75rem 1.5rem;
+  gap: 0.3rem;
+  padding: 0.7rem 0.55rem 1.2rem;
 }
 
 .group {
-  display: grid;
-  gap: 0.4rem;
+  border-radius: 10px;
+  min-width: 0;
 }
 
-.group h2 {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.67rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  margin: 0;
-  min-height: 1rem;
-  padding: 0 0.7rem;
+.group.open {
+  background: color-mix(in srgb, var(--surface-alt) 38%, transparent);
+}
+
+.group.containsActive {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--green-soft) 55%, transparent),
+    transparent 92%
+  );
+}
+
+.groupButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  gap: 0.5rem;
+  min-height: 34px;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.groupButton:hover {
+  background: color-mix(in srgb, var(--surface-alt) 74%, transparent);
+  color: var(--ink);
+}
+
+.groupButton:focus-visible,
+.links a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--green) 28%, transparent);
+  outline-offset: 1px;
+}
+
+.containsActive .groupButton {
+  color: var(--green);
+}
+
+.groupIcon,
+.icon {
+  align-items: center;
+  border-radius: 7px;
+  display: flex;
+  flex: 0 0 24px;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.containsActive .groupIcon {
+  background: var(--green-soft);
+}
+
+.groupIcon svg,
+.icon svg {
+  height: 15px;
+  width: 15px;
+}
+
+.groupLabel {
+  flex: 1;
+  font-size: 0.62rem;
+  font-weight: 820;
+  letter-spacing: 0.075em;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.groupChevron {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+}
+
+.groupChevron svg {
+  fill: none;
+  height: 13px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 160ms ease;
+  width: 13px;
+}
+
+.open .groupChevron svg {
+  transform: rotate(180deg);
+}
+
+.children {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 160ms ease;
+}
+
+.children > div {
+  overflow: hidden;
+}
+
+.open .children {
+  grid-template-rows: 1fr;
 }
 
 .links {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.12rem;
+  margin-left: 0.7rem;
+  padding: 0.1rem 0 0.35rem 0.42rem;
+  position: relative;
+}
+
+.links::before {
+  background: var(--line);
+  bottom: 0.55rem;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 0.25rem;
+  width: 1px;
 }
 
 .links a {
   align-items: center;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: 2rem minmax(0, 1fr);
-  min-height: 48px;
-  padding: 0.48rem 0.55rem;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease;
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.73rem;
+  font-weight: 620;
+  gap: 0.45rem;
+  min-height: 34px;
+  padding: 0.28rem 0.48rem;
+  position: relative;
 }
 
 .links a:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #ffffff;
-}
-
-.links a:focus-visible {
-  outline: 3px solid rgba(88, 210, 248, 0.42);
-  outline-offset: 2px;
+  background: var(--surface-alt);
+  color: var(--ink);
 }
 
 .links a.active {
-  background: rgba(88, 210, 248, 0.14);
-  border-color: rgba(88, 210, 248, 0.22);
-  color: #ffffff;
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 760;
 }
 
-.icon {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  display: flex;
-  height: 2rem;
-  justify-content: center;
-  width: 2rem;
+.links a.active::before {
+  background: var(--green);
+  border-radius: 999px;
+  content: "";
+  height: 18px;
+  left: -0.48rem;
+  position: absolute;
+  width: 2px;
 }
 
 .active .icon {
-  background: #58d2f8;
-  color: #071116;
-}
-
-.icon svg {
-  height: 1.08rem;
-  width: 1.08rem;
+  background: color-mix(in srgb, var(--green-soft) 72%, transparent);
 }
 
 .copy {
-  display: grid;
-  gap: 0.08rem;
-  min-width: 0;
-}
-
-.copy strong,
-.copy small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.copy strong {
-  font-size: 0.79rem;
-  font-weight: 760;
-}
-
-.copy small {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 0.62rem;
-  line-height: 1.25;
-}
-
-.active .copy small {
-  color: rgba(255, 255, 255, 0.62);
-}
-
 :global(.shell-compact) .navigation {
-  padding-inline: 0.55rem;
+  gap: 0.15rem;
+  padding-inline: 0.4rem;
 }
 
 :global(.shell-compact) .group {
-  gap: 0.5rem;
+  background: transparent;
 }
 
-:global(.shell-compact) .group h2 {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0;
-  margin: 0 0.42rem;
-  min-height: 1px;
+:global(.shell-compact) .groupButton {
+  display: none;
+}
+
+:global(.shell-compact) .children {
+  grid-template-rows: 1fr;
+}
+
+:global(.shell-compact) .links {
+  margin: 0;
   padding: 0;
 }
 
-:global(.shell-compact) .group:first-child h2 {
+:global(.shell-compact) .links::before {
   display: none;
 }
 
 :global(.shell-compact) .links a {
-  gap: 0;
-  grid-template-columns: 1fr;
-  justify-items: center;
-  padding-inline: 0;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0;
+}
+
+:global(.shell-compact) .links a.active::before {
+  left: -0.4rem;
+}
+
+:global(.shell-compact) .icon {
+  flex-basis: 32px;
+  height: 32px;
+  width: 32px;
 }
 
 :global(.shell-compact) .copy {
@@ -138,26 +227,45 @@
 
 @media (max-width: 1180px) and (min-width: 901px) {
   .navigation {
-    padding-inline: 0.55rem;
+    gap: 0.15rem;
+    padding-inline: 0.4rem;
   }
 
-  .group h2 {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 0;
-    margin: 0 0.42rem;
-    min-height: 1px;
+  .group {
+    background: transparent;
+  }
+
+  .groupButton {
+    display: none;
+  }
+
+  .children {
+    grid-template-rows: 1fr;
+  }
+
+  .links {
+    margin: 0;
     padding: 0;
   }
 
-  .group:first-child h2 {
+  .links::before {
     display: none;
   }
 
   .links a {
-    gap: 0;
-    grid-template-columns: 1fr;
-    justify-items: center;
-    padding-inline: 0;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0;
+  }
+
+  .links a.active::before {
+    left: -0.4rem;
+  }
+
+  .icon {
+    flex-basis: 32px;
+    height: 32px;
+    width: 32px;
   }
 
   .copy {
@@ -166,41 +274,61 @@
 }
 
 @media (max-width: 900px) {
-  .navigation {
-    padding-inline: 0.75rem;
-  }
-
+  .navigation,
   :global(.shell-compact) .navigation {
-    padding-inline: 0.75rem;
+    gap: 0.3rem;
+    padding: 0.7rem 0.55rem 1.2rem;
   }
 
-  :global(.shell-compact) .group {
-    gap: 0.4rem;
+  :global(.shell-compact) .group.open {
+    background: color-mix(in srgb, var(--surface-alt) 38%, transparent);
   }
 
-  :global(.shell-compact) .group h2 {
-    border-top: 0;
+  :global(.shell-compact) .groupButton {
+    display: flex;
+  }
+
+  :global(.shell-compact) .children {
+    grid-template-rows: 0fr;
+  }
+
+  :global(.shell-compact) .open .children {
+    grid-template-rows: 1fr;
+  }
+
+  :global(.shell-compact) .links {
+    margin-left: 0.7rem;
+    padding: 0.1rem 0 0.35rem 0.42rem;
+  }
+
+  :global(.shell-compact) .links::before {
     display: block;
-    font-size: 0.67rem;
-    margin: 0;
-    min-height: 1rem;
-    padding: 0 0.7rem;
   }
 
   :global(.shell-compact) .links a {
-    gap: 0.7rem;
-    grid-template-columns: 2rem minmax(0, 1fr);
-    justify-items: stretch;
-    padding: 0.48rem 0.55rem;
+    justify-content: flex-start;
+    min-height: 34px;
+    padding: 0.28rem 0.48rem;
+  }
+
+  :global(.shell-compact) .links a.active::before {
+    left: -0.48rem;
+  }
+
+  :global(.shell-compact) .icon {
+    flex-basis: 24px;
+    height: 24px;
+    width: 24px;
   }
 
   :global(.shell-compact) .copy {
-    display: grid;
+    display: inline;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .links a {
+  .children,
+  .groupChevron svg {
     transition: none;
   }
 }

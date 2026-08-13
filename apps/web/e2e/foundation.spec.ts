@@ -74,6 +74,10 @@ test("supports the responsive application navigation", async ({ page }) => {
     sidebar.getByRole("link", { name: "Dashboard" }),
   ).toHaveAttribute("aria-current", "page");
 
+  const operationsGroup = sidebar.getByRole("button", { name: "Operations" });
+  await expect(operationsGroup).toHaveAttribute("aria-expanded", "false");
+  await operationsGroup.click();
+  await expect(operationsGroup).toHaveAttribute("aria-expanded", "true");
   await sidebar.getByRole("link", { name: "Collections" }).click();
   await expect(page).toHaveURL(/\/collections$/);
   await expect(
