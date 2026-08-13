@@ -80,6 +80,28 @@ def test_phase_9_5_contracts_preserve_identifiers_and_source_authority() -> None
     }
 
 
+def test_price_monitoring_examples_are_contract_valid_and_search_authoritative() -> None:
+    observation = json.loads(
+        (REPOSITORY_ROOT / "examples/price-observation.example.json").read_text()
+    )
+    view = json.loads((REPOSITORY_ROOT / "examples/price-monitoring-view.example.json").read_text())
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-observation.schema.json",
+        observation,
+        label="price observation example",
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-monitoring-view.schema.json",
+        view,
+        label="price monitoring view example",
+    )
+    assert observation["source_authority"] == "search_location_observation"
+    assert view["source"]["authority"] == "Search"
+
+
 def test_agent_contract_forbids_authoritative_metric_computation() -> None:
     output = json.loads(
         (REPOSITORY_ROOT / "examples/agent-output.ground-beef-insight.json").read_text(

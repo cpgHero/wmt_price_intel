@@ -20,6 +20,7 @@ describe("application navigation", () => {
       "/",
       "/workspace/matches",
       "/workspace/brands",
+      "/price-monitoring",
       "/analyses",
       "/collections",
       "/automation",
@@ -32,7 +33,7 @@ describe("application navigation", () => {
 
   it("keeps the dashboard exact and activates nested workspaces by prefix", () => {
     const dashboard = homeNavigationItem;
-    const competitive = applicationNavigation[1].items[0];
+    const competitive = applicationNavigation[1].items[1];
 
     expect(navigationItemIsActive("/", dashboard)).toBe(true);
     expect(navigationItemIsActive("/collections", dashboard)).toBe(false);
@@ -42,6 +43,9 @@ describe("application navigation", () => {
     );
     expect(activeNavigationItem("/workspace/matches")?.label).toBe(
       "Match Workbench",
+    );
+    expect(activeNavigationItem("/price-monitoring/analysis-123")?.label).toBe(
+      "Price Monitoring",
     );
   });
 

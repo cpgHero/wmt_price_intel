@@ -33,6 +33,11 @@ export interface RetailCompetitiveIntelligenceReportView {
   product_highlights?: {
     [k: string]: unknown;
   }[];
+  product_evidence?: {
+    [k: string]: {
+      [k: string]: unknown;
+    };
+  };
   product_decisions?: ProductDecision[];
   suppressed_product_decisions?: ProductDecision[];
   match_candidates?: {

@@ -15,6 +15,7 @@ from rci_api.analyses import router as analysis_router
 from rci_api.automation import router as automation_router
 from rci_api.collections import router as collection_router
 from rci_api.locations import router as location_router
+from rci_api.price_monitoring import router as price_monitoring_router
 from rci_api.product_packs import (
     router as product_pack_router,
 )
@@ -62,6 +63,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(automation_router)
     app.include_router(collection_router)
     app.include_router(location_router)
+    app.include_router(price_monitoring_router)
     app.include_router(product_pack_router)
     app.include_router(study_router)
 

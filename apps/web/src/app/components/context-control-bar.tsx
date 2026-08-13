@@ -117,9 +117,13 @@ export function ContextControlBar({
 
   function selectOption(control: ApplicationContextControl, value: string) {
     if (control.queryParameter) {
-      updateLocation({
+      const parameters: Record<string, string | null> = {
         [control.queryParameter]: value === control.defaultValue ? null : value,
-      });
+      };
+      for (const key of control.resetQueryParameters ?? []) {
+        parameters[key] = null;
+      }
+      updateLocation(parameters);
     }
     closeDrawer();
   }

@@ -1,5 +1,6 @@
 export type NavigationIcon =
   | "dashboard"
+  | "prices"
   | "intelligence"
   | "collections"
   | "automation"
@@ -56,6 +57,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     id: "intelligence",
     label: "Intelligence",
     items: [
+      {
+        label: "Price Monitoring",
+        description: "Store-level price distribution within each retailer",
+        href: "/price-monitoring",
+        icon: "prices",
+        match: "prefix",
+      },
       {
         label: "Competitive Intelligence",
         description: "Comparable products, price position, and assortment",

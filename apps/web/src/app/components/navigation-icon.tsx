@@ -18,6 +18,14 @@ const iconPaths: Record<NavigationIconName, React.ReactNode> = {
       <path d="m3 7 6-4 6 5 6-4" />
     </>
   ),
+  prices: (
+    <>
+      <path d="M4 6h16v12H4z" />
+      <path d="M7 9h3M14 15h3" />
+      <path d="M12 8.5v7" />
+      <path d="M14.5 10.5c-.3-1-1.1-1.5-2.5-1.5-1.5 0-2.5.7-2.5 1.8 0 2.7 5 1.2 5 3.5 0 1.1-1 1.7-2.5 1.7-1.4 0-2.3-.5-2.6-1.5" />
+    </>
+  ),
   collections: (
     <>
       <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5Z" />

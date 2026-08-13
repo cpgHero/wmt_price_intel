@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "fresh_ground_beef-example",
+  "generated_at": "2026-08-13T12:00:00Z",
+  "product_pack": {
+    "id": "fresh_ground_beef",
+    "name": "Fresh Ground Beef",
+    "version": "1.0.0"
+  },
+  "retailer": {
+    "id": "walmart_us",
+    "name": "Walmart (US)",
+    "location_dimension": "store"
+  },
+  "source": {
+    "authority": "Search",
+    "grain": "retailer product x retailer location x latest observation in run",
+    "observed_start": null,
+    "observed_end": null,
+    "source_rows": 0,
+    "classified_rows": 0,
+    "artifact_checksums": []
+  },
+  "filters": {
+    "retailer_id": "walmart_us",
+    "brand_type": "all",
+    "state": null,
+    "city": null,
+    "product_id": null
+  },
+  "filter_options": {
+    "retailers": [{ "id": "walmart_us", "name": "Walmart (US)" }],
+    "brand_types": [
+      { "value": "private_label", "label": "Private Label", "count": 0 },
+      { "value": "regional", "label": "Regional", "count": 0 },
+      { "value": "national", "label": "National", "count": 0 },
+      { "value": "unclassified", "label": "Unclassified", "count": 0 }
+    ],
+    "states": [],
+    "cities": []
+  },
+  "summary": {
+    "observed_locations": 0,
+    "expected_locations": 0,
+    "coverage_rate": null,
+    "observed_products": 0,
+    "eligible_observations": 0,
+    "usable_price_rate": 0,
+    "price_consistency_rate": null
+  },
+  "price_distribution": {
+    "minimum": null,
+    "q1": null,
+    "observation_median": null,
+    "product_equal_weighted_median": null,
+    "q3": null,
+    "maximum": null,
+    "range": null,
+    "modal_price": null,
+    "modal_share": null,
+    "observation_count": 0
+  },
+  "brand_portfolio": [],
+  "geographies": [],
+  "locations": [],
+  "location_display": { "returned": 0, "total": 0, "sampled": false },
+  "products": [],
+  "quality": {
+    "status": "ready",
+    "checks": []
+  },
+  "movement": {
+    "status": "unavailable",
+    "reason": "A second complete comparable snapshot is required before price movement is calculated."
+  }
+}

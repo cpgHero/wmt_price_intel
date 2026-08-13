@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/price-monitoring-view.schema.json",
+  "title": "RetailCompetitiveIntelligencePriceMonitoringView",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "generated_at",
+    "product_pack",
+    "retailer",
+    "source",
+    "filters",
+    "filter_options",
+    "summary",
+    "price_distribution",
+    "brand_portfolio",
+    "geographies",
+    "locations",
+    "location_display",
+    "products",
+    "quality",
+    "movement"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "product_pack": { "$ref": "#/$defs/idNameVersion" },
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "location_dimension"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location_dimension": { "enum": ["store", "service_area"] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "grain",
+        "observed_start",
+        "observed_end",
+        "source_rows",
+        "classified_rows",
+        "artifact_checksums"
+      ],
+      "properties": {
+        "authority": { "const": "Search" },
+        "grain": { "const": "retailer product x retailer location x latest observation in run" },
+        "observed_start": { "type": ["string", "null"], "format": "date-time" },
+        "observed_end": { "type": ["string", "null"], "format": "date-time" },
+        "source_rows": { "type": "integer", "minimum": 0 },
+        "classified_rows": { "type": "integer", "minimum": 0 },
+        "artifact_checksums": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_id", "brand_type", "state", "city", "product_id"],
+      "properties": {
+        "retailer_id": { "type": "string" },
+        "brand_type": {
+          "enum": ["all", "private_label", "regional", "national", "unclassified"]
+        },
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "product_id": { "type": ["string", "null"] }
+      }
+    },
+    "filter_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailers", "brand_types", "states", "cities"],
+      "properties": {
+        "retailers": { "type": "array", "items": { "$ref": "#/$defs/idName" } },
+        "brand_types": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
+        "states": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } },
+        "cities": { "type": "array", "items": { "$ref": "#/$defs/valueLabelCount" } }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_locations",
+        "expected_locations",
+        "coverage_rate",
+        "observed_products",
+        "eligible_observations",
+        "usable_price_rate",
+        "price_consistency_rate"
+      ],
+      "properties": {
+        "observed_locations": { "type": "integer", "minimum": 0 },
+        "expected_locations": { "type": "integer", "minimum": 0 },
+        "coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "observed_products": { "type": "integer", "minimum": 0 },
+        "eligible_observations": { "type": "integer", "minimum": 0 },
+        "usable_price_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "price_consistency_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "price_distribution": { "$ref": "#/$defs/priceStats" },
+    "brand_portfolio": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["brand_type", "products", "locations", "observations", "median_price"],
+        "properties": {
+          "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+          "products": { "type": "integer", "minimum": 0 },
+          "locations": { "type": "integer", "minimum": 0 },
+          "observations": { "type": "integer", "minimum": 0 },
+          "median_price": { "type": ["number", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "geographies": { "type": "array", "items": { "$ref": "#/$defs/geography" } },
+    "locations": { "type": "array", "items": { "$ref": "#/$defs/locationSummary" } },
+    "location_display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["returned", "total", "sampled"],
+      "properties": {
+        "returned": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "sampled": { "type": "boolean" }
+      }
+    },
+    "products": { "type": "array", "items": { "$ref": "#/$defs/productSummary" } },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks"],
+      "properties": {
+        "status": { "enum": ["ready", "warning", "blocked"] },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "count", "rate", "severity", "definition"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "count": { "type": "integer", "minimum": 0 },
+              "rate": { "type": "number", "minimum": 0, "maximum": 1 },
+              "severity": { "enum": ["info", "warning", "blocker"] },
+              "definition": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "movement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": { "enum": ["available", "unavailable"] },
+        "reason": { "type": "string" },
+        "continuous_pairs": { "type": "integer", "minimum": 0 },
+        "changed_pairs": { "type": "integer", "minimum": 0 },
+        "changed_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "idName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "idNameVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "valueLabelCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label", "count"],
+      "properties": {
+        "value": { "type": "string" },
+        "label": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "priceStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "q1",
+        "observation_median",
+        "product_equal_weighted_median",
+        "q3",
+        "maximum",
+        "range",
+        "modal_price",
+        "modal_share",
+        "observation_count"
+      ],
+      "properties": {
+        "minimum": { "type": ["number", "null"], "minimum": 0 },
+        "q1": { "type": ["number", "null"], "minimum": 0 },
+        "observation_median": { "type": ["number", "null"], "minimum": 0 },
+        "product_equal_weighted_median": { "type": ["number", "null"], "minimum": 0 },
+        "q3": { "type": ["number", "null"], "minimum": 0 },
+        "maximum": { "type": ["number", "null"], "minimum": 0 },
+        "range": { "type": ["number", "null"], "minimum": 0 },
+        "modal_price": { "type": ["number", "null"], "minimum": 0 },
+        "modal_share": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "observation_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "geography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "key", "label", "state", "city", "locations", "products", "observations", "price_stats"],
+      "properties": {
+        "level": { "enum": ["country", "state", "city"] },
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "locations": { "type": "integer", "minimum": 0 },
+        "products": { "type": "integer", "minimum": 0 },
+        "observations": { "type": "integer", "minimum": 0 },
+        "latitude": { "type": ["number", "null"] },
+        "longitude": { "type": ["number", "null"] },
+        "price_stats": { "$ref": "#/$defs/priceStats" }
+      }
+    },
+    "locationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_key", "kind", "store_number", "store_name", "zipcode", "city", "state", "country", "latitude", "longitude", "products", "observations", "minimum_price", "median_price", "maximum_price"],
+      "properties": {
+        "scope_key": { "type": "string" },
+        "kind": { "enum": ["store", "service_area"] },
+        "store_number": { "type": ["string", "null"] },
+        "store_name": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"] },
+        "country": { "type": "string" },
+        "latitude": { "type": ["number", "null"] },
+        "longitude": { "type": ["number", "null"] },
+        "products": { "type": "integer", "minimum": 0 },
+        "observations": { "type": "integer", "minimum": 0 },
+        "minimum_price": { "type": ["number", "null"], "minimum": 0 },
+        "median_price": { "type": ["number", "null"], "minimum": 0 },
+        "maximum_price": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "productSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "name", "brand", "brand_type", "brand_origin", "brand_status", "image_url", "url", "locations", "states", "cities", "price_stats", "consistency_rate", "sample_locations"],
+      "properties": {
+        "product_id": { "type": "string" },
+        "name": { "type": "string" },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "brand_origin": { "enum": ["user", "product_pack", "retailer_pack", "search", "pdp", "unresolved"] },
+        "brand_status": { "enum": ["confirmed", "suggested", "unclassified", "rejected"] },
+        "image_url": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "locations": { "type": "integer", "minimum": 0 },
+        "states": { "type": "integer", "minimum": 0 },
+        "cities": { "type": "integer", "minimum": 0 },
+        "price_stats": { "$ref": "#/$defs/priceStats" },
+        "consistency_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "sample_locations": { "type": "array", "items": { "$ref": "#/$defs/productLocation" } }
+      }
+    },
+    "productLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_key", "store_number", "store_name", "zipcode", "city", "state", "price", "observed_at"],
+      "properties": {
+        "scope_key": { "type": "string" },
+        "store_number": { "type": ["string", "null"] },
+        "store_name": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"] },
+        "price": { "type": "number", "minimum": 0 },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

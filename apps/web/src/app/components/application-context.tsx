@@ -29,6 +29,7 @@ export interface ApplicationContextControl {
   messages?: string[];
   options?: ApplicationContextOption[];
   queryParameter?: string;
+  resetQueryParameters?: string[];
   selectedValue?: string;
   title: string;
   tone?: ContextControlTone;

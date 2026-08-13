@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0.0",
+  "observation_id": "walmart_us:15136790:1753:2026-08-07T05:16:43Z",
+  "analysis_id": "fresh_ground_beef-example",
+  "product_pack_id": "fresh_ground_beef",
+  "retailer_id": "walmart_us",
+  "retailer_product_id": "15136790",
+  "product_name": "93% Lean / 7% Fat Ground Beef, 1 lb",
+  "brand": "Great Value",
+  "brand_type": "private_label",
+  "brand_origin": "pdp",
+  "location": {
+    "scope_key": "walmart_us|store|1753",
+    "kind": "store",
+    "store_number": "1753",
+    "store_name": "Derry Supercenter",
+    "zipcode": "03038",
+    "city": "Derry",
+    "state": "NH",
+    "country": "USA",
+    "latitude": 42.8806,
+    "longitude": -71.3273
+  },
+  "price": 5.84,
+  "currency": "USD",
+  "in_stock": true,
+  "observed_at": "2026-08-07T05:16:43Z",
+  "source_authority": "search_location_observation",
+  "eligible": true,
+  "exclusion_reasons": []
+}

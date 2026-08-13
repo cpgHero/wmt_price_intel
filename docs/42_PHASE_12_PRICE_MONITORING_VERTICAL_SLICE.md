@@ -128,3 +128,24 @@ store correspondence, and comparison bases. The shared layer improves:
   export.
 - A retailer-only metric never depends on a cross-retailer match.
 - No new paid provider calls are required for the first vertical-slice replay.
+
+## Implementation status — 2026-08-13
+
+Implemented in the initial vertical slice:
+
+- versioned `PriceObservation` and `PriceMonitoringView` contracts with generated TypeScript types;
+- deterministic Search-authoritative projection from immutable classified Parquet artifacts;
+- latest-row product × retailer-location deduplication with conflicting-price disclosure;
+- governed brand roles from Retailer Packs, the brand foundation, PDP identity, and user overrides;
+- retailer, brand-type, state, city, and product URL-addressable filters;
+- country/state map, city/location detail, product cards, complete filtered product evidence drawer,
+  and CSV download;
+- quality checks and source/grain definitions in the primary application;
+- checksum validation plus bounded in-process caching of immutable Parquet reads; and
+- focused contract, metric, API, navigation, TypeScript, and production-build tests.
+
+Intentionally deferred until a second complete comparable snapshot is certified:
+
+- longitudinal price movement, additions/removals, availability transitions, and historical trends;
+- promotion-state analysis where the source provides reliable promotion semantics; and
+- reuse of the PriceObservation read model inside Competitive Intelligence.

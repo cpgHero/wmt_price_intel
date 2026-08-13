@@ -7,12 +7,15 @@ import type {
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
+  RetailCompetitiveIntelligencePriceMonitoringView,
   RetailCompetitiveIntelligenceReportView,
 } from "@rci/contracts";
 
 import { loadServerConfig } from "./config";
 
 export type JsonObject = Record<string, unknown>;
+export type PriceMonitoringView =
+  RetailCompetitiveIntelligencePriceMonitoringView;
 
 export interface AnalysisRecord {
   id: string;
@@ -568,12 +571,15 @@ export interface ApiResult<T> {
   error: string | null;
 }
 
-export async function getApi<T>(path: string): Promise<ApiResult<T>> {
+export async function getApi<T>(
+  path: string,
+  timeoutMs = 5_000,
+): Promise<ApiResult<T>> {
   const { apiInternalUrl } = loadServerConfig();
   try {
     const response = await fetch(new URL(path, apiInternalUrl), {
       cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       return {
