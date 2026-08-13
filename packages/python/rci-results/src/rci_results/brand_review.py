@@ -74,6 +74,9 @@ class BrandReanalysisRecord:
 
 class ProductPackDocument(Protocol):
     @property
+    def name(self) -> str: ...
+
+    @property
     def document(self) -> JsonObject: ...
 
 
@@ -825,7 +828,11 @@ class BrandReviewService:
                 for brand_row in retailer_summary.get("brands", []):
                     if not isinstance(brand_row, dict) or not brand_row.get("brand"):
                         continue
-                    resolution = brand_resolver.resolve(retailer_id, str(brand_row["brand"]))
+                    resolution = brand_resolver.resolve(
+                        retailer_id,
+                        str(brand_row["brand"]),
+                        category=pack.name,
+                    )
                     if resolution.status == "resolved" and resolution.role != "unclassified":
                         configured.setdefault(
                             (

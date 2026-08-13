@@ -1091,6 +1091,7 @@ class ComparisonEngine:
                 resolution = self._brand_resolver.resolve(
                     item.offer.retailer_id,
                     str(brand),
+                    category=self.pack.name,
                 )
                 if resolution.strict_private_label:
                     return ("private_label",)

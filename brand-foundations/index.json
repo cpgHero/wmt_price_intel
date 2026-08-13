@@ -1,12 +1,18 @@
 {
   "schema_version": "1.0.0",
-  "active_foundation_id": "private_label_brand_foundation",
+  "active_foundation_id": "cpg_brand_foundation",
   "foundations": [
     {
       "id": "private_label_brand_foundation",
       "name": "CPGHero Private Label Brand Foundation",
       "version": "1.0.0",
       "file": "private_label_brand_foundation/1.0.0.json"
+    },
+    {
+      "id": "cpg_brand_foundation",
+      "name": "CPGHero Brand Universe Foundation",
+      "version": "2.0.0",
+      "file": "cpg_brand_foundation/2.0.0.json"
     }
   ]
 }

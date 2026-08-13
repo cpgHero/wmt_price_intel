@@ -80,6 +80,12 @@ class BrandResolution:
     temporal_status: str | None
     confidence: str | None
     matching_priority: str | None
+    distribution_scope: str | None
+    core_region: str | None
+    home_state: str | None
+    primary_category: str | None
+    category_tags: str | None
+    is_priority_brand: bool
     foundation_id: str
     foundation_version: str
     foundation_checksum: str
@@ -104,6 +110,12 @@ class BrandResolution:
             "temporal_status": self.temporal_status,
             "confidence": self.confidence,
             "matching_priority": self.matching_priority,
+            "distribution_scope": self.distribution_scope,
+            "core_region": self.core_region,
+            "home_state": self.home_state,
+            "primary_category": self.primary_category,
+            "category_tags": self.category_tags,
+            "is_priority_brand": self.is_priority_brand,
             "foundation": {
                 "id": self.foundation_id,
                 "version": self.foundation_version,
@@ -175,7 +187,14 @@ class FileRetailerPackCatalog:
             raise LookupError(f"Retailer Pack {retailer_id}@{version} was not found") from exc
 
     def active_versions(self) -> dict[str, RetailerPack]:
-        return {record.id: record for record in self.versions()}
+        active: dict[str, RetailerPack] = {}
+        for record in self.versions():
+            current = active.get(record.id)
+            if current is None or tuple(map(int, record.version.split("."))) > tuple(
+                map(int, current.version.split("."))
+            ):
+                active[record.id] = record
+        return active
 
 
 class BrandFoundationLoader:
@@ -220,6 +239,41 @@ class BrandFoundationLoader:
             brand_ids.add(brand_id)
             retailer_names.add(key)
             retailer_by_brand[brand_id] = str(brand["retailer_id"])
+        external_names: set[str] = set()
+        for brand in document.get("external_brands", []):
+            brand_id = str(brand["brand_id"])
+            normalized = str(brand["brand_name_normalized"])
+            if brand_id in brand_ids:
+                raise ContractError(f"duplicate brand ID {brand_id!r}")
+            if normalized in external_names:
+                raise ContractError(f"duplicate global canonical brand {normalized!r}")
+            brand_ids.add(brand_id)
+            external_names.add(normalized)
+            retailer_by_brand[brand_id] = "__global__"
+        external_ids = {str(brand["brand_id"]) for brand in document.get("external_brands", [])}
+        priority_ids = [str(value) for value in document.get("priority_brand_ids", [])]
+        unknown_priority_ids = sorted(set(priority_ids) - external_ids)
+        if unknown_priority_ids:
+            raise ContractError(
+                f"priority list references unknown external brands {unknown_priority_ids!r}"
+            )
+        if len(priority_ids) != len(set(priority_ids)):
+            raise ContractError("priority brand IDs must be unique")
+        presence_ids = [str(row["brand_id"]) for row in document.get("retailer_presence", [])]
+        if len(presence_ids) != len(set(presence_ids)):
+            raise ContractError("retailer presence rows must be unique per brand")
+        unknown_presence_ids = sorted(set(presence_ids) - external_ids)
+        if unknown_presence_ids:
+            raise ContractError(
+                f"retailer presence references unknown external brands {unknown_presence_ids!r}"
+            )
+        source_ids = {str(row["source_id"]) for row in document.get("source_registry", [])}
+        for brand in document.get("external_brands", []):
+            source_id = str(brand["primary_source_id"])
+            if source_id not in source_ids:
+                raise ContractError(
+                    f"external brand {brand['brand_id']!r} references unknown source {source_id!r}"
+                )
         alias_ids: set[str] = set()
         aliases: dict[tuple[str, str], str] = {}
         for alias in document["aliases"]:
@@ -238,6 +292,16 @@ class BrandFoundationLoader:
             if existing is not None and existing != canonical_brand_id:
                 raise ContractError(f"ambiguous exact alias {key!r}")
             aliases[key] = canonical_brand_id
+        for conflict in document.get("alias_conflicts", []):
+            key = (str(conflict["retailer_id"]), str(conflict["alias_normalized"]))
+            if key in aliases:
+                raise ContractError(f"quarantined alias conflict remains resolvable {key!r}")
+            candidate_ids = {str(value) for value in conflict["candidate_brand_ids"]}
+            unknown_candidates = sorted(candidate_ids - brand_ids)
+            if unknown_candidates:
+                raise ContractError(
+                    f"alias conflict references unknown brands {unknown_candidates!r}"
+                )
 
 
 class GovernedBrandResolver:
@@ -254,16 +318,28 @@ class GovernedBrandResolver:
         self.foundation = foundation
         self._overrides = dict(overrides or {})
         self._brands_by_id = {
-            str(row["brand_id"]): dict(row) for row in foundation.document["brands"]
+            str(row["brand_id"]): dict(row)
+            for row in [
+                *foundation.document["brands"],
+                *foundation.document.get("external_brands", []),
+            ]
         }
         self._canonical = {
             (str(row["retailer_id"]), str(row["brand_name_normalized"])): dict(row)
             for row in foundation.document["brands"]
         }
+        self._global_canonical = {
+            str(row["brand_name_normalized"]): dict(row)
+            for row in foundation.document.get("external_brands", [])
+        }
         self._aliases: dict[tuple[str, str], JsonObject] = {}
         for row in foundation.document["aliases"]:
             key = (str(row["retailer_id"]), str(row["alias_normalized"]))
             self._aliases.setdefault(key, dict(row))
+        self._global_aliases: dict[str, JsonObject] = {}
+        for row in foundation.document.get("aliases", []):
+            if str(row["retailer_id"]) == "__global__":
+                self._global_aliases.setdefault(str(row["alias_normalized"]), dict(row))
 
     @classmethod
     def from_repository(
@@ -302,7 +378,13 @@ class GovernedBrandResolver:
             overrides=indexed,
         )
 
-    def resolve(self, retailer_id: str, observed_brand: str | None) -> BrandResolution:
+    def resolve(
+        self,
+        retailer_id: str,
+        observed_brand: str | None,
+        *,
+        category: str | None = None,
+    ) -> BrandResolution:
         observed = str(observed_brand or "").strip()
         normalized = normalize_brand_name(observed)
         override = self._overrides.get((retailer_id, normalized))
@@ -314,12 +396,33 @@ class GovernedBrandResolver:
             if alias is not None:
                 row = self._brands_by_id[str(alias["canonical_brand_id"])]
                 method = "legacy_alias" if str(alias["status"]) == "Legacy" else "exact_alias"
+        if row is None:
+            row = self._global_canonical.get(normalized)
+        if row is None:
+            alias = self._global_aliases.get(normalized)
+            if alias is not None and self._category_alias_allowed(alias, category):
+                row = self._brands_by_id[str(alias["canonical_brand_id"])]
+                method = "legacy_alias" if str(alias["status"]) == "Legacy" else "exact_alias"
         if override is not None:
             return self._override_resolution(retailer_id, observed, normalized, row, override)
         if row is None or retailer_id not in self._packs:
             return self._unresolved(retailer_id, observed, normalized)
         eligible = self._strict_eligible(row) and method != "legacy_alias"
         return self._resolved(retailer_id, observed, normalized, row, method, eligible)
+
+    @staticmethod
+    def _category_alias_allowed(alias: JsonObject, category: str | None) -> bool:
+        if str(alias.get("matching_rule")) != "exact_normalized_then_category_gate":
+            return True
+        if not category:
+            return False
+        expected = {
+            normalize_brand_name(value)
+            for value in str(alias.get("category_context") or "").split(";")
+            if value.strip()
+        }
+        observed = normalize_brand_name(category)
+        return any(value in observed or observed in value for value in expected)
 
     def provenance(self, retailer_ids: list[str]) -> list[JsonObject]:
         rows = [
@@ -339,10 +442,13 @@ class GovernedBrandResolver:
         return rows
 
     def _strict_eligible(self, row: JsonObject) -> bool:
+        if "retailer_id" not in row or str(row["retailer_id"]) == "__global__":
+            return False
         pack = self._packs[str(row["retailer_id"])]
         policy = pack.document["brand_policy"]
         return bool(row["in_private_label_matching"]) and all(
             (
+                str(row["ownership_model"]) == "retailer_owned",
                 str(row["review_status"]) == "Approved",
                 str(row["status"]) in set(policy["eligible_statuses"]),
                 str(row["brand_class"]) in set(policy["eligible_classes"]),
@@ -380,12 +486,24 @@ class GovernedBrandResolver:
             strict_private_label=strict_private_label,
             brand_bucket=bucket,
             brand_class=str(row["brand_class"]),
-            ownership_model=str(row["ownership_model"]),
-            competitive_brand_role=str(row["competitive_brand_role"]),
-            review_status=str(row["review_status"]),
+            ownership_model=(str(row["ownership_model"]) if row.get("ownership_model") else None),
+            competitive_brand_role=(
+                str(row["competitive_brand_role"]) if row.get("competitive_brand_role") else None
+            ),
+            review_status=str(row["review_status"]) if row.get("review_status") else None,
             temporal_status=str(row["status"]),
             confidence=str(row["confidence"]),
             matching_priority=str(row["matching_priority"]),
+            distribution_scope=(
+                str(row["distribution_scope"]) if row.get("distribution_scope") else None
+            ),
+            core_region=str(row["core_region"]) if row.get("core_region") else None,
+            home_state=str(row["home_state"]) if row.get("home_state") else None,
+            primary_category=(
+                str(row["primary_category"]) if row.get("primary_category") else None
+            ),
+            category_tags=str(row["category_tags"]) if row.get("category_tags") else None,
+            is_priority_brand=bool(row.get("is_priority_brand", False)),
             foundation_id=self.foundation.id,
             foundation_version=self.foundation.version,
             foundation_checksum=self.foundation.checksum,
@@ -438,6 +556,12 @@ class GovernedBrandResolver:
             temporal_status=None,
             confidence=None,
             matching_priority=None,
+            distribution_scope=None,
+            core_region=None,
+            home_state=None,
+            primary_category=None,
+            category_tags=None,
+            is_priority_brand=False,
             foundation_id=self.foundation.id,
             foundation_version=self.foundation.version,
             foundation_checksum=self.foundation.checksum,

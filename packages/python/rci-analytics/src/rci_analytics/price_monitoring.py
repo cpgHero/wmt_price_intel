@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from statistics import median
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
 from rci_analytics.product_pack import ProductPack
@@ -282,7 +282,11 @@ class PriceMonitoringProjector:
             product = context.get(product_key, {})
             observed_brand = str(product.get("brand") or offer.brand or "").strip() or None
             brand_governance = classified.attributes.get("_brand_governance")
-            resolution = self._brands.resolve(offer.retailer_id, observed_brand)
+            resolution = self._brands.resolve(
+                offer.retailer_id,
+                observed_brand,
+                category=self._pack.name,
+            )
             if resolution.resolution_method == "governed_override":
                 brand_type = resolution.role
                 brand_origin = "user"
@@ -291,7 +295,13 @@ class PriceMonitoringProjector:
             elif (
                 isinstance(brand_governance, dict) and brand_governance.get("status") == "resolved"
             ):
-                brand_type = str(brand_governance.get("role") or resolution.role)
+                governed_role = str(brand_governance.get("role") or resolution.role)
+                brand_type = cast(
+                    BrandType,
+                    governed_role
+                    if governed_role in {"private_label", "regional", "national", "unclassified"}
+                    else "unclassified",
+                )
                 brand_origin = "pdp" if product.get("brand") else "search"
                 brand_status = "suggested"
                 brand_name = (
@@ -315,7 +325,7 @@ class PriceMonitoringProjector:
                 "observation_id": offer.offer_id,
                 "product_id": offer.retailer_product_id,
                 "name": str(product.get("name") or offer.title),
-                "brand": product.get("brand") or brand_name,
+                "brand": brand_name or product.get("brand") or observed_brand,
                 "brand_type": brand_type,
                 "brand_origin": brand_origin,
                 "brand_status": brand_status,

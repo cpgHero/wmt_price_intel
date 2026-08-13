@@ -122,6 +122,7 @@ class OfferClassifier:
                 resolution = self._brand_resolver.resolve(
                     offer.retailer_id,
                     str(observed_brand) if observed_brand else None,
+                    category=self.pack.name,
                 )
                 attributes["_brand_governance"] = resolution.to_record()
                 if observed_brand and resolution.canonical_brand_name:

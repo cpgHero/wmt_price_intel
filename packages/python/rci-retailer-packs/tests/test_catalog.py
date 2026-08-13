@@ -35,6 +35,26 @@ def test_brand_foundation_preserves_complete_supplied_master_and_aliases() -> No
     assert foundation.document["retailer_id_map"]["walmart"] == "walmart_us"
 
 
+def test_brand_universe_v2_reconciles_governed_private_and_external_sources() -> None:
+    foundation = BrandFoundationLoader(REPOSITORY_ROOT).load("cpg_brand_foundation", "2.0.0")
+
+    assert len(foundation.document["brands"]) == 224
+    assert len(foundation.document["external_brands"]) == 483
+    assert len(foundation.document["priority_brand_ids"]) == 185
+    assert len(foundation.document["aliases"]) == 105
+    assert foundation.document["alias_conflicts"] == [
+        {
+            "retailer_id": "whole_foods_market_us",
+            "alias_normalized": "whole_foods_market_kitchen",
+            "candidate_brand_ids": [
+                "whole_foods_market__whole_foods_market",
+                "whole_foods_market__whole_foods_market_kitchens",
+            ],
+            "resolution": "quarantined_unresolved",
+        }
+    ]
+
+
 def test_brand_normalization_matches_governed_possessive_and_ampersand_keys() -> None:
     assert normalize_brand_name("Sam's Choice") == "sams_choice"
     assert normalize_brand_name("Good & Gather") == "good_and_gather"
@@ -69,6 +89,46 @@ def test_acquired_brand_is_not_strict_private_label() -> None:
     resolution = resolver.resolve(str(acquired["retailer_id"]), str(acquired["brand_name"]))
 
     assert resolution.brand_class == "acquired_brand"
+    assert resolution.strict_private_label is False
+    assert resolution.role == "unclassified"
+
+
+def test_external_brands_resolve_globally_but_private_labels_remain_retailer_scoped() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    walmart_fairlife = resolver.resolve("walmart_us", "fairlife", category="Fresh Fluid Milk")
+    aldi_fairlife = resolver.resolve("aldi_us", "fairlife", category="Fresh Fluid Milk")
+    aldi_great_value = resolver.resolve("aldi_us", "Great Value", category="Fresh Fluid Milk")
+
+    assert walmart_fairlife.canonical_brand_id == "national__fairlife"
+    assert walmart_fairlife.role == "national"
+    assert walmart_fairlife.strict_private_label is False
+    assert aldi_fairlife.canonical_brand_id == "national__fairlife"
+    assert aldi_great_value.status == "unresolved"
+
+
+def test_category_gated_global_alias_fails_closed_without_matching_category() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    milk = resolver.resolve("walmart_us", "Borden Milk", category="Fresh Fluid Milk")
+    beef = resolver.resolve("walmart_us", "Borden Milk", category="Fresh Ground Beef")
+
+    assert milk.canonical_brand_id == "national__borden_dairy"
+    assert beef.status == "unresolved"
+
+
+def test_exclusive_without_retailer_ownership_is_not_strict_private_label() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+    exclusive = next(
+        row
+        for row in resolver.foundation.document["brands"]
+        if row["ownership_model"] == "retailer_exclusive"
+        and row["in_private_label_matching"] is True
+    )
+
+    resolution = resolver.resolve(str(exclusive["retailer_id"]), str(exclusive["brand_name"]))
+
+    assert resolution.status == "resolved"
     assert resolution.strict_private_label is False
     assert resolution.role == "unclassified"
 

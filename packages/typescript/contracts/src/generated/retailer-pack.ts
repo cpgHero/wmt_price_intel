@@ -22,8 +22,23 @@ export interface RetailCompetitiveIntelligenceRetailerPack {
     version: string;
   };
   brand_policy: {
-    resolution_order: unknown[];
-    strict_private_label_requires: unknown[];
+    resolution_order: (
+      | ["retailer_context", "exact_canonical", "exact_alias", "unresolved"]
+      | [
+          "retailer_context",
+          "retailer_exact_canonical",
+          "retailer_exact_alias",
+          "global_exact_canonical",
+          "global_exact_alias",
+          "unresolved"
+        ]
+    ) &
+      unknown[];
+    strict_private_label_requires: (
+      | ["in_private_label_matching", "approved_review", "eligible_status", "eligible_class"]
+      | ["in_private_label_matching", "approved_review", "eligible_status", "eligible_class", "retailer_owned"]
+    ) &
+      unknown[];
     /**
      * @minItems 1
      */

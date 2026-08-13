@@ -76,11 +76,43 @@
       "properties": {
         "resolution_order": {
           "type": "array",
-          "const": ["retailer_context", "exact_canonical", "exact_alias", "unresolved"]
+          "oneOf": [
+            {
+              "const": ["retailer_context", "exact_canonical", "exact_alias", "unresolved"]
+            },
+            {
+              "const": [
+                "retailer_context",
+                "retailer_exact_canonical",
+                "retailer_exact_alias",
+                "global_exact_canonical",
+                "global_exact_alias",
+                "unresolved"
+              ]
+            }
+          ]
         },
         "strict_private_label_requires": {
           "type": "array",
-          "const": ["in_private_label_matching", "approved_review", "eligible_status", "eligible_class"]
+          "oneOf": [
+            {
+              "const": [
+                "in_private_label_matching",
+                "approved_review",
+                "eligible_status",
+                "eligible_class"
+              ]
+            },
+            {
+              "const": [
+                "in_private_label_matching",
+                "approved_review",
+                "eligible_status",
+                "eligible_class",
+                "retailer_owned"
+              ]
+            }
+          ]
         },
         "eligible_statuses": {
           "type": "array",

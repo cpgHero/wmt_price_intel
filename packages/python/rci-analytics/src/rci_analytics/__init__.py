@@ -29,12 +29,6 @@ from rci_analytics.models import ProductMatchRule
 from rci_analytics.normalization import CanonicalOfferNormalizer
 from rci_analytics.parquet import InMemoryDatasetStore, ParquetDatasetWriter
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp, product_context_index
-from rci_analytics.price_monitoring import (
-    PriceLocation,
-    PriceMonitoringFilters,
-    PriceMonitoringProjector,
-    classified_offer_from_record,
-)
 from rci_analytics.presentation import (
     benchmark_product_decisions,
     benchmark_product_evidence,
@@ -42,6 +36,12 @@ from rci_analytics.presentation import (
     benchmark_product_match_candidates,
     merge_product_decision_context,
     merge_product_evidence_summary,
+)
+from rci_analytics.price_monitoring import (
+    PriceLocation,
+    PriceMonitoringFilters,
+    PriceMonitoringProjector,
+    classified_offer_from_record,
 )
 from rci_analytics.product_pack import (
     CatalogProductPackLoader,
@@ -69,6 +69,9 @@ __all__ = [
     "OfferClassifier",
     "ParquetDatasetWriter",
     "PostgresAnalysisInputRepository",
+    "PriceLocation",
+    "PriceMonitoringFilters",
+    "PriceMonitoringProjector",
     "ProductMatchRule",
     "ProductPackLoader",
     "RankedInsightCandidate",
@@ -78,6 +81,7 @@ __all__ = [
     "benchmark_product_evidence",
     "benchmark_product_map_points",
     "benchmark_product_match_candidates",
+    "classified_offer_from_record",
     "complete_attributes_from_pdp",
     "evidence_set",
     "location_scope_key",
@@ -87,10 +91,6 @@ __all__ = [
     "prepare_historical_import",
     "primary_exact_profile",
     "product_context_index",
-    "PriceLocation",
-    "PriceMonitoringFilters",
-    "PriceMonitoringProjector",
-    "classified_offer_from_record",
     "product_footprint",
     "resolve_one_to_one_relationships",
 ]

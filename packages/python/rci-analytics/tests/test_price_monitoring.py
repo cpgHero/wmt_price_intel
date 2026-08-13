@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -214,3 +215,38 @@ def test_classified_parquet_record_round_trip_preserves_provider_ids() -> None:
     assert restored.offer.store_number == "0042"
     assert restored.offer.zipcode == "72712"
     assert restored.offer.price == Decimal("6.59")
+
+
+def test_price_monitoring_uses_governed_canonical_external_brand_identity() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    projector = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+        retailer_names={"walmart_us": "Walmart (US)"},
+    )
+    offer = _classified(
+        offer_id="fairlife-1",
+        product_id="fairlife-product",
+        store="1",
+        price="4.98",
+        collected_at="2026-08-07T06:00:00Z",
+    )
+    offer = replace(offer, offer=replace(offer.offer, brand="Fairlife"))
+    view = projector.build(
+        [offer],
+        analysis_id="milk-brand-foundation-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us"),
+        location_index={
+            ("walmart_us", "1"): {
+                "zipcode": "72712",
+                "city": "Bentonville",
+                "state": "AR",
+                "country": "USA",
+            }
+        },
+    )
+
+    assert view["products"][0]["brand"] == "fairlife"
+    assert view["products"][0]["brand_type"] == "national"
+    assert view["brand_portfolio"][0]["brand_type"] == "national"

@@ -16,7 +16,7 @@
     "aliases"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "enum": ["1.0.0", "2.0.0"] },
     "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
     "name": { "type": "string", "minLength": 1 },
     "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
@@ -47,8 +47,59 @@
     "aliases": {
       "type": "array",
       "items": { "$ref": "#/$defs/alias" }
+    },
+    "external_brands": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/externalBrand" }
+    },
+    "priority_brand_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "retailer_presence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/retailerPresence" }
+    },
+    "source_registry": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceRegistry" }
+    },
+    "agent_instructions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/agentInstruction" }
+    },
+    "alias_conflicts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/aliasConflict" }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "schema_version": { "const": "2.0.0" } },
+        "required": ["schema_version"]
+      },
+      "then": {
+        "properties": {
+          "external_brands": {},
+          "priority_brand_ids": {},
+          "retailer_presence": {},
+          "source_registry": {},
+          "agent_instructions": {},
+          "alias_conflicts": {}
+        },
+        "required": [
+          "external_brands",
+          "priority_brand_ids",
+          "retailer_presence",
+          "source_registry",
+          "agent_instructions",
+          "alias_conflicts"
+        ]
+      }
+    }
+  ],
   "$defs": {
     "brand": {
       "type": "object",
@@ -156,10 +207,141 @@
         "canonical_brand_name": { "type": "string", "minLength": 1 },
         "alias_type": { "type": "string", "minLength": 1 },
         "status": { "enum": ["Active", "Legacy"] },
-        "matching_rule": { "enum": ["exact_normalized", "manual_or_legacy_map"] },
+        "matching_rule": {
+          "enum": [
+            "exact_normalized",
+            "exact_normalized_then_category_gate",
+            "manual_or_legacy_map"
+          ]
+        },
         "confidence": { "enum": ["Verified", "High", "Medium", "Candidate"] },
         "source_url": { "type": ["string", "null"], "format": "uri" },
+        "notes": { "type": ["string", "null"] },
+        "alias_namespace": { "enum": ["private_label", "regional_national"] },
+        "category_context": { "type": ["string", "null"] },
+        "source_reference": { "type": ["string", "null"] }
+      }
+    },
+    "externalBrand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brand_id",
+        "brand_name",
+        "brand_name_normalized",
+        "brand_bucket",
+        "brand_class",
+        "owner_or_marketer",
+        "ownership_relationship",
+        "brand_family",
+        "priority_category",
+        "primary_category",
+        "category_tags",
+        "product_origin",
+        "distribution_scope",
+        "core_region",
+        "home_state",
+        "is_priority_brand",
+        "matching_priority",
+        "status",
+        "confidence",
+        "primary_source_id",
+        "corroborating_source_ids",
+        "source_type",
+        "source_url",
+        "last_verified_at",
+        "notes"
+      ],
+      "properties": {
+        "brand_id": { "type": "string", "minLength": 1 },
+        "brand_name": { "type": "string", "minLength": 1 },
+        "brand_name_normalized": { "type": "string", "minLength": 1 },
+        "brand_bucket": { "enum": ["Regional", "National"] },
+        "brand_class": { "enum": ["regional_brand", "national_brand"] },
+        "owner_or_marketer": { "type": "string", "minLength": 1 },
+        "ownership_relationship": { "type": "string", "minLength": 1 },
+        "brand_family": { "type": "string" },
+        "priority_category": { "type": "string", "minLength": 1 },
+        "primary_category": { "type": "string", "minLength": 1 },
+        "category_tags": { "type": "string", "minLength": 1 },
+        "product_origin": { "type": "string", "minLength": 1 },
+        "distribution_scope": { "type": "string", "minLength": 1 },
+        "core_region": { "type": ["string", "null"] },
+        "home_state": { "type": ["string", "null"] },
+        "is_priority_brand": { "type": "boolean" },
+        "matching_priority": { "enum": ["Critical", "High", "Medium", "Low"] },
+        "status": { "enum": ["Active", "Transitioning", "Seasonal", "Legacy", "Candidate"] },
+        "confidence": { "enum": ["Verified", "High", "Medium", "Candidate"] },
+        "primary_source_id": { "type": "string", "minLength": 1 },
+        "corroborating_source_ids": { "type": ["string", "null"] },
+        "source_type": { "type": "string", "minLength": 1 },
+        "source_url": { "type": "string", "format": "uri" },
+        "last_verified_at": { "type": ["string", "null"], "format": "date" },
         "notes": { "type": ["string", "null"] }
+      }
+    },
+    "retailerPresence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brand_id", "presence", "presence_rule", "last_verified_at"],
+      "properties": {
+        "brand_id": { "type": "string", "minLength": 1 },
+        "presence": {
+          "type": "object",
+          "additionalProperties": { "enum": ["UNKNOWN", "PRESENT", "ABSENT"] }
+        },
+        "presence_rule": { "type": "string", "minLength": 1 },
+        "last_verified_at": { "type": ["string", "null"], "format": "date" }
+      }
+    },
+    "sourceRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "organization",
+        "source_title",
+        "source_url",
+        "source_type",
+        "scope_supported",
+        "verified_at",
+        "evidence_notes"
+      ],
+      "properties": {
+        "source_id": { "type": "string", "minLength": 1 },
+        "organization": { "type": "string", "minLength": 1 },
+        "source_title": { "type": "string", "minLength": 1 },
+        "source_url": { "type": "string", "format": "uri" },
+        "source_type": { "type": "string", "minLength": 1 },
+        "scope_supported": { "type": "string", "minLength": 1 },
+        "verified_at": { "type": ["string", "null"], "format": "date" },
+        "evidence_notes": { "type": ["string", "null"] }
+      }
+    },
+    "agentInstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "topic", "instruction"],
+      "properties": {
+        "rule_id": { "type": "string", "minLength": 1 },
+        "topic": { "type": "string", "minLength": 1 },
+        "instruction": { "type": "string", "minLength": 1 }
+      }
+    },
+    "aliasConflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_id", "alias_normalized", "candidate_brand_ids", "resolution"],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "alias_normalized": { "type": "string", "minLength": 1 },
+        "candidate_brand_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "resolution": { "const": "quarantined_unresolved" }
       }
     }
   }

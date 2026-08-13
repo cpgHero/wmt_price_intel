@@ -181,7 +181,12 @@ def profile_products(
         else:
             admission_status = "provisionally_admitted"
             admission_reason = "Matched reviewed target terms with a positive Search price"
-        resolution = brand_resolver.resolve(retailer_id, representative.brand)
+        resolution = brand_resolver.resolve(
+            retailer_id,
+            representative.brand,
+            category=str(query_plan.get("category") or query_plan.get("product_pack_name") or "")
+            or None,
+        )
         if resolution.status == "unresolved" and resolution.normalized_brand:
             unknown_brands.add((retailer_id, resolution.normalized_brand))
         by_price: dict[Decimal, list[DiscoveryObservation]] = defaultdict(list)

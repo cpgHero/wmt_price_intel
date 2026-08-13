@@ -81,10 +81,9 @@ test("supports the responsive application navigation", async ({ page }) => {
 
   const sidebar = page.getByLabel("Application sidebar");
   await expect(sidebar).toBeVisible();
-  await expect(sidebar.getByRole("link", { name: "Home" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(
+    sidebar.getByRole("link", { name: "Home", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(
     sidebar.getByRole("link", { name: "Match Workbench" }),
   ).toBeVisible();
