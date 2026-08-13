@@ -180,6 +180,8 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
         ),
     }
     assert view["filter_options"]["products"][0]["value"] == "100"
+    assert view["filter_options"]["cities"] == []
+    assert view["filter_options"]["zipcodes"] == []
     assert sum(row["count"] for row in view["price_histogram"]) == 3
     checks = {row["id"]: row for row in view["quality"]["checks"]}
     assert checks["duplicate-product-location"]["count"] == 1
@@ -217,6 +219,10 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     assert product_view["products"][0]["sample_locations"][0]["store_name"] == (
         "Bentonville Supercenter"
     )
+    assert product_view["filter_options"]["cities"]
+    assert product_view["filter_options"]["zipcodes"] == [
+        {"value": "72712", "label": "72712", "count": 1}
+    ]
 
 
 def test_classified_parquet_record_round_trip_preserves_provider_ids() -> None:

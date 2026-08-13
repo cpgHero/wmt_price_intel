@@ -439,14 +439,20 @@ class PriceMonitoringProjector:
             for row in admitted
             if filters.state is None or row["location"].state == filters.state
         ]
-        cities = Counter(row["location"].city for row in state_scoped if row["location"].city)
+        cities = (
+            Counter(row["location"].city for row in state_scoped if row["location"].city)
+            if filters.state is not None
+            else Counter()
+        )
         city_scoped = [
             row
             for row in state_scoped
             if filters.city is None or row["location"].city == filters.city
         ]
-        zipcodes = Counter(
-            row["location"].zipcode for row in city_scoped if row["location"].zipcode
+        zipcodes = (
+            Counter(row["location"].zipcode for row in city_scoped if row["location"].zipcode)
+            if filters.city is not None
+            else Counter()
         )
         product_option_rows = [
             row
