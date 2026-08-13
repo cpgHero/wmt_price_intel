@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/price-monitoring-map.schema.json",
+  "title": "RetailCompetitiveIntelligencePriceMonitoringMap",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "retailer",
+    "product",
+    "filters",
+    "source",
+    "reference_price",
+    "display",
+    "points"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "retailer": { "$ref": "#/$defs/idName" },
+    "product": { "$ref": "#/$defs/idName" },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "city", "zipcode", "detail"],
+      "properties": {
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "detail": { "enum": ["summary", "full"] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "location_authority", "definition"],
+      "properties": {
+        "authority": { "const": "Search" },
+        "location_authority": { "const": "Retailer location master" },
+        "definition": { "type": "string", "minLength": 1 }
+      }
+    },
+    "reference_price": { "type": ["number", "null"], "minimum": 0 },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_locations",
+        "observed_points",
+        "observed_missing_coordinates",
+        "observed_sampled",
+        "not_observed_locations",
+        "not_observed_points",
+        "not_observed_missing_coordinates",
+        "not_observed_sampled"
+      ],
+      "properties": {
+        "observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_points": { "type": "integer", "minimum": 0 },
+        "observed_missing_coordinates": { "type": "integer", "minimum": 0 },
+        "observed_sampled": { "type": "boolean" },
+        "not_observed_locations": { "type": "integer", "minimum": 0 },
+        "not_observed_points": { "type": "integer", "minimum": 0 },
+        "not_observed_missing_coordinates": { "type": "integer", "minimum": 0 },
+        "not_observed_sampled": { "type": "boolean" }
+      }
+    },
+    "points": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mapPoint" }
+    }
+  },
+  "$defs": {
+    "idName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mapPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_key",
+        "status",
+        "kind",
+        "store_number",
+        "store_name",
+        "zipcode",
+        "city",
+        "state",
+        "country",
+        "latitude",
+        "longitude",
+        "price",
+        "difference_from_reference"
+      ],
+      "properties": {
+        "scope_key": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["observed", "not_observed"] },
+        "kind": { "enum": ["store", "service_area"] },
+        "store_number": { "type": ["string", "null"] },
+        "store_name": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"] },
+        "country": { "type": "string" },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "price": { "type": ["number", "null"], "minimum": 0 },
+        "difference_from_reference": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

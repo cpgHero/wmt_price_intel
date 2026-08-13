@@ -9,11 +9,18 @@ import {
   type ApplicationContextDefinition,
   useApplicationContextDefinition,
 } from "@/app/components/application-context";
-import type { PriceMonitoringView } from "@/lib/api";
+import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
 import { displayDate } from "@/lib/presentation";
 
 type Product = PriceMonitoringView["products"][number];
 type Location = PriceMonitoringView["locations"][number];
+type MapPoint = PriceMonitoringMap["points"][number];
+type MapMode = "observed" | "not_observed";
+type MapDetail = "summary" | "full";
+type StateFeature = {
+  id?: string | number;
+  geometry: { type: string; coordinates: unknown };
+};
 type TabId =
   | "home"
   | "overview"
@@ -104,10 +111,7 @@ const stateFeatures = (
     statesTopology,
     statesTopology.objects.states as GeometryCollection,
   ) as unknown as {
-    features: Array<{
-      id?: string | number;
-      geometry: { type: string; coordinates: unknown };
-    }>;
+    features: StateFeature[];
   }
 ).features;
 
@@ -163,7 +167,15 @@ function projectCoordinate(longitude: number, latitude: number) {
   };
 }
 
-function coordinateRingPath(value: unknown) {
+type CoordinateProjector = (
+  longitude: number,
+  latitude: number,
+) => { x: number; y: number };
+
+function coordinateRingPath(
+  value: unknown,
+  projector: CoordinateProjector = projectCoordinate,
+) {
   if (!Array.isArray(value)) return "";
   const points = value.filter(
     (item): item is [number, number] =>
@@ -174,21 +186,61 @@ function coordinateRingPath(value: unknown) {
   if (points.length === 0) return "";
   return `${points
     .map(([longitude, latitude], index) => {
-      const { x, y } = projectCoordinate(longitude, latitude);
+      const { x, y } = projector(longitude, latitude);
       return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ")} Z`;
 }
 
-function geometryPath(geometry: { type: string; coordinates: unknown }) {
+function geometryPath(
+  geometry: { type: string; coordinates: unknown },
+  projector: CoordinateProjector = projectCoordinate,
+) {
   if (!Array.isArray(geometry.coordinates)) return "";
   const polygons =
     geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   return polygons
     .flatMap((polygon) => (Array.isArray(polygon) ? polygon : []))
-    .map(coordinateRingPath)
+    .map((ring) => coordinateRingPath(ring, projector))
     .filter(Boolean)
     .join(" ");
+}
+
+function coordinatePairs(value: unknown, output: Array<[number, number]>) {
+  if (!Array.isArray(value)) return;
+  if (
+    value.length >= 2 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number"
+  ) {
+    output.push([value[0], value[1]]);
+    return;
+  }
+  for (const item of value) coordinatePairs(item, output);
+}
+
+function projectionForFeature(state: StateFeature | undefined) {
+  if (!state) return projectCoordinate;
+  const points: Array<[number, number]> = [];
+  coordinatePairs(state.geometry.coordinates, points);
+  if (!points.length) return projectCoordinate;
+  const longitudes = points.map(([longitude]) => longitude);
+  const latitudes = points.map(([, latitude]) => latitude);
+  const minimumLongitude = Math.min(...longitudes);
+  const maximumLongitude = Math.max(...longitudes);
+  const minimumLatitude = Math.min(...latitudes);
+  const maximumLatitude = Math.max(...latitudes);
+  const longitudeSpan = Math.max(0.1, maximumLongitude - minimumLongitude);
+  const latitudeSpan = Math.max(0.1, maximumLatitude - minimumLatitude);
+  const scale = Math.min(840 / longitudeSpan, 430 / latitudeSpan);
+  const renderedWidth = longitudeSpan * scale;
+  const renderedHeight = latitudeSpan * scale;
+  const left = (960 - renderedWidth) / 2;
+  const top = (520 - renderedHeight) / 2;
+  return (longitude: number, latitude: number) => ({
+    x: left + (longitude - minimumLongitude) * scale,
+    y: top + (maximumLatitude - latitude) * scale,
+  });
 }
 
 function downloadCsv(analysisId: string, retailerId: string, product: Product) {
@@ -387,6 +439,322 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
         <p>
           Teal shading shows median Search price for the exact product. Location
           names and geography come from the retailer location master.
+        </p>
+      </aside>
+    </div>
+  );
+}
+
+function EvidenceRetailMap({
+  view,
+  detail = "full",
+}: Readonly<{ view: PriceMonitoringView; detail?: MapDetail }>) {
+  const [mode, setMode] = useState<MapMode>("observed");
+  const [mapData, setMapData] = useState<PriceMonitoringMap | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
+
+  useEffect(() => {
+    if (!view.filters.product_id) return;
+    const controller = new AbortController();
+    const parameters = new URLSearchParams({
+      retailer: view.filters.retailer_id,
+      brand_type: view.filters.brand_type,
+      product_id: view.filters.product_id,
+      detail,
+    });
+    if (view.filters.state) parameters.set("state", view.filters.state);
+    if (view.filters.city) parameters.set("city", view.filters.city);
+    if (view.filters.zipcode) parameters.set("zipcode", view.filters.zipcode);
+    fetch(
+      "/api/price-monitoring/" +
+        encodeURIComponent(view.analysis_id) +
+        "/map?" +
+        parameters.toString(),
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Map evidence returned " + response.status);
+        }
+        setMapError(null);
+        setSelectedPoint(null);
+        setMapData((await response.json()) as PriceMonitoringMap);
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
+        setMapData(null);
+        setMapError(
+          reason instanceof Error
+            ? reason.message
+            : "Map evidence could not be loaded.",
+        );
+      });
+    return () => controller.abort();
+  }, [detail, view]);
+
+  const stateRows = new Map(
+    view.geographies
+      .filter((row) => row.level === "state")
+      .map((row) => [row.key, row]),
+  );
+  const gapStateRows = new Map(
+    (view.distribution_gaps?.geographies ?? [])
+      .filter((row) => row.level === "state")
+      .map((row) => [row.key, row]),
+  );
+  const selectedFeature = view.filters.state
+    ? stateFeatures.find((state) => {
+        const fips = String(state.id ?? "").padStart(2, "0");
+        return stateByFips[fips] === view.filters.state;
+      })
+    : undefined;
+  const projection = projectionForFeature(selectedFeature);
+  const visibleFeatures = selectedFeature ? [selectedFeature] : stateFeatures;
+  const visiblePoints = (mapData?.points ?? []).filter(
+    (point) => point.status === mode,
+  );
+  const modeTotal = mapData
+    ? mode === "observed"
+      ? mapData.display.observed_locations
+      : mapData.display.not_observed_locations
+    : 0;
+  const modeSampled = mapData
+    ? mode === "observed"
+      ? mapData.display.observed_sampled
+      : mapData.display.not_observed_sampled
+    : false;
+
+  function pointClass(point: MapPoint) {
+    if (point.status === "not_observed") return "not-observed";
+    const difference = point.difference_from_reference ?? 0;
+    if (difference < -0.005) return "price-lower";
+    if (difference > 0.005) return "price-higher";
+    return "price-parity";
+  }
+
+  function pointLabel(point: MapPoint) {
+    const location =
+      point.store_name ??
+      (point.store_number ? "Store " + point.store_number : null) ??
+      point.zipcode ??
+      "Location";
+    if (point.status === "not_observed") {
+      return location + ": not observed in the successful Search result";
+    }
+    return (
+      location +
+      ": " +
+      currency(point.price) +
+      ", " +
+      signedCurrency(point.difference_from_reference ?? 0) +
+      " versus the visible footprint median"
+    );
+  }
+
+  return (
+    <div className="pm-map-stage pi-map-stage pi-evidence-map-stage">
+      <svg
+        className="pm-map"
+        role="img"
+        aria-label={
+          view.retailer.name +
+          " exact-product " +
+          (mode === "observed" ? "observed" : "not observed") +
+          " location footprint"
+        }
+        viewBox="0 0 960 520"
+      >
+        <g className="pm-state-layer">
+          {visibleFeatures.map((state) => {
+            const fips = String(state.id ?? "").padStart(2, "0");
+            const stateCode = stateByFips[fips];
+            const geography = stateRows.get(stateCode);
+            const gapGeography = gapStateRows.get(stateCode);
+            const selectedAggregate =
+              view.filters.state === stateCode && view.products[0]
+                ? {
+                    locations: view.summary.observed_locations,
+                    price_stats: view.products[0].price_stats,
+                  }
+                : undefined;
+            const stateEvidence = geography ?? selectedAggregate;
+            const hasData = Boolean(
+              stateEvidence || gapGeography?.eligible_locations,
+            );
+            const observedCount = stateEvidence?.locations ?? 0;
+            const notObservedCount = gapGeography?.not_observed_locations ?? 0;
+            const isSelectedState = view.filters.state === stateCode;
+            return (
+              <path
+                aria-label={
+                  hasData
+                    ? stateCode +
+                      ": " +
+                      count(observedCount) +
+                      " observed and " +
+                      count(notObservedCount) +
+                      " not observed locations"
+                    : stateCode
+                }
+                className={
+                  (hasData ? "has-data" : "") +
+                  (isSelectedState ? " selected" : "")
+                }
+                d={geometryPath(state.geometry, projection)}
+                key={fips}
+                onClick={() => {
+                  if (hasData && !isSelectedState) {
+                    updateQuery({
+                      state: stateCode,
+                      city: null,
+                      zipcode: null,
+                    });
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    hasData &&
+                    !isSelectedState &&
+                    (event.key === "Enter" || event.key === " ")
+                  ) {
+                    updateQuery({
+                      state: stateCode,
+                      city: null,
+                      zipcode: null,
+                    });
+                  }
+                }}
+                role={hasData && !isSelectedState ? "button" : undefined}
+                tabIndex={hasData && !isSelectedState ? 0 : undefined}
+              />
+            );
+          })}
+        </g>
+        <g className="pm-location-layer">
+          {visiblePoints.map((row) => {
+            const point = projection(row.longitude, row.latitude);
+            const label = pointLabel(row);
+            return (
+              <circle
+                aria-label={label}
+                className={pointClass(row)}
+                cx={point.x}
+                cy={point.y}
+                key={row.status + ":" + row.scope_key}
+                onClick={() => {
+                  if (!view.filters.state && row.state) {
+                    updateQuery({
+                      state: row.state,
+                      city: null,
+                      zipcode: null,
+                    });
+                  } else {
+                    setSelectedPoint(row);
+                  }
+                }}
+                r={view.filters.state ? 4.2 : detail === "summary" ? 2.4 : 2.1}
+                role="button"
+                tabIndex={0}
+              >
+                <title>{label}</title>
+              </circle>
+            );
+          })}
+        </g>
+        {!mapData && !mapError ? (
+          <text className="pi-map-status" x="480" y="490" textAnchor="middle">
+            Loading location evidence…
+          </text>
+        ) : null}
+      </svg>
+      <aside className="pm-map-legend">
+        <div
+          className="pi-map-mode"
+          role="group"
+          aria-label="Location evidence"
+        >
+          <button
+            aria-pressed={mode === "observed"}
+            className={mode === "observed" ? "active" : ""}
+            onClick={() => {
+              setMode("observed");
+              setSelectedPoint(null);
+            }}
+            type="button"
+          >
+            Observed
+          </button>
+          <button
+            aria-pressed={mode === "not_observed"}
+            className={mode === "not_observed" ? "active" : ""}
+            onClick={() => {
+              setMode("not_observed");
+              setSelectedPoint(null);
+            }}
+            type="button"
+          >
+            Not observed
+          </button>
+        </div>
+        <span>
+          {mapData
+            ? count(visiblePoints.length) +
+              " mapped of " +
+              count(modeTotal) +
+              (mode === "observed"
+                ? " observed locations"
+                : " not observed locations")
+            : (mapError ?? "Loading exact-product locations…")}
+        </span>
+        {mode === "observed" ? (
+          <div className="pi-price-legend" aria-label="Price difference legend">
+            <span className="price-lower">Below median</span>
+            <span className="price-parity">At median</span>
+            <span className="price-higher">Above median</span>
+          </div>
+        ) : (
+          <div className="pi-price-legend">
+            <span className="not-observed">Search non-observation</span>
+          </div>
+        )}
+        {selectedPoint ? (
+          <div className="pi-map-point-detail">
+            <small>
+              {selectedPoint.status === "observed"
+                ? "Observed store"
+                : "Search non-observation"}
+            </small>
+            <strong>
+              {selectedPoint.store_name ??
+                (selectedPoint.store_number
+                  ? "Store " + selectedPoint.store_number
+                  : "ZIP " + selectedPoint.zipcode)}
+            </strong>
+            <span>
+              {[selectedPoint.city, selectedPoint.state, selectedPoint.zipcode]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+            {selectedPoint.status === "observed" ? (
+              <b>
+                {currency(selectedPoint.price)} ·{" "}
+                {signedCurrency(selectedPoint.difference_from_reference ?? 0)}{" "}
+                vs. median
+              </b>
+            ) : null}
+          </div>
+        ) : null}
+        <p>
+          {view.filters.state
+            ? view.filters.state +
+              " is fitted to the map. Select a point for store detail."
+            : "Select a state or location point to open the state footprint."}{" "}
+          Price colors compare each observed store with the median for the
+          visible footprint. Location details come from the retailer location
+          master.
+          {modeSampled ? " This overview is a bounded map sample." : ""}
         </p>
       </aside>
     </div>
@@ -1268,7 +1636,11 @@ export function PriceMonitoringWorkspace({
                   Open footprint →
                 </button>
               </header>
-              <RetailMap view={view} />
+              <EvidenceRetailMap
+                detail="summary"
+                key={"summary:" + JSON.stringify(view.filters)}
+                view={view}
+              />
             </article>
             <article className="pm-panel">
               <header>
@@ -1318,15 +1690,18 @@ export function PriceMonitoringWorkspace({
           <article className="pm-section-intro">
             <div>
               <p className="section-kicker">Country → state → city → store</p>
-              <h2>Exact-product observed footprint</h2>
+              <h2>Exact-product location footprint</h2>
             </div>
             <p>
-              Map color represents this product&apos;s median observed price. It
-              does not mix products or imply that an uncolored location does not
-              carry the item.
+              Toggle between stores where the product was observed and planned
+              stores where it did not appear in Search. Observed-store colors
+              show each price relative to the visible-footprint median.
             </p>
           </article>
-          <RetailMap view={view} />
+          <EvidenceRetailMap
+            key={"full:" + JSON.stringify(view.filters)}
+            view={view}
+          />
           <article className="pm-panel">
             <header>
               <div>

@@ -3958,6 +3958,134 @@ tbody tr:last-child td {
 .pi-map-stage .pm-map-legend {
   background: var(--card);
 }
+.pi-evidence-map-stage {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+.pi-evidence-map-stage .pm-state-layer path.has-data {
+  fill: #d9e9ed;
+}
+.pi-evidence-map-stage .pm-state-layer path.selected {
+  fill: #e2eef1 !important;
+  stroke: #21434d;
+  stroke-width: 1.4;
+}
+.pi-evidence-map-stage .pm-location-layer circle {
+  cursor: pointer;
+  opacity: 0.86;
+  stroke: #fff;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.pi-evidence-map-stage .pm-location-layer circle.price-lower {
+  fill: #087da1;
+}
+.pi-evidence-map-stage .pm-location-layer circle.price-parity {
+  fill: #23333a;
+}
+.pi-evidence-map-stage .pm-location-layer circle.price-higher {
+  fill: #db7512;
+}
+.pi-evidence-map-stage .pm-location-layer circle.not-observed {
+  fill: #f5b642;
+  stroke: #4a3a16;
+}
+.pi-evidence-map-stage .pm-location-layer circle:hover,
+.pi-evidence-map-stage .pm-location-layer circle:focus {
+  opacity: 1;
+  outline: none;
+  r: 6px;
+  stroke: #0b242b;
+  stroke-width: 2;
+}
+.pi-map-status {
+  fill: #536d76;
+  font-size: 14px;
+  font-weight: 700;
+}
+.pi-map-mode {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  display: grid !important;
+  gap: 3px;
+  grid-template-columns: 1fr 1fr !important;
+  padding: 3px;
+}
+.pi-map-mode button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0.55rem 0.4rem;
+}
+.pi-map-mode button.active {
+  background: var(--card);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.pi-price-legend {
+  display: grid !important;
+  gap: 0.45rem !important;
+  grid-template-columns: 1fr !important;
+  margin: 0.3rem 0 0.5rem;
+}
+.pi-price-legend span {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.57rem;
+  gap: 0.45rem;
+}
+.pi-price-legend span::before {
+  background: #23333a;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  content: "";
+  height: 9px;
+  width: 9px;
+}
+.pi-price-legend span.price-lower::before {
+  background: #087da1;
+}
+.pi-price-legend span.price-higher::before {
+  background: #db7512;
+}
+.pi-price-legend span.not-observed::before {
+  background: #f5b642;
+  border-color: #4a3a16;
+}
+.pi-map-point-detail {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.75rem;
+}
+.pi-map-point-detail small {
+  color: var(--green);
+  font-size: 0.5rem !important;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pi-map-point-detail strong {
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+.pi-map-point-detail span,
+.pi-map-point-detail b {
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.4;
+}
+.pi-map-point-detail b {
+  color: var(--ink);
+}
 .pi-histogram {
   align-items: end;
   border-bottom: 1px solid var(--line);

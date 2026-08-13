@@ -743,8 +743,10 @@ class PriceMonitoringProjector:
                 str(row["label"]),
             )
         )
-        gap_location_limit = 1_000
         gap_locations = [self._gap_location(location) for location in known_not_observed]
+        gap_location_limit = (
+            len(gap_locations) if location_limit is None else max(1_000, location_limit)
+        )
         gap_display = {
             "returned": min(len(gap_locations), gap_location_limit),
             "total": not_observed_count,

@@ -91,6 +91,9 @@ const narrativeBenchmarkValidator = validator(
 const productDetailCatalogValidator = validator(
   "product-detail-catalog.schema.json",
 );
+const priceMonitoringMapValidator = validator(
+  "price-monitoring-map.schema.json",
+);
 
 await assertValid(
   geographyRequestValidator,
@@ -153,6 +156,11 @@ await assertValid(
   alertValidator,
   await loadJson("examples", "alert-definition.amazon-pressure.json"),
   "alert definition",
+);
+await assertValid(
+  priceMonitoringMapValidator,
+  await loadJson("examples", "price-monitoring-map.example.json"),
+  "price monitoring map",
 );
 const exampleFiles = await readdir(join(repositoryRoot, "examples"));
 const collectionDefinitionFiles = exampleFiles

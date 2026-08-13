@@ -29,6 +29,7 @@ const contracts = [
   ["historical-input-manifest.schema.json", "historical-input-manifest.ts"],
   ["normalized-offer.schema.json", "normalized-offer.ts"],
   ["price-observation.schema.json", "price-observation.ts"],
+  ["price-monitoring-map.schema.json", "price-monitoring-map.ts"],
   ["price-monitoring-view.schema.json", "price-monitoring-view.ts"],
   ["narrative-benchmarks.schema.json", "narrative-benchmarks.ts"],
   ["product-detail-catalog.schema.json", "product-detail-catalog.ts"],

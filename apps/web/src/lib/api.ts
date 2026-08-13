@@ -7,6 +7,7 @@ import type {
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
+  RetailCompetitiveIntelligencePriceMonitoringMap,
   RetailCompetitiveIntelligencePriceMonitoringView,
   RetailCompetitiveIntelligenceReportView,
 } from "@rci/contracts";
@@ -16,6 +17,8 @@ import { loadServerConfig } from "./config";
 export type JsonObject = Record<string, unknown>;
 export type PriceMonitoringView =
   RetailCompetitiveIntelligencePriceMonitoringView;
+export type PriceMonitoringMap =
+  RetailCompetitiveIntelligencePriceMonitoringMap;
 
 export interface AnalysisRecord {
   id: string;

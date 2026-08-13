@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "fresh_ground_beef-example",
+  "retailer": { "id": "walmart_us", "name": "Walmart (US)" },
+  "product": { "id": "959024059", "name": "80% Lean Ground Beef" },
+  "filters": {
+    "state": "AR",
+    "city": null,
+    "zipcode": null,
+    "detail": "full"
+  },
+  "source": {
+    "authority": "Search",
+    "location_authority": "Retailer location master",
+    "definition": "Observed points have positive Search prices. Not observed points are planned collection locations where the exact product did not appear in the successful Search result; they are review signals, not proof of non-carriage."
+  },
+  "reference_price": 15.73,
+  "display": {
+    "observed_locations": 2,
+    "observed_points": 2,
+    "observed_missing_coordinates": 0,
+    "observed_sampled": false,
+    "not_observed_locations": 1,
+    "not_observed_points": 1,
+    "not_observed_missing_coordinates": 0,
+    "not_observed_sampled": false
+  },
+  "points": [
+    {
+      "scope_key": "store:1",
+      "status": "observed",
+      "kind": "store",
+      "store_number": "1",
+      "store_name": "Bentonville Supercenter",
+      "zipcode": "72712",
+      "city": "Bentonville",
+      "state": "AR",
+      "country": "USA",
+      "latitude": 36.37,
+      "longitude": -94.21,
+      "price": 15.48,
+      "difference_from_reference": -0.25
+    },
+    {
+      "scope_key": "store:2",
+      "status": "observed",
+      "kind": "store",
+      "store_number": "2",
+      "store_name": "Rogers Supercenter",
+      "zipcode": "72756",
+      "city": "Rogers",
+      "state": "AR",
+      "country": "USA",
+      "latitude": 36.33,
+      "longitude": -94.12,
+      "price": 15.98,
+      "difference_from_reference": 0.25
+    },
+    {
+      "scope_key": "store:3",
+      "status": "not_observed",
+      "kind": "store",
+      "store_number": "3",
+      "store_name": "Springdale Supercenter",
+      "zipcode": "72764",
+      "city": "Springdale",
+      "state": "AR",
+      "country": "USA",
+      "latitude": 36.18,
+      "longitude": -94.13,
+      "price": null,
+      "difference_from_reference": null
+    }
+  ]
+}

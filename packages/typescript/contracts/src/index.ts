@@ -11,6 +11,7 @@ export type { RetailCompetitiveIntelligenceGoldenBenchmarks } from "./generated/
 export type { RetailCompetitiveIntelligenceHistoricalInputManifest } from "./generated/historical-input-manifest";
 export type { NormalizedRetailOffer } from "./generated/normalized-offer";
 export type { RetailCompetitiveIntelligencePriceObservation } from "./generated/price-observation";
+export type { RetailCompetitiveIntelligencePriceMonitoringMap } from "./generated/price-monitoring-map";
 export type { RetailCompetitiveIntelligencePriceMonitoringView } from "./generated/price-monitoring-view";
 export type { RetailCompetitiveIntelligenceNarrativeBenchmarks } from "./generated/narrative-benchmarks";
 export type { MetricsCartProductDetailCatalog } from "./generated/product-detail-catalog";

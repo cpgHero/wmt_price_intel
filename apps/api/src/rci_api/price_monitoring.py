@@ -354,6 +354,7 @@ class PriceMonitoringService:
         self._prepared_cache: dict[tuple[str, str], PreparedPriceMonitoringData] = {}
         self._prepared_locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._map_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         catalog = json.loads((repository_root / "config" / "retailer-catalog.json").read_text())
         self._retailer_names = {
             str(row["id"]): str(row["display_name"])
@@ -560,6 +561,144 @@ class PriceMonitoringService:
             )
         return output.getvalue()
 
+    async def map_view(
+        self,
+        analysis_id: str,
+        filters: PriceMonitoringFilters,
+        *,
+        detail: Literal["summary", "full"] = "full",
+    ) -> dict[str, Any]:
+        if not filters.product_id:
+            raise ValueError("a product_id is required for the price footprint map")
+        if filters.city is not None and filters.state is None:
+            raise ValueError("a city filter requires its state")
+        cache_key = (*self._view_key(analysis_id, filters), "map-v1", detail)
+        cached = self._map_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        prepared = await self._prepare(analysis_id, filters.retailer_id)
+        view = self._project(
+            prepared,
+            filters,
+            location_limit=None,
+            product_location_limit=0,
+        )
+        products = view["products"]
+        if not products:
+            raise LookupError("no exact-product Search evidence matched the map filters")
+
+        reference_price = products[0]["price_stats"]["observation_median"]
+        point_limit = 1_200 if detail == "summary" else 6_000
+
+        def map_point(row: dict[str, Any], status_value: str) -> dict[str, Any]:
+            price = row.get("median_price") if status_value == "observed" else None
+            difference = (
+                round(float(price) - float(reference_price), 4)
+                if price is not None and reference_price is not None
+                else None
+            )
+            return {
+                "scope_key": str(row["scope_key"]),
+                "status": status_value,
+                "kind": row["kind"],
+                "store_number": row.get("store_number"),
+                "store_name": row.get("store_name"),
+                "zipcode": row.get("zipcode"),
+                "city": row.get("city"),
+                "state": row.get("state"),
+                "country": row["country"],
+                "latitude": float(row["latitude"]),
+                "longitude": float(row["longitude"]),
+                "price": price,
+                "difference_from_reference": difference,
+            }
+
+        observed_rows = list(view["locations"])
+        not_observed_rows = list(view["distribution_gaps"]["locations"])
+        observed_with_coordinates = [
+            row
+            for row in observed_rows
+            if row.get("latitude") is not None and row.get("longitude") is not None
+        ]
+        not_observed_with_coordinates = [
+            row
+            for row in not_observed_rows
+            if row.get("latitude") is not None and row.get("longitude") is not None
+        ]
+
+        def evenly_sample(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            if len(rows) <= point_limit:
+                return rows
+            step = len(rows) / point_limit
+            return [rows[int(index * step)] for index in range(point_limit)]
+
+        observed_points = [
+            map_point(row, "observed") for row in evenly_sample(observed_with_coordinates)
+        ]
+        not_observed_points = [
+            map_point(row, "not_observed") for row in evenly_sample(not_observed_with_coordinates)
+        ]
+        result = {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "retailer": {
+                "id": view["retailer"]["id"],
+                "name": view["retailer"]["name"],
+            },
+            "product": {
+                "id": products[0]["product_id"],
+                "name": products[0]["name"],
+            },
+            "filters": {
+                "state": filters.state,
+                "city": filters.city,
+                "zipcode": filters.zipcode,
+                "detail": detail,
+            },
+            "source": {
+                "authority": "Search",
+                "location_authority": "Retailer location master",
+                "definition": (
+                    "Observed points have positive Search prices. Not observed points are "
+                    "planned collection locations where the exact product did not appear "
+                    "in the successful Search result; they are review signals, not proof "
+                    "of non-carriage."
+                ),
+            },
+            "reference_price": reference_price,
+            "display": {
+                "observed_locations": int(view["location_display"]["total"]),
+                "observed_points": len(observed_points),
+                "observed_missing_coordinates": max(
+                    0,
+                    int(view["location_display"]["total"]) - len(observed_with_coordinates),
+                ),
+                "observed_sampled": len(observed_with_coordinates) > point_limit,
+                "not_observed_locations": int(
+                    view["distribution_gaps"]["location_display"]["total"]
+                ),
+                "not_observed_points": len(not_observed_points),
+                "not_observed_missing_coordinates": max(
+                    0,
+                    int(view["distribution_gaps"]["location_display"]["total"])
+                    - len(not_observed_with_coordinates),
+                ),
+                "not_observed_sampled": len(not_observed_with_coordinates) > point_limit,
+            },
+            "points": [*observed_points, *not_observed_points],
+        }
+        validate_instance(
+            self._root,
+            "price-monitoring-map.schema.json",
+            result,
+            label=f"price-monitoring-map:{analysis_id}:{filters.retailer_id}",
+        )
+        if len(self._map_cache) >= 96:
+            self._map_cache.pop(next(iter(self._map_cache)))
+        self._map_cache[cache_key] = result
+        return result
+
 
 def get_price_monitoring_service(request: Request) -> PriceMonitoringService:
     existing = getattr(request.app.state, "price_monitoring_service", None)
@@ -623,6 +762,47 @@ async def price_monitoring_view(
         ) from exc
 
 
+@router.get("/analyses/{analysis_id}/price-monitoring/map")
+async def price_monitoring_map(
+    analysis_id: str,
+    service: ServiceDependency,
+    retailer: str = Query(min_length=1),
+    brand_type: BrandFilter = "all",
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+    zipcode: str | None = None,
+    product_id: str = Query(min_length=1),
+    detail: Literal["summary", "full"] = "full",
+) -> dict[str, Any]:
+    try:
+        return await service.map_view(
+            analysis_id,
+            PriceMonitoringFilters(
+                retailer_id=retailer,
+                brand_type=brand_type,
+                state=state_filter,
+                city=city,
+                zipcode=zipcode,
+                product_id=product_id,
+            ),
+            detail=detail,
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
 @router.get("/analyses/{analysis_id}/price-monitoring/evidence.csv")
 async def price_monitoring_evidence_csv(
     analysis_id: str,
@@ -652,7 +832,9 @@ async def price_monitoring_evidence_csv(
         safe_product_id = "".join(
             character for character in product_id if character.isalnum() or character in "_-"
         )
-        filename = f"{safe_retailer or 'retailer'}-{safe_product_id or 'product'}-price-evidence.csv"
+        filename = (
+            f"{safe_retailer or 'retailer'}-{safe_product_id or 'product'}-price-evidence.csv"
+        )
         return Response(
             content=body,
             media_type="text/csv; charset=utf-8",
