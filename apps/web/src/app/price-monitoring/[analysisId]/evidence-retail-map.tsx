@@ -480,6 +480,12 @@ export function EvidenceRetailMap({
   }, [detail, mapData, mapReady, mode]);
 
   const display = mapData?.display;
+  const hasPricePositionCounts = Boolean(
+    display &&
+    Number.isFinite(display.below_reference_locations) &&
+    Number.isFinite(display.at_reference_locations) &&
+    Number.isFinite(display.above_reference_locations),
+  );
   const modeTotal = display
     ? mode === "observed"
       ? display.observed_locations
@@ -550,7 +556,7 @@ export function EvidenceRetailMap({
           </button>
         </div>
 
-        {mode === "observed" && display ? (
+        {mode === "observed" && display && hasPricePositionCounts ? (
           <section className={styles.positionSummary}>
             <header>
               <span>Store price position</span>
