@@ -10,7 +10,7 @@ export async function GET(
   const query = new URL(request.url).searchParams.toString();
   const response = await getApi<PriceMonitoringView>(
     `/api/v1/analyses/${encodeURIComponent(analysisId)}/price-monitoring?${query}`,
-    30_000,
+    120_000,
   );
   if (!response.data) {
     return NextResponse.json(
