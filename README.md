@@ -104,3 +104,8 @@ Phase 12.9.1 independently certifies the Product Leadership evidence chain and d
 the five full-source release-candidate categories, repairs distribution-scoped relationship
 admission, and fails closed before inconsistent reports can be served. See
 `docs/50_PHASE_12_9_1_FIVE_CATEGORY_TRUST_VALIDATION.md`.
+
+Phase 12.10 consolidates Price Intelligence around Product Overview, Price Architecture, Store
+Review, and Product History; moves footprint and market detail into contextual drawers; disables
+overview clustering; and exposes only governed Search in-stock and sponsorship signals. See
+`docs/51_PHASE_12_10_PRICE_INTELLIGENCE_COHESION.md`.

@@ -188,56 +188,59 @@ function addEvidenceLayers(
   sourceId: string,
   prefix: string,
   mode: MapMode,
+  clustered: boolean,
 ) {
   const isObserved = mode === "observed";
-  map.addLayer({
-    id: `${prefix}-clusters`,
-    type: "circle",
-    source: sourceId,
-    filter: ["has", "point_count"],
-    paint: {
-      "circle-color": isObserved
-        ? [
-            "step",
-            ["get", "point_count"],
-            "#0b7b92",
-            100,
-            "#075f73",
-            750,
-            "#143b47",
-          ]
-        : [
-            "step",
-            ["get", "point_count"],
-            "#f4b740",
-            100,
-            "#d99016",
-            750,
-            "#9a5b0b",
-          ],
-      "circle-radius": ["step", ["get", "point_count"], 16, 100, 21, 750, 27],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 2,
-      "circle-opacity": 0.92,
-    },
-  });
-  map.addLayer({
-    id: `${prefix}-cluster-count`,
-    type: "symbol",
-    source: sourceId,
-    filter: ["has", "point_count"],
-    layout: {
-      "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Noto Sans Bold"],
-      "text-size": 12,
-    },
-    paint: { "text-color": "#ffffff" },
-  });
+  if (clustered) {
+    map.addLayer({
+      id: `${prefix}-clusters`,
+      type: "circle",
+      source: sourceId,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": isObserved
+          ? [
+              "step",
+              ["get", "point_count"],
+              "#0b7b92",
+              100,
+              "#075f73",
+              750,
+              "#143b47",
+            ]
+          : [
+              "step",
+              ["get", "point_count"],
+              "#f4b740",
+              100,
+              "#d99016",
+              750,
+              "#9a5b0b",
+            ],
+        "circle-radius": ["step", ["get", "point_count"], 16, 100, 21, 750, 27],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+        "circle-opacity": 0.92,
+      },
+    });
+    map.addLayer({
+      id: `${prefix}-cluster-count`,
+      type: "symbol",
+      source: sourceId,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count_abbreviated"],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": 12,
+      },
+      paint: { "text-color": "#ffffff" },
+    });
+  }
   map.addLayer({
     id: `${prefix}-points`,
     type: "circle",
     source: sourceId,
-    filter: ["!", ["has", "point_count"]],
+    ...(clustered ? { filter: ["!", ["has", "point_count"]] } : {}),
     paint: {
       "circle-color": isObserved
         ? [
@@ -262,7 +265,7 @@ function addEvidenceLayers(
       type: "symbol",
       source: sourceId,
       minzoom: 10,
-      filter: ["!", ["has", "point_count"]],
+      ...(clustered ? { filter: ["!", ["has", "point_count"]] } : {}),
       layout: {
         "text-field": ["get", "price_label"],
         "text-font": ["Noto Sans Bold"],
@@ -283,18 +286,31 @@ export function EvidenceRetailMap({
   view,
   detail = "full",
   onScopeChange,
+  clusterPoints = true,
+  mode,
+  onModeChange,
 }: Readonly<{
   view: PriceMonitoringView;
   detail?: MapDetail;
   onScopeChange: (parameters: QueryUpdate) => void;
+  clusterPoints?: boolean;
+  mode?: MapMode;
+  onModeChange?: (mode: MapMode) => void;
 }>) {
-  const [mode, setMode] = useState<MapMode>("observed");
+  const [internalMode, setInternalMode] = useState<MapMode>("observed");
   const [mapData, setMapData] = useState<PriceMonitoringMap | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<InteractiveMap | null>(null);
+  const activeMode = mode ?? internalMode;
+
+  function selectMode(nextMode: MapMode) {
+    setInternalMode(nextMode);
+    onModeChange?.(nextMode);
+    setSelectedPoint(null);
+  }
 
   useEffect(() => {
     if (!view.filters.product_id) return;
@@ -375,19 +391,39 @@ export function EvidenceRetailMap({
           map.addSource(OBSERVED_SOURCE, {
             type: "geojson",
             data: toFeatureCollection(observed),
-            cluster: true,
-            clusterMaxZoom: EVIDENCE_CLUSTER_MAX_ZOOM,
-            clusterRadius: EVIDENCE_CLUSTER_RADIUS,
+            cluster: clusterPoints,
+            ...(clusterPoints
+              ? {
+                  clusterMaxZoom: EVIDENCE_CLUSTER_MAX_ZOOM,
+                  clusterRadius: EVIDENCE_CLUSTER_RADIUS,
+                }
+              : {}),
           });
           map.addSource(GAP_SOURCE, {
             type: "geojson",
             data: toFeatureCollection(gaps),
-            cluster: true,
-            clusterMaxZoom: EVIDENCE_CLUSTER_MAX_ZOOM,
-            clusterRadius: EVIDENCE_CLUSTER_RADIUS,
+            cluster: clusterPoints,
+            ...(clusterPoints
+              ? {
+                  clusterMaxZoom: EVIDENCE_CLUSTER_MAX_ZOOM,
+                  clusterRadius: EVIDENCE_CLUSTER_RADIUS,
+                }
+              : {}),
           });
-          addEvidenceLayers(map, OBSERVED_SOURCE, "observed", "observed");
-          addEvidenceLayers(map, GAP_SOURCE, "gap", "not_observed");
+          addEvidenceLayers(
+            map,
+            OBSERVED_SOURCE,
+            "observed",
+            "observed",
+            clusterPoints,
+          );
+          addEvidenceLayers(
+            map,
+            GAP_SOURCE,
+            "gap",
+            "not_observed",
+            clusterPoints,
+          );
 
           const selectPoint = (prefix: string) => (event: MapMouseEvent) => {
             if (!map) return;
@@ -424,18 +460,19 @@ export function EvidenceRetailMap({
 
           map.on("click", "observed-points", selectPoint("observed"));
           map.on("click", "gap-points", selectPoint("gap"));
-          map.on(
-            "click",
-            "observed-clusters",
-            expandCluster(OBSERVED_SOURCE, "observed"),
-          );
-          map.on("click", "gap-clusters", expandCluster(GAP_SOURCE, "gap"));
-          for (const layer of [
-            "observed-points",
-            "gap-points",
-            "observed-clusters",
-            "gap-clusters",
-          ]) {
+          if (clusterPoints) {
+            map.on(
+              "click",
+              "observed-clusters",
+              expandCluster(OBSERVED_SOURCE, "observed"),
+            );
+            map.on("click", "gap-clusters", expandCluster(GAP_SOURCE, "gap"));
+          }
+          const interactiveLayers = ["observed-points", "gap-points"];
+          if (clusterPoints) {
+            interactiveLayers.push("observed-clusters", "gap-clusters");
+          }
+          for (const layer of interactiveLayers) {
             map.on("mouseenter", layer, () => {
               if (map) map.getCanvas().style.cursor = "pointer";
             });
@@ -461,28 +498,29 @@ export function EvidenceRetailMap({
       mapRef.current = null;
       map?.remove();
     };
-  }, [detail, mapData, pointByScope]);
+  }, [clusterPoints, detail, mapData, pointByScope]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const observedVisibility = mode === "observed" ? "visible" : "none";
-    const gapVisibility = mode === "not_observed" ? "visible" : "none";
-    for (const layer of [
-      "observed-clusters",
-      "observed-cluster-count",
-      "observed-points",
-      "observed-price-labels",
-    ]) {
+    const observedVisibility = activeMode === "observed" ? "visible" : "none";
+    const gapVisibility = activeMode === "not_observed" ? "visible" : "none";
+    const observedLayers = ["observed-points", "observed-price-labels"];
+    const gapLayers = ["gap-points"];
+    if (clusterPoints) {
+      observedLayers.push("observed-clusters", "observed-cluster-count");
+      gapLayers.push("gap-clusters", "gap-cluster-count");
+    }
+    for (const layer of observedLayers) {
       map.setLayoutProperty(layer, "visibility", observedVisibility);
     }
-    for (const layer of ["gap-clusters", "gap-cluster-count", "gap-points"]) {
+    for (const layer of gapLayers) {
       map.setLayoutProperty(layer, "visibility", gapVisibility);
     }
     const visiblePoints =
-      mapData?.points.filter((point) => point.status === mode) ?? [];
+      mapData?.points.filter((point) => point.status === activeMode) ?? [];
     fitToPoints(map, visiblePoints, detail);
-  }, [detail, mapData, mapReady, mode]);
+  }, [activeMode, clusterPoints, detail, mapData, mapReady]);
 
   const display = mapData?.display;
   const hasPricePositionCounts = Boolean(
@@ -492,17 +530,17 @@ export function EvidenceRetailMap({
     Number.isFinite(display.above_reference_locations),
   );
   const modeTotal = display
-    ? mode === "observed"
+    ? activeMode === "observed"
       ? display.observed_locations
       : display.not_observed_locations
     : 0;
   const modePoints = display
-    ? mode === "observed"
+    ? activeMode === "observed"
       ? display.observed_points
       : display.not_observed_points
     : 0;
   const modeSampled = display
-    ? mode === "observed"
+    ? activeMode === "observed"
       ? display.observed_sampled
       : display.not_observed_sampled
     : false;
@@ -524,7 +562,9 @@ export function EvidenceRetailMap({
           </div>
         ) : null}
         <div className={styles.mapHint}>
-          Scroll to zoom · drag to explore · select a cluster to expand
+          {clusterPoints
+            ? "Scroll to zoom · drag to explore · select a cluster to expand"
+            : "Scroll to zoom · drag to explore · select a store point"}
         </div>
       </div>
       <aside className={styles.inspector}>
@@ -534,24 +574,18 @@ export function EvidenceRetailMap({
           aria-label="Location evidence"
         >
           <button
-            aria-pressed={mode === "observed"}
-            className={mode === "observed" ? styles.active : ""}
-            onClick={() => {
-              setMode("observed");
-              setSelectedPoint(null);
-            }}
+            aria-pressed={activeMode === "observed"}
+            className={activeMode === "observed" ? styles.active : ""}
+            onClick={() => selectMode("observed")}
             type="button"
           >
             Observed
             <small>{display ? count(display.observed_locations) : "—"}</small>
           </button>
           <button
-            aria-pressed={mode === "not_observed"}
-            className={mode === "not_observed" ? styles.active : ""}
-            onClick={() => {
-              setMode("not_observed");
-              setSelectedPoint(null);
-            }}
+            aria-pressed={activeMode === "not_observed"}
+            className={activeMode === "not_observed" ? styles.active : ""}
+            onClick={() => selectMode("not_observed")}
             type="button"
           >
             Not observed
@@ -561,7 +595,7 @@ export function EvidenceRetailMap({
           </button>
         </div>
 
-        {mode === "observed" && display && hasPricePositionCounts ? (
+        {activeMode === "observed" && display && hasPricePositionCounts ? (
           <section className={styles.positionSummary}>
             <header>
               <span>Store price position</span>

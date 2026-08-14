@@ -24,10 +24,16 @@ responsiveness.
 
 - Added a Home workspace tab containing the retailer product selector.
 - Added country → state → city → ZIP → store drill-through.
+- Consolidated Product Footprint into Product Overview with an unclustered map, full-screen map,
+  and mode-aware observed/non-observed location drawer.
 - Reworked maps to use a light, legible base in light and dark application
   themes, price-colored states, city bubbles, and store points at deeper levels.
-- Distribution Gaps now includes planned, observed, and non-observed metrics;
-  ranked market concentration; and a location-master-backed review list.
+- Consolidated Distribution Gaps and Store Exceptions into Store Review, with plain-language IQR
+  governance and ranked Search non-observation concentration.
+- Replaced the duplicate Market Benchmarks workspace with a geographic price heatmap/map toggle in
+  Price Architecture; its complete market table opens in a drawer.
+- Removed Promotion from the decision surface. In-stock and Sponsorship are the two governed Search
+  signals shown alongside price structure.
 - Added exact-product sponsorship visibility, geographic breadth, and largest
   non-observation market signals.
 - Complete store-level Search evidence remains downloadable as CSV.

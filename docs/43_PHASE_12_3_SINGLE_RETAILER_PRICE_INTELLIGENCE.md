@@ -11,20 +11,17 @@ retailer's governed collection footprint. It does not perform competitor matchin
 - Search is authoritative for store/service-area price, location, and explicit availability fields.
 - PDP enrichment supplies identity, attributes, URLs, and imagery. It cannot replace Search price.
 - A Search non-observation is not proof that a store does not carry a product.
-- Promotion requires an explicit regular or discounted Search price.
+- Sponsorship uses only the Search `is_sponsored` boolean.
 - Confirmed distribution gaps require an explicit product-specific retailer signal.
 - History compares only snapshots with the same comparability fingerprint.
 - Inventory, history, and unsupported availability measures remain unavailable rather than inferred.
 
 ## Product-scoped workspaces
 
-1. Product Overview
-2. Product Footprint
-3. Price Architecture
-4. Distribution Gaps
-5. Store Exceptions
-6. Market Benchmarks
-7. Product History
+1. Product Overview, including footprint, observed/non-observed evidence drawers, and full-screen map
+2. Price Architecture, including price distribution and geographic price structure
+3. Store Review, combining unusual-price and Search non-observation review queues
+4. Product History
 
 The retailer, product, geography, and source-readiness context is persistent. URL parameters are the
 analytical source of truth for the selected workspace and filters.
@@ -39,26 +36,28 @@ analytical source of truth for the selected workspace and filters.
   tolerance of that product's modal price.
 - **Store exception:** exact-product price outside the 1.5×IQR interval with at least four visible
   observations; when IQR is zero, the Product Pack modal-price tolerance is used.
-- **Availability rate:** explicit in-stock observations divided by observations with a known
-  availability value. Missing values are excluded from the denominator.
-- **Promotion rate:** observations with an explicit discounted price, or a current price below an
-  explicit regular price, divided by observations with either explicit component.
+- **In-stock rate:** an admitted product-location Search observation with a price greater than zero
+  is treated as available/in stock. Missing, null, and non-positive prices are not admitted.
+- **Sponsorship rate:** `is_sponsored=true` observations divided by Search observations where the
+  boolean is known. Missing values remain unavailable.
 
 All analytical calculations are deterministic. AI may summarize validated facts but may not compute
 or change metrics.
 
 ## Contracts and persistence
 
-`price-monitoring-view.schema.json` version `1.1.0` adds product selection, observed-presence
-semantics, explicit-source availability and promotion summaries, deterministic price histograms,
-and store exceptions. Migration `0027_price_intelligence_foundation` creates the persistent read
+`price-monitoring-view.schema.json` retains its backward-compatible promotion summary, but the
+Price Intelligence UI does not present promotion as a governed decision signal. Product selection,
+observed-presence semantics, deterministic price histograms, sponsorship, and store review all
+remain contract-backed. Migration `0027_price_intelligence_foundation` creates the persistent read
 model required for comparable snapshot history and durable exception review.
 
 ## Current evidence limits
 
-The current release can render all seven workspaces, but Product History remains in an honest
-insufficient-snapshots state until compatible snapshots are materialized. Distribution Gaps shows
-positive presence and inconclusive non-observations; it does not fabricate confirmed non-carriage.
+The current release consolidates the product-location workflow into four workspaces. Product
+History remains in an honest insufficient-snapshots state until compatible snapshots are
+materialized. Store Review shows positive presence and inconclusive non-observations; it does not
+fabricate confirmed non-carriage.
 Internal region/division/market/store-format reporting is shown only after a governed hierarchy
 source populates the new nullable location fields.
 

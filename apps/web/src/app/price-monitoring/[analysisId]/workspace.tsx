@@ -24,25 +24,30 @@ type StateFeature = {
   geometry: { type: string; coordinates: unknown };
 };
 type TabId =
-  | "home"
-  | "overview"
-  | "footprint"
-  | "price-architecture"
-  | "distribution-gaps"
-  | "store-exceptions"
-  | "market-benchmarks"
-  | "history";
+  "home" | "overview" | "price-architecture" | "store-review" | "history";
+type ArchitectureView = "heatmap" | "map";
+type StoreReviewMode = "price" | "not_observed";
 
 const tabIds: readonly TabId[] = [
   "home",
   "overview",
-  "footprint",
   "price-architecture",
-  "distribution-gaps",
-  "store-exceptions",
-  "market-benchmarks",
+  "store-review",
   "history",
 ];
+
+const legacyTabMigration: Record<string, TabId> = {
+  footprint: "overview",
+  "distribution-gaps": "store-review",
+  "store-exceptions": "store-review",
+  "market-benchmarks": "price-architecture",
+};
+
+function normalizeTab(value: string | null | undefined): TabId {
+  if (value && tabIds.includes(value as TabId)) return value as TabId;
+  if (value && legacyTabMigration[value]) return legacyTabMigration[value];
+  return "overview";
+}
 
 const brandLabels: Record<string, string> = {
   all: "All brand types",
@@ -1085,6 +1090,252 @@ function GapLocationTable({
   );
 }
 
+function GeographicHeatmap({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  const rows = view.geographies.slice(0, 24);
+  const medians = rows
+    .map((row) => row.price_stats.observation_median)
+    .filter((value): value is number => value !== null);
+  const minimum = medians.length ? Math.min(...medians) : 0;
+  const maximum = medians.length ? Math.max(...medians) : minimum;
+  const span = Math.max(0.01, maximum - minimum);
+
+  return (
+    <div className="pi-geography-heatmap" role="table">
+      <div className="pi-heatmap-header" role="row">
+        <span role="columnheader">Market</span>
+        <span role="columnheader">Observed</span>
+        <span role="columnheader">Median shelf price</span>
+        <span role="columnheader">Price range</span>
+        <span role="columnheader">At modal price</span>
+      </div>
+      {rows.map((row) => {
+        const medianPrice = row.price_stats.observation_median;
+        const intensity =
+          medianPrice === null ? 0 : (medianPrice - minimum) / span;
+        return (
+          <button
+            className="pi-heatmap-row"
+            key={`${row.level}-${row.key}`}
+            onClick={() =>
+              updateQuery(
+                row.level === "state"
+                  ? { state: row.key, city: null, zipcode: null }
+                  : row.level === "city"
+                    ? { city: row.key, zipcode: null }
+                    : { zipcode: row.key },
+              )
+            }
+            role="row"
+            type="button"
+          >
+            <span role="cell">
+              <strong>{row.label}</strong>
+              <small>Open {row.level}</small>
+            </span>
+            <span role="cell">{count(row.locations)}</span>
+            <span
+              className="pi-heat-cell"
+              role="cell"
+              style={{
+                backgroundColor: `hsl(190 62% ${Math.round(94 - intensity * 38)}%)`,
+                color: intensity > 0.58 ? "#ffffff" : "#12333d",
+              }}
+            >
+              {currency(medianPrice)}
+            </span>
+            <span role="cell">
+              {currency(row.price_stats.minimum)}–
+              {currency(row.price_stats.maximum)}
+            </span>
+            <span role="cell">{percent(row.price_stats.modal_share)}</span>
+          </button>
+        );
+      })}
+      {view.geographies.length > rows.length ? (
+        <p>
+          Showing the first {count(rows.length)} of{" "}
+          {count(view.geographies.length)} visible markets. Open the detail
+          drawer for the complete table.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function LocationEvidenceDrawer({
+  mode,
+  view,
+  product,
+  onClose,
+  onOpenLocation,
+}: Readonly<{
+  mode: MapMode;
+  view: PriceMonitoringView;
+  product: Product;
+  onClose: () => void;
+  onOpenLocation: (location: Location) => void;
+}>) {
+  const observed = mode === "observed";
+  return (
+    <div className="pm-drawer-layer">
+      <button
+        aria-label="Close location evidence"
+        className="pm-drawer-backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <aside
+        className="pm-product-drawer pi-evidence-drawer"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header>
+          <div>
+            <p className="section-kicker">Exact-product location evidence</p>
+            <h2>
+              {observed ? "Observed locations" : "Search non-observations"}
+            </h2>
+            <small>
+              {observed
+                ? `${count(view.location_display.total)} locations with a positive Search price`
+                : `${count(view.distribution_gaps.location_display.total)} planned locations where the product did not appear`}
+            </small>
+          </div>
+          <button
+            aria-label="Close location evidence"
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+        </header>
+        <section className="pm-drawer-section">
+          {observed ? (
+            <LocationTable view={view} onOpen={onOpenLocation} />
+          ) : (
+            <>
+              <div className="pi-drawer-note">
+                A Search non-observation is a review signal, not proof that the
+                retailer does not carry the item.
+              </div>
+              <GapLocationTable gaps={view.distribution_gaps} />
+            </>
+          )}
+        </section>
+        <footer>
+          <p>
+            Search price and product-location evidence remain authoritative.
+          </p>
+          {observed ? (
+            <button
+              className="button secondary"
+              onClick={() =>
+                downloadCsv(view.analysis_id, view.retailer.id, product)
+              }
+              type="button"
+            >
+              Download evidence
+            </button>
+          ) : null}
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function GeographyDrawer({
+  view,
+  onClose,
+}: Readonly<{ view: PriceMonitoringView; onClose: () => void }>) {
+  return (
+    <div className="pm-drawer-layer">
+      <button
+        aria-label="Close geographic price detail"
+        className="pm-drawer-backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <aside
+        className="pm-product-drawer pi-evidence-drawer"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header>
+          <div>
+            <p className="section-kicker">Geographic price structure</p>
+            <h2>All visible markets</h2>
+            <small>
+              Exact-product Search prices; select a market to drill down.
+            </small>
+          </div>
+          <button
+            aria-label="Close geographic price detail"
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+        </header>
+        <section className="pm-drawer-section">
+          <MarketTable view={view} />
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+function FootprintModal({
+  mode,
+  view,
+  onClose,
+  onModeChange,
+}: Readonly<{
+  mode: MapMode;
+  view: PriceMonitoringView;
+  onClose: () => void;
+  onModeChange: (mode: MapMode) => void;
+}>) {
+  return (
+    <div className="pm-drawer-layer pi-map-modal-layer">
+      <button
+        aria-label="Close full-screen footprint"
+        className="pm-drawer-backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <section
+        aria-label="Full-screen exact-product footprint"
+        aria-modal="true"
+        className="pi-map-modal"
+        role="dialog"
+      >
+        <header>
+          <div>
+            <p className="section-kicker">Exact-product footprint</p>
+            <h2>
+              {mode === "observed"
+                ? "Observed store locations"
+                : "Planned locations not observed in Search"}
+            </h2>
+          </div>
+          <button aria-label="Close full-screen footprint" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <InteractiveEvidenceRetailMap
+          clusterPoints={false}
+          detail="full"
+          key={`modal:${JSON.stringify(view.filters)}`}
+          mode={mode}
+          onModeChange={onModeChange}
+          onScopeChange={updateQuery}
+          view={view}
+        />
+      </section>
+    </div>
+  );
+}
+
 function ProductCatalog({ view }: Readonly<{ view: PriceMonitoringView }>) {
   return (
     <section className="pi-product-catalog">
@@ -1130,19 +1381,33 @@ export function PriceMonitoringWorkspace({
   initialTab,
 }: Readonly<{ initialView: PriceMonitoringView; initialTab?: string }>) {
   const [view, setView] = useState(initialView);
-  const [tab, setTab] = useState<TabId>(
-    tabIds.includes(initialTab as TabId) ? (initialTab as TabId) : "overview",
-  );
+  const [tab, setTab] = useState<TabId>(normalizeTab(initialTab));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openLocation, setOpenLocation] = useState<Location | null>(null);
+  const [locationEvidenceMode, setLocationEvidenceMode] =
+    useState<MapMode | null>(null);
+  const [overviewMapMode, setOverviewMapMode] = useState<MapMode>("observed");
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [architectureView, setArchitectureView] =
+    useState<ArchitectureView>("heatmap");
+  const [geographyDrawerOpen, setGeographyDrawerOpen] = useState(false);
+  const [storeReviewMode, setStoreReviewMode] =
+    useState<StoreReviewMode>("price");
   const viewCache = useRef(new Map<string, PriceMonitoringView>());
 
   useEffect(() => {
     function loadView() {
       const url = new URL(window.location.href);
-      const nextTab = url.searchParams.get("tab") as TabId | null;
-      if (nextTab) setTab(nextTab);
+      const requestedTab = url.searchParams.get("tab");
+      if (requestedTab) {
+        const nextTab = normalizeTab(requestedTab);
+        setTab(nextTab);
+        if (requestedTab !== nextTab) {
+          url.searchParams.set("tab", nextTab);
+          window.history.replaceState(window.history.state, "", url);
+        }
+      }
       const requestParameters = new URLSearchParams(url.searchParams);
       requestParameters.delete("tab");
       const cacheKey = requestParameters.toString();
@@ -1179,7 +1444,16 @@ export function PriceMonitoringWorkspace({
         .finally(() => setLoading(false));
       return () => controller.abort();
     }
-    const initialParameters = new URL(window.location.href).searchParams;
+    const initialUrl = new URL(window.location.href);
+    const initialRequestedTab = initialUrl.searchParams.get("tab");
+    if (initialRequestedTab) {
+      const migratedTab = normalizeTab(initialRequestedTab);
+      if (migratedTab !== initialRequestedTab) {
+        initialUrl.searchParams.set("tab", migratedTab);
+        window.history.replaceState(window.history.state, "", initialUrl);
+      }
+    }
+    const initialParameters = initialUrl.searchParams;
     initialParameters.delete("tab");
     viewCache.current.set(initialParameters.toString(), initialView);
     let cancel = () => {};
@@ -1263,13 +1537,20 @@ export function PriceMonitoringWorkspace({
           ],
         },
         {
-          id: "source-readiness",
-          label: "Source readiness",
-          title: "Evidence, quality, and metric eligibility",
+          id: "status-notifications",
+          label: "Status & notifications",
+          title: "Current assessment and evidence readiness",
           description:
             "Unsupported measures remain unavailable rather than being inferred.",
-          value: view.quality.status === "ready" ? "Ready" : "Review caveats",
-          tone: view.quality.status === "ready" ? "ready" : "attention",
+          value: view.exceptions.length
+            ? `${count(view.exceptions.length)} price reviews`
+            : view.quality.status === "ready"
+              ? "Ready"
+              : "Review caveats",
+          tone:
+            view.quality.status === "ready" && !view.exceptions.length
+              ? "ready"
+              : "attention",
           facts: [
             {
               label: "Usable price rows",
@@ -1291,6 +1572,9 @@ export function PriceMonitoringWorkspace({
             },
           ],
           messages: [
+            view.exceptions.length
+              ? `${count(view.exceptions.length)} store prices meet the deterministic review rule. Open Store Review for exact evidence.`
+              : "No store prices meet the current deterministic exception rule.",
             view.presence.definition,
             "PDP identity enrichment never overrides Search price or location.",
           ],
@@ -1307,11 +1591,8 @@ export function PriceMonitoringWorkspace({
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: "home", label: "Home" },
     { id: "overview", label: "Product Overview" },
-    { id: "footprint", label: "Product Footprint" },
     { id: "price-architecture", label: "Price Architecture" },
-    { id: "distribution-gaps", label: "Distribution Gaps" },
-    { id: "store-exceptions", label: "Store Exceptions" },
-    { id: "market-benchmarks", label: "Market Benchmarks" },
+    { id: "store-review", label: "Store Review" },
     { id: "history", label: "Product History" },
   ];
 
@@ -1348,7 +1629,6 @@ export function PriceMonitoringWorkspace({
 
   const stats = selectedProduct.price_stats;
   const availability = selectedProduct.availability;
-  const promotion = selectedProduct.promotion;
   const sponsorship = selectedProduct.sponsorship ?? {
     status: "unavailable" as const,
     known_observations: 0,
@@ -1371,11 +1651,6 @@ export function PriceMonitoringWorkspace({
     locations: [],
   };
   const topGapMarket = distributionGaps.geographies[0] ?? null;
-  const assessment = view.exceptions.length
-    ? `${count(view.exceptions.length)} store prices fall outside the exact product's 1.5×IQR range and merit review.`
-    : stats.range === 0
-      ? "The selected product was observed at one consistent price across the visible store footprint."
-      : `The selected product spans ${currency(stats.minimum)} to ${currency(stats.maximum)} across ${count(selectedProduct.locations)} observed locations.`;
 
   return (
     <>
@@ -1465,22 +1740,11 @@ export function PriceMonitoringWorkspace({
               <small>At modal price ± Product Pack tolerance</small>
             </article>
             <article>
-              <span>Store exceptions</span>
+              <span>Stores to review</span>
               <strong>{count(view.exceptions.length)}</strong>
-              <small>Governed IQR/modal rule</small>
+              <small>Unusual exact-product prices</small>
             </article>
           </div>
-          <article className="pi-assessment">
-            <div>
-              <p className="section-kicker">Current assessment</p>
-              <h2>
-                {view.exceptions.length
-                  ? "Price exceptions are concentrated in a limited store set"
-                  : "The current exact-product footprint is ready to explore"}
-              </h2>
-            </div>
-            <p>{assessment}</p>
-          </article>
           <article className="pm-panel pi-retail-signals">
             <header>
               <div>
@@ -1528,22 +1792,35 @@ export function PriceMonitoringWorkspace({
               <header>
                 <div>
                   <p className="section-kicker">Exact-product footprint</p>
-                  <h2>Where the product was observed</h2>
+                  <h2>
+                    {overviewMapMode === "observed"
+                      ? "Where the product was observed"
+                      : "Where it did not appear in Search"}
+                  </h2>
                 </div>
-                <button
-                  className="text-link"
-                  onClick={() => {
-                    updateTab("footprint");
-                    setTab("footprint");
-                  }}
-                  type="button"
-                >
-                  Open footprint →
-                </button>
+                <div className="pi-panel-actions">
+                  <button
+                    className="button secondary"
+                    onClick={() => setLocationEvidenceMode(overviewMapMode)}
+                    type="button"
+                  >
+                    View locations
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => setMapExpanded(true)}
+                    type="button"
+                  >
+                    Expand map
+                  </button>
+                </div>
               </header>
               <InteractiveEvidenceRetailMap
+                clusterPoints={false}
                 detail="summary"
                 key={"summary:" + JSON.stringify(view.filters)}
+                mode={overviewMapMode}
+                onModeChange={setOverviewMapMode}
                 onScopeChange={updateQuery}
                 view={view}
               />
@@ -1591,49 +1868,6 @@ export function PriceMonitoringWorkspace({
         </section>
       ) : null}
 
-      {tab === "footprint" ? (
-        <section className="pm-tab-content pi-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Country → state → city → store</p>
-              <h2>Exact-product location footprint</h2>
-            </div>
-            <p>
-              Toggle between stores where the product was observed and planned
-              stores where it did not appear in Search. Observed-store colors
-              show each price relative to the visible-footprint median.
-            </p>
-          </article>
-          <InteractiveEvidenceRetailMap
-            key={"full:" + JSON.stringify(view.filters)}
-            onScopeChange={updateQuery}
-            view={view}
-          />
-          <article className="pm-panel">
-            <header>
-              <div>
-                <p className="section-kicker">Store evidence</p>
-                <h2>{count(view.location_display.total)} observed locations</h2>
-              </div>
-              <button
-                className="button secondary"
-                onClick={() =>
-                  downloadCsv(
-                    view.analysis_id,
-                    view.retailer.id,
-                    selectedProduct,
-                  )
-                }
-                type="button"
-              >
-                Download evidence
-              </button>
-            </header>
-            <LocationTable view={view} onOpen={setOpenLocation} />
-          </article>
-        </section>
-      ) : null}
-
       {tab === "price-architecture" ? (
         <section className="pm-tab-content pi-tab-content">
           <article className="pm-section-intro">
@@ -1646,29 +1880,7 @@ export function PriceMonitoringWorkspace({
               and competitor matching are excluded.
             </p>
           </article>
-          <div className="pi-five-stat">
-            <article>
-              <span>Minimum</span>
-              <strong>{currency(stats.minimum)}</strong>
-            </article>
-            <article>
-              <span>Q1</span>
-              <strong>{currency(stats.q1)}</strong>
-            </article>
-            <article>
-              <span>Median</span>
-              <strong>{currency(stats.observation_median)}</strong>
-            </article>
-            <article>
-              <span>Q3</span>
-              <strong>{currency(stats.q3)}</strong>
-            </article>
-            <article>
-              <span>Maximum</span>
-              <strong>{currency(stats.maximum)}</strong>
-            </article>
-          </div>
-          <article className="pm-panel pi-architecture-panel">
+          <article className="pm-panel pi-architecture-panel pi-architecture-compact">
             <header>
               <div>
                 <p className="section-kicker">Store price distribution</p>
@@ -1676,39 +1888,61 @@ export function PriceMonitoringWorkspace({
               </div>
               <span className="pi-evidence-pill">Search authoritative</span>
             </header>
-            <PriceHistogram product={selectedProduct} />
-            <div className="pi-signal-grid">
+            <div className="pi-architecture-layout">
+              <PriceHistogram product={selectedProduct} />
+              <div className="pi-architecture-metrics">
+                <div>
+                  <span>Observed range</span>
+                  <strong>
+                    {currency(stats.minimum)}–{currency(stats.maximum)}
+                  </strong>
+                  <small>
+                    Q1 {currency(stats.q1)} · Q3 {currency(stats.q3)}
+                  </small>
+                </div>
+                <div>
+                  <span>Median shelf price</span>
+                  <strong>{currency(stats.observation_median)}</strong>
+                  <small>Exact-product, location-weighted</small>
+                </div>
+                <div>
+                  <span>Most common price</span>
+                  <strong>{currency(stats.modal_price)}</strong>
+                  <small>{percent(stats.modal_share)} of observations</small>
+                </div>
+                <div>
+                  <span>In stock</span>
+                  <strong>
+                    {availability.status === "observed"
+                      ? percent(availability.rate)
+                      : "Unavailable"}
+                  </strong>
+                  <small>Positive Search price</small>
+                </div>
+                <div>
+                  <span>Sponsored</span>
+                  <strong>
+                    {sponsorship.status === "observed"
+                      ? percent(sponsorship.rate)
+                      : "Unavailable"}
+                  </strong>
+                  <small>Search is_sponsored only</small>
+                </div>
+                <div>
+                  <span>Price consistency</span>
+                  <strong>{percent(selectedProduct.consistency_rate)}</strong>
+                  <small>Within Product Pack modal tolerance</small>
+                </div>
+              </div>
+            </div>
+            <div className="pi-signal-definitions">
               <div>
-                <span>Modal price</span>
-                <strong>{currency(stats.modal_price)}</strong>
-                <small>{percent(stats.modal_share)} of observations</small>
+                <strong>In-stock rule</strong>
+                <span>{availability.definition}</span>
               </div>
               <div>
-                <span>Availability</span>
-                <strong>
-                  {availability.status === "observed"
-                    ? percent(availability.rate)
-                    : "Unavailable"}
-                </strong>
-                <small>{availability.definition}</small>
-              </div>
-              <div>
-                <span>Promotion</span>
-                <strong>
-                  {promotion.status === "observed"
-                    ? percent(promotion.rate)
-                    : "Unavailable"}
-                </strong>
-                <small>{promotion.definition}</small>
-              </div>
-              <div>
-                <span>Sponsorship</span>
-                <strong>
-                  {sponsorship.status === "observed"
-                    ? percent(sponsorship.rate)
-                    : "Unavailable"}
-                </strong>
-                <small>{sponsorship.definition}</small>
+                <strong>Sponsorship rule</strong>
+                <span>{sponsorship.definition}</span>
               </div>
             </div>
           </article>
@@ -1718,166 +1952,212 @@ export function PriceMonitoringWorkspace({
                 <p className="section-kicker">Geographic structure</p>
                 <h2>Price ranges by visible market</h2>
               </div>
+              <div className="pi-panel-actions">
+                <div
+                  aria-label="Geographic price visualization"
+                  className="pi-view-toggle"
+                  role="group"
+                >
+                  <button
+                    aria-pressed={architectureView === "heatmap"}
+                    onClick={() => setArchitectureView("heatmap")}
+                    type="button"
+                  >
+                    Heatmap table
+                  </button>
+                  <button
+                    aria-pressed={architectureView === "map"}
+                    onClick={() => setArchitectureView("map")}
+                    type="button"
+                  >
+                    US map
+                  </button>
+                </div>
+                <button
+                  className="button secondary"
+                  onClick={() => setGeographyDrawerOpen(true)}
+                  type="button"
+                >
+                  View details
+                </button>
+              </div>
             </header>
-            <MarketTable view={view} />
+            {architectureView === "heatmap" ? (
+              <GeographicHeatmap view={view} />
+            ) : (
+              <RetailMap view={view} />
+            )}
           </article>
         </section>
       ) : null}
 
-      {tab === "distribution-gaps" ? (
+      {tab === "store-review" ? (
         <section className="pm-tab-content pi-tab-content">
           <article className="pm-section-intro">
             <div>
-              <p className="section-kicker">Evidence-aware presence</p>
-              <h2>Presence and distribution gaps</h2>
+              <p className="section-kicker">Deterministic evidence review</p>
+              <h2>Store review</h2>
             </div>
-            <p>{view.presence.definition}</p>
+            <p>
+              Review unusual exact-product prices or planned locations where the
+              product did not appear in Search. Neither signal prescribes an
+              action by itself.
+            </p>
           </article>
-          <div className="pm-metric-grid pi-metric-grid">
-            <article>
-              <span>Observed locations</span>
-              <strong>{count(view.presence.observed_locations)}</strong>
-              <small>Product appeared in Search</small>
-            </article>
-            <article>
-              <span>Planned locations</span>
-              <strong>{count(view.presence.eligible_locations)}</strong>
-              <small>Collection scope denominator</small>
-            </article>
-            <article>
-              <span>Not observed</span>
+          <div
+            aria-label="Store review queue"
+            className="pi-review-switch"
+            role="group"
+          >
+            <button
+              aria-pressed={storeReviewMode === "price"}
+              onClick={() => setStoreReviewMode("price")}
+              type="button"
+            >
+              <span>Unusual prices</span>
+              <strong>{count(view.exceptions.length)}</strong>
+              <small>Deterministic exact-product price review</small>
+            </button>
+            <button
+              aria-pressed={storeReviewMode === "not_observed"}
+              onClick={() => setStoreReviewMode("not_observed")}
+              type="button"
+            >
+              <span>Not observed in Search</span>
               <strong>{count(view.presence.not_observed_locations)}</strong>
-              <small>Inconclusive—not called a gap</small>
-            </article>
-            <article>
-              <span>Confirmed gaps</span>
-              <strong>{count(view.presence.confirmed_gap_locations)}</strong>
-              <small>Requires explicit product-specific evidence</small>
-            </article>
+              <small>Inconclusive presence review</small>
+            </button>
           </div>
-          <article className="pi-governance-callout">
-            <strong>Why “not observed” is different from “not carried”</strong>
-            <p>
-              A keyword Search call returns a bounded result set. A product can
-              be carried but omitted from that result, so this view will not
-              convert absence into a confirmed distribution gap.
-            </p>
-          </article>
-          <article className="pm-panel">
-            <header>
-              <div>
-                <p className="section-kicker">Market concentration</p>
-                <h2>Where product non-observations are concentrated</h2>
-              </div>
-            </header>
-            <GapMarketTable gaps={distributionGaps} />
-          </article>
-          <article className="pm-panel">
-            <header>
-              <div>
-                <p className="section-kicker">Location review list</p>
-                <h2>
-                  {count(distributionGaps.location_display.total)} planned
-                  locations where the product was not observed
-                </h2>
-              </div>
-            </header>
-            <GapLocationTable gaps={distributionGaps} />
-          </article>
-        </section>
-      ) : null}
-
-      {tab === "store-exceptions" ? (
-        <section className="pm-tab-content pi-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Deterministic review queue</p>
-              <h2>Store price exceptions</h2>
-            </div>
-            <p>
-              Exceptions use the exact-product 1.5×IQR range, with the Product
-              Pack modal-price tolerance when IQR is zero. They identify
-              evidence to review, not prescribed actions.
-            </p>
-          </article>
-          {view.exceptions.length ? (
-            <article className="pm-panel">
-              <div className="pm-location-table-wrap">
-                <table className="pm-location-table">
-                  <thead>
-                    <tr>
-                      <th>Store</th>
-                      <th>Observed price</th>
-                      <th>Median reference</th>
-                      <th>Difference</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {view.exceptions.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          <strong>
-                            {row.store_name ??
-                              (row.store_number
-                                ? `Store ${row.store_number}`
-                                : row.zipcode)}
-                          </strong>
-                          <small>
-                            {[row.city, row.state].filter(Boolean).join(", ")}
-                          </small>
-                        </td>
-                        <td>
-                          <strong>{currency(row.price)}</strong>
-                        </td>
-                        <td>{currency(row.reference_price)}</td>
-                        <td
-                          className={row.difference > 0 ? "pi-up" : "pi-down"}
-                        >
-                          {signedCurrency(row.difference)}
-                        </td>
-                        <td>
-                          <span className={`pi-severity ${row.severity}`}>
-                            {row.severity}
-                          </span>
-                          <small>{row.reason}</small>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-          ) : (
-            <article className="pi-empty-workspace">
-              <span>✓</span>
-              <div>
-                <h2>No IQR price exceptions in the visible footprint</h2>
+          {storeReviewMode === "price" ? (
+            <>
+              <article className="pi-governance-callout pi-iqr-explainer">
+                <strong>What “IQR price review” means</strong>
                 <p>
-                  This does not assert that every price is correct; it means
-                  none meets the current deterministic outlier rule.
+                  IQR is the middle 50% of observed prices: Q3 minus Q1. A store
+                  is flagged when its price is below Q1 − 1.5×IQR or above Q3 +
+                  1.5×IQR. If every middle price is identical, the Product Pack
+                  tolerance around the most common price is used instead. A flag
+                  means “verify this evidence,” not “the price is wrong.”
                 </p>
+              </article>
+              {view.exceptions.length ? (
+                <article className="pm-panel">
+                  <header>
+                    <div>
+                      <p className="section-kicker">Unusual price evidence</p>
+                      <h2>{count(view.exceptions.length)} stores to review</h2>
+                    </div>
+                  </header>
+                  <div className="pm-location-table-wrap">
+                    <table className="pm-location-table">
+                      <thead>
+                        <tr>
+                          <th>Store</th>
+                          <th>Observed price</th>
+                          <th>Median reference</th>
+                          <th>Difference</th>
+                          <th>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {view.exceptions.map((row) => (
+                          <tr key={row.id}>
+                            <td>
+                              <strong>
+                                {row.store_name ??
+                                  (row.store_number
+                                    ? `Store ${row.store_number}`
+                                    : row.zipcode)}
+                              </strong>
+                              <small>
+                                {[row.city, row.state]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </small>
+                            </td>
+                            <td>
+                              <strong>{currency(row.price)}</strong>
+                            </td>
+                            <td>{currency(row.reference_price)}</td>
+                            <td
+                              className={
+                                row.difference > 0 ? "pi-up" : "pi-down"
+                              }
+                            >
+                              {signedCurrency(row.difference)}
+                            </td>
+                            <td>
+                              <span className={`pi-severity ${row.severity}`}>
+                                {row.severity}
+                              </span>
+                              <small>{row.reason}</small>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              ) : (
+                <article className="pi-empty-workspace">
+                  <span>✓</span>
+                  <div>
+                    <h2>No unusual prices under the current review rule</h2>
+                    <p>
+                      This does not assert that every price is correct; it means
+                      none meets the deterministic outlier rule.
+                    </p>
+                  </div>
+                </article>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="pm-metric-grid pi-metric-grid">
+                <article>
+                  <span>Planned locations</span>
+                  <strong>{count(view.presence.eligible_locations)}</strong>
+                  <small>Collection scope denominator</small>
+                </article>
+                <article>
+                  <span>Observed</span>
+                  <strong>{count(view.presence.observed_locations)}</strong>
+                  <small>Product appeared with a positive Search price</small>
+                </article>
+                <article>
+                  <span>Not observed</span>
+                  <strong>{count(view.presence.not_observed_locations)}</strong>
+                  <small>Review signal, not confirmed non-carriage</small>
+                </article>
               </div>
-            </article>
+              <article className="pi-governance-callout">
+                <strong>
+                  Why “not observed” is different from “not carried”
+                </strong>
+                <p>
+                  Keyword Search returns a bounded result set. A carried product
+                  can be omitted from those results, so the app does not convert
+                  an omission into a confirmed distribution gap.
+                </p>
+              </article>
+              <article className="pm-panel">
+                <header>
+                  <div>
+                    <p className="section-kicker">Market concentration</p>
+                    <h2>Where non-observations are concentrated</h2>
+                  </div>
+                  <button
+                    className="button secondary"
+                    onClick={() => setLocationEvidenceMode("not_observed")}
+                    type="button"
+                  >
+                    View all locations
+                  </button>
+                </header>
+                <GapMarketTable gaps={distributionGaps} />
+              </article>
+            </>
           )}
-        </section>
-      ) : null}
-
-      {tab === "market-benchmarks" ? (
-        <section className="pm-tab-content pi-tab-content">
-          <article className="pm-section-intro">
-            <div>
-              <p className="section-kicker">Internal retailer benchmarks</p>
-              <h2>How the same product varies by market</h2>
-            </div>
-            <p>
-              Price is presented neutrally. A lower internal shelf price is not
-              automatically labeled better or worse.
-            </p>
-          </article>
-          <article className="pm-panel">
-            <MarketTable view={view} />
-          </article>
         </section>
       ) : null}
 
@@ -1922,6 +2202,35 @@ export function PriceMonitoringWorkspace({
             </div>
           </article>
         </section>
+      ) : null}
+
+      {locationEvidenceMode ? (
+        <LocationEvidenceDrawer
+          mode={locationEvidenceMode}
+          onClose={() => setLocationEvidenceMode(null)}
+          onOpenLocation={(location) => {
+            setLocationEvidenceMode(null);
+            setOpenLocation(location);
+          }}
+          product={selectedProduct}
+          view={view}
+        />
+      ) : null}
+
+      {geographyDrawerOpen ? (
+        <GeographyDrawer
+          onClose={() => setGeographyDrawerOpen(false)}
+          view={view}
+        />
+      ) : null}
+
+      {mapExpanded ? (
+        <FootprintModal
+          mode={overviewMapMode}
+          onClose={() => setMapExpanded(false)}
+          onModeChange={setOverviewMapMode}
+          view={view}
+        />
       ) : null}
 
       {openLocation ? (

@@ -178,6 +178,9 @@ def test_fixture_results_normalize_to_canonical_retailers(
     assert normalized["retailer_product_id"]
     assert normalized["name"]
     assert normalized["zipcode"] == "00123"
+    assert normalized["price"] is not None
+    assert normalized["is_sponsored"] is False
+    assert normalized["in_stock"] is True
 
 
 def test_request_overrides_cannot_replace_auth_or_location_identity() -> None:

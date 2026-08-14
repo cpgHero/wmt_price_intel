@@ -3880,12 +3880,28 @@ tbody tr:last-child td {
   white-space: normal;
 }
 .pi-tabs {
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--ink) 7%, transparent);
   overflow-x: auto;
+  position: sticky;
   scrollbar-width: thin;
+  top: 64px;
+  z-index: 24;
 }
 .pi-tabs button {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+.pi-panel-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+.pi-panel-actions .button {
+  font-size: 0.58rem;
+  min-height: 34px;
+  padding: 0.45rem 0.65rem;
 }
 .pi-tab-content {
   gap: 1rem;
@@ -4176,6 +4192,141 @@ tbody tr:last-child td {
 .pi-architecture-panel .pi-histogram {
   height: 270px;
 }
+.pi-architecture-layout {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+}
+.pi-architecture-layout .pi-histogram {
+  height: 300px;
+  margin: 0;
+}
+.pi-architecture-metrics {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pi-architecture-metrics > div {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.72rem;
+}
+.pi-architecture-metrics span,
+.pi-architecture-metrics small {
+  color: var(--muted);
+  font-size: 0.52rem;
+}
+.pi-architecture-metrics span {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pi-architecture-metrics strong {
+  font-size: 0.85rem;
+  line-height: 1.25;
+}
+.pi-signal-definitions {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+}
+.pi-signal-definitions > div {
+  display: grid;
+  gap: 0.2rem;
+}
+.pi-signal-definitions strong {
+  font-size: 0.58rem;
+}
+.pi-signal-definitions span {
+  color: var(--muted);
+  font-size: 0.55rem;
+  line-height: 1.45;
+}
+.pi-view-toggle {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  display: flex;
+  padding: 3px;
+}
+.pi-view-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  padding: 0.5rem 0.62rem;
+}
+.pi-view-toggle button[aria-pressed="true"] {
+  background: var(--card);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.pi-geography-heatmap {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.pi-heatmap-header,
+.pi-heatmap-row {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(150px, 1.4fr) 0.65fr 0.9fr 1fr 0.75fr;
+  min-height: 46px;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.pi-heatmap-header {
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.49rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.pi-heatmap-row {
+  background: var(--card);
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.61rem;
+  width: 100%;
+}
+.pi-heatmap-row:hover {
+  background: var(--green-soft);
+}
+.pi-heatmap-row strong,
+.pi-heatmap-row small {
+  display: block;
+}
+.pi-heatmap-row small {
+  color: var(--muted);
+  font-size: 0.49rem;
+  margin-top: 0.1rem;
+}
+.pi-heat-cell {
+  border-radius: 7px;
+  font-weight: 850;
+  padding: 0.45rem 0.55rem;
+}
+.pi-geography-heatmap > p {
+  background: var(--surface-alt);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.55rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+}
 .pi-signal-grid {
   display: grid;
   gap: 0.7rem;
@@ -4281,6 +4432,107 @@ tbody tr:last-child td {
 .pi-governance-callout p {
   display: block;
   margin: 0;
+}
+.pi-iqr-explainer {
+  background: color-mix(in srgb, var(--green-soft) 72%, var(--card));
+  border-color: color-mix(in srgb, var(--green) 24%, var(--line));
+}
+.pi-review-switch {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr 1fr;
+}
+.pi-review-switch button {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: var(--ink);
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.9rem 1rem;
+  text-align: left;
+}
+.pi-review-switch button[aria-pressed="true"] {
+  background: var(--green-soft);
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.pi-review-switch span,
+.pi-review-switch small {
+  color: var(--muted);
+  font-size: 0.55rem;
+}
+.pi-review-switch span {
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pi-review-switch strong {
+  font-size: 1.25rem;
+}
+.pi-evidence-drawer {
+  max-width: 900px;
+  width: min(900px, 96vw);
+}
+.pi-evidence-drawer .pm-drawer-section {
+  overflow: auto;
+}
+.pi-evidence-drawer .pm-location-table-wrap {
+  max-height: none;
+}
+.pi-drawer-note {
+  background: var(--warning-soft);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  margin-bottom: 0.7rem;
+  padding: 0.75rem;
+}
+.pi-map-modal-layer {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.pi-map-modal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 28px 80px rgba(5, 12, 15, 0.32);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 3rem);
+  overflow: hidden;
+  position: relative;
+  width: min(1600px, calc(100vw - 3rem));
+  z-index: 1;
+}
+.pi-map-modal > header {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+}
+.pi-map-modal > header h2 {
+  font-size: 0.95rem;
+  margin: 0.18rem 0 0;
+}
+.pi-map-modal > header button {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 1rem;
+  height: 34px;
+  width: 34px;
+}
+.pi-map-modal > div {
+  border: 0;
+  border-radius: 0;
+  flex: 1;
+  min-height: 0;
 }
 .pi-governance-callout strong {
   font-size: 0.72rem;
@@ -4458,7 +4710,8 @@ tbody tr:last-child td {
 
 @media (max-width: 1100px) {
   .pi-overview-grid,
-  .pi-assessment {
+  .pi-assessment,
+  .pi-architecture-layout {
     grid-template-columns: 1fr;
   }
   .pi-five-stat {
@@ -4477,6 +4730,20 @@ tbody tr:last-child td {
   }
   .pi-loading-grid {
     grid-template-columns: 1fr;
+  }
+  .pi-review-switch,
+  .pi-signal-definitions {
+    grid-template-columns: 1fr;
+  }
+  .pi-heatmap-header,
+  .pi-heatmap-row {
+    grid-template-columns: minmax(130px, 1.4fr) 0.65fr 0.9fr;
+  }
+  .pi-heatmap-header span:nth-child(4),
+  .pi-heatmap-header span:nth-child(5),
+  .pi-heatmap-row > span:nth-child(4),
+  .pi-heatmap-row > span:nth-child(5) {
+    display: none;
   }
 }
 @media (max-width: 560px) {
