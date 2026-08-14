@@ -77,7 +77,8 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
             product_id="100",
             store="1",
             price="6.00",
-            collected_at="2026-08-07T06:00:00Z",
+            # Production historical rows can contain a timezone-naive UTC value.
+            collected_at="2026-08-07T06:00:00",
         ),
         _classified(
             offer_id="second",
@@ -163,6 +164,13 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
         "usable_price_rate": 0.6667,
         "price_consistency_rate": 1.0,
     }
+    assert view["source"]["observed_start"] == "2026-08-07T06:00:00Z"
+    assert view["source"]["observed_end"] == "2026-08-07T06:00:00Z"
+    assert {
+        location["observed_at"]
+        for product in view["products"]
+        for location in product["sample_locations"]
+    } == {"2026-08-07T06:00:00Z"}
     assert view["price_distribution"]["observation_median"] == 6.0
     assert view["price_distribution"]["product_equal_weighted_median"] == 5.0
     assert view["products"][0]["price_stats"]["minimum"] == 6.0

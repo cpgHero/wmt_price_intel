@@ -262,15 +262,29 @@ class ProductLocationPopulation:
 
 
 def _observed_at(value: str | None) -> datetime:
-    if not value:
+    normalized = _normalized_observed_at(value)
+    if normalized is None:
         return datetime.min.replace(tzinfo=UTC)
+    return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+
+
+def _normalized_observed_at(value: str | None) -> str | None:
+    """Return a Search timestamp as an explicit RFC 3339 UTC instant.
+
+    Historical database rows may contain timezone-naive ISO values even though
+    collection timestamps are UTC. Normalize once at the canonical
+    product-location boundary so every downstream contract receives the same
+    unambiguous value.
+    """
+
+    if not value:
+        return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=UTC)
-        return parsed.astimezone(UTC)
     except ValueError:
-        return datetime.min.replace(tzinfo=UTC)
+        return None
+    parsed = parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+    return parsed.isoformat().replace("+00:00", "Z")
 
 
 def _location_from_offer(
@@ -508,7 +522,7 @@ class ProductLocationProjector:
                     float(offer.discounted_price) if offer.discounted_price is not None else None
                 ),
                 is_sponsored=offer.is_sponsored,
-                observed_at=offer.collected_at,
+                observed_at=_normalized_observed_at(offer.collected_at),
                 offer_id=offer.offer_id,
                 metric_values=tuple(
                     sorted(
