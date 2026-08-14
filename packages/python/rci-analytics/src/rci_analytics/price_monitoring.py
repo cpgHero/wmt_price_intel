@@ -411,9 +411,7 @@ class PriceMonitoringProjector:
                 ),
             )[:sample_limit]
             identity = rows[0]
-            observed_product_locations = len(
-                {row["location"].scope_key for row in rows}
-            )
+            observed_product_locations = len({row["location"].scope_key for row in rows})
             eligible_product_locations = max(
                 scoped_expected_location_count,
                 observed_product_locations,
