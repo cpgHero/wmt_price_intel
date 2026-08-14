@@ -65,10 +65,10 @@ const MAPLIBRE_VERSION = "5.24.0";
 const MAPLIBRE_SCRIPT = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.js`;
 const MAPLIBRE_STYLES = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.css`;
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
-// Keep nationwide views legible while exposing individual stores by metro-level
-// zoom. The previous zoom 11 / 42 px settings kept nearby stores clustered until
-// users were effectively at neighborhood scale.
-const EVIDENCE_CLUSTER_MAX_ZOOM = 8;
+// Keep the initial nationwide view legible, then expose individual stores as
+// soon as the reader moves beyond the national overview. The original zoom 11 /
+// 42 px settings kept nearby stores clustered until neighborhood scale.
+const EVIDENCE_CLUSTER_MAX_ZOOM = 4;
 const EVIDENCE_CLUSTER_RADIUS = 26;
 const OBSERVED_SOURCE = "price-observed-locations";
 const GAP_SOURCE = "price-not-observed-locations";

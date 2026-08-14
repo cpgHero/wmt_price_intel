@@ -39,8 +39,8 @@ presented as proof of non-carriage.
 
 - Observed and not-observed points use separate clustered GeoJSON sources, so cluster counts never
   mix the two meanings.
-- Clusters use a compact 26-pixel radius and stop clustering after zoom 8, exposing individual
-  stores at metro-level zoom instead of requiring neighborhood-level zoom.
+- Clusters use a compact 26-pixel radius and stop clustering after zoom 4, exposing individual
+  stores as soon as the reader moves beyond the national overview.
 - Cluster selection zooms into local detail; individual store selection opens exact location and
   price evidence.
 - Observed stores use below/at/above-median color classes and show exact price labels at local zoom.
