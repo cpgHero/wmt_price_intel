@@ -220,8 +220,7 @@ def test_distribution_scope_translates_canonical_product_location_key() -> None:
     certification = certify_competitive_product_leadership(wrong_zip)
     assert not certification.ready
     assert any(
-        "service-area comparison is not exact ZIP" in error
-        for error in certification.errors
+        "service-area comparison is not exact ZIP" in error for error in certification.errors
     )
 
 

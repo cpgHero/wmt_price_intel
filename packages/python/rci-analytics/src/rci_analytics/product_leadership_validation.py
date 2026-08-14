@@ -88,9 +88,7 @@ def certify_competitive_product_leadership(
     filters = dict(document.get("filters") or {})
     relationships = _rows(document.get("relationships"))
     relationship_index = {
-        str(row.get("relationship_id")): row
-        for row in relationships
-        if row.get("relationship_id")
+        str(row.get("relationship_id")): row for row in relationships if row.get("relationship_id")
     }
     parity = float(policy.get("parity_tolerance") or 0)
     at_risk = float(policy.get("at_risk_threshold") or 0)
@@ -301,9 +299,7 @@ def certify_competitive_product_leadership(
             f"{len(unresolved)} selected retailer product(s) have unclassified brand type"
         )
     missing_images = [
-        identity
-        for identity in product_identities.values()
-        if not identity.get("image_url")
+        identity for identity in product_identities.values() if not identity.get("image_url")
     ]
     if missing_images:
         warnings.append(f"{len(missing_images)} selected retailer product(s) lack imagery")
