@@ -29,6 +29,10 @@ The Product Leadership report tab now contains:
 Each view has purpose-specific metrics. The same generic KPI strip is not repeated across every
 page, and every denominator is disclosed in nearby copy.
 
+Store Comparisons and Competitive Exceptions render 50 evidence rows per page while calculating
+filters, totals, and KPIs over the complete response. This keeps large national studies responsive
+without sampling or changing the deterministic result.
+
 ## Shared context and drill-down
 
 Competitive View, Comparison Basis, Benchmark Product, Store Radius, Benchmark Geography, and

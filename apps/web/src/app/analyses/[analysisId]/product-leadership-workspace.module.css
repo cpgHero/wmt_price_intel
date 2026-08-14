@@ -416,6 +416,37 @@
   padding: 0.28rem 0.42rem;
   white-space: nowrap;
 }
+.pagination {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+}
+.pagination span {
+  color: var(--muted);
+  font-size: 0.54rem;
+  margin-right: auto;
+}
+.pagination strong {
+  font-size: 0.54rem;
+}
+.pagination button {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.54rem;
+  font-weight: 750;
+  padding: 0.38rem 0.55rem;
+}
+.pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 .productCell {
   align-items: center;
   display: flex;

@@ -386,6 +386,46 @@ function KpiCard({
   );
 }
 
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onChange,
+}: Readonly<{
+  page: number;
+  pageSize: number;
+  total: number;
+  onChange: (page: number) => void;
+}>) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total ? page * pageSize + 1 : 0;
+  const end = Math.min(total, (page + 1) * pageSize);
+  return (
+    <div className={styles.pagination} aria-label="Table pagination">
+      <span>
+        Showing {count(start)}–{count(end)} of {count(total)}
+      </span>
+      <button
+        disabled={page === 0}
+        onClick={() => onChange(Math.max(0, page - 1))}
+        type="button"
+      >
+        Previous
+      </button>
+      <strong>
+        Page {count(page + 1)} of {count(pages)}
+      </strong>
+      <button
+        disabled={page >= pages - 1}
+        onClick={() => onChange(Math.min(pages - 1, page + 1))}
+        type="button"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
 function OverviewKpis({ summary }: Readonly<{ summary: Summary }>) {
   return (
     <div className={styles.kpiStrip}>
@@ -983,10 +1023,13 @@ function CompetitiveExceptions({
   view,
 }: Readonly<{ view: CompetitiveProductLeadership }>) {
   const [type, setType] = useState<"all" | "high" | "medium" | "review">("all");
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
   const exceptions = leadershipExceptions(view.outcomes);
   const rows = exceptions.filter(
     (row) => type === "all" || row.priority === type,
   );
+  const visibleRows = rows.slice(page * pageSize, (page + 1) * pageSize);
   const high = exceptions.filter((row) => row.priority === "high").length;
   const medium = exceptions.filter((row) => row.priority === "medium").length;
   const review = exceptions.filter((row) => row.priority === "review").length;
@@ -1049,7 +1092,10 @@ function CompetitiveExceptions({
               <button
                 className={type === value ? styles.active : ""}
                 key={value}
-                onClick={() => setType(value)}
+                onClick={() => {
+                  setType(value);
+                  setPage(0);
+                }}
                 type="button"
               >
                 {value === "all" ? "All exceptions" : value}
@@ -1058,7 +1104,7 @@ function CompetitiveExceptions({
           </div>
         </header>
         <div className={styles.exceptionList}>
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <article key={row.id}>
               <span className={`${styles.priority} ${styles[row.priority]}`}>
                 {row.priority}
@@ -1091,6 +1137,12 @@ function CompetitiveExceptions({
             </article>
           ))}
         </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={rows.length}
+          onChange={setPage}
+        />
       </section>
     </>
   );
@@ -1138,9 +1190,12 @@ function StoreComparisons({
   view,
 }: Readonly<{ view: CompetitiveProductLeadership }>) {
   const [status, setStatus] = useState<"all" | Outcome["status"]>("all");
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
   const rows = view.outcomes.filter(
     (row) => status === "all" || row.status === status,
   );
+  const visibleRows = rows.slice(page * pageSize, (page + 1) * pageSize);
   const losingRows = view.outcomes.filter((row) => row.status === "losing");
   const averageReduction = losingRows.length
     ? losingRows.reduce(
@@ -1221,7 +1276,10 @@ function StoreComparisons({
               <button
                 className={status === value ? styles.active : ""}
                 key={value}
-                onClick={() => setStatus(value)}
+                onClick={() => {
+                  setStatus(value);
+                  setPage(0);
+                }}
                 type="button"
               >
                 {value === "all" ? "All stores" : statusLabel(value)}
@@ -1244,7 +1302,7 @@ function StoreComparisons({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {visibleRows.map((row) => (
                 <tr key={row.id}>
                   <td>
                     <span
@@ -1306,6 +1364,12 @@ function StoreComparisons({
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={rows.length}
+          onChange={setPage}
+        />
       </section>
     </>
   );

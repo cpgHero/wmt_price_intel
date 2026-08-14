@@ -18,8 +18,10 @@
   border-right: 1px solid var(--line);
   color: var(--ink);
   display: flex;
+  flex: 1 1 0;
   gap: 0.55rem;
   min-width: 0;
+  overflow: hidden;
   padding: 0 0.7rem;
   text-align: left;
 }
@@ -86,6 +88,8 @@
   font-weight: 800;
   letter-spacing: 0.075em;
   line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -103,6 +107,7 @@
 .chevron {
   color: var(--muted);
   display: flex;
+  flex: 0 0 13px;
   margin-left: 0.15rem;
 }
 
