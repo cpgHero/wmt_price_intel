@@ -174,6 +174,21 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     assert view["price_distribution"]["observation_median"] == 6.0
     assert view["price_distribution"]["product_equal_weighted_median"] == 5.0
     assert view["products"][0]["price_stats"]["minimum"] == 6.0
+    assert view["products"][0]["presence"] == {
+        "observed_locations": 2,
+        "eligible_locations": 2,
+        "not_observed_locations": 0,
+        "observed_rate": 1.0,
+        "not_observed_rate": 0.0,
+        "definition": (
+            "Observed means the exact product appeared in successful Search with a positive "
+            "price. Not observed is a Search non-observation within the retailer's eligible "
+            "location scope, not proof of non-carriage."
+        ),
+    }
+    assert view["products"][1]["presence"]["observed_locations"] == 1
+    assert view["products"][1]["presence"]["not_observed_locations"] == 1
+    assert view["products"][1]["presence"]["observed_rate"] == 0.5
     assert view["presence"] == {
         "status": "observed_only",
         "observed_locations": 2,

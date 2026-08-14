@@ -36,6 +36,14 @@ Legacy deep links migrate deterministically: `footprint` → `overview`, `distri
 ## Interaction and presentation
 
 - The workspace tab rail remains visible below the 64-pixel application top bar while scrolling.
+- Home is a full-width, one-row-per-product operating index rather than a card gallery. Each row
+  reconciles the exact product's modal and median price, observed range, consistency, observed and
+  not-observed location shares, Search sponsorship, and positive-price in-stock evidence.
+- Home row metrics link to the relevant governed evidence surface: observed and not-observed counts
+  open their location drawers, price and sponsorship open Price Architecture, and row actions open
+  the full product workspace or Store Review.
+- Opening Home clears the exact-product filter so the index always contains the complete product
+  population for the selected retailer and geography.
 - Product Overview uses individual location points rather than clusters.
 - The map can expand to a near-full-screen dialog and preserves the observed/not-observed mode.
 - The location drawer follows the active map mode and provides exact store evidence or planned
@@ -64,3 +72,5 @@ enabled retailer before the snapshot is published.
 - In-stock and Sponsorship definitions match deterministic Search rules.
 - Store Review explains IQR in plain language and preserves exact evidence.
 - Product and geography URL context remains aligned across all workspaces and drawers.
+- Home renders one full-width row per product from the same `products` projection consumed by the
+  product workspaces; no metric is recomputed by the renderer.

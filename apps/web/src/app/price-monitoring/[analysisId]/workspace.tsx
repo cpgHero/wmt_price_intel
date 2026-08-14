@@ -1336,41 +1336,200 @@ function FootprintModal({
   );
 }
 
-function ProductCatalog({ view }: Readonly<{ view: PriceMonitoringView }>) {
+function ProductCatalog({
+  view,
+  onOpenProduct,
+}: Readonly<{
+  view: PriceMonitoringView;
+  onOpenProduct: (
+    productId: string,
+    tab: TabId,
+    evidenceMode?: MapMode,
+  ) => void;
+}>) {
   return (
     <section className="pi-product-catalog">
       <header>
         <div>
           <p className="section-kicker">Single-retailer product intelligence</p>
-          <h2>Select a product to open its workspace</h2>
+          <h2>Product price and distribution index</h2>
         </div>
         <p>
-          Products are ranked by the number of locations where they appeared in
-          governed Search evidence.
+          One row per exact retailer product, ranked by observed locations.
+          Price and location metrics come from governed Search evidence.
         </p>
       </header>
-      <div>
-        {view.filter_options.products.map((product) => (
-          <button
-            key={product.value}
-            onClick={() =>
-              updateQuery({ product_id: product.value, tab: "overview" })
-            }
-            type="button"
-          >
-            {product.image_url ? (
-              <img src={product.image_url} alt="" />
-            ) : (
-              <span aria-hidden="true">P</span>
-            )}
-            <div>
-              <small>{brandLabels[product.brand_type]}</small>
-              <strong>{product.label}</strong>
-              <p>{product.brand ?? "Brand unresolved"}</p>
-            </div>
-            <b>{count(product.count)} locations →</b>
-          </button>
-        ))}
+      <div
+        className="pi-product-table"
+        role="table"
+        aria-label="Retailer products"
+      >
+        <div className="pi-product-table-head" role="row">
+          <span role="columnheader">Product</span>
+          <span role="columnheader">Price</span>
+          <span role="columnheader">Price range</span>
+          <span role="columnheader">Location footprint</span>
+          <span role="columnheader">Sponsored</span>
+          <span role="columnheader">In stock</span>
+          <span role="columnheader">Workspace</span>
+        </div>
+        <div className="pi-product-table-body" role="rowgroup">
+          {view.products.map((product) => {
+            const stats = product.price_stats;
+            const typicalPrice = stats.modal_price ?? stats.observation_median;
+            const observedRate = product.presence.observed_rate;
+            const notObservedRate = product.presence.not_observed_rate;
+            return (
+              <article
+                className="pi-product-row"
+                key={product.product_id}
+                role="row"
+              >
+                <div className="pi-product-identity" role="cell">
+                  {product.image_url ? (
+                    <img loading="lazy" src={product.image_url} alt="" />
+                  ) : (
+                    <span aria-hidden="true">P</span>
+                  )}
+                  <div>
+                    <small>{brandLabels[product.brand_type]}</small>
+                    <button
+                      onClick={() =>
+                        onOpenProduct(product.product_id, "overview")
+                      }
+                      type="button"
+                    >
+                      {product.name}
+                    </button>
+                    <p>
+                      {product.brand ?? "Brand unresolved"} · ID{" "}
+                      {product.product_id}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  aria-label={`Open price architecture for ${product.name}`}
+                  className="pi-product-metric pi-product-metric-link"
+                  onClick={() =>
+                    onOpenProduct(product.product_id, "price-architecture")
+                  }
+                  role="cell"
+                  type="button"
+                >
+                  <small>Typical price</small>
+                  <strong>{currency(typicalPrice)}</strong>
+                  <span>Median {currency(stats.observation_median)}</span>
+                </button>
+                <button
+                  aria-label={`Open price range for ${product.name}`}
+                  className="pi-product-metric pi-product-metric-link"
+                  onClick={() =>
+                    onOpenProduct(product.product_id, "price-architecture")
+                  }
+                  role="cell"
+                  type="button"
+                >
+                  <small>Observed range</small>
+                  <strong>
+                    {currency(stats.minimum)}–{currency(stats.maximum)}
+                  </strong>
+                  <span>{percent(product.consistency_rate)} consistent</span>
+                </button>
+                <div className="pi-product-footprint" role="cell">
+                  <small>Eligible location footprint</small>
+                  <div>
+                    <button
+                      onClick={() =>
+                        onOpenProduct(
+                          product.product_id,
+                          "overview",
+                          "observed",
+                        )
+                      }
+                      type="button"
+                    >
+                      <strong>
+                        {count(product.presence.observed_locations)}
+                      </strong>{" "}
+                      observed
+                    </button>
+                    <span>{percent(observedRate)}</span>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() =>
+                        onOpenProduct(
+                          product.product_id,
+                          "overview",
+                          "not_observed",
+                        )
+                      }
+                      type="button"
+                    >
+                      <strong>
+                        {count(product.presence.not_observed_locations)}
+                      </strong>{" "}
+                      not observed
+                    </button>
+                    <span>{percent(notObservedRate)}</span>
+                  </div>
+                  <i aria-hidden="true">
+                    <span style={{ width: `${(observedRate ?? 0) * 100}%` }} />
+                  </i>
+                </div>
+                <button
+                  aria-label={`Open sponsorship evidence for ${product.name}`}
+                  className="pi-product-metric pi-product-metric-link"
+                  onClick={() =>
+                    onOpenProduct(product.product_id, "price-architecture")
+                  }
+                  role="cell"
+                  type="button"
+                >
+                  <small>Search is_sponsored</small>
+                  <strong>{percent(product.sponsorship.rate)}</strong>
+                  <span>
+                    {count(product.sponsorship.known_observations)} classified
+                  </span>
+                </button>
+                <button
+                  aria-label={`Open in-stock evidence for ${product.name}`}
+                  className="pi-product-metric pi-product-metric-link"
+                  onClick={() =>
+                    onOpenProduct(product.product_id, "overview", "observed")
+                  }
+                  role="cell"
+                  type="button"
+                >
+                  <small>Positive-price Search</small>
+                  <strong>{percent(product.availability.rate)}</strong>
+                  <span>
+                    {count(product.availability.in_stock_observations ?? 0)}{" "}
+                    stores
+                  </span>
+                </button>
+                <div className="pi-product-actions" role="cell">
+                  <button
+                    onClick={() =>
+                      onOpenProduct(product.product_id, "overview")
+                    }
+                    type="button"
+                  >
+                    Open report
+                  </button>
+                  <button
+                    onClick={() =>
+                      onOpenProduct(product.product_id, "store-review")
+                    }
+                    type="button"
+                  >
+                    Store review
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -1395,6 +1554,10 @@ export function PriceMonitoringWorkspace({
   const [storeReviewMode, setStoreReviewMode] =
     useState<StoreReviewMode>("price");
   const viewCache = useRef(new Map<string, PriceMonitoringView>());
+  const pendingEvidence = useRef<{
+    productId: string;
+    mode: MapMode;
+  } | null>(null);
 
   useEffect(() => {
     function loadView() {
@@ -1473,6 +1636,33 @@ export function PriceMonitoringWorkspace({
       window.removeEventListener("popstate", listener);
     };
   }, [initialView]);
+
+  useEffect(() => {
+    const pending = pendingEvidence.current;
+    if (
+      pending === null ||
+      loading ||
+      error !== null ||
+      view.filters.product_id !== pending.productId
+    ) {
+      return;
+    }
+    setOverviewMapMode(pending.mode);
+    setLocationEvidenceMode(pending.mode);
+    pendingEvidence.current = null;
+  }, [error, loading, view.filters.product_id]);
+
+  function openCatalogProduct(
+    productId: string,
+    nextTab: TabId,
+    evidenceMode?: MapMode,
+  ) {
+    pendingEvidence.current = evidenceMode
+      ? { productId, mode: evidenceMode }
+      : null;
+    setLocationEvidenceMode(null);
+    updateQuery({ product_id: productId, tab: nextTab });
+  }
 
   const contextDefinition = useMemo<ApplicationContextDefinition>(
     () => ({
@@ -1628,7 +1818,7 @@ export function PriceMonitoringWorkspace({
             {loading ? "Refreshing evidence…" : error}
           </p>
         ) : null}
-        <ProductCatalog view={view} />
+        <ProductCatalog onOpenProduct={openCatalogProduct} view={view} />
       </>
     );
   }
@@ -1705,7 +1895,11 @@ export function PriceMonitoringWorkspace({
             aria-current={tab === item.id ? "page" : undefined}
             key={item.id}
             onClick={() => {
-              updateTab(item.id);
+              if (item.id === "home") {
+                updateQuery({ product_id: null, tab: "home" });
+              } else {
+                updateTab(item.id);
+              }
               setTab(item.id);
             }}
             type="button"
@@ -1720,7 +1914,9 @@ export function PriceMonitoringWorkspace({
         </p>
       ) : null}
 
-      {tab === "home" ? <ProductCatalog view={view} /> : null}
+      {tab === "home" ? (
+        <ProductCatalog onOpenProduct={openCatalogProduct} view={view} />
+      ) : null}
 
       {tab === "overview" ? (
         <section className="pm-tab-content pi-tab-content">

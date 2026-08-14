@@ -231,8 +231,17 @@ export interface ProductSummary {
   availability: EvidenceRate;
   promotion: EvidenceRate;
   sponsorship: EvidenceRate;
+  presence: ProductPresence;
   price_histogram: PriceBin[];
   sample_locations: ProductLocation[];
+}
+export interface ProductPresence {
+  observed_locations: number;
+  eligible_locations: number;
+  not_observed_locations: number;
+  observed_rate: number | null;
+  not_observed_rate: number | null;
+  definition: string;
 }
 export interface ProductLocation {
   scope_key: string;

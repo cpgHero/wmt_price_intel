@@ -334,6 +334,19 @@ class PriceMonitoringProjector:
             and (filters.zipcode is None or row["location"].zipcode == filters.zipcode)
             and (filters.product_id is None or row["product_id"] == filters.product_id)
         ]
+        scoped_eligible_locations = [
+            source_locations[key]
+            for key in eligible_scope_keys
+            if key in source_locations
+            and (filters.state is None or source_locations[key].state == filters.state)
+            and (filters.city is None or source_locations[key].city == filters.city)
+            and (filters.zipcode is None or source_locations[key].zipcode == filters.zipcode)
+        ]
+        scoped_expected_location_count = (
+            len(scoped_eligible_locations)
+            if filters.state is not None or filters.city is not None or filters.zipcode is not None
+            else expected_location_count or len(scoped_eligible_locations)
+        )
 
         product_groups: dict[str, list[JsonObject]] = defaultdict(list)
         location_groups: dict[str, list[JsonObject]] = defaultdict(list)
@@ -398,6 +411,17 @@ class PriceMonitoringProjector:
                 ),
             )[:sample_limit]
             identity = rows[0]
+            observed_product_locations = len(
+                {row["location"].scope_key for row in rows}
+            )
+            eligible_product_locations = max(
+                scoped_expected_location_count,
+                observed_product_locations,
+            )
+            not_observed_product_locations = max(
+                0,
+                eligible_product_locations - observed_product_locations,
+            )
             product_summaries.append(
                 {
                     "product_id": product_id,
@@ -408,7 +432,7 @@ class PriceMonitoringProjector:
                     "brand_status": identity["brand_status"],
                     "image_url": identity["image_url"],
                     "url": identity["url"],
-                    "locations": len({row["location"].scope_key for row in rows}),
+                    "locations": observed_product_locations,
                     "states": len({row["location"].state for row in rows if row["location"].state}),
                     "cities": len(
                         {
@@ -422,6 +446,27 @@ class PriceMonitoringProjector:
                     "availability": self._availability_summary(rows),
                     "promotion": self._promotion_summary(rows),
                     "sponsorship": self._sponsorship_summary(rows),
+                    "presence": {
+                        "observed_locations": observed_product_locations,
+                        "eligible_locations": eligible_product_locations,
+                        "not_observed_locations": not_observed_product_locations,
+                        "observed_rate": (
+                            _round(observed_product_locations / eligible_product_locations)
+                            if eligible_product_locations
+                            else None
+                        ),
+                        "not_observed_rate": (
+                            _round(not_observed_product_locations / eligible_product_locations)
+                            if eligible_product_locations
+                            else None
+                        ),
+                        "definition": (
+                            "Observed means the exact product appeared in successful Search "
+                            "with a positive price. Not observed is a Search non-observation "
+                            "within the retailer's eligible location scope, not proof of "
+                            "non-carriage."
+                        ),
+                    },
                     "price_histogram": _price_histogram(prices),
                     "sample_locations": [
                         {
@@ -543,19 +588,6 @@ class PriceMonitoringProjector:
         quality_status = "warning" if any(row["count"] for row in quality_checks) else "ready"
         observed_location_keys = set(location_groups)
         observed_locations = len(observed_location_keys)
-        scoped_eligible_locations = [
-            source_locations[key]
-            for key in eligible_scope_keys
-            if key in source_locations
-            and (filters.state is None or source_locations[key].state == filters.state)
-            and (filters.city is None or source_locations[key].city == filters.city)
-            and (filters.zipcode is None or source_locations[key].zipcode == filters.zipcode)
-        ]
-        scoped_expected_location_count = (
-            len(scoped_eligible_locations)
-            if filters.state is not None or filters.city is not None or filters.zipcode is not None
-            else expected_location_count or len(scoped_eligible_locations)
-        )
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]
         presence_rate = (
             _round(observed_locations / scoped_expected_location_count)
