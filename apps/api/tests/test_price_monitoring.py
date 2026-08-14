@@ -8,7 +8,7 @@ from types import MethodType, SimpleNamespace
 import polars as pl
 from httpx import ASGITransport, AsyncClient
 
-from rci_analytics import PriceMonitoringFilters
+from rci_analytics import PriceMonitoringFilters, ProductPackLoader
 from rci_api.main import create_app
 from rci_api.price_monitoring import (
     ClassifiedArtifact,
@@ -73,7 +73,10 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
         async def get(self, analysis_id: str) -> object:
             assert analysis_id == "analysis-1"
             return SimpleNamespace(
+                analysis_id="analysis-1",
                 collection_run_id="run-1",
+                product_pack_id="fresh_ground_beef",
+                product_pack_version="1.0.0",
                 result={
                     "benchmark_retailer": "walmart_us",
                     "competitors": ["aldi_us"],
@@ -126,9 +129,21 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
             assert retailer_id == "aldi_us"
             assert product_ids == ["a-1", "a-2"]
             return {
-                "aldi_us:a-1": {"name": "ALDI Product One"},
+                "aldi_us:a-1": {
+                    "name": "ALDI Product One",
+                    "brand": "ALDI",
+                    "image_url": "https://example.com/aldi-one.jpg",
+                },
                 "aldi_us:a-2": {"name": "ALDI Product Two"},
             }
+
+        async def brand_overrides(self, **_kwargs: object) -> list[object]:
+            return []
+
+    class PackLoader:
+        async def load(self, product_pack_id: str, version: str) -> object:
+            assert (product_pack_id, version) == ("fresh_ground_beef", "1.0.0")
+            return ProductPackLoader(Path(__file__).resolve().parents[3]).load(product_pack_id)
 
     class Reader:
         def __init__(self) -> None:
@@ -170,7 +185,7 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
         repository_root=Path(__file__).resolve().parents[3],
         analysis_service=Analyses(),  # type: ignore[arg-type]
         repository=Repository(),  # type: ignore[arg-type]
-        product_pack_loader=object(),  # type: ignore[arg-type]
+        product_pack_loader=PackLoader(),  # type: ignore[arg-type]
         reader=reader,  # type: ignore[arg-type]
     )
     first = await service.product_observations_for_products(
@@ -192,6 +207,8 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
     }
     assert first == second
     assert first["a-1"][0].product_name == "ALDI Product One"
+    assert first["a-1"][0].brand == "ALDI"
+    assert first["a-1"][0].image_url == "https://example.com/aldi-one.jpg"
     assert reader.calls == 1
 
 

@@ -8,7 +8,7 @@ export type GeographySummary = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -119,7 +119,12 @@ export interface Location {
   retailer_name: string;
   product_id: string;
   product_name: string;
+  brand: string | null;
+  brand_type: "private_label" | "regional" | "national" | "unclassified";
+  brand_origin: "user" | "retailer_pack" | "search" | "pdp" | "unresolved";
+  brand_status: string;
   image_url: string | null;
+  product_url: string | null;
   scope_key: string;
   location_kind: "store" | "service_area";
   store_number: string | null;
@@ -131,6 +136,11 @@ export interface Location {
   latitude: number | null;
   longitude: number | null;
   package_price: number;
+  regular_price: number | null;
+  discounted_price: number | null;
+  is_sponsored: boolean | null;
+  in_stock: boolean;
+  offer_id: string | null;
   comparison_value: number;
   observed_at: string | null;
 }

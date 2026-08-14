@@ -53,6 +53,8 @@
         "observed_end",
         "source_rows",
         "classified_rows",
+        "observation_schema_version",
+        "observation_population_checksum",
         "artifact_checksums"
       ],
       "properties": {
@@ -63,6 +65,11 @@
         "observed_end": { "type": ["string", "null"], "format": "date-time" },
         "source_rows": { "type": "integer", "minimum": 0 },
         "classified_rows": { "type": "integer", "minimum": 0 },
+        "observation_schema_version": { "const": "1.1.0" },
+        "observation_population_checksum": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "artifact_checksums": {
           "type": "array",
           "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" },

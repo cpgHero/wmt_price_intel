@@ -5,7 +5,6 @@ from rci_analytics.classification import OfferClassifier
 from rci_analytics.competitive_leadership import (
     CompetitiveProductLeadershipProjector,
     ProductLeadershipRelationship,
-    ProductPriceObservation,
 )
 from rci_analytics.historical import (
     HistoricalImportService,
@@ -43,10 +42,17 @@ from rci_analytics.presentation import (
     merge_product_evidence_summary,
 )
 from rci_analytics.price_monitoring import (
-    PriceLocation,
     PriceMonitoringFilters,
     PriceMonitoringProjector,
     classified_offer_from_record,
+)
+from rci_analytics.product_location import (
+    PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
+    PriceLocation,
+    ProductLocationObservation,
+    ProductLocationPopulation,
+    ProductLocationProjector,
+    ProductPriceObservation,
 )
 from rci_analytics.product_pack import (
     CatalogProductPackLoader,
@@ -56,6 +62,7 @@ from rci_analytics.product_pack import (
 from rci_analytics.result_v2 import AnalysisResultV2Builder, ComparisonFact, evidence_set
 
 __all__ = [
+    "PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION",
     "AnalysisResultV2Builder",
     "AssortmentAccumulator",
     "CanonicalOfferNormalizer",
@@ -79,6 +86,9 @@ __all__ = [
     "PriceMonitoringFilters",
     "PriceMonitoringProjector",
     "ProductLeadershipRelationship",
+    "ProductLocationObservation",
+    "ProductLocationPopulation",
+    "ProductLocationProjector",
     "ProductMatchRule",
     "ProductPackLoader",
     "ProductPriceObservation",

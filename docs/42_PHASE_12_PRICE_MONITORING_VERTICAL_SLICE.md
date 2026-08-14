@@ -147,5 +147,10 @@ Implemented in the initial vertical slice:
 Intentionally deferred until a second complete comparable snapshot is certified:
 
 - longitudinal price movement, additions/removals, availability transitions, and historical trends;
-- promotion-state analysis where the source provides reliable promotion semantics; and
-- reuse of the PriceObservation read model inside Competitive Intelligence.
+- promotion-state analysis where the source provides reliable promotion semantics.
+
+Completed in Phase 12.8:
+
+- Price Monitoring and Competitive Product Leadership now derive from one canonical, versioned
+  product-location observation population. See
+  `48_PHASE_12_8_SHARED_PRODUCT_LOCATION_INTELLIGENCE_FOUNDATION.md`.

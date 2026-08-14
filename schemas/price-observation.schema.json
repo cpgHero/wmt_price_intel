@@ -9,24 +9,40 @@
     "observation_id",
     "analysis_id",
     "product_pack_id",
+    "product_pack_version",
     "retailer_id",
+    "retailer_name",
     "retailer_product_id",
     "product_name",
+    "brand",
     "brand_type",
     "brand_origin",
+    "brand_status",
+    "image_url",
+    "product_url",
+    "identity_authority",
     "location",
     "price",
+    "regular_price",
+    "discounted_price",
     "currency",
+    "in_stock",
+    "is_sponsored",
+    "price_metrics",
     "observed_at",
     "source_authority",
-    "eligible"
+    "location_authority",
+    "eligible",
+    "exclusion_reasons"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "observation_id": { "type": "string", "minLength": 1 },
     "analysis_id": { "type": "string", "minLength": 1 },
     "product_pack_id": { "type": "string", "minLength": 1 },
+    "product_pack_version": { "type": "string", "minLength": 1 },
     "retailer_id": { "type": "string", "minLength": 1 },
+    "retailer_name": { "type": "string", "minLength": 1 },
     "retailer_product_id": { "type": "string", "minLength": 1 },
     "product_name": { "type": "string", "minLength": 1 },
     "brand": { "type": ["string", "null"] },
@@ -34,12 +50,27 @@
       "enum": ["private_label", "regional", "national", "unclassified"]
     },
     "brand_origin": {
-      "enum": ["user", "product_pack", "retailer_pack", "search", "pdp", "unresolved"]
+      "enum": ["user", "retailer_pack", "search", "pdp", "unresolved"]
     },
+    "brand_status": { "type": "string", "minLength": 1 },
+    "image_url": { "type": ["string", "null"] },
+    "product_url": { "type": ["string", "null"] },
+    "identity_authority": { "enum": ["search", "pdp"] },
     "location": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scope_key", "kind", "zipcode", "country"],
+      "required": [
+        "scope_key",
+        "kind",
+        "store_number",
+        "store_name",
+        "zipcode",
+        "city",
+        "state",
+        "country",
+        "latitude",
+        "longitude"
+      ],
       "properties": {
         "scope_key": { "type": "string", "minLength": 1 },
         "kind": { "enum": ["store", "service_area"] },
@@ -53,16 +84,25 @@
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 }
       }
     },
-    "price": { "type": ["number", "null"], "minimum": 0 },
+    "price": { "type": "number", "exclusiveMinimum": 0 },
+    "regular_price": { "type": ["number", "null"], "minimum": 0 },
+    "discounted_price": { "type": ["number", "null"], "minimum": 0 },
     "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "in_stock": { "type": ["boolean", "null"] },
+    "in_stock": { "const": true },
+    "is_sponsored": { "type": ["boolean", "null"] },
+    "price_metrics": {
+      "type": "object",
+      "additionalProperties": { "type": ["number", "null"], "minimum": 0 }
+    },
     "observed_at": { "type": ["string", "null"], "format": "date-time" },
     "source_authority": { "const": "search_location_observation" },
-    "eligible": { "type": "boolean" },
+    "location_authority": { "const": "retailer_location_master" },
+    "eligible": { "const": true },
     "exclusion_reasons": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
+      "uniqueItems": true,
+      "maxItems": 0
     }
   }
 }

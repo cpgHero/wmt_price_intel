@@ -7,30 +7,21 @@ import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from decimal import Decimal
 from statistics import median
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
+from rci_analytics.product_location import (
+    PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
+    BrandType,
+    PriceLocation,
+    ProductLocationPopulation,
+    ProductLocationProjector,
+    ProductPriceObservation,
+)
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
-
-BrandType = Literal["private_label", "regional", "national", "unclassified"]
-
-
-@dataclass(frozen=True, slots=True)
-class PriceLocation:
-    scope_key: str
-    kind: Literal["store", "service_area"]
-    store_number: str | None
-    store_name: str | None
-    zipcode: str | None
-    city: str | None
-    state: str | None
-    country: str
-    latitude: float | None
-    longitude: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,49 +112,6 @@ def _price_histogram(values: Iterable[float], *, maximum_bins: int = 8) -> list[
         }
         for index, count in enumerate(counts)
     ]
-
-
-def _location_from_offer(
-    offer: ClassifiedOffer,
-    location_index: dict[tuple[str, str], JsonObject],
-) -> PriceLocation:
-    value = offer.offer
-    kind: Literal["store", "service_area"] = (
-        "store" if value.store_number is not None else "service_area"
-    )
-    lookup = (
-        location_index.get((value.retailer_id, value.store_number))
-        if value.store_number is not None
-        else location_index.get((value.retailer_id, f"zip:{value.zipcode}"))
-        if value.zipcode is not None
-        else None
-    ) or {}
-    scope_value = value.store_number or value.zipcode or "unknown"
-    return PriceLocation(
-        scope_key=f"{value.retailer_id}|{kind}|{scope_value}",
-        kind=kind,
-        store_number=value.store_number,
-        store_name=(str(lookup["store_name"]) if lookup.get("store_name") else None),
-        zipcode=(str(lookup["zipcode"]) if lookup.get("zipcode") else value.zipcode),
-        city=str(lookup["city"]) if lookup.get("city") else None,
-        state=str(lookup["state"]) if lookup.get("state") else None,
-        country=str(lookup.get("country") or "USA"),
-        latitude=(
-            float(lookup["latitude"]) if lookup.get("latitude") is not None else value.latitude
-        ),
-        longitude=(
-            float(lookup["longitude"]) if lookup.get("longitude") is not None else value.longitude
-        ),
-    )
-
-
-def _observed_at(value: str | None) -> datetime:
-    if not value:
-        return datetime.min.replace(tzinfo=UTC)
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return datetime.min.replace(tzinfo=UTC)
 
 
 def classified_offer_from_record(record: JsonObject) -> ClassifiedOffer:
@@ -260,8 +208,56 @@ class PriceMonitoringProjector:
         self._pack = pack
         self._brands = brand_resolver
         self._retailer_names = dict(retailer_names or {})
+        self._population = ProductLocationProjector(
+            pack,
+            brand_resolver,
+            retailer_names=self._retailer_names,
+        )
         self._parity_tolerance = Decimal(
             str(pack.document.get("qa_rules", {}).get("parity_tolerance_dollars", 0.01))
+        )
+
+    def canonical_population(
+        self,
+        offers: Iterable[ClassifiedOffer],
+        *,
+        retailer_id: str,
+        location_index: dict[tuple[str, str], JsonObject] | None = None,
+        eligible_location_index: dict[tuple[str, str], JsonObject] | None = None,
+        product_context: dict[str, JsonObject] | None = None,
+        retailer_options: Iterable[str] = (),
+    ) -> ProductLocationPopulation:
+        """Project the governed product-location population shared by every module."""
+
+        return self._population.build(
+            offers,
+            retailer_id=retailer_id,
+            location_index=location_index or {},
+            eligible_location_index=eligible_location_index or location_index or {},
+            product_context=product_context or {},
+            retailer_options=retailer_options,
+        )
+
+    def comparison_observations(
+        self,
+        offers: Iterable[ClassifiedOffer],
+        *,
+        retailer_id: str,
+        product_ids: set[str],
+        comparison_metric: str,
+        location_index: dict[tuple[str, str], JsonObject] | None = None,
+        product_context: dict[str, JsonObject] | None = None,
+    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
+        """Return comparison-ready rows derived from the canonical population."""
+
+        return self.canonical_population(
+            offers,
+            retailer_id=retailer_id,
+            location_index=location_index,
+            product_context=product_context,
+        ).comparison_observations(
+            product_ids=product_ids,
+            comparison_metric=comparison_metric,
         )
 
     def build(
@@ -281,157 +277,24 @@ class PriceMonitoringProjector:
         location_limit: int | None = 1_200,
         product_location_limit: int | None = 200,
     ) -> JsonObject:
-        location_lookup = location_index or {}
-        eligible_location_lookup = eligible_location_index or location_lookup
-        context = product_context or {}
-        admitted: list[JsonObject] = []
-        excluded = Counter[str]()
-        seen_keys: dict[tuple[str, str], JsonObject] = {}
-        conflicting_keys: set[tuple[str, str]] = set()
-        duplicate_rows = 0
-        classified_rows = 0
-        eligible_input_rows = 0
-        excluded_rows = 0
-        source_locations: dict[str, PriceLocation] = {}
-        eligible_scope_keys: set[str] = set()
-        all_retailers: set[str] = set(retailer_options)
+        population = self.canonical_population(
+            offers,
+            retailer_id=filters.retailer_id,
+            location_index=location_index or {},
+            eligible_location_index=eligible_location_index or location_index or {},
+            product_context=product_context or {},
+            retailer_options=retailer_options,
+        )
+        admitted = [row.to_price_monitoring_row() for row in population.observations]
+        excluded = Counter(dict(population.exclusion_counts))
+        conflicting_keys = set(population.conflicting_keys)
+        duplicate_rows = population.duplicate_rows
+        classified_rows = population.classified_rows
+        eligible_input_rows = population.eligible_input_rows
+        source_locations = dict(population.source_locations)
+        eligible_scope_keys = set(population.eligible_scope_keys)
+        all_retailers = set(population.all_retailers)
 
-        for (retailer_id, location_key), lookup in eligible_location_lookup.items():
-            if retailer_id != filters.retailer_id:
-                continue
-            service_area = location_key.startswith("zip:")
-            scope_value = location_key.removeprefix("zip:") if service_area else location_key
-            location = PriceLocation(
-                scope_key=(
-                    f"{retailer_id}|service_area|{scope_value}"
-                    if service_area
-                    else f"{retailer_id}|store|{scope_value}"
-                ),
-                kind="service_area" if service_area else "store",
-                store_number=None if service_area else location_key,
-                store_name=str(lookup["store_name"]) if lookup.get("store_name") else None,
-                zipcode=str(lookup["zipcode"]) if lookup.get("zipcode") else None,
-                city=str(lookup["city"]) if lookup.get("city") else None,
-                state=str(lookup["state"]) if lookup.get("state") else None,
-                country=str(lookup.get("country") or "USA"),
-                latitude=(
-                    float(lookup["latitude"]) if lookup.get("latitude") is not None else None
-                ),
-                longitude=(
-                    float(lookup["longitude"]) if lookup.get("longitude") is not None else None
-                ),
-            )
-            source_locations[location.scope_key] = location
-            eligible_scope_keys.add(location.scope_key)
-
-        for classified in offers:
-            offer = classified.offer
-            all_retailers.add(offer.retailer_id)
-            if offer.retailer_id != filters.retailer_id:
-                continue
-            classified_rows += 1
-            location = _location_from_offer(classified, location_lookup)
-            if not location.scope_key.endswith("|unknown"):
-                source_locations[location.scope_key] = location
-            reasons: list[str] = []
-            if not classified.in_scope:
-                reasons.append("out_of_scope")
-            if offer.price is None or offer.price <= 0:
-                reasons.append("missing_or_zero_price")
-            if offer.currency != "USD":
-                reasons.append("unsupported_currency")
-            if location.scope_key.endswith("|unknown"):
-                reasons.append("missing_location_identity")
-            if reasons:
-                excluded_rows += 1
-                excluded.update(reasons)
-                continue
-            eligible_input_rows += 1
-            assert offer.price is not None
-
-            key = (offer.retailer_product_id, location.scope_key)
-            product_key = f"{offer.retailer_id}:{offer.retailer_product_id}"
-            product = context.get(product_key, {})
-            observed_brand = str(product.get("brand") or offer.brand or "").strip() or None
-            brand_governance = classified.attributes.get("_brand_governance")
-            resolution = self._brands.resolve(
-                offer.retailer_id,
-                observed_brand,
-                category=self._pack.name,
-            )
-            if resolution.resolution_method == "governed_override":
-                brand_type = resolution.role
-                brand_origin = "user"
-                brand_status = resolution.override_decision or "suggested"
-                brand_name = resolution.canonical_brand_name or observed_brand
-            elif (
-                isinstance(brand_governance, dict) and brand_governance.get("status") == "resolved"
-            ):
-                governed_role = str(brand_governance.get("role") or resolution.role)
-                brand_type = cast(
-                    BrandType,
-                    governed_role
-                    if governed_role in {"private_label", "regional", "national", "unclassified"}
-                    else "unclassified",
-                )
-                brand_origin = "pdp" if product.get("brand") else "search"
-                brand_status = "suggested"
-                brand_name = (
-                    str(
-                        brand_governance.get("canonical_brand_name") or observed_brand or ""
-                    ).strip()
-                    or None
-                )
-            else:
-                brand_type = resolution.role
-                brand_origin = (
-                    "pdp"
-                    if product.get("brand")
-                    else "retailer_pack"
-                    if resolution.status == "resolved"
-                    else "unresolved"
-                )
-                brand_status = "suggested" if resolution.status == "resolved" else "unclassified"
-                brand_name = resolution.canonical_brand_name or observed_brand
-            row: JsonObject = {
-                "observation_id": offer.offer_id,
-                "product_id": offer.retailer_product_id,
-                "name": str(product.get("name") or offer.title),
-                "brand": brand_name or product.get("brand") or observed_brand,
-                "brand_type": brand_type,
-                "brand_origin": brand_origin,
-                "brand_status": brand_status,
-                "image_url": product.get("image_url") or offer.image_url,
-                "url": product.get("url") or offer.product_url,
-                "location": location,
-                "price": float(offer.price),
-                "regular_price": (
-                    float(offer.regular_price) if offer.regular_price is not None else None
-                ),
-                "discounted_price": (
-                    float(offer.discounted_price) if offer.discounted_price is not None else None
-                ),
-                "in_stock": offer.in_stock,
-                "is_sponsored": offer.is_sponsored,
-                "observed_at": offer.collected_at,
-                "offer_id": offer.offer_id,
-            }
-            existing = seen_keys.get(key)
-            if existing is None:
-                seen_keys[key] = row
-                continue
-            duplicate_rows += 1
-            if existing["price"] != row["price"]:
-                conflicting_keys.add(key)
-            current_rank = (
-                _observed_at(str(existing.get("observed_at") or "")),
-                str(existing["offer_id"]),
-            )
-            next_rank = (_observed_at(str(row.get("observed_at") or "")), str(row["offer_id"]))
-            if next_rank > current_rank:
-                seen_keys[key] = row
-
-        admitted = list(seen_keys.values())
         brand_types = Counter(str(row["brand_type"]) for row in admitted)
         states = Counter(row["location"].state for row in admitted if row["location"].state)
         state_scoped = [
@@ -782,6 +645,8 @@ class PriceMonitoringProjector:
                 "observed_end": max(source_values) if source_values else None,
                 "source_rows": source_rows,
                 "classified_rows": classified_rows,
+                "observation_schema_version": PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
+                "observation_population_checksum": population.checksum,
                 "artifact_checksums": sorted(set(artifact_checksums)),
             },
             "filters": {

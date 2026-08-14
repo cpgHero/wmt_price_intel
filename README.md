@@ -89,3 +89,8 @@ Primary application navigation, operational dashboard, collection history,
 report discovery, schedules and alerts, and the decision-readiness quality
 queue are governed by `docs/33_PRIMARY_APPLICATION_UX_COHESION.md`. This phase
 does not change publication or export renderers.
+
+Phase 12.8 establishes one Search-authoritative product-location observation population shared by
+Price Intelligence and Competitive Intelligence, including governed PDP identity, brand role,
+location-master geography, deterministic deduplication, and population provenance. See
+`docs/48_PHASE_12_8_SHARED_PRODUCT_LOCATION_INTELLIGENCE_FOUNDATION.md`.

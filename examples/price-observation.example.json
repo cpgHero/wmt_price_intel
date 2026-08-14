@@ -1,14 +1,20 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "observation_id": "walmart_us:15136790:1753:2026-08-07T05:16:43Z",
   "analysis_id": "fresh_ground_beef-example",
   "product_pack_id": "fresh_ground_beef",
+  "product_pack_version": "1.0.0",
   "retailer_id": "walmart_us",
+  "retailer_name": "Walmart (US)",
   "retailer_product_id": "15136790",
   "product_name": "93% Lean / 7% Fat Ground Beef, 1 lb",
   "brand": "Great Value",
   "brand_type": "private_label",
   "brand_origin": "pdp",
+  "brand_status": "suggested",
+  "image_url": "https://i5.walmartimages.com/example.jpeg",
+  "product_url": "https://www.walmart.com/ip/15136790",
+  "identity_authority": "pdp",
   "location": {
     "scope_key": "walmart_us|store|1753",
     "kind": "store",
@@ -22,10 +28,18 @@
     "longitude": -71.3273
   },
   "price": 5.84,
+  "regular_price": 5.84,
+  "discounted_price": null,
   "currency": "USD",
   "in_stock": true,
+  "is_sponsored": false,
+  "price_metrics": {
+    "package_price": 5.84,
+    "price_per_lb": 5.84
+  },
   "observed_at": "2026-08-07T05:16:43Z",
   "source_authority": "search_location_observation",
+  "location_authority": "retailer_location_master",
   "eligible": true,
   "exclusion_reasons": []
 }

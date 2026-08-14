@@ -22,7 +22,7 @@
     "outcomes"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -247,7 +247,12 @@
         "retailer_name",
         "product_id",
         "product_name",
+        "brand",
+        "brand_type",
+        "brand_origin",
+        "brand_status",
         "image_url",
+        "product_url",
         "scope_key",
         "location_kind",
         "store_number",
@@ -259,6 +264,11 @@
         "latitude",
         "longitude",
         "package_price",
+        "regular_price",
+        "discounted_price",
+        "is_sponsored",
+        "in_stock",
+        "offer_id",
         "comparison_value",
         "observed_at"
       ],
@@ -267,7 +277,16 @@
         "retailer_name": { "type": "string", "minLength": 1 },
         "product_id": { "type": "string", "minLength": 1 },
         "product_name": { "type": "string", "minLength": 1 },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": {
+          "enum": ["private_label", "regional", "national", "unclassified"]
+        },
+        "brand_origin": {
+          "enum": ["user", "retailer_pack", "search", "pdp", "unresolved"]
+        },
+        "brand_status": { "type": "string", "minLength": 1 },
         "image_url": { "type": ["string", "null"], "format": "uri" },
+        "product_url": { "type": ["string", "null"], "format": "uri" },
         "scope_key": { "type": "string", "minLength": 1 },
         "location_kind": { "enum": ["store", "service_area"] },
         "store_number": { "type": ["string", "null"] },
@@ -279,6 +298,11 @@
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
         "package_price": { "type": "number", "exclusiveMinimum": 0 },
+        "regular_price": { "type": ["number", "null"], "minimum": 0 },
+        "discounted_price": { "type": ["number", "null"], "minimum": 0 },
+        "is_sponsored": { "type": ["boolean", "null"] },
+        "in_stock": { "type": "boolean" },
+        "offer_id": { "type": ["string", "null"] },
         "comparison_value": { "type": "number", "exclusiveMinimum": 0 },
         "observed_at": { "type": ["string", "null"] }
       }

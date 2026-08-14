@@ -23,7 +23,6 @@ from rci_analytics import (
     PriceMonitoringProjector,
     ProductPriceObservation,
     classified_offer_from_record,
-    location_scope_key,
 )
 from rci_api.analyses import get_analysis_service
 from rci_contracts import validate_instance
@@ -418,6 +417,8 @@ class PriceMonitoringService:
         self._reader = reader
         self._prepared_cache: dict[tuple[str, str], PreparedPriceMonitoringData] = {}
         self._prepared_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self._projector_cache: dict[str, PriceMonitoringProjector] = {}
+        self._projector_locks: dict[str, asyncio.Lock] = {}
         self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._map_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._product_observation_cache: dict[
@@ -430,6 +431,49 @@ class PriceMonitoringService:
             for row in catalog.get("retailers", [])
             if isinstance(row, dict) and row.get("id") and row.get("display_name")
         }
+
+    async def _projector_for_analysis(
+        self,
+        analysis: Any,
+        benchmark_retailer_id: str,
+    ) -> PriceMonitoringProjector:
+        """Load one governed projector shared by full and selective read paths."""
+
+        cache_key = str(analysis.analysis_id)
+        cached = self._projector_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        lock = self._projector_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            cached = self._projector_cache.get(cache_key)
+            if cached is not None:
+                return cached
+            source = analysis.result.get("source", {})
+            revision_id = (
+                str(source["brand_revision_id"]) if source.get("brand_revision_id") else None
+            )
+            overrides, pack = await asyncio.gather(
+                self._repository.brand_overrides(
+                    revision_id=revision_id,
+                    product_pack_id=analysis.product_pack_id,
+                    product_pack_version=analysis.product_pack_version,
+                    benchmark_retailer_id=benchmark_retailer_id,
+                ),
+                self._packs.load(
+                    analysis.product_pack_id,
+                    analysis.product_pack_version,
+                ),
+            )
+            resolver = GovernedBrandResolver.from_repository(self._root).with_overrides(overrides)
+            projector = PriceMonitoringProjector(
+                pack,
+                resolver,
+                retailer_names=self._retailer_names,
+            )
+            if len(self._projector_cache) >= 16:
+                self._projector_cache.pop(next(iter(self._projector_cache)))
+            self._projector_cache[cache_key] = projector
+            return projector
 
     async def _prepare(
         self,
@@ -480,28 +524,10 @@ class PriceMonitoringService:
                 retailer_id,
                 product_ids,
             )
-            source = result.get("source", {})
-            revision_id = (
-                str(source["brand_revision_id"]) if source.get("brand_revision_id") else None
-            )
-            overrides = await self._repository.brand_overrides(
-                revision_id=revision_id,
-                product_pack_id=analysis.product_pack_id,
-                product_pack_version=analysis.product_pack_version,
-                benchmark_retailer_id=benchmark,
-            )
-            resolver = GovernedBrandResolver.from_repository(self._root).with_overrides(overrides)
-            pack = await self._packs.load(
-                analysis.product_pack_id,
-                analysis.product_pack_version,
-            )
+            projector = await self._projector_for_analysis(analysis, benchmark)
             prepared = PreparedPriceMonitoringData(
                 analysis=analysis,
-                projector=PriceMonitoringProjector(
-                    pack,
-                    resolver,
-                    retailer_names=self._retailer_names,
-                ),
+                projector=projector,
                 offers=offers,
                 location_index=location_index,
                 eligible_location_index=eligible_location_index,
@@ -630,6 +656,7 @@ class PriceMonitoringService:
                 offers = prepared.offers
                 location_index = prepared.location_index
                 product_context = prepared.product_context
+                projector = prepared.projector
             else:
                 analysis = await self._analyses.get(analysis_id)
                 result = analysis.result
@@ -645,7 +672,7 @@ class PriceMonitoringService:
                     raise LookupError(
                         f"classified Search evidence for {retailer_id!r} is unavailable"
                     )
-                row_groups, location_context, product_context = await asyncio.gather(
+                row_groups, location_context, product_context, projector = await asyncio.gather(
                     asyncio.gather(
                         *(
                             self._reader.read_products(
@@ -664,13 +691,14 @@ class PriceMonitoringService:
                         retailer_id,
                         selected_product_ids,
                     ),
+                    self._projector_for_analysis(analysis, benchmark),
                 )
                 offers = tuple(
                     classified_offer_from_record(record) for group in row_groups for record in group
                 )
                 location_index = location_context[0]
-            grouped = self._select_product_observations(
-                offers=offers,
+            grouped = projector.comparison_observations(
+                offers,
                 retailer_id=retailer_id,
                 product_ids=set(selected_product_ids),
                 comparison_metric=comparison_metric,
@@ -681,103 +709,6 @@ class PriceMonitoringService:
                 self._product_observation_cache.pop(next(iter(self._product_observation_cache)))
             self._product_observation_cache[cache_key] = grouped
             return grouped
-
-    def _select_product_observations(
-        self,
-        *,
-        offers: tuple[Any, ...],
-        retailer_id: str,
-        product_ids: set[str],
-        comparison_metric: str,
-        location_index: dict[tuple[str, str], dict[str, Any]],
-        product_context: dict[str, dict[str, Any]],
-    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
-        selected: dict[tuple[str, str], tuple[tuple[str, str], ProductPriceObservation]] = {}
-        for classified in offers:
-            offer = classified.offer
-            comparison_value = (
-                offer.price
-                if comparison_metric == "package_price"
-                else classified.metrics.get(comparison_metric)
-            )
-            if (
-                not classified.in_scope
-                or offer.retailer_id != retailer_id
-                or offer.retailer_product_id not in product_ids
-                or offer.price is None
-                or offer.price <= 0
-                or comparison_value is None
-                or comparison_value <= 0
-                or offer.currency != "USD"
-            ):
-                continue
-            location_kind: Literal["store", "service_area"] = (
-                "store" if offer.store_number is not None else "service_area"
-            )
-            location_key = offer.store_number or (
-                f"zip:{offer.zipcode}" if offer.zipcode is not None else None
-            )
-            if location_key is None:
-                continue
-            product_id = offer.retailer_product_id
-            context = product_context.get(f"{retailer_id}:{product_id}", {})
-            location = location_index.get((retailer_id, location_key), {})
-            scope_key = location_scope_key(offer)
-            observation = ProductPriceObservation(
-                retailer_id=retailer_id,
-                retailer_name=self._retailer_names.get(
-                    retailer_id, retailer_id.replace("_", " ").title()
-                ),
-                product_id=product_id,
-                product_name=str(context.get("name") or offer.title),
-                image_url=(
-                    str(context["image_url"]) if context.get("image_url") else offer.image_url
-                ),
-                scope_key=scope_key,
-                location_kind=location_kind,
-                store_number=offer.store_number,
-                store_name=(str(location["store_name"]) if location.get("store_name") else None),
-                zipcode=(str(location["zipcode"]) if location.get("zipcode") else offer.zipcode),
-                city=str(location["city"]) if location.get("city") else None,
-                state=str(location["state"]) if location.get("state") else None,
-                country=str(location.get("country") or "USA"),
-                latitude=(
-                    float(location["latitude"])
-                    if location.get("latitude") is not None
-                    else offer.latitude
-                ),
-                longitude=(
-                    float(location["longitude"])
-                    if location.get("longitude") is not None
-                    else offer.longitude
-                ),
-                package_price=float(offer.price),
-                comparison_value=float(comparison_value),
-                observed_at=offer.collected_at,
-            )
-            rank = (str(offer.collected_at or ""), offer.offer_id)
-            selected_key = (product_id, scope_key)
-            previous = selected.get(selected_key)
-            if previous is None or rank > previous[0]:
-                selected[selected_key] = (rank, observation)
-        grouped: dict[str, list[ProductPriceObservation]] = {
-            product_id: [] for product_id in product_ids
-        }
-        for (product_id, _scope), value in selected.items():
-            grouped[product_id].append(value[1])
-        return {
-            product_id: tuple(
-                sorted(
-                    observations,
-                    key=lambda row: (
-                        str(row.state or ""),
-                        str(row.city or ""),
-                        str(row.store_number or row.zipcode or ""),
-                    ),
-                )
-            )
-            for product_id, observations in grouped.items()
-        }
 
     async def evidence_csv(
         self,

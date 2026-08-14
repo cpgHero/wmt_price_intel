@@ -10,31 +10,10 @@ from statistics import mean
 from typing import Literal
 
 from rci_analytics.models import JsonObject
+from rci_analytics.product_location import ProductPriceObservation
 
 LeadershipStatus = Literal["leader", "tied", "at_risk", "losing", "unscored"]
 _SPATIAL_BUCKET_DEGREES = 0.1
-
-
-@dataclass(frozen=True, slots=True)
-class ProductPriceObservation:
-    retailer_id: str
-    retailer_name: str
-    product_id: str
-    product_name: str
-    image_url: str | None
-    scope_key: str
-    location_kind: Literal["store", "service_area"]
-    store_number: str | None
-    store_name: str | None
-    zipcode: str | None
-    city: str | None
-    state: str | None
-    country: str
-    latitude: float | None
-    longitude: float | None
-    package_price: float
-    comparison_value: float
-    observed_at: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +94,12 @@ def _location(value: ProductPriceObservation) -> JsonObject:
         "retailer_name": value.retailer_name,
         "product_id": value.product_id,
         "product_name": value.product_name,
+        "brand": value.brand,
+        "brand_type": value.brand_type,
+        "brand_origin": value.brand_origin,
+        "brand_status": value.brand_status,
         "image_url": value.image_url,
+        "product_url": value.product_url,
         "scope_key": value.scope_key,
         "location_kind": value.location_kind,
         "store_number": value.store_number,
@@ -127,6 +111,11 @@ def _location(value: ProductPriceObservation) -> JsonObject:
         "latitude": value.latitude,
         "longitude": value.longitude,
         "package_price": _round(value.package_price),
+        "regular_price": _round(value.regular_price),
+        "discounted_price": _round(value.discounted_price),
+        "is_sponsored": value.is_sponsored,
+        "in_stock": value.in_stock,
+        "offer_id": value.offer_id,
         "comparison_value": _round(value.comparison_value),
         "observed_at": value.observed_at,
     }
@@ -380,7 +369,7 @@ class CompetitiveProductLeadershipProjector:
         comparison_metric = next(iter(metrics))
         comparison_unit = next(iter(units))
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "benchmark_retailer": benchmark_retailer,

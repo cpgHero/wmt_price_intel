@@ -31,6 +31,8 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     observed_end: string | null;
     source_rows: number;
     classified_rows: number;
+    observation_schema_version: "1.1.0";
+    observation_population_checksum: string;
     artifact_checksums: string[];
   };
   filters: {

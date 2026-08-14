@@ -44,9 +44,11 @@ so the initial payload does not repeat thousands of irrelevant city aggregates.
 Benchmark and competitor evidence preparation runs concurrently. Product Leadership batches every
 selected governed product for a retailer into one predicate-pushed Parquet scan, retaining only the
 Search columns required to build its evidence. Verified artifact bytes are reused across product
-selections, and a warmed Price Intelligence preparation can be reused directly. This avoids parsing
-unrelated products and prevents several governed matches for one retailer from triggering duplicate
-artifact work.
+selections, and a warmed Price Intelligence preparation can be reused directly. Both the full and
+predicate-pushed paths now call the Phase 12.8 canonical product-location projector, so selective
+competitive reads cannot bypass PDP identity, brand governance, location-master geography, Search
+availability, or latest-row selection. This avoids parsing unrelated products, prevents duplicate
+artifact work, and makes Price and Competitive evidence directly reconcilable.
 
 ## Status and metric governance
 
