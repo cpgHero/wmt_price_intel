@@ -225,11 +225,15 @@ class PostgresPriceMonitoringRepository:
         )
         async with self._engine.connect() as connection:
             rows = (
-                await connection.execute(
-                    statement,
-                    {"collection_run_id": collection_run_id, "retailer_id": retailer_id},
+                (
+                    await connection.execute(
+                        statement,
+                        {"collection_run_id": collection_run_id, "retailer_id": retailer_id},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             return [ClassifiedArtifact(**dict(row)) for row in rows]
 
     async def source_rows(self, collection_run_id: str, retailer_id: str) -> int:
@@ -359,23 +363,25 @@ class PostgresPriceMonitoringRepository:
         )
         async with self._engine.connect() as connection:
             rows = (
-                await connection.execute(
-                    statement,
-                    {
-                        "retailer_id": retailer_id,
-                        "product_ids": product_ids,
-                        "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
-                    },
+                (
+                    await connection.execute(
+                        statement,
+                        {
+                            "retailer_id": retailer_id,
+                            "product_ids": product_ids,
+                            "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
+                        },
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             context: dict[str, dict[str, Any]] = {}
             for row in rows:
                 identity = dict(row["identity"])
                 normalized = dict(row["normalized"]) if isinstance(row["normalized"], dict) else {}
                 media = (
-                    dict(normalized["media"])
-                    if isinstance(normalized.get("media"), dict)
-                    else {}
+                    dict(normalized["media"]) if isinstance(normalized.get("media"), dict) else {}
                 )
                 commerce = (
                     dict(normalized["commerce"])
@@ -387,9 +393,7 @@ class PostgresPriceMonitoringRepository:
                     if isinstance(normalized.get("relationships"), dict)
                     else {}
                 )
-                seller = (
-                    normalized.get("seller") if normalized else identity.get("seller")
-                )
+                seller = normalized.get("seller") if normalized else identity.get("seller")
                 context[f"{row['retailer_id']}:{row['retailer_product_id']}"] = {
                     "name": normalized.get("name") or identity.get("name"),
                     "brand": normalized.get("brand") or identity.get("brand"),
@@ -414,9 +418,7 @@ class PostgresPriceMonitoringRepository:
                         "variant_configuration": normalized.get("variant_configuration")
                         or identity.get("variant_configuration", {}),
                         "commerce": {
-                            key: value
-                            for key, value in commerce.items()
-                            if key != "offers"
+                            key: value for key, value in commerce.items() if key != "offers"
                         },
                         "media": {
                             "image_count": len(media.get("images", []))
@@ -435,9 +437,7 @@ class PostgresPriceMonitoringRepository:
                             for key, value in relationships.items()
                         },
                         "source_context": normalized.get("source_context", {}),
-                        "source_field_count": len(
-                            normalized.get("source_field_inventory", [])
-                        ),
+                        "source_field_count": len(normalized.get("source_field_inventory", [])),
                         "unmapped_source_fields": normalized.get("unmapped_source_fields", []),
                         "authority": {
                             "identity": "pdp" if normalized else "search",
@@ -685,11 +685,12 @@ class PriceMonitoringService:
                 analysis.collection_run_id,
                 retailer_id,
             )
-            product_context, product_context_revision = (
-                await self._repository.product_context_bundle(
-                    retailer_id,
-                    product_ids,
-                )
+            (
+                product_context,
+                product_context_revision,
+            ) = await self._repository.product_context_bundle(
+                retailer_id,
+                product_ids,
             )
             projector = await self._projector_for_analysis(analysis, benchmark)
             prepared = PreparedPriceMonitoringData(
