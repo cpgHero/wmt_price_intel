@@ -520,10 +520,10 @@ function Overview({
 }>) {
   const mostExposedState = [...view.state_summaries].sort(
     (left, right) => right.losing_stores - left.losing_stores,
-  )[0];
+  ).find((row) => row.losing_stores > 0);
   const leadingCompetitor = [...view.competitor_summaries].sort(
     (left, right) => right.losing_stores - left.losing_stores,
-  )[0];
+  ).find((row) => row.losing_stores > 0);
   return (
     <>
       <OverviewKpis summary={view.summary} />
@@ -537,11 +537,16 @@ function Overview({
                 comparison.
               </p>
             </div>
-            <span>{Math.round((view.summary.leader_rate ?? 0) * 100)}</span>
+            <span>
+              {view.summary.leader_rate === null
+                ? "—"
+                : Math.round(view.summary.leader_rate * 100)}
+            </span>
           </header>
           <strong>
-            {count(view.summary.leader_stores)} stores are clear price leaders;{" "}
-            {count(view.summary.losing_stores)} are currently undercut.
+            {view.summary.scored_stores === 0
+              ? "No benchmark store currently has comparable evidence in this view."
+              : `${count(view.summary.leader_stores)} stores are clear price leaders; ${count(view.summary.losing_stores)} are currently undercut.`}
           </strong>
           <ul>
             <li>
@@ -559,6 +564,16 @@ function Overview({
               <li>
                 {mostExposedState.label} has the largest current loss count at{" "}
                 {count(mostExposedState.losing_stores)} stores.
+              </li>
+            ) : null}
+            {view.summary.scored_stores === 0 ? (
+              <li>
+                No current competitor observation is comparable at the selected
+                radius and governed relationship scope.
+              </li>
+            ) : view.summary.losing_stores === 0 ? (
+              <li>
+                No scored benchmark store is currently undercut in this view.
               </li>
             ) : null}
           </ul>

@@ -36,6 +36,21 @@ class ProductLeadershipRelationship:
         )
 
 
+def _relationship_scope_key(observation: ProductPriceObservation) -> str:
+    """Return the stable Search-grain key stored by governed relationships.
+
+    Canonical Product Location keys intentionally encode the location kind as
+    ``retailer|store|store-id`` or ``retailer|service_area|ZIP``. Product-match
+    scopes predate that portable contract and use the immutable Search grain
+    ``retailer|ZIP|store-id`` (or ``zip:ZIP`` for a service area). Keep the two
+    identities explicit instead of comparing unlike key formats.
+    """
+
+    zipcode = str(observation.zipcode or "unknown")
+    store = str(observation.store_number or f"zip:{zipcode}")
+    return "|".join((observation.retailer_id, zipcode, store))
+
+
 def _round(value: float | int | None, places: int = 4) -> float | None:
     return round(float(value), places) if value is not None else None
 
@@ -238,7 +253,7 @@ class CompetitiveProductLeadershipProjector:
                 ]
             ] = []
             for relationship in relationships:
-                if not relationship.admits(benchmark.scope_key):
+                if not relationship.admits(_relationship_scope_key(benchmark)):
                     continue
                 eligible_competitors = list(
                     service_area_candidates.get(

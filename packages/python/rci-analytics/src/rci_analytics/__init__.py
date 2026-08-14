@@ -46,6 +46,10 @@ from rci_analytics.price_monitoring import (
     PriceMonitoringProjector,
     classified_offer_from_record,
 )
+from rci_analytics.product_leadership_validation import (
+    ProductLeadershipCertification,
+    certify_competitive_product_leadership,
+)
 from rci_analytics.product_location import (
     PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
     PriceLocation,
@@ -85,6 +89,7 @@ __all__ = [
     "PriceLocation",
     "PriceMonitoringFilters",
     "PriceMonitoringProjector",
+    "ProductLeadershipCertification",
     "ProductLeadershipRelationship",
     "ProductLocationObservation",
     "ProductLocationPopulation",
@@ -99,6 +104,7 @@ __all__ = [
     "benchmark_product_evidence",
     "benchmark_product_map_points",
     "benchmark_product_match_candidates",
+    "certify_competitive_product_leadership",
     "classified_offer_from_record",
     "complete_attributes_from_pdp",
     "evidence_set",

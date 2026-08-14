@@ -14,6 +14,7 @@ from rci_analytics import (
     CatalogProductPackLoader,
     CompetitiveProductLeadershipProjector,
     ProductLeadershipRelationship,
+    certify_competitive_product_leadership,
 )
 from rci_api.analyses import get_analysis_service
 from rci_api.price_monitoring import PriceMonitoringService, get_price_monitoring_service
@@ -293,6 +294,10 @@ class CompetitiveProductLeadershipService:
             result,
             label=f"competitive-product-leadership:{analysis.analysis_id}",
         )
+        try:
+            certify_competitive_product_leadership(result).require_ready()
+        except ValueError as exc:
+            raise RuntimeError(f"Product Leadership trust certification failed: {exc}") from exc
         if len(self._cache) >= 96:
             self._cache.pop(next(iter(self._cache)))
         self._cache[cache_key] = result

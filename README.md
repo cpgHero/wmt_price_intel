@@ -99,3 +99,8 @@ Phase 12.9 expands the source-backed Competitive Product Leadership experience i
 overview, footprint, match-group, store, market, exception, and history-readiness workspaces with
 shared top-bar geography context and purpose-specific metrics. See
 `docs/49_PHASE_12_9_COMPETITIVE_INTELLIGENCE_WORKSPACES.md`.
+
+Phase 12.9.1 independently certifies the Product Leadership evidence chain and decision math across
+the five full-source release-candidate categories, repairs distribution-scoped relationship
+admission, and fails closed before inconsistent reports can be served. See
+`docs/50_PHASE_12_9_1_FIVE_CATEGORY_TRUST_VALIDATION.md`.
