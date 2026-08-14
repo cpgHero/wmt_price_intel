@@ -1,13 +1,57 @@
 from __future__ import annotations
 
+import hashlib
+from io import BytesIO
 from pathlib import Path
 from types import MethodType
 
+import polars as pl
 from httpx import ASGITransport, AsyncClient
 
 from rci_analytics import PriceMonitoringFilters
 from rci_api.main import create_app
-from rci_api.price_monitoring import PriceMonitoringService, get_price_monitoring_service
+from rci_api.price_monitoring import (
+    ClassifiedArtifact,
+    PriceMonitoringService,
+    S3ParquetReader,
+    get_price_monitoring_service,
+)
+
+
+async def test_parquet_reader_projects_governed_columns_and_inserts_optional_columns() -> None:
+    buffer = BytesIO()
+    pl.DataFrame(
+        {
+            "offer_id": ["offer-1"],
+            "retailer_id": ["walmart_us"],
+            "retailer_product_id": ["123"],
+            "title": ["Product 123"],
+            "price": [4.99],
+            "unused_payload": ["must not be decoded into the read model"],
+        }
+    ).write_parquet(buffer)
+    payload = buffer.getvalue()
+
+    class Body:
+        def read(self) -> bytes:
+            return payload
+
+    class Client:
+        def get_object(self, **_kwargs: object) -> dict[str, object]:
+            return {"Body": Body()}
+
+    reader = S3ParquetReader(bucket="artifacts", client=Client())
+    rows = await reader.read(
+        ClassifiedArtifact(
+            storage_uri="s3://artifacts/classified.parquet",
+            checksum=hashlib.sha256(payload).hexdigest(),
+            row_count=1,
+        )
+    )
+
+    assert rows[0]["offer_id"] == "offer-1"
+    assert "metrics_json" not in rows[0]
+    assert "unused_payload" not in rows[0]
 
 
 async def test_price_monitoring_api_passes_governed_filters() -> None:

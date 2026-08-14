@@ -41,6 +41,9 @@ Physical stores are indexed in small latitude/longitude buckets before distance 
 keeps the exact haversine admission rule while avoiding a national all-stores-by-all-stores join.
 National responses return state summaries; city summaries are materialized after a state is selected
 so the initial payload does not repeat thousands of irrelevant city aggregates.
+Benchmark and competitor evidence preparation runs concurrently. Preparation is single-flight per
+analysis and retailer, and Parquet decoding projects only the columns required by Price Intelligence,
+so several governed matches for one retailer do not trigger duplicate artifact work.
 
 ## Status and metric governance
 

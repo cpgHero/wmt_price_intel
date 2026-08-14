@@ -141,9 +141,14 @@ class S3ParquetReader:
             "metrics_json",
             "review_reasons_json",
         ]
-        frame = await asyncio.to_thread(pl.read_parquet, BytesIO(body))
-        available = [column for column in columns if column in frame.columns]
-        return frame.select(available).to_dicts()
+
+        def decode_columns() -> pl.DataFrame:
+            schema = pl.read_parquet_schema(BytesIO(body))
+            available = [column for column in columns if column in schema]
+            return pl.read_parquet(BytesIO(body), columns=available)
+
+        frame = await asyncio.to_thread(decode_columns)
+        return frame.to_dicts()
 
 
 class PostgresPriceMonitoringRepository:

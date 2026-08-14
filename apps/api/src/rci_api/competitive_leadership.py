@@ -209,25 +209,29 @@ class CompetitiveProductLeadershipService:
             raise ValueError("selected relationships do not share one comparison metric")
         comparison_metric = next(iter(comparison_metrics))
 
-        benchmark_observations = await self._prices.product_observations(
-            analysis_id,
-            retailer_id=str(benchmark["id"]),
-            product_id=selected_product_id,
-            comparison_metric=comparison_metric,
+        competitor_products = sorted(
+            {(row.competitor_id, row.competitor_product_id) for row in relationships}
         )
-        competitor_observation_groups = await asyncio.gather(
+        observation_groups = await asyncio.gather(
+            self._prices.product_observations(
+                analysis_id,
+                retailer_id=str(benchmark["id"]),
+                product_id=selected_product_id,
+                comparison_metric=comparison_metric,
+            ),
             *(
                 self._prices.product_observations(
                     analysis_id,
-                    retailer_id=row.competitor_id,
-                    product_id=row.competitor_product_id,
+                    retailer_id=competitor_retailer_id,
+                    product_id=competitor_product_id,
                     comparison_metric=comparison_metric,
                 )
-                for row in relationships
-            )
+                for competitor_retailer_id, competitor_product_id in competitor_products
+            ),
         )
+        benchmark_observations = observation_groups[0]
         competitor_observations = [
-            observation for group in competitor_observation_groups for observation in group
+            observation for group in observation_groups[1:] for observation in group
         ]
         if not benchmark_observations:
             raise LookupError("positive benchmark Search observations are unavailable")
