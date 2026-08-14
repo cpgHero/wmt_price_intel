@@ -37,6 +37,6 @@ application analyses record exact checksums for reproducibility.
 work approvals. `0027_price_intelligence_foundation` adds nullable, source-governed retailer
 location hierarchy fields plus immutable single-retailer product-price snapshots, exact-product
 store observations, deterministic aggregates, and an auditable exception-review foundation.
-`0028_product_detail_renormalization` adds a leased, replica-safe, zero-credit queue of append-only
+`0028_pdp_renormalization` adds a leased, replica-safe, zero-credit queue of append-only
 normalization revisions over immutable PDP raw snapshots. It permits schema upgrades and historical
 seller/attribute recovery without mutating raw or previously published snapshot evidence.

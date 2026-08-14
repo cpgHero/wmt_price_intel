@@ -1,6 +1,6 @@
 """Add immutable, versioned PDP re-normalization evidence.
 
-Revision ID: 0028_product_detail_renormalization
+Revision ID: 0028_pdp_renormalization
 Revises: 0027_price_intelligence
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0028_product_detail_renormalization"
+revision: str = "0028_pdp_renormalization"
 down_revision: str | None = "0027_price_intelligence"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

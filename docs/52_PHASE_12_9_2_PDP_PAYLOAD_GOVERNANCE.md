@@ -36,7 +36,7 @@ review instead of being silently ignored.
 
 ## Historical repair
 
-Migration `0028_product_detail_renormalization` creates a replica-safe leased queue keyed by raw
+Migration `0028_pdp_renormalization` creates a replica-safe leased queue keyed by raw
 snapshot and normalizer version. The worker verifies the compressed-object checksum, decompresses
 and parses the retained response, applies the current retailer adapter, validates the derived
 contract, and writes an immutable normalization revision. It then refreshes canonical identity from

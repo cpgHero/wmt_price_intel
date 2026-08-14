@@ -202,7 +202,7 @@ only after an explicit enrichment run with a reviewed credit ceiling has been qu
 limits are independent per retailer/type but share their state across all worker replicas.
 
 `PRODUCT_DETAIL_RENORMALIZATION_ENABLED` is independent of paid enrichment. Enable it after the
-`0028_product_detail_renormalization` migration to replay retained immutable PDP payloads through
+`0028_pdp_renormalization` migration to replay retained immutable PDP payloads through
 the current normalizer. It reads the private bucket, creates append-only normalization revisions,
 and spends zero MetricsCart credits. Leave it enabled so future normalizer versions and source-field
 drift are repaired and audited without recollection.
