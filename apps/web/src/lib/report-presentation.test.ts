@@ -81,6 +81,21 @@ describe("report presentation", () => {
     expect(grouped[1]?.sections).toEqual([price]);
   });
 
+  it("omits retired report tabs from the server presentation contract", () => {
+    const summary = section("summary-copy", "executive_summary");
+
+    const grouped = groupReportSections(
+      [summary],
+      [
+        { id: "overview", label: "Overview", section_ids: ["summary-copy"] },
+        { id: "match-review", label: "Match Evidence", section_ids: [] },
+        { id: "exports", label: "Exports", section_ids: [] },
+      ],
+    );
+
+    expect(grouped.map((group) => group.id)).toEqual(["overview"]);
+  });
+
   it("formats deterministic metric values without changing them", () => {
     expect(formatMetric(0.8414189413, "rate")).toBe("84.1%");
     expect(formatMetric(-1.48, "USD_per_lb")).toBe("-$1.48 / lb");

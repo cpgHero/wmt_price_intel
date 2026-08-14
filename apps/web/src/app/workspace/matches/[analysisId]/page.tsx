@@ -53,9 +53,9 @@ export default async function MatchWorkbenchDetailPage({
           </p>
           <Link
             className="button secondary"
-            href={`/analyses/${encodeURIComponent(analysisId)}?tab=match-review`}
+            href={`/analyses/${encodeURIComponent(analysisId)}?tab=products`}
           >
-            View match evidence in report
+            Open competitive product report
           </Link>
         </div>
       </header>

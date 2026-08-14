@@ -51,9 +51,9 @@ export default async function BrandWorkbenchDetailPage({
           </p>
           <Link
             className="button secondary"
-            href={`/analyses/${encodeURIComponent(analysisId)}?tab=brand-workbench`}
+            href={`/analyses/${encodeURIComponent(analysisId)}?tab=assortment`}
           >
-            View brand evidence in report
+            Open competitive assortment report
           </Link>
         </div>
       </header>

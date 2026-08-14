@@ -2584,21 +2584,6 @@ dd {
   margin: 0 0 0.55rem;
   max-width: 780px;
 }
-.report-action {
-  border: 0;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.report-action-wrap {
-  align-items: flex-end;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-.report-action-wrap .form-error {
-  margin: 0;
-  max-width: 260px;
-}
 .workspace-meta {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: rgba(255, 255, 255, 0.52);
@@ -3389,36 +3374,6 @@ a.product-highlight:hover {
   font-size: 0.7rem;
   overflow-wrap: anywhere;
 }
-.export-grid {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(2, 1fr);
-}
-.export-grid button {
-  background: var(--surface-alt);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
-  display: grid;
-  padding: 1.2rem;
-  text-align: left;
-}
-.export-grid button:hover {
-  border-color: var(--green);
-}
-.export-grid button span {
-  font-weight: 750;
-}
-.export-grid button b {
-  color: var(--green);
-  font-size: 0.7rem;
-  margin-top: 1rem;
-}
-.action-message {
-  grid-column: 1 / -1;
-  margin: 0;
-}
-
 .table-scroll {
   overflow-x: auto;
 }
@@ -3768,7 +3723,6 @@ tbody tr:last-child td {
   .feature-grid,
   .quality-grid,
   .metric-grid,
-  .export-grid,
   .two-column,
   .split-card {
     grid-template-columns: 1fr;

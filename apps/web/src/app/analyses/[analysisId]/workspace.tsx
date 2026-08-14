@@ -11,9 +11,7 @@ import {
   type ApplicationContextDefinition,
   useApplicationContextDefinition,
 } from "@/app/components/application-context";
-import { BrandWorkbenchPanel } from "./brand-workbench";
 import { ComparableCohortExplorer } from "./cohort-explorer";
-import { MatchReviewWorkbench } from "./match-review-workbench";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
 import type {
   AnalysisRecord,
@@ -62,7 +60,6 @@ const tabs = [
   "Assortment",
   "Data Quality / QA",
   "Methodology",
-  "Exports",
 ] as const;
 
 type Tab = (typeof tabs)[number];
@@ -201,14 +198,6 @@ function LegacyAnalysisWorkspace({
             </Section>
           </>
         )}
-        {activeTab === "Exports" && (
-          <Section
-            title="Delivery artifacts"
-            note="Generated from this immutable AnalysisResult; renderers do not recalculate metrics."
-          >
-            <ArtifactActions analysisId={analysis.analysis_id} />
-          </Section>
-        )}
       </section>
     </>
   );
@@ -222,9 +211,9 @@ function BlueprintAnalysisWorkspace({
   reportView: AnalysisReportView;
 }>) {
   const router = useRouter();
-  const groupedSections = groupReportSections(
-    reportView.sections,
-    reportView.groups,
+  const groupedSections = useMemo(
+    () => groupReportSections(reportView.sections, reportView.groups),
+    [reportView.groups, reportView.sections],
   );
   const firstPopulatedGroup =
     groupedSections.find((group) => group.sections.length > 0)?.id ??
@@ -239,7 +228,6 @@ function BlueprintAnalysisWorkspace({
     reportView.comparison_bases[0]?.profile_id ??
     "";
   const [selectedLens, setSelectedLens] = useState(preferredBasis);
-  const [selectedPair, setSelectedPair] = useState<string | null>(null);
   const leadershipProductOptions = useMemo(() => {
     const options = new Map<
       string,
@@ -302,9 +290,8 @@ function BlueprintAnalysisWorkspace({
       const requestedTab = parameters.get("tab");
       setActiveGroup(
         requestedTab &&
-          (requestedTab === "brand-workbench" ||
-            requestedTab === "product-leadership" ||
-            reportView.groups.some((group) => group.id === requestedTab))
+          (requestedTab === "product-leadership" ||
+            groupedSections.some((group) => group.id === requestedTab))
           ? requestedTab
           : firstPopulatedGroup,
       );
@@ -317,7 +304,6 @@ function BlueprintAnalysisWorkspace({
           ? requestedLens
           : preferredBasis,
       );
-      setSelectedPair(parameters.get("pair"));
       const requestedProduct = parameters.get("product");
       setSelectedLeadershipProduct(
         requestedProduct &&
@@ -342,9 +328,10 @@ function BlueprintAnalysisWorkspace({
   }, [
     competitorOptions,
     firstPopulatedGroup,
+    groupedSections,
     leadershipProductOptions,
     preferredBasis,
-    reportView,
+    reportView.comparison_bases,
   ]);
   const updateRoute = (updates: Record<string, string | null>) => {
     const url = new URL(window.location.href);
@@ -364,10 +351,9 @@ function BlueprintAnalysisWorkspace({
   };
   const selectGroup = (groupId: string) => {
     setActiveGroup(groupId);
-    if (groupId !== "match-review") setSelectedPair(null);
     updateRoute({
       tab: groupId === firstPopulatedGroup ? null : groupId,
-      pair: groupId === "match-review" ? selectedPair : null,
+      pair: null,
     });
   };
   const selectLens = (profileId: string) => {
@@ -732,12 +718,6 @@ function BlueprintAnalysisWorkspace({
           <span className={`status-badge ${visibleStatus}`}>
             {displayLabel(visibleStatus)}
           </span>
-          <ArtifactDownloadButton
-            analysisId={analysis.analysis_id}
-            artifactType="html"
-            label="Open shareable report"
-            className="button primary report-action"
-          />
           <small>
             Blueprint {reportView.blueprint.id} · {reportView.blueprint.version}
           </small>
@@ -753,7 +733,7 @@ function BlueprintAnalysisWorkspace({
             onClick={() => selectGroup(group.id)}
             key={group.id}
           >
-            {group.id === "match-review" ? "Match Evidence" : group.label}
+            {group.label}
           </button>
         ))}
         <button
@@ -765,30 +745,9 @@ function BlueprintAnalysisWorkspace({
         >
           Product Leadership
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeGroup === "brand-workbench"}
-          className={activeGroup === "brand-workbench" ? "active" : ""}
-          onClick={() => selectGroup("brand-workbench")}
-        >
-          Brand Evidence
-        </button>
       </div>
       <section className="workspace-panel" role="tabpanel">
-        {activeGroup === "match-review" ? (
-          <MatchReviewWorkbench
-            analysisId={analysis.analysis_id}
-            scopedCompetitorId={selectedRetailer?.id ?? null}
-            scopedProfileId={selectedLens || null}
-            focusedRelationshipId={selectedPair}
-            onCompetitorSelect={selectCompetitor}
-            onProfileSelect={selectLens}
-            readOnly
-          />
-        ) : activeGroup === "brand-workbench" ? (
-          <BrandWorkbenchPanel analysisId={analysis.analysis_id} readOnly />
-        ) : activeGroup === "product-leadership" ? (
+        {activeGroup === "product-leadership" ? (
           <ProductLeadershipWorkspace
             analysisId={analysis.analysis_id}
             competitorId={selectedCompetitor}
@@ -799,13 +758,6 @@ function BlueprintAnalysisWorkspace({
             cityFilter={leadershipCity}
             onGeographyOptions={receiveLeadershipGeography}
           />
-        ) : activeGroup === "exports" ? (
-          <Section
-            title="Delivery artifacts"
-            note="Every format presents the same immutable AnalysisResult and carries its shared result checksum."
-          >
-            <ArtifactActions analysisId={analysis.analysis_id} />
-          </Section>
         ) : activeGroup === "assortment" && reportView.assortment_analysis ? (
           <AssortmentAnalysisPanel
             data={reportView.assortment_analysis}
@@ -3087,116 +3039,5 @@ function ObjectGrid({ value }: Readonly<{ value: JsonObject }>) {
           </div>
         ))}
     </dl>
-  );
-}
-
-function ArtifactDownloadButton({
-  analysisId,
-  artifactType,
-  label,
-  className,
-}: Readonly<{
-  analysisId: string;
-  artifactType: string;
-  label: string;
-  className?: string;
-}>) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function openArtifact() {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch(
-        `/api/analyses/${encodeURIComponent(analysisId)}/artifacts/${artifactType}`,
-        { method: "POST" },
-      );
-      const body = (await response.json()) as {
-        download_url?: string;
-        error?: string;
-      };
-      if (!response.ok || !body.download_url) {
-        throw new Error(body.error ?? "Report generation failed.");
-      }
-      window.open(body.download_url, "_blank", "noopener,noreferrer");
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Report generation failed.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="report-action-wrap">
-      <button
-        type="button"
-        className={className}
-        onClick={() => void openArtifact()}
-        disabled={busy}
-      >
-        {busy ? "Preparing report…" : label}
-      </button>
-      {error ? (
-        <small className="form-error" role="alert">
-          {error}
-        </small>
-      ) : null}
-    </div>
-  );
-}
-
-function ArtifactActions({ analysisId }: Readonly<{ analysisId: string }>) {
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState("");
-  const artifacts = [
-    ["html", "Report (HTML)"],
-    ["xlsx", "Excel audit workbook"],
-    ["leadership_email", "Email draft + attached report"],
-    ["audit_zip", "Complete audit package"],
-  ] as const;
-  async function generate(type: string) {
-    setBusy(type);
-    setMessage("");
-    try {
-      const response = await fetch(
-        `/api/analyses/${encodeURIComponent(analysisId)}/artifacts/${type}`,
-        { method: "POST" },
-      );
-      const body = (await response.json()) as {
-        download_url?: string;
-        error?: string;
-      };
-      if (!response.ok || !body.download_url)
-        throw new Error(body.error ?? "Artifact generation failed.");
-      window.location.assign(body.download_url);
-      setMessage("Artifact generated. Your secure download is opening now.");
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Artifact generation failed.",
-      );
-    } finally {
-      setBusy("");
-    }
-  }
-  return (
-    <div className="export-grid">
-      {artifacts.map(([type, label]) => (
-        <button
-          type="button"
-          onClick={() => void generate(type)}
-          disabled={Boolean(busy)}
-          key={type}
-        >
-          <span>{label}</span>
-          <b>{busy === type ? "Generating…" : "Generate & download"}</b>
-        </button>
-      ))}
-      {message && (
-        <p className="action-message" role="status">
-          {message}
-        </p>
-      )}
-    </div>
   );
 }

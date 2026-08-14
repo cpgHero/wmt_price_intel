@@ -129,9 +129,7 @@ export const reportGroups = [
   { id: "products", label: "Products" },
   { id: "geography", label: "Geography" },
   { id: "assortment", label: "Assortment" },
-  { id: "match-review", label: "Match Review" },
   { id: "quality-methodology", label: "Quality & Methodology" },
-  { id: "exports", label: "Exports" },
 ] as const;
 
 export type ReportGroupId = (typeof reportGroups)[number]["id"];
@@ -160,13 +158,16 @@ export function groupReportSections(
 ) {
   if (contractGroups?.length) {
     const byId = new Map(sections.map((section) => [section.id, section]));
-    return contractGroups.map((group) => ({
-      id: group.id as ReportGroupId,
-      label: group.label,
-      sections: group.section_ids
-        .map((id) => byId.get(id))
-        .filter((section): section is ReportSectionView => Boolean(section)),
-    }));
+    const visibleIds = new Set<string>(reportGroups.map((group) => group.id));
+    return contractGroups
+      .filter((group) => visibleIds.has(group.id))
+      .map((group) => ({
+        id: group.id as ReportGroupId,
+        label: group.label,
+        sections: group.section_ids
+          .map((id) => byId.get(id))
+          .filter((section): section is ReportSectionView => Boolean(section)),
+      }));
   }
   const grouped = new Map<ReportGroupId, ReportSectionView[]>();
   for (const group of reportGroups) grouped.set(group.id, []);
