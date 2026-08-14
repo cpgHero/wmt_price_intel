@@ -161,3 +161,39 @@ def test_distribution_scoped_relationship_only_scores_admitted_benchmark_store()
 
     assert result["summary"]["scored_stores"] == 1
     assert result["summary"]["unscored_stores"] == 1
+
+
+def test_spatial_index_keeps_nearby_stores_across_bucket_boundary() -> None:
+    benchmark = [_observation("walmart_us", "w1", "w-1", -94.199, 4.00)]
+    competitor = [_observation("aldi_us", "a1", "a-1", -94.201, 3.90)]
+    relationship = ProductLeadershipRelationship(
+        relationship_id="boundary-relationship",
+        competitor_id="aldi_us",
+        competitor_name="ALDI",
+        benchmark_product_id="w1",
+        competitor_product_id="a1",
+        profile_id="strict",
+        profile_label="Strict",
+        comparison_metric="package_price",
+        comparison_unit="USD/package",
+    )
+
+    result = CompetitiveProductLeadershipProjector().build(
+        analysis_id="analysis-1",
+        generated_at="2026-08-07T06:00:00Z",
+        benchmark_retailer={"id": "walmart_us", "name": "Walmart (US)"},
+        benchmark_product={"id": "w1", "name": "Product w1", "image_url": None},
+        benchmark_observations=benchmark,
+        competitor_observations=competitor,
+        relationships=[relationship],
+        competitor_options=[{"id": "aldi_us", "name": "ALDI"}],
+        product_options=[{"id": "w1", "name": "Product w1", "image_url": None}],
+        profile_options=[{"id": "strict", "name": "Strict"}],
+        selected_competitor="aldi_us",
+        selected_profile="strict",
+        radius_miles=1,
+    )
+
+    assert result["summary"]["scored_stores"] == 1
+    assert result["outcomes"][0]["status"] == "losing"
+    assert result["city_summaries"] == []

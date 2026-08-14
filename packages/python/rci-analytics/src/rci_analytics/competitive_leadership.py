@@ -12,6 +12,7 @@ from typing import Literal
 from rci_analytics.models import JsonObject
 
 LeadershipStatus = Literal["leader", "tied", "at_risk", "losing", "unscored"]
+_SPATIAL_BUCKET_DEGREES = 0.1
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,34 @@ def _distance_miles(left: ProductPriceObservation, right: ProductPriceObservatio
         + math.cos(left_latitude) * math.cos(right_latitude) * math.sin(longitude_delta / 2) ** 2
     )
     return earth_radius_miles * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def _spatial_bucket(observation: ProductPriceObservation) -> tuple[int, int] | None:
+    if observation.latitude is None or observation.longitude is None:
+        return None
+    return (
+        math.floor(observation.latitude / _SPATIAL_BUCKET_DEGREES),
+        math.floor(observation.longitude / _SPATIAL_BUCKET_DEGREES),
+    )
+
+
+def _neighboring_buckets(
+    observation: ProductPriceObservation,
+    radius_miles: Literal[1, 3, 5],
+) -> list[tuple[int, int]]:
+    center = _spatial_bucket(observation)
+    if center is None or observation.latitude is None:
+        return []
+    latitude_span = math.ceil(radius_miles / (69.0 * _SPATIAL_BUCKET_DEGREES)) + 1
+    longitude_miles_per_degree = 69.0 * max(abs(math.cos(math.radians(observation.latitude))), 0.1)
+    longitude_span = (
+        math.ceil(radius_miles / (longitude_miles_per_degree * _SPATIAL_BUCKET_DEGREES)) + 1
+    )
+    return [
+        (latitude_bucket, longitude_bucket)
+        for latitude_bucket in range(center[0] - latitude_span, center[0] + latitude_span + 1)
+        for longitude_bucket in range(center[1] - longitude_span, center[1] + longitude_span + 1)
+    ]
 
 
 def _location(value: ProductPriceObservation) -> JsonObject:
@@ -180,13 +209,33 @@ class CompetitiveProductLeadershipProjector:
             for row in benchmark_observations
             if (state is None or row.state == state) and (city is None or row.city == city)
         ]
-        candidates_by_product: dict[tuple[str, str], list[ProductPriceObservation]] = defaultdict(
-            list
+        store_candidates: dict[tuple[str, str, int, int], list[ProductPriceObservation]] = (
+            defaultdict(list)
+        )
+        service_area_candidates: dict[tuple[str, str, str], list[ProductPriceObservation]] = (
+            defaultdict(list)
         )
         for observation in competitor_observations:
-            candidates_by_product[(observation.retailer_id, observation.product_id)].append(
-                observation
-            )
+            if observation.location_kind == "service_area":
+                if observation.zipcode:
+                    service_area_candidates[
+                        (
+                            observation.retailer_id,
+                            observation.product_id,
+                            observation.zipcode,
+                        )
+                    ].append(observation)
+                continue
+            bucket = _spatial_bucket(observation)
+            if bucket is not None:
+                store_candidates[
+                    (
+                        observation.retailer_id,
+                        observation.product_id,
+                        bucket[0],
+                        bucket[1],
+                    )
+                ].append(observation)
 
         outcomes: list[JsonObject] = []
         for benchmark in visible_benchmark:
@@ -202,9 +251,31 @@ class CompetitiveProductLeadershipProjector:
             for relationship in relationships:
                 if not relationship.admits(benchmark.scope_key):
                     continue
-                for competitor in candidates_by_product.get(
-                    (relationship.competitor_id, relationship.competitor_product_id), []
+                eligible_competitors = list(
+                    service_area_candidates.get(
+                        (
+                            relationship.competitor_id,
+                            relationship.competitor_product_id,
+                            benchmark.zipcode or "",
+                        ),
+                        [],
+                    )
+                )
+                for latitude_bucket, longitude_bucket in _neighboring_buckets(
+                    benchmark, radius_miles
                 ):
+                    eligible_competitors.extend(
+                        store_candidates.get(
+                            (
+                                relationship.competitor_id,
+                                relationship.competitor_product_id,
+                                latitude_bucket,
+                                longitude_bucket,
+                            ),
+                            [],
+                        )
+                    )
+                for competitor in eligible_competitors:
                     distance = _distance_miles(benchmark, competitor)
                     if competitor.location_kind == "service_area":
                         if not benchmark.zipcode or competitor.zipcode != benchmark.zipcode:
@@ -373,10 +444,14 @@ class CompetitiveProductLeadershipProjector:
                 _geography_summary(rows, level="state", label=label)
                 for label, rows in sorted(state_groups.items())
             ],
-            "city_summaries": [
-                _geography_summary(rows, level="city", label=f"{label}, {state_label}")
-                for (state_label, label), rows in sorted(city_groups.items())
-            ],
+            "city_summaries": (
+                [
+                    _geography_summary(rows, level="city", label=f"{label}, {state_label}")
+                    for (state_label, label), rows in sorted(city_groups.items())
+                ]
+                if state is not None
+                else []
+            ),
             "competitor_summaries": [
                 {
                     "competitor_id": competitor_id,

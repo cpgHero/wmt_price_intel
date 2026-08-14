@@ -37,6 +37,11 @@ When several governed competitor observations qualify, the lowest comparison val
 benchmark-store outcome. Equal values are resolved deterministically by distance and stable location
 scope key.
 
+Physical stores are indexed in small latitude/longitude buckets before distance calculation. This
+keeps the exact haversine admission rule while avoiding a national all-stores-by-all-stores join.
+National responses return state summaries; city summaries are materialized after a state is selected
+so the initial payload does not repeat thousands of irrelevant city aggregates.
+
 ## Status and metric governance
 
 Each observed benchmark store receives exactly one mutually exclusive status:

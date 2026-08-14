@@ -81,25 +81,7 @@
       "maximum_losing_gap": 0.09
     }
   ],
-  "city_summaries": [
-    {
-      "id": "city:Bentonville, AR",
-      "level": "city",
-      "label": "Bentonville, AR",
-      "benchmark_observed_stores": 1,
-      "scored_stores": 1,
-      "coverage_rate": 1.0,
-      "leader_stores": 0,
-      "tied_stores": 0,
-      "at_risk_stores": 0,
-      "losing_stores": 1,
-      "unscored_stores": 0,
-      "leader_rate": 0.0,
-      "average_gap": -0.09,
-      "average_losing_gap": 0.09,
-      "maximum_losing_gap": 0.09
-    }
-  ],
+  "city_summaries": [],
   "competitor_summaries": [
     {
       "competitor_id": "aldi_us",
