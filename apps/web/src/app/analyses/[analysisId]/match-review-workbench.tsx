@@ -365,10 +365,11 @@ function ProductComparisonChecklist({
   benchmarkName: string;
   competitorName: string;
 }>) {
-  const rows = compareProductDetails(benchmark, competitor).filter((row) =>
-    ["Product", "Specifications", "Physical properties", "Variant"].includes(
-      row.section,
-    ) && row.label !== "Seller",
+  const rows = compareProductDetails(benchmark, competitor).filter(
+    (row) =>
+      ["Product", "Specifications", "Physical properties", "Variant"].includes(
+        row.section,
+      ) && row.label !== "Seller",
   );
   if (!rows.length) return null;
   const aligned = rows.filter((row) => row.status === "aligned").length;

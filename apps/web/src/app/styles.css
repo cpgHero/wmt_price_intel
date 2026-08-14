@@ -9359,10 +9359,9 @@ tbody tr:last-child td {
   align-items: center;
   display: grid;
   gap: 0.65rem;
-  grid-template-columns: minmax(120px, 0.9fr) repeat(
-      2,
-      minmax(135px, 1.2fr)
-    ) minmax(95px, 0.7fr);
+  grid-template-columns:
+    minmax(120px, 0.9fr) repeat(2, minmax(135px, 1.2fr))
+    minmax(95px, 0.7fr);
   padding: 0.55rem 0.65rem;
 }
 .match-comparison-head {
