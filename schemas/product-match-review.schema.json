@@ -108,10 +108,41 @@
         "canonical_product_id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
         "brand": { "type": ["string", "null"] },
+        "seller": { "type": ["string", "null"] },
         "image_url": { "type": ["string", "null"] },
         "url": { "type": ["string", "null"] },
-        "price": { "type": ["number", "null"] }
-        ,
+        "description": { "type": ["string", "null"] },
+        "category_path": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "null" }
+          ]
+        },
+        "identifiers": { "type": "object" },
+        "specification": { "type": "object" },
+        "physical_properties": { "type": "object" },
+        "variant_configuration": { "type": "object" },
+        "item_condition": { "type": ["string", "null"] },
+        "fulfillment": { "type": "object" },
+        "reviews": { "type": "object" },
+        "demand": { "type": "object" },
+        "content": { "type": "object" },
+        "relationships": { "type": "object" },
+        "media": { "type": "object" },
+        "pdp_source_field_inventory": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "pdp_unmapped_source_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "pdp_reference_price": { "type": ["number", "null"] },
+        "pdp_reference_currency": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
         "other_lens_participation": {
           "type": "array",
           "items": {

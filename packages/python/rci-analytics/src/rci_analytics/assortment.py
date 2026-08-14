@@ -380,21 +380,49 @@ def merge_assortment_product_context(
         for row in highlights
         if row.get("canonical_product_id")
     }
+
+    def enrich_product(product: JsonObject) -> None:
+        pdp = context.get(str(product.get("canonical_product_id")))
+        if not pdp:
+            return
+        # These fields describe the retailer product and can safely improve the
+        # review surface. Search remains the sole authority for observed price,
+        # availability, sponsorship, and retailer-location facts.
+        for key in (
+            "name",
+            "brand",
+            "seller",
+            "image_url",
+            "url",
+            "description",
+            "category_path",
+            "identifiers",
+            "specification",
+            "physical_properties",
+            "variant_configuration",
+            "item_condition",
+            "fulfillment",
+            "reviews",
+            "demand",
+            "content",
+            "relationships",
+            "media",
+            "pdp_source_field_inventory",
+            "pdp_unmapped_source_fields",
+            "role",
+        ):
+            if pdp.get(key) not in (None, "", {}, []):
+                product[key] = copy.deepcopy(pdp[key])
+        if pdp.get("price") is not None:
+            product["pdp_reference_price"] = pdp["price"]
+        if pdp.get("price_currency"):
+            product["pdp_reference_currency"] = pdp["price_currency"]
+
     for comparison in enriched.get("comparisons", []):
         for field in ("top_benchmark_only", "top_competitor_whitespace"):
             for product in comparison.get(field, []):
-                pdp = context.get(str(product.get("canonical_product_id")))
-                if not pdp:
-                    continue
-                for key in ("name", "brand", "image_url", "url"):
-                    if pdp.get(key):
-                        product[key] = pdp[key]
+                enrich_product(product)
     for retailer in enriched.get("retailers", []):
         for product in retailer.get("products", []):
-            pdp = context.get(str(product.get("canonical_product_id")))
-            if not pdp:
-                continue
-            for key in ("name", "brand", "image_url", "url"):
-                if pdp.get(key):
-                    product[key] = pdp[key]
+            enrich_product(product)
     return enriched

@@ -41,6 +41,7 @@ from rci_analytics import (
     benchmark_product_match_candidates,
     complete_attributes_from_pdp,
     evidence_set,
+    merge_assortment_product_context,
     product_context_index,
     resolve_one_to_one_relationships,
 )
@@ -1143,12 +1144,15 @@ class AnalysisProcessor:
                 if candidate["relationship_status"] == "ambiguous"
                 else []
             )
-        assortment_analysis = assortment_accumulator.finalize(
-            benchmark_retailer=benchmark,
-            competitors=competitors,
-            matches=review_matches,
-            profiles=selected_profiles,
-            ambiguous_groups=ambiguous_match_groups,
+        assortment_analysis = merge_assortment_product_context(
+            assortment_accumulator.finalize(
+                benchmark_retailer=benchmark,
+                competitors=competitors,
+                matches=review_matches,
+                profiles=selected_profiles,
+                ambiguous_groups=ambiguous_match_groups,
+            ),
+            pdp_context.values(),
         )
         assortment_analysis["comparison_population"] = {
             "reported_price_outcomes": "relationship_resolved_products",

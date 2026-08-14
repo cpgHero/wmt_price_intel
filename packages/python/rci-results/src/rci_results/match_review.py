@@ -1138,8 +1138,27 @@ class MatchReviewService:
                     )
                     for key in (
                         "brand",
+                        "seller",
                         "image_url",
                         "url",
+                        "description",
+                        "category_path",
+                        "identifiers",
+                        "specification",
+                        "physical_properties",
+                        "variant_configuration",
+                        "item_condition",
+                        "fulfillment",
+                        "reviews",
+                        "demand",
+                        "content",
+                        "relationships",
+                        "media",
+                        "pdp_source_field_inventory",
+                        "pdp_unmapped_source_fields",
+                        "pdp_reference_price",
+                        "pdp_reference_currency",
+                        "role",
                         "attributes",
                         "attribute_variants",
                         "attribute_conflict",
@@ -1173,8 +1192,21 @@ class MatchReviewService:
                         "price": row.get(f"median_{prefix}_price"),
                     },
                 )
+                current = products[(retailer, product_id)]
+                for target, source_name in (
+                    ("brand", f"{prefix}_brand"),
+                    ("image_url", f"{prefix}_image_url"),
+                    ("url", f"{prefix}_product_url"),
+                    ("description", f"{prefix}_description"),
+                    ("category_path", f"{prefix}_category_path"),
+                    ("identifiers", f"{prefix}_identifiers"),
+                    ("specification", f"{prefix}_specification"),
+                    ("physical_properties", f"{prefix}_physical_properties"),
+                    ("variant_configuration", f"{prefix}_variant_configuration"),
+                ):
+                    if row.get(source_name) not in (None, "", {}, []):
+                        current[target] = copy.deepcopy(row[source_name])
                 if prefix == "benchmark":
-                    current = products[(retailer, product_id)]
                     current["location_scope_keys"] = sorted(
                         {
                             *(

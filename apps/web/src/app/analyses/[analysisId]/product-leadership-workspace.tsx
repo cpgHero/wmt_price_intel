@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CompetitiveProductLeadership } from "@/lib/api";
@@ -915,6 +916,12 @@ function MatchGroupAnalysis({
                   <dd>{count(row.benchmarkLocations)} stores</dd>
                 </div>
               </dl>
+              <Link
+                className={styles.reviewLink}
+                href={`/workspace/matches/${encodeURIComponent(view.analysis_id)}?competitor=${encodeURIComponent(row.competitor_id)}&lens=${encodeURIComponent(row.profile_id)}&pair=${encodeURIComponent(row.relationship_id)}`}
+              >
+                Inspect PDP & match evidence
+              </Link>
             </article>
           ))}
         </div>

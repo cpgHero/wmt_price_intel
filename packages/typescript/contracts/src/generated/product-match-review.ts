@@ -43,9 +43,47 @@ export interface Product {
   canonical_product_id: string;
   name: string;
   brand?: string | null;
+  seller?: string | null;
   image_url?: string | null;
   url?: string | null;
-  price?: number | null;
+  description?: string | null;
+  category_path?: string | string[] | null;
+  identifiers?: {
+    [k: string]: unknown;
+  };
+  specification?: {
+    [k: string]: unknown;
+  };
+  physical_properties?: {
+    [k: string]: unknown;
+  };
+  variant_configuration?: {
+    [k: string]: unknown;
+  };
+  item_condition?: string | null;
+  fulfillment?: {
+    [k: string]: unknown;
+  };
+  reviews?: {
+    [k: string]: unknown;
+  };
+  demand?: {
+    [k: string]: unknown;
+  };
+  content?: {
+    [k: string]: unknown;
+  };
+  relationships?: {
+    [k: string]: unknown;
+  };
+  media?: {
+    [k: string]: unknown;
+  };
+  pdp_source_field_inventory?: string[];
+  pdp_unmapped_source_fields?: string[];
+  pdp_reference_price?: number | null;
+  pdp_reference_currency?: string | null;
+  role?: string | null;
   other_lens_participation?: {
     profile_id: string;
     status: "suggested" | "confirmed" | "rejected" | "ambiguous";

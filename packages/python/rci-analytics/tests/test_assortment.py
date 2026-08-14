@@ -167,11 +167,30 @@ def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
             {
                 "canonical_product_id": "walmart_us:w1",
                 "name": "PDP name",
+                "seller": "Walmart.com",
                 "image_url": "https://example.test/product.png",
+                "description": "PDP description",
+                "category_path": "Dairy > Milk",
+                "identifiers": {"upc": "012345678905"},
+                "specification": {"size": "1 gal"},
+                "fulfillment": {"pickup_available": True},
+                "reviews": {"rating": 4.6},
+                "pdp_source_field_inventory": ["seller", "rating"],
+                "price": 3.94,
+                "price_currency": "USD",
             }
         ],
     )
 
     assert enriched["comparisons"][0]["product_relationships"] == 3
     assert enriched["comparisons"][0]["top_benchmark_only"][0]["name"] == "PDP name"
+    product = enriched["comparisons"][0]["top_benchmark_only"][0]
+    assert product["seller"] == "Walmart.com"
+    assert product["description"] == "PDP description"
+    assert product["identifiers"] == {"upc": "012345678905"}
+    assert product["specification"] == {"size": "1 gal"}
+    assert product["fulfillment"] == {"pickup_available": True}
+    assert product["reviews"] == {"rating": 4.6}
+    assert product["pdp_reference_price"] == 3.94
+    assert "price" not in product
     assert source["comparisons"][0]["top_benchmark_only"][0]["name"] == "Search name"

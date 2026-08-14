@@ -575,6 +575,17 @@
   font-weight: 750;
   margin: 0;
 }
+.reviewLink {
+  color: var(--green);
+  font-size: 0.52rem;
+  font-weight: 800;
+  grid-column: 2 / -1;
+  justify-self: start;
+  text-decoration: none;
+}
+.reviewLink:hover {
+  text-decoration: underline;
+}
 .marketSpotlight {
   border-color: color-mix(in srgb, var(--green) 25%, var(--line));
 }

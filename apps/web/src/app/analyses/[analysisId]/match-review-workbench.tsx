@@ -11,9 +11,11 @@ import type {
 } from "@/lib/api";
 import {
   type CrossLensMembership,
+  compareProductDetails,
   connectionSearchText,
   evidenceForProfile,
   productDetailRows,
+  productEvidenceSummary,
   rankMatchReviewConnections,
   scopeMatchReview,
 } from "@/lib/match-review-model";
@@ -246,10 +248,7 @@ function ProductEvidencePanel({
   retailerName: string;
 }>) {
   const rows = productDetailRows(product);
-  const description =
-    typeof product.description === "string" && product.description.trim()
-      ? product.description
-      : null;
+  const summary = productEvidenceSummary(product);
   return (
     <section className="match-drawer-product">
       <div className="match-drawer-product-head">
@@ -261,12 +260,63 @@ function ProductEvidencePanel({
           <code>{product.product_id}</code>
         </div>
       </div>
-      <p className="match-price-reference">
-        PDP identity evidence. Decision-facing price is shown only from matched
-        retailer Search observations.
-      </p>
+      <div className="match-pdp-status-line">
+        <span className={summary.enriched ? "enriched" : "missing"}>
+          {summary.enriched ? "PDP enriched" : "PDP not available"}
+        </span>
+        <small>
+          {summary.sourceFieldCount
+            ? `${summary.sourceFieldCount} retained provider fields`
+            : "Search identity fallback"}
+        </small>
+      </div>
+      <div className="match-pdp-summary-grid">
+        <div>
+          <span>Seller</span>
+          <strong>{summary.seller || "Not supplied"}</strong>
+          <small>Never inferred from retailer name</small>
+        </div>
+        <div>
+          <span>Category</span>
+          <strong>{summary.category || "Not supplied"}</strong>
+          <small>{summary.condition || "Condition not supplied"}</small>
+        </div>
+        <div>
+          <span>Ratings</span>
+          <strong>
+            {summary.rating === null
+              ? "Not supplied"
+              : `${summary.rating.toFixed(1)} rating`}
+          </strong>
+          <small>
+            {summary.reviewCount === null
+              ? "Review count not supplied"
+              : `${summary.reviewCount.toLocaleString()} reviews/ratings`}
+          </small>
+        </div>
+        <div>
+          <span>Fulfillment</span>
+          <strong>{summary.fulfillment[0] || "Not supplied"}</strong>
+          <small>
+            {summary.fulfillment.slice(1).join(" · ") || "PDP context only"}
+          </small>
+        </div>
+        <div>
+          <span>Content depth</span>
+          <strong>
+            {summary.imageCount} images · {summary.videoCount} videos
+          </strong>
+          <small>{summary.relationshipCount} related product references</small>
+        </div>
+        <div>
+          <span>Demand context</span>
+          <strong>{summary.demand || "Not supplied"}</strong>
+          <small>PDP reference; not Search demand</small>
+        </div>
+      </div>
       <p className="match-product-description">
-        {description || "No PDP description is persisted for this product."}
+        {summary.description ||
+          "No PDP description is persisted for this product."}
       </p>
       {product.url ? (
         <a href={product.url} target="_blank" rel="noreferrer">
@@ -274,22 +324,100 @@ function ProductEvidencePanel({
         </a>
       ) : null}
       {rows.length ? (
-        <dl className="match-detail-list">
-          {rows.slice(0, 24).map((row) => (
-            <div key={`${row.section}:${row.label}`}>
-              <dt>
-                <small>{row.section}</small>
-                {row.label}
-              </dt>
-              <dd>{row.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <details className="match-pdp-details">
+          <summary>View identifiers and all retained attributes</summary>
+          <dl className="match-detail-list">
+            {rows.slice(0, 36).map((row) => (
+              <div key={`${row.section}:${row.label}`}>
+                <dt>
+                  <small>{row.section}</small>
+                  {row.label}
+                </dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       ) : (
         <p className="match-detail-empty">
           No additional PDP specifications are persisted for this product.
         </p>
       )}
+      {summary.unmappedFields.length ? (
+        <p className="match-pdp-governance-note">
+          {summary.unmappedFields.length} newly observed provider field
+          {summary.unmappedFields.length === 1 ? " is" : "s are"} retained in
+          the immutable raw payload and queued for schema review.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ProductComparisonChecklist({
+  benchmark,
+  competitor,
+  benchmarkName,
+  competitorName,
+}: Readonly<{
+  benchmark: MatchReviewProduct;
+  competitor: MatchReviewProduct;
+  benchmarkName: string;
+  competitorName: string;
+}>) {
+  const rows = compareProductDetails(benchmark, competitor).filter((row) =>
+    ["Product", "Specifications", "Physical properties", "Variant"].includes(
+      row.section,
+    ) && row.label !== "Seller",
+  );
+  if (!rows.length) return null;
+  const aligned = rows.filter((row) => row.status === "aligned").length;
+  const needsReview = rows.length - aligned;
+  return (
+    <section className="match-comparison-checklist">
+      <header>
+        <div>
+          <p className="eyebrow">PDP comparison checklist</p>
+          <h4>See exactly where identity evidence aligns or differs</h4>
+          <p>
+            PDP attributes inform comparability; Product Pack rules and Search
+            observations still govern the relationship and price result.
+          </p>
+        </div>
+        <span>
+          <b>{aligned} aligned</b>
+          <em>{needsReview} incomplete or different</em>
+        </span>
+      </header>
+      <div className="match-comparison-table" role="table">
+        <div className="match-comparison-head" role="row">
+          <strong role="columnheader">Attribute</strong>
+          <strong role="columnheader">{benchmarkName}</strong>
+          <strong role="columnheader">{competitorName}</strong>
+          <strong role="columnheader">Assessment</strong>
+        </div>
+        {rows.slice(0, 18).map((row) => (
+          <div
+            className={`match-comparison-row ${row.status}`}
+            role="row"
+            key={`${row.section}:${row.label}`}
+          >
+            <span role="cell">
+              <small>{row.section}</small>
+              {row.label}
+            </span>
+            <span role="cell">{row.value}</span>
+            <span role="cell">{row.counterpartValue || "Not supplied"}</span>
+            <b role="cell">
+              {row.status === "aligned"
+                ? "Aligned"
+                : row.status === "different"
+                  ? "Review difference"
+                  : "Incomplete"}
+            </b>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -424,6 +552,14 @@ function MatchEvidenceDrawer({
           </section>
         ) : null}
 
+        {selection.benchmark && selection.competitor ? (
+          <ProductComparisonChecklist
+            benchmark={selection.benchmark}
+            competitor={selection.competitor}
+            benchmarkName={benchmarkName}
+            competitorName={competitorName}
+          />
+        ) : null}
         <div className="match-drawer-products">
           {selection.benchmark ? (
             <ProductEvidencePanel

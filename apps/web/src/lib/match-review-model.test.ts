@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { MatchReview } from "@/lib/api";
 
 import {
+  compareProductDetails,
   evidenceForProfile,
   productDetailRows,
+  productEvidenceSummary,
   rankMatchReviewConnections,
   scopeMatchReview,
 } from "./match-review-model";
@@ -37,7 +39,16 @@ const review: MatchReview = {
       product_id: "w1",
       canonical_product_id: "walmart_us:w1",
       name: "Walmart beef",
-      specification: { weight: "1 lb" },
+      seller: "Walmart.com",
+      description: "Fresh ground beef",
+      category_path: "Meat > Ground beef",
+      identifiers: { upc: "012345678905" },
+      specification: { weight: "1 lb", form: "Fresh" },
+      fulfillment: { pickup_available: true },
+      reviews: { rating: 4.7, reviews_count: 120 },
+      media: { images: ["https://example.test/w1.png"] },
+      pdp_source_field_inventory: ["seller", "rating", "reviews_count"],
+      role: "PDP-enriched reference",
     },
     {
       retailer_id: "walmart_us",
@@ -50,6 +61,8 @@ const review: MatchReview = {
       product_id: "a1",
       canonical_product_id: "aldi_us:a1",
       name: "ALDI beef",
+      seller: "ALDI",
+      specification: { weight: "1 lb", form: "Fresh" },
     },
   ],
   connections: [
@@ -113,6 +126,47 @@ describe("match review scope", () => {
       section: "Specifications",
       label: "Weight",
       value: "1 lb",
+    });
+    expect(productDetailRows(review.products[0])).toContainEqual({
+      section: "Product",
+      label: "Seller",
+      value: "Walmart.com",
+    });
+    expect(productEvidenceSummary(review.products[0])).toMatchObject({
+      enriched: true,
+      seller: "Walmart.com",
+      category: "Meat > Ground beef",
+      rating: 4.7,
+      reviewCount: 120,
+      fulfillment: ["Pickup available"],
+      imageCount: 1,
+      sourceFieldCount: 3,
+    });
+  });
+
+  it("compares PDP semantics without treating missing fields as aligned", () => {
+    const rows = compareProductDetails(review.products[0], review.products[2]);
+
+    expect(rows).toContainEqual({
+      section: "Specifications",
+      label: "Weight",
+      value: "1 lb",
+      counterpartValue: "1 lb",
+      status: "aligned",
+    });
+    expect(rows).toContainEqual({
+      section: "Product",
+      label: "Seller",
+      value: "Walmart.com",
+      counterpartValue: "ALDI",
+      status: "different",
+    });
+    expect(rows).toContainEqual({
+      section: "Identifiers",
+      label: "Upc",
+      value: "012345678905",
+      counterpartValue: null,
+      status: "missing",
     });
   });
 

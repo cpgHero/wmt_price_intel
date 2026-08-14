@@ -73,7 +73,16 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "canonical_product_id": "walmart_us:w1",
                     "retailer": "walmart_us",
                     "name": "Walmart 93/7 Ground Beef",
+                    "seller": "Walmart.com",
                     "image_url": "https://example.test/w1.png",
+                    "description": "Fresh 93/7 ground beef",
+                    "category_path": "Meat > Ground beef",
+                    "identifiers": {"upc": "012345678905"},
+                    "specification": {"weight": "1 lb"},
+                    "fulfillment": {"pickup_available": True},
+                    "reviews": {"rating": 4.7, "reviews_count": 120},
+                    "pdp_source_field_inventory": ["seller", "rating", "reviews_count"],
+                    "role": "PDP-enriched reference",
                     "price": 5.47,
                     "location_scope_keys": ["walmart_us|72712|store-1"],
                 },
@@ -218,6 +227,15 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
     products = {row["canonical_product_id"]: row for row in initial["products"]}
     assert "price" not in products["walmart_us:w1"]
     assert products["walmart_us:w1"]["pdp_reference_price"] == 5.47
+    assert products["walmart_us:w1"]["seller"] == "Walmart.com"
+    assert products["walmart_us:w1"]["description"] == "Fresh 93/7 ground beef"
+    assert products["walmart_us:w1"]["identifiers"] == {"upc": "012345678905"}
+    assert products["walmart_us:w1"]["specification"] == {"weight": "1 lb"}
+    assert products["walmart_us:w1"]["fulfillment"] == {"pickup_available": True}
+    assert products["walmart_us:w1"]["reviews"] == {
+        "rating": 4.7,
+        "reviews_count": 120,
+    }
     strict_evidence = initial["connections"][0]["profile_evidence"][0]
     assert strict_evidence["benchmark_median"] == 5.47
     assert strict_evidence["competitor_median"] == 5.29
