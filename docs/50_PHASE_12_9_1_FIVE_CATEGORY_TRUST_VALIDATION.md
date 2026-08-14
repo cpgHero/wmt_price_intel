@@ -29,6 +29,37 @@ fixtures.
 The report-library row counts and category identities must reconcile to the full-source golden
 inputs before a release is accepted.
 
+## Live release-candidate ledger
+
+The production validation used each report's default governed benchmark product, comparison
+basis, competitor context, and 3-mile radius. Every row was independently certified by the API
+before it reached the UI.
+
+| Category | Observed | Scored | Leader | Tied | At risk | Losing | Unscored | Coverage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fresh bananas | 4,294 | 2,095 | 0 | 0 | 0 | 2,095 | 2,199 | 48.8% |
+| Fresh strawberries | 3,562 | 362 | 362 | 0 | 0 | 0 | 3,200 | 10.2% |
+| Fresh shell eggs | 453 | 53 | 23 | 0 | 0 | 30 | 400 | 11.7% |
+| Fresh fluid milk | 1,995 | 10 | 0 | 10 | 0 | 0 | 1,985 | 0.5% |
+| Fresh ground beef | 4,091 | 2,057 | 0 | 0 | 0 | 2,057 | 2,034 | 50.3% |
+
+Additional evidence checks:
+
+- Milk's ten admitted observations are the ten exact ZIP overlaps in the approved 1,817-location
+  relationship scope. Each row is an $11.92-to-$11.92 tie and displays `Same ZIP`, not a fabricated
+  distance. North Carolina scopes to 117 observed and ten scored stores; Charlotte scopes to nine
+  observed and five scored stores.
+- The physical-store radius check is monotonic for the same ground-beef product and denominator:
+  1,178 scored stores at 1 mile, 2,057 at 3 miles, and 2,421 at 5 miles.
+- Ground beef's 3-mile losses average $0.152 with a $0.25 maximum; the average is calculated from
+  all 2,057 scored losses and is not inferred from one display card.
+- Eggs reconcile to 23 leaders plus 30 losses; the 30 losses are exact-ZIP Amazon evidence in
+  Florida at $6.92 versus $6.49 for the selected pair.
+- Strawberries present a truthful zero-loss state and do not name a zero-count competitor or
+  market as an insight.
+- The production browser emitted no application console errors during the state, city, radius,
+  match-group, and store-evidence drill-through.
+
 ## Trust defect found and repaired
 
 Distribution-scoped governed relationships store the immutable Search-grain key
@@ -88,6 +119,16 @@ The current five-category replay requires no additional paid PDP request to corr
 math. Known unclassified ALDI identity remains a governed review warning because the successful
 cached PDP evidence did not provide a usable brand; repeating the same paid request would not make
 that classification trustworthy.
+
+## Executed verification
+
+- Five complete-source golden suites: **6 passed** in 422.93 seconds.
+- Focused Product Leadership, Product Location, and API regression suites: **17 passed**.
+- Local repository suite: **404 passed**, **13 expected integration skips**; the managed desktop
+  sandbox alone denied the health test's ephemeral localhost socket bind.
+- GitHub CI run `31819718156` passed the unrestricted health test, all Python checks, database
+  upgrade/downgrade tests, contracts, TypeScript checks, 46 unit tests, three Playwright tests,
+  production builds, and all four application container builds.
 
 ## Acceptance commands
 
