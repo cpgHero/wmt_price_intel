@@ -209,29 +209,35 @@ class CompetitiveProductLeadershipService:
             raise ValueError("selected relationships do not share one comparison metric")
         comparison_metric = next(iter(comparison_metrics))
 
-        competitor_products = sorted(
-            {(row.competitor_id, row.competitor_product_id) for row in relationships}
-        )
+        competitor_products: dict[str, set[str]] = {}
+        for relationship in relationships:
+            competitor_products.setdefault(relationship.competitor_id, set()).add(
+                relationship.competitor_product_id
+            )
+        competitor_retailers = sorted(competitor_products)
         observation_groups = await asyncio.gather(
-            self._prices.product_observations(
+            self._prices.product_observations_for_products(
                 analysis_id,
                 retailer_id=str(benchmark["id"]),
-                product_id=selected_product_id,
+                product_ids=[selected_product_id],
                 comparison_metric=comparison_metric,
             ),
             *(
-                self._prices.product_observations(
+                self._prices.product_observations_for_products(
                     analysis_id,
                     retailer_id=competitor_retailer_id,
-                    product_id=competitor_product_id,
+                    product_ids=sorted(competitor_products[competitor_retailer_id]),
                     comparison_metric=comparison_metric,
                 )
-                for competitor_retailer_id, competitor_product_id in competitor_products
+                for competitor_retailer_id in competitor_retailers
             ),
         )
-        benchmark_observations = observation_groups[0]
+        benchmark_observations = list(observation_groups[0].get(selected_product_id, ()))
         competitor_observations = [
-            observation for group in observation_groups[1:] for observation in group
+            observation
+            for group in observation_groups[1:]
+            for observations in group.values()
+            for observation in observations
         ]
         if not benchmark_observations:
             raise LookupError("positive benchmark Search observations are unavailable")

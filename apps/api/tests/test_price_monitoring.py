@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from io import BytesIO
 from pathlib import Path
-from types import MethodType
+from types import MethodType, SimpleNamespace
 
 import polars as pl
 from httpx import ASGITransport, AsyncClient
@@ -22,12 +22,15 @@ async def test_parquet_reader_projects_governed_columns_and_inserts_optional_col
     buffer = BytesIO()
     pl.DataFrame(
         {
-            "offer_id": ["offer-1"],
-            "retailer_id": ["walmart_us"],
-            "retailer_product_id": ["123"],
-            "title": ["Product 123"],
-            "price": [4.99],
-            "unused_payload": ["must not be decoded into the read model"],
+            "offer_id": ["offer-1", "offer-2"],
+            "retailer_id": ["walmart_us", "walmart_us"],
+            "retailer_product_id": ["000123", "999"],
+            "title": ["Product 123", "Product 999"],
+            "price": [4.99, 8.99],
+            "unused_payload": [
+                "must not be decoded into the read model",
+                "must not be decoded into the read model",
+            ],
         }
     ).write_parquet(buffer)
     payload = buffer.getvalue()
@@ -37,21 +40,159 @@ async def test_parquet_reader_projects_governed_columns_and_inserts_optional_col
             return payload
 
     class Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
         def get_object(self, **_kwargs: object) -> dict[str, object]:
+            self.calls += 1
             return {"Body": Body()}
 
-    reader = S3ParquetReader(bucket="artifacts", client=Client())
-    rows = await reader.read(
-        ClassifiedArtifact(
-            storage_uri="s3://artifacts/classified.parquet",
-            checksum=hashlib.sha256(payload).hexdigest(),
-            row_count=1,
-        )
+    client = Client()
+    reader = S3ParquetReader(bucket="artifacts", client=client)
+    artifact = ClassifiedArtifact(
+        storage_uri="s3://artifacts/classified.parquet",
+        checksum=hashlib.sha256(payload).hexdigest(),
+        row_count=2,
+    )
+    rows = await reader.read(artifact)
+    selected = await reader.read_products(
+        artifact,
+        retailer_id="walmart_us",
+        product_ids=["000123"],
     )
 
     assert rows[0]["offer_id"] == "offer-1"
     assert "metrics_json" not in rows[0]
     assert "unused_payload" not in rows[0]
+    assert [row["retailer_product_id"] for row in selected] == ["000123"]
+    assert client.calls == 1
+
+
+async def test_product_observation_batch_reads_only_requested_products_once() -> None:
+    class Analyses:
+        async def get(self, analysis_id: str) -> object:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                collection_run_id="run-1",
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                },
+            )
+
+    class Repository:
+        async def artifacts(self, collection_run_id: str, retailer_id: str) -> list[object]:
+            assert (collection_run_id, retailer_id) == ("run-1", "aldi_us")
+            return [
+                ClassifiedArtifact(
+                    storage_uri="s3://artifacts/aldi.parquet",
+                    checksum="a" * 64,
+                    row_count=2,
+                )
+            ]
+
+        async def location_context(
+            self, collection_run_id: str, retailer_id: str
+        ) -> tuple[dict[tuple[str, str], dict[str, object]], dict[object, object], int]:
+            assert (collection_run_id, retailer_id) == ("run-1", "aldi_us")
+            return (
+                {
+                    ("aldi_us", "1"): {
+                        "store_name": "ALDI One",
+                        "zipcode": "72712",
+                        "city": "Bentonville",
+                        "state": "AR",
+                        "country": "USA",
+                        "latitude": 36.37,
+                        "longitude": -94.21,
+                    },
+                    ("aldi_us", "2"): {
+                        "store_name": "ALDI Two",
+                        "zipcode": "72756",
+                        "city": "Rogers",
+                        "state": "AR",
+                        "country": "USA",
+                        "latitude": 36.33,
+                        "longitude": -94.12,
+                    },
+                },
+                {},
+                2,
+            )
+
+        async def product_context(
+            self, retailer_id: str, product_ids: list[str]
+        ) -> dict[str, dict[str, object]]:
+            assert retailer_id == "aldi_us"
+            assert product_ids == ["a-1", "a-2"]
+            return {
+                "aldi_us:a-1": {"name": "ALDI Product One"},
+                "aldi_us:a-2": {"name": "ALDI Product Two"},
+            }
+
+    class Reader:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def read_products(
+            self,
+            artifact: object,
+            *,
+            retailer_id: str,
+            product_ids: list[str],
+        ) -> list[dict[str, object]]:
+            assert artifact is not None
+            assert retailer_id == "aldi_us"
+            assert product_ids == ["a-1", "a-2"]
+            self.calls += 1
+            return [
+                {
+                    "offer_id": f"offer-{index}",
+                    "retailer_id": "aldi_us",
+                    "retailer_product_id": product_id,
+                    "title": f"Search {product_id}",
+                    "price": price,
+                    "currency": "USD",
+                    "zipcode": zipcode,
+                    "store_number": str(index),
+                    "in_scope": True,
+                    "metrics_json": "{}",
+                    "collected_at": "2026-08-07T06:00:00Z",
+                }
+                for index, (product_id, zipcode, price) in enumerate(
+                    (("a-1", "72712", 3.99), ("a-2", "72756", 4.99)),
+                    start=1,
+                )
+            ]
+
+    reader = Reader()
+    service = PriceMonitoringService(
+        repository_root=Path(__file__).resolve().parents[3],
+        analysis_service=Analyses(),  # type: ignore[arg-type]
+        repository=Repository(),  # type: ignore[arg-type]
+        product_pack_loader=object(),  # type: ignore[arg-type]
+        reader=reader,  # type: ignore[arg-type]
+    )
+    first = await service.product_observations_for_products(
+        "analysis-1",
+        retailer_id="aldi_us",
+        product_ids=["a-2", "a-1"],
+        comparison_metric="package_price",
+    )
+    second = await service.product_observations_for_products(
+        "analysis-1",
+        retailer_id="aldi_us",
+        product_ids=["a-1", "a-2"],
+        comparison_metric="package_price",
+    )
+
+    assert {product_id: len(rows) for product_id, rows in first.items()} == {
+        "a-1": 1,
+        "a-2": 1,
+    }
+    assert first == second
+    assert first["a-1"][0].product_name == "ALDI Product One"
+    assert reader.calls == 1
 
 
 async def test_price_monitoring_api_passes_governed_filters() -> None:

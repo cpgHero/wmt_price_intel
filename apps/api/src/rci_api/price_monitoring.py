@@ -63,6 +63,8 @@ class S3ParquetReader:
         self._client = client
         self._cache: dict[str, list[dict[str, Any]]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._body_cache: dict[str, bytes] = {}
+        self._body_locks: dict[str, asyncio.Lock] = {}
 
     @classmethod
     def from_environment(cls) -> S3ParquetReader:
@@ -104,6 +106,58 @@ class S3ParquetReader:
             return rows
 
     async def _download(self, artifact: ClassifiedArtifact) -> list[dict[str, Any]]:
+        body = await self._body(artifact)
+        frame = await asyncio.to_thread(self._decode, body)
+        return frame.to_dicts()
+
+    async def read_products(
+        self,
+        artifact: ClassifiedArtifact,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Read only selected products while preserving authoritative Search columns."""
+
+        if not product_ids:
+            return []
+        body = await self._body(artifact)
+
+        def decode_products() -> pl.DataFrame:
+            schema = pl.read_parquet_schema(BytesIO(body))
+            available = [column for column in self._columns() if column in schema]
+            required = {"retailer_id", "retailer_product_id"}
+            if not required.issubset(schema):
+                return pl.DataFrame()
+            return (
+                pl.scan_parquet(BytesIO(body))
+                .filter(
+                    (pl.col("retailer_id") == retailer_id)
+                    & pl.col("retailer_product_id").is_in(product_ids)
+                )
+                .select(available)
+                .collect()
+            )
+
+        frame = await asyncio.to_thread(decode_products)
+        return frame.to_dicts()
+
+    async def _body(self, artifact: ClassifiedArtifact) -> bytes:
+        cached = self._body_cache.get(artifact.checksum)
+        if cached is not None:
+            return cached
+        lock = self._body_locks.setdefault(artifact.checksum, asyncio.Lock())
+        async with lock:
+            cached = self._body_cache.get(artifact.checksum)
+            if cached is not None:
+                return cached
+            body = await self._fetch(artifact)
+            if len(self._body_cache) >= 3:
+                self._body_cache.pop(next(iter(self._body_cache)))
+            self._body_cache[artifact.checksum] = body
+            return body
+
+    async def _fetch(self, artifact: ClassifiedArtifact) -> bytes:
         prefix = f"s3://{self._bucket}/"
         if not artifact.storage_uri.startswith(prefix):
             raise ValueError("classified dataset belongs to a different object-storage bucket")
@@ -116,7 +170,11 @@ class S3ParquetReader:
         body = await asyncio.to_thread(download)
         if hashlib.sha256(body).hexdigest() != artifact.checksum:
             raise ValueError(f"classified dataset checksum mismatch for {artifact.storage_uri}")
-        columns = [
+        return body
+
+    @staticmethod
+    def _columns() -> list[str]:
+        return [
             "offer_id",
             "retailer_id",
             "retailer_product_id",
@@ -142,13 +200,11 @@ class S3ParquetReader:
             "review_reasons_json",
         ]
 
-        def decode_columns() -> pl.DataFrame:
-            schema = pl.read_parquet_schema(BytesIO(body))
-            available = [column for column in columns if column in schema]
-            return pl.read_parquet(BytesIO(body), columns=available)
-
-        frame = await asyncio.to_thread(decode_columns)
-        return frame.to_dicts()
+    @classmethod
+    def _decode(cls, body: bytes) -> pl.DataFrame:
+        schema = pl.read_parquet_schema(BytesIO(body))
+        available = [column for column in cls._columns() if column in schema]
+        return pl.read_parquet(BytesIO(body), columns=available)
 
 
 class PostgresPriceMonitoringRepository:
@@ -364,6 +420,10 @@ class PriceMonitoringService:
         self._prepared_locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._map_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._product_observation_cache: dict[
+            tuple[str, ...], dict[str, tuple[ProductPriceObservation, ...]]
+        ] = {}
+        self._product_observation_locks: dict[tuple[str, ...], asyncio.Lock] = {}
         catalog = json.loads((repository_root / "config" / "retailer-catalog.json").read_text())
         self._retailer_names = {
             str(row["id"]): str(row["display_name"])
@@ -530,10 +590,110 @@ class PriceMonitoringService:
     ) -> list[ProductPriceObservation]:
         """Return latest positive Search evidence at exact product-location grain."""
 
-        prepared = await self._prepare(analysis_id, retailer_id)
-        context = prepared.product_context.get(f"{retailer_id}:{product_id}", {})
-        selected: dict[str, tuple[tuple[str, str], ProductPriceObservation]] = {}
-        for classified in prepared.offers:
+        grouped = await self.product_observations_for_products(
+            analysis_id,
+            retailer_id=retailer_id,
+            product_ids=[product_id],
+            comparison_metric=comparison_metric,
+        )
+        return list(grouped.get(product_id, ()))
+
+    async def product_observations_for_products(
+        self,
+        analysis_id: str,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+        comparison_metric: str,
+    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
+        """Return selected product evidence without preparing unrelated retailer offers."""
+
+        selected_product_ids = sorted({value for value in product_ids if value})
+        if not selected_product_ids:
+            return {}
+        cache_key = (
+            analysis_id,
+            retailer_id,
+            comparison_metric,
+            *selected_product_ids,
+        )
+        cached = self._product_observation_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        lock = self._product_observation_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            cached = self._product_observation_cache.get(cache_key)
+            if cached is not None:
+                return cached
+            prepared = self._prepared_cache.get((analysis_id, retailer_id))
+            if prepared is not None:
+                offers = prepared.offers
+                location_index = prepared.location_index
+                product_context = prepared.product_context
+            else:
+                analysis = await self._analyses.get(analysis_id)
+                result = analysis.result
+                benchmark = str(result["benchmark_retailer"])
+                retailer_options = (benchmark, *(str(value) for value in result["competitors"]))
+                if retailer_id not in retailer_options:
+                    raise ValueError(f"retailer {retailer_id!r} is not in this analysis")
+                artifacts = await self._repository.artifacts(
+                    analysis.collection_run_id,
+                    retailer_id,
+                )
+                if not artifacts:
+                    raise LookupError(
+                        f"classified Search evidence for {retailer_id!r} is unavailable"
+                    )
+                row_groups, location_context, product_context = await asyncio.gather(
+                    asyncio.gather(
+                        *(
+                            self._reader.read_products(
+                                artifact,
+                                retailer_id=retailer_id,
+                                product_ids=selected_product_ids,
+                            )
+                            for artifact in artifacts
+                        )
+                    ),
+                    self._repository.location_context(
+                        analysis.collection_run_id,
+                        retailer_id,
+                    ),
+                    self._repository.product_context(
+                        retailer_id,
+                        selected_product_ids,
+                    ),
+                )
+                offers = tuple(
+                    classified_offer_from_record(record) for group in row_groups for record in group
+                )
+                location_index = location_context[0]
+            grouped = self._select_product_observations(
+                offers=offers,
+                retailer_id=retailer_id,
+                product_ids=set(selected_product_ids),
+                comparison_metric=comparison_metric,
+                location_index=location_index,
+                product_context=product_context,
+            )
+            if len(self._product_observation_cache) >= 128:
+                self._product_observation_cache.pop(next(iter(self._product_observation_cache)))
+            self._product_observation_cache[cache_key] = grouped
+            return grouped
+
+    def _select_product_observations(
+        self,
+        *,
+        offers: tuple[Any, ...],
+        retailer_id: str,
+        product_ids: set[str],
+        comparison_metric: str,
+        location_index: dict[tuple[str, str], dict[str, Any]],
+        product_context: dict[str, dict[str, Any]],
+    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
+        selected: dict[tuple[str, str], tuple[tuple[str, str], ProductPriceObservation]] = {}
+        for classified in offers:
             offer = classified.offer
             comparison_value = (
                 offer.price
@@ -543,7 +703,7 @@ class PriceMonitoringService:
             if (
                 not classified.in_scope
                 or offer.retailer_id != retailer_id
-                or offer.retailer_product_id != product_id
+                or offer.retailer_product_id not in product_ids
                 or offer.price is None
                 or offer.price <= 0
                 or comparison_value is None
@@ -559,7 +719,9 @@ class PriceMonitoringService:
             )
             if location_key is None:
                 continue
-            location = prepared.location_index.get((retailer_id, location_key), {})
+            product_id = offer.retailer_product_id
+            context = product_context.get(f"{retailer_id}:{product_id}", {})
+            location = location_index.get((retailer_id, location_key), {})
             scope_key = location_scope_key(offer)
             observation = ProductPriceObservation(
                 retailer_id=retailer_id,
@@ -594,20 +756,28 @@ class PriceMonitoringService:
                 observed_at=offer.collected_at,
             )
             rank = (str(offer.collected_at or ""), offer.offer_id)
-            previous = selected.get(scope_key)
+            selected_key = (product_id, scope_key)
+            previous = selected.get(selected_key)
             if previous is None or rank > previous[0]:
-                selected[scope_key] = (rank, observation)
-        return [
-            value[1]
-            for _scope, value in sorted(
-                selected.items(),
-                key=lambda item: (
-                    str(item[1][1].state or ""),
-                    str(item[1][1].city or ""),
-                    str(item[1][1].store_number or item[1][1].zipcode or ""),
-                ),
+                selected[selected_key] = (rank, observation)
+        grouped: dict[str, list[ProductPriceObservation]] = {
+            product_id: [] for product_id in product_ids
+        }
+        for (product_id, _scope), value in selected.items():
+            grouped[product_id].append(value[1])
+        return {
+            product_id: tuple(
+                sorted(
+                    observations,
+                    key=lambda row: (
+                        str(row.state or ""),
+                        str(row.city or ""),
+                        str(row.store_number or row.zipcode or ""),
+                    ),
+                )
             )
-        ]
+            for product_id, observations in grouped.items()
+        }
 
     async def evidence_csv(
         self,
