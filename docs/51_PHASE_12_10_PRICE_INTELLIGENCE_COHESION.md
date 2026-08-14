@@ -32,6 +32,9 @@ Legacy deep links migrate deterministically: `footprint` → `overview`, `distri
 - PDP enrichment supplies identity and imagery only; it cannot override Search price or location.
 - PDP seller is retained as optional identity evidence. A missing seller remains null and cannot be
   inferred from the retailer name, Search title, or URL.
+- Unit price uses the Product Pack's first governed `price_per_*` secondary metric. It is derived
+  from the Search package price and parsed package quantity and remains unavailable when the
+  quantity is missing or ambiguous.
 - The backward-compatible promotion contract remains readable but is intentionally absent from the
   Price Intelligence decision surface.
 
@@ -40,7 +43,8 @@ Legacy deep links migrate deterministically: `footprint` → `overview`, `distri
 - The workspace tab rail remains visible below the 64-pixel application top bar while scrolling.
 - Home is a full-width, one-row-per-product operating index rather than a card gallery. Each row
   reconciles the exact product's modal and median price, observed range, consistency, observed and
-  not-observed location shares, Search sponsorship, and positive-price in-stock evidence.
+  not-observed location shares, Search sponsorship, positive-price in-stock evidence, and the
+  governed unit-price value and range when supported.
 - Home provides local product search plus Brand Name, governed Brand Type, and PDP Seller filters.
   Seller options appear only when a retained PDP supplied seller evidence.
 - Home never presents positive-price evidence as a percentage of the full eligible network.
@@ -83,6 +87,9 @@ enabled retailer before the snapshot is published.
   product workspaces; no metric is recomputed by the renderer.
 - The eligible-footprint bar visibly distinguishes observed distribution from planned locations
   where the exact product was not observed.
+- Every Home price cell and the Product Overview shelf-price card show the relevant unit price
+  (`$/lb`, `$/gal`, `$/dozen`, or `$/each`) when the Product Pack has sufficient package evidence;
+  missing evidence is labeled unavailable rather than estimated.
 - Product `261171981` is preserved at its source price of `$188.58`. Fresh Shell Eggs Product Pack
   `1.1.0` excludes it in new or explicitly replayed studies because its title identifies a
   commercial `12 per case` item. Existing immutable `1.0.0` results remain reproducible. The

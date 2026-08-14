@@ -14,7 +14,7 @@ export type EvidenceRate1 = {
 };
 
 export interface RetailCompetitiveIntelligencePriceMonitoringView {
-  schema_version: "1.2.0";
+  schema_version: "1.3.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
@@ -228,6 +228,7 @@ export interface ProductSummary {
   states: number;
   cities: number;
   price_stats: PriceStats;
+  unit_price: UnitPriceSummary;
   consistency_rate: number | null;
   availability: EvidenceRate;
   promotion: EvidenceRate;
@@ -235,6 +236,17 @@ export interface ProductSummary {
   presence: ProductPresence;
   price_histogram: PriceBin[];
   sample_locations: ProductLocation[];
+}
+export interface UnitPriceSummary {
+  status: "observed" | "unavailable";
+  metric: string | null;
+  label: string | null;
+  unit: string | null;
+  price_stats: PriceStats;
+  known_observations: number;
+  total_observations: number;
+  coverage_rate: number | null;
+  definition: string;
 }
 export interface ProductPresence {
   observed_locations: number;

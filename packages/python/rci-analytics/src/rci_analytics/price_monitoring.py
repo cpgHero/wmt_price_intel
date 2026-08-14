@@ -216,6 +216,18 @@ class PriceMonitoringProjector:
         self._parity_tolerance = Decimal(
             str(pack.document.get("qa_rules", {}).get("parity_tolerance_dollars", 0.01))
         )
+        secondary_metrics = [
+            str(value)
+            for value in pack.document.get("normalization", {}).get("secondary_metrics", [])
+        ]
+        self._unit_price_metric = next(
+            (
+                value
+                for value in secondary_metrics
+                if value.startswith("price_per_") and not value.endswith(("_low", "_high"))
+            ),
+            None,
+        )
 
     def canonical_population(
         self,
@@ -443,6 +455,7 @@ class PriceMonitoringProjector:
                         }
                     ),
                     "price_stats": stats,
+                    "unit_price": self._unit_price_summary(rows),
                     "consistency_rate": _round(consistent / len(rows)) if rows else None,
                     "availability": self._availability_summary(rows),
                     "promotion": self._promotion_summary(rows),
@@ -653,7 +666,7 @@ class PriceMonitoringProjector:
         exceptions = self._price_exceptions(visible) if filters.product_id else []
         all_retailer_options = sorted(all_retailers or {filters.retailer_id})
         return {
-            "schema_version": "1.2.0",
+            "schema_version": "1.3.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": {
@@ -787,6 +800,49 @@ class PriceMonitoringProjector:
                     "movement is calculated."
                 ),
             },
+        }
+
+    def _unit_price_summary(self, rows: list[JsonObject]) -> JsonObject:
+        metric = self._unit_price_metric
+        labels = {
+            "price_per_lb": ("Price per pound", "lb"),
+            "price_per_dozen": ("Price per dozen", "dozen"),
+            "price_per_gallon": ("Price per gallon", "gal"),
+            "price_per_each": ("Price per item", "each"),
+        }
+        if metric is None:
+            label = None
+            unit = None
+        else:
+            label, unit = labels.get(
+                metric,
+                (
+                    metric.replace("_", " ").title(),
+                    metric.removeprefix("price_per_").replace("_", " "),
+                ),
+            )
+        values = [
+            float(value)
+            for row in rows
+            if metric
+            and isinstance(row.get("price_metrics"), dict)
+            and (value := row["price_metrics"].get(metric)) is not None
+            and float(value) > 0
+        ]
+        return {
+            "status": "observed" if values else "unavailable",
+            "metric": metric,
+            "label": label,
+            "unit": unit,
+            "price_stats": _price_stats(values),
+            "known_observations": len(values),
+            "total_observations": len(rows),
+            "coverage_rate": _round(len(values) / len(rows)) if rows else None,
+            "definition": (
+                "Derived deterministically from the Search package price and the Product "
+                "Pack's parsed package quantity. It is unavailable when package evidence "
+                "is missing or ambiguous."
+            ),
         }
 
     @staticmethod

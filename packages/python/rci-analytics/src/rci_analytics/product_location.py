@@ -134,6 +134,7 @@ class ProductLocationObservation:
             "url": self.product_url,
             "location": self.location,
             "price": self.package_price,
+            "price_metrics": dict(self.metric_values),
             "regular_price": self.regular_price,
             "discounted_price": self.discounted_price,
             # Positive Search price is the governed availability signal.

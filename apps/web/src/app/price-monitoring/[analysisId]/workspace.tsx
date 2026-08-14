@@ -133,6 +133,20 @@ function currency(value: number | null) {
       }).format(value);
 }
 
+function unitCurrency(value: number | null, unit: string | null) {
+  return value === null || !unit ? "—" : `${currency(value)}/${unit}`;
+}
+
+function unitCurrencyRange(
+  minimum: number | null,
+  maximum: number | null,
+  unit: string | null,
+) {
+  return minimum === null || maximum === null || !unit
+    ? "—"
+    : `${currency(minimum)}–${currency(maximum)}/${unit}`;
+}
+
 function percent(value: number | null) {
   return value === null
     ? "—"
@@ -1517,6 +1531,10 @@ function ProductCatalog({
           {filteredProducts.map((product) => {
             const stats = product.price_stats;
             const typicalPrice = stats.modal_price ?? stats.observation_median;
+            const unitPrice = product.unit_price;
+            const typicalUnitPrice =
+              unitPrice.price_stats.modal_price ??
+              unitPrice.price_stats.observation_median;
             const observedRate = product.presence.observed_rate;
             const notObservedRate = product.presence.not_observed_rate;
             return (
@@ -1559,6 +1577,11 @@ function ProductCatalog({
                   <small>Typical price</small>
                   <strong>{currency(typicalPrice)}</strong>
                   <span>Median {currency(stats.observation_median)}</span>
+                  <span>
+                    {unitPrice.status === "observed"
+                      ? `${unitPrice.label}: ${unitCurrency(typicalUnitPrice, unitPrice.unit)}`
+                      : "Unit price unavailable"}
+                  </span>
                 </button>
                 <button
                   aria-label={`Open price range for ${product.name}`}
@@ -1573,7 +1596,14 @@ function ProductCatalog({
                   <strong>
                     {currency(stats.minimum)}–{currency(stats.maximum)}
                   </strong>
-                  <span>{percent(product.consistency_rate)} consistent</span>
+                  <span>
+                    {unitPrice.status === "observed"
+                      ? `Unit range ${unitCurrencyRange(unitPrice.price_stats.minimum, unitPrice.price_stats.maximum, unitPrice.unit)}`
+                      : "Unit range unavailable"}
+                  </span>
+                  <span>
+                    {percent(product.consistency_rate)} shelf-price consistency
+                  </span>
                 </button>
                 <div className="pi-product-footprint" role="cell">
                   <small>Eligible location footprint</small>
@@ -1974,6 +2004,10 @@ export function PriceMonitoringWorkspace({
   }
 
   const stats = selectedProduct.price_stats;
+  const unitPrice = selectedProduct.unit_price;
+  const typicalUnitPrice =
+    unitPrice.price_stats.modal_price ??
+    unitPrice.price_stats.observation_median;
   const availability = selectedProduct.availability;
   const sponsorship = selectedProduct.sponsorship ?? {
     status: "unavailable" as const,
@@ -2082,6 +2116,11 @@ export function PriceMonitoringWorkspace({
             <article>
               <span>Median shelf price</span>
               <strong>{currency(stats.observation_median)}</strong>
+              <small>
+                {unitPrice.status === "observed"
+                  ? `${unitPrice.label}: ${unitCurrency(typicalUnitPrice, unitPrice.unit)}`
+                  : "Unit price unavailable"}
+              </small>
               <small>
                 {count(stats.observation_count)} exact-product observations
               </small>
@@ -2204,6 +2243,14 @@ export function PriceMonitoringWorkspace({
                   <dt>Observed range</dt>
                   <dd>
                     {currency(stats.minimum)}–{currency(stats.maximum)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>{unitPrice.label ?? "Unit price"}</dt>
+                  <dd>
+                    {unitPrice.status === "observed"
+                      ? unitCurrency(typicalUnitPrice, unitPrice.unit)
+                      : "Unavailable"}
                   </dd>
                 </div>
                 <div>

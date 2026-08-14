@@ -28,6 +28,7 @@ def _classified(
     in_scope: bool = True,
     in_stock: bool | None = True,
     is_sponsored: bool | None = None,
+    price_per_lb: str | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
         offer=NormalizedOffer(
@@ -52,7 +53,7 @@ def _classified(
         in_scope=in_scope,
         scope_reason=None if in_scope else "excluded by Product Pack",
         attributes={},
-        metrics={},
+        metrics=({"price_per_lb": Decimal(price_per_lb)} if price_per_lb is not None else {}),
         review_reasons=(),
     )
 
@@ -71,6 +72,7 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
             store="1",
             price="5.00",
             collected_at="2026-08-07T05:00:00Z",
+            price_per_lb="2.50",
         ),
         _classified(
             offer_id="new",
@@ -79,6 +81,7 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
             price="6.00",
             # Production historical rows can contain a timezone-naive UTC value.
             collected_at="2026-08-07T06:00:00",
+            price_per_lb="3.00",
         ),
         _classified(
             offer_id="second",
@@ -86,6 +89,7 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
             store="2",
             price="6.00",
             collected_at="2026-08-07T06:00:00Z",
+            price_per_lb="3.00",
         ),
         _classified(
             offer_id="other",
@@ -175,6 +179,34 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     assert view["price_distribution"]["observation_median"] == 6.0
     assert view["price_distribution"]["product_equal_weighted_median"] == 5.0
     assert view["products"][0]["price_stats"]["minimum"] == 6.0
+    assert view["products"][0]["unit_price"] == {
+        "status": "observed",
+        "metric": "price_per_lb",
+        "label": "Price per pound",
+        "unit": "lb",
+        "price_stats": {
+            "minimum": 3.0,
+            "q1": 3.0,
+            "observation_median": 3.0,
+            "product_equal_weighted_median": None,
+            "q3": 3.0,
+            "maximum": 3.0,
+            "range": 0.0,
+            "modal_price": 3.0,
+            "modal_share": 1.0,
+            "observation_count": 2,
+        },
+        "known_observations": 2,
+        "total_observations": 2,
+        "coverage_rate": 1.0,
+        "definition": (
+            "Derived deterministically from the Search package price and the Product "
+            "Pack's parsed package quantity. It is unavailable when package evidence "
+            "is missing or ambiguous."
+        ),
+    }
+    assert view["products"][1]["unit_price"]["status"] == "unavailable"
+    assert view["products"][1]["unit_price"]["coverage_rate"] == 0.0
     assert view["products"][0]["seller"] == "Walmart.com"
     assert view["products"][0]["presence"] == {
         "observed_locations": 2,
