@@ -144,6 +144,7 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
             "walmart_us:100": {
                 "name": "Great Value Ground Beef",
                 "brand": "Great Value",
+                "seller": "Walmart.com",
                 "image_url": "https://i5.walmartimages.com/product.jpg",
             }
         },
@@ -174,6 +175,7 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     assert view["price_distribution"]["observation_median"] == 6.0
     assert view["price_distribution"]["product_equal_weighted_median"] == 5.0
     assert view["products"][0]["price_stats"]["minimum"] == 6.0
+    assert view["products"][0]["seller"] == "Walmart.com"
     assert view["products"][0]["presence"] == {
         "observed_locations": 2,
         "eligible_locations": 2,

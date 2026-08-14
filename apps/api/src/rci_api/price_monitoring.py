@@ -344,6 +344,7 @@ class PostgresPriceMonitoringRepository:
                 context[f"{row['retailer_id']}:{row['retailer_product_id']}"] = {
                     "name": identity.get("name"),
                     "brand": identity.get("brand"),
+                    "seller": identity.get("seller"),
                     "image_url": identity.get("image_primary"),
                     "url": identity.get("url"),
                 }

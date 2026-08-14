@@ -137,6 +137,28 @@ def test_request_builder_preserves_leading_zero_ids_and_rejects_missing_context(
         )
 
 
+def test_pdp_seller_is_preserved_as_identity_evidence() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    context = ProductDetailRequestContext(
+        product_id="677669806",
+        zipcode="90020",
+        store="2464",
+        fulfillment_type="pickup",
+    )
+    normalized = MetricsCartProductDetailAdapter(endpoint).normalize(
+        {
+            "name": "Lay's Classic Potato Chips",
+            "retailer_product_id": "677669806",
+            "seller": "Walmart.com",
+        },
+        context,
+    )
+
+    assert normalized.seller == "Walmart.com"
+    assert normalized.identity_document()["seller"] == "Walmart.com"
+    assert normalized.contract_document()["seller"] == "Walmart.com"
+
+
 def test_aldi_request_matches_verified_zipcode_contract() -> None:
     endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("aldi_us")
     adapter = MetricsCartProductDetailAdapter(endpoint)

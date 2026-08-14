@@ -1347,6 +1347,74 @@ function ProductCatalog({
     evidenceMode?: MapMode,
   ) => void;
 }>) {
+  const [search, setSearch] = useState("");
+  const [brandName, setBrandName] = useState("all");
+  const [brandType, setBrandType] = useState("all");
+  const [seller, setSeller] = useState("all");
+  const brandNames = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          view.products
+            .map((product) => product.brand?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [view.products],
+  );
+  const brandTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(view.products.map((product) => product.brand_type)),
+      ).sort((left, right) =>
+        brandLabels[left].localeCompare(brandLabels[right]),
+      ),
+    [view.products],
+  );
+  const sellers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          view.products
+            .map((product) => product.seller?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [view.products],
+  );
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return view.products.filter((product) => {
+      const searchable = [
+        product.name,
+        product.product_id,
+        product.brand,
+        product.seller,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase();
+      return (
+        (!query || searchable.includes(query)) &&
+        (brandName === "all" || product.brand === brandName) &&
+        (brandType === "all" || product.brand_type === brandType) &&
+        (seller === "all" || product.seller === seller)
+      );
+    });
+  }, [brandName, brandType, search, seller, view.products]);
+  const filtersActive =
+    Boolean(search.trim()) ||
+    brandName !== "all" ||
+    brandType !== "all" ||
+    seller !== "all";
+
+  function clearFilters() {
+    setSearch("");
+    setBrandName("all");
+    setBrandType("all");
+    setSeller("all");
+  }
+
   return (
     <section className="pi-product-catalog">
       <header>
@@ -1359,6 +1427,78 @@ function ProductCatalog({
           Price and location metrics come from governed Search evidence.
         </p>
       </header>
+      <div className="pi-catalog-filters" aria-label="Filter retailer products">
+        <label className="pi-catalog-search">
+          <span>Search products</span>
+          <input
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name, product ID, brand, or seller"
+            type="search"
+            value={search}
+          />
+        </label>
+        <label>
+          <span>Brand name</span>
+          <select
+            aria-label="Filter by brand name"
+            onChange={(event) => setBrandName(event.target.value)}
+            value={brandName}
+          >
+            <option value="all">All brands</option>
+            {brandNames.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Brand type</span>
+          <select
+            aria-label="Filter by brand type"
+            onChange={(event) => setBrandType(event.target.value)}
+            value={brandType}
+          >
+            <option value="all">All brand types</option>
+            {brandTypes.map((value) => (
+              <option key={value} value={value}>
+                {brandLabels[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>PDP seller</span>
+          <select
+            aria-label="Filter by PDP seller"
+            disabled={!sellers.length}
+            onChange={(event) => setSeller(event.target.value)}
+            value={seller}
+          >
+            <option value="all">
+              {sellers.length ? "All sellers" : "No seller data available"}
+            </option>
+            {sellers.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="pi-catalog-filter-status" aria-live="polite">
+          <strong>
+            {count(filteredProducts.length)} of {count(view.products.length)}
+          </strong>
+          <span>products</span>
+          <button
+            disabled={!filtersActive}
+            onClick={clearFilters}
+            type="button"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
       <div
         className="pi-product-table"
         role="table"
@@ -1370,11 +1510,11 @@ function ProductCatalog({
           <span role="columnheader">Price range</span>
           <span role="columnheader">Location footprint</span>
           <span role="columnheader">Sponsored</span>
-          <span role="columnheader">In stock</span>
+          <span role="columnheader">Availability evidence</span>
           <span role="columnheader">Workspace</span>
         </div>
         <div className="pi-product-table-body" role="rowgroup">
-          {view.products.map((product) => {
+          {filteredProducts.map((product) => {
             const stats = product.price_stats;
             const typicalPrice = stats.modal_price ?? stats.observation_median;
             const observedRate = product.presence.observed_rate;
@@ -1493,7 +1633,7 @@ function ProductCatalog({
                   </span>
                 </button>
                 <button
-                  aria-label={`Open in-stock evidence for ${product.name}`}
+                  aria-label={`Open positive-price availability evidence for ${product.name}`}
                   className="pi-product-metric pi-product-metric-link"
                   onClick={() =>
                     onOpenProduct(product.product_id, "overview", "observed")
@@ -1501,12 +1641,11 @@ function ProductCatalog({
                   role="cell"
                   type="button"
                 >
-                  <small>Positive-price Search</small>
-                  <strong>{percent(product.availability.rate)}</strong>
-                  <span>
-                    {count(product.availability.in_stock_observations ?? 0)}{" "}
-                    stores
-                  </span>
+                  <small>Observed in stock</small>
+                  <strong>
+                    {count(product.availability.in_stock_observations ?? 0)}
+                  </strong>
+                  <span>positive-price locations only</span>
                 </button>
                 <div className="pi-product-actions" role="cell">
                   <button
@@ -1529,6 +1668,17 @@ function ProductCatalog({
               </article>
             );
           })}
+          {!filteredProducts.length ? (
+            <div className="pi-catalog-empty" role="row">
+              <strong>No products match these filters.</strong>
+              <span>
+                Change a filter or clear all filters to restore the index.
+              </span>
+              <button onClick={clearFilters} type="button">
+                Clear filters
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

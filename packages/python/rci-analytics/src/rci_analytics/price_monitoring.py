@@ -277,12 +277,13 @@ class PriceMonitoringProjector:
         location_limit: int | None = 1_200,
         product_location_limit: int | None = 200,
     ) -> JsonObject:
+        context = product_context or {}
         population = self.canonical_population(
             offers,
             retailer_id=filters.retailer_id,
             location_index=location_index or {},
             eligible_location_index=eligible_location_index or location_index or {},
-            product_context=product_context or {},
+            product_context=context,
             retailer_options=retailer_options,
         )
         admitted = [row.to_price_monitoring_row() for row in population.observations]
@@ -411,6 +412,7 @@ class PriceMonitoringProjector:
                 ),
             )[:sample_limit]
             identity = rows[0]
+            product_identity = context.get(f"{filters.retailer_id}:{product_id}", {})
             observed_product_locations = len({row["location"].scope_key for row in rows})
             eligible_product_locations = max(
                 scoped_expected_location_count,
@@ -425,6 +427,7 @@ class PriceMonitoringProjector:
                     "product_id": product_id,
                     "name": identity["name"],
                     "brand": identity["brand"],
+                    "seller": product_identity.get("seller"),
                     "brand_type": identity["brand_type"],
                     "brand_origin": identity["brand_origin"],
                     "brand_status": identity["brand_status"],

@@ -86,6 +86,7 @@ class NormalizedProductDetail:
     retailer_product_id: str
     name: str
     brand: str | None
+    seller: str | None
     url: str | None
     description_short: str | None
     description_full: str | None
@@ -110,6 +111,7 @@ class NormalizedProductDetail:
         return {
             "name": self.name,
             "brand": self.brand,
+            "seller": self.seller,
             "url": self.url,
             "image_primary": self.image_primary,
             "description_short": self.description_short,
@@ -126,6 +128,7 @@ class NormalizedProductDetail:
             "retailer_product_id": self.retailer_product_id,
             "name": self.name,
             "brand": self.brand,
+            "seller": self.seller,
             "url": self.url,
             "description_short": self.description_short,
             "description_full": self.description_full,

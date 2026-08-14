@@ -89,7 +89,7 @@ async def test_egg_vertical_slice_is_configuration_only_and_capped() -> None:
     config = _egg_config()
     plan = await planner.plan(config)
 
-    assert config["product_pack"] == {"id": "fresh_shell_eggs", "version": "1.0.0"}
+    assert config["product_pack"] == {"id": "fresh_shell_eggs", "version": "1.1.0"}
     assert config["query"] == {
         "keyword": "fresh eggs",
         "amazon_same_day_url_template": "https://www.amazon.com/s?k={{keyword}}&i=samedaystore",

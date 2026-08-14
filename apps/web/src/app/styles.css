@@ -4615,6 +4615,87 @@ tbody tr:last-child td {
   font-size: 0.68rem;
   max-width: 460px;
 }
+.pi-catalog-filters {
+  align-items: end;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(250px, 1.8fr) repeat(
+      3,
+      minmax(130px, 0.85fr)
+    ) auto;
+  padding: 0.75rem;
+}
+.pi-catalog-filters label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.pi-catalog-filters label > span {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.pi-catalog-filters input,
+.pi-catalog-filters select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.64rem;
+  height: 36px;
+  min-width: 0;
+  padding: 0 0.65rem;
+  width: 100%;
+}
+.pi-catalog-filters input:focus,
+.pi-catalog-filters select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent);
+  outline: none;
+}
+.pi-catalog-filters select:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.pi-catalog-filter-status {
+  align-items: center;
+  display: grid;
+  gap: 0.1rem 0.45rem;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  min-width: 105px;
+}
+.pi-catalog-filter-status strong {
+  font-size: 0.7rem;
+  text-align: right;
+}
+.pi-catalog-filter-status span {
+  color: var(--muted);
+  font-size: 0.54rem;
+}
+.pi-catalog-filter-status button,
+.pi-catalog-empty button {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.55rem;
+  font-weight: 800;
+  grid-column: 1 / -1;
+  justify-self: end;
+  padding: 0.15rem 0;
+}
+.pi-catalog-filter-status button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.55;
+}
 .pi-product-table {
   display: grid;
   gap: 0.45rem;
@@ -4776,22 +4857,45 @@ tbody tr:last-child td {
   text-underline-offset: 0.14rem;
 }
 .pi-product-footprint > div > span {
-  color: var(--muted);
+  color: var(--ink);
   font-size: 0.5rem;
+  font-weight: 750;
 }
 .pi-product-footprint > i {
-  background: var(--surface-alt);
+  background: color-mix(in srgb, #d97706 22%, var(--surface-alt));
+  border: 1px solid color-mix(in srgb, #d97706 35%, var(--line));
   border-radius: 999px;
   display: block;
-  height: 4px;
+  height: 9px;
   overflow: hidden;
   width: 100%;
 }
 .pi-product-footprint > i span {
-  background: var(--green);
+  background: linear-gradient(90deg, var(--green-dark), var(--green));
   border-radius: inherit;
   display: block;
   height: 100%;
+}
+.pi-catalog-empty {
+  align-items: center;
+  background: var(--card);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.25rem 0.75rem;
+  grid-template-columns: 1fr auto;
+  padding: 1.15rem;
+}
+.pi-catalog-empty strong {
+  font-size: 0.75rem;
+}
+.pi-catalog-empty span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.pi-catalog-empty button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 .pi-product-actions {
   align-content: center;
@@ -4857,6 +4961,24 @@ tbody tr:last-child td {
   }
   .pi-five-stat {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pi-catalog-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pi-catalog-search,
+  .pi-catalog-filter-status {
+    grid-column: 1 / -1;
+  }
+  .pi-catalog-filter-status {
+    grid-template-columns: auto auto 1fr;
+    justify-content: start;
+  }
+  .pi-catalog-filter-status strong {
+    text-align: left;
+  }
+  .pi-catalog-filter-status button {
+    grid-column: auto;
+    justify-self: end;
   }
 }
 @media (max-width: 800px) {
@@ -4925,6 +5047,13 @@ tbody tr:last-child td {
   }
   .pi-product-row {
     grid-template-columns: 1fr;
+  }
+  .pi-catalog-filters {
+    grid-template-columns: 1fr;
+  }
+  .pi-catalog-search,
+  .pi-catalog-filter-status {
+    grid-column: 1;
   }
   .pi-product-identity,
   .pi-product-footprint,

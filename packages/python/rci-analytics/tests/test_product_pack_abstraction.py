@@ -176,6 +176,10 @@ def test_declarative_rules_classify_each_expansion_pack(
     ("pack_id", "title"),
     [
         ("fresh_shell_eggs", "Liquid Egg Whites, 16 oz"),
+        (
+            "fresh_shell_eggs",
+            "Sunny Fresh Cage Free Selections Whole Eggs with Citric Acid, 2 Pound -- 12 per case.",
+        ),
         ("fresh_fluid_milk", "Unsweetened Almond Milk, Half Gallon"),
         ("fresh_bananas", "Freeze-Dried Banana Chips"),
     ],

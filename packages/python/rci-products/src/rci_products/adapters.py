@@ -133,6 +133,7 @@ class MetricsCartProductDetailAdapter:
             retailer_product_id=retailer_product_id,
             name=name,
             brand=_text(payload.get("brand")),
+            seller=_text(payload.get("seller")),
             url=_text(payload.get("url")),
             description_short=_text(payload.get("description_short")),
             description_full=_text(payload.get("description_full")),

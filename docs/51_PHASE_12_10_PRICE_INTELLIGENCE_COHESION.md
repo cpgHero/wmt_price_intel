@@ -30,6 +30,8 @@ Legacy deep links migrate deterministically: `footprint` → `overview`, `distri
 - An unusual-price review uses the 1.5×IQR rule when Q3 is greater than Q1. If IQR is zero, the
   Product Pack tolerance around the modal price is used.
 - PDP enrichment supplies identity and imagery only; it cannot override Search price or location.
+- PDP seller is retained as optional identity evidence. A missing seller remains null and cannot be
+  inferred from the retailer name, Search title, or URL.
 - The backward-compatible promotion contract remains readable but is intentionally absent from the
   Price Intelligence decision surface.
 
@@ -39,6 +41,11 @@ Legacy deep links migrate deterministically: `footprint` → `overview`, `distri
 - Home is a full-width, one-row-per-product operating index rather than a card gallery. Each row
   reconciles the exact product's modal and median price, observed range, consistency, observed and
   not-observed location shares, Search sponsorship, and positive-price in-stock evidence.
+- Home provides local product search plus Brand Name, governed Brand Type, and PDP Seller filters.
+  Seller options appear only when a retained PDP supplied seller evidence.
+- Home never presents positive-price evidence as a percentage of the full eligible network.
+  Network distribution is the observed/not-observed footprint; availability is the count of
+  positive-price Search locations within the observed population.
 - Home row metrics link to the relevant governed evidence surface: observed and not-observed counts
   open their location drawers, price and sponsorship open Price Architecture, and row actions open
   the full product workspace or Store Review.
@@ -74,3 +81,10 @@ enabled retailer before the snapshot is published.
 - Product and geography URL context remains aligned across all workspaces and drawers.
 - Home renders one full-width row per product from the same `products` projection consumed by the
   product workspaces; no metric is recomputed by the renderer.
+- The eligible-footprint bar visibly distinguishes observed distribution from planned locations
+  where the exact product was not observed.
+- Product `261171981` is preserved at its source price of `$188.58`. Fresh Shell Eggs Product Pack
+  `1.1.0` excludes it in new or explicitly replayed studies because its title identifies a
+  commercial `12 per case` item. Existing immutable `1.0.0` results remain reproducible. The
+  regression proves scope changes through Product Pack configuration rather than a category or
+  product-ID branch in the engine.

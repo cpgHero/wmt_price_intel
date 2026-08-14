@@ -45,6 +45,7 @@ export interface RetailCompetitiveIntelligenceCanonicalProduct {
   identity: {
     name: string;
     brand?: string | null;
+    seller?: string | null;
     url: string;
     image_primary?: string | null;
     description_short?: string | null;

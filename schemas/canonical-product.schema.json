@@ -79,6 +79,9 @@
         "brand": {
           "type": ["string", "null"]
         },
+        "seller": {
+          "type": ["string", "null"]
+        },
         "url": {
           "type": "string",
           "format": "uri"

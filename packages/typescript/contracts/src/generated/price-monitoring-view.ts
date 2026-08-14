@@ -218,6 +218,7 @@ export interface ProductSummary {
   product_id: string;
   name: string;
   brand: string | null;
+  seller: string | null;
   brand_type: "private_label" | "regional" | "national" | "unclassified";
   brand_origin: "user" | "product_pack" | "retailer_pack" | "search" | "pdp" | "unresolved";
   brand_status: "confirmed" | "suggested" | "unclassified" | "rejected";

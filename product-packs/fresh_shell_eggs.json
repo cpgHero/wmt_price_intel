@@ -1,7 +1,7 @@
 {
   "id": "fresh_shell_eggs",
   "name": "Fresh Shell Eggs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category_family": "dairy_eggs",
   "scope": {
     "target_terms": [
@@ -37,7 +37,8 @@
       "egg carton",
       "egg accessory",
       "plastic egg",
-      "chocolate egg"
+      "chocolate egg",
+      "per case"
     ],
     "availability_policy": "retailer_specific"
   },
@@ -339,7 +340,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_shell_eggs_leadership",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Identify Walmart's broad fresh-shell-egg price position, the retailer and product segments that create material risk, and the regional or data-quality distinctions that should shape monitoring.",

@@ -32,6 +32,7 @@ export type RetailCompetitiveIntelligenceProductDetailSnapshot = {
     retailer_product_id: string;
     name: string;
     brand?: string | null;
+    seller?: string | null;
     url?: string | null;
     description_short?: string | null;
     description_full?: string | null;
