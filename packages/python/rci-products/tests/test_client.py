@@ -84,6 +84,15 @@ async def test_success_is_billed_once_and_raw_response_is_immutable() -> None:
     assert result.normalized is not None
     assert result.normalized.identifiers["upc"] == "028400310413"
     assert json.loads(gzip.decompress(next(iter(store.objects.values())))) == payload
+    assert (
+        json.loads(
+            await store.get_response(
+                result.raw_artifact.storage_uri,
+                expected_checksum=result.raw_artifact.checksum,
+            )
+        )
+        == payload
+    )
     request = route.calls.last.request
     assert request.url.params["x-api-key"] == "test-secret-key"
     assert "test-secret-key" not in json.dumps(result.raw_artifact.metadata)

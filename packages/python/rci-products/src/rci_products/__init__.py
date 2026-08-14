@@ -16,12 +16,15 @@ from rci_products.documents import (
 )
 from rci_products.memory import InMemoryProductDetailRepository
 from rci_products.models import (
+    PRODUCT_DETAIL_NORMALIZER_VERSION,
     CanonicalProductRecord,
     EnqueueProductDetailResult,
     NormalizedProductDetail,
     ProductDetailEndpoint,
     ProductDetailFetchResult,
     ProductDetailJob,
+    ProductDetailNormalizationCandidate,
+    ProductDetailNormalizationRecord,
     ProductDetailRawArtifact,
     ProductDetailRequestContext,
     ProductDetailRun,
@@ -29,6 +32,7 @@ from rci_products.models import (
 )
 from rci_products.planning import ProductDetailCandidate, plan_product_detail_candidates
 from rci_products.postgres import PostgresProductDetailRepository
+from rci_products.renormalization import ProductDetailRenormalizationWorker
 from rci_products.repository import ProductDetailBudgetExceeded, ProductDetailRepository
 from rci_products.service import ProductDetailWorker
 from rci_products.storage import (
@@ -37,6 +41,7 @@ from rci_products.storage import (
 )
 
 __all__ = [
+    "PRODUCT_DETAIL_NORMALIZER_VERSION",
     "CanonicalProductRecord",
     "EnqueueProductDetailResult",
     "InMemoryProductDetailRawObjectStore",
@@ -52,7 +57,10 @@ __all__ = [
     "ProductDetailEndpoint",
     "ProductDetailFetchResult",
     "ProductDetailJob",
+    "ProductDetailNormalizationCandidate",
+    "ProductDetailNormalizationRecord",
     "ProductDetailRawArtifact",
+    "ProductDetailRenormalizationWorker",
     "ProductDetailRepository",
     "ProductDetailRequestContext",
     "ProductDetailRun",

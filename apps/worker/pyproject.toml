@@ -29,6 +29,7 @@ rci-import-historical = "rci_worker.historical_cli:main"
 rci-narrative-bakeoff = "rci_worker.narrative_bakeoff:main"
 rci-publication-context = "rci_worker.publication_context:main"
 rci-product-enrichment = "rci_worker.product_enrichment:main"
+rci-pdp-normalization-audit = "rci_worker.pdp_normalization_audit:main"
 
 [tool.uv.sources]
 rci-agents = { workspace = true }

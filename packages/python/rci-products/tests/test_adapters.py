@@ -9,10 +9,11 @@ import pytest
 from rci_contracts import validate_instance
 from rci_products.adapters import MetricsCartProductDetailAdapter
 from rci_products.catalog import ProductDetailCatalog
-from rci_products.documents import snapshot_document
+from rci_products.documents import normalization_document, snapshot_document
 from rci_products.models import (
     ProductDetailFetchResult,
     ProductDetailJob,
+    ProductDetailNormalizationCandidate,
     ProductDetailRawArtifact,
     ProductDetailRequestContext,
 )
@@ -157,6 +158,78 @@ def test_pdp_seller_is_preserved_as_identity_evidence() -> None:
     assert normalized.seller == "Walmart.com"
     assert normalized.identity_document()["seller"] == "Walmart.com"
     assert normalized.contract_document()["seller"] == "Walmart.com"
+
+
+def test_full_pdp_payload_is_governed_into_useful_evidence_groups() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    context = ProductDetailRequestContext(
+        product_id="677669806",
+        zipcode="90020",
+        store="2464",
+        fulfillment_type="pickup",
+    )
+    payload = json.loads(
+        (FIXTURE_ROOT / "metricscart_pdp_walmart_200.json").read_text(encoding="utf-8")
+    )
+    normalized = MetricsCartProductDetailAdapter(endpoint).normalize(payload, context)
+    document = normalized.contract_document()
+
+    assert document["normalizer_version"] == "2.0.0"
+    assert normalized.seller == "Walmart.com"
+    assert normalized.identity_document()["item_condition"] == "New"
+    assert document["commerce"]["price_regular"] == 4.77
+    assert document["commerce"]["offers"] == []
+    assert document["fulfillment"]["fulfilled_by_retailer"] is True
+    assert document["fulfillment"]["returnable_in"] == 90
+    assert document["reviews"]["rating"] == 4.7
+    assert document["reviews"]["reviews_count"] == 2358
+    assert document["demand"]["weekly_sales_volume"] == 10000
+    assert document["content"]["has_enhanced_content"] is True
+    assert document["relationships"]["variants"] == []
+    assert document["source_context"] == {
+        "zipcode": "90020",
+        "retailer": "walmart.com",
+        "source": "pdp",
+    }
+    assert document["unmapped_source_fields"] == []
+    assert set(document["source_field_inventory"]) == set(payload)
+    revision = normalization_document(
+        ProductDetailNormalizationCandidate(
+            id="00000000-0000-0000-0000-000000000011",
+            snapshot_id="00000000-0000-0000-0000-000000000012",
+            normalizer_version="2.0.0",
+            canonical_product_db_id="00000000-0000-0000-0000-000000000013",
+            canonical_product_id="walmart_us:677669806",
+            retailer_id="walmart_us",
+            raw_storage_uri="s3://fixture/pdp.json.gz",
+            raw_checksum="a" * 64,
+            endpoint=endpoint,
+            context=context,
+            attempt_count=1,
+        ),
+        normalized,
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "product-detail-normalization.schema.json",
+        revision,
+        label="full PDP normalization",
+    )
+
+
+def test_unrecognized_pdp_fields_are_visible_for_schema_drift_review() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    context = ProductDetailRequestContext(product_id="677669806")
+    normalized = MetricsCartProductDetailAdapter(endpoint).normalize(
+        {
+            "name": "Test product",
+            "retailer_product_id": "677669806",
+            "future_provider_field": {"useful": True},
+        },
+        context,
+    )
+
+    assert normalized.unmapped_source_fields == ("future_provider_field",)
 
 
 def test_aldi_request_matches_verified_zipcode_contract() -> None:

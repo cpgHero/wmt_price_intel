@@ -440,6 +440,17 @@ class PriceMonitoringProjector:
                     "name": identity["name"],
                     "brand": identity["brand"],
                     "seller": product_identity.get("seller"),
+                    "pdp": product_identity.get(
+                        "pdp",
+                        {
+                            "enriched": False,
+                            "authority": {
+                                "identity": "search",
+                                "price": "search",
+                                "availability": "search",
+                            },
+                        },
+                    ),
                     "brand_type": identity["brand_type"],
                     "brand_origin": identity["brand_origin"],
                     "brand_status": identity["brand_status"],

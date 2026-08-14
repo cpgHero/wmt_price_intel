@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 JsonObject = dict[str, Any]
 ProductDetailStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
+PRODUCT_DETAIL_NORMALIZER_VERSION = "2.0.0"
 
 
 def canonical_json(value: JsonObject) -> str:
@@ -105,6 +106,15 @@ class NormalizedProductDetail:
     image_primary: str | None
     images: tuple[str, ...]
     videos: tuple[object, ...]
+    commerce: JsonObject
+    fulfillment: JsonObject
+    reviews: JsonObject
+    demand: JsonObject
+    content: JsonObject
+    relationships: JsonObject
+    source_context: JsonObject
+    source_field_inventory: tuple[str, ...]
+    unmapped_source_fields: tuple[str, ...]
     extras: JsonObject
 
     def identity_document(self) -> JsonObject:
@@ -117,7 +127,8 @@ class NormalizedProductDetail:
             "description_short": self.description_short,
             "description_full": self.description_full,
             "category_path": self.category_path,
-            "model_number": self.identifiers.get("model"),
+            "model_number": self.content.get("model_number") or self.identifiers.get("model"),
+            "item_condition": self.commerce.get("item_condition"),
             "specification": self.specification,
             "physical_properties": self.physical_properties,
             "variant_configuration": self.variant_configuration,
@@ -125,6 +136,7 @@ class NormalizedProductDetail:
 
     def contract_document(self) -> JsonObject:
         return {
+            "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
             "retailer_product_id": self.retailer_product_id,
             "name": self.name,
             "brand": self.brand,
@@ -151,6 +163,15 @@ class NormalizedProductDetail:
                 "images": list(self.images),
                 "videos": list(self.videos),
             },
+            "commerce": self.commerce,
+            "fulfillment": self.fulfillment,
+            "reviews": self.reviews,
+            "demand": self.demand,
+            "content": self.content,
+            "relationships": self.relationships,
+            "source_context": self.source_context,
+            "source_field_inventory": list(self.source_field_inventory),
+            "unmapped_source_fields": list(self.unmapped_source_fields),
             "extras": self.extras,
         }
 
@@ -224,3 +245,27 @@ class ProductDetailSnapshotRecord:
     request_checksum: str
     document: JsonObject
     cache_expires_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProductDetailNormalizationCandidate:
+    id: str
+    snapshot_id: str
+    normalizer_version: str
+    canonical_product_db_id: str
+    canonical_product_id: str
+    retailer_id: str
+    raw_storage_uri: str
+    raw_checksum: str
+    endpoint: ProductDetailEndpoint
+    context: ProductDetailRequestContext
+    attempt_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProductDetailNormalizationRecord:
+    id: str
+    snapshot_id: str
+    normalizer_version: str
+    document: JsonObject
+    document_checksum: str

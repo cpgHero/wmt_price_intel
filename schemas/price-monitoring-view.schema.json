@@ -377,12 +377,30 @@
     "productSummary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["product_id", "name", "brand", "seller", "brand_type", "brand_origin", "brand_status", "image_url", "url", "locations", "states", "cities", "price_stats", "unit_price", "consistency_rate", "availability", "promotion", "sponsorship", "presence", "price_histogram", "sample_locations"],
+      "required": ["product_id", "name", "brand", "seller", "pdp", "brand_type", "brand_origin", "brand_status", "image_url", "url", "locations", "states", "cities", "price_stats", "unit_price", "consistency_rate", "availability", "promotion", "sponsorship", "presence", "price_histogram", "sample_locations"],
       "properties": {
         "product_id": { "type": "string" },
         "name": { "type": "string" },
         "brand": { "type": ["string", "null"] },
         "seller": { "type": ["string", "null"] },
+        "pdp": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["enriched", "authority"],
+          "properties": {
+            "enriched": { "type": "boolean" },
+            "authority": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["identity", "price", "availability"],
+              "properties": {
+                "identity": { "enum": ["pdp", "search"] },
+                "price": { "const": "search" },
+                "availability": { "const": "search" }
+              }
+            }
+          }
+        },
         "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
         "brand_origin": { "enum": ["user", "product_pack", "retailer_pack", "search", "pdp", "unresolved"] },
         "brand_status": { "enum": ["confirmed", "suggested", "unclassified", "rejected"] },

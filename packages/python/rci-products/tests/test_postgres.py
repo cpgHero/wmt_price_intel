@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from rci_db import DatabaseProbe
 from rci_products import (
+    PRODUCT_DETAIL_NORMALIZER_VERSION,
     PostgresProductDetailRepository,
     ProductDetailBudgetExceeded,
     ProductDetailCatalog,
@@ -120,13 +121,36 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
         }
         assert all(row["snapshot_id"] for row in audit["calls"])
         assert all(row["identity_evidence"]["name"] for row in audit["calls"])
+        async with database.engine.connect() as connection:
+            normalization_count = int(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT count(*) FROM product_detail_normalization n "
+                            "JOIN product_detail_snapshot s "
+                            "ON s.id = n.product_detail_snapshot_id "
+                            "JOIN product_detail_job j ON j.id = s.product_detail_job_id "
+                            "WHERE j.enrichment_run_id::text = :run_id "
+                            "AND n.normalizer_version = :normalizer_version "
+                            "AND n.status = 'succeeded'"
+                        ),
+                        {
+                            "run_id": run.id,
+                            "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
+                        },
+                    )
+                ).scalar_one()
+            )
+        assert normalization_count == 2
 
         cache_run = await repository.create_run(max_credits=2)
         cleanup_run_ids.append(cache_run.id)
         cached = await repository.enqueue(cache_run.id, product, endpoint, contexts[0])
         assert cached.cached is True
         assert cached.snapshot_id is not None
-        assert (await repository.product_document(product.id))["identity"]["brand"] == "Lay's"
+        product_document = await repository.product_document(product.id)
+        assert product_document["identity"]["brand"] == "Lay's"
+        assert product_document["identity"]["seller"] == "Walmart.com"
 
         budget_run = await repository.create_run(max_credits=2)
         cleanup_run_ids.append(budget_run.id)

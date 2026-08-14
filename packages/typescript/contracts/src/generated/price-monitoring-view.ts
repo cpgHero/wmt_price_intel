@@ -219,6 +219,15 @@ export interface ProductSummary {
   name: string;
   brand: string | null;
   seller: string | null;
+  pdp: {
+    enriched: boolean;
+    authority: {
+      identity: "pdp" | "search";
+      price: "search";
+      availability: "search";
+    };
+    [k: string]: unknown;
+  };
   brand_type: "private_label" | "regional" | "national" | "unclassified";
   brand_origin: "user" | "product_pack" | "retailer_pack" | "search" | "pdp" | "unresolved";
   brand_status: "confirmed" | "suggested" | "unclassified" | "rejected";

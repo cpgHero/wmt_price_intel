@@ -29,6 +29,7 @@ export type RetailCompetitiveIntelligenceProductDetailSnapshot = {
     credits: number;
   };
   normalized?: {
+    normalizer_version?: string;
     retailer_product_id: string;
     name: string;
     brand?: string | null;
@@ -63,6 +64,29 @@ export type RetailCompetitiveIntelligenceProductDetailSnapshot = {
       images?: string[];
       videos?: unknown[];
     };
+    commerce?: {
+      [k: string]: unknown;
+    };
+    fulfillment?: {
+      [k: string]: unknown;
+    };
+    reviews?: {
+      [k: string]: unknown;
+    };
+    demand?: {
+      [k: string]: unknown;
+    };
+    content?: {
+      [k: string]: unknown;
+    };
+    relationships?: {
+      [k: string]: unknown;
+    };
+    source_context?: {
+      [k: string]: unknown;
+    };
+    source_field_inventory?: string[];
+    unmapped_source_fields?: string[];
     extras?: {
       [k: string]: unknown;
     };

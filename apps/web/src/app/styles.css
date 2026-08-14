@@ -4406,6 +4406,115 @@ tbody tr:last-child td {
 .pi-retail-signals > header {
   margin-bottom: 0.75rem;
 }
+.pi-pdp-reference {
+  display: grid;
+  gap: 0.9rem;
+}
+.pi-pdp-summary-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.pi-pdp-summary-grid > div {
+  background: var(--surface-alt);
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+  padding: 0.78rem;
+}
+.pi-pdp-summary-grid span,
+.pi-pdp-summary-grid small {
+  color: var(--muted);
+  font-size: 0.54rem;
+  line-height: 1.4;
+}
+.pi-pdp-summary-grid span {
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.pi-pdp-summary-grid strong {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.pi-pdp-description,
+.pi-pdp-governance-note {
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.pi-pdp-governance-note {
+  background: var(--warning-soft);
+  border-radius: 9px;
+  padding: 0.65rem 0.75rem;
+}
+.pi-pdp-details {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.pi-pdp-details summary {
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0.72rem 0.8rem;
+}
+.pi-pdp-details > div {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.8rem;
+}
+.pi-pdp-details h3 {
+  font-size: 0.66rem;
+  margin: 0 0 0.45rem;
+}
+.pi-pdp-details dl {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+}
+.pi-pdp-details dl div {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr);
+}
+.pi-pdp-details dt,
+.pi-pdp-details dd {
+  font-size: 0.56rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.pi-pdp-details dt {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.pi-pdp-reference > footer {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+}
+.pi-pdp-reference > footer span,
+.pi-pdp-reference > footer a {
+  font-size: 0.56rem;
+  line-height: 1.45;
+}
+.pi-pdp-reference > footer span {
+  color: var(--muted);
+}
+.pi-pdp-reference > footer a {
+  color: var(--green);
+  flex: 0 0 auto;
+  font-weight: 800;
+}
 .pi-severity.review {
   background: var(--warning-soft);
   color: var(--amber);
@@ -4983,6 +5092,14 @@ tbody tr:last-child td {
 @media (max-width: 800px) {
   .pi-signal-grid {
     grid-template-columns: 1fr;
+  }
+  .pi-pdp-summary-grid,
+  .pi-pdp-details > div {
+    grid-template-columns: 1fr;
+  }
+  .pi-pdp-reference > footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .pi-product-catalog > header {
     align-items: start;

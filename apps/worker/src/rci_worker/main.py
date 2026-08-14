@@ -33,6 +33,7 @@ from rci_products import (
     PostgresProductDetailLimiterRegistry,
     PostgresProductDetailRepository,
     ProductDetailCatalog,
+    ProductDetailRenormalizationWorker,
     ProductDetailWorker,
     S3ProductDetailRawObjectStore,
 )
@@ -283,6 +284,24 @@ async def run() -> None:
             lease_seconds=int(os.getenv("PRODUCT_DETAIL_LEASE_SECONDS", "300")),
             cache_ttl_seconds=int(os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")),
         )
+    product_detail_renormalization_worker: ProductDetailRenormalizationWorker | None = None
+    if _enabled(os.getenv("PRODUCT_DETAIL_RENORMALIZATION_ENABLED")):
+        product_detail_renormalization_worker = ProductDetailRenormalizationWorker(
+            PostgresProductDetailRepository(database.engine, repository_root),
+            S3ProductDetailRawObjectStore.create(
+                bucket=os.environ["OBJECT_STORAGE_BUCKET"],
+                endpoint_url=os.getenv("OBJECT_STORAGE_ENDPOINT"),
+                region_name=os.getenv("OBJECT_STORAGE_REGION"),
+                access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY_ID"),
+                secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+                force_path_style=_enabled(
+                    os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE"), default=True
+                ),
+            ),
+            worker_id=f"{worker_id}-pdp-normalizer",
+            claim_limit=int(os.getenv("PRODUCT_DETAIL_RENORMALIZATION_CLAIM_LIMIT", "8")),
+            lease_seconds=int(os.getenv("PRODUCT_DETAIL_RENORMALIZATION_LEASE_SECONDS", "300")),
+        )
     health_server = AsyncHealthServer(
         "worker",
         database.is_ready,
@@ -305,11 +324,24 @@ async def run() -> None:
             product_details = (
                 await product_detail_worker.run_once() if product_detail_worker is not None else 0
             )
+            product_detail_normalizations = (
+                await product_detail_renormalization_worker.run_once()
+                if product_detail_renormalization_worker is not None
+                else 0
+            )
             product_pack_validations = await product_pack_validation_worker.run_once()
             study_jobs = (
                 await study_discovery_worker.run_once() if study_discovery_worker is not None else 0
             )
-            if claimed + analyses + product_details + product_pack_validations + study_jobs == 0:
+            if (
+                claimed
+                + analyses
+                + product_details
+                + product_detail_normalizations
+                + product_pack_validations
+                + study_jobs
+                == 0
+            ):
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), timeout=1)
     finally:

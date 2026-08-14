@@ -13,14 +13,24 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from rci_contracts import validate_instance
-from rci_products.documents import canonical_product_document, serp_identity, snapshot_document
+from rci_products.documents import (
+    canonical_product_document,
+    identity_from_normalized_document,
+    normalization_document,
+    serp_identity,
+    snapshot_document,
+)
 from rci_products.models import (
+    PRODUCT_DETAIL_NORMALIZER_VERSION,
     CanonicalProductRecord,
     EnqueueProductDetailResult,
     JsonObject,
+    NormalizedProductDetail,
     ProductDetailEndpoint,
     ProductDetailFetchResult,
     ProductDetailJob,
+    ProductDetailNormalizationCandidate,
+    ProductDetailNormalizationRecord,
     ProductDetailRequestContext,
     ProductDetailRun,
     ProductDetailSnapshotRecord,
@@ -144,6 +154,22 @@ def _snapshot(row: RowMapping) -> ProductDetailSnapshotRecord:
     )
 
 
+def _normalization_candidate(row: RowMapping) -> ProductDetailNormalizationCandidate:
+    return ProductDetailNormalizationCandidate(
+        id=str(row["id"]),
+        snapshot_id=str(row["product_detail_snapshot_id"]),
+        normalizer_version=str(row["normalizer_version"]),
+        canonical_product_db_id=str(row["canonical_product_id"]),
+        canonical_product_id=str(row["canonical_product_stable_id"]),
+        retailer_id=str(row["retailer_id"]),
+        raw_storage_uri=str(row["raw_storage_uri"]),
+        raw_checksum=str(row["source_raw_checksum"]),
+        endpoint=_endpoint(row["endpoint"]),
+        context=_context(row["request_context"]),
+        attempt_count=int(row["attempt_count"]),
+    )
+
+
 class PostgresProductDetailRepository:
     def __init__(
         self,
@@ -155,6 +181,7 @@ class PostgresProductDetailRepository:
         self._engine = engine
         self._root = repository_root
         self._organization_id = organization_id
+        self._seeded_normalizer_versions: set[str] = set()
 
     async def upsert_serp_product(
         self,
@@ -556,6 +583,50 @@ class PostgresProductDetailRepository:
                 .mappings()
                 .one()
             )
+            if result.normalized is not None:
+                candidate = ProductDetailNormalizationCandidate(
+                    id=str(uuid4()),
+                    snapshot_id=str(snapshot_row["id"]),
+                    normalizer_version=PRODUCT_DETAIL_NORMALIZER_VERSION,
+                    canonical_product_db_id=job.canonical_product_db_id,
+                    canonical_product_id=job.canonical_product_id,
+                    retailer_id=job.retailer_id,
+                    raw_storage_uri=result.raw_artifact.storage_uri,
+                    raw_checksum=result.raw_artifact.checksum,
+                    endpoint=job.endpoint,
+                    context=job.context,
+                    attempt_count=job.attempt_count,
+                )
+                normalized_document = normalization_document(candidate, result.normalized)
+                validate_instance(
+                    self._root,
+                    "product-detail-normalization.schema.json",
+                    normalized_document,
+                    label=f"product-detail-normalization:{candidate.snapshot_id}",
+                )
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO product_detail_normalization (
+                          product_detail_snapshot_id, normalizer_version, status,
+                          attempt_count, document, document_checksum,
+                          source_raw_checksum, completed_at
+                        ) VALUES (
+                          CAST(:snapshot_id AS uuid), :normalizer_version, 'succeeded',
+                          1, CAST(:document AS jsonb), :document_checksum,
+                          :source_raw_checksum, now()
+                        ) ON CONFLICT ON CONSTRAINT
+                          product_detail_normalization_snapshot_version_uq DO NOTHING
+                        """
+                    ),
+                    {
+                        "snapshot_id": candidate.snapshot_id,
+                        "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
+                        "document": _json(normalized_document),
+                        "document_checksum": sha256_document(normalized_document),
+                        "source_raw_checksum": candidate.raw_checksum,
+                    },
+                )
             await connection.execute(
                 text(
                     """
@@ -842,6 +913,364 @@ class PostgresProductDetailRepository:
         )
         return document
 
+    async def claim_normalizations(
+        self,
+        worker_id: str,
+        *,
+        normalizer_version: str,
+        limit: int,
+        lease_seconds: int,
+    ) -> list[ProductDetailNormalizationCandidate]:
+        if not worker_id or not normalizer_version:
+            raise ValueError("normalization worker and version are required")
+        if limit < 1 or lease_seconds < 1:
+            raise ValueError("normalization claim limit and lease must be positive")
+        seed_version = normalizer_version not in self._seeded_normalizer_versions
+        async with self._engine.begin() as connection:
+            if seed_version:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO product_detail_normalization (
+                          product_detail_snapshot_id, normalizer_version,
+                          source_raw_checksum
+                        )
+                        SELECT s.id, :normalizer_version, s.raw_checksum
+                        FROM product_detail_snapshot s
+                        WHERE s.normalized AND s.http_status = 200
+                        ON CONFLICT ON CONSTRAINT
+                          product_detail_normalization_snapshot_version_uq DO NOTHING
+                        """
+                    ),
+                    {"normalizer_version": normalizer_version},
+                )
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_normalization
+                    SET status = 'queued', locked_by = NULL, locked_at = NULL,
+                        lease_expires_at = NULL, available_at = now(),
+                        last_error = COALESCE(last_error, 'expired normalization lease')
+                    WHERE normalizer_version = :normalizer_version
+                      AND status = 'running' AND lease_expires_at <= now()
+                      AND attempt_count < max_attempts
+                    """
+                ),
+                {"normalizer_version": normalizer_version},
+            )
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH candidates AS (
+                              SELECT id FROM product_detail_normalization
+                              WHERE normalizer_version = :normalizer_version
+                                AND status = 'queued' AND available_at <= now()
+                                AND attempt_count < max_attempts
+                              ORDER BY available_at, created_at, id
+                              FOR UPDATE SKIP LOCKED LIMIT :limit
+                            ), updated AS (
+                              UPDATE product_detail_normalization n
+                              SET status = 'running', locked_by = :worker_id,
+                                locked_at = now(),
+                                lease_expires_at = now() + make_interval(secs => :lease_seconds),
+                                attempt_count = n.attempt_count + 1
+                              FROM candidates c WHERE n.id = c.id
+                              RETURNING n.*
+                            )
+                            SELECT u.*, s.canonical_product_id, s.raw_storage_uri,
+                              cp.canonical_product_id AS canonical_product_stable_id,
+                              j.retailer_id, j.endpoint, j.request_context
+                            FROM updated u
+                            JOIN product_detail_snapshot s
+                              ON s.id = u.product_detail_snapshot_id
+                            JOIN product_detail_job j ON j.id = s.product_detail_job_id
+                            JOIN canonical_product cp ON cp.id = s.canonical_product_id
+                            ORDER BY u.created_at, u.id
+                            """
+                        ),
+                        {
+                            "normalizer_version": normalizer_version,
+                            "limit": limit,
+                            "worker_id": worker_id,
+                            "lease_seconds": lease_seconds,
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        if seed_version:
+            self._seeded_normalizer_versions.add(normalizer_version)
+        return [_normalization_candidate(row) for row in rows]
+
+    async def record_normalization(
+        self,
+        candidate: ProductDetailNormalizationCandidate,
+        worker_id: str,
+        normalized: NormalizedProductDetail,
+    ) -> ProductDetailNormalizationRecord:
+        document = normalization_document(candidate, normalized)
+        validate_instance(
+            self._root,
+            "product-detail-normalization.schema.json",
+            document,
+            label=f"product-detail-normalization:{candidate.snapshot_id}",
+        )
+        checksum = sha256_document(document)
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT *, lease_expires_at > now() AS lease_valid
+                            FROM product_detail_normalization
+                            WHERE id::text = :normalization_id FOR UPDATE
+                            """
+                        ),
+                        {"normalization_id": candidate.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                str(row["status"]) != "running"
+                or str(row["locked_by"]) != worker_id
+                or not bool(row["lease_valid"])
+                or str(row["normalizer_version"]) != candidate.normalizer_version
+            ):
+                raise ValueError("Product Details normalization lease is not owned by this worker")
+            updated = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE product_detail_normalization
+                            SET status = 'succeeded', document = CAST(:document AS jsonb),
+                              document_checksum = :checksum, locked_by = NULL,
+                              locked_at = NULL, lease_expires_at = NULL,
+                              last_error = NULL, completed_at = now()
+                            WHERE id::text = :normalization_id RETURNING *
+                            """
+                        ),
+                        {
+                            "document": _json(document),
+                            "checksum": checksum,
+                            "normalization_id": candidate.id,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            # Serialize canonical identity refreshes for multiple historical snapshots of
+            # the same product. The latest-normalization query must run after this lock so
+            # a waiting transaction sees the normalization committed by the prior writer.
+            product = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT identity, identifiers FROM canonical_product
+                            WHERE id::text = :product_id FOR UPDATE
+                            """
+                        ),
+                        {"product_id": candidate.canonical_product_db_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            latest = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT n.document->'normalized' AS normalized
+                            FROM product_detail_normalization n
+                            JOIN product_detail_snapshot s
+                              ON s.id = n.product_detail_snapshot_id
+                            WHERE s.canonical_product_id::text = :product_id
+                              AND n.status = 'succeeded'
+                              AND n.normalizer_version = :normalizer_version
+                            ORDER BY s.observed_at DESC, n.completed_at DESC, n.id DESC
+                            LIMIT 1
+                            """
+                        ),
+                        {
+                            "product_id": candidate.canonical_product_db_id,
+                            "normalizer_version": candidate.normalizer_version,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            latest_normalized = dict(latest["normalized"])
+            current_identity = dict(product["identity"])
+            current_identity.update(
+                {
+                    key: value
+                    for key, value in identity_from_normalized_document(latest_normalized).items()
+                    if value is not None
+                }
+            )
+            latest_identifiers = latest_normalized.get("identifiers", {})
+            identifiers = {
+                **dict(product["identifiers"]),
+                **(dict(latest_identifiers) if isinstance(latest_identifiers, dict) else {}),
+            }
+            await connection.execute(
+                text(
+                    """
+                    UPDATE canonical_product SET identifiers = CAST(:identifiers AS jsonb),
+                      identity = CAST(:identity AS jsonb), identity_checksum = :checksum,
+                      updated_at = now()
+                    WHERE id::text = :product_id
+                    """
+                ),
+                {
+                    "identifiers": _json(identifiers),
+                    "identity": _json(current_identity),
+                    "checksum": sha256_document(current_identity),
+                    "product_id": candidate.canonical_product_db_id,
+                },
+            )
+            await self._audit(
+                connection,
+                "product_detail_renormalized",
+                "product_detail_normalization",
+                candidate.id,
+                {
+                    "snapshot_id": candidate.snapshot_id,
+                    "retailer_id": candidate.retailer_id,
+                    "normalizer_version": candidate.normalizer_version,
+                    "source_raw_checksum": candidate.raw_checksum,
+                    "unmapped_source_fields": list(normalized.unmapped_source_fields),
+                },
+            )
+        return ProductDetailNormalizationRecord(
+            id=str(updated["id"]),
+            snapshot_id=candidate.snapshot_id,
+            normalizer_version=candidate.normalizer_version,
+            document=document,
+            document_checksum=checksum,
+        )
+
+    async def fail_normalization(
+        self,
+        candidate: ProductDetailNormalizationCandidate,
+        worker_id: str,
+        message: str,
+        *,
+        retry_delay_seconds: float,
+    ) -> None:
+        async with self._engine.begin() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT *, lease_expires_at > now() AS lease_valid
+                            FROM product_detail_normalization
+                            WHERE id::text = :normalization_id FOR UPDATE
+                            """
+                        ),
+                        {"normalization_id": candidate.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                str(row["status"]) != "running"
+                or str(row["locked_by"]) != worker_id
+                or not bool(row["lease_valid"])
+            ):
+                raise ValueError("Product Details normalization lease is not owned by this worker")
+            next_status = (
+                "queued" if int(row["attempt_count"]) < int(row["max_attempts"]) else "failed"
+            )
+            await connection.execute(
+                text(
+                    """
+                    UPDATE product_detail_normalization
+                    SET status = :status,
+                      available_at = now() + make_interval(secs => :retry_delay),
+                      locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                      last_error = :last_error,
+                      completed_at = CASE WHEN :status = 'failed' THEN now() ELSE NULL END
+                    WHERE id::text = :normalization_id
+                    """
+                ),
+                {
+                    "status": next_status,
+                    "retry_delay": max(retry_delay_seconds, 0),
+                    "last_error": message[:2000],
+                    "normalization_id": candidate.id,
+                },
+            )
+
+    async def normalization_audit(self, normalizer_version: str) -> JsonObject:
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT j.retailer_id, n.status, count(*)::integer AS count,
+                              count(*) FILTER (
+                                WHERE NULLIF(BTRIM(n.document #>> '{normalized,seller}'), '')
+                                  IS NOT NULL
+                              )::integer AS seller_count
+                            FROM product_detail_normalization n
+                            JOIN product_detail_snapshot s
+                              ON s.id = n.product_detail_snapshot_id
+                            JOIN product_detail_job j ON j.id = s.product_detail_job_id
+                            WHERE n.normalizer_version = :normalizer_version
+                            GROUP BY j.retailer_id, n.status
+                            ORDER BY j.retailer_id, n.status
+                            """
+                        ),
+                        {"normalizer_version": normalizer_version},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            unknown_rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT fields.field, count(*)::integer AS count
+                            FROM product_detail_normalization n
+                            CROSS JOIN LATERAL jsonb_array_elements_text(
+                              COALESCE(
+                                n.document #> '{normalized,unmapped_source_fields}',
+                                '[]'::jsonb
+                              )
+                            ) AS fields(field)
+                            WHERE n.normalizer_version = :normalizer_version
+                              AND n.status = 'succeeded'
+                            GROUP BY fields.field ORDER BY count(*) DESC, fields.field
+                            """
+                        ),
+                        {"normalizer_version": normalizer_version},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return {
+            "normalizer_version": normalizer_version,
+            "retailers": [dict(row) for row in rows],
+            "unmapped_source_fields": [dict(row) for row in unknown_rows],
+        }
+
     async def publication_highlights(
         self,
         source_artifact_ids: list[str],
@@ -870,6 +1299,7 @@ class PostgresProductDetailRepository:
                               GROUP BY cp.id
                             ), enriched AS (
                               SELECT matched.*, snapshot.document AS snapshot_document,
+                                snapshot.normalization_document,
                                 row_number() OVER (
                                   PARTITION BY matched.retailer_id
                                   ORDER BY (snapshot.id IS NOT NULL) DESC,
@@ -878,8 +1308,17 @@ class PostgresProductDetailRepository:
                                 ) AS retailer_rank
                               FROM matched
                               LEFT JOIN LATERAL (
-                                SELECT s.id, s.document
+                                SELECT s.id, s.document,
+                                  normalization.document->'normalized' AS normalization_document
                                 FROM product_detail_snapshot s
+                                LEFT JOIN LATERAL (
+                                  SELECT n.document
+                                  FROM product_detail_normalization n
+                                  WHERE n.product_detail_snapshot_id = s.id
+                                    AND n.normalizer_version = :normalizer_version
+                                    AND n.status = 'succeeded'
+                                  ORDER BY n.completed_at DESC, n.id DESC LIMIT 1
+                                ) normalization ON true
                                 WHERE s.canonical_product_id = matched.id
                                   AND s.normalized AND s.http_status = 200
                                 ORDER BY s.observed_at DESC, s.id DESC LIMIT 1
@@ -896,6 +1335,7 @@ class PostgresProductDetailRepository:
                             "source_artifact_ids": source_artifact_ids,
                             "limit": limit,
                             "per_retailer_limit": per_retailer_limit,
+                            "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
                         },
                     )
                 )
@@ -906,14 +1346,21 @@ class PostgresProductDetailRepository:
         for row in rows:
             identity = dict(row["identity"])
             snapshot = row["snapshot_document"]
-            normalized = dict(snapshot.get("normalized", {})) if isinstance(snapshot, dict) else {}
+            revision = row["normalization_document"]
+            normalized = (
+                dict(revision)
+                if isinstance(revision, dict)
+                else (dict(snapshot.get("normalized", {})) if isinstance(snapshot, dict) else {})
+            )
             media = normalized.get("media", {})
+            commerce = normalized.get("commerce", {})
             highlights.append(
                 {
                     "canonical_product_id": str(row["canonical_product_id"]),
                     "retailer": str(row["retailer_id"]),
                     "name": str(normalized.get("name") or identity.get("name") or "Product"),
                     "brand": normalized.get("brand") or identity.get("brand"),
+                    "seller": normalized.get("seller") or identity.get("seller"),
                     "url": normalized.get("url") or identity.get("url"),
                     "image_url": (
                         (media.get("image_primary") if isinstance(media, dict) else None)
@@ -926,6 +1373,19 @@ class PostgresProductDetailRepository:
                     "specification": normalized.get("specification", {}),
                     "physical_properties": normalized.get("physical_properties", {}),
                     "variant_configuration": normalized.get("variant_configuration", {}),
+                    "item_condition": (
+                        commerce.get("item_condition")
+                        if isinstance(commerce, dict)
+                        else identity.get("item_condition")
+                    ),
+                    "fulfillment": normalized.get("fulfillment", {}),
+                    "reviews": normalized.get("reviews", {}),
+                    "demand": normalized.get("demand", {}),
+                    "content": normalized.get("content", {}),
+                    "relationships": normalized.get("relationships", {}),
+                    "media": media if isinstance(media, dict) else {},
+                    "pdp_source_field_inventory": normalized.get("source_field_inventory", []),
+                    "pdp_unmapped_source_fields": normalized.get("unmapped_source_fields", []),
                     "price": normalized.get("price"),
                     "price_currency": normalized.get("price_currency"),
                     "role": (

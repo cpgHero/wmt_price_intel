@@ -165,6 +165,41 @@ function signedCurrency(value: number) {
   return `${value > 0 ? "+" : "−"}${currency(Math.abs(value))}`;
 }
 
+function objectValue(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function textValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function booleanLabel(value: unknown): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "Not supplied";
+}
+
+function evidenceCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function attributeRows(value: unknown): Array<[string, string]> {
+  return Object.entries(objectValue(value))
+    .flatMap(([key, rowValue]): Array<[string, string]> => {
+      if (rowValue === null || rowValue === undefined || rowValue === "")
+        return [];
+      if (typeof rowValue === "object") return [];
+      return [[key.replaceAll("_", " "), String(rowValue)]];
+    })
+    .slice(0, 16);
+}
+
 function updateQuery(parameters: Record<string, string | null>) {
   const url = new URL(window.location.href);
   for (const [key, value] of Object.entries(parameters)) {
@@ -865,6 +900,194 @@ function StoreDrawer({
   );
 }
 
+function PdpReferencePanel({ product }: Readonly<{ product: Product }>) {
+  const pdp = objectValue(product.pdp);
+  const enriched = pdp.enriched === true;
+  const fulfillment = objectValue(pdp.fulfillment);
+  const reviews = objectValue(pdp.reviews);
+  const demand = objectValue(pdp.demand);
+  const content = objectValue(pdp.content);
+  const relationshipCounts = objectValue(pdp.relationship_counts);
+  const media = objectValue(pdp.media);
+  const identifiers = attributeRows(pdp.identifiers);
+  const specifications = attributeRows(pdp.specification);
+  const physicalProperties = attributeRows(pdp.physical_properties);
+  const rating = numberValue(reviews.rating);
+  const reviewCount = numberValue(
+    reviews.reviews_count ?? reviews.rating_count,
+  );
+  const monthlySales = numberValue(demand.monthly_sales_volume);
+  const weeklySales = numberValue(demand.weekly_sales_volume);
+  const imageCount =
+    numberValue(media.image_count) ?? evidenceCount(media.images);
+  const videoCount =
+    numberValue(content.video_count) ??
+    numberValue(media.video_count) ??
+    evidenceCount(media.videos);
+  const relationshipCount = Object.values(relationshipCounts).reduce<number>(
+    (total, value) => total + (numberValue(value) ?? 0),
+    0,
+  );
+  const description =
+    textValue(pdp.description_short) ?? textValue(pdp.description_full);
+  const category = textValue(pdp.category_path);
+  const unmappedFields = Array.isArray(pdp.unmapped_source_fields)
+    ? pdp.unmapped_source_fields.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+
+  return (
+    <article className="pm-panel pi-pdp-reference">
+      <header>
+        <div>
+          <p className="section-kicker">Product Details reference</p>
+          <h2>Identity, attributes, and commerce context</h2>
+        </div>
+        <span className={`pi-evidence-pill ${enriched ? "" : "organic"}`}>
+          {enriched ? "PDP enriched" : "PDP not available"}
+        </span>
+      </header>
+      {enriched ? (
+        <>
+          <div className="pi-pdp-summary-grid">
+            <div>
+              <span>Seller</span>
+              <strong>
+                {product.seller ?? "Not supplied by retailer PDP"}
+              </strong>
+              <small>PDP seller; not inferred from the retailer name</small>
+            </div>
+            <div>
+              <span>Category</span>
+              <strong>{category ?? "Not supplied"}</strong>
+              <small>
+                {textValue(pdp.item_condition) ?? "Condition not supplied"}
+              </small>
+            </div>
+            <div>
+              <span>Ratings & reviews</span>
+              <strong>
+                {rating === null
+                  ? "Not supplied"
+                  : `${rating.toFixed(1)} rating`}
+              </strong>
+              <small>
+                {reviewCount === null
+                  ? "Review count not supplied"
+                  : `${count(reviewCount)} reviews/ratings`}
+              </small>
+            </div>
+            <div>
+              <span>Demand context</span>
+              <strong>
+                {monthlySales !== null
+                  ? `${count(monthlySales)} monthly sales`
+                  : weeklySales !== null
+                    ? `${count(weeklySales)} weekly sales`
+                    : "Not supplied"}
+              </strong>
+              <small>
+                PDP reference only; never substituted for Search demand
+              </small>
+            </div>
+            <div>
+              <span>Fulfillment context</span>
+              <strong>
+                Pickup {booleanLabel(fulfillment.pickup_available)} · Shipping{" "}
+                {textValue(fulfillment.shipping_type) ?? "not supplied"}
+              </strong>
+              <small>
+                Retailer fulfilled{" "}
+                {booleanLabel(fulfillment.fulfilled_by_retailer)}
+              </small>
+            </div>
+            <div>
+              <span>Content depth</span>
+              <strong>
+                {count(imageCount)} images · {count(videoCount)} videos
+              </strong>
+              <small>
+                {count(relationshipCount)} related or variant product references
+              </small>
+            </div>
+          </div>
+          {description ? (
+            <p className="pi-pdp-description">{description}</p>
+          ) : null}
+          <details className="pi-pdp-details">
+            <summary>View identifiers and product attributes</summary>
+            <div>
+              <section>
+                <h3>Identifiers</h3>
+                <dl>
+                  {identifiers.length ? (
+                    identifiers.map(([label, value]) => (
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))
+                  ) : (
+                    <div>
+                      <dt>Retailer ID</dt>
+                      <dd>{product.product_id}</dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
+              <section>
+                <h3>Specifications</h3>
+                <dl>
+                  {[...specifications, ...physicalProperties].length ? (
+                    [...specifications, ...physicalProperties].map(
+                      ([label, value], index) => (
+                        <div key={`${label}:${index}`}>
+                          <dt>{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ),
+                    )
+                  ) : (
+                    <div>
+                      <dt>Attributes</dt>
+                      <dd>Not supplied in this PDP</dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
+            </div>
+          </details>
+          {unmappedFields.length ? (
+            <p className="pi-pdp-governance-note">
+              {count(unmappedFields.length)} newly observed provider fields are
+              retained in the immutable raw payload and queued for schema
+              review.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="pi-pdp-description">
+          No successful Product Details payload is linked to this exact retailer
+          product. Search still provides its governed name, price, and location
+          evidence.
+        </p>
+      )}
+      <footer>
+        <span>
+          PDP owns descriptive identity. Search remains authoritative for store
+          price, observed availability, sponsorship, and collection time.
+        </span>
+        {product.url ? (
+          <a href={product.url} rel="noreferrer" target="_blank">
+            Open retailer product page ↗
+          </a>
+        ) : null}
+      </footer>
+    </article>
+  );
+}
+
 function LocationTable({
   view,
   onOpen,
@@ -1396,6 +1619,12 @@ function ProductCatalog({
       ).sort((left, right) => left.localeCompare(right)),
     [view.products],
   );
+  const enrichedProducts = useMemo(
+    () => view.products.filter((product) => product.pdp.enriched).length,
+    [view.products],
+  );
+  const selectedSeller =
+    seller === "all" || sellers.includes(seller) ? seller : "all";
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return view.products.filter((product) => {
@@ -1412,15 +1641,15 @@ function ProductCatalog({
         (!query || searchable.includes(query)) &&
         (brandName === "all" || product.brand === brandName) &&
         (brandType === "all" || product.brand_type === brandType) &&
-        (seller === "all" || product.seller === seller)
+        (selectedSeller === "all" || product.seller === selectedSeller)
       );
     });
-  }, [brandName, brandType, search, seller, view.products]);
+  }, [brandName, brandType, search, selectedSeller, view.products]);
   const filtersActive =
     Boolean(search.trim()) ||
     brandName !== "all" ||
     brandType !== "all" ||
-    seller !== "all";
+    selectedSeller !== "all";
 
   function clearFilters() {
     setSearch("");
@@ -1487,10 +1716,14 @@ function ProductCatalog({
             aria-label="Filter by PDP seller"
             disabled={!sellers.length}
             onChange={(event) => setSeller(event.target.value)}
-            value={seller}
+            value={selectedSeller}
           >
             <option value="all">
-              {sellers.length ? "All sellers" : "No seller data available"}
+              {sellers.length
+                ? "All PDP sellers"
+                : enrichedProducts
+                  ? "Seller not supplied by PDP"
+                  : "PDP enrichment unavailable"}
             </option>
             {sellers.map((value) => (
               <option key={value} value={value}>
@@ -1562,6 +1795,7 @@ function ProductCatalog({
                     <p>
                       {product.brand ?? "Brand unresolved"} · ID{" "}
                       {product.product_id}
+                      {product.seller ? ` · Seller ${product.seller}` : ""}
                     </p>
                   </div>
                 </div>
@@ -2178,6 +2412,7 @@ export function PriceMonitoringWorkspace({
               </div>
             </div>
           </article>
+          <PdpReferencePanel product={selectedProduct} />
           <div className="pm-two-column pi-overview-grid">
             <article className="pm-panel">
               <header>

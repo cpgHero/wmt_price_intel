@@ -52,6 +52,7 @@ export interface RetailCompetitiveIntelligenceCanonicalProduct {
     description_full?: string | null;
     category_path?: string | null;
     model_number?: string | null;
+    item_condition?: string | null;
     specification: {
       [k: string]: unknown;
     };

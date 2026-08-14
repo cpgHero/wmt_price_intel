@@ -8,9 +8,12 @@ from rci_products.models import (
     CanonicalProductRecord,
     EnqueueProductDetailResult,
     JsonObject,
+    NormalizedProductDetail,
     ProductDetailEndpoint,
     ProductDetailFetchResult,
     ProductDetailJob,
+    ProductDetailNormalizationCandidate,
+    ProductDetailNormalizationRecord,
     ProductDetailRequestContext,
     ProductDetailRun,
     ProductDetailSnapshotRecord,
@@ -104,6 +107,35 @@ class ProductDetailRepository(Protocol):
     async def run_audit(self, run_id: str) -> JsonObject | None: ...
 
     async def reconcile_run(self, run_id: str) -> ProductDetailRun | None: ...
+
+
+class ProductDetailNormalizationRepository(Protocol):
+    async def claim_normalizations(
+        self,
+        worker_id: str,
+        *,
+        normalizer_version: str,
+        limit: int,
+        lease_seconds: int,
+    ) -> list[ProductDetailNormalizationCandidate]: ...
+
+    async def record_normalization(
+        self,
+        candidate: ProductDetailNormalizationCandidate,
+        worker_id: str,
+        normalized: NormalizedProductDetail,
+    ) -> ProductDetailNormalizationRecord: ...
+
+    async def fail_normalization(
+        self,
+        candidate: ProductDetailNormalizationCandidate,
+        worker_id: str,
+        message: str,
+        *,
+        retry_delay_seconds: float,
+    ) -> None: ...
+
+    async def normalization_audit(self, normalizer_version: str) -> JsonObject: ...
 
 
 def require_positive_budget(value: int) -> int:

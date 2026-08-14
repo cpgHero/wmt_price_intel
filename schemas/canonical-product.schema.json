@@ -102,6 +102,9 @@
         "model_number": {
           "type": ["string", "null"]
         },
+        "item_condition": {
+          "type": ["string", "null"]
+        },
         "specification": {
           "type": "object"
         },

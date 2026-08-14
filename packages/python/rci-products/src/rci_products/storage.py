@@ -7,6 +7,7 @@ import gzip
 import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 from rci_products.models import ProductDetailJob, ProductDetailRawArtifact
 from rci_providers.models import ProviderRequest
@@ -22,6 +23,10 @@ class ProductDetailRawObjectStore(Protocol):
         body: bytes,
         response_content_type: str | None,
     ) -> ProductDetailRawArtifact: ...
+
+
+class ProductDetailRawObjectReader(Protocol):
+    async def get_response(self, storage_uri: str, *, expected_checksum: str) -> bytes: ...
 
 
 def _raw_object(
@@ -95,6 +100,13 @@ class InMemoryProductDetailRawObjectStore:
         if previous != compressed:
             raise RuntimeError(f"immutable Product Details collision at {key}")
         return artifact
+
+    async def get_response(self, storage_uri: str, *, expected_checksum: str) -> bytes:
+        parsed = urlparse(storage_uri)
+        compressed = self.objects[parsed.path.lstrip("/")]
+        if hashlib.sha256(compressed).hexdigest() != expected_checksum:
+            raise RuntimeError(f"Product Details raw checksum mismatch at {storage_uri}")
+        return gzip.decompress(compressed)
 
 
 class S3ProductDetailRawObjectStore:
@@ -177,3 +189,18 @@ class S3ProductDetailRawObjectStore:
 
         await asyncio.to_thread(put_once)
         return artifact
+
+    async def get_response(self, storage_uri: str, *, expected_checksum: str) -> bytes:
+        parsed = urlparse(storage_uri)
+        if parsed.scheme != "s3" or parsed.netloc != self.bucket:
+            raise ValueError(f"unexpected Product Details raw storage URI: {storage_uri}")
+        key = parsed.path.lstrip("/")
+
+        def read() -> bytes:
+            response = self._client.get_object(Bucket=self.bucket, Key=key)
+            compressed = response["Body"].read()
+            if hashlib.sha256(compressed).hexdigest() != expected_checksum:
+                raise RuntimeError(f"Product Details raw checksum mismatch at {storage_uri}")
+            return gzip.decompress(compressed)
+
+        return await asyncio.to_thread(read)

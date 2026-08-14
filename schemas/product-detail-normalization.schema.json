@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-detail-normalization.schema.json",
+  "title": "Retail Competitive Intelligence Product Detail Normalization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "normalizer_version",
+    "snapshot_id",
+    "canonical_product_id",
+    "retailer_id",
+    "source_raw_checksum_sha256",
+    "normalized"
+  ],
+  "properties": {
+    "normalizer_version": { "type": "string", "minLength": 1 },
+    "snapshot_id": { "type": "string", "format": "uuid" },
+    "canonical_product_id": { "type": "string", "minLength": 1 },
+    "retailer_id": { "type": "string", "minLength": 1 },
+    "source_raw_checksum_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "normalized": {
+      "$ref": "https://schemas.example.local/rci/product-detail-snapshot.schema.json#/properties/normalized"
+    }
+  }
+}

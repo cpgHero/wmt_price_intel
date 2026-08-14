@@ -7,10 +7,52 @@ from datetime import UTC, datetime
 from rci_products.models import (
     CanonicalProductRecord,
     JsonObject,
+    NormalizedProductDetail,
     ProductDetailFetchResult,
     ProductDetailJob,
+    ProductDetailNormalizationCandidate,
     sha256_document,
 )
+
+
+def normalization_document(
+    candidate: ProductDetailNormalizationCandidate,
+    normalized: NormalizedProductDetail,
+) -> JsonObject:
+    normalized_document = normalized.contract_document()
+    if normalized_document["normalizer_version"] != candidate.normalizer_version:
+        raise ValueError("normalizer version does not match the claimed revision")
+    return {
+        "normalizer_version": candidate.normalizer_version,
+        "snapshot_id": candidate.snapshot_id,
+        "canonical_product_id": candidate.canonical_product_id,
+        "retailer_id": candidate.retailer_id,
+        "source_raw_checksum_sha256": candidate.raw_checksum,
+        "normalized": normalized_document,
+    }
+
+
+def identity_from_normalized_document(normalized: JsonObject) -> JsonObject:
+    content = normalized.get("content", {})
+    commerce = normalized.get("commerce", {})
+    media = normalized.get("media", {})
+    identifiers = normalized.get("identifiers", {})
+    return {
+        "name": normalized.get("name"),
+        "brand": normalized.get("brand"),
+        "seller": normalized.get("seller"),
+        "url": normalized.get("url"),
+        "image_primary": media.get("image_primary") if isinstance(media, dict) else None,
+        "description_short": normalized.get("description_short"),
+        "description_full": normalized.get("description_full"),
+        "category_path": normalized.get("category_path"),
+        "model_number": (content.get("model_number") if isinstance(content, dict) else None)
+        or (identifiers.get("model") if isinstance(identifiers, dict) else None),
+        "item_condition": (commerce.get("item_condition") if isinstance(commerce, dict) else None),
+        "specification": normalized.get("specification", {}),
+        "physical_properties": normalized.get("physical_properties", {}),
+        "variant_configuration": normalized.get("variant_configuration", {}),
+    }
 
 
 def snapshot_document(

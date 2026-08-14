@@ -27,6 +27,7 @@ from rci_analytics import (
 from rci_api.analyses import get_analysis_service
 from rci_contracts import validate_instance
 from rci_product_packs import PostgresProductPackCatalog
+from rci_products import PRODUCT_DETAIL_NORMALIZER_VERSION
 from rci_results import AnalysisResultService
 from rci_results.service import AnalysisNotFoundError
 from rci_retailer_packs import BrandDecisionOverride, GovernedBrandResolver
@@ -53,6 +54,7 @@ class PreparedPriceMonitoringData:
     source_rows: int
     artifact_checksums: tuple[str, ...]
     product_context: dict[str, dict[str, Any]]
+    product_context_revision: str
     retailer_options: tuple[str, ...]
 
 
@@ -227,7 +229,7 @@ class PostgresPriceMonitoringRepository:
                     statement,
                     {"collection_run_id": collection_run_id, "retailer_id": retailer_id},
                 )
-            ).mappings()
+            ).mappings().all()
             return [ClassifiedArtifact(**dict(row)) for row in rows]
 
     async def source_rows(self, collection_run_id: str, retailer_id: str) -> int:
@@ -321,34 +323,165 @@ class PostgresPriceMonitoringRepository:
         retailer_id: str,
         product_ids: list[str],
     ) -> dict[str, dict[str, Any]]:
+        context, _revision = await self.product_context_bundle(retailer_id, product_ids)
+        return context
+
+    async def product_context_bundle(
+        self,
+        retailer_id: str,
+        product_ids: list[str],
+    ) -> tuple[dict[str, dict[str, Any]], str]:
+        """Return PDP context and its cache revision from one database snapshot."""
+
         if not product_ids:
-            return {}
+            return {}, "0:"
         statement = text(
             """
-            SELECT retailer_id, retailer_product_id, identity
-            FROM canonical_product
-            WHERE retailer_id = :retailer_id
-              AND retailer_product_id = ANY(CAST(:product_ids AS text[]))
+            SELECT cp.retailer_id, cp.retailer_product_id, cp.identifiers,
+              cp.identity, revision.normalized,
+              count(*) OVER ()::integer AS context_product_count,
+              COALESCE(max(cp.updated_at) OVER ()::text, '') AS context_latest_update
+            FROM canonical_product cp
+            LEFT JOIN LATERAL (
+              SELECT n.document->'normalized' AS normalized
+              FROM product_detail_normalization n
+              JOIN product_detail_snapshot s
+                ON s.id = n.product_detail_snapshot_id
+              WHERE s.canonical_product_id = cp.id
+                AND n.normalizer_version = :normalizer_version
+                AND n.status = 'succeeded'
+              ORDER BY s.observed_at DESC, n.completed_at DESC, n.id DESC
+              LIMIT 1
+            ) revision ON true
+            WHERE cp.retailer_id = :retailer_id
+              AND cp.retailer_product_id = ANY(CAST(:product_ids AS text[]))
             """
         )
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
                     statement,
-                    {"retailer_id": retailer_id, "product_ids": product_ids},
+                    {
+                        "retailer_id": retailer_id,
+                        "product_ids": product_ids,
+                        "normalizer_version": PRODUCT_DETAIL_NORMALIZER_VERSION,
+                    },
                 )
-            ).mappings()
+            ).mappings().all()
             context: dict[str, dict[str, Any]] = {}
             for row in rows:
                 identity = dict(row["identity"])
+                normalized = dict(row["normalized"]) if isinstance(row["normalized"], dict) else {}
+                media = (
+                    dict(normalized["media"])
+                    if isinstance(normalized.get("media"), dict)
+                    else {}
+                )
+                commerce = (
+                    dict(normalized["commerce"])
+                    if isinstance(normalized.get("commerce"), dict)
+                    else {}
+                )
+                relationships = (
+                    dict(normalized["relationships"])
+                    if isinstance(normalized.get("relationships"), dict)
+                    else {}
+                )
+                seller = (
+                    normalized.get("seller") if normalized else identity.get("seller")
+                )
                 context[f"{row['retailer_id']}:{row['retailer_product_id']}"] = {
-                    "name": identity.get("name"),
-                    "brand": identity.get("brand"),
-                    "seller": identity.get("seller"),
-                    "image_url": identity.get("image_primary"),
-                    "url": identity.get("url"),
+                    "name": normalized.get("name") or identity.get("name"),
+                    "brand": normalized.get("brand") or identity.get("brand"),
+                    "seller": seller,
+                    "image_url": media.get("image_primary") or identity.get("image_primary"),
+                    "url": normalized.get("url") or identity.get("url"),
+                    "pdp": {
+                        "enriched": bool(normalized),
+                        "item_condition": commerce.get("item_condition")
+                        or identity.get("item_condition"),
+                        "description_short": normalized.get("description_short")
+                        or identity.get("description_short"),
+                        "description_full": normalized.get("description_full")
+                        or identity.get("description_full"),
+                        "category_path": normalized.get("category_path")
+                        or identity.get("category_path"),
+                        "identifiers": dict(row["identifiers"]),
+                        "specification": normalized.get("specification")
+                        or identity.get("specification", {}),
+                        "physical_properties": normalized.get("physical_properties")
+                        or identity.get("physical_properties", {}),
+                        "variant_configuration": normalized.get("variant_configuration")
+                        or identity.get("variant_configuration", {}),
+                        "commerce": {
+                            key: value
+                            for key, value in commerce.items()
+                            if key != "offers"
+                        },
+                        "media": {
+                            "image_count": len(media.get("images", []))
+                            if isinstance(media.get("images"), list)
+                            else 0,
+                            "video_count": len(media.get("videos", []))
+                            if isinstance(media.get("videos"), list)
+                            else 0,
+                        },
+                        "fulfillment": normalized.get("fulfillment", {}),
+                        "reviews": normalized.get("reviews", {}),
+                        "demand": normalized.get("demand", {}),
+                        "content": normalized.get("content", {}),
+                        "relationship_counts": {
+                            key: len(value) if isinstance(value, list) else 0
+                            for key, value in relationships.items()
+                        },
+                        "source_context": normalized.get("source_context", {}),
+                        "source_field_count": len(
+                            normalized.get("source_field_inventory", [])
+                        ),
+                        "unmapped_source_fields": normalized.get("unmapped_source_fields", []),
+                        "authority": {
+                            "identity": "pdp" if normalized else "search",
+                            "price": "search",
+                            "availability": "search",
+                        },
+                    },
                 }
-            return context
+            first_row = rows[0] if rows else None
+            revision = (
+                f"{int(first_row['context_product_count'])}:{first_row['context_latest_update']}"
+                if first_row is not None
+                else "0:"
+            )
+            return context, revision
+
+    async def product_context_revision(
+        self,
+        retailer_id: str,
+        product_ids: list[str],
+    ) -> str:
+        if not product_ids:
+            return "0:"
+        statement = text(
+            """
+            SELECT count(*)::integer AS product_count,
+              COALESCE(max(updated_at)::text, '') AS latest_update
+            FROM canonical_product
+            WHERE retailer_id = :retailer_id
+              AND retailer_product_id = ANY(CAST(:product_ids AS text[]))
+            """
+        )
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        statement,
+                        {"retailer_id": retailer_id, "product_ids": product_ids},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return f"{int(row['product_count'])}:{row['latest_update']}"
 
     async def brand_overrides(
         self,
@@ -484,7 +617,38 @@ class PriceMonitoringService:
         cache_key = (analysis_id, retailer_id)
         cached = self._prepared_cache.get(cache_key)
         if cached is not None:
-            return cached
+            product_ids = sorted(
+                {
+                    offer.offer.retailer_product_id
+                    for offer in cached.offers
+                    if offer.offer.retailer_id == retailer_id and offer.in_scope
+                }
+            )
+            revision = await self._repository.product_context_revision(
+                retailer_id,
+                product_ids,
+            )
+            if revision == cached.product_context_revision:
+                return cached
+            product_context, revision = await self._repository.product_context_bundle(
+                retailer_id,
+                product_ids,
+            )
+            refreshed = PreparedPriceMonitoringData(
+                analysis=cached.analysis,
+                projector=cached.projector,
+                offers=cached.offers,
+                location_index=cached.location_index,
+                eligible_location_index=cached.eligible_location_index,
+                expected_locations=cached.expected_locations,
+                source_rows=cached.source_rows,
+                artifact_checksums=cached.artifact_checksums,
+                product_context=product_context,
+                product_context_revision=revision,
+                retailer_options=cached.retailer_options,
+            )
+            self._prepared_cache[cache_key] = refreshed
+            return refreshed
         lock = self._prepared_locks.setdefault(cache_key, asyncio.Lock())
         async with lock:
             cached = self._prepared_cache.get(cache_key)
@@ -521,9 +685,11 @@ class PriceMonitoringService:
                 analysis.collection_run_id,
                 retailer_id,
             )
-            product_context = await self._repository.product_context(
-                retailer_id,
-                product_ids,
+            product_context, product_context_revision = (
+                await self._repository.product_context_bundle(
+                    retailer_id,
+                    product_ids,
+                )
             )
             projector = await self._projector_for_analysis(analysis, benchmark)
             prepared = PreparedPriceMonitoringData(
@@ -539,6 +705,7 @@ class PriceMonitoringService:
                 ),
                 artifact_checksums=tuple(artifact.checksum for artifact in artifacts),
                 product_context=product_context,
+                product_context_revision=product_context_revision,
                 retailer_options=retailer_options,
             )
             if len(self._prepared_cache) >= 8:
@@ -586,11 +753,11 @@ class PriceMonitoringService:
     async def view(self, analysis_id: str, filters: PriceMonitoringFilters) -> dict[str, Any]:
         if filters.city is not None and filters.state is None:
             raise ValueError("a city filter requires its state")
-        cache_key = self._view_key(analysis_id, filters)
+        prepared = await self._prepare(analysis_id, filters.retailer_id)
+        cache_key = (*self._view_key(analysis_id, filters), prepared.product_context_revision)
         cached = self._view_cache.get(cache_key)
         if cached is not None:
             return cached
-        prepared = await self._prepare(analysis_id, filters.retailer_id)
         view = self._project(
             prepared,
             filters,

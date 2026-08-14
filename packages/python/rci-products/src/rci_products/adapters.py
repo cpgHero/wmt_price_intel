@@ -12,6 +12,77 @@ from rci_products.models import (
 )
 from rci_providers.models import ProviderRequest
 
+_MAPPED_SOURCE_FIELDS = frozenset(
+    {
+        "brand",
+        "category",
+        "category_path",
+        "description_full",
+        "description_short",
+        "enhanced_content_raw",
+        "extras",
+        "fulfiled_by_retailer",
+        "fulfilled_by_retailer",
+        "has_360_images",
+        "has_enhanced_content",
+        "image_primary",
+        "images",
+        "item_condition",
+        "model_number",
+        "monthly_sales_volume",
+        "name",
+        "offers",
+        "physical_properties",
+        "pickup_address",
+        "pickup_available",
+        "pickup_extras",
+        "pickup_store_id",
+        "pickup_zipcode",
+        "price",
+        "price_currency",
+        "price_discount_percent",
+        "price_discounted",
+        "price_is_discounted",
+        "price_regular",
+        "product_aspects",
+        "product_identifiers",
+        "rating",
+        "rating_count",
+        "related_products_also_viewed",
+        "related_products_bought_together",
+        "related_products_similar",
+        "related_products_sponsored",
+        "retailer",
+        "retailer_product_id",
+        "retailer_ranks",
+        "retailer_review_summary",
+        "retailer_store_id",
+        "return_extras",
+        "returnable",
+        "returnable_in",
+        "reviews_count",
+        "reviews_summary",
+        "seller",
+        "shipping_cost",
+        "shipping_delivery_address",
+        "shipping_delivery_zipcode",
+        "shipping_expected_delivery_date",
+        "shipping_extras",
+        "shipping_type",
+        "source",
+        "specification",
+        "stock_availability",
+        "stock_quantity",
+        "url",
+        "variant_configuration",
+        "variants",
+        "video_count",
+        "videos",
+        "weekly_sales_volume",
+        "zipcode",
+    }
+)
+
 
 def _text(value: object) -> str | None:
     if value is None:
@@ -44,6 +115,10 @@ def _boolean(value: object) -> bool | None:
 
 def _object(value: object) -> JsonObject:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _list(value: object) -> list[object]:
+    return list(value) if isinstance(value, list) else []
 
 
 def _category_path(payload: JsonObject) -> str | None:
@@ -129,6 +204,73 @@ class MetricsCartProductDetailAdapter:
             "source_retailer": _text(payload.get("retailer")),
             "source": _text(payload.get("source")),
         }
+        commerce = {
+            "item_condition": _text(payload.get("item_condition")),
+            "price_regular": _number(payload.get("price_regular")),
+            "price_discounted": _number(payload.get("price_discounted")),
+            "price_discount_percent": _number(payload.get("price_discount_percent")),
+            "price_is_discounted": _boolean(payload.get("price_is_discounted")),
+            "offers": _list(payload.get("offers")),
+        }
+        fulfillment = {
+            "fulfilled_by_retailer": (
+                _boolean(payload.get("fulfilled_by_retailer"))
+                if payload.get("fulfilled_by_retailer") is not None
+                else _boolean(payload.get("fulfiled_by_retailer"))
+            ),
+            "retailer_store_id": _text(payload.get("retailer_store_id")),
+            "stock_available": _boolean(payload.get("stock_availability")),
+            "stock_quantity": _number(payload.get("stock_quantity")),
+            "pickup_available": _boolean(payload.get("pickup_available")),
+            "pickup_store_id": _text(payload.get("pickup_store_id")),
+            "pickup_zipcode": _text(payload.get("pickup_zipcode")),
+            "pickup_address": _text(payload.get("pickup_address")),
+            "pickup_extras": _object(payload.get("pickup_extras")),
+            "shipping_type": _text(payload.get("shipping_type")),
+            "shipping_expected_delivery_date": _text(
+                payload.get("shipping_expected_delivery_date")
+            ),
+            "shipping_delivery_zipcode": _text(payload.get("shipping_delivery_zipcode")),
+            "shipping_delivery_address": _text(payload.get("shipping_delivery_address")),
+            "shipping_cost": _number(payload.get("shipping_cost")),
+            "shipping_extras": _object(payload.get("shipping_extras")),
+            "returnable": _boolean(payload.get("returnable")),
+            "returnable_in": _number(payload.get("returnable_in")),
+            "return_extras": _object(payload.get("return_extras")),
+        }
+        reviews = {
+            "rating": _number(payload.get("rating")),
+            "rating_count": _number(payload.get("rating_count")),
+            "reviews_count": _number(payload.get("reviews_count")),
+            "reviews_summary": _object(payload.get("reviews_summary")),
+            "retailer_review_summary": payload.get("retailer_review_summary"),
+            "product_aspects": _list(payload.get("product_aspects")),
+        }
+        demand = {
+            "monthly_sales_volume": _number(payload.get("monthly_sales_volume")),
+            "weekly_sales_volume": _number(payload.get("weekly_sales_volume")),
+            "retailer_ranks": _object(payload.get("retailer_ranks")),
+        }
+        content = {
+            "model_number": _text(payload.get("model_number")),
+            "video_count": _number(payload.get("video_count")),
+            "has_360_images": _boolean(payload.get("has_360_images")),
+            "has_enhanced_content": _boolean(payload.get("has_enhanced_content")),
+            "enhanced_content_present": payload.get("enhanced_content_raw") is not None,
+        }
+        relationships = {
+            "also_viewed": _list(payload.get("related_products_also_viewed")),
+            "bought_together": _list(payload.get("related_products_bought_together")),
+            "similar": _list(payload.get("related_products_similar")),
+            "sponsored": _list(payload.get("related_products_sponsored")),
+            "variants": _list(payload.get("variants")),
+        }
+        source_context = {
+            "zipcode": _text(payload.get("zipcode")),
+            "retailer": _text(payload.get("retailer")),
+            "source": _text(payload.get("source")),
+        }
+        source_fields = tuple(sorted(str(name) for name in payload))
         return NormalizedProductDetail(
             retailer_product_id=retailer_product_id,
             name=name,
@@ -152,5 +294,16 @@ class MetricsCartProductDetailAdapter:
             image_primary=image_primary,
             images=images or ((image_primary,) if image_primary else ()),
             videos=videos,
+            commerce=commerce,
+            fulfillment=fulfillment,
+            reviews=reviews,
+            demand=demand,
+            content=content,
+            relationships=relationships,
+            source_context=source_context,
+            source_field_inventory=source_fields,
+            unmapped_source_fields=tuple(
+                name for name in source_fields if name not in _MAPPED_SOURCE_FIELDS
+            ),
             extras=extras,
         )

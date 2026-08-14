@@ -405,6 +405,7 @@ class InMemoryProductDetailRepository:
                     dict(snapshot.get("normalized", {})) if isinstance(snapshot, dict) else {}
                 )
                 media = normalized.get("media", {})
+                commerce = normalized.get("commerce", {})
                 highlights.append(
                     {
                         "canonical_product_id": product.canonical_product_id,
@@ -413,6 +414,7 @@ class InMemoryProductDetailRepository:
                             normalized.get("name") or product.identity.get("name") or "Product"
                         ),
                         "brand": normalized.get("brand") or product.identity.get("brand"),
+                        "seller": normalized.get("seller") or product.identity.get("seller"),
                         "url": normalized.get("url") or product.identity.get("url"),
                         "image_url": (
                             (media.get("image_primary") if isinstance(media, dict) else None)
@@ -425,6 +427,19 @@ class InMemoryProductDetailRepository:
                         "specification": normalized.get("specification", {}),
                         "physical_properties": normalized.get("physical_properties", {}),
                         "variant_configuration": normalized.get("variant_configuration", {}),
+                        "item_condition": (
+                            commerce.get("item_condition")
+                            if isinstance(commerce, dict)
+                            else product.identity.get("item_condition")
+                        ),
+                        "fulfillment": normalized.get("fulfillment", {}),
+                        "reviews": normalized.get("reviews", {}),
+                        "demand": normalized.get("demand", {}),
+                        "content": normalized.get("content", {}),
+                        "relationships": normalized.get("relationships", {}),
+                        "media": media if isinstance(media, dict) else {},
+                        "pdp_source_field_inventory": normalized.get("source_field_inventory", []),
+                        "pdp_unmapped_source_fields": normalized.get("unmapped_source_fields", []),
                         "price": normalized.get("price"),
                         "price_currency": normalized.get("price_currency"),
                         "role": (

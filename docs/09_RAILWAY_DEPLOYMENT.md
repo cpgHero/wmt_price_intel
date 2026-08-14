@@ -81,6 +81,9 @@ PRODUCT_DETAIL_RPM=180
 PRODUCT_DETAIL_CLAIM_LIMIT=1
 PRODUCT_DETAIL_LEASE_SECONDS=300
 PRODUCT_DETAIL_CACHE_TTL_SECONDS=604800
+PRODUCT_DETAIL_RENORMALIZATION_ENABLED=false
+PRODUCT_DETAIL_RENORMALIZATION_CLAIM_LIMIT=8
+PRODUCT_DETAIL_RENORMALIZATION_LEASE_SECONDS=300
 AI_ENABLED=false
 OPENAI_MODEL_INSIGHT=<explicit model ID; required only when AI_ENABLED=true>
 OPENAI_MODEL_NARRATIVE=<explicit model ID; required only when AI_ENABLED=true>
@@ -197,6 +200,12 @@ MetricsCart uses query-parameter authentication.
 Keep `PRODUCT_DETAIL_ENRICHMENT_ENABLED=false` through migration and fixture acceptance. Enable it
 only after an explicit enrichment run with a reviewed credit ceiling has been queued. Search and PDP
 limits are independent per retailer/type but share their state across all worker replicas.
+
+`PRODUCT_DETAIL_RENORMALIZATION_ENABLED` is independent of paid enrichment. Enable it after the
+`0028_product_detail_renormalization` migration to replay retained immutable PDP payloads through
+the current normalizer. It reads the private bucket, creates append-only normalization revisions,
+and spends zero MetricsCart credits. Leave it enabled so future normalizer versions and source-field
+drift are repaired and audited without recollection.
 
 ## Historical import job
 
