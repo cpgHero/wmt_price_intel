@@ -94,3 +94,8 @@ Phase 12.8 establishes one Search-authoritative product-location observation pop
 Price Intelligence and Competitive Intelligence, including governed PDP identity, brand role,
 location-master geography, deterministic deduplication, and population provenance. See
 `docs/48_PHASE_12_8_SHARED_PRODUCT_LOCATION_INTELLIGENCE_FOUNDATION.md`.
+
+Phase 12.9 expands the source-backed Competitive Product Leadership experience into distinct
+overview, footprint, match-group, store, market, exception, and history-readiness workspaces with
+shared top-bar geography context and purpose-specific metrics. See
+`docs/49_PHASE_12_9_COMPETITIVE_INTELLIGENCE_WORKSPACES.md`.

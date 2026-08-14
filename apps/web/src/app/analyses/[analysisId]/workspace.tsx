@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
@@ -282,6 +282,14 @@ function BlueprintAnalysisWorkspace({
     string | null
   >(leadershipProductOptions[0]?.id ?? null);
   const [leadershipRadius, setLeadershipRadius] = useState<1 | 3 | 5>(3);
+  const [leadershipState, setLeadershipState] = useState<string | null>(null);
+  const [leadershipCity, setLeadershipCity] = useState<string | null>(null);
+  const [leadershipStateOptions, setLeadershipStateOptions] = useState<
+    { value: string; label: string; count: number }[]
+  >([]);
+  const [leadershipCityOptions, setLeadershipCityOptions] = useState<
+    { value: string; label: string; count: number; state: string }[]
+  >([]);
   useEffect(() => {
     const applyLocation = () => {
       const parameters = new URL(window.location.href).searchParams;
@@ -323,6 +331,10 @@ function BlueprintAnalysisWorkspace({
       setLeadershipRadius(
         requestedRadius === 1 || requestedRadius === 5 ? requestedRadius : 3,
       );
+      const requestedState = parameters.get("state");
+      const requestedCity = parameters.get("city");
+      setLeadershipState(requestedState || null);
+      setLeadershipCity(requestedState && requestedCity ? requestedCity : null);
     };
     applyLocation();
     window.addEventListener("popstate", applyLocation);
@@ -366,6 +378,16 @@ function BlueprintAnalysisWorkspace({
     setSelectedLens(next);
     updateRoute({ lens: next === preferredBasis ? null : next });
   };
+  const receiveLeadershipGeography = useCallback(
+    (
+      states: { value: string; label: string; count: number }[],
+      cities: { value: string; label: string; count: number; state: string }[],
+    ) => {
+      if (states.length) setLeadershipStateOptions(states);
+      setLeadershipCityOptions(cities);
+    },
+    [],
+  );
   const reviewDecision = (decision: ProductDecision) => {
     const pairReference =
       decision.relationship_id ||
@@ -541,6 +563,7 @@ function BlueprintAnalysisWorkspace({
                 })),
                 queryParameter: "product",
                 selectedValue: selectedLeadershipProduct ?? undefined,
+                resetQueryParameters: ["state", "city"],
               },
               {
                 id: "store-radius",
@@ -563,6 +586,58 @@ function BlueprintAnalysisWorkspace({
                 defaultValue: "3",
                 selectedValue: String(leadershipRadius),
               },
+              {
+                id: "benchmark-geography",
+                label: "Benchmark Geography",
+                title: `Choose the ${reportView.retailer_scope.benchmark.name} store geography`,
+                description:
+                  "Scope every product-leadership workspace to all observed benchmark stores or one state. Select a state to unlock city drill-down.",
+                value: leadershipState ?? "All benchmark stores",
+                options: [
+                  {
+                    value: "all",
+                    label: "All benchmark stores",
+                    description:
+                      "Use the complete observed benchmark footprint.",
+                  },
+                  ...leadershipStateOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                    description: `${option.count.toLocaleString()} observed benchmark stores`,
+                  })),
+                ],
+                queryParameter: "state",
+                defaultValue: "all",
+                selectedValue: leadershipState ?? "all",
+                resetQueryParameters: ["city"],
+              },
+              ...(leadershipState && leadershipCityOptions.length
+                ? [
+                    {
+                      id: "benchmark-city",
+                      label: "Benchmark City",
+                      title: `Choose a city in ${leadershipState}`,
+                      description:
+                        "Optionally narrow the product-leadership workspaces to one benchmark-store city.",
+                      value: leadershipCity ?? `All ${leadershipState} cities`,
+                      options: [
+                        {
+                          value: "all",
+                          label: `All ${leadershipState} cities`,
+                          description: `Use every observed benchmark store in ${leadershipState}.`,
+                        },
+                        ...leadershipCityOptions.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                          description: `${option.count.toLocaleString()} observed benchmark stores`,
+                        })),
+                      ],
+                      queryParameter: "city",
+                      defaultValue: "all",
+                      selectedValue: leadershipCity ?? "all",
+                    },
+                  ]
+                : []),
             ]
           : []),
         {
@@ -615,6 +690,10 @@ function BlueprintAnalysisWorkspace({
     activeGroup,
     leadershipProductOptions,
     leadershipRadius,
+    leadershipState,
+    leadershipCity,
+    leadershipStateOptions,
+    leadershipCityOptions,
     readiness,
     reportView.comparison_bases,
     reportView.match_governance,
@@ -716,6 +795,9 @@ function BlueprintAnalysisWorkspace({
             profileId={selectedLens}
             productId={selectedLeadershipProduct}
             radiusMiles={leadershipRadius}
+            stateFilter={leadershipState}
+            cityFilter={leadershipCity}
+            onGeographyOptions={receiveLeadershipGeography}
           />
         ) : activeGroup === "exports" ? (
           <Section

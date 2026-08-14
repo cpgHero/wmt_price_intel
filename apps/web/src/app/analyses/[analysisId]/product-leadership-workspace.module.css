@@ -76,6 +76,7 @@
   border: 1px solid var(--line);
   border-radius: 11px;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.25rem;
 }
@@ -90,6 +91,10 @@
   font-size: 0.63rem;
   font-weight: 800;
   padding: 0.55rem 0.75rem;
+}
+.viewNav button {
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 .viewNav button:hover,
 .viewNav button.active,
@@ -368,6 +373,18 @@
 .tableWrap tbody th {
   font-size: 0.6rem;
 }
+.marketLink {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--green) 35%, transparent);
+  text-underline-offset: 0.15rem;
+}
 .tableWrap td small,
 .tableWrap th small {
   color: var(--muted);
@@ -398,6 +415,238 @@
   font-weight: 850;
   padding: 0.28rem 0.42rem;
   white-space: nowrap;
+}
+.productCell {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+  min-width: 220px;
+}
+.productCell > span:last-child {
+  min-width: 0;
+}
+.productThumb {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--green);
+  display: flex;
+  flex: 0 0 46px;
+  font-size: 0.85rem;
+  font-weight: 900;
+  height: 46px;
+  justify-content: center;
+  overflow: hidden;
+}
+.productThumb img {
+  height: 100%;
+  object-fit: contain;
+  padding: 0.22rem;
+  width: 100%;
+}
+.identityCard {
+  min-height: 190px;
+}
+.anchorProduct {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+}
+.anchorProduct .productThumb {
+  flex-basis: 78px;
+  height: 78px;
+}
+.anchorProduct div {
+  display: grid;
+  gap: 0.2rem;
+}
+.anchorProduct strong {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.anchorProduct span,
+.anchorProduct small {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+.keyPoints {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.61rem;
+  gap: 0.55rem;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.keyPoints li::marker {
+  color: var(--green);
+}
+.relationshipGrid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.relationshipGrid article {
+  align-items: start;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(145px, auto);
+  padding: 0.72rem;
+}
+.relationshipGrid article > div {
+  display: grid;
+  gap: 0.17rem;
+  min-width: 0;
+}
+.relationshipGrid article small {
+  color: var(--green);
+  font-size: 0.48rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.relationshipGrid article strong {
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+.relationshipGrid article span {
+  color: var(--muted);
+  font-size: 0.52rem;
+  line-height: 1.35;
+}
+.relationshipGrid dl,
+.marketSpotlight dl,
+.historyState dl {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+.relationshipGrid dl div,
+.historyState dl div {
+  display: grid;
+  gap: 0.1rem;
+}
+.relationshipGrid dt,
+.historyState dt {
+  color: var(--muted);
+  font-size: 0.46rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.relationshipGrid dd,
+.historyState dd {
+  font-size: 0.54rem;
+  font-weight: 750;
+  margin: 0;
+}
+.marketSpotlight {
+  border-color: color-mix(in srgb, var(--green) 25%, var(--line));
+}
+.marketSpotlight > div {
+  display: grid;
+  gap: 0.25rem 1.2rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.marketSpotlight > div strong {
+  font-size: 1.2rem;
+}
+.marketSpotlight > div span {
+  color: var(--muted);
+  font-size: 0.52rem;
+}
+.exceptionList {
+  display: grid;
+  gap: 0.45rem;
+}
+.exceptionList article {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 70px minmax(260px, 1fr) repeat(3, minmax(95px, auto));
+  padding: 0.65rem;
+}
+.exceptionList article > div {
+  display: grid;
+  gap: 0.13rem;
+}
+.exceptionList article strong,
+.exceptionList article b {
+  font-size: 0.62rem;
+}
+.exceptionList article span,
+.exceptionList article small {
+  color: var(--muted);
+  font-size: 0.5rem;
+  line-height: 1.35;
+}
+.priority {
+  border-radius: 99px;
+  font-size: 0.46rem;
+  font-weight: 900;
+  padding: 0.3rem 0.45rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+.priority.high {
+  background: var(--danger-soft);
+  color: var(--red);
+}
+.priority.medium {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
+.priority.review {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+.historyState {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 76px minmax(0, 1fr);
+  min-height: 360px;
+  padding: 1.5rem;
+}
+.historyIcon {
+  align-items: center;
+  background: color-mix(in srgb, var(--green) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--green) 22%, var(--line));
+  border-radius: 16px;
+  color: var(--green);
+  display: flex;
+  font-size: 2rem;
+  height: 76px;
+  justify-content: center;
+}
+.historyState > div:last-child {
+  max-width: 760px;
+}
+.historyState small {
+  color: var(--green);
+  font-size: 0.5rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.historyState h3 {
+  font-size: 1.25rem;
+  margin: 0.35rem 0;
+}
+.historyState p {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+}
+.historyState dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .state {
   align-items: center;
@@ -434,6 +683,15 @@
   .kpiStrip {
     grid-template-columns: repeat(3, 1fr);
   }
+  .relationshipGrid {
+    grid-template-columns: 1fr;
+  }
+  .exceptionList article {
+    grid-template-columns: 70px minmax(240px, 1fr) repeat(2, minmax(90px, auto));
+  }
+  .exceptionList article > div:last-child {
+    display: none;
+  }
 }
 @media (max-width: 760px) {
   .workspaceHeader,
@@ -453,6 +711,7 @@
     grid-template-columns: 1fr 1fr;
   }
   .viewNav {
+    flex-wrap: nowrap;
     overflow-x: auto;
   }
   .viewNav button {
@@ -461,6 +720,21 @@
   .mapShell,
   .footprintCard .mapShell {
     height: 480px;
+  }
+  .marketSpotlight > div,
+  .historyState dl {
+    grid-template-columns: 1fr 1fr;
+  }
+  .relationshipGrid article,
+  .exceptionList article {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+  .relationshipGrid dl,
+  .exceptionList article > div:not(:first-of-type) {
+    grid-column: 2;
+  }
+  .historyState {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 520px) {

@@ -198,6 +198,30 @@ def test_unknown_location_is_excluded_from_every_downstream_projection() -> None
     assert population.comparison_observations({"000123"}, "package_price") == {"000123": ()}
 
 
+def test_canonical_population_orders_mixed_naive_and_aware_timestamps() -> None:
+    population = _projector().build(
+        [
+            _classified(
+                offer_id="earlier-aware",
+                price="3.49",
+                metric="3.49",
+                collected_at="2026-08-07T05:00:00Z",
+            ),
+            _classified(
+                offer_id="later-naive",
+                price="3.59",
+                metric="3.59",
+                collected_at="2026-08-07T06:00:00",
+            ),
+        ],
+        retailer_id="walmart_us",
+    )
+
+    assert len(population.observations) == 1
+    assert population.observations[0].offer_id == "later-naive"
+    assert population.observations[0].package_price == 3.59
+
+
 def test_price_and_competitive_projections_reconcile_to_one_population() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
     projector = PriceMonitoringProjector(

@@ -3,10 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CompetitiveProductLeadership } from "@/lib/api";
+import {
+  freshestObservation,
+  leadershipExceptions,
+  marketPerformance,
+  relationshipEvidence,
+  summarizeMatchGroup,
+} from "@/lib/product-leadership-analytics";
 
 import styles from "./product-leadership-workspace.module.css";
 
-type ViewName = "overview" | "footprint" | "stores";
+type ViewName =
+  | "overview"
+  | "footprint"
+  | "match_group"
+  | "stores"
+  | "markets"
+  | "exceptions"
+  | "history";
 type Outcome = CompetitiveProductLeadership["outcomes"][number];
 type Summary = CompetitiveProductLeadership["summary"];
 
@@ -52,6 +66,15 @@ const MAPLIBRE_STYLES = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const SOURCE_ID = "competitive-product-leadership-outcomes";
 const POINT_LAYER = "competitive-product-leadership-points";
+const WORKSPACES: { id: ViewName; label: string }[] = [
+  { id: "overview", label: "Leadership Overview" },
+  { id: "footprint", label: "Competitive Footprint" },
+  { id: "match_group", label: "Match Group Analysis" },
+  { id: "stores", label: "Store Comparisons" },
+  { id: "markets", label: "Market Performance" },
+  { id: "exceptions", label: "Competitive Exceptions" },
+  { id: "history", label: "Competitive History" },
+];
 let mapLibraryPromise: Promise<MapLibrary> | null = null;
 
 function loadMapLibrary() {
@@ -120,6 +143,27 @@ function signedMoney(value: number | null) {
   if (value === null) return "—";
   if (Math.abs(value) < 0.0005) return money(0);
   return `${value > 0 ? "+" : "−"}${money(Math.abs(value))}`;
+}
+
+function displayDate(value: string | null) {
+  if (!value) return "Not available";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(parsed);
+}
+
+function brandType(value: Outcome["benchmark"]["brand_type"]) {
+  return value === "private_label"
+    ? "Private label"
+    : value === "regional"
+      ? "Regional brand"
+      : value === "national"
+        ? "National brand"
+        : "Brand type unclassified";
 }
 
 function statusLabel(status: Outcome["status"]) {
@@ -342,7 +386,7 @@ function KpiCard({
   );
 }
 
-function KpiStrip({ summary }: Readonly<{ summary: Summary }>) {
+function OverviewKpis({ summary }: Readonly<{ summary: Summary }>) {
   return (
     <div className={styles.kpiStrip}>
       <KpiCard
@@ -442,7 +486,7 @@ function Overview({
   )[0];
   return (
     <>
-      <KpiStrip summary={view.summary} />
+      <OverviewKpis summary={view.summary} />
       <div className={styles.overviewGrid}>
         <section className={`${styles.card} ${styles.brief}`}>
           <header>
@@ -522,7 +566,13 @@ function Overview({
 
 function GeographyTable({
   rows,
-}: Readonly<{ rows: CompetitiveProductLeadership["state_summaries"] }>) {
+  onSelect,
+}: Readonly<{
+  rows: CompetitiveProductLeadership["state_summaries"];
+  onSelect?: (
+    row: CompetitiveProductLeadership["state_summaries"][number],
+  ) => void;
+}>) {
   return (
     <div className={styles.tableWrap}>
       <table>
@@ -540,7 +590,19 @@ function GeographyTable({
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
-              <th>{row.label}</th>
+              <th>
+                {onSelect ? (
+                  <button
+                    className={styles.marketLink}
+                    onClick={() => onSelect(row)}
+                    type="button"
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  row.label
+                )}
+              </th>
               <td>
                 {count(row.scored_stores)} /{" "}
                 {count(row.benchmark_observed_stores)}
@@ -564,14 +626,54 @@ function Footprint({
   view,
   selected,
   onSelect,
+  onOpenState,
 }: Readonly<{
   view: CompetitiveProductLeadership;
   selected: Outcome | null;
   onSelect: (row: Outcome) => void;
+  onOpenState: (state: string) => void;
 }>) {
+  const mapped = view.outcomes.filter(
+    (row) =>
+      row.benchmark.latitude !== null && row.benchmark.longitude !== null,
+  ).length;
   return (
     <>
-      <KpiStrip summary={view.summary} />
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="Mapped benchmark stores"
+          value={count(mapped)}
+          note={`${rate(mapped / Math.max(view.summary.benchmark_observed_stores, 1))} of observed stores`}
+        />
+        <KpiCard
+          label="Comparable stores"
+          value={count(view.summary.scored_stores)}
+          note={`${rate(view.summary.coverage_rate)} evidence coverage`}
+        />
+        <KpiCard
+          label="Clear leaders"
+          value={count(view.summary.leader_stores)}
+          note={`${rate(view.summary.leader_rate)} of scored stores`}
+          tone="good"
+        />
+        <KpiCard
+          label="Current losses"
+          value={count(view.summary.losing_stores)}
+          note="Competitor is lower nearby"
+          tone="danger"
+        />
+        <KpiCard
+          label="Narrow leads"
+          value={count(view.summary.at_risk_stores)}
+          note="Inside the at-risk threshold"
+          tone="warning"
+        />
+        <KpiCard
+          label="Unscored"
+          value={count(view.summary.unscored_stores)}
+          note="No geographically comparable evidence"
+        />
+      </div>
       <section className={`${styles.card} ${styles.footprintCard}`}>
         <header>
           <div>
@@ -605,9 +707,430 @@ function Footprint({
             <p>State-level outcomes reconcile to the national summary.</p>
           </div>
         </header>
-        <GeographyTable rows={view.state_summaries} />
+        <GeographyTable
+          rows={view.state_summaries}
+          onSelect={(row) => onOpenState(row.label)}
+        />
       </section>
     </>
+  );
+}
+
+function ProductThumb({
+  imageUrl,
+  name,
+}: Readonly<{ imageUrl: string | null; name: string }>) {
+  return (
+    <span className={styles.productThumb} aria-hidden="true">
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" />
+      ) : (
+        name.slice(0, 1).toUpperCase()
+      )}
+    </span>
+  );
+}
+
+function MatchGroupAnalysis({
+  view,
+}: Readonly<{ view: CompetitiveProductLeadership }>) {
+  const summary = summarizeMatchGroup(view.relationships, view.outcomes);
+  const rows = relationshipEvidence(view.relationships, view.outcomes);
+  return (
+    <>
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="Governed relationships"
+          value={count(summary.relationships)}
+          note="Approved or decision-ready for this basis"
+        />
+        <KpiCard
+          label="Competitor products"
+          value={count(summary.competitorProducts)}
+          note="Distinct retailer-product identities"
+        />
+        <KpiCard
+          label="Competitor retailers"
+          value={count(summary.competitorRetailers)}
+          note="Participating in this product group"
+        />
+        <KpiCard
+          label="Relationships observed"
+          value={count(summary.relationshipsWithEvidence)}
+          note={`${count(summary.relationships - summary.relationshipsWithEvidence)} configured relationships had no winning nearby observation`}
+          tone={
+            summary.relationshipsWithEvidence === summary.relationships
+              ? "good"
+              : "warning"
+          }
+        />
+        <KpiCard
+          label="Location-scoped matches"
+          value={count(summary.locationScopedRelationships)}
+          note="Admitted only in governed benchmark footprints"
+        />
+        <KpiCard
+          label="Global matches"
+          value={count(summary.globalRelationships)}
+          note="Eligible across the benchmark footprint"
+        />
+      </div>
+      <div className={styles.overviewGrid}>
+        <section className={`${styles.card} ${styles.identityCard}`}>
+          <header>
+            <div>
+              <h3>Benchmark anchor product</h3>
+              <p>The product whose store-level price leadership is measured.</p>
+            </div>
+          </header>
+          <div className={styles.anchorProduct}>
+            <ProductThumb
+              imageUrl={view.benchmark_product.image_url}
+              name={view.benchmark_product.name}
+            />
+            <div>
+              <strong>{view.benchmark_product.name}</strong>
+              <span>{view.benchmark_retailer.name}</span>
+              <small>Retailer product ID {view.benchmark_product.id}</small>
+            </div>
+          </div>
+        </section>
+        <section className={styles.card}>
+          <header>
+            <div>
+              <h3>Match-group governance</h3>
+              <p>
+                Rules that protect comparability and store-footprint integrity.
+              </p>
+            </div>
+          </header>
+          <ul className={styles.keyPoints}>
+            <li>Every result uses one comparison metric and unit.</li>
+            <li>
+              A location-scoped relationship is admitted only at its approved
+              benchmark stores.
+            </li>
+            <li>
+              Search supplies price and availability; PDP and retailer packs
+              supply governed identity and brand context.
+            </li>
+          </ul>
+        </section>
+      </div>
+      <section className={styles.card}>
+        <header>
+          <div>
+            <h3>Approved equivalent products</h3>
+            <p>
+              Relationship-level evidence used to select the lowest nearby
+              governed competitor at each benchmark store.
+            </p>
+          </div>
+        </header>
+        <div className={styles.relationshipGrid}>
+          {rows.map((row) => (
+            <article key={row.relationship_id}>
+              <ProductThumb
+                imageUrl={row.competitorImageUrl}
+                name={row.competitorProductName}
+              />
+              <div>
+                <small>{row.competitor_name}</small>
+                <strong>{row.competitorProductName}</strong>
+                <span>
+                  {row.competitorBrand || "Brand unresolved"} ·{" "}
+                  {brandType(row.competitorBrandType)}
+                </span>
+                <span>
+                  {row.profile_label} · {row.comparison_unit}
+                </span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Scope</dt>
+                  <dd>
+                    {row.scope_mode === "global"
+                      ? "All benchmark locations"
+                      : `${count(row.scoped_benchmark_locations)} approved locations`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Selected nearby</dt>
+                  <dd>{count(row.benchmarkLocations)} stores</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function MarketPerformanceWorkspace({
+  view,
+  focusedMarket,
+  onFocus,
+}: Readonly<{
+  view: CompetitiveProductLeadership;
+  focusedMarket: string | null;
+  onFocus: (market: string | null) => void;
+}>) {
+  const markets = marketPerformance(view.state_summaries);
+  const scoredMarkets = markets.filter((row) => row.scored_stores >= 3);
+  const best = [...scoredMarkets].sort(
+    (left, right) => (right.leader_rate ?? -1) - (left.leader_rate ?? -1),
+  )[0];
+  const mostExposed = markets[0];
+  const widestGap = [...markets].sort(
+    (left, right) => right.unscored_stores - left.unscored_stores,
+  )[0];
+  const focused = markets.find((row) => row.label === focusedMarket) ?? null;
+  return (
+    <>
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="States analyzed"
+          value={count(markets.length)}
+          note="Current benchmark product footprint"
+        />
+        <KpiCard
+          label="Strongest leadership state"
+          value={best?.label ?? "—"}
+          note={
+            best
+              ? `${rate(best.leader_rate)} leader rate`
+              : "No state has 3 scored stores"
+          }
+          tone="good"
+        />
+        <KpiCard
+          label="Most exposed state"
+          value={mostExposed?.label ?? "—"}
+          note={
+            mostExposed
+              ? `${count(mostExposed.losing_stores)} current losses`
+              : "No scored markets"
+          }
+          tone="danger"
+        />
+        <KpiCard
+          label="Largest evidence gap"
+          value={widestGap?.label ?? "—"}
+          note={
+            widestGap
+              ? `${count(widestGap.unscored_stores)} unscored stores`
+              : "No evidence gaps"
+          }
+          tone="warning"
+        />
+        <KpiCard
+          label="National average gap"
+          value={signedMoney(view.summary.average_gap)}
+          note="Competitor minus benchmark; positive favors benchmark"
+        />
+        <KpiCard
+          label="Markets with losses"
+          value={count(markets.filter((row) => row.losing_stores > 0).length)}
+          note="States with at least one current undercut"
+          tone="danger"
+        />
+      </div>
+      {focused ? (
+        <section className={`${styles.card} ${styles.marketSpotlight}`}>
+          <header>
+            <div>
+              <h3>{focused.label} market spotlight</h3>
+              <p>
+                Current state scorecard; select another state in the table
+                below.
+              </p>
+            </div>
+            <button onClick={() => onFocus(null)} type="button">
+              Clear spotlight
+            </button>
+          </header>
+          <div>
+            <strong>{rate(focused.leader_rate)}</strong>
+            <span>leader rate</span>
+            <strong>{rate(focused.coverage_rate)}</strong>
+            <span>comparable coverage</span>
+            <strong>{count(focused.losing_stores)}</strong>
+            <span>current losses</span>
+            <strong>{signedMoney(focused.average_gap)}</strong>
+            <span>average price gap</span>
+          </div>
+        </section>
+      ) : null}
+      <section className={styles.card}>
+        <header>
+          <div>
+            <h3>State performance scorecard</h3>
+            <p>
+              Loss rates use scored stores; coverage uses all observed benchmark
+              stores. Select a state for a focused readout.
+            </p>
+          </div>
+        </header>
+        <GeographyTable rows={markets} onSelect={(row) => onFocus(row.label)} />
+      </section>
+    </>
+  );
+}
+
+function CompetitiveExceptions({
+  view,
+}: Readonly<{ view: CompetitiveProductLeadership }>) {
+  const [type, setType] = useState<"all" | "high" | "medium" | "review">("all");
+  const exceptions = leadershipExceptions(view.outcomes);
+  const rows = exceptions.filter(
+    (row) => type === "all" || row.priority === type,
+  );
+  const high = exceptions.filter((row) => row.priority === "high").length;
+  const medium = exceptions.filter((row) => row.priority === "medium").length;
+  const review = exceptions.filter((row) => row.priority === "review").length;
+  const largest = exceptions.find(
+    (row) => row.type === "competitor_undercut",
+  )?.outcome;
+  return (
+    <>
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="Current undercuts"
+          value={count(high)}
+          note="Highest-priority store exceptions"
+          tone="danger"
+        />
+        <KpiCard
+          label="Narrow benchmark leads"
+          value={count(medium)}
+          note="Inside the governed risk threshold"
+          tone="warning"
+        />
+        <KpiCard
+          label="Evidence reviews"
+          value={count(review)}
+          note="No comparable current competitor observation"
+        />
+        <KpiCard
+          label="Largest undercut"
+          value={money(largest?.comparison_value_reduction_to_lead ?? null)}
+          note="Reduction needed to regain a clear lead"
+          tone="danger"
+        />
+        <KpiCard
+          label="Exception share"
+          value={rate(
+            exceptions.length /
+              Math.max(view.summary.benchmark_observed_stores, 1),
+          )}
+          note="Current exceptions among observed stores"
+        />
+        <KpiCard
+          label="Snapshot freshness"
+          value={
+            freshestObservation(view.outcomes) ? "Current snapshot" : "Unknown"
+          }
+          note={displayDate(freshestObservation(view.outcomes))}
+        />
+      </div>
+      <section className={styles.card}>
+        <header>
+          <div>
+            <h3>Prioritized competitive exception queue</h3>
+            <p>
+              Current-snapshot facts only. Persistence and new-versus-existing
+              status require certified history.
+            </p>
+          </div>
+          <div className={styles.statusFilter}>
+            {(["all", "high", "medium", "review"] as const).map((value) => (
+              <button
+                className={type === value ? styles.active : ""}
+                key={value}
+                onClick={() => setType(value)}
+                type="button"
+              >
+                {value === "all" ? "All exceptions" : value}
+              </button>
+            ))}
+          </div>
+        </header>
+        <div className={styles.exceptionList}>
+          {rows.map((row) => (
+            <article key={row.id}>
+              <span className={`${styles.priority} ${styles[row.priority]}`}>
+                {row.priority}
+              </span>
+              <div>
+                <strong>{row.label}</strong>
+                <span>{row.reason}</span>
+                <small>
+                  {row.outcome.benchmark.store_name ||
+                    `Store ${row.outcome.benchmark.store_number || "—"}`}{" "}
+                  · {row.outcome.benchmark.city}, {row.outcome.benchmark.state}{" "}
+                  {row.outcome.benchmark.zipcode}
+                </small>
+              </div>
+              <div>
+                <b>{money(row.outcome.benchmark.comparison_value)}</b>
+                <span>benchmark</span>
+              </div>
+              <div>
+                <b>{money(row.outcome.competitor?.comparison_value ?? null)}</b>
+                <span>
+                  {row.outcome.competitor?.retailer_name ??
+                    "No comparable offer"}
+                </span>
+              </div>
+              <div>
+                <b>{money(row.outcome.comparison_value_reduction_to_lead)}</b>
+                <span>reduction to lead</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function CompetitiveHistory({
+  view,
+}: Readonly<{ view: CompetitiveProductLeadership }>) {
+  return (
+    <section className={`${styles.card} ${styles.historyState}`}>
+      <div className={styles.historyIcon} aria-hidden="true">
+        ↻
+      </div>
+      <div>
+        <small>History readiness</small>
+        <h3>
+          Trend reporting begins with the next certified comparable snapshot
+        </h3>
+        <p>
+          This analysis contains one immutable collection snapshot. Showing a
+          trend, persistent loss, or new exception now would invent evidence.
+          The current snapshot is preserved as the baseline for the same
+          product, retailer set, comparison basis, radius, and geography.
+        </p>
+        <dl>
+          <div>
+            <dt>Baseline snapshot</dt>
+            <dd>{displayDate(view.generated_at)}</dd>
+          </div>
+          <div>
+            <dt>Baseline stores</dt>
+            <dd>{count(view.summary.benchmark_observed_stores)}</dd>
+          </div>
+          <div>
+            <dt>Required for first trend</dt>
+            <dd>1 additional certified comparable snapshot</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
   );
 }
 
@@ -618,9 +1141,63 @@ function StoreComparisons({
   const rows = view.outcomes.filter(
     (row) => status === "all" || row.status === status,
   );
+  const losingRows = view.outcomes.filter((row) => row.status === "losing");
+  const averageReduction = losingRows.length
+    ? losingRows.reduce(
+        (sum, row) => sum + (row.comparison_value_reduction_to_lead ?? 0),
+        0,
+      ) / losingRows.length
+    : null;
+  const sponsoredLowest = view.outcomes.filter(
+    (row) => row.competitor?.is_sponsored === true,
+  ).length;
+  const discountedLowest = view.outcomes.filter(
+    (row) =>
+      row.competitor?.discounted_price !== null &&
+      row.competitor?.discounted_price !== undefined &&
+      row.competitor.discounted_price > 0 &&
+      row.competitor.regular_price !== null &&
+      row.competitor.discounted_price < row.competitor.regular_price,
+  ).length;
   return (
     <>
-      <KpiStrip summary={view.summary} />
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="Scored benchmark stores"
+          value={count(view.summary.scored_stores)}
+          note="One outcome per observed benchmark store"
+        />
+        <KpiCard
+          label="Stores to inspect"
+          value={count(
+            view.summary.losing_stores + view.summary.at_risk_stores,
+          )}
+          note="Current losses plus narrow leads"
+          tone="warning"
+        />
+        <KpiCard
+          label="Average reduction to lead"
+          value={money(averageReduction)}
+          note="Among currently undercut stores"
+          tone="danger"
+        />
+        <KpiCard
+          label="Maximum losing gap"
+          value={money(view.summary.maximum_losing_gap)}
+          note="Largest current competitor advantage"
+          tone="danger"
+        />
+        <KpiCard
+          label="Discounted lowest offers"
+          value={count(discountedLowest)}
+          note="Search evidence shows a lower promo price"
+        />
+        <KpiCard
+          label="Sponsored lowest offers"
+          value={count(sponsoredLowest)}
+          note="Search result marked sponsored"
+        />
+      </div>
       <section className={styles.card}>
         <header>
           <div>
@@ -657,7 +1234,7 @@ function StoreComparisons({
             <thead>
               <tr>
                 <th>Status</th>
-                <th>Benchmark store</th>
+                <th>Benchmark product & store</th>
                 <th>Benchmark price</th>
                 <th>Lowest competitor</th>
                 <th>Competitor price</th>
@@ -677,24 +1254,39 @@ function StoreComparisons({
                     </span>
                   </td>
                   <th>
-                    {row.benchmark.store_name ||
-                      `Store ${row.benchmark.store_number || "—"}`}
-                    <small>
-                      {row.benchmark.city}, {row.benchmark.state}{" "}
-                      {row.benchmark.zipcode}
-                    </small>
+                    <span className={styles.productCell}>
+                      <ProductThumb
+                        imageUrl={row.benchmark.image_url}
+                        name={row.benchmark.product_name}
+                      />
+                      <span>
+                        {row.benchmark.store_name ||
+                          `Store ${row.benchmark.store_number || "—"}`}
+                        <small>
+                          {row.benchmark.product_name} · {row.benchmark.city},{" "}
+                          {row.benchmark.state} {row.benchmark.zipcode}
+                        </small>
+                      </span>
+                    </span>
                   </th>
                   <td>{money(row.benchmark.comparison_value)}</td>
                   <td>
                     {row.competitor ? (
-                      <>
-                        {row.competitor.retailer_name}
-                        <small>
-                          {row.competitor.product_name} · store{" "}
-                          {row.competitor.store_number ||
-                            row.competitor.zipcode}
-                        </small>
-                      </>
+                      <span className={styles.productCell}>
+                        <ProductThumb
+                          imageUrl={row.competitor.image_url}
+                          name={row.competitor.product_name}
+                        />
+                        <span>
+                          {row.competitor.retailer_name}
+                          <small>
+                            {row.competitor.product_name} ·{" "}
+                            {brandType(row.competitor.brand_type)} · store{" "}
+                            {row.competitor.store_number ||
+                              row.competitor.zipcode}
+                          </small>
+                        </span>
+                      </span>
                     ) : (
                       "No comparable observation"
                     )}
@@ -725,16 +1317,26 @@ export function ProductLeadershipWorkspace({
   profileId,
   productId,
   radiusMiles,
+  stateFilter,
+  cityFilter,
+  onGeographyOptions,
 }: Readonly<{
   analysisId: string;
   competitorId: string;
   profileId: string;
   productId: string | null;
   radiusMiles: 1 | 3 | 5;
+  stateFilter: string | null;
+  cityFilter: string | null;
+  onGeographyOptions: (
+    states: CompetitiveProductLeadership["filter_options"]["states"],
+    cities: CompetitiveProductLeadership["filter_options"]["cities"],
+  ) => void;
 }>) {
   const [view, setView] = useState<CompetitiveProductLeadership | null>(null);
   const [viewName, setViewName] = useState<ViewName>("overview");
   const [selected, setSelected] = useState<Outcome | null>(null);
+  const [focusedMarket, setFocusedMarket] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const query = useMemo(() => {
@@ -744,8 +1346,17 @@ export function ProductLeadershipWorkspace({
       radius_miles: String(radiusMiles),
     });
     if (productId) parameters.set("product", productId);
+    if (stateFilter) parameters.set("state", stateFilter);
+    if (stateFilter && cityFilter) parameters.set("city", cityFilter);
     return parameters.toString();
-  }, [competitorId, productId, profileId, radiusMiles]);
+  }, [
+    cityFilter,
+    competitorId,
+    productId,
+    profileId,
+    radiusMiles,
+    stateFilter,
+  ]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -783,6 +1394,30 @@ export function ProductLeadershipWorkspace({
     return () => controller.abort();
   }, [analysisId, query]);
 
+  useEffect(() => {
+    const applyLocation = () => {
+      const requested = new URL(window.location.href).searchParams.get(
+        "leadership",
+      );
+      setViewName(
+        WORKSPACES.some((workspace) => workspace.id === requested)
+          ? (requested as ViewName)
+          : "overview",
+      );
+    };
+    applyLocation();
+    window.addEventListener("popstate", applyLocation);
+    return () => window.removeEventListener("popstate", applyLocation);
+  }, []);
+
+  useEffect(() => {
+    if (!view) return;
+    onGeographyOptions(
+      stateFilter ? [] : view.filter_options.states,
+      view.filter_options.cities,
+    );
+  }, [onGeographyOptions, stateFilter, view]);
+
   if (loading && !view)
     return (
       <div className={styles.state}>
@@ -801,6 +1436,20 @@ export function ProductLeadershipWorkspace({
       </div>
     );
   if (!view) return null;
+  const selectWorkspace = (workspace: ViewName) => {
+    setViewName(workspace);
+    const url = new URL(window.location.href);
+    if (workspace === "overview") url.searchParams.delete("leadership");
+    else url.searchParams.set("leadership", workspace);
+    window.history.replaceState(window.history.state, "", url);
+  };
+  const drillState = (state: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("state", state);
+    url.searchParams.delete("city");
+    window.history.replaceState(window.history.state, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
   return (
     <div className={styles.workspace}>
       <header className={styles.workspaceHeader}>
@@ -835,18 +1484,14 @@ export function ProductLeadershipWorkspace({
         className={styles.viewNav}
         aria-label="Product leadership workspaces"
       >
-        {(["overview", "footprint", "stores"] as const).map((name) => (
+        {WORKSPACES.map((workspace) => (
           <button
-            className={viewName === name ? styles.active : ""}
-            key={name}
-            onClick={() => setViewName(name)}
+            className={viewName === workspace.id ? styles.active : ""}
+            key={workspace.id}
+            onClick={() => selectWorkspace(workspace.id)}
             type="button"
           >
-            {name === "overview"
-              ? "Leadership Overview"
-              : name === "footprint"
-                ? "Competitive Footprint"
-                : "Store Comparisons"}
+            {workspace.label}
           </button>
         ))}
       </nav>
@@ -876,13 +1521,28 @@ export function ProductLeadershipWorkspace({
           view={view}
           selected={selected}
           onSelect={setSelected}
-          onOpenFootprint={() => setViewName("footprint")}
+          onOpenFootprint={() => selectWorkspace("footprint")}
         />
       ) : null}
       {viewName === "footprint" ? (
-        <Footprint view={view} selected={selected} onSelect={setSelected} />
+        <Footprint
+          view={view}
+          selected={selected}
+          onSelect={setSelected}
+          onOpenState={drillState}
+        />
       ) : null}
+      {viewName === "match_group" ? <MatchGroupAnalysis view={view} /> : null}
       {viewName === "stores" ? <StoreComparisons view={view} /> : null}
+      {viewName === "markets" ? (
+        <MarketPerformanceWorkspace
+          view={view}
+          focusedMarket={focusedMarket}
+          onFocus={setFocusedMarket}
+        />
+      ) : null}
+      {viewName === "exceptions" ? <CompetitiveExceptions view={view} /> : null}
+      {viewName === "history" ? <CompetitiveHistory view={view} /> : null}
     </div>
   );
 }
