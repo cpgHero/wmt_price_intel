@@ -267,7 +267,9 @@ function ProductEvidencePanel({
         <small>
           {summary.sourceFieldCount
             ? `${summary.sourceFieldCount} retained provider fields`
-            : "Search identity fallback"}
+            : summary.enriched
+              ? "PDP identity retained"
+              : "Search identity fallback"}
         </small>
       </div>
       <div className="match-pdp-summary-grid">
