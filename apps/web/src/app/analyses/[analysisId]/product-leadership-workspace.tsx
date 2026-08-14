@@ -518,12 +518,12 @@ function Overview({
   onSelect: (row: Outcome) => void;
   onOpenFootprint: () => void;
 }>) {
-  const mostExposedState = [...view.state_summaries].sort(
-    (left, right) => right.losing_stores - left.losing_stores,
-  ).find((row) => row.losing_stores > 0);
-  const leadingCompetitor = [...view.competitor_summaries].sort(
-    (left, right) => right.losing_stores - left.losing_stores,
-  ).find((row) => row.losing_stores > 0);
+  const mostExposedState = [...view.state_summaries]
+    .sort((left, right) => right.losing_stores - left.losing_stores)
+    .find((row) => row.losing_stores > 0);
+  const leadingCompetitor = [...view.competitor_summaries]
+    .sort((left, right) => right.losing_stores - left.losing_stores)
+    .find((row) => row.losing_stores > 0);
   return (
     <>
       <OverviewKpis summary={view.summary} />
