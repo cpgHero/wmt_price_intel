@@ -1410,6 +1410,9 @@ export function PriceMonitoringWorkspace({
       }
       const requestParameters = new URLSearchParams(url.searchParams);
       requestParameters.delete("tab");
+      if (!requestParameters.has("retailer")) {
+        requestParameters.set("retailer", initialView.retailer.id);
+      }
       const cacheKey = requestParameters.toString();
       const cachedView = viewCache.current.get(cacheKey);
       if (cachedView) {
@@ -1455,6 +1458,9 @@ export function PriceMonitoringWorkspace({
     }
     const initialParameters = initialUrl.searchParams;
     initialParameters.delete("tab");
+    if (!initialParameters.has("retailer")) {
+      initialParameters.set("retailer", initialView.retailer.id);
+    }
     viewCache.current.set(initialParameters.toString(), initialView);
     let cancel = () => {};
     const listener = () => {
