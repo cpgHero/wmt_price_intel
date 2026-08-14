@@ -7,6 +7,7 @@ export type { RetailCompetitiveIntelligenceCollectionDefinition } from "./genera
 export type { RetailCompetitiveIntelligenceCollectionGeographyRequest } from "./generated/collection-geography-request";
 export type { RetailCompetitiveIntelligenceCollectionGeographyResolution } from "./generated/collection-geography-resolution";
 export type { RetailCompetitiveIntelligenceCollectionScopeEstimate } from "./generated/collection-scope-estimate";
+export type { RetailCompetitiveIntelligenceCompetitiveProductLeadership } from "./generated/competitive-product-leadership";
 export type { RetailCompetitiveIntelligenceGoldenBenchmarks } from "./generated/golden-benchmarks";
 export type { RetailCompetitiveIntelligenceHistoricalInputManifest } from "./generated/historical-input-manifest";
 export type { NormalizedRetailOffer } from "./generated/normalized-offer";

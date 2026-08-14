@@ -5,6 +5,7 @@ import type {
   RetailCompetitiveIntelligenceCollectionGeographyRequest,
   RetailCompetitiveIntelligenceCollectionGeographyResolution,
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
+  RetailCompetitiveIntelligenceCompetitiveProductLeadership,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
   RetailCompetitiveIntelligencePriceMonitoringMap,
@@ -19,6 +20,8 @@ export type PriceMonitoringView =
   RetailCompetitiveIntelligencePriceMonitoringView;
 export type PriceMonitoringMap =
   RetailCompetitiveIntelligencePriceMonitoringMap;
+export type CompetitiveProductLeadership =
+  RetailCompetitiveIntelligenceCompetitiveProductLeadership;
 
 export interface AnalysisRecord {
   id: string;
@@ -56,6 +59,7 @@ export interface AnalysisReportView extends Omit<
   | "product_pack"
   | "product_highlights"
   | "product_decisions"
+  | "match_candidates"
   | "suppressed_product_decisions"
   | "map_points"
   | "quality_observations"
@@ -82,11 +86,33 @@ export interface AnalysisReportView extends Omit<
   blueprint: { id: string; version: string };
   product_highlights?: ProductHighlight[];
   product_decisions?: ProductDecision[];
+  match_candidates?: ProductMatchCandidate[];
   suppressed_product_decisions?: ProductDecision[];
   map_points?: MapPoint[];
   quality_observations?: QualityObservation[];
   assortment_analysis?: AssortmentAnalysis;
   sections: ReportSectionView[];
+}
+
+export interface ProductMatchCandidate {
+  id: string;
+  relationship_id?: string | null;
+  relationship_status?:
+    | "suggested"
+    | "confirmed"
+    | "rejected"
+    | "ambiguous"
+    | "unmatched"
+    | "unavailable";
+  qa_status?: "ready" | "review_required" | "suppressed";
+  profile_id?: string | null;
+  benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_image_url?: string | null;
+  competitor: string;
+  competitor_product_id: string;
+  geographies?: number;
+  matches?: number;
 }
 
 export interface AssortmentProduct {

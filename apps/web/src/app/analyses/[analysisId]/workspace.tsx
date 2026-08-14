@@ -14,6 +14,7 @@ import {
 import { BrandWorkbenchPanel } from "./brand-workbench";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { MatchReviewWorkbench } from "./match-review-workbench";
+import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -239,6 +240,48 @@ function BlueprintAnalysisWorkspace({
     "";
   const [selectedLens, setSelectedLens] = useState(preferredBasis);
   const [selectedPair, setSelectedPair] = useState<string | null>(null);
+  const leadershipProductOptions = useMemo(() => {
+    const options = new Map<
+      string,
+      { id: string; name: string; imageUrl?: string | null }
+    >();
+    const activeCandidates = (reportView.match_candidates ?? []).filter(
+      (row) =>
+        (row.relationship_status === "suggested" ||
+          row.relationship_status === "confirmed") &&
+        (row.qa_status ?? "ready") === "ready" &&
+        (selectedCompetitor === "all" ||
+          row.competitor === selectedCompetitor) &&
+        (!selectedLens || row.profile_id === selectedLens),
+    );
+    const rows = activeCandidates.length
+      ? activeCandidates
+      : (reportView.product_decisions ?? []).filter(
+          (row) =>
+            (selectedCompetitor === "all" ||
+              row.competitor === selectedCompetitor) &&
+            (!selectedLens ||
+              !row.profile_id ||
+              row.profile_id === selectedLens),
+        );
+    for (const row of rows) {
+      options.set(row.benchmark_product_id, {
+        id: row.benchmark_product_id,
+        name: row.benchmark_product_name,
+        imageUrl: row.benchmark_image_url,
+      });
+    }
+    return [...options.values()];
+  }, [
+    reportView.match_candidates,
+    reportView.product_decisions,
+    selectedCompetitor,
+    selectedLens,
+  ]);
+  const [selectedLeadershipProduct, setSelectedLeadershipProduct] = useState<
+    string | null
+  >(leadershipProductOptions[0]?.id ?? null);
+  const [leadershipRadius, setLeadershipRadius] = useState<1 | 3 | 5>(3);
   useEffect(() => {
     const applyLocation = () => {
       const parameters = new URL(window.location.href).searchParams;
@@ -252,6 +295,7 @@ function BlueprintAnalysisWorkspace({
       setActiveGroup(
         requestedTab &&
           (requestedTab === "brand-workbench" ||
+            requestedTab === "product-leadership" ||
             reportView.groups.some((group) => group.id === requestedTab))
           ? requestedTab
           : firstPopulatedGroup,
@@ -266,11 +310,30 @@ function BlueprintAnalysisWorkspace({
           : preferredBasis,
       );
       setSelectedPair(parameters.get("pair"));
+      const requestedProduct = parameters.get("product");
+      setSelectedLeadershipProduct(
+        requestedProduct &&
+          leadershipProductOptions.some(
+            (option) => option.id === requestedProduct,
+          )
+          ? requestedProduct
+          : (leadershipProductOptions[0]?.id ?? null),
+      );
+      const requestedRadius = Number(parameters.get("radius") ?? 3);
+      setLeadershipRadius(
+        requestedRadius === 1 || requestedRadius === 5 ? requestedRadius : 3,
+      );
     };
     applyLocation();
     window.addEventListener("popstate", applyLocation);
     return () => window.removeEventListener("popstate", applyLocation);
-  }, [competitorOptions, firstPopulatedGroup, preferredBasis, reportView]);
+  }, [
+    competitorOptions,
+    firstPopulatedGroup,
+    leadershipProductOptions,
+    preferredBasis,
+    reportView,
+  ]);
   const updateRoute = (updates: Record<string, string | null>) => {
     const url = new URL(window.location.href);
     for (const [key, value] of Object.entries(updates)) {
@@ -459,6 +522,49 @@ function BlueprintAnalysisWorkspace({
           defaultValue: preferredBasis,
           selectedValue: selectedLens,
         },
+        ...(activeGroup === "product-leadership"
+          ? [
+              {
+                id: "benchmark-product",
+                label: "Benchmark Product",
+                title: `Choose the ${reportView.retailer_scope.benchmark.name} product`,
+                description:
+                  "Select one governed benchmark product to score at benchmark-store grain. PDP identity and imagery do not replace Search price.",
+                value:
+                  leadershipProductOptions.find(
+                    (option) => option.id === selectedLeadershipProduct,
+                  )?.name ?? "Select a product",
+                options: leadershipProductOptions.map((option) => ({
+                  value: option.id,
+                  label: option.name,
+                  description: `Benchmark product ID ${option.id}`,
+                })),
+                queryParameter: "product",
+                selectedValue: selectedLeadershipProduct ?? undefined,
+              },
+              {
+                id: "store-radius",
+                label: "Store Radius",
+                title: "Choose the local competitor radius",
+                description:
+                  "A physical competitor store must fall inside this radius of the benchmark store. Service-area retailers use the same ZIP.",
+                value: `${leadershipRadius} mile${leadershipRadius === 1 ? "" : "s"}`,
+                options: ([1, 3, 5] as const).map((radius) => ({
+                  value: String(radius),
+                  label: `${radius} mile${radius === 1 ? "" : "s"}`,
+                  description:
+                    radius === 1
+                      ? "Immediate local trade area."
+                      : radius === 3
+                        ? "Balanced neighborhood comparison."
+                        : "Broader local trade area.",
+                })),
+                queryParameter: "radius",
+                defaultValue: "3",
+                selectedValue: String(leadershipRadius),
+              },
+            ]
+          : []),
         {
           id: "decision-readiness",
           label: "Decision Readiness",
@@ -506,6 +612,9 @@ function BlueprintAnalysisWorkspace({
   }, [
     competitorOptions,
     analysis.analysis_id,
+    activeGroup,
+    leadershipProductOptions,
+    leadershipRadius,
     readiness,
     reportView.comparison_bases,
     reportView.match_governance,
@@ -513,6 +622,7 @@ function BlueprintAnalysisWorkspace({
     preferredBasis,
     selectedBasis,
     selectedCompetitor,
+    selectedLeadershipProduct,
     selectedLens,
   ]);
   useApplicationContextDefinition(contextDefinition);
@@ -570,6 +680,15 @@ function BlueprintAnalysisWorkspace({
         <button
           type="button"
           role="tab"
+          aria-selected={activeGroup === "product-leadership"}
+          className={activeGroup === "product-leadership" ? "active" : ""}
+          onClick={() => selectGroup("product-leadership")}
+        >
+          Product Leadership
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeGroup === "brand-workbench"}
           className={activeGroup === "brand-workbench" ? "active" : ""}
           onClick={() => selectGroup("brand-workbench")}
@@ -590,6 +709,14 @@ function BlueprintAnalysisWorkspace({
           />
         ) : activeGroup === "brand-workbench" ? (
           <BrandWorkbenchPanel analysisId={analysis.analysis_id} readOnly />
+        ) : activeGroup === "product-leadership" ? (
+          <ProductLeadershipWorkspace
+            analysisId={analysis.analysis_id}
+            competitorId={selectedCompetitor}
+            profileId={selectedLens}
+            productId={selectedLeadershipProduct}
+            radiusMiles={leadershipRadius}
+          />
         ) : activeGroup === "exports" ? (
           <Section
             title="Delivery artifacts"

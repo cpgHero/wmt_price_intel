@@ -1,0 +1,186 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_id": "fresh-fluid-milk-example",
+  "generated_at": "2026-08-07T06:00:00Z",
+  "benchmark_retailer": { "id": "walmart_us", "name": "Walmart (US)" },
+  "benchmark_product": {
+    "id": "w1",
+    "name": "Great Value Whole Milk, 1 gal",
+    "image_url": null
+  },
+  "competitors": [{ "id": "aldi_us", "name": "ALDI" }],
+  "filters": {
+    "competitor_id": "aldi_us",
+    "profile_id": "strict",
+    "radius_miles": 3,
+    "state": null,
+    "city": null
+  },
+  "filter_options": {
+    "products": [
+      {
+        "id": "w1",
+        "name": "Great Value Whole Milk, 1 gal",
+        "image_url": null
+      }
+    ],
+    "competitors": [{ "id": "aldi_us", "name": "ALDI" }],
+    "profiles": [{ "id": "strict", "name": "Strict each-to-each" }],
+    "radii_miles": [1, 3, 5],
+    "states": [{ "value": "AR", "label": "AR", "count": 1 }],
+    "cities": []
+  },
+  "policy": {
+    "price_authority": "Search",
+    "identity_authority": "Product Pack classification with PDP enrichment",
+    "location_authority": "Retailer location master",
+    "observation_definition": "A product observed in Search with a price greater than zero is available at that retailer location. The latest observation in the collection run controls duplicate product-location rows.",
+    "comparison_definition": "Each observed benchmark store is compared with the lowest current value among its governed matched competitor products within the selected radius. Service-area retailers are compared within the same ZIP.",
+    "comparison_metric": "package_price",
+    "comparison_unit": "USD/package",
+    "parity_tolerance": 0.01,
+    "at_risk_threshold": 0.0776,
+    "status_definition": {
+      "leader": "Benchmark lead is greater than the at-risk threshold.",
+      "tied": "Absolute price difference is within the parity tolerance.",
+      "at_risk": "Benchmark leads, but by no more than the at-risk threshold.",
+      "losing": "The lowest geographically comparable competitor is lower.",
+      "unscored": "No governed matched competitor observation is comparable."
+    }
+  },
+  "summary": {
+    "benchmark_observed_stores": 1,
+    "scored_stores": 1,
+    "coverage_rate": 1.0,
+    "leader_stores": 0,
+    "tied_stores": 0,
+    "at_risk_stores": 0,
+    "losing_stores": 1,
+    "unscored_stores": 0,
+    "leader_rate": 0.0,
+    "average_gap": -0.09,
+    "average_losing_gap": 0.09,
+    "maximum_losing_gap": 0.09
+  },
+  "state_summaries": [
+    {
+      "id": "state:AR",
+      "level": "state",
+      "label": "AR",
+      "benchmark_observed_stores": 1,
+      "scored_stores": 1,
+      "coverage_rate": 1.0,
+      "leader_stores": 0,
+      "tied_stores": 0,
+      "at_risk_stores": 0,
+      "losing_stores": 1,
+      "unscored_stores": 0,
+      "leader_rate": 0.0,
+      "average_gap": -0.09,
+      "average_losing_gap": 0.09,
+      "maximum_losing_gap": 0.09
+    }
+  ],
+  "city_summaries": [
+    {
+      "id": "city:Bentonville, AR",
+      "level": "city",
+      "label": "Bentonville, AR",
+      "benchmark_observed_stores": 1,
+      "scored_stores": 1,
+      "coverage_rate": 1.0,
+      "leader_stores": 0,
+      "tied_stores": 0,
+      "at_risk_stores": 0,
+      "losing_stores": 1,
+      "unscored_stores": 0,
+      "leader_rate": 0.0,
+      "average_gap": -0.09,
+      "average_losing_gap": 0.09,
+      "maximum_losing_gap": 0.09
+    }
+  ],
+  "competitor_summaries": [
+    {
+      "competitor_id": "aldi_us",
+      "competitor": "ALDI",
+      "benchmark_observed_stores": 1,
+      "scored_stores": 1,
+      "coverage_rate": 1.0,
+      "leader_stores": 0,
+      "tied_stores": 0,
+      "at_risk_stores": 0,
+      "losing_stores": 1,
+      "unscored_stores": 0,
+      "leader_rate": 0.0,
+      "average_gap": -0.09,
+      "average_losing_gap": 0.09,
+      "maximum_losing_gap": 0.09
+    }
+  ],
+  "relationships": [
+    {
+      "relationship_id": "relationship-1",
+      "competitor_id": "aldi_us",
+      "competitor_name": "ALDI",
+      "benchmark_product_id": "w1",
+      "competitor_product_id": "a1",
+      "profile_id": "strict",
+      "profile_label": "Strict each-to-each",
+      "comparison_metric": "package_price",
+      "comparison_unit": "USD/package",
+      "scope_mode": "global",
+      "scoped_benchmark_locations": 0
+    }
+  ],
+  "outcomes": [
+    {
+      "id": "leadership-example-store-100",
+      "status": "losing",
+      "benchmark": {
+        "retailer_id": "walmart_us",
+        "retailer_name": "Walmart (US)",
+        "product_id": "w1",
+        "product_name": "Great Value Whole Milk, 1 gal",
+        "image_url": null,
+        "scope_key": "walmart_us|72712|100",
+        "location_kind": "store",
+        "store_number": "100",
+        "store_name": "Store 100",
+        "zipcode": "72712",
+        "city": "Bentonville",
+        "state": "AR",
+        "country": "USA",
+        "latitude": 36.37,
+        "longitude": -94.21,
+        "package_price": 3.88,
+        "comparison_value": 3.88,
+        "observed_at": "2026-08-07T06:00:00Z"
+      },
+      "competitor": {
+        "retailer_id": "aldi_us",
+        "retailer_name": "ALDI",
+        "product_id": "a1",
+        "product_name": "Friendly Farms Whole Milk, 1 gal",
+        "image_url": null,
+        "scope_key": "aldi_us|72712|200",
+        "location_kind": "store",
+        "store_number": "200",
+        "store_name": "Store 200",
+        "zipcode": "72712",
+        "city": "Bentonville",
+        "state": "AR",
+        "country": "USA",
+        "latitude": 36.37,
+        "longitude": -94.205,
+        "package_price": 3.79,
+        "comparison_value": 3.79,
+        "observed_at": "2026-08-07T06:00:00Z"
+      },
+      "relationship_id": "relationship-1",
+      "distance_miles": 0.28,
+      "competitor_minus_benchmark": -0.09,
+      "comparison_value_reduction_to_lead": 0.1
+    }
+  ]
+}

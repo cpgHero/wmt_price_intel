@@ -6,7 +6,7 @@
   display: flex;
   flex: 1 1 auto;
   height: 44px;
-  max-width: min(890px, 68vw);
+  max-width: min(1180px, 78vw);
   min-width: 0;
   overflow: hidden;
 }

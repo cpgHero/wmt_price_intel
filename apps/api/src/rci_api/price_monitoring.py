@@ -21,7 +21,9 @@ from rci_analytics import (
     CatalogProductPackLoader,
     PriceMonitoringFilters,
     PriceMonitoringProjector,
+    ProductPriceObservation,
     classified_offer_from_record,
+    location_scope_key,
 )
 from rci_api.analyses import get_analysis_service
 from rci_contracts import validate_instance
@@ -136,6 +138,8 @@ class S3ParquetReader:
             "in_scope",
             "scope_reason",
             "attributes_json",
+            "metrics_json",
+            "review_reasons_json",
         ]
         frame = await asyncio.to_thread(pl.read_parquet, BytesIO(body))
         available = [column for column in columns if column in frame.columns]
@@ -510,6 +514,95 @@ class PriceMonitoringService:
             self._view_cache.pop(next(iter(self._view_cache)))
         self._view_cache[cache_key] = view
         return view
+
+    async def product_observations(
+        self,
+        analysis_id: str,
+        *,
+        retailer_id: str,
+        product_id: str,
+        comparison_metric: str,
+    ) -> list[ProductPriceObservation]:
+        """Return latest positive Search evidence at exact product-location grain."""
+
+        prepared = await self._prepare(analysis_id, retailer_id)
+        context = prepared.product_context.get(f"{retailer_id}:{product_id}", {})
+        selected: dict[str, tuple[tuple[str, str], ProductPriceObservation]] = {}
+        for classified in prepared.offers:
+            offer = classified.offer
+            comparison_value = (
+                offer.price
+                if comparison_metric == "package_price"
+                else classified.metrics.get(comparison_metric)
+            )
+            if (
+                not classified.in_scope
+                or offer.retailer_id != retailer_id
+                or offer.retailer_product_id != product_id
+                or offer.price is None
+                or offer.price <= 0
+                or comparison_value is None
+                or comparison_value <= 0
+                or offer.currency != "USD"
+            ):
+                continue
+            location_kind: Literal["store", "service_area"] = (
+                "store" if offer.store_number is not None else "service_area"
+            )
+            location_key = offer.store_number or (
+                f"zip:{offer.zipcode}" if offer.zipcode is not None else None
+            )
+            if location_key is None:
+                continue
+            location = prepared.location_index.get((retailer_id, location_key), {})
+            scope_key = location_scope_key(offer)
+            observation = ProductPriceObservation(
+                retailer_id=retailer_id,
+                retailer_name=self._retailer_names.get(
+                    retailer_id, retailer_id.replace("_", " ").title()
+                ),
+                product_id=product_id,
+                product_name=str(context.get("name") or offer.title),
+                image_url=(
+                    str(context["image_url"]) if context.get("image_url") else offer.image_url
+                ),
+                scope_key=scope_key,
+                location_kind=location_kind,
+                store_number=offer.store_number,
+                store_name=(str(location["store_name"]) if location.get("store_name") else None),
+                zipcode=(str(location["zipcode"]) if location.get("zipcode") else offer.zipcode),
+                city=str(location["city"]) if location.get("city") else None,
+                state=str(location["state"]) if location.get("state") else None,
+                country=str(location.get("country") or "USA"),
+                latitude=(
+                    float(location["latitude"])
+                    if location.get("latitude") is not None
+                    else offer.latitude
+                ),
+                longitude=(
+                    float(location["longitude"])
+                    if location.get("longitude") is not None
+                    else offer.longitude
+                ),
+                package_price=float(offer.price),
+                comparison_value=float(comparison_value),
+                observed_at=offer.collected_at,
+            )
+            rank = (str(offer.collected_at or ""), offer.offer_id)
+            previous = selected.get(scope_key)
+            if previous is None or rank > previous[0]:
+                selected[scope_key] = (rank, observation)
+        return [
+            value[1]
+            for _scope, value in sorted(
+                selected.items(),
+                key=lambda item: (
+                    str(item[1][1].state or ""),
+                    str(item[1][1].city or ""),
+                    str(item[1][1].store_number or item[1][1].zipcode or ""),
+                ),
+            )
+        ]
 
     async def evidence_csv(
         self,

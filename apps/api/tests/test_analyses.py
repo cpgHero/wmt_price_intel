@@ -10,6 +10,7 @@ from rci_api.analyses import (
     get_brand_review_service,
     get_match_review_service,
 )
+from rci_api.competitive_leadership import get_competitive_product_leadership_service
 from rci_api.main import create_app
 from rci_results import (
     AnalysisResultService,
@@ -97,6 +98,45 @@ async def test_analysis_api_rejects_contract_mismatch_and_mutation() -> None:
             json={"analysis_id": "invalid"},
         )
         assert invalid.status_code == 422
+
+
+async def test_competitive_product_leadership_api_forwards_governed_context() -> None:
+    class LeadershipService:
+        async def view(self, analysis_id: str, **filters: object) -> dict[str, object]:
+            assert analysis_id == "analysis-id"
+            assert filters == {
+                "competitor_id": "aldi_us",
+                "profile_id": "strict",
+                "benchmark_product_id": "w-1",
+                "radius_miles": 3,
+                "state": "AR",
+                "city": "Bentonville",
+            }
+            return {"schema_version": "1.0.0", "analysis_id": analysis_id}
+
+    app = create_app()
+    app.dependency_overrides[get_competitive_product_leadership_service] = lambda: (
+        LeadershipService()
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/analyses/analysis-id/competitive-product-leadership",
+            params={
+                "competitor": "aldi_us",
+                "profile": "strict",
+                "product": "w-1",
+                "radius_miles": 3,
+                "state": "AR",
+                "city": "Bentonville",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"schema_version": "1.0.0", "analysis_id": "analysis-id"}
 
 
 async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis() -> None:

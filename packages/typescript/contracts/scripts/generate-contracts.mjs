@@ -25,6 +25,10 @@ const contracts = [
     "collection-geography-resolution.ts",
   ],
   ["collection-scope-estimate.schema.json", "collection-scope-estimate.ts"],
+  [
+    "competitive-product-leadership.schema.json",
+    "competitive-product-leadership.ts",
+  ],
   ["golden-benchmarks.schema.json", "golden-benchmarks.ts"],
   ["historical-input-manifest.schema.json", "historical-input-manifest.ts"],
   ["normalized-offer.schema.json", "normalized-offer.ts"],

@@ -2,6 +2,11 @@
 
 from rci_analytics.assortment import AssortmentAccumulator, merge_assortment_product_context
 from rci_analytics.classification import OfferClassifier
+from rci_analytics.competitive_leadership import (
+    CompetitiveProductLeadershipProjector,
+    ProductLeadershipRelationship,
+    ProductPriceObservation,
+)
 from rci_analytics.historical import (
     HistoricalImportService,
     HistoricalInputManifestLoader,
@@ -59,6 +64,7 @@ __all__ = [
     "ComparisonFact",
     "ComparisonInputReducer",
     "ComparisonInsightInput",
+    "CompetitiveProductLeadershipProjector",
     "DeterministicInsightEngine",
     "HistoricalImportService",
     "HistoricalInputManifestLoader",
@@ -73,6 +79,8 @@ __all__ = [
     "PriceMonitoringFilters",
     "PriceMonitoringProjector",
     "ProductMatchRule",
+    "ProductLeadershipRelationship",
+    "ProductPriceObservation",
     "ProductPackLoader",
     "RankedInsightCandidate",
     "RelationshipInputReducer",
