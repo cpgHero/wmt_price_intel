@@ -7,6 +7,7 @@ import type {
   RetailerScorecard,
 } from "./api";
 import {
+  cohortProductSummaries,
   comparisonBasisDescription,
   compactMetricName,
   formatMetric,
@@ -310,5 +311,53 @@ describe("report presentation", () => {
     expect(scorecardProductSummaries(scorecard, [], [decision])).toMatchObject([
       { relationship_id: "relationship-1", stance: "protect", matches: 20 },
     ]);
+  });
+
+  it("resolves only the governed product relationships inside a Product Pack cohort", () => {
+    const base = {
+      id: "candidate-1",
+      relationship_id: "relationship-1",
+      relationship_status: "suggested",
+      qa_status: "ready",
+      profile_id: "strict",
+      comparison_metric: "package_price",
+      benchmark_product_id: "w1",
+      benchmark_product_name: "Walmart whole milk",
+      competitor: "aldi_us",
+      competitor_product_id: "a1",
+      competitor_product_name: "ALDI whole milk",
+      matches: 40,
+      geographies: 30,
+      benchmark_lower: 10,
+      competitor_lower: 25,
+      parity: 5,
+      match_attributes: { volume_oz: 128, fat_type: "whole" },
+    } satisfies ProductMatchCandidate;
+    const candidates = [
+      base,
+      {
+        ...base,
+        id: "candidate-2",
+        relationship_id: "relationship-2",
+        benchmark_product_id: "w2",
+        competitor_product_id: "a2",
+        match_attributes: { volume_oz: 128, fat_type: "2%" },
+      },
+    ];
+
+    const products = cohortProductSummaries(
+      {
+        competitorId: "aldi_us",
+        competitor: "ALDI",
+        profileId: "strict",
+        overall: false,
+        attributes: { volume_oz: 128, fat_type: "whole" },
+      },
+      candidates,
+      [],
+    );
+
+    expect(products).toHaveLength(1);
+    expect(products[0]?.relationship_id).toBe("relationship-1");
   });
 });

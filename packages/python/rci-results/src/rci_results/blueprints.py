@@ -799,6 +799,7 @@ class ReportProjector:
                     "_competitor_id": competitor_id,
                     "_profile_id": str(comparison.get("profile_id", "")),
                     "_segment_id": segment_id,
+                    "_segment_attributes": dict(segment.get("attributes") or {}),
                     "competitor": competitor,
                     "comparison lens": _merchant_text(
                         mode.get("label", comparison.get("profile_id", "Comparison")),

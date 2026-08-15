@@ -13,6 +13,7 @@ import {
 } from "@/app/components/application-context";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
+import { comparableCohort, type ComparableCohort } from "@/lib/cohort-model";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/presentation";
 import {
   comparisonBasisDescription,
+  cohortProductSummaries,
   compactMetricName,
   formatMapValueLabel,
   formatPriceForBasis,
@@ -231,6 +233,9 @@ function BlueprintAnalysisWorkspace({
     reportView.comparison_bases[0]?.profile_id ??
     "";
   const [selectedLens, setSelectedLens] = useState(preferredBasis);
+  const [selectedCohort, setSelectedCohort] = useState<ComparableCohort | null>(
+    null,
+  );
   const leadershipProductOptions = useMemo(() => {
     const options = new Map<
       string,
@@ -350,10 +355,12 @@ function BlueprintAnalysisWorkspace({
       competitorOptions.some((option) => option.id === competitorId);
     const next = valid ? competitorId : "all";
     setSelectedCompetitor(next);
+    setSelectedCohort(null);
     updateRoute({ competitor: next === "all" ? null : next });
   };
   const selectGroup = (groupId: string) => {
     setActiveGroup(groupId);
+    if (groupId !== "price-segments") setSelectedCohort(null);
     updateRoute({
       tab: groupId === firstPopulatedGroup ? null : groupId,
       pair: null,
@@ -365,6 +372,7 @@ function BlueprintAnalysisWorkspace({
     );
     const next = valid ? profileId : preferredBasis;
     setSelectedLens(next);
+    setSelectedCohort(null);
     updateRoute({ lens: next === preferredBasis ? null : next });
   };
   const receiveLeadershipGeography = useCallback(
@@ -441,6 +449,26 @@ function BlueprintAnalysisWorkspace({
     reportView.comparison_bases.find(
       (basis) => basis.profile_id === selectedLens,
     ) ?? null;
+  const selectedCohortBasis = selectedCohort
+    ? (reportView.comparison_bases.find(
+        (basis) => basis.profile_id === selectedCohort.profileId,
+      ) ?? null)
+    : null;
+  const selectedCohortProducts = useMemo(
+    () =>
+      selectedCohort
+        ? cohortProductSummaries(
+            selectedCohort,
+            reportView.match_candidates ?? [],
+            reportView.product_decisions ?? [],
+          )
+        : [],
+    [reportView.match_candidates, reportView.product_decisions, selectedCohort],
+  );
+  const openCohortRecord = (record: JsonObject) => {
+    const cohort = comparableCohort(record);
+    if (cohort) setSelectedCohort(cohort);
+  };
   const scopedDecisions = scopeRetailerRows(
     reportView.product_decisions ?? [],
     selectedRetailer,
@@ -794,6 +822,21 @@ function BlueprintAnalysisWorkspace({
                 }
                 ambiguousMatches={reportView.match_governance.ambiguous}
                 onReviewMatches={openMatchWorkbench}
+                onOpenAssortment={() => selectGroup("assortment")}
+                onOpenCohort={setSelectedCohort}
+              />
+            ) : null}
+            {activeGroup === "price-segments" && selectedCohort ? (
+              <IncludedProductsDrawer
+                key={selectedCohort.id}
+                benchmark={reportView.retailer_scope.benchmark}
+                cohort={{
+                  cohort: selectedCohort,
+                  comparisonBasis: selectedCohortBasis,
+                }}
+                products={selectedCohortProducts}
+                onClose={() => setSelectedCohort(null)}
+                onReviewMatch={reviewDecision}
               />
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
@@ -830,6 +873,11 @@ function BlueprintAnalysisWorkspace({
                     qualityObservations={scopedQuality}
                     showPortfolioNarrative={selectedRetailer === null}
                     selectedRetailerName={selectedRetailer?.name ?? null}
+                    onSelectCohort={
+                      activeGroup === "price-segments"
+                        ? openCohortRecord
+                        : undefined
+                    }
                   />
                   {activeGroup === "overview" &&
                   section.kind === "executive_summary" ? (
@@ -1569,7 +1617,7 @@ function RetailerScorecardPanel({
         ) : null}
       </Section>
       {selectedScorecard ? (
-        <ScorecardProductsDrawer
+        <IncludedProductsDrawer
           key={`${selectedScorecard.competitor_id}::${selectedScorecard.profile_id}`}
           benchmark={benchmark}
           scorecard={selectedScorecard}
@@ -1582,19 +1630,47 @@ function RetailerScorecardPanel({
   );
 }
 
-function ScorecardProductsDrawer({
+interface CohortDrawerContext {
+  cohort: ComparableCohort;
+  comparisonBasis: AnalysisReportView["comparison_bases"][number] | null;
+}
+
+function IncludedProductsDrawer({
   benchmark,
   scorecard,
+  cohort,
   products,
   onClose,
   onReviewMatch,
 }: Readonly<{
   benchmark: RetailerOption;
-  scorecard: RetailerScorecard;
+  scorecard?: RetailerScorecard;
+  cohort?: CohortDrawerContext;
   products: ScorecardProductSummary[];
   onClose: () => void;
   onReviewMatch: (product: ScorecardProductSummary) => void;
 }>) {
+  const competitor =
+    scorecard?.competitor ?? cohort?.cohort.competitor ?? "Competitor";
+  const priceUnit =
+    scorecard?.price_unit ??
+    cohort?.comparisonBasis?.price_unit ??
+    "USD/package";
+  const matches = scorecard?.matches ?? cohort?.cohort.matches ?? 0;
+  const geographies =
+    scorecard?.matched_geographies ?? cohort?.cohort.matchedGeographies ?? null;
+  const basisLabel =
+    scorecard?.comparison_lens ??
+    cohort?.comparisonBasis?.label ??
+    "Configured Product Pack cohort";
+  const basisDetail = scorecard
+    ? `${displayLabel(scorecard.comparison_metric)} · ${priceUnitLabel(scorecard.price_unit)} · ${displayLabel(scorecard.geography)}`
+    : cohort?.comparisonBasis
+      ? `${displayLabel(cohort.comparisonBasis.comparison_metric)} · ${priceUnitLabel(cohort.comparisonBasis.price_unit)} · ${displayLabel(cohort.comparisonBasis.geography)}`
+      : "Persisted comparison basis";
+  const drawerId = scorecard
+    ? "scorecard-products-title"
+    : "cohort-products-title";
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(25);
   useEffect(() => {
@@ -1635,18 +1711,24 @@ function ScorecardProductsDrawer({
         className="evidence-drawer scorecard-products-drawer"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="scorecard-products-title"
+        aria-labelledby={drawerId}
         onClick={(event) => event.stopPropagation()}
       >
         <header>
           <div>
-            <span className="eyebrow">Retailer scorecard evidence</span>
-            <h2 id="scorecard-products-title">
-              Products included in {scorecard.competitor} scorecard
+            <span className="eyebrow">
+              {scorecard
+                ? "Retailer scorecard evidence"
+                : "Product Pack cohort evidence"}
+            </span>
+            <h2 id={drawerId}>
+              {scorecard
+                ? `Products included in ${competitor} scorecard`
+                : `Products included in ${cohort?.cohort.segment ?? "this cohort"}`}
             </h2>
             <p>
-              One summary per governed {benchmark.name}–{scorecard.competitor}{" "}
-              product relationship. Store-level rows are intentionally omitted.
+              One summary per governed {benchmark.name}–{competitor} product
+              relationship. Store-level rows are intentionally omitted.
             </p>
           </div>
           <button
@@ -1664,31 +1746,26 @@ function ScorecardProductsDrawer({
           </div>
           <div>
             <span>Matched observations</span>
-            <strong>{(scorecard.matches ?? 0).toLocaleString()}</strong>
+            <strong>{matches.toLocaleString()}</strong>
           </div>
           <div>
             <span>Matched ZIP markets</span>
-            <strong>
-              {scorecard.matched_geographies?.toLocaleString() ?? "—"}
-            </strong>
+            <strong>{geographies?.toLocaleString() ?? "—"}</strong>
           </div>
           <div>
             <span>Comparison basis</span>
-            <strong>{scorecard.comparison_lens}</strong>
-            <small>
-              {displayLabel(scorecard.comparison_metric)} ·{" "}
-              {priceUnitLabel(scorecard.price_unit)} ·{" "}
-              {displayLabel(scorecard.geography)}
-            </small>
+            <strong>{basisLabel}</strong>
+            <small>{basisDetail}</small>
           </div>
         </div>
         <div className="scorecard-products-authority">
           <strong>How to read this list</strong>
           <p>
-            These are the admitted product relationships represented by the
-            scorecard&apos;s governed comparison profile. Search observations
-            remain authoritative for price and location; PDP enrichment supplies
-            identity and imagery where available.
+            {scorecard
+              ? "These are the admitted product relationships represented by the scorecard's governed comparison profile."
+              : "These are the admitted one-to-one relationships whose Product Pack attributes place them in this cohort. The cohort does not create one-to-many product matches."}{" "}
+            Search observations remain authoritative for price and location; PDP
+            enrichment supplies identity and imagery where available.
           </p>
         </div>
         <div className="scorecard-products-toolbar">
@@ -1717,14 +1794,17 @@ function ScorecardProductsDrawer({
                 `${product.benchmark_product_id}::${product.competitor_product_id}`
               }
               benchmark={benchmark}
-              scorecard={scorecard}
+              competitor={competitor}
+              priceUnit={priceUnit}
               product={product}
               onReviewMatch={() => onReviewMatch(product)}
             />
           ))}
           {visibleProducts.length === 0 ? (
             <p className="scorecard-products-empty">
-              No included products match this search.
+              {query
+                ? "No included products match this search."
+                : "No admitted product identities are available for this summary in the current publication."}
             </p>
           ) : null}
         </div>
@@ -1744,24 +1824,26 @@ function ScorecardProductsDrawer({
 
 function ScorecardProductRow({
   benchmark,
-  scorecard,
+  competitor,
+  priceUnit,
   product,
   onReviewMatch,
 }: Readonly<{
   benchmark: RetailerOption;
-  scorecard: RetailerScorecard;
+  competitor: string;
+  priceUnit: string;
   product: ScorecardProductSummary;
   onReviewMatch: () => void;
 }>) {
   const parityShare = product.matches ? product.parity / product.matches : 0;
   const outcome =
     product.stance === "attention"
-      ? `${scorecard.competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)} of matched observations`
+      ? `${competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)} of matched observations`
       : product.stance === "protect"
         ? `${benchmark.name} is lower in ${formatScorecardRate(product.benchmark_lower_share)} of matched observations`
         : product.stance === "parity"
           ? `Prices are tied in ${formatScorecardRate(parityShare)} of matched observations`
-          : `Mixed result: ${benchmark.name} is lower in ${formatScorecardRate(product.benchmark_lower_share)}, ${scorecard.competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)}, and ${formatScorecardRate(parityShare)} are tied`;
+          : `Mixed result: ${benchmark.name} is lower in ${formatScorecardRate(product.benchmark_lower_share)}, ${competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)}, and ${formatScorecardRate(parityShare)} are tied`;
   const attributeRows = Object.entries(product.match_attributes)
     .filter(
       ([, value]) => value !== null && value !== undefined && value !== "",
@@ -1787,10 +1869,10 @@ function ScorecardProductRow({
           <ProductImage
             imageUrl={product.competitor_image_url}
             name={product.competitor_product_name}
-            retailer={scorecard.competitor}
+            retailer={competitor}
           />
           <span>
-            <small>{scorecard.competitor}</small>
+            <small>{competitor}</small>
             <strong>{product.competitor_product_name}</strong>
             <code>Item {product.competitor_product_id}</code>
           </span>
@@ -1813,7 +1895,7 @@ function ScorecardProductRow({
         </small>
         <div
           className="scorecard-product-share"
-          aria-label={`${benchmark.name} lower ${formatScorecardRate(product.benchmark_lower_share)}, ${scorecard.competitor} lower ${formatScorecardRate(product.competitor_lower_share)}, parity ${formatScorecardRate(parityShare)}`}
+          aria-label={`${benchmark.name} lower ${formatScorecardRate(product.benchmark_lower_share)}, ${competitor} lower ${formatScorecardRate(product.competitor_lower_share)}, parity ${formatScorecardRate(parityShare)}`}
         >
           <i
             className="benchmark"
@@ -1829,26 +1911,18 @@ function ScorecardProductRow({
           <span>
             {benchmark.name} median price
             <b>
-              {formatPriceForBasis(
-                product.median_benchmark_price,
-                scorecard.price_unit,
-              )}
+              {formatPriceForBasis(product.median_benchmark_price, priceUnit)}
             </b>
           </span>
           <span>
-            {scorecard.competitor} median price
+            {competitor} median price
             <b>
-              {formatPriceForBasis(
-                product.median_competitor_price,
-                scorecard.price_unit,
-              )}
+              {formatPriceForBasis(product.median_competitor_price, priceUnit)}
             </b>
           </span>
           <span>
             Paired median gap · competitor minus {benchmark.name}
-            <b>
-              {formatPriceForBasis(product.median_gap, scorecard.price_unit)}
-            </b>
+            <b>{formatPriceForBasis(product.median_gap, priceUnit)}</b>
           </span>
         </div>
         {product.match_rationale || attributeRows.length ? (
@@ -1888,6 +1962,7 @@ function BlueprintSection({
   qualityObservations,
   showPortfolioNarrative,
   selectedRetailerName,
+  onSelectCohort,
 }: Readonly<{
   section: ReportSectionView;
   recommendedCharts: string[];
@@ -1896,6 +1971,7 @@ function BlueprintSection({
   qualityObservations: QualityObservation[];
   showPortfolioNarrative: boolean;
   selectedRetailerName: string | null;
+  onSelectCohort?: (record: JsonObject) => void;
 }>) {
   const narrative = asObject(section.narrative);
   const visibleMetrics = [
@@ -2015,6 +2091,7 @@ function BlueprintSection({
         <SegmentPositionMatrix
           benchmarkRetailer={benchmarkRetailer}
           rows={section.records}
+          onSelect={onSelectCohort}
         />
       ) : null}
       {section.kind === "data_quality" ? (
@@ -3073,7 +3150,12 @@ function AnalysisMap({
 function SegmentPositionMatrix({
   benchmarkRetailer,
   rows,
-}: Readonly<{ benchmarkRetailer: string; rows: JsonObject[] }>) {
+  onSelect,
+}: Readonly<{
+  benchmarkRetailer: string;
+  rows: JsonObject[];
+  onSelect?: (record: JsonObject) => void;
+}>) {
   const matrix = rows
     .map((row) => ({
       row,
@@ -3101,7 +3183,14 @@ function SegmentPositionMatrix({
         .map(({ row, benchmarkRate, competitorRate, matches, gap }, index) => {
           const benchmarkWins = (benchmarkRate ?? 0) >= (competitorRate ?? 0);
           return (
-            <div className="segment-matrix-row" key={String(row.id ?? index)}>
+            <button
+              type="button"
+              className="segment-matrix-row"
+              key={String(row.id ?? index)}
+              onClick={() => onSelect?.(row)}
+              disabled={!onSelect}
+              aria-label={`View products included in ${displayValue(row.segment ?? "Comparable items")}`}
+            >
               <div>
                 <strong>
                   {displayValue(row.segment ?? "Comparable items")}
@@ -3126,7 +3215,8 @@ function SegmentPositionMatrix({
                 <span>matched observations</span>
               </div>
               <strong>{gap}</strong>
-            </div>
+              <span className="segment-matrix-action">View products →</span>
+            </button>
           );
         })}
     </div>

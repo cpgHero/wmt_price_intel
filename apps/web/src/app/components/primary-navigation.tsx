@@ -17,8 +17,7 @@ import { NavigationIcon } from "./navigation-icon";
 import styles from "./primary-navigation.module.css";
 
 const groupIcons: Record<NavigationGroup["id"], NavigationIconName> = {
-  workspace: "dashboard",
-  intelligence: "intelligence",
+  analytics: "intelligence",
   operations: "automation",
   administration: "studies",
 };
@@ -38,9 +37,9 @@ export function PrimaryNavigation({
   const activeGroupId =
     applicationNavigation.find((group) =>
       group.items.some((item) => navigationItemIsActive(pathname, item)),
-    )?.id ?? "workspace";
+    )?.id ?? "analytics";
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(["workspace", "intelligence", activeGroupId]),
+    () => new Set(["analytics", activeGroupId]),
   );
   const [flyout, setFlyout] = useState<{
     group: NavigationGroup;

@@ -19,7 +19,7 @@ export interface NavigationItem {
 }
 
 export interface NavigationGroup {
-  id: "workspace" | "intelligence" | "operations" | "administration";
+  id: "analytics" | "operations" | "administration";
   items: readonly NavigationItem[];
   label: string;
 }
@@ -34,28 +34,8 @@ export const homeNavigationItem: NavigationItem = {
 
 export const applicationNavigation: readonly NavigationGroup[] = [
   {
-    id: "workspace",
-    label: "Workspace",
-    items: [
-      {
-        label: "Match Workbench",
-        description: "Review and govern product relationships across reports",
-        href: "/workspace/matches",
-        icon: "matches",
-        match: "prefix",
-      },
-      {
-        label: "Brand Workbench",
-        description: "Classify and govern observed brands across reports",
-        href: "/workspace/brands",
-        icon: "brands",
-        match: "prefix",
-      },
-    ],
-  },
-  {
-    id: "intelligence",
-    label: "Intelligence",
+    id: "analytics",
+    label: "Analytics",
     items: [
       {
         label: "Price Intelligence",
@@ -104,6 +84,20 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     id: "administration",
     label: "Administration",
     items: [
+      {
+        label: "Match Workbench",
+        description: "Review and govern product relationships across reports",
+        href: "/workspace/matches",
+        icon: "matches",
+        match: "prefix",
+      },
+      {
+        label: "Brand Workbench",
+        description: "Classify and govern observed brands across reports",
+        href: "/workspace/brands",
+        icon: "brands",
+        match: "prefix",
+      },
       {
         label: "Study Discovery",
         description: "Evidence-led category onboarding",

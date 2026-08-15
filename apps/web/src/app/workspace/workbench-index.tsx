@@ -51,7 +51,7 @@ export async function WorkbenchIndex({
     <main className="governance-workspace-index">
       <header className="page-header compact">
         <div>
-          <p className="eyebrow">Workspace · {content.eyebrow}</p>
+          <p className="eyebrow">Administration · {content.eyebrow}</p>
           <h1>{content.title}</h1>
         </div>
         <p>{content.description}</p>
@@ -70,7 +70,7 @@ export async function WorkbenchIndex({
         <>
           <section
             className="workbench-index-guide"
-            aria-label="Workspace guidance"
+            aria-label="Administration workbench guidance"
           >
             <div>
               <small>Cross-report entry point</small>
@@ -82,9 +82,9 @@ export async function WorkbenchIndex({
               </span>
             </div>
             <p>
-              Workspace tools govern evidence and decisions. Competitive
-              Intelligence remains the place to interpret price, assortment,
-              geography, and executive reporting.
+              Administration workbenches govern evidence and decisions.
+              Competitive Analytics remains the place to interpret price,
+              assortment, geography, and executive reporting.
             </p>
           </section>
 

@@ -8291,7 +8291,31 @@ tbody tr:last-child td {
   border-color: color-mix(in srgb, var(--green) 48%, var(--line));
   box-shadow: inset 0 3px 0 var(--green);
 }
-.comparison-model-guide article > span {
+.comparison-model-guide article.actionable {
+  padding: 0;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+.comparison-model-guide article.actionable:hover {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  transform: translateY(-1px);
+}
+.comparison-model-guide article.actionable > button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.7rem;
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 0.8rem;
+  text-align: left;
+  width: 100%;
+}
+.comparison-model-guide article > span,
+.comparison-model-guide article > button > span {
   align-items: center;
   background: var(--card);
   border: 1px solid var(--line);
@@ -8329,6 +8353,14 @@ tbody tr:last-child td {
   font-size: 0.64rem;
   line-height: 1.45;
   margin: 0.2rem 0 0;
+}
+.comparison-model-guide em {
+  color: var(--green);
+  display: block;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 800;
+  margin-top: 0.45rem;
 }
 .cohort-toolbar {
   align-items: end;
@@ -8383,15 +8415,32 @@ tbody tr:last-child td {
 }
 .cohort-row {
   align-items: center;
+  background: var(--card);
   border: 1px solid var(--line);
   border-left: 4px solid var(--green);
   border-radius: 12px;
+  color: var(--ink);
+  cursor: pointer;
   display: grid;
+  font: inherit;
   gap: 1rem;
   grid-template-columns:
     minmax(220px, 1.25fr) minmax(180px, 0.9fr) minmax(230px, 1.1fr)
     minmax(150px, 0.7fr);
-  padding: 0.85rem;
+  padding: 0.85rem 2rem 0.85rem 0.85rem;
+  position: relative;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+  width: 100%;
+}
+.cohort-row:hover,
+.cohort-row:focus-visible {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 8%, transparent);
+  transform: translateY(-1px);
 }
 .cohort-row.competitor_lower {
   border-left-color: var(--amber);
@@ -8490,6 +8539,14 @@ tbody tr:last-child td {
   font-size: 0.84rem;
   font-weight: 850;
   margin: 0;
+}
+.cohort-row-action {
+  bottom: 0.45rem;
+  color: var(--green);
+  font-size: 0.58rem;
+  font-weight: 850;
+  position: absolute;
+  right: 0.65rem;
 }
 .cohort-empty {
   background: var(--surface-alt);
@@ -10385,8 +10442,24 @@ tbody tr:last-child td {
   text-transform: uppercase;
 }
 .segment-matrix-row {
+  background: var(--card);
+  border: 0;
   border-top: 1px solid var(--soft-line);
+  color: var(--ink);
+  cursor: pointer;
   font-size: 0.76rem;
+  padding-right: 6.5rem;
+  position: relative;
+  text-align: left;
+  transition: background 140ms ease;
+  width: 100%;
+}
+.segment-matrix-row:hover,
+.segment-matrix-row:focus-visible {
+  background: var(--surface-alt);
+}
+.segment-matrix-row:disabled {
+  cursor: default;
 }
 .segment-matrix-row > div {
   display: grid;
@@ -10395,6 +10468,13 @@ tbody tr:last-child td {
 .segment-matrix-row span {
   color: var(--muted);
   font-size: 0.66rem;
+}
+.segment-matrix-row .segment-matrix-action {
+  color: var(--green);
+  font-size: 0.62rem;
+  font-weight: 850;
+  position: absolute;
+  right: 1rem;
 }
 .segment-leader {
   border-radius: 999px;

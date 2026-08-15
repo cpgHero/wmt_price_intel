@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { JsonObject } from "@/lib/api";
 import {
   comparableCohorts,
+  type ComparableCohort,
   type CohortOutcome,
   type CohortSort,
   sortComparableCohorts,
@@ -63,6 +64,8 @@ export function ComparableCohortExplorer({
   minimumGeographies,
   ambiguousMatches,
   onReviewMatches,
+  onOpenAssortment,
+  onOpenCohort,
 }: Readonly<{
   records: JsonObject[];
   benchmarkName: string;
@@ -70,6 +73,8 @@ export function ComparableCohortExplorer({
   minimumGeographies: number;
   ambiguousMatches: number;
   onReviewMatches: () => void;
+  onOpenAssortment: () => void;
+  onOpenCohort: (cohort: ComparableCohort) => void;
 }>) {
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [sort, setSort] = useState<CohortSort>("evidence");
@@ -111,15 +116,19 @@ export function ComparableCohortExplorer({
       </header>
 
       <div className="comparison-model-guide" aria-label="Comparison hierarchy">
-        <article>
-          <span>1</span>
-          <div>
-            <small>Auditable price evidence</small>
-            <strong>One-to-one item relationships</strong>
-            <p>
-              One primary SKU and one competitor SKU within each eligible lens.
-            </p>
-          </div>
+        <article className="actionable">
+          <button type="button" onClick={onReviewMatches}>
+            <span>1</span>
+            <div>
+              <small>Auditable price evidence</small>
+              <strong>One-to-one item relationships</strong>
+              <p>
+                One primary SKU and one competitor SKU within each eligible
+                comparison basis.
+              </p>
+              <em>Open governed relationships →</em>
+            </div>
+          </button>
         </article>
         <article className="active">
           <span>2</span>
@@ -127,17 +136,21 @@ export function ComparableCohortExplorer({
             <small>Category-level comparison</small>
             <strong>Comparable Product Pack cohorts</strong>
             <p>{dimensions}</p>
+            <em>Current view</em>
           </div>
         </article>
-        <article>
-          <span>3</span>
-          <div>
-            <small>Range and whitespace</small>
-            <strong>Assortment rollups</strong>
-            <p>
-              Retailer, brand, and geographic breadth—not assumed substitutes.
-            </p>
-          </div>
+        <article className="actionable">
+          <button type="button" onClick={onOpenAssortment}>
+            <span>3</span>
+            <div>
+              <small>Range and whitespace</small>
+              <strong>Assortment rollups</strong>
+              <p>
+                Retailer, brand, and geographic breadth—not assumed substitutes.
+              </p>
+              <em>Open assortment analysis →</em>
+            </div>
+          </button>
         </article>
       </div>
 
@@ -184,7 +197,13 @@ export function ComparableCohortExplorer({
         {visible.map((cohort) => {
           const limited = cohort.matchedGeographies < minimumGeographies;
           return (
-            <article className={`cohort-row ${cohort.outcome}`} key={cohort.id}>
+            <button
+              type="button"
+              className={`cohort-row ${cohort.outcome}`}
+              key={cohort.id}
+              onClick={() => onOpenCohort(cohort)}
+              aria-label={`View products included in ${cohort.segment} for ${cohort.competitor}`}
+            >
               <div className="cohort-title">
                 <span>{cohort.competitor}</span>
                 <h3>{cohort.segment}</h3>
@@ -251,7 +270,10 @@ export function ComparableCohortExplorer({
                   <dd>{formatCurrency(cohort.competitorMedian)}</dd>
                 </div>
               </dl>
-            </article>
+              <span className="cohort-row-action">
+                View included products →
+              </span>
+            </button>
           );
         })}
         {!visible.length ? (

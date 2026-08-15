@@ -295,7 +295,7 @@ export function BrandWorkbenchPanel({
           roles. Search evidence determines where each brand is actually
           distributed; a broad footprint alone never proves a national role.{" "}
           {readOnly
-            ? "This report view is read-only; open Workspace to govern classifications."
+            ? "This report view is read-only; open the Administration Brand Workbench to govern classifications."
             : ""}
         </p>
         <div className="brand-revision-card">

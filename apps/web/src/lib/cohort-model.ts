@@ -12,6 +12,8 @@ export interface ComparableCohort {
   profileId: string;
   segmentId: string;
   segment: string;
+  attributes: Record<string, unknown>;
+  overall: boolean;
   matches: number;
   matchedGeographies: number;
   benchmarkLowerRate: number;
@@ -55,51 +57,62 @@ function outcomeValue(value: unknown): CohortOutcome {
   return "unavailable";
 }
 
+export function comparableCohort(row: JsonObject): ComparableCohort | null {
+  const segment = String(row.segment ?? "").trim();
+  if (!segment) return null;
+  const competitor = String(row.competitor ?? "Competitor");
+  const competitorId = String(row._competitor_id ?? competitor);
+  const profileId = String(row._profile_id ?? "");
+  const segmentId = String(row._segment_id ?? segment);
+  const attributes = row._segment_attributes;
+  return {
+    id: `${competitorId}:${profileId}:${segmentId}`,
+    competitorId,
+    competitor,
+    profileId,
+    segmentId,
+    segment,
+    attributes:
+      attributes && typeof attributes === "object" && !Array.isArray(attributes)
+        ? (attributes as Record<string, unknown>)
+        : {},
+    overall:
+      segmentId.toLocaleLowerCase("en-US") === "all" ||
+      segment.toLocaleLowerCase("en-US") === "all comparable items",
+    matches: numericValue(row, "_matches", "matches") ?? 0,
+    matchedGeographies:
+      numericValue(row, "_matched_geographies", "matched geographies") ?? 0,
+    benchmarkLowerRate:
+      numericValue(row, "_benchmark_lower_rate", "benchmark lower") ?? 0,
+    competitorLowerRate:
+      numericValue(row, "_competitor_lower_rate", "competitor lower") ?? 0,
+    parityRate: numericValue(row, "_parity_rate", "parity") ?? 0,
+    benchmarkMedian: numericValue(
+      row,
+      "_benchmark_median",
+      "benchmark marginal median",
+      "benchmark median",
+    ),
+    competitorMedian: numericValue(
+      row,
+      "_competitor_median",
+      "competitor marginal median",
+      "competitor median",
+    ),
+    medianGap: numericValue(
+      row,
+      "_median_gap",
+      "paired median gap",
+      "competitor - benchmark gap",
+    ),
+    outcome: outcomeValue(row._dominant_outcome ?? row["dominant outcome"]),
+  };
+}
+
 export function comparableCohorts(records: JsonObject[]): ComparableCohort[] {
   return records.flatMap((row) => {
-    const segment = String(row.segment ?? "").trim();
-    if (!segment || segment === "All comparable items") return [];
-    const competitor = String(row.competitor ?? "Competitor");
-    const competitorId = String(row._competitor_id ?? competitor);
-    const profileId = String(row._profile_id ?? "");
-    const segmentId = String(row._segment_id ?? segment);
-    return [
-      {
-        id: `${competitorId}:${profileId}:${segmentId}`,
-        competitorId,
-        competitor,
-        profileId,
-        segmentId,
-        segment,
-        matches: numericValue(row, "_matches", "matches") ?? 0,
-        matchedGeographies:
-          numericValue(row, "_matched_geographies", "matched geographies") ?? 0,
-        benchmarkLowerRate:
-          numericValue(row, "_benchmark_lower_rate", "benchmark lower") ?? 0,
-        competitorLowerRate:
-          numericValue(row, "_competitor_lower_rate", "competitor lower") ?? 0,
-        parityRate: numericValue(row, "_parity_rate", "parity") ?? 0,
-        benchmarkMedian: numericValue(
-          row,
-          "_benchmark_median",
-          "benchmark marginal median",
-          "benchmark median",
-        ),
-        competitorMedian: numericValue(
-          row,
-          "_competitor_median",
-          "competitor marginal median",
-          "competitor median",
-        ),
-        medianGap: numericValue(
-          row,
-          "_median_gap",
-          "paired median gap",
-          "competitor - benchmark gap",
-        ),
-        outcome: outcomeValue(row._dominant_outcome ?? row["dominant outcome"]),
-      },
-    ];
+    const cohort = comparableCohort(row);
+    return cohort && !cohort.overall ? [cohort] : [];
   });
 }
 

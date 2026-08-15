@@ -180,20 +180,20 @@ function productPairKey(row: {
   ].join("::");
 }
 
-/**
- * Project relationship-level evidence for a scorecard without recalculating it.
- * Preferred scorecards use admitted candidates for the exact scorecard profile;
- * the legacy governed-products fallback uses the same decision rows from which
- * that fallback scorecard was reconciled on the server.
- */
-export function scorecardProductSummaries(
-  scorecard: RetailerScorecard,
+type ProductSummaryScope = Pick<
+  RetailerScorecard,
+  "competitor_id" | "competitor" | "profile_id"
+>;
+
+function scopedProductSummaries(
+  scope: ProductSummaryScope,
   candidates: ProductMatchCandidate[],
   decisions: ProductDecision[],
+  governedFallback = false,
 ): ScorecardProductSummary[] {
   const competitorTokens = new Set([
-    retailerIdentityToken(scorecard.competitor_id),
-    retailerIdentityToken(scorecard.competitor),
+    retailerIdentityToken(scope.competitor_id),
+    retailerIdentityToken(scope.competitor),
   ]);
   const admitted = (row: {
     competitor: string;
@@ -211,12 +211,11 @@ export function scorecardProductSummaries(
   const decisionIndex = new Map(
     decisions.filter(admitted).map((row) => [productPairKey(row), row]),
   );
-  const governedFallback = scorecard.profile_id === "governed_products";
   const sourceRows: Array<ProductMatchCandidate | ProductDecision> =
     governedFallback
       ? decisions.filter(admitted)
       : candidates.filter(
-          (row) => admitted(row) && row.profile_id === scorecard.profile_id,
+          (row) => admitted(row) && row.profile_id === scope.profile_id,
         );
   const summaries = sourceRows.map((row) => {
     const decision = decisionIndex.get(productPairKey(row));
@@ -288,6 +287,68 @@ export function scorecardProductSummaries(
     (left, right) =>
       right.matches - left.matches ||
       left.benchmark_product_name.localeCompare(right.benchmark_product_name),
+  );
+}
+
+/**
+ * Project relationship-level evidence for a scorecard without recalculating it.
+ * Preferred scorecards use admitted candidates for the exact scorecard profile;
+ * the legacy governed-products fallback uses the same decision rows from which
+ * that fallback scorecard was reconciled on the server.
+ */
+export function scorecardProductSummaries(
+  scorecard: RetailerScorecard,
+  candidates: ProductMatchCandidate[],
+  decisions: ProductDecision[],
+): ScorecardProductSummary[] {
+  return scopedProductSummaries(
+    scorecard,
+    candidates,
+    decisions,
+    scorecard.profile_id === "governed_products",
+  );
+}
+
+function comparableAttributeValue(value: unknown): string {
+  if (typeof value === "string") return value.trim().toLocaleLowerCase("en-US");
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value);
+}
+
+/**
+ * Select the admitted one-to-one relationships that contributed to a persisted
+ * Product Pack cohort. Cohort metrics remain authoritative from AnalysisResult;
+ * this function only resolves the product identities shown in the drilldown.
+ */
+export function cohortProductSummaries(
+  cohort: {
+    attributes: Record<string, unknown>;
+    competitor: string;
+    competitorId: string;
+    overall: boolean;
+    profileId: string;
+  },
+  candidates: ProductMatchCandidate[],
+  decisions: ProductDecision[],
+): ScorecardProductSummary[] {
+  const products = scopedProductSummaries(
+    {
+      competitor_id: cohort.competitorId,
+      competitor: cohort.competitor,
+      profile_id: cohort.profileId,
+    },
+    candidates,
+    decisions,
+  );
+  if (cohort.overall) return products;
+  const cohortAttributes = Object.entries(cohort.attributes);
+  if (!cohortAttributes.length) return [];
+  return products.filter((product) =>
+    cohortAttributes.every(
+      ([name, value]) =>
+        comparableAttributeValue(product.match_attributes[name]) ===
+        comparableAttributeValue(value),
+    ),
   );
 }
 

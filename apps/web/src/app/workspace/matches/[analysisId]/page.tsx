@@ -42,7 +42,7 @@ export default async function MatchWorkbenchDetailPage({
     <main className="governance-detail-page">
       <header className="page-header compact">
         <div>
-          <p className="eyebrow">Workspace · Match Workbench</p>
+          <p className="eyebrow">Administration · Match Workbench</p>
           <h1>{summary.category}</h1>
         </div>
         <div className="page-header-actions governance-detail-actions">

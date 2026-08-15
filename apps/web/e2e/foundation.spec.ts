@@ -66,6 +66,8 @@ test("serves the branded shell and no-flash theme controls", async ({
   expect(html).toContain("CPGHero");
   expect(html).toContain("Application navigation");
   expect(html).toContain("Home");
+  expect(html).toContain("Analytics");
+  expect(html).not.toContain(">Workspace<");
   expect(html).toContain("Match Workbench");
   expect(html).toContain("Brand Workbench");
   expect(html).toContain("Competitive Intelligence");
@@ -86,7 +88,19 @@ test("supports the responsive application navigation", async ({ page }) => {
     sidebar.getByRole("link", { name: "Home", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
+    sidebar.getByRole("button", { name: "Analytics" }),
+  ).toBeVisible();
+  const administrationGroup = sidebar.getByRole("button", {
+    name: "Administration",
+  });
+  await expect(administrationGroup).toHaveAttribute("aria-expanded", "false");
+  await administrationGroup.click();
+  await expect(administrationGroup).toHaveAttribute("aria-expanded", "true");
+  await expect(
     sidebar.getByRole("link", { name: "Match Workbench" }),
+  ).toBeVisible();
+  await expect(
+    sidebar.getByRole("link", { name: "Brand Workbench" }),
   ).toBeVisible();
 
   const operationsGroup = sidebar.getByRole("button", { name: "Operations" });

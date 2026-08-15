@@ -18,13 +18,13 @@ describe("application navigation", () => {
 
     expect(hrefs).toEqual([
       "/",
-      "/workspace/matches",
-      "/workspace/brands",
       "/price-intelligence",
       "/analyses",
       "/collections",
       "/automation",
       "/data-quality",
+      "/workspace/matches",
+      "/workspace/brands",
       "/admin/studies",
       "/admin/product-packs",
     ]);
@@ -33,7 +33,7 @@ describe("application navigation", () => {
 
   it("keeps the dashboard exact and activates nested workspaces by prefix", () => {
     const dashboard = homeNavigationItem;
-    const competitive = applicationNavigation[1].items[1];
+    const competitive = applicationNavigation[0].items[1];
 
     expect(navigationItemIsActive("/", dashboard)).toBe(true);
     expect(navigationItemIsActive("/collections", dashboard)).toBe(false);

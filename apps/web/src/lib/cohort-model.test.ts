@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { comparableCohorts, sortComparableCohorts } from "./cohort-model";
+import {
+  comparableCohort,
+  comparableCohorts,
+  sortComparableCohorts,
+} from "./cohort-model";
 
 describe("comparable cohort presentation model", () => {
   const rows = [
@@ -8,6 +12,7 @@ describe("comparable cohort presentation model", () => {
       _competitor_id: "aldi_us",
       _profile_id: "private_label",
       _segment_id: "gallon-whole",
+      _segment_attributes: { volume_oz: 128, fat_type: "whole" },
       competitor: "ALDI",
       segment: "128 fl oz · whole · non-organic · non-lactose-free",
       _matches: 1500,
@@ -49,10 +54,22 @@ describe("comparable cohort presentation model", () => {
 
     expect(cohorts).toHaveLength(2);
     expect(cohorts[0]).toMatchObject({
+      attributes: { volume_oz: 128, fat_type: "whole" },
+      overall: false,
       matches: 1500,
       matchedGeographies: 1400,
       medianGap: -0.37,
       outcome: "competitor_lower",
+    });
+  });
+
+  it("exposes the overall row for a governed included-products drilldown", () => {
+    const cohort = comparableCohort(rows[2]);
+
+    expect(cohort).toMatchObject({
+      segmentId: "All comparable items",
+      overall: true,
+      attributes: {},
     });
   });
 

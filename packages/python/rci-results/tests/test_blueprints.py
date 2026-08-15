@@ -397,6 +397,23 @@ def test_comparison_table_projects_matched_geography_count() -> None:
     assert price_section["records"][0]["_dominant_outcome"] == "competitor_lower"
 
 
+def test_comparison_table_retains_segment_attributes_for_product_drilldown() -> None:
+    result = _result()
+    result["comparisons"][0]["segment_id"] = "organic_grass_fed_85_15_1lb"
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+    price_section = next(
+        section for section in view["sections"] if section["kind"] == "price_position"
+    )
+
+    assert price_section["records"][0]["_segment_attributes"] == {
+        "lean_pct": 85,
+        "package_weight_lb": 1,
+        "organic": True,
+        "grass_fed": True,
+    }
+
+
 def test_report_view_exposes_product_pack_cohort_guidance() -> None:
     view = ArtifactRenderer(REPOSITORY_ROOT).report_view(_result())
 

@@ -973,7 +973,7 @@ export function MatchReviewWorkbench({
           Suggested pairs are the deterministic Product Pack relationships used
           by the current analysis.{" "}
           {readOnly
-            ? "This report view is read-only; open Workspace to change governed relationships."
+            ? "This report view is read-only; open the Administration Match Workbench to change governed relationships."
             : "Confirm a pair to lock it, or reject it to remove it from the next governed analysis."}
         </p>
         <div className="match-revision-card">
@@ -1254,7 +1254,7 @@ export function MatchReviewWorkbench({
               <span className="match-row-actions">
                 {readOnly ? (
                   <Link href={workbenchHref(connection)}>
-                    Open in Workspace
+                    Open in Match Workbench
                   </Link>
                 ) : (
                   <>
@@ -1363,7 +1363,7 @@ export function MatchReviewWorkbench({
           relationship for the selected competitor and lens. Their alphabetical
           positions do not imply a pairing.{" "}
           {readOnly
-            ? "Open a product for identity details or continue to Workspace to create a relationship."
+            ? "Open a product for identity details or continue to the Match Workbench to create a relationship."
             : ""}
         </p>
         <div className={`match-builder ${readOnly ? "read-only" : ""}`}>
