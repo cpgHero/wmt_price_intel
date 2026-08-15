@@ -33,11 +33,12 @@ class RetailerCatalog:
         self._known: dict[tuple[str, str], ResolvedRetailer] = {}
         self._static: dict[str, ResolvedRetailer] = {}
         self._dynamic: dict[tuple[str, str], ResolvedRetailer] = {}
-        for item in catalog.get("retailers", []):
-            resolved = self._from_catalog_item(item)
-            self._static[resolved.retailer.id] = resolved
-            for alias in resolved.aliases:
-                self._known[(alias.alias, resolved.retailer.country)] = resolved
+        for group in ("retailers", "normalization_only_retailers"):
+            for item in catalog.get(group, []):
+                resolved = self._from_catalog_item(item)
+                self._static[resolved.retailer.id] = resolved
+                for alias in resolved.aliases:
+                    self._known[(alias.alias, resolved.retailer.country)] = resolved
 
     @classmethod
     def from_path(cls, path: Path) -> RetailerCatalog:

@@ -79,6 +79,8 @@ def test_api_aliases_resolve_within_country() -> None:
     catalog = RetailerCatalog.from_path(CATALOG_PATH)
     assert catalog.resolve("new_aldi", "USA").retailer.id == "aldi_us"
     assert catalog.resolve("ALDI.US", "US").retailer.id == "aldi_us"
+    assert catalog.resolve("gianteagle.com", "USA").retailer.id == "giant_eagle_us"
+    assert catalog.resolve("Trader Joe's", "US").retailer.id == "trader_joes_us"
     assert catalog.resolve("Target", "Australia").retailer.id == "target__au"
 
 
