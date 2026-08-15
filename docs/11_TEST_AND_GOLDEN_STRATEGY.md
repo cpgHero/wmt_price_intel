@@ -39,6 +39,17 @@ precision, includes per-stratum metrics, fails any unlabeled automatic approval,
 synthetic contract fixtures to claim release readiness. The five-category order is eggs, milk,
 ground beef, strawberries, then bananas.
 
+The Phase 13.4 evidence profiler and review-queue tests are run with:
+
+```bash
+uv run pytest packages/python/rci-analytics/tests/test_matching_v2.py \
+  packages/python/rci-contracts/tests/test_validator.py \
+  apps/api/tests/test_matching_v2_review.py
+```
+
+Full-data evidence results and the human certification workflow are documented in
+`docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`.
+
 ## Regression sequence
 
 Strawberries -> Eggs -> Milk -> Bananas.

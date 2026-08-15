@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "id": "fresh_fluid_milk_leadership",
-  "version": "1.1.0",
-  "product_pack": { "id": "fresh_fluid_milk", "version": "1.2.0" },
+  "version": "1.2.0",
+  "product_pack": { "id": "fresh_fluid_milk", "version": "1.3.0" },
   "brand_profile": {
     "id": "cpghero_rci",
     "version": "1.0.0",

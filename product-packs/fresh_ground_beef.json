@@ -1,7 +1,7 @@
 {
   "id": "fresh_ground_beef",
   "name": "Fresh Ground Beef",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category_family": "fresh_meat",
   "description": "Raw fresh ground beef segmented by lean/fat ratio, package weight, production claims, and premium tier.",
   "scope": {
@@ -275,6 +275,31 @@
       }
     ],
     "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_v2": {
+    "policy_version": "2.0.0-shadow.1",
+    "certification_state": "shadow",
+    "attribute_roles": {
+      "lean_pct": {"role": "hard_blocker", "critical": true, "weight": 6, "numeric_tolerance": 0},
+      "fat_pct": {"role": "hard_blocker", "critical": true, "weight": 6, "numeric_tolerance": 0},
+      "weight_lb": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0.01},
+      "organic": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "grass_fed": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "premium_tier": {"role": "hard_blocker", "critical": true, "weight": 4},
+      "package_format": {"role": "soft_comparator", "critical": false, "weight": 1},
+      "brand": {"role": "descriptive", "critical": false, "weight": 0}
+    },
+    "exact_item_identifier_schemes": ["gtin", "upc", "manufacturer_item_id"],
+    "eligible_price_bases": ["exact_package", "random_weight_unit"],
+    "price_basis_requirements": {"exact_package": ["weight_lb"]},
+    "minimum_equivalent_coverage": 0.85,
+    "equivalent_score_threshold": 0.92,
+    "allow_comparable_substitute": true,
+    "auto_approval_tiers": [],
+    "geography_policy": "physical_store_radius",
+    "scope_mode": "observed_distribution",
+    "fulfillment_types": ["pickup"],
+    "maximum_candidate_pairs": 250000
   },
   "matching_profiles": [
     {
@@ -1273,7 +1298,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_ground_beef_leadership",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Show where Walmart's ground-beef price position is structurally strong, where ALDI or Amazon creates segment-specific pressure, and whether exact-package conclusions change after price-per-pound or proximity normalization.",

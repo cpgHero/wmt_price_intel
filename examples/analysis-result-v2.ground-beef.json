@@ -24,11 +24,11 @@
   ],
   "product_pack": {
     "id": "fresh_ground_beef",
-    "version": "1.0.0",
-    "checksum_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "version": "1.1.0",
+    "checksum_sha256": "17bfeedfe42046f939f5734060dc75ee07672be847bd6610611f126603e10ef1",
     "report_blueprint": {
       "id": "fresh_ground_beef_leadership",
-      "version": "1.0.0"
+      "version": "1.1.0"
     }
   },
   "metrics": [

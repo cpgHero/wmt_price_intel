@@ -36,7 +36,7 @@ class FakeResults:
             collection_run_id="00000000-0000-0000-0000-000000000311",
             status="succeeded",
             product_pack_id="fresh_fluid_milk",
-            product_pack_version="1.2.0",
+            product_pack_version="1.3.0",
             schema_version="2.0.0",
             checksum="a" * 64,
             result={

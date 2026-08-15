@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/matching-v2-evidence-profile.schema.json",
+  "title": "Matching Architecture v2 Evidence Quality Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "profile_version",
+    "authoritative",
+    "product_pack",
+    "matching_policy",
+    "benchmark_retailer_id",
+    "competitor_retailer_ids",
+    "decided_at",
+    "source_files",
+    "totals",
+    "normalization_failure_reasons",
+    "retailers",
+    "shadow_results",
+    "review_queue",
+    "quality_findings",
+    "release_use",
+    "checksum"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "profile_version": { "type": "string", "minLength": 1 },
+    "authoritative": { "const": false },
+    "product_pack": { "$ref": "#/$defs/versionedId" },
+    "matching_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "version", "checksum"],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "checksum": { "$ref": "#/$defs/checksum" }
+      }
+    },
+    "benchmark_retailer_id": { "type": "string", "minLength": 1 },
+    "competitor_retailer_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "decided_at": { "type": "string", "format": "date-time" },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sourceFile" }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_rows",
+        "normalized_unique_rows",
+        "normalization_failures",
+        "expected_retailer_mismatches"
+      ],
+      "properties": {
+        "source_rows": { "$ref": "#/$defs/count" },
+        "normalized_unique_rows": { "$ref": "#/$defs/count" },
+        "normalization_failures": { "$ref": "#/$defs/count" },
+        "expected_retailer_mismatches": { "$ref": "#/$defs/count" }
+      }
+    },
+    "normalization_failure_reasons": { "$ref": "#/$defs/countMap" },
+    "retailers": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/retailer" }
+    },
+    "shadow_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/shadowResult" }
+    },
+    "review_queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queue_id", "version", "checksum", "case_count"],
+      "properties": {
+        "queue_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "checksum": { "$ref": "#/$defs/checksum" },
+        "case_count": { "$ref": "#/$defs/count" }
+      }
+    },
+    "quality_findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "release_use": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eligible", "reason"],
+      "properties": {
+        "eligible": { "const": false },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "checksum": { "$ref": "#/$defs/checksum" }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/count" }
+    },
+    "versionedId": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_name",
+        "sha256",
+        "size_bytes",
+        "row_count",
+        "declared_retailer_id",
+        "normalized_retailer_counts",
+        "evidence_reference"
+      ],
+      "properties": {
+        "file_name": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/checksum" },
+        "size_bytes": { "$ref": "#/$defs/count" },
+        "row_count": { "$ref": "#/$defs/count" },
+        "declared_retailer_id": { "type": ["string", "null"] },
+        "normalized_retailer_counts": { "$ref": "#/$defs/countMap" },
+        "evidence_reference": { "type": "string", "minLength": 1 }
+      }
+    },
+    "attributeQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["known_listings", "known_rate", "conflicted_listings", "sources"],
+      "properties": {
+        "known_listings": { "$ref": "#/$defs/count" },
+        "known_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "conflicted_listings": { "$ref": "#/$defs/count" },
+        "sources": { "$ref": "#/$defs/countMap" }
+      }
+    },
+    "listingQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "listing_count",
+        "listings_with_all_critical_attributes",
+        "critical_attribute_completeness_rate",
+        "attribute_evidence"
+      ],
+      "properties": {
+        "listing_count": { "$ref": "#/$defs/count" },
+        "listings_with_all_critical_attributes": { "$ref": "#/$defs/count" },
+        "critical_attribute_completeness_rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "attribute_evidence": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/attributeQuality" }
+        }
+      }
+    },
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retailer_id",
+        "source_rows",
+        "normalized_unique_rows",
+        "duplicate_rows",
+        "positive_price_rows",
+        "in_scope_rows",
+        "distinct_products",
+        "distinct_in_scope_products",
+        "distinct_locations",
+        "distinct_in_scope_locations",
+        "out_of_scope_reasons",
+        "listing_evidence_quality"
+      ],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "source_rows": { "$ref": "#/$defs/count" },
+        "normalized_unique_rows": { "$ref": "#/$defs/count" },
+        "duplicate_rows": { "$ref": "#/$defs/count" },
+        "positive_price_rows": { "$ref": "#/$defs/count" },
+        "in_scope_rows": { "$ref": "#/$defs/count" },
+        "distinct_products": { "$ref": "#/$defs/count" },
+        "distinct_in_scope_products": { "$ref": "#/$defs/count" },
+        "distinct_locations": { "$ref": "#/$defs/count" },
+        "distinct_in_scope_locations": { "$ref": "#/$defs/count" },
+        "out_of_scope_reasons": { "$ref": "#/$defs/countMap" },
+        "listing_evidence_quality": { "$ref": "#/$defs/listingQuality" }
+      }
+    },
+    "shadowResult": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "product_pack_id",
+        "product_pack_version",
+        "profile_id",
+        "policy_checksum",
+        "benchmark_retailer_id",
+        "competitor_retailer_id",
+        "benchmark_listings",
+        "competitor_listings",
+        "possible_pairs",
+        "evaluated_pairs",
+        "blocked_pairs",
+        "blocked_review_sample",
+        "tier_counts",
+        "status_counts",
+        "auto_approved_edges",
+        "review_edges",
+        "not_comparable_edges"
+      ],
+      "properties": {
+        "schema_version": { "type": "string", "minLength": 1 },
+        "product_pack_id": { "type": "string", "minLength": 1 },
+        "product_pack_version": { "type": "string", "minLength": 1 },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "policy_checksum": { "$ref": "#/$defs/checksum" },
+        "benchmark_retailer_id": { "type": "string", "minLength": 1 },
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "benchmark_listings": { "$ref": "#/$defs/count" },
+        "competitor_listings": { "$ref": "#/$defs/count" },
+        "possible_pairs": { "$ref": "#/$defs/count" },
+        "evaluated_pairs": { "$ref": "#/$defs/count" },
+        "blocked_pairs": { "$ref": "#/$defs/count" },
+        "blocked_review_sample": { "$ref": "#/$defs/count" },
+        "tier_counts": { "$ref": "#/$defs/countMap" },
+        "status_counts": { "$ref": "#/$defs/countMap" },
+        "auto_approved_edges": { "$ref": "#/$defs/count" },
+        "review_edges": { "$ref": "#/$defs/count" },
+        "not_comparable_edges": { "$ref": "#/$defs/count" }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "critical"] },
+        "code": { "type": "string", "minLength": 1 },
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -154,6 +154,21 @@ def test_matching_v2_synthetic_gold_fixture_cannot_claim_release_review() -> Non
         )
 
 
+def test_matching_v2_review_queue_is_explicitly_non_authoritative() -> None:
+    queue = json.loads(
+        (REPOSITORY_ROOT / "examples/matching-v2-review-queue.milk.json").read_text()
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-review-queue.schema.json",
+        queue,
+        label="matching v2 review queue",
+    )
+
+    assert queue["authoritative"] is False
+    assert {case["review_state"] for case in queue["cases"]} == {"pending"}
+
+
 def test_agent_contract_forbids_authoritative_metric_computation() -> None:
     output = json.loads(
         (REPOSITORY_ROOT / "examples/agent-output.ground-beef-insight.json").read_text(

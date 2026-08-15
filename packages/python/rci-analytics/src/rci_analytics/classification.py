@@ -54,8 +54,12 @@ def _exclusion_patterns(pack: ProductPack) -> tuple[str, ...]:
 
 
 def _contains_pattern(text: str, pattern: str) -> bool:
+    return bool(_compile_term_pattern(pattern).search(text))
+
+
+def _compile_term_pattern(pattern: str) -> re.Pattern[str]:
     expression = r"\s+".join(rf"{re.escape(word)}(?:s|es)?" for word in pattern.split())
-    return bool(re.search(rf"\b{expression}\b", text))
+    return re.compile(rf"\b{expression}\b")
 
 
 class FormulaEvaluator:
@@ -100,7 +104,69 @@ class OfferClassifier:
         self._brand_resolver = brand_resolver
         self._targets = _target_terms(pack)
         self._exclusions = _exclusion_patterns(pack)
+        self._target_patterns = tuple(
+            re.compile(rf"\b{re.escape(term)}\b") for term in sorted(self._targets)
+        )
+        self._exclusion_patterns = tuple(
+            (value, _compile_term_pattern(value)) for value in self._exclusions
+        )
         self._formulas = FormulaEvaluator()
+        self._term_maps: dict[int, tuple[tuple[re.Pattern[str], Any], ...]] = {}
+        self._boolean_terms: dict[
+            int, tuple[tuple[re.Pattern[str], ...], tuple[re.Pattern[str], ...]]
+        ] = {}
+        self._measurement_rules: dict[int, tuple[re.Pattern[str], dict[str, Decimal]]] = {}
+        self._number_patterns: dict[int, tuple[re.Pattern[str], ...]] = {}
+        self._compile_rules()
+
+    def _compile_rules(self) -> None:
+        for definition in self.pack.attributes:
+            for rule in definition.get("extraction_rules", []):
+                rule_type = str(rule["type"])
+                if rule_type == "term_map":
+                    candidates = [
+                        (_normalized_text(str(term)), value)
+                        for value, terms in rule.get("values", {}).items()
+                        for term in terms
+                    ]
+                    candidates.sort(key=lambda item: (-len(item[0].split()), -len(item[0])))
+                    self._term_maps[id(rule)] = tuple(
+                        (_compile_term_pattern(term), value) for term, value in candidates
+                    )
+                elif rule_type == "boolean_terms":
+                    self._boolean_terms[id(rule)] = (
+                        self._compile_term_list(rule.get("true_terms", [])),
+                        self._compile_term_list(rule.get("false_terms", [])),
+                    )
+                elif rule_type == "measurement":
+                    units = {
+                        _normalized_text(str(key)): Decimal(str(value))
+                        for key, value in rule["units"].items()
+                    }
+                    aliases = sorted(
+                        units,
+                        key=lambda value: (-len(value.split()), -len(value)),
+                    )
+                    unit_expression = "|".join(
+                        r"\s+".join(re.escape(word) for word in alias.split()) for alias in aliases
+                    )
+                    self._measurement_rules[id(rule)] = (
+                        re.compile(rf"(?<![\d.])(\d+(?:\.\d+)?)\s*({unit_expression})(?![a-z])"),
+                        units,
+                    )
+                elif rule_type == "number_pattern":
+                    self._number_patterns[id(rule)] = tuple(
+                        re.compile(str(pattern), re.IGNORECASE)
+                        for pattern in rule.get("patterns", [])
+                    )
+
+    @staticmethod
+    def _compile_term_list(values: Any) -> tuple[re.Pattern[str], ...]:
+        candidates = sorted(
+            (_normalized_text(str(value)) for value in values),
+            key=lambda value: (-len(value.split()), -len(value)),
+        )
+        return tuple(_compile_term_pattern(value) for value in candidates)
 
     def classify(self, offer: NormalizedOffer) -> ClassifiedOffer:
         retailer_override, product_override = self._product_override(offer)
@@ -165,13 +231,13 @@ class OfferClassifier:
             product_override is not None and product_override.get("scope") == "include"
         )
         if not explicit_include and not any(
-            re.search(rf"\b{re.escape(term)}\b", title) for term in self._targets
+            pattern.search(title) for pattern in self._target_patterns
         ):
             return False, "target product term absent"
         if not explicit_include:
-            for pattern in self._exclusions:
-                if _contains_pattern(text, pattern):
-                    return False, f"excluded scope pattern: {pattern}"
+            for value, pattern in self._exclusion_patterns:
+                if pattern.search(text):
+                    return False, f"excluded scope pattern: {value}"
         if self.pack.document["scope"].get("require_positive_price") and (
             offer.price is None or offer.price <= 0
         ):
@@ -200,29 +266,16 @@ class OfferClassifier:
         for rule in definition.get("extraction_rules", []):
             value = self._apply_extraction_rule(rule, definition, offer)
             if value is not None:
-                if self._used_fallback_default(rule, definition, offer):
-                    # Missing evidence is unknown. A Product Pack may explicitly opt into
-                    # a default only when the absence itself is authoritative evidence.
-                    if str(rule.get("absence_policy") or "unknown") != "infer_default":
-                        return None, "unresolved"
-                    return value, "product_pack_default"
                 return value, (
                     "product_pack_constant" if str(rule.get("type")) == "constant" else "search"
                 )
+            if rule.get("default") is not None:
+                # Missing evidence is unknown. A Product Pack may explicitly opt into
+                # a default only when the absence itself is authoritative evidence.
+                if str(rule.get("absence_policy") or "unknown") != "infer_default":
+                    return None, "unresolved"
+                return self._coerce(rule["default"], definition), "product_pack_default"
         return None, "unresolved"
-
-    def _used_fallback_default(
-        self,
-        rule: JsonObject,
-        definition: JsonObject,
-        offer: NormalizedOffer,
-    ) -> bool:
-        """Return whether a configured default—not observed evidence—produced the value."""
-
-        if "default" not in rule:
-            return False
-        without_default = {key: value for key, value in rule.items() if key != "default"}
-        return self._apply_extraction_rule(without_default, definition, offer) is None
 
     def _apply_extraction_rule(
         self, rule: JsonObject, definition: JsonObject, offer: NormalizedOffer
@@ -243,13 +296,12 @@ class OfferClassifier:
             return self._term_map(rule, definition, offer)
         if rule_type == "boolean_terms":
             text = self._rule_text(rule, offer)
-            true_terms = tuple(str(value) for value in rule.get("true_terms", []))
-            false_terms = tuple(str(value) for value in rule.get("false_terms", []))
+            true_terms, false_terms = self._boolean_terms[id(rule)]
             if self._contains_any(text, true_terms):
                 return True
             if self._contains_any(text, false_terms):
                 return False
-            return rule.get("default")
+            return None
         raise ValueError(f"unknown extraction rule type {rule_type!r}")
 
     @staticmethod
@@ -277,7 +329,7 @@ class OfferClassifier:
     def _source_values(rule: JsonObject, offer: NormalizedOffer) -> tuple[Any, ...]:
         sources = rule.get("sources", ["text"])
         values: list[Any] = []
-        raw_keys = {_normalized_text(str(key)): value for key, value in offer.raw.items()}
+        raw_keys: dict[str, Any] | None = None
         for source in sources:
             source_name = str(source)
             if source_name in {"text", "raw_text"}:
@@ -292,6 +344,10 @@ class OfferClassifier:
             elif source_name == "retailer_product_id":
                 values.append(offer.retailer_product_id)
             elif source_name.startswith("raw."):
+                if raw_keys is None:
+                    raw_keys = {
+                        _normalized_text(str(key)): value for key, value in offer.raw.items()
+                    }
                 values.append(raw_keys.get(_normalized_text(source_name[4:])))
             else:
                 raise ValueError(f"unknown extraction source {source_name!r}")
@@ -305,20 +361,13 @@ class OfferClassifier:
         return _normalized_text(text)
 
     def _measurement(self, rule: JsonObject, definition: JsonObject, offer: NormalizedOffer) -> Any:
-        units = {str(key): Decimal(str(value)) for key, value in rule["units"].items()}
-        aliases = sorted(
-            ((_normalized_text(alias), factor) for alias, factor in units.items()),
-            key=lambda value: (-len(value[0].split()), -len(value[0])),
-        )
-        unit_expression = "|".join(
-            r"\s+".join(re.escape(word) for word in alias.split()) for alias, _ in aliases
-        )
+        pattern, units = self._measurement_rules[id(rule)]
         text = self._rule_text(rule, offer)
-        match = re.search(rf"(?<![\d.])(\d+(?:\.\d+)?)\s*({unit_expression})(?![a-z])", text)
+        match = pattern.search(text)
         if match is None:
             return None
         matched_unit = _normalized_text(match.group(2))
-        factor = next(value for alias, value in aliases if alias == matched_unit)
+        factor = units[matched_unit]
         return self._coerce(Decimal(match.group(1)) * factor, definition)
 
     def _number_pattern(
@@ -326,33 +375,22 @@ class OfferClassifier:
     ) -> Any:
         text = self._rule_text(rule, offer)
         group = int(rule.get("group", 1))
-        for pattern in rule.get("patterns", []):
-            match = re.search(str(pattern), text, re.IGNORECASE)
+        for pattern in self._number_patterns[id(rule)]:
+            match = pattern.search(text)
             if match is not None:
                 return self._coerce(match.group(group), definition)
         return None
 
     def _term_map(self, rule: JsonObject, definition: JsonObject, offer: NormalizedOffer) -> Any:
         text = self._rule_text(rule, offer)
-        candidates = [
-            (_normalized_text(str(term)), value)
-            for value, terms in rule.get("values", {}).items()
-            for term in terms
-        ]
-        candidates.sort(key=lambda item: (-len(item[0].split()), -len(item[0])))
-        for term, value in candidates:
-            if _contains_pattern(text, term):
+        for pattern, value in self._term_maps[id(rule)]:
+            if pattern.search(text):
                 return self._coerce(value, definition)
-        default = rule.get("default")
-        return self._coerce(default, definition) if default is not None else None
+        return None
 
     @staticmethod
-    def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
-        candidates = sorted(
-            (_normalized_text(value) for value in terms),
-            key=lambda value: (-len(value.split()), -len(value)),
-        )
-        return any(_contains_pattern(text, term) for term in candidates)
+    def _contains_any(text: str, terms: tuple[re.Pattern[str], ...]) -> bool:
+        return any(term.search(text) for term in terms)
 
     def _metrics(self, offer: NormalizedOffer, attributes: JsonObject) -> dict[str, Decimal | None]:
         values: dict[str, Decimal | None] = {"price": offer.price}

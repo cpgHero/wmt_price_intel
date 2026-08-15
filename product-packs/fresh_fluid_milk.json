@@ -1,7 +1,7 @@
 {
   "id": "fresh_fluid_milk",
   "name": "Fresh Fluid Milk",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "category_family": "dairy",
   "scope": {
     "target_terms": [
@@ -375,6 +375,35 @@
     "forbidden_metrics": [],
     "package_equivalence_policy": "exact_package_first"
   },
+  "matching_v2": {
+    "policy_version": "2.0.0-shadow.1",
+    "certification_state": "shadow",
+    "attribute_roles": {
+      "volume_oz": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0.5},
+      "fat_type": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "flavor": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "organic": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "lactose_free": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "ultrafiltered": {"role": "hard_blocker", "critical": true, "weight": 4},
+      "a2": {"role": "hard_blocker", "critical": true, "weight": 4},
+      "grass_fed": {"role": "hard_blocker", "critical": true, "weight": 4},
+      "omega_3_dha": {"role": "hard_blocker", "critical": true, "weight": 3},
+      "kids": {"role": "hard_blocker", "critical": true, "weight": 3},
+      "protein_fortified": {"role": "hard_blocker", "critical": true, "weight": 4},
+      "brand": {"role": "descriptive", "critical": false, "weight": 0}
+    },
+    "exact_item_identifier_schemes": ["gtin", "upc", "manufacturer_item_id"],
+    "eligible_price_bases": ["exact_package", "normalized_unit"],
+    "price_basis_requirements": {"exact_package": ["volume_oz"]},
+    "minimum_equivalent_coverage": 0.9,
+    "equivalent_score_threshold": 0.94,
+    "allow_comparable_substitute": true,
+    "auto_approval_tiers": [],
+    "geography_policy": "physical_store_radius",
+    "scope_mode": "observed_distribution",
+    "fulfillment_types": ["pickup"],
+    "maximum_candidate_pairs": 250000
+  },
   "matching_profiles": [
     {
       "id": "same_brand_exact",
@@ -620,7 +649,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_fluid_milk_leadership",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Separate Walmart's conventional milk strengths from specialty vulnerabilities and distinguish Amazon same-brand, private-label, and broader equivalent-product economics.",

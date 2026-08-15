@@ -97,7 +97,7 @@ def test_full_banana_golden_regression() -> None:
     )
     comparisons = _expected_comparisons()
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas")
-    assert pack.version == "1.1.0"
+    assert pack.version == "1.2.0"
     normalizer = CanonicalOfferNormalizer(
         RetailerIdentityMap.from_catalog(REPOSITORY_ROOT / "config/retailer-catalog.json")
     )

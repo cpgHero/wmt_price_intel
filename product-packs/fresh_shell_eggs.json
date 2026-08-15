@@ -1,7 +1,7 @@
 {
   "id": "fresh_shell_eggs",
   "name": "Fresh Shell Eggs",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "category_family": "dairy_eggs",
   "scope": {
     "target_terms": [
@@ -258,6 +258,30 @@
     "forbidden_metrics": [],
     "package_equivalence_policy": "exact_package_first"
   },
+  "matching_v2": {
+    "policy_version": "2.0.0-shadow.1",
+    "certification_state": "shadow",
+    "attribute_roles": {
+      "count": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0},
+      "size": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "shell_color": {"role": "soft_comparator", "critical": true, "weight": 2},
+      "grade": {"role": "soft_comparator", "critical": true, "weight": 3},
+      "organic": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "housing": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "brand": {"role": "descriptive", "critical": false, "weight": 0}
+    },
+    "exact_item_identifier_schemes": ["gtin", "upc", "manufacturer_item_id"],
+    "eligible_price_bases": ["exact_package", "normalized_unit"],
+    "price_basis_requirements": {"exact_package": ["count"]},
+    "minimum_equivalent_coverage": 0.8,
+    "equivalent_score_threshold": 0.9,
+    "allow_comparable_substitute": true,
+    "auto_approval_tiers": [],
+    "geography_policy": "physical_store_radius",
+    "scope_mode": "observed_distribution",
+    "fulfillment_types": ["pickup"],
+    "maximum_candidate_pairs": 250000
+  },
   "matching_profiles": [
     {
       "id": "strict",
@@ -340,7 +364,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_shell_eggs_leadership",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Identify Walmart's broad fresh-shell-egg price position, the retailer and product segments that create material risk, and the regional or data-quality distinctions that should shape monitoring.",

@@ -219,9 +219,13 @@ unbounded pair expansion; shadow errors never modify or fail the authoritative a
 - Connect report product/cohort/scorecard/assortment drawers to the same contract.
 - Replace global assortment match state with local family × store × competitor facts.
 
-The first surface is deliberately read-only and identified as shadow evidence. It exposes policy,
-tier, attribute outcomes, evidence coverage, brand relationship, eligible price bases, and decision
-rationale inside the existing Match Workbench. No v2 confirm/reject route exists before cutover.
+The first report-facing surface is deliberately read-only and identified as shadow evidence. It
+exposes policy, tier, attribute outcomes, evidence coverage, brand relationship, eligible price
+bases, and decision rationale inside the existing Match Workbench.
+
+Phase 13.4 adds a separate protected certification workbench. Its append-only review and
+adjudication routes create release evidence only; they do not mutate report matches or make v2
+authoritative. See `docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`.
 
 Release certification uses `matching-v2-gold-set.schema.json`. Synthetic fixtures can test the
 contract but cannot pass a release gate. Every release label must be adjudicated by at least two

@@ -1,7 +1,7 @@
 {
   "id": "fresh_bananas",
   "name": "Fresh Bananas & Plantains",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "category_family": "produce",
   "scope": {
     "target_terms": [
@@ -361,6 +361,31 @@
     ],
     "package_equivalence_policy": "category_specific"
   },
+  "matching_v2": {
+    "policy_version": "2.0.0-shadow.1",
+    "certification_state": "shadow",
+    "attribute_roles": {
+      "variety": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "organic": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "selling_unit": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "weight_lb": {"role": "soft_comparator", "critical": false, "weight": 3, "numeric_tolerance": 0.05},
+      "count_min": {"role": "soft_comparator", "critical": false, "weight": 2, "numeric_tolerance": 0},
+      "count_max": {"role": "soft_comparator", "critical": false, "weight": 2, "numeric_tolerance": 0},
+      "retailer_product_id": {"role": "ignored", "critical": false, "weight": 0},
+      "brand": {"role": "descriptive", "critical": false, "weight": 0}
+    },
+    "exact_item_identifier_schemes": ["gtin", "upc", "manufacturer_item_id"],
+    "eligible_price_bases": ["exact_package", "normalized_unit"],
+    "price_basis_requirements": {"exact_package": ["selling_unit"]},
+    "minimum_equivalent_coverage": 0.75,
+    "equivalent_score_threshold": 0.9,
+    "allow_comparable_substitute": true,
+    "auto_approval_tiers": [],
+    "geography_policy": "physical_store_radius",
+    "scope_mode": "observed_distribution",
+    "fulfillment_types": ["pickup"],
+    "maximum_candidate_pairs": 250000
+  },
   "matching_profiles": [
     {
       "id": "strict_each",
@@ -559,7 +584,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_bananas_leadership",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Separate banana shelf-price perception from underlying unit economics and identify conclusions that change across each, weight, package, and count-compatible comparisons.",

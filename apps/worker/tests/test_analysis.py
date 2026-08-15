@@ -228,7 +228,7 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
         input_set_id="00000000-0000-0000-0000-000000000703",
         source_kind="live_collection",
         product_pack_id="fresh_strawberries",
-        product_pack_version="1.0.0",
+        product_pack_version="1.1.0",
         definition_config={
             "benchmark_retailer": "walmart_us",
             "retailers": [
@@ -346,7 +346,7 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
         input_set_id=input_set_id,
         source_kind="historical_import",
         product_pack_id="fresh_strawberries",
-        product_pack_version="1.0.0",
+        product_pack_version="1.1.0",
         definition_config={
             "benchmark_retailer": "walmart_us",
             "retailers": [

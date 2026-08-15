@@ -106,6 +106,10 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         next((root / "examples").glob("matching-v2-gold-set.*.json")),
     )
     yield ContractTarget(
+        "matching-v2-review-queue.schema.json",
+        next((root / "examples").glob("matching-v2-review-queue.*.json")),
+    )
+    yield ContractTarget(
         "product-detail-snapshot.schema.json",
         root / "examples" / "product-detail-snapshot.aldi.json",
     )

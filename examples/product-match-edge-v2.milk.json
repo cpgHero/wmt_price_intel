@@ -5,7 +5,7 @@
     "policy_id": "milk_exact_package",
     "version": "1.0.0",
     "product_pack_id": "fresh_fluid_milk",
-    "product_pack_version": "1.2.0",
+    "product_pack_version": "1.3.0",
     "checksum": null
   },
   "benchmark_listing_id": "listing-walmart-10450115",
@@ -13,7 +13,7 @@
   "tier": "exact_specification",
   "status": "auto_approved",
   "brand_relationship": "private_label_to_private_label",
-  "eligible_price_bases": ["exact_package", "normalized_unit", "lowest_eligible_local_offer"],
+  "eligible_price_bases": ["exact_package", "normalized_unit"],
   "evidence_coverage": {
     "known_critical": 4,
     "required_critical": 4,
@@ -30,6 +30,7 @@
       "benchmark_source": "pdp:walmart_us:10450115",
       "competitor_source": "pdp:aldi_us:1234",
       "weight": 1,
+      "reliability": 0.95,
       "rationale": null
     }
   ],

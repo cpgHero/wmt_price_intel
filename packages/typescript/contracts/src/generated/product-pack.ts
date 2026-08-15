@@ -139,25 +139,15 @@ export interface RetailCompetitiveIntelligenceProductPack {
      * @minItems 1
      */
     eligible_price_bases: [
-      (
-        | "exact_package"
-        | "normalized_unit"
-        | "random_weight_unit"
-        | "lowest_eligible_local_offer"
-        | "representative_assortment"
-        | "availability_weighted_portfolio"
-        | "sales_weighted_portfolio"
-      ),
-      ...(
-        | "exact_package"
-        | "normalized_unit"
-        | "random_weight_unit"
-        | "lowest_eligible_local_offer"
-        | "representative_assortment"
-        | "availability_weighted_portfolio"
-        | "sales_weighted_portfolio"
-      )[]
+      "exact_package" | "normalized_unit" | "random_weight_unit",
+      ...("exact_package" | "normalized_unit" | "random_weight_unit")[]
     ];
+    price_basis_requirements: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [string, ...string[]];
+    };
     minimum_equivalent_coverage: number;
     equivalent_score_threshold: number;
     allow_comparable_substitute: boolean;

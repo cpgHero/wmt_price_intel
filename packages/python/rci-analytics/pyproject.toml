@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 rci-analytics-compact = "rci_analytics.cli:main"
+rci-matching-v2-profile = "rci_analytics.matching_v2_profile:main"
 
 [tool.uv.sources]
 rci-collections = { workspace = true }

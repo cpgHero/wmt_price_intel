@@ -55,14 +55,20 @@ Phase 13.1 introduces repository contracts before exposing any new public mutati
   facts, semantic/availability/price coverage, explicit missing reason, selection policy, and
   result.
 
-These contracts are consumed internally during shadow certification. Match Workbench decision
-mutation routes will be versioned only after the five-category evidence and reconciliation gates
-pass; existing match-review routes remain authoritative until that cutover.
+These contracts are consumed internally during shadow certification. Existing match-review routes
+remain authoritative until category cutover. Phase 13.4 adds protected, queue-scoped human review
+and adjudication routes; those writes create immutable certification evidence and never alter report
+matches.
 
 `GET /api/v1/analyses/{analysis_id}/matching-v2-shadow` exposes bounded, read-only shadow evidence
 only when `MATCHING_V2_SHADOW_API_ENABLED=true`. It accepts competitor, tier, status, benchmark
 product, competitor product, offset, and limit filters. Responses always declare
-`authoritative=false` and `report_metrics_affected=false`; no v2 decision mutation endpoint exists.
+`authoritative=false` and `report_metrics_affected=false`; no v2 report-match mutation endpoint
+exists.
+
+Protected Matching v2 certification routes are documented in
+`docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`. They require the production feature flag and
+administrator token; every queue response remains `authoritative=false`.
 
 ## Automation
 

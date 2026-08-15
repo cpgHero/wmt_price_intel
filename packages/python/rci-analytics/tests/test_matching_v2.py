@@ -19,6 +19,14 @@ from rci_analytics.matching_v2 import (
     reconcile_local_comparisons,
 )
 from rci_analytics.matching_v2_certification import GoldMatchLabelV2, certify_matching_v2
+from rci_analytics.matching_v2_profile import (
+    MatchingV2SourceInput,
+    build_matching_v2_evidence_profile,
+)
+from rci_analytics.matching_v2_review import (
+    MatchingV2ReviewSampling,
+    build_matching_v2_review_queue,
+)
 from rci_analytics.matching_v2_shadow import (
     ListingEvidenceAccumulatorV2,
     MatchingShadowEvaluatorV2,
@@ -46,11 +54,9 @@ def _policy() -> MatchingPolicyV2:
             AttributePolicyV2("organic", "required_exact"),
             AttributePolicyV2("container", "soft_comparator", weight=0.5),
         ),
-        eligible_price_bases=(
-            "exact_package",
-            "normalized_unit",
-            "lowest_eligible_local_offer",
-        ),
+        eligible_price_bases=("exact_package", "normalized_unit"),
+        price_basis_requirements=(("exact_package", ("volume_fl_oz",)),),
+        auto_approval_tiers=("exact_item", "exact_specification"),
         minimum_equivalent_coverage=0.75,
         equivalent_score_threshold=0.8,
     )
@@ -114,6 +120,28 @@ def test_exact_specification_is_deterministic_and_contract_valid() -> None:
         decision.to_contract(),
         label="deterministic exact-spec edge",
     )
+
+
+def test_product_pack_must_explicitly_authorize_automatic_approval() -> None:
+    draft_policy = MatchingPolicyV2(
+        policy_id="milk:draft",
+        version="2.0.0-draft",
+        product_pack_id="fresh_fluid_milk",
+        product_pack_version="1.2.0",
+        attributes=_policy().attributes,
+        eligible_price_bases=_policy().eligible_price_bases,
+        auto_approval_tiers=(),
+    )
+    decision = DeterministicMatchEngineV2().evaluate(
+        _listing("walmart_us", "w1"),
+        _listing("aldi_us", "a1"),
+        draft_policy,
+        decided_at=DECIDED_AT,
+    )
+
+    assert decision.tier == "exact_specification"
+    assert decision.status == "candidate"
+    assert "Product Pack review is required" in decision.decision_reason
 
 
 def test_unknown_values_never_agree_and_prevent_exact_specification() -> None:
@@ -182,6 +210,19 @@ def test_verified_identifier_does_not_override_conflicting_critical_evidence() -
 
     assert decision.tier != "exact_item"
     assert decision.status != "auto_approved"
+
+
+def test_package_size_conflict_cannot_use_exact_package_price_basis() -> None:
+    decision = DeterministicMatchEngineV2().evaluate(
+        _listing("walmart_us", "w1", volume=128),
+        _listing("aldi_us", "a1", volume=64),
+        _policy(),
+        decided_at=DECIDED_AT,
+    )
+
+    assert decision.tier == "comparable_substitute"
+    assert "exact_package" not in decision.eligible_price_bases
+    assert "normalized_unit" in decision.eligible_price_bases
 
 
 def test_equal_unverified_brand_names_are_not_labeled_verified() -> None:
@@ -266,6 +307,97 @@ def test_many_to_one_gold_certification_is_contract_valid() -> None:
         "matching-v2-certification.schema.json",
         certification.to_contract(),
         label="matching v2 certification",
+    )
+
+
+def test_review_queue_is_deterministic_and_keeps_every_automatic_approval() -> None:
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "private_label",
+        policy=_policy(),
+    )
+    result = evaluator.evaluate_listings(
+        tuple(_listing("walmart_us", f"w{index}") for index in range(1, 5)),
+        (_listing("aldi_us", "a1"),),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+    arguments = {
+        "queue_id": "milk-release-review",
+        "queue_version": "1.0.0",
+        "benchmark_source_reference": "artifact://search/milk/walmart#sha256=def",
+        "source_references": {"aldi_us": "artifact://search/milk/aldi#sha256=abc"},
+        "sampling": MatchingV2ReviewSampling(per_stratum_limit=1),
+    }
+
+    first = build_matching_v2_review_queue((result,), **arguments)
+    second = build_matching_v2_review_queue((result,), **arguments)
+
+    assert first == second
+    assert len(first["cases"]) == 4
+    assert first["sampling"]["selected_counts"] == {
+        "aldi_us:overlapping_many_to_one_exact_specification_auto_approved": 4
+    }
+    assert all(case["critical"] for case in first["cases"])
+    assert all(case["review_state"] == "pending" for case in first["cases"])
+    assert all(len(case["evidence_refs"]) == 2 for case in first["cases"])
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-review-queue.schema.json",
+        first,
+        label="matching v2 deterministic review queue",
+    )
+
+
+def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Path) -> None:
+    walmart = tmp_path / "walmart.csv"
+    aldi = tmp_path / "aldi.csv"
+    header = "Retailer,Product Name,Brand,Price,Zipcode,Retailer Store Id,Retailer Product Id\n"
+    walmart.write_text(
+        header
+        + "Walmart,Great Value 2% Reduced Fat Milk 1 Gallon,Great Value,3.98,72712,100,wm1\n"
+        + "Walmart,Great Value 2% Reduced Fat Milk 1 Gallon,Great Value,3.98,72712,100,wm1\n",
+        encoding="utf-8",
+    )
+    aldi.write_text(
+        header
+        + "ALDI,Friendly Farms 2% Reduced Fat Milk 1 Gallon,Friendly Farms,3.79,72712,10,al1\n",
+        encoding="utf-8",
+    )
+
+    profile, queue = build_matching_v2_evidence_profile(
+        REPOSITORY_ROOT,
+        product_pack_id="fresh_fluid_milk",
+        benchmark_retailer_id="walmart_us",
+        inputs=(
+            MatchingV2SourceInput(walmart, "walmart_us"),
+            MatchingV2SourceInput(aldi, "aldi_us"),
+        ),
+        decided_at=DECIDED_AT,
+        competitor_retailer_ids=("aldi_us",),
+        per_stratum_limit=5,
+    )
+
+    walmart_profile = next(
+        row for row in profile["retailers"] if row["retailer_id"] == "walmart_us"
+    )
+    assert profile["totals"] == {
+        "source_rows": 3,
+        "normalized_unique_rows": 2,
+        "normalization_failures": 0,
+        "expected_retailer_mismatches": 0,
+    }
+    assert walmart_profile["duplicate_rows"] == 1
+    assert walmart_profile["distinct_in_scope_products"] == 1
+    assert profile["release_use"]["eligible"] is False
+    assert queue["authoritative"] is False
+    assert queue["cases"]
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-evidence-profile.schema.json",
+        profile,
+        label="matching v2 evidence profile",
     )
 
 
@@ -467,6 +599,8 @@ def test_policy_compiler_is_category_neutral(pack_id: str) -> None:
     assert policy.product_pack_id == pack_id
     assert policy.attributes
     assert policy.eligible_price_bases
+    assert dict(policy.price_basis_requirements).get("exact_package")
+    assert policy.auto_approval_tiers == ()
     assert len({attribute.name for attribute in policy.attributes}) == len(policy.attributes)
 
 
@@ -482,6 +616,7 @@ def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() 
         },
         "exact_item_identifier_schemes": ["gtin", "upc"],
         "eligible_price_bases": ["exact_package", "normalized_unit"],
+        "price_basis_requirements": {"exact_package": ["volume_oz"]},
         "minimum_equivalent_coverage": 0.9,
         "equivalent_score_threshold": 0.95,
         "allow_comparable_substitute": True,
@@ -499,6 +634,7 @@ def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() 
     assert roles["fat_type"].weight == 3
     assert policy.minimum_equivalent_coverage == 0.9
     assert policy.eligible_price_bases == ("exact_package", "normalized_unit")
+    assert policy.price_basis_requirements == (("exact_package", ("volume_oz",)),)
 
 
 def _classified_offer(
@@ -594,6 +730,9 @@ def test_shadow_candidate_generation_blocks_known_hard_conflicts_without_losing_
     assert result.evaluated_pairs == 2
     assert result.blocked_pairs == 1
     assert {edge.competitor.retailer_product_id for edge in result.edges} == {"a1", "a3"}
+    assert len(result.blocked_review_edges) == 1
+    assert result.blocked_review_edges[0].competitor.retailer_product_id == "a2"
+    assert result.blocked_review_edges[0].status == "not_comparable"
 
 
 def test_incremental_listing_accumulator_matches_batch_collapse() -> None:

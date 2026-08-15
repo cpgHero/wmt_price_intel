@@ -48,6 +48,11 @@ from rci_analytics.matching_v2_certification import (
     MatchingV2Certification,
     certify_matching_v2,
 )
+from rci_analytics.matching_v2_review import (
+    MatchingV2ReviewSampling,
+    build_matching_v2_review_queue,
+    queue_cases,
+)
 from rci_analytics.matching_v2_shadow import (
     ListingEvidenceAccumulatorV2,
     MatchingShadowEvaluatorV2,
@@ -123,6 +128,7 @@ __all__ = [
     "MatchingShadowEvaluatorV2",
     "MatchingShadowResultV2",
     "MatchingV2Certification",
+    "MatchingV2ReviewSampling",
     "OfferClassifier",
     "ParquetDatasetWriter",
     "PostgresAnalysisInputRepository",
@@ -146,6 +152,7 @@ __all__ = [
     "benchmark_product_map_points",
     "benchmark_product_match_candidates",
     "build_listing_evidence_v2",
+    "build_matching_v2_review_queue",
     "certify_competitive_product_leadership",
     "certify_matching_v2",
     "classified_offer_from_record",
@@ -160,6 +167,7 @@ __all__ = [
     "primary_exact_profile",
     "product_context_index",
     "product_footprint",
+    "queue_cases",
     "reconcile_local_comparisons",
     "resolve_one_to_one_relationships",
     "shadow_result_checksum",

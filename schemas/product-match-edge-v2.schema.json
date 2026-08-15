@@ -78,11 +78,7 @@
         "enum": [
           "exact_package",
           "normalized_unit",
-          "random_weight_unit",
-          "lowest_eligible_local_offer",
-          "representative_assortment",
-          "availability_weighted_portfolio",
-          "sales_weighted_portfolio"
+          "random_weight_unit"
         ]
       }
     },
@@ -148,7 +144,9 @@
         "competitor_value",
         "outcome",
         "benchmark_source",
-        "competitor_source"
+        "competitor_source",
+        "weight",
+        "reliability"
       ],
       "properties": {
         "attribute": { "type": "string", "minLength": 1 },
@@ -161,6 +159,7 @@
         "benchmark_source": { "type": ["string", "null"] },
         "competitor_source": { "type": ["string", "null"] },
         "weight": { "type": "number", "minimum": 0 },
+        "reliability": { "type": "number", "minimum": 0, "maximum": 1 },
         "rationale": { "type": ["string", "null"] }
       }
     }

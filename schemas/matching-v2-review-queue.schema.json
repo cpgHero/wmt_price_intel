@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/matching-v2-review-queue.schema.json",
+  "title": "Matching Architecture v2 Human Review Queue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "queue_id",
+    "version",
+    "purpose",
+    "authoritative",
+    "product_pack",
+    "policy_checksum",
+    "source_evidence",
+    "sampling",
+    "cases",
+    "checksum"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "queue_id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "purpose": { "const": "human_gold_set_adjudication" },
+    "authoritative": { "const": false },
+    "product_pack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "policy_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "per_stratum_limit",
+        "include_all_automatic_approvals",
+        "available_counts",
+        "selected_counts"
+      ],
+      "properties": {
+        "method": { "const": "deterministic_stratified_sha256" },
+        "per_stratum_limit": { "type": "integer", "minimum": 1 },
+        "include_all_automatic_approvals": { "const": true },
+        "available_counts": { "$ref": "#/$defs/counts" },
+        "selected_counts": { "$ref": "#/$defs/counts" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "benchmark_listing_id",
+        "competitor_listing_id",
+        "competitor_retailer_id",
+        "benchmark_listing",
+        "competitor_listing",
+        "stratum",
+        "critical",
+        "engine_proposal",
+        "evidence_refs",
+        "edge",
+        "review_state"
+      ],
+      "properties": {
+        "case_id": { "type": "string", "minLength": 1 },
+        "benchmark_listing_id": { "type": "string", "minLength": 1 },
+        "competitor_listing_id": { "type": "string", "minLength": 1 },
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "benchmark_listing": { "$ref": "#/$defs/listing" },
+        "competitor_listing": { "$ref": "#/$defs/listing" },
+        "stratum": { "type": "string", "minLength": 1 },
+        "critical": { "type": "boolean" },
+        "engine_proposal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["edge_id", "tier", "status", "decision_reason", "evidence_coverage"],
+          "properties": {
+            "edge_id": { "type": "string", "minLength": 1 },
+            "tier": {
+              "type": ["string", "null"],
+              "enum": [
+                "exact_item",
+                "exact_specification",
+                "equivalent_product",
+                "comparable_substitute",
+                "custom_approved",
+                null
+              ]
+            },
+            "status": { "type": "string", "minLength": 1 },
+            "decision_reason": { "type": "string", "minLength": 1 },
+            "evidence_coverage": { "type": "object" }
+          }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "edge": { "$ref": "product-match-edge-v2.schema.json" },
+        "review_state": { "const": "pending" }
+      }
+    },
+    "listing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "listing_id",
+        "retailer_id",
+        "retailer_product_id",
+        "title",
+        "brand",
+        "brand_type",
+        "brand_verified",
+        "image_url",
+        "product_url",
+        "identifiers",
+        "attributes"
+      ],
+      "properties": {
+        "listing_id": { "type": "string", "minLength": 1 },
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_product_id": { "type": "string", "minLength": 1 },
+        "title": { "type": ["string", "null"] },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": {
+          "enum": ["private_label", "regional", "national", "unclassified"]
+        },
+        "brand_verified": { "type": "boolean" },
+        "image_url": { "type": ["string", "null"] },
+        "product_url": { "type": ["string", "null"] },
+        "identifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["scheme", "value", "verification_status", "source"],
+            "properties": {
+              "scheme": { "type": "string", "minLength": 1 },
+              "value": { "type": "string", "minLength": 1 },
+              "verification_status": { "enum": ["observed", "verified", "disputed"] },
+              "source": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "source", "reliability", "review_status"],
+            "properties": {
+              "value": {},
+              "source": { "type": "string", "minLength": 1 },
+              "reliability": { "type": "number", "minimum": 0, "maximum": 1 },
+              "review_status": { "enum": ["unreviewed", "verified", "conflicted"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

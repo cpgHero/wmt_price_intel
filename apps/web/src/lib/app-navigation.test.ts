@@ -24,6 +24,7 @@ describe("application navigation", () => {
       "/automation",
       "/data-quality",
       "/workspace/matches",
+      "/admin/matching-v2",
       "/workspace/brands",
       "/admin/studies",
       "/admin/product-packs",
@@ -47,6 +48,9 @@ describe("application navigation", () => {
     expect(
       activeNavigationItem("/price-intelligence/analysis-123")?.label,
     ).toBe("Price Intelligence");
+    expect(activeNavigationItem("/admin/matching-v2")?.label).toBe(
+      "Match Certification",
+    );
   });
 
   it("returns the page context for detail routes", () => {

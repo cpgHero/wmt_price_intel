@@ -418,6 +418,7 @@
         "attribute_roles",
         "exact_item_identifier_schemes",
         "eligible_price_bases",
+        "price_basis_requirements",
         "minimum_equivalent_coverage",
         "equivalent_score_threshold",
         "allow_comparable_substitute",
@@ -469,12 +470,21 @@
             "enum": [
               "exact_package",
               "normalized_unit",
-              "random_weight_unit",
-              "lowest_eligible_local_offer",
-              "representative_assortment",
-              "availability_weighted_portfolio",
-              "sales_weighted_portfolio"
+              "random_weight_unit"
             ]
+          }
+        },
+        "price_basis_requirements": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": ["exact_package", "normalized_unit", "random_weight_unit"]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
           }
         },
         "minimum_equivalent_coverage": {

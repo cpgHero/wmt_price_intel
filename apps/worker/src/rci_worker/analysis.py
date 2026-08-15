@@ -877,6 +877,9 @@ class AnalysisProcessor:
                         "collection_run_id": job.collection_run_id,
                         "authoritative_metrics_affected": False,
                         "edges": [edge.to_contract() for edge in shadow_result.edges],
+                        "blocked_review_edges": [
+                            edge.to_contract() for edge in shadow_result.blocked_review_edges
+                        ],
                     }
                     shadow_artifact = await self._dataset_writer.write_matching_v2_shadow(
                         shadow_document,

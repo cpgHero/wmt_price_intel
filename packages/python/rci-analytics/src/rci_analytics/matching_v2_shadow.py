@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -83,6 +84,9 @@ class _ListingAccumulatorState:
     attribute_values: dict[str, dict[str, Any]] = field(default_factory=lambda: defaultdict(dict))
     attribute_sources: dict[str, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
     identifiers: dict[tuple[str, str], IdentifierEvidence] = field(default_factory=dict)
+    titles: Counter[str] = field(default_factory=Counter)
+    image_urls: Counter[str] = field(default_factory=Counter)
+    product_urls: Counter[str] = field(default_factory=Counter)
     brands: set[str] = field(default_factory=set)
     brand_types: Counter[str] = field(default_factory=Counter)
     branded_rows: int = 0
@@ -122,6 +126,11 @@ class ListingEvidenceAccumulatorV2:
 
         for identifier in _identifier_rows((item,)):
             state.identifiers[(identifier.scheme, identifier.value)] = identifier
+        state.titles[offer.title] += 1
+        if offer.image_url:
+            state.image_urls[offer.image_url] += 1
+        if offer.product_url:
+            state.product_urls[offer.product_url] += 1
         brand = item.attributes.get("brand") or offer.brand
         if brand:
             state.brands.add(str(brand).strip())
@@ -174,12 +183,21 @@ class ListingEvidenceAccumulatorV2:
                     identifiers=tuple(
                         sorted(state.identifiers.values(), key=lambda row: (row.scheme, row.value))
                     ),
+                    title=_representative_text(state.titles),
+                    image_url=_representative_text(state.image_urls),
+                    product_url=_representative_text(state.product_urls),
                     brand=brand,
                     brand_type=brand_type,  # type: ignore[arg-type]
                     brand_verified=bool(brand) and state.branded_rows == state.verified_brand_rows,
                 )
             )
         return tuple(results)
+
+
+def _representative_text(values: Counter[str]) -> str | None:
+    if not values:
+        return None
+    return sorted(values.items(), key=lambda row: (-row[1], row[0]))[0][0]
 
 
 def build_listing_evidence_v2(
@@ -215,6 +233,7 @@ class MatchingShadowResultV2:
     evaluated_pairs: int
     blocked_pairs: int
     edges: tuple[TieredMatchDecisionV2, ...]
+    blocked_review_edges: tuple[TieredMatchDecisionV2, ...] = ()
 
     def summary(self) -> JsonObject:
         tiers = Counter(edge.tier or "none" for edge in self.edges)
@@ -232,6 +251,7 @@ class MatchingShadowResultV2:
             "possible_pairs": self.possible_pairs,
             "evaluated_pairs": self.evaluated_pairs,
             "blocked_pairs": self.blocked_pairs,
+            "blocked_review_sample": len(self.blocked_review_edges),
             "tier_counts": dict(sorted(tiers.items())),
             "status_counts": dict(sorted(statuses.items())),
             "auto_approved_edges": statuses.get("auto_approved", 0),
@@ -298,14 +318,19 @@ class MatchingShadowEvaluatorV2:
         competitor_retailer_id: str,
         decided_at: str,
         maximum_candidate_pairs: int | None = None,
+        blocked_review_limit: int = 40,
     ) -> MatchingShadowResultV2:
-        """Generate high-recall candidates, then evaluate every retained pair."""
+        """Generate candidates and retain a deterministic hard-negative review sample."""
+
+        if blocked_review_limit < 0:
+            raise ValueError("blocked review limit cannot be negative")
 
         edges: list[TieredMatchDecisionV2] = []
+        blocked_sample: list[tuple[int, str, int, int]] = []
         possible_pairs = len(benchmark) * len(competitor)
         candidate_indexes = self._candidate_indexes(competitor)
         all_competitor_indexes = set(range(len(competitor)))
-        for benchmark_listing in benchmark:
+        for benchmark_index, benchmark_listing in enumerate(benchmark):
             eligible_indexes = set(all_competitor_indexes)
             for rule in self._policy.attributes:
                 if rule.role != "hard_blocker":
@@ -315,6 +340,16 @@ class MatchingShadowEvaluatorV2:
                     continue
                 values, unknown = candidate_indexes[rule.name]
                 eligible_indexes &= values.get(_canonical(value.value), set()) | unknown
+            if blocked_review_limit:
+                for competitor_index in all_competitor_indexes - eligible_indexes:
+                    competitor_listing = competitor[competitor_index]
+                    pair_key = f"{benchmark_listing.listing_id}|{competitor_listing.listing_id}"
+                    rank = int(hashlib.sha256(pair_key.encode()).hexdigest(), 16)
+                    candidate = (-rank, pair_key, benchmark_index, competitor_index)
+                    if len(blocked_sample) < blocked_review_limit:
+                        heapq.heappush(blocked_sample, candidate)
+                    elif rank < -blocked_sample[0][0]:
+                        heapq.heapreplace(blocked_sample, candidate)
             for index in sorted(eligible_indexes):
                 if maximum_candidate_pairs is not None and len(edges) >= maximum_candidate_pairs:
                     raise ValueError(
@@ -329,6 +364,17 @@ class MatchingShadowEvaluatorV2:
                         decided_at=decided_at,
                     )
                 )
+        blocked_review_edges = tuple(
+            self._engine.evaluate(
+                benchmark[benchmark_index],
+                competitor[competitor_index],
+                self._policy,
+                decided_at=decided_at,
+            )
+            for _, _, benchmark_index, competitor_index in sorted(
+                blocked_sample, key=lambda row: (-row[0], row[1])
+            )
+        )
         return MatchingShadowResultV2(
             schema_version="2.0.0-shadow",
             product_pack_id=self._pack.id,
@@ -343,6 +389,7 @@ class MatchingShadowEvaluatorV2:
             evaluated_pairs=len(edges),
             blocked_pairs=possible_pairs - len(edges),
             edges=tuple(edges),
+            blocked_review_edges=blocked_review_edges,
         )
 
     def _candidate_indexes(
@@ -368,5 +415,6 @@ def shadow_result_checksum(result: MatchingShadowResultV2) -> str:
     document = {
         **result.summary(),
         "edges": [edge.to_contract() for edge in result.edges],
+        "blocked_review_edges": [edge.to_contract() for edge in result.blocked_review_edges],
     }
     return hashlib.sha256(_canonical(document).encode()).hexdigest()

@@ -9,6 +9,7 @@ dependencies = [
   "rci-analytics",
   "rci-core",
   "rci-collections",
+  "rci-contracts",
   "rci-db",
   "rci-locations",
   "rci-product-packs",
@@ -24,6 +25,7 @@ rci-automation = { workspace = true }
 rci-analytics = { workspace = true }
 rci-core = { workspace = true }
 rci-collections = { workspace = true }
+rci-contracts = { workspace = true }
 rci-db = { workspace = true }
 rci-locations = { workspace = true }
 rci-product-packs = { workspace = true }

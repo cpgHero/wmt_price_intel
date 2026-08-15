@@ -237,7 +237,7 @@ async def test_brand_workbench_api_stages_decisions_and_zero_provider_reanalysis
                 "schema_version": "1.0.0",
                 "analysis_id": analysis_id,
                 "product_pack_id": "fresh_fluid_milk",
-                "product_pack_version": "1.2.0",
+                "product_pack_version": "1.3.0",
                 "revision": 0,
                 "future_application": None,
                 "retailers": [{"id": "walmart_us", "name": "Walmart"}],
@@ -338,7 +338,7 @@ async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> Non
     assert report.status_code == 200
     assert report.json()["blueprint"] == {
         "id": "fresh_ground_beef_leadership",
-        "version": "1.0.0",
+        "version": "1.1.0",
     }
     assert report.json()["sections"][0]["id"] == "executive_summary"
 

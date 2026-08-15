@@ -70,7 +70,7 @@ def test_full_milk_golden_regression() -> None:
         (REPOSITORY_ROOT / "fixtures/golden/milk/validated_summary.json").read_text()
     )
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
-    assert pack.version == "1.2.0"
+    assert pack.version == "1.3.0"
     normalizer = CanonicalOfferNormalizer(
         RetailerIdentityMap.from_catalog(REPOSITORY_ROOT / "config/retailer-catalog.json")
     )

@@ -23,7 +23,7 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_strawberries")
 
     assert pack.id == "fresh_strawberries"
-    assert pack.version == "1.0.0"
+    assert pack.version == "1.1.0"
     assert len(pack.checksum) == 64
     assert pack.profile("strict")["dimensions"] == [
         "weight_oz",
@@ -33,7 +33,7 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
     ]
     assert pack.report_blueprint == {
         "id": "fresh_strawberries_leadership",
-        "version": "1.0.0",
+        "version": "1.1.0",
     }
 
 
@@ -83,7 +83,7 @@ def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
 def test_milk_uses_generic_distribution_scope_and_brand_portfolios() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
 
-    assert pack.version == "1.2.0"
+    assert pack.version == "1.3.0"
     assert all(
         profile["relationship_scope_policy"]
         == {

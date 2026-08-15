@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "id": "fresh_bananas_leadership",
-  "version": "1.0.0",
-  "product_pack": { "id": "fresh_bananas", "version": "1.1.0" },
+  "version": "1.1.0",
+  "product_pack": { "id": "fresh_bananas", "version": "1.2.0" },
   "brand_profile": {
     "id": "cpghero_rci",
     "version": "1.0.0",

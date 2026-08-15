@@ -112,6 +112,9 @@ class ListingEvidence:
     retailer_product_id: str
     attributes: Mapping[str, AttributeValue]
     identifiers: tuple[IdentifierEvidence, ...] = ()
+    title: str | None = None
+    image_url: str | None = None
+    product_url: str | None = None
     brand: str | None = None
     brand_type: BrandType = "unclassified"
     brand_verified: bool = False
@@ -140,11 +143,13 @@ class MatchingPolicyV2:
     product_pack_version: str
     attributes: tuple[AttributePolicyV2, ...]
     eligible_price_bases: tuple[str, ...]
+    price_basis_requirements: tuple[tuple[str, tuple[str, ...]], ...] = ()
     exact_item_identifier_schemes: tuple[str, ...] = (
         "gtin",
         "upc",
         "manufacturer_item_id",
     )
+    auto_approval_tiers: tuple[Literal["exact_item", "exact_specification"], ...] = ()
     minimum_equivalent_coverage: float = 0.8
     equivalent_score_threshold: float = 0.9
     allow_comparable_substitute: bool = True
@@ -162,6 +167,37 @@ class MatchingPolicyV2:
             raise ValueError("matching policy attribute names must be unique")
         if not self.eligible_price_bases:
             raise ValueError("matching policy must define an eligible price basis")
+        if len(self.eligible_price_bases) != len(set(self.eligible_price_bases)):
+            raise ValueError("matching policy price bases must be unique")
+        requirement_bases = [basis for basis, _ in self.price_basis_requirements]
+        if len(requirement_bases) != len(set(requirement_bases)):
+            raise ValueError("matching policy price-basis requirement keys must be unique")
+        if any(
+            not attributes or len(attributes) != len(set(attributes))
+            for _, attributes in self.price_basis_requirements
+        ):
+            raise ValueError(
+                "matching policy price-basis attribute requirements must be non-empty and unique"
+            )
+        unknown_bases = sorted(
+            basis
+            for basis, _ in self.price_basis_requirements
+            if basis not in self.eligible_price_bases
+        )
+        if unknown_bases:
+            raise ValueError(
+                f"price-basis requirements reference ineligible bases: {unknown_bases}"
+            )
+        unknown_attributes = sorted(
+            name
+            for _, required_attributes in self.price_basis_requirements
+            for name in required_attributes
+            if name not in names
+        )
+        if unknown_attributes:
+            raise ValueError(
+                f"price-basis requirements reference unknown attributes: {unknown_attributes}"
+            )
         if not 0 <= self.minimum_equivalent_coverage <= 1:
             raise ValueError("minimum equivalent coverage must be between zero and one")
         if not 0 <= self.equivalent_score_threshold <= 1:
@@ -186,7 +222,9 @@ class MatchingPolicyV2:
                     for rule in self.attributes
                 ],
                 "eligible_price_bases": self.eligible_price_bases,
+                "price_basis_requirements": self.price_basis_requirements,
                 "exact_item_identifier_schemes": self.exact_item_identifier_schemes,
+                "auto_approval_tiers": self.auto_approval_tiers,
                 "minimum_equivalent_coverage": self.minimum_equivalent_coverage,
                 "equivalent_score_threshold": self.equivalent_score_threshold,
                 "allow_comparable_substitute": self.allow_comparable_substitute,
@@ -220,6 +258,7 @@ class AttributeComparisonV2:
             "benchmark_source": self.benchmark_source,
             "competitor_source": self.competitor_source,
             "weight": self.weight,
+            "reliability": self.reliability,
             "rationale": self.rationale,
         }
 
@@ -355,12 +394,25 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
                 "eligible_price_bases", (basis, "lowest_eligible_local_offer")
             )
         ),
+        price_basis_requirements=tuple(
+            (str(basis), tuple(str(name) for name in required_attributes))
+            for basis, required_attributes in sorted(
+                dict(configured.get("price_basis_requirements") or {}).items()
+            )
+        ),
         exact_item_identifier_schemes=tuple(
             str(value)
             for value in configured.get(
                 "exact_item_identifier_schemes",
                 ("gtin", "upc", "manufacturer_item_id"),
             )
+        ),
+        auto_approval_tiers=tuple(
+            cast(
+                Literal["exact_item", "exact_specification"],
+                value,
+            )
+            for value in configured.get("auto_approval_tiers", ())
         ),
         minimum_equivalent_coverage=float(configured.get("minimum_equivalent_coverage", 0.8)),
         equivalent_score_threshold=float(configured.get("equivalent_score_threshold", 0.9)),
@@ -447,14 +499,32 @@ class DeterministicMatchEngineV2:
             reason = "A Product Pack hard-blocker attribute conflicts."
         elif verified_identifier and not critical_conflicts:
             tier = "exact_item"
-            status = "auto_approved"
-            reason = (
-                f"Verified shared {verified_identifier} with no contradictory critical evidence."
-            )
+            if tier in policy.auto_approval_tiers:
+                status = "auto_approved"
+                reason = (
+                    f"Verified shared {verified_identifier} with no contradictory critical "
+                    "evidence; the Product Pack authorizes automatic exact-item approval."
+                )
+            else:
+                status = "candidate"
+                reason = (
+                    f"Verified shared {verified_identifier} with no contradictory critical "
+                    "evidence; Product Pack review is required for this tier."
+                )
         elif not critical_conflicts and not required_unknowns and critical_coverage == 1:
             tier = "exact_specification"
-            status = "auto_approved"
-            reason = "All required critical attributes are known and compatible."
+            if tier in policy.auto_approval_tiers:
+                status = "auto_approved"
+                reason = (
+                    "All required critical attributes are known and compatible; the Product "
+                    "Pack authorizes automatic exact-specification approval."
+                )
+            else:
+                status = "candidate"
+                reason = (
+                    "All required critical attributes are known and compatible; Product Pack "
+                    "review is required for this tier."
+                )
         elif (
             not required_conflicts
             and critical_coverage >= policy.minimum_equivalent_coverage
@@ -580,17 +650,21 @@ class DeterministicMatchEngineV2:
     ) -> tuple[str, ...]:
         if tier is None:
             return ()
-        required_exact = [row for row in evidence if row.role == "required_exact"]
-        exact_package_eligible = all(
-            row.outcome in {"match", "within_tolerance"} for row in required_exact
-        )
-        eligible = [
-            basis
-            for basis in policy.eligible_price_bases
-            if basis != "exact_package" or exact_package_eligible
-        ]
-        if not eligible:
-            eligible.append("normalized_unit")
+        evidence_by_attribute = {row.attribute: row for row in evidence}
+        configured_requirements = dict(policy.price_basis_requirements)
+        eligible: list[str] = []
+        for basis in policy.eligible_price_bases:
+            requirements = configured_requirements.get(basis)
+            if requirements is None and basis == "exact_package":
+                requirements = tuple(
+                    row.attribute for row in evidence if row.role == "required_exact"
+                )
+            if requirements is not None and not all(
+                evidence_by_attribute[name].outcome in {"match", "within_tolerance"}
+                for name in requirements
+            ):
+                continue
+            eligible.append(basis)
         return tuple(dict.fromkeys(eligible))
 
 

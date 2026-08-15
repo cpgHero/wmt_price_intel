@@ -5,7 +5,7 @@
   "purpose": "contract_fixture",
   "product_pack": {
     "id": "fresh_fluid_milk",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "source_evidence": [
     "synthetic:user-confirmed-four-primary-products-to-one-competitor-scenario"

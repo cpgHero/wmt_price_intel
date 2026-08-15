@@ -213,6 +213,25 @@ class ProductPackLoader:
                 raise ContractError(
                     f"matching_v2 references unknown attributes {sorted(unknown_v2_attributes)}"
                 )
+            price_bases = {str(value) for value in matching_v2["eligible_price_bases"]}
+            price_basis_requirements = matching_v2["price_basis_requirements"]
+            unknown_requirement_bases = set(price_basis_requirements) - price_bases
+            if unknown_requirement_bases:
+                raise ContractError(
+                    "matching_v2 price-basis requirements reference ineligible bases "
+                    f"{sorted(unknown_requirement_bases)}"
+                )
+            unknown_requirement_attributes = {
+                str(attribute_name)
+                for requirements in price_basis_requirements.values()
+                for attribute_name in requirements
+                if str(attribute_name) not in known
+            }
+            if unknown_requirement_attributes:
+                raise ContractError(
+                    "matching_v2 price-basis requirements reference unknown attributes "
+                    f"{sorted(unknown_requirement_attributes)}"
+                )
         strict_required = {
             str(attribute["name"])
             for attribute in attributes
