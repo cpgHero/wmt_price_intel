@@ -43,7 +43,8 @@ export async function GET(request: Request, context: RouteContext) {
       return new NextResponse(detail, {
         status: upstream.status,
         headers: {
-          "content-type": upstream.headers.get("content-type") ?? "application/json",
+          "content-type":
+            upstream.headers.get("content-type") ?? "application/json",
           "cache-control": "private, no-store",
         },
       });
