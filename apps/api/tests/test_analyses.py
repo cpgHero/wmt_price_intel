@@ -338,7 +338,7 @@ async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> Non
     assert report.status_code == 200
     assert report.json()["blueprint"] == {
         "id": "fresh_ground_beef_leadership",
-        "version": "1.1.0",
+        "version": "1.2.0",
     }
     assert report.json()["sections"][0]["id"] == "executive_summary"
 

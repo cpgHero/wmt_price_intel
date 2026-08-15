@@ -33,7 +33,7 @@
     {
       "id": "fresh_ground_beef",
       "name": "Fresh Ground Beef",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "default_keyword": "ground beef",
       "file": "fresh_ground_beef.json"
     }

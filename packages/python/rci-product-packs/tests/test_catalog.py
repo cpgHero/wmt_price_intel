@@ -13,10 +13,10 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 async def test_file_catalog_returns_exact_immutable_runtime_bundle() -> None:
     catalog = FileProductPackCatalog(REPOSITORY_ROOT)
 
-    record = await catalog.get("fresh_ground_beef", "1.1.0")
+    record = await catalog.get("fresh_ground_beef", "1.2.0")
 
     assert record.id == "fresh_ground_beef"
-    assert record.version == "1.1.0"
+    assert record.version == "1.2.0"
     assert record.active is True
     assert record.checksum == canonical_checksum(record.document)
     assert record.report_blueprint["product_pack"] == {

@@ -1,7 +1,7 @@
 {
   "id": "fresh_ground_beef",
   "name": "Fresh Ground Beef",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "category_family": "fresh_meat",
   "description": "Raw fresh ground beef segmented by lean/fat ratio, package weight, production claims, and premium tier.",
   "scope": {
@@ -1298,7 +1298,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_ground_beef_leadership",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Show where Walmart's ground-beef price position is structurally strong, where ALDI or Amazon creates segment-specific pressure, and whether exact-package conclusions change after price-per-pound or proximity normalization.",
