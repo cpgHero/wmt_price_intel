@@ -436,7 +436,11 @@ function BlueprintAnalysisWorkspace({
   );
   const cohortRecords =
     selectedGroup?.sections
-      .filter((section) => section.kind === "segment_analysis")
+      .filter(
+        (section) =>
+          section.kind === "price_position" ||
+          section.kind === "segment_analysis",
+      )
       .flatMap((section) => section.records) ?? [];
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];

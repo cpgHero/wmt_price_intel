@@ -109,4 +109,16 @@ describe("comparable cohort presentation model", () => {
       outcome: "benchmark_lower",
     });
   });
+
+  it("deduplicates a cohort projected into more than one report section", () => {
+    const duplicate = {
+      ...rows[0],
+      _matches: 1499,
+    };
+
+    const cohorts = comparableCohorts([rows[0], duplicate]);
+
+    expect(cohorts).toHaveLength(1);
+    expect(cohorts[0]?.matches).toBe(1500);
+  });
 });

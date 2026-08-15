@@ -110,10 +110,18 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
 }
 
 export function comparableCohorts(records: JsonObject[]): ComparableCohort[] {
-  return records.flatMap((row) => {
+  const cohorts = records.flatMap((row) => {
     const cohort = comparableCohort(row);
     return cohort && !cohort.overall ? [cohort] : [];
   });
+  const unique = new Map<string, ComparableCohort>();
+  for (const cohort of cohorts) {
+    const current = unique.get(cohort.id);
+    if (!current || cohort.matches > current.matches) {
+      unique.set(cohort.id, cohort);
+    }
+  }
+  return [...unique.values()];
 }
 
 export function sortComparableCohorts(
