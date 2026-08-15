@@ -10019,6 +10019,10 @@ tbody tr:last-child td {
     align-items: stretch;
     flex-direction: column;
   }
+  .scorecard-products-toolbar label {
+    flex-basis: auto;
+    width: 100%;
+  }
   .scorecard-product-row {
     grid-template-columns: 1fr;
   }
