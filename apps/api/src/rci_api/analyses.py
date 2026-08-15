@@ -4,16 +4,32 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from rci_analytics import CatalogProductPackLoader
+from rci_api.pdp_exports import (
+    ProductDetailExportNotFoundError,
+    ProductDetailRawExportService,
+)
 from rci_contracts import ContractError
 from rci_product_packs import PostgresProductPackCatalog
+from rci_products import S3ProductDetailRawObjectStore
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
@@ -193,8 +209,47 @@ BrandReviewServiceDependency = Annotated[BrandReviewService, Depends(get_brand_r
 AnalysisBody = Annotated[dict[str, Any], Body()]
 
 
+def get_product_detail_raw_export_service(request: Request) -> ProductDetailRawExportService:
+    bucket = os.getenv("OBJECT_STORAGE_BUCKET", "").strip()
+    if not bucket:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Product Details raw-object storage is not configured.",
+        )
+    reader = S3ProductDetailRawObjectStore.create(
+        bucket=bucket,
+        endpoint_url=os.getenv("OBJECT_STORAGE_ENDPOINT"),
+        region_name=os.getenv("OBJECT_STORAGE_REGION"),
+        access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY_ID"),
+        secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
+        force_path_style=_enabled(os.getenv("OBJECT_STORAGE_FORCE_PATH_STYLE"), default=True),
+    )
+    return ProductDetailRawExportService(
+        request.app.state.database_probe.engine,
+        get_analysis_service(request),
+        reader,
+    )
+
+
+ProductDetailRawExportDependency = Annotated[
+    ProductDetailRawExportService,
+    Depends(get_product_detail_raw_export_service),
+]
+
+
 def _analysis_not_found(exc: AnalysisNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+def _require_evidence_export_access(request: Request, provided_token: str | None) -> None:
+    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN")
+    if request.app.state.settings.is_production and (
+        not expected or not provided_token or not secrets.compare_digest(expected, provided_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated administrator access is required.",
+        )
 
 
 @router.post(
@@ -492,3 +547,38 @@ async def download_artifact(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
+
+
+@router.get(
+    "/admin/analyses/{analysis_id}/pdp-raw-export",
+    tags=["admin", "artifacts"],
+)
+async def export_raw_product_details(
+    analysis_id: str,
+    request: Request,
+    service: ProductDetailRawExportDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> Response:
+    _require_evidence_export_access(request, x_rci_admin_token)
+    try:
+        exported = await service.export(analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise _analysis_not_found(exc) from exc
+    except ProductDetailExportNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Raw Product Details export failed: {exc}",
+        ) from exc
+    return Response(
+        content=exported.body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{exported.filename}"',
+            "Cache-Control": "private, no-store",
+            "X-RCI-PDP-Snapshot-Count": str(exported.snapshot_count),
+            "X-RCI-PDP-Successful-Count": str(exported.successful_count),
+            "X-RCI-Provider-Calls": "0",
+        },
+    )
