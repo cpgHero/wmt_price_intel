@@ -243,9 +243,9 @@ function gapCopy(
 
 function shadowLabel(value: string | null) {
   if (!value) return "Unresolved";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) =>
-    letter.toUpperCase(),
-  );
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function shadowValue(value: unknown) {
@@ -327,7 +327,9 @@ function MatchingV2ShadowPanel({
                   <strong>{benchmark?.name || benchmarkProductId}</strong>
                   <small>with {competitor?.name || competitorProductId}</small>
                 </span>
-                <span className={`matching-v2-tier ${edge.tier || "unresolved"}`}>
+                <span
+                  className={`matching-v2-tier ${edge.tier || "unresolved"}`}
+                >
                   {shadowLabel(edge.tier)}
                 </span>
                 <em>
@@ -367,11 +369,20 @@ function MatchingV2ShadowPanel({
                       <strong>{shadowLabel(evidence.attribute)}</strong>
                       <small>{shadowLabel(evidence.role)}</small>
                     </span>
-                    <span role="cell">{shadowValue(evidence.benchmark_value)}</span>
-                    <span role="cell">{shadowValue(evidence.competitor_value)}</span>
-                    <span role="cell" className={`evidence-${evidence.outcome}`}>
+                    <span role="cell">
+                      {shadowValue(evidence.benchmark_value)}
+                    </span>
+                    <span role="cell">
+                      {shadowValue(evidence.competitor_value)}
+                    </span>
+                    <span
+                      role="cell"
+                      className={`evidence-${evidence.outcome}`}
+                    >
                       {shadowLabel(evidence.outcome)}
-                      {evidence.rationale ? <small>{evidence.rationale}</small> : null}
+                      {evidence.rationale ? (
+                        <small>{evidence.rationale}</small>
+                      ) : null}
                     </span>
                   </div>
                 ))}
@@ -912,12 +923,14 @@ export function MatchReviewWorkbench({
     )
       .then(async (response) => {
         if (response.status === 404) return null;
-        if (!response.ok) throw new Error("Matching v2 shadow evidence is unavailable.");
+        if (!response.ok)
+          throw new Error("Matching v2 shadow evidence is unavailable.");
         return (await response.json()) as MatchingV2ShadowView;
       })
       .then((view) => setMatchingV2Shadow(view))
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
         setMatchingV2Shadow(null);
       });
     return () => controller.abort();
