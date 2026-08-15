@@ -121,4 +121,16 @@ describe("comparable cohort presentation model", () => {
     expect(cohorts).toHaveLength(1);
     expect(cohorts[0]?.matches).toBe(1500);
   });
+
+  it("does not present a zero-price sentinel as a valid product median", () => {
+    const cohort = comparableCohort({
+      ...rows[0],
+      _benchmark_median: 0,
+      _competitor_median: 0,
+    });
+
+    expect(cohort?.benchmarkMedian).toBeNull();
+    expect(cohort?.competitorMedian).toBeNull();
+    expect(cohort?.medianGap).toBe(-0.37);
+  });
 });

@@ -211,12 +211,19 @@ function scopedProductSummaries(
   const decisionIndex = new Map(
     decisions.filter(admitted).map((row) => [productPairKey(row), row]),
   );
+  const scopedCandidates = candidates.filter(
+    (row) => admitted(row) && row.profile_id === scope.profile_id,
+  );
+  const scopedDecisions = decisions.filter(
+    (row) =>
+      admitted(row) && (!row.profile_id || row.profile_id === scope.profile_id),
+  );
   const sourceRows: Array<ProductMatchCandidate | ProductDecision> =
     governedFallback
       ? decisions.filter(admitted)
-      : candidates.filter(
-          (row) => admitted(row) && row.profile_id === scope.profile_id,
-        );
+      : scopedCandidates.length
+        ? scopedCandidates
+        : scopedDecisions;
   const summaries = sourceRows.map((row) => {
     const decision = decisionIndex.get(productPairKey(row));
     const source = decision ?? row;

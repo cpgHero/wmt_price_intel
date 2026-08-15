@@ -57,6 +57,16 @@ function outcomeValue(value: unknown): CohortOutcome {
   return "unavailable";
 }
 
+function positiveNumericValue(
+  row: JsonObject,
+  rawKey: string,
+  displayKey: string,
+  legacyDisplayKey?: string,
+) {
+  const value = numericValue(row, rawKey, displayKey, legacyDisplayKey);
+  return value !== null && value > 0 ? value : null;
+}
+
 export function comparableCohort(row: JsonObject): ComparableCohort | null {
   const segment = String(row.segment ?? "").trim();
   if (!segment) return null;
@@ -87,13 +97,13 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     competitorLowerRate:
       numericValue(row, "_competitor_lower_rate", "competitor lower") ?? 0,
     parityRate: numericValue(row, "_parity_rate", "parity") ?? 0,
-    benchmarkMedian: numericValue(
+    benchmarkMedian: positiveNumericValue(
       row,
       "_benchmark_median",
       "benchmark marginal median",
       "benchmark median",
     ),
-    competitorMedian: numericValue(
+    competitorMedian: positiveNumericValue(
       row,
       "_competitor_median",
       "competitor marginal median",

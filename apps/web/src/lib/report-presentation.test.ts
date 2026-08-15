@@ -360,4 +360,59 @@ describe("report presentation", () => {
     expect(products).toHaveLength(1);
     expect(products[0]?.relationship_id).toBe("relationship-1");
   });
+
+  it("uses admitted decision evidence when automatic candidates remain unmatched", () => {
+    const unmatchedCandidate = {
+      id: "candidate-1",
+      relationship_status: "unmatched",
+      qa_status: "ready",
+      profile_id: "strict",
+      benchmark_product_id: "w1",
+      benchmark_product_name: "Walmart whole milk",
+      competitor: "aldi_us",
+      competitor_product_id: "a1",
+      competitor_product_name: "ALDI whole milk",
+      matches: 40,
+      match_attributes: { volume_oz: 128, fat_type: "whole" },
+    } satisfies ProductMatchCandidate;
+    const admittedDecision = {
+      ...unmatchedCandidate,
+      id: "decision-1",
+      relationship_id: "relationship-1",
+      relationship_status: "suggested",
+      benchmark_lower: 10,
+      competitor_lower: 25,
+      parity: 5,
+      priority: "attention",
+      geographies: 30,
+      benchmark_lower_share: 0.25,
+      competitor_lower_share: 0.625,
+      median_benchmark_price: 3.98,
+      median_competitor_price: 3.75,
+      median_gap: -0.23,
+      plain_insight: "ALDI is lower more often.",
+      top_locations: [],
+    } satisfies ProductDecision;
+
+    const products = cohortProductSummaries(
+      {
+        competitorId: "aldi_us",
+        competitor: "ALDI",
+        profileId: "strict",
+        overall: false,
+        attributes: { volume_oz: 128, fat_type: "whole" },
+      },
+      [unmatchedCandidate],
+      [admittedDecision],
+    );
+
+    expect(products).toMatchObject([
+      {
+        relationship_id: "relationship-1",
+        benchmark_product_id: "w1",
+        competitor_product_id: "a1",
+        matches: 40,
+      },
+    ]);
+  });
 });
