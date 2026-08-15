@@ -29,6 +29,16 @@ A change that materially changes a golden metric is not automatically a bug, but
 
 Strawberries: 297,443 source rows in validated run. Headline assertions are in `fixtures/golden/benchmarks.json` and detailed expected summary files are under `fixtures/golden/strawberries/`.
 
+## Matching Architecture v2 certification
+
+Matching v2 uses a separate, human-adjudicated pair-label gold set; aggregate price-report goldens
+cannot substitute for match labels. A release set must validate against
+`schemas/matching-v2-gold-set.schema.json`, cite immutable Search/PDP evidence, and record at least
+two reviewers per label. Certification reports candidate recall separately from automatic-tier
+precision, includes per-stratum metrics, fails any unlabeled automatic approval, and does not permit
+synthetic contract fixtures to claim release readiness. The five-category order is eggs, milk,
+ground beef, strawberries, then bananas.
+
 ## Regression sequence
 
 Strawberries -> Eggs -> Milk -> Bananas.

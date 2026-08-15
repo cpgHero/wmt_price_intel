@@ -43,6 +43,27 @@ Prefix: `/api/v1`.
   JSON evidence references.
 - `POST /analyses/{id}/evaluate-alerts` idempotently evaluates active alert versions.
 
+### Matching Architecture v2 shadow contracts
+
+Phase 13.1 introduces repository contracts before exposing any new public mutation route:
+
+- `product-identity-evidence.schema.json` — retailer listing, optional verified trade item,
+  identifiers, and provenance-preserving attribute facts.
+- `product-match-edge-v2.schema.json` — tiered pairwise claim, brand relationship, eligible price
+  bases, evidence coverage, attribute evidence, applicability, and decision origin.
+- `local-comparison-observation-v2.schema.json` — Search-authoritative benchmark/competitor offer
+  facts, semantic/availability/price coverage, explicit missing reason, selection policy, and
+  result.
+
+These contracts are consumed internally during shadow certification. Match Workbench decision
+mutation routes will be versioned only after the five-category evidence and reconciliation gates
+pass; existing match-review routes remain authoritative until that cutover.
+
+`GET /api/v1/analyses/{analysis_id}/matching-v2-shadow` exposes bounded, read-only shadow evidence
+only when `MATCHING_V2_SHADOW_API_ENABLED=true`. It accepts competitor, tier, status, benchmark
+product, competitor product, offset, and limit filters. Responses always declare
+`authoritative=false` and `report_metrics_affected=false`; no v2 decision mutation endpoint exists.
+
 ## Automation
 
 - `GET /collection-schedules`

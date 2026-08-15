@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -141,3 +142,23 @@ def test_core_engine_has_no_product_pack_id_branches() -> None:
     source_root = REPOSITORY_ROOT / "packages" / "python" / "rci-analytics" / "src"
     source = "\n".join(path.read_text() for path in source_root.rglob("*.py"))
     assert "fresh_strawberries" not in source
+
+
+async def test_matching_v2_shadow_document_is_immutable_non_authoritative_json() -> None:
+    store = InMemoryDatasetStore()
+    document = {
+        "schema_version": "2.0.0-shadow",
+        "authoritative_metrics_affected": False,
+        "edges": [],
+    }
+    artifact = await ParquetDatasetWriter(store).write_matching_v2_shadow(
+        document,
+        run_id="run-shadow",
+        retailer_id="aldi_us",
+    )
+
+    key = artifact.storage_uri.removeprefix("s3://test-datasets/")
+    assert artifact.artifact_type == "matching_v2_shadow"
+    assert artifact.content_type == "application/json"
+    assert artifact.metadata["shadow_only"] is True
+    assert json.loads(store.objects[key]) == document

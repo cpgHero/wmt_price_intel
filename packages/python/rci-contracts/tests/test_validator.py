@@ -102,6 +102,58 @@ def test_price_monitoring_examples_are_contract_valid_and_search_authoritative()
     assert view["source"]["authority"] == "Search"
 
 
+def test_matching_v2_examples_preserve_evidence_and_search_price_authority() -> None:
+    identity = json.loads(
+        (REPOSITORY_ROOT / "examples/product-identity-evidence.milk.json").read_text()
+    )
+    edge = json.loads((REPOSITORY_ROOT / "examples/product-match-edge-v2.milk.json").read_text())
+    comparison = json.loads(
+        (REPOSITORY_ROOT / "examples/local-comparison-observation-v2.milk.json").read_text()
+    )
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "product-identity-evidence.schema.json",
+        identity,
+        label="matching v2 identity evidence",
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "product-match-edge-v2.schema.json",
+        edge,
+        label="matching v2 edge",
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "local-comparison-observation-v2.schema.json",
+        comparison,
+        label="matching v2 local comparison",
+    )
+
+    assert edge["evidence_coverage"]["critical_coverage"] == 1
+    assert comparison["source_authority"] == "search_location_observation"
+    assert comparison["result"]["competitor_minus_benchmark"] == pytest.approx(-0.09)
+
+
+def test_matching_v2_synthetic_gold_fixture_cannot_claim_release_review() -> None:
+    gold_set = json.loads((REPOSITORY_ROOT / "examples/matching-v2-gold-set.milk.json").read_text())
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-gold-set.schema.json",
+        gold_set,
+        label="matching v2 synthetic gold set",
+    )
+    gold_set["purpose"] = "release_certification"
+
+    with pytest.raises(ContractError, match="adjudicated"):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "matching-v2-gold-set.schema.json",
+            gold_set,
+            label="invalid release gold set",
+        )
+
+
 def test_agent_contract_forbids_authoritative_metric_computation() -> None:
     output = json.loads(
         (REPOSITORY_ROOT / "examples/agent-output.ground-beef-insight.json").read_text(

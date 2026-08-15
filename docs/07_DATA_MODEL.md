@@ -56,6 +56,33 @@ raw-object checksum and optional cache expiry. The cache key includes retailer, 
 store, fulfillment, and endpoint contract version. PDP identity may enrich every linked SERP
 observation, but PDP price and availability never replace the SERP snapshot fields.
 
+## Matching Architecture v2 shadow model
+
+Phase 13 adds an additive evidence and comparison model while the existing matcher remains
+authoritative:
+
+- `retailer_listing_v2` explicitly represents the retailer-specific product identity currently
+  carried by `canonical_product`.
+- `trade_item_v2` represents a verified physical package when identifier and package evidence are
+  sufficient; listings may remain unlinked rather than being guessed into a trade item.
+- `product_attribute_fact_v2` stores immutable raw/normalized attribute evidence, source,
+  reliability, extraction method, review state, and Product Pack version.
+- `match_policy_version_v2`, `product_match_candidate_v2`, `product_match_edge_v2`, and
+  `product_match_attribute_evidence_v2` separate candidate recall, pairwise semantic claims, match
+  tiers, price-basis eligibility, and attribute provenance.
+- `match_group_v2` and `match_group_member_v2` are derived business groupings; they never replace
+  pairwise edge evidence.
+- `store_catchment_policy_v2` and `store_catchment_v2` version physical-store and service-area
+  applicability.
+- `local_comparison_observation_v2` stores every local candidate and the one policy-selected
+  controlling offer. Partial unique indexes enforce one selected result per policy, competitor,
+  price basis, benchmark product, and benchmark location.
+- decision and revalidation events preserve immutable human/rule history and drift triggers.
+
+The v2 tables are shadow-only until a Product Pack passes the Phase 13 certification gates.
+Historical `product_match_revision`, `product_match_rule`, AnalysisResults, and publications are
+not rewritten.
+
 An analysis result records:
 - collection definition version,
 - Product Pack version,

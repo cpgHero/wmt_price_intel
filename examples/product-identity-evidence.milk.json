@@ -1,0 +1,44 @@
+{
+  "schema_version": "2.0.0",
+  "listing_id": "listing-walmart-10450115",
+  "organization_id": "standalone",
+  "retailer_id": "walmart_us",
+  "retailer_product_id": "10450115",
+  "trade_item": null,
+  "listing_identity": {
+    "name": "Great Value 2% Reduced Fat Milk, Gallon",
+    "brand": "Great Value",
+    "seller": "Walmart.com",
+    "url": "https://www.walmart.com/ip/10450115",
+    "image_url": null
+  },
+  "identifiers": [
+    {
+      "scheme": "retailer_product_id",
+      "value": "10450115",
+      "verification_status": "verified",
+      "source": "search"
+    }
+  ],
+  "attribute_facts": [
+    {
+      "attribute": "fat_percent",
+      "raw_value": "2%",
+      "normalized_value": 2,
+      "unit": "percent",
+      "source_kind": "pdp",
+      "source_reference": "pdp:walmart_us:10450115",
+      "observed_at": "2026-08-15T12:00:00Z",
+      "extraction_method": "structured",
+      "reliability": 1,
+      "review_status": "verified",
+      "reviewer": null
+    }
+  ],
+  "provenance": {
+    "product_pack_id": "fresh_fluid_milk",
+    "product_pack_version": "1.2.0",
+    "evidence_checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "generated_at": "2026-08-15T12:05:00Z"
+  }
+}

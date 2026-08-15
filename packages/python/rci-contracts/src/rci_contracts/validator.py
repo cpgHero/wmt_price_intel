@@ -90,6 +90,22 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         root / "examples" / "canonical-product.ground-beef.json",
     )
     yield ContractTarget(
+        "product-identity-evidence.schema.json",
+        next((root / "examples").glob("product-identity-evidence.*.json")),
+    )
+    yield ContractTarget(
+        "product-match-edge-v2.schema.json",
+        next((root / "examples").glob("product-match-edge-v2.*.json")),
+    )
+    yield ContractTarget(
+        "local-comparison-observation-v2.schema.json",
+        next((root / "examples").glob("local-comparison-observation-v2.*.json")),
+    )
+    yield ContractTarget(
+        "matching-v2-gold-set.schema.json",
+        next((root / "examples").glob("matching-v2-gold-set.*.json")),
+    )
+    yield ContractTarget(
         "product-detail-snapshot.schema.json",
         root / "examples" / "product-detail-snapshot.aldi.json",
     )

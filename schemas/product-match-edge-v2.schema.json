@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-match-edge-v2.schema.json",
+  "title": "Governed Pairwise Product Match Edge v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "edge_id",
+    "policy",
+    "benchmark_listing_id",
+    "competitor_listing_id",
+    "tier",
+    "status",
+    "brand_relationship",
+    "eligible_price_bases",
+    "evidence_coverage",
+    "attribute_evidence",
+    "applicability",
+    "decision"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "edge_id": { "type": "string", "minLength": 1 },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "version", "product_pack_id", "product_pack_version"],
+      "properties": {
+        "policy_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "product_pack_id": { "type": "string", "minLength": 1 },
+        "product_pack_version": { "type": "string", "minLength": 1 },
+        "checksum": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "benchmark_listing_id": { "type": "string", "minLength": 1 },
+    "competitor_listing_id": { "type": "string", "minLength": 1 },
+    "tier": {
+      "enum": [
+        "exact_item",
+        "exact_specification",
+        "equivalent_product",
+        "comparable_substitute",
+        "custom_approved",
+        null
+      ]
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "auto_approved",
+        "human_approved",
+        "rejected",
+        "expired",
+        "superseded",
+        "needs_revalidation",
+        "unresolved",
+        "not_comparable"
+      ]
+    },
+    "brand_relationship": {
+      "enum": [
+        "same_verified_brand",
+        "different_national_brands",
+        "private_label_to_private_label",
+        "private_label_to_national_brand",
+        "regional_brand_relationship",
+        "brand_unknown",
+        "unbranded_or_generic"
+      ]
+    },
+    "eligible_price_bases": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "exact_package",
+          "normalized_unit",
+          "random_weight_unit",
+          "lowest_eligible_local_offer",
+          "representative_assortment",
+          "availability_weighted_portfolio",
+          "sales_weighted_portfolio"
+        ]
+      }
+    },
+    "evidence_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["known_critical", "required_critical", "critical_coverage"],
+      "properties": {
+        "known_critical": { "type": "integer", "minimum": 0 },
+        "required_critical": { "type": "integer", "minimum": 0 },
+        "critical_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+        "weighted_evidence_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "attribute_evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/attributeEvidence" }
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_mode", "geography_policy", "fulfillment_types"],
+      "properties": {
+        "scope_mode": {
+          "enum": ["global", "observed_distribution", "explicit_locations", "regional"]
+        },
+        "geography_policy": { "type": "string", "minLength": 1 },
+        "benchmark_location_scope_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fulfillment_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "effective_from": { "type": ["string", "null"], "format": "date-time" },
+        "effective_to": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "decided_at", "reason"],
+      "properties": {
+        "origin": { "enum": ["deterministic_rule", "model_assisted", "human", "legacy"] },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "actor": { "type": ["string", "null"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "supersedes_edge_id": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "attributeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attribute",
+        "role",
+        "benchmark_value",
+        "competitor_value",
+        "outcome",
+        "benchmark_source",
+        "competitor_source"
+      ],
+      "properties": {
+        "attribute": { "type": "string", "minLength": 1 },
+        "role": {
+          "enum": ["identity", "hard_blocker", "required_exact", "soft_comparator", "descriptive", "ignored"]
+        },
+        "benchmark_value": {},
+        "competitor_value": {},
+        "outcome": { "enum": ["match", "conflict", "unknown", "ignored", "within_tolerance"] },
+        "benchmark_source": { "type": ["string", "null"] },
+        "competitor_source": { "type": ["string", "null"] },
+        "weight": { "type": "number", "minimum": 0 },
+        "rationale": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

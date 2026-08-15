@@ -247,6 +247,9 @@ async def run() -> None:
                     database.engine,
                     repository_root,
                 ),
+                matching_v2_shadow_enabled=_enabled(
+                    os.getenv("MATCHING_V2_SHADOW_ENABLED"), default=False
+                ),
             ),
             worker_id=f"{worker_id}-analysis",
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),

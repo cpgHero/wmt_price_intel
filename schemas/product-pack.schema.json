@@ -409,6 +409,116 @@
         }
       }
     },
+    "matching_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_version",
+        "certification_state",
+        "attribute_roles",
+        "exact_item_identifier_schemes",
+        "eligible_price_bases",
+        "minimum_equivalent_coverage",
+        "equivalent_score_threshold",
+        "allow_comparable_substitute",
+        "auto_approval_tiers",
+        "geography_policy",
+        "scope_mode",
+        "fulfillment_types"
+      ],
+      "properties": {
+        "policy_version": { "type": "string", "minLength": 1 },
+        "certification_state": { "enum": ["draft", "shadow", "certified"] },
+        "attribute_roles": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "critical", "weight"],
+            "properties": {
+              "role": {
+                "enum": [
+                  "identity",
+                  "hard_blocker",
+                  "required_exact",
+                  "soft_comparator",
+                  "descriptive",
+                  "ignored"
+                ]
+              },
+              "critical": { "type": "boolean" },
+              "weight": { "type": "number", "minimum": 0 },
+              "numeric_tolerance": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "exact_item_identifier_schemes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["gtin", "upc", "manufacturer_item_id"]
+          }
+        },
+        "eligible_price_bases": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "exact_package",
+              "normalized_unit",
+              "random_weight_unit",
+              "lowest_eligible_local_offer",
+              "representative_assortment",
+              "availability_weighted_portfolio",
+              "sales_weighted_portfolio"
+            ]
+          }
+        },
+        "minimum_equivalent_coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "equivalent_score_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "allow_comparable_substitute": { "type": "boolean" },
+        "auto_approval_tiers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["exact_item", "exact_specification"] }
+        },
+        "geography_policy": {
+          "enum": [
+            "same_zip",
+            "physical_store_radius",
+            "nearest_store",
+            "service_area",
+            "merchant_market",
+            "national"
+          ]
+        },
+        "scope_mode": {
+          "enum": ["global", "observed_distribution", "explicit_locations", "regional"]
+        },
+        "fulfillment_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "maximum_candidate_pairs": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 250000
+        }
+      }
+    },
     "brand_rules": {
       "type": "object",
       "properties": {

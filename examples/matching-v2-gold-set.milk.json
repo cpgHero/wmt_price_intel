@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0.0",
+  "gold_set_id": "milk-regional-many-to-one-contract-fixture",
+  "version": "1.0.0",
+  "purpose": "contract_fixture",
+  "product_pack": {
+    "id": "fresh_fluid_milk",
+    "version": "1.2.0"
+  },
+  "source_evidence": [
+    "synthetic:user-confirmed-four-primary-products-to-one-competitor-scenario"
+  ],
+  "labels": [
+    {
+      "case_id": "regional-milk-1",
+      "benchmark_listing_id": "walmart_us:w1",
+      "competitor_listing_id": "aldi_us:a1",
+      "expected_comparable": true,
+      "allowed_tiers": ["exact_specification", "equivalent_product"],
+      "critical": true,
+      "stratum": "regional_distribution_many_to_one",
+      "review_status": "synthetic_fixture",
+      "reviewers": [],
+      "evidence_refs": [],
+      "rationale": "Contract-only representation of the owner-confirmed regional milk scenario; not release evidence."
+    },
+    {
+      "case_id": "milk-hard-negative",
+      "benchmark_listing_id": "walmart_us:w1",
+      "competitor_listing_id": "aldi_us:oat1",
+      "expected_comparable": false,
+      "allowed_tiers": [],
+      "critical": true,
+      "stratum": "hard_negative_product_form",
+      "review_status": "synthetic_fixture",
+      "reviewers": [],
+      "evidence_refs": [],
+      "rationale": "Dairy milk and oat beverage must not become automatically comparable."
+    }
+  ]
+}

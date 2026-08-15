@@ -1,0 +1,53 @@
+{
+  "schema_version": "2.0.0",
+  "comparison_id": "comparison-001",
+  "analysis_id": "fresh-fluid-milk-example",
+  "match_edge_id": "edge-w10450115-a1234",
+  "competitor_retailer_id": "aldi_us",
+  "policy_revision": "milk-exact-package-1.0.0",
+  "benchmark": {
+    "retailer_id": "walmart_us",
+    "listing_id": "listing-walmart-10450115",
+    "product_id": "10450115",
+    "location_scope_key": "walmart_us|72712|100",
+    "store_number": "100",
+    "zipcode": "72712",
+    "offer_id": "offer-walmart-100",
+    "observed_at": "2026-08-15T10:00:00Z",
+    "comparison_value": 3.48,
+    "distance_miles": null
+  },
+  "competitor": {
+    "retailer_id": "aldi_us",
+    "listing_id": "listing-aldi-1234",
+    "product_id": "1234",
+    "location_scope_key": "aldi_us|72712|12",
+    "store_number": "12",
+    "zipcode": "72712",
+    "offer_id": "offer-aldi-12",
+    "observed_at": "2026-08-15T10:03:00Z",
+    "comparison_value": 3.39,
+    "distance_miles": 2.1
+  },
+  "price_basis": "exact_package",
+  "coverage": {
+    "semantic": true,
+    "availability": true,
+    "price": true,
+    "reason": "comparable"
+  },
+  "selection": {
+    "status": "selected",
+    "policy": "lowest_eligible_local_offer",
+    "candidate_count": 1,
+    "selection_rank": 1
+  },
+  "result": {
+    "benchmark_value": 3.48,
+    "competitor_value": 3.39,
+    "competitor_minus_benchmark": -0.09,
+    "winner": "competitor_lower"
+  },
+  "source_authority": "search_location_observation",
+  "generated_at": "2026-08-15T12:10:00Z"
+}

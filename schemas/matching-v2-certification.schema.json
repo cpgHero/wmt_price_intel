@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/matching-v2-certification.schema.json",
+  "title": "Matching Architecture v2 Certification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product_pack_id",
+    "product_pack_version",
+    "policy_checksum",
+    "gold_set_version",
+    "metrics",
+    "thresholds",
+    "release_gate",
+    "strata",
+    "failures",
+    "ready"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "product_pack_id": { "type": "string", "minLength": 1 },
+    "product_pack_version": { "type": "string", "minLength": 1 },
+    "policy_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "gold_set_version": { "type": "string", "minLength": 1 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gold_positive_pairs",
+        "recalled_positive_pairs",
+        "candidate_recall",
+        "labeled_auto_approvals",
+        "correct_auto_approvals",
+        "auto_approval_precision",
+        "unlabeled_auto_approvals",
+        "hard_conflict_auto_approvals"
+      ],
+      "properties": {
+        "gold_positive_pairs": { "type": "integer", "minimum": 0 },
+        "recalled_positive_pairs": { "type": "integer", "minimum": 0 },
+        "candidate_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "labeled_auto_approvals": { "type": "integer", "minimum": 0 },
+        "correct_auto_approvals": { "type": "integer", "minimum": 0 },
+        "auto_approval_precision": { "type": "number", "minimum": 0, "maximum": 1 },
+        "unlabeled_auto_approvals": { "type": "integer", "minimum": 0 },
+        "hard_conflict_auto_approvals": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_recall", "auto_approval_precision"],
+      "properties": {
+        "candidate_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "auto_approval_precision": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "release_gate": { "type": "boolean" },
+    "strata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "labels",
+          "positive_pairs",
+          "candidate_recall",
+          "automatic_approvals",
+          "auto_approval_precision"
+        ],
+        "properties": {
+          "labels": { "type": "integer", "minimum": 1 },
+          "positive_pairs": { "type": "integer", "minimum": 0 },
+          "candidate_recall": { "type": "number", "minimum": 0, "maximum": 1 },
+          "automatic_approvals": { "type": "integer", "minimum": 0 },
+          "auto_approval_precision": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "ready": { "type": "boolean" }
+  }
+}

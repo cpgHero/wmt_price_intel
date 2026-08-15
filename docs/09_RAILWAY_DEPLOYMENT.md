@@ -71,6 +71,8 @@ METRICSCART_MAX_ATTEMPTS=5
 WORKER_CLAIM_LIMIT=10
 WORKER_LEASE_SECONDS=300
 ANALYSIS_PIPELINE_ENABLED=true
+MATCHING_V2_SHADOW_ENABLED=false
+MATCHING_V2_SHADOW_API_ENABLED=false
 ANALYSIS_HISTORICAL_REPLAY_ENABLED=false
 ANALYSIS_CLAIM_LIMIT=1
 ANALYSIS_LEASE_SECONDS=600
@@ -206,6 +208,16 @@ limits are independent per retailer/type but share their state across all worker
 the current normalizer. It reads the private bucket, creates append-only normalization revisions,
 and spends zero MetricsCart credits. Leave it enabled so future normalizer versions and source-field
 drift are repaired and audited without recollection.
+
+`MATCHING_V2_SHADOW_ENABLED` remains `false` until migration `0029_matching_architecture_v2`, a
+versioned Product Pack `matching_v2` policy, and its candidate-recall fixture have passed. When
+enabled, the worker writes immutable `matching_v2_shadow` JSON audit artifacts only. Shadow output
+cannot alter the current AnalysisResult, publication, scorecards, match decisions, or AI context.
+Each Product Pack must cap `maximum_candidate_pairs`; a shadow failure is logged and cannot fail the
+authoritative analysis.
+
+Set `MATCHING_V2_SHADOW_API_ENABLED=true` on `api` only after shadow artifacts exist. The endpoint
+is read-only, bounded to 500 edges per request, and explicitly labels its output non-authoritative.
 
 ## Historical import job
 

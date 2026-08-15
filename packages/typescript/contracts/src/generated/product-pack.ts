@@ -117,6 +117,60 @@ export interface RetailCompetitiveIntelligenceProductPack {
     };
     [k: string]: unknown;
   }[];
+  matching_v2?: {
+    policy_version: string;
+    certification_state: "draft" | "shadow" | "certified";
+    attribute_roles: {
+      [k: string]: {
+        role: "identity" | "hard_blocker" | "required_exact" | "soft_comparator" | "descriptive" | "ignored";
+        critical: boolean;
+        weight: number;
+        numeric_tolerance?: number;
+      };
+    };
+    /**
+     * @minItems 1
+     */
+    exact_item_identifier_schemes: [
+      "gtin" | "upc" | "manufacturer_item_id",
+      ...("gtin" | "upc" | "manufacturer_item_id")[]
+    ];
+    /**
+     * @minItems 1
+     */
+    eligible_price_bases: [
+      (
+        | "exact_package"
+        | "normalized_unit"
+        | "random_weight_unit"
+        | "lowest_eligible_local_offer"
+        | "representative_assortment"
+        | "availability_weighted_portfolio"
+        | "sales_weighted_portfolio"
+      ),
+      ...(
+        | "exact_package"
+        | "normalized_unit"
+        | "random_weight_unit"
+        | "lowest_eligible_local_offer"
+        | "representative_assortment"
+        | "availability_weighted_portfolio"
+        | "sales_weighted_portfolio"
+      )[]
+    ];
+    minimum_equivalent_coverage: number;
+    equivalent_score_threshold: number;
+    allow_comparable_substitute: boolean;
+    auto_approval_tiers: ("exact_item" | "exact_specification")[];
+    geography_policy:
+      "same_zip" | "physical_store_radius" | "nearest_store" | "service_area" | "merchant_market" | "national";
+    scope_mode: "global" | "observed_distribution" | "explicit_locations" | "regional";
+    /**
+     * @minItems 1
+     */
+    fulfillment_types: [string, ...string[]];
+    maximum_candidate_pairs?: number;
+  };
   brand_rules?: {
     aliases?: {
       [k: string]: string[];

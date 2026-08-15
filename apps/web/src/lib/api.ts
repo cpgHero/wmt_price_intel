@@ -368,6 +368,64 @@ export type ProductMatchScope = RetailCompetitiveIntelligenceProductMatchScope;
 export type BrandWorkbench = RetailCompetitiveIntelligenceBrandWorkbench;
 export type BrandWorkbenchBrand = BrandWorkbench["brands"][number];
 
+export interface MatchingV2AttributeEvidence {
+  attribute: string;
+  role:
+    | "identity"
+    | "hard_blocker"
+    | "required_exact"
+    | "soft_comparator"
+    | "descriptive"
+    | "ignored";
+  benchmark_value: unknown;
+  competitor_value: unknown;
+  outcome: "match" | "within_tolerance" | "conflict" | "unknown" | "ignored";
+  benchmark_source?: string | null;
+  competitor_source?: string | null;
+  rationale?: string | null;
+}
+
+export interface MatchingV2ShadowEdge {
+  edge_id: string;
+  benchmark_listing_id: string;
+  competitor_listing_id: string;
+  tier:
+    | "exact_item"
+    | "exact_specification"
+    | "equivalent_product"
+    | "comparable_substitute"
+    | "custom_approved"
+    | null;
+  status: string;
+  brand_relationship: string;
+  eligible_price_bases: string[];
+  evidence_coverage: {
+    known_critical: number;
+    required_critical: number;
+    critical_coverage: number;
+    weighted_evidence_score?: number | null;
+  };
+  attribute_evidence: MatchingV2AttributeEvidence[];
+  decision: { reason: string; origin: string };
+}
+
+export interface MatchingV2ShadowView {
+  schema_version: string;
+  analysis_id: string;
+  authoritative: false;
+  report_metrics_affected: false;
+  artifacts: Array<{
+    retailer_id: string;
+    checksum: string;
+    created_at: string;
+    summary: Record<string, unknown>;
+  }>;
+  total_edges: number;
+  offset: number;
+  limit: number;
+  edges: MatchingV2ShadowEdge[];
+}
+
 export interface MapPoint {
   id: string;
   label: string;

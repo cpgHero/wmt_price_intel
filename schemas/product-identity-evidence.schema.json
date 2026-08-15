@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/product-identity-evidence.schema.json",
+  "title": "Retail Product Identity and Attribute Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "listing_id",
+    "organization_id",
+    "retailer_id",
+    "retailer_product_id",
+    "listing_identity",
+    "identifiers",
+    "attribute_facts",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "listing_id": { "type": "string", "minLength": 1 },
+    "organization_id": { "type": "string", "minLength": 1 },
+    "retailer_id": { "type": "string", "minLength": 1 },
+    "retailer_product_id": { "type": "string", "minLength": 1 },
+    "trade_item": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["trade_item_id", "status", "identity_basis"],
+          "properties": {
+            "trade_item_id": { "type": "string", "minLength": 1 },
+            "status": { "enum": ["provisional", "verified", "disputed", "retired"] },
+            "identity_basis": {
+              "enum": [
+                "verified_gtin_package",
+                "manufacturer_identifier",
+                "retailer_listing_only",
+                "human_approved"
+              ]
+            },
+            "effective_from": { "type": ["string", "null"], "format": "date-time" },
+            "effective_to": { "type": ["string", "null"], "format": "date-time" }
+          }
+        }
+      ]
+    },
+    "listing_identity": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "brand": { "type": ["string", "null"] },
+        "seller": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "image_url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "identifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scheme", "value", "verification_status", "source"],
+        "properties": {
+          "scheme": {
+            "enum": [
+              "retailer_product_id",
+              "gtin",
+              "upc",
+              "asin",
+              "manufacturer_item_id",
+              "sku",
+              "other"
+            ]
+          },
+          "value": { "type": "string", "minLength": 1 },
+          "verification_status": { "enum": ["observed", "verified", "disputed"] },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "attribute_facts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/attributeFact" }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_pack_id",
+        "product_pack_version",
+        "evidence_checksum",
+        "generated_at"
+      ],
+      "properties": {
+        "product_pack_id": { "type": "string", "minLength": 1 },
+        "product_pack_version": { "type": "string", "minLength": 1 },
+        "evidence_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "attributeFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attribute",
+        "raw_value",
+        "normalized_value",
+        "source_kind",
+        "source_reference",
+        "observed_at",
+        "extraction_method",
+        "reliability",
+        "review_status"
+      ],
+      "properties": {
+        "attribute": { "type": "string", "minLength": 1 },
+        "raw_value": {},
+        "normalized_value": {},
+        "unit": { "type": ["string", "null"] },
+        "source_kind": {
+          "enum": [
+            "search",
+            "pdp",
+            "manufacturer",
+            "brand_foundation",
+            "ocr",
+            "vision",
+            "human"
+          ]
+        },
+        "source_reference": { "type": "string", "minLength": 1 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "extraction_method": {
+          "enum": ["structured", "rule", "ocr", "vision", "manual"]
+        },
+        "reliability": { "type": "number", "minimum": 0, "maximum": 1 },
+        "review_status": {
+          "enum": ["unreviewed", "verified", "rejected", "conflicted", "superseded"]
+        },
+        "reviewer": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

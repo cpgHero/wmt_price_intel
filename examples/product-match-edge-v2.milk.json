@@ -1,0 +1,51 @@
+{
+  "schema_version": "2.0.0",
+  "edge_id": "edge-w10450115-a1234",
+  "policy": {
+    "policy_id": "milk_exact_package",
+    "version": "1.0.0",
+    "product_pack_id": "fresh_fluid_milk",
+    "product_pack_version": "1.2.0",
+    "checksum": null
+  },
+  "benchmark_listing_id": "listing-walmart-10450115",
+  "competitor_listing_id": "listing-aldi-1234",
+  "tier": "exact_specification",
+  "status": "auto_approved",
+  "brand_relationship": "private_label_to_private_label",
+  "eligible_price_bases": ["exact_package", "normalized_unit", "lowest_eligible_local_offer"],
+  "evidence_coverage": {
+    "known_critical": 4,
+    "required_critical": 4,
+    "critical_coverage": 1,
+    "weighted_evidence_score": null
+  },
+  "attribute_evidence": [
+    {
+      "attribute": "fat_percent",
+      "role": "required_exact",
+      "benchmark_value": 2,
+      "competitor_value": 2,
+      "outcome": "match",
+      "benchmark_source": "pdp:walmart_us:10450115",
+      "competitor_source": "pdp:aldi_us:1234",
+      "weight": 1,
+      "rationale": null
+    }
+  ],
+  "applicability": {
+    "scope_mode": "observed_distribution",
+    "geography_policy": "physical_store_radius",
+    "benchmark_location_scope_keys": [],
+    "fulfillment_types": ["pickup"],
+    "effective_from": "2026-08-15T12:00:00Z",
+    "effective_to": null
+  },
+  "decision": {
+    "origin": "deterministic_rule",
+    "decided_at": "2026-08-15T12:05:00Z",
+    "actor": null,
+    "reason": "All required exact-package attributes are known and equal.",
+    "supersedes_edge_id": null
+  }
+}

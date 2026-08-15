@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cpghero.com/schemas/local-comparison-observation-v2.schema.json",
+  "title": "Local Product Comparison Observation v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "comparison_id",
+    "analysis_id",
+    "match_edge_id",
+    "competitor_retailer_id",
+    "policy_revision",
+    "benchmark",
+    "competitor",
+    "price_basis",
+    "coverage",
+    "selection",
+    "source_authority"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "comparison_id": { "type": "string", "minLength": 1 },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "match_edge_id": { "type": ["string", "null"], "minLength": 1 },
+    "competitor_retailer_id": { "type": "string", "minLength": 1 },
+    "policy_revision": { "type": "string", "minLength": 1 },
+    "benchmark": { "$ref": "#/$defs/offerObservation" },
+    "competitor": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/offerObservation" }]
+    },
+    "price_basis": {
+      "enum": ["exact_package", "normalized_unit", "random_weight_unit"]
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic", "availability", "price", "reason"],
+      "properties": {
+        "semantic": { "type": "boolean" },
+        "availability": { "type": "boolean" },
+        "price": { "type": "boolean" },
+        "reason": {
+          "enum": [
+            "comparable",
+            "no_eligible_match",
+            "no_geographic_overlap",
+            "matched_product_not_observed",
+            "price_unavailable_or_stale",
+            "collection_failure",
+            "attribute_evidence_incomplete",
+            "match_review_required"
+          ]
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "policy", "candidate_count"],
+      "properties": {
+        "status": { "enum": ["selected", "eligible_not_selected", "unscored"] },
+        "policy": {
+          "enum": ["lowest_eligible_local_offer", "nearest_eligible_offer", "representative_assortment"]
+        },
+        "candidate_count": { "type": "integer", "minimum": 0 },
+        "selection_rank": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "result": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["benchmark_value", "competitor_value", "competitor_minus_benchmark", "winner"],
+          "properties": {
+            "benchmark_value": { "type": "number", "exclusiveMinimum": 0 },
+            "competitor_value": { "type": "number", "exclusiveMinimum": 0 },
+            "competitor_minus_benchmark": { "type": "number" },
+            "winner": { "enum": ["benchmark_lower", "competitor_lower", "parity"] }
+          }
+        }
+      ]
+    },
+    "source_authority": { "const": "search_location_observation" },
+    "generated_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "$defs": {
+    "offerObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_id", "listing_id", "product_id", "location_scope_key", "observed_at"],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "listing_id": { "type": "string", "minLength": 1 },
+        "product_id": { "type": "string", "minLength": 1 },
+        "location_scope_key": { "type": "string", "minLength": 1 },
+        "store_number": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] },
+        "offer_id": { "type": ["string", "null"] },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "comparison_value": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "distance_miles": { "type": ["number", "null"], "minimum": 0 }
+      }
+    }
+  }
+}

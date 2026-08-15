@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -138,8 +139,6 @@ class ParquetDatasetWriter:
         retailer_id: str,
         partition: int = 0,
     ) -> RawArtifact:
-        import json
-
         records = [
             {
                 "profile_id": match.profile_id,
@@ -183,6 +182,50 @@ class ParquetDatasetWriter:
             stage="match_detail",
             retailer_id=retailer_id,
             partition=partition,
+        )
+
+    async def write_matching_v2_shadow(
+        self,
+        document: dict[str, Any],
+        *,
+        run_id: str,
+        retailer_id: str,
+        partition: int = 0,
+    ) -> RawArtifact:
+        """Write an immutable audit document without treating it as report evidence."""
+
+        stage = "matching_v2_shadow"
+        for component in (run_id, stage, retailer_id):
+            if not _SAFE_COMPONENT.fullmatch(component):
+                raise ValueError(f"unsafe dataset key component {component!r}")
+        body = json.dumps(
+            document,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        ).encode()
+        checksum = hashlib.sha256(body).hexdigest()
+        key = (
+            f"datasets/run_id={run_id}/stage={stage}/retailer_id={retailer_id}/"
+            f"part-{partition:05d}-{checksum[:16]}.json"
+        )
+        uri = await self._store.put_bytes(key, body, content_type="application/json")
+        return RawArtifact(
+            storage_uri=uri,
+            content_type="application/json",
+            byte_size=len(body),
+            checksum=checksum,
+            metadata={
+                "stage": stage,
+                "retailer_id": retailer_id,
+                "partition": partition,
+                "shadow_only": True,
+                "authoritative_metrics_affected": False,
+            },
+            artifact_type=stage,
+            schema_version=str(document.get("schema_version") or "2.0.0-shadow"),
+            row_count=len(document.get("edges", [])),
         )
 
     async def _write(

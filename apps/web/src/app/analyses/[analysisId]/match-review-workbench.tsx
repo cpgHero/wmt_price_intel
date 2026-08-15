@@ -7,6 +7,7 @@ import type {
   MatchReview,
   MatchReviewConnection,
   MatchReviewProduct,
+  MatchingV2ShadowView,
   ProductMatchScope,
 } from "@/lib/api";
 import {
@@ -238,6 +239,155 @@ function gapCopy(
   return gap < 0
     ? `${competitorName} is ${amount} lower at the paired median`
     : `${benchmarkName} is ${amount} lower at the paired median`;
+}
+
+function shadowLabel(value: string | null) {
+  if (!value) return "Unresolved";
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) =>
+    letter.toUpperCase(),
+  );
+}
+
+function shadowValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Unknown";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function MatchingV2ShadowPanel({
+  view,
+  productByKey,
+  benchmarkRetailerId,
+  competitorId,
+}: Readonly<{
+  view: MatchingV2ShadowView;
+  productByKey: Map<string, MatchReviewProduct>;
+  benchmarkRetailerId: string;
+  competitorId: string;
+}>) {
+  const artifact = view.artifacts.find(
+    (candidate) => candidate.retailer_id === competitorId,
+  );
+  const summary = artifact?.summary ?? {};
+  return (
+    <details className="matching-v2-preview">
+      <summary>
+        <span>
+          <small>Evidence architecture preview</small>
+          <strong>Matching v2 · governed, read-only shadow results</strong>
+        </span>
+        <em>{view.total_edges} candidate edges</em>
+      </summary>
+      <div className="matching-v2-notice">
+        <strong>Not used in this report yet</strong>
+        <p>
+          These results test tiered product evidence before certification. They
+          cannot change match decisions, scorecards, price math, or reporting.
+        </p>
+      </div>
+      <div className="matching-v2-metrics">
+        <span>
+          <b>{Number(summary.benchmark_listings ?? 0).toLocaleString()}</b>
+          Primary listings
+        </span>
+        <span>
+          <b>{Number(summary.competitor_listings ?? 0).toLocaleString()}</b>
+          Competitor listings
+        </span>
+        <span>
+          <b>{Number(summary.evaluated_pairs ?? 0).toLocaleString()}</b>
+          Evidence pairs evaluated
+        </span>
+        <span>
+          <b>{Number(summary.blocked_pairs ?? 0).toLocaleString()}</b>
+          Known conflicts blocked
+        </span>
+      </div>
+      <div className="matching-v2-edge-list">
+        {view.edges.slice(0, 25).map((edge) => {
+          const benchmarkProductId = edge.benchmark_listing_id.replace(
+            `${benchmarkRetailerId}:`,
+            "",
+          );
+          const competitorProductId = edge.competitor_listing_id.replace(
+            `${competitorId}:`,
+            "",
+          );
+          const benchmark = productByKey.get(
+            `${benchmarkRetailerId}:${benchmarkProductId}`,
+          );
+          const competitor = productByKey.get(
+            `${competitorId}:${competitorProductId}`,
+          );
+          return (
+            <details className="matching-v2-edge" key={edge.edge_id}>
+              <summary>
+                <span>
+                  <strong>{benchmark?.name || benchmarkProductId}</strong>
+                  <small>with {competitor?.name || competitorProductId}</small>
+                </span>
+                <span className={`matching-v2-tier ${edge.tier || "unresolved"}`}>
+                  {shadowLabel(edge.tier)}
+                </span>
+                <em>
+                  {Math.round(edge.evidence_coverage.critical_coverage * 100)}%
+                  evidence coverage
+                </em>
+              </summary>
+              <p className="matching-v2-reason">{edge.decision.reason}</p>
+              <dl className="matching-v2-edge-meta">
+                <div>
+                  <dt>Status</dt>
+                  <dd>{shadowLabel(edge.status)}</dd>
+                </div>
+                <div>
+                  <dt>Brand relationship</dt>
+                  <dd>{shadowLabel(edge.brand_relationship)}</dd>
+                </div>
+                <div>
+                  <dt>Eligible price bases</dt>
+                  <dd>
+                    {edge.eligible_price_bases.length
+                      ? edge.eligible_price_bases.map(shadowLabel).join(" · ")
+                      : "None until resolved"}
+                  </dd>
+                </div>
+              </dl>
+              <div className="matching-v2-evidence-table" role="table">
+                <div role="row" className="matching-v2-evidence-head">
+                  <span role="columnheader">Attribute</span>
+                  <span role="columnheader">Primary</span>
+                  <span role="columnheader">Competitor</span>
+                  <span role="columnheader">Evidence result</span>
+                </div>
+                {edge.attribute_evidence.map((evidence) => (
+                  <div role="row" key={evidence.attribute}>
+                    <span role="cell">
+                      <strong>{shadowLabel(evidence.attribute)}</strong>
+                      <small>{shadowLabel(evidence.role)}</small>
+                    </span>
+                    <span role="cell">{shadowValue(evidence.benchmark_value)}</span>
+                    <span role="cell">{shadowValue(evidence.competitor_value)}</span>
+                    <span role="cell" className={`evidence-${evidence.outcome}`}>
+                      {shadowLabel(evidence.outcome)}
+                      {evidence.rationale ? <small>{evidence.rationale}</small> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+      {view.total_edges > 25 ? (
+        <p className="matching-v2-more">
+          Showing the first 25 deterministic edges. Use product filters in the
+          governed inspection API for the complete population.
+        </p>
+      ) : null}
+    </details>
+  );
 }
 
 function ProductEvidencePanel({
@@ -669,6 +819,8 @@ export function MatchReviewWorkbench({
   const [showRecompute, setShowRecompute] = useState(false);
   const [message, setMessage] = useState("Loading governed match review…");
   const [openedFocus, setOpenedFocus] = useState<string | null>(null);
+  const [matchingV2Shadow, setMatchingV2Shadow] =
+    useState<MatchingV2ShadowView | null>(null);
 
   function updateWorkbenchRoute(updates: Record<string, string | null>) {
     if (!routeBasePath) return;
@@ -746,6 +898,30 @@ export function MatchReviewWorkbench({
       ),
     );
   }, [load]);
+
+  useEffect(() => {
+    if (!competitorId) return;
+    const controller = new AbortController();
+    const parameters = new URLSearchParams({
+      competitor_retailer_id: competitorId,
+      limit: "100",
+    });
+    fetch(
+      `/api/analyses/${encodeURIComponent(analysisId)}/matching-v2-shadow?${parameters}`,
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error("Matching v2 shadow evidence is unavailable.");
+        return (await response.json()) as MatchingV2ShadowView;
+      })
+      .then((view) => setMatchingV2Shadow(view))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setMatchingV2Shadow(null);
+      });
+    return () => controller.abort();
+  }, [analysisId, competitorId]);
 
   const scoped = useMemo(
     () =>
@@ -1111,6 +1287,15 @@ export function MatchReviewWorkbench({
           Ambiguous candidates
         </span>
       </div>
+
+      {matchingV2Shadow ? (
+        <MatchingV2ShadowPanel
+          view={matchingV2Shadow}
+          productByKey={productByKey}
+          benchmarkRetailerId={review.benchmark_retailer.id}
+          competitorId={competitorId}
+        />
+      ) : null}
 
       {scoped.summary.ambiguous ? (
         <section className="match-priority-callout">

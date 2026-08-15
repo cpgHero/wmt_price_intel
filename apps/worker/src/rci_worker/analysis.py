@@ -31,6 +31,8 @@ from rci_analytics import (
     ComparisonEngine,
     ComparisonFact,
     ComparisonInputReducer,
+    ListingEvidenceAccumulatorV2,
+    MatchingShadowEvaluatorV2,
     OfferClassifier,
     ParquetDatasetWriter,
     ProductMatchRule,
@@ -555,6 +557,7 @@ class AnalysisProcessor:
         brand_reviews: BrandReviewRepository | None = None,
         product_packs: CatalogProductPackLoader | None = None,
         product_details: ProductDetailRepository | None = None,
+        matching_v2_shadow_enabled: bool = False,
     ) -> None:
         self._root = repository_root
         self._queue = queue
@@ -570,6 +573,7 @@ class AnalysisProcessor:
         self._brand_reviews = brand_reviews
         self._product_packs = product_packs
         self._product_details = product_details
+        self._matching_v2_shadow_enabled = matching_v2_shadow_enabled
 
     async def process(self, job: AnalysisJob) -> str:
         pack = (
@@ -667,6 +671,11 @@ class AnalysisProcessor:
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
         relationship_reducer = RelationshipInputReducer(pack, profile_ids=requested_profile_ids)
         assortment_accumulator = AssortmentAccumulator()
+        matching_v2_accumulator = (
+            ListingEvidenceAccumulatorV2(pack)
+            if self._matching_v2_shadow_enabled and pack.matching_v2 is not None
+            else None
+        )
         pdp_context: dict[str, dict[str, Any]] = {}
         raw_artifact_ids: list[str] = []
         source_evidence_artifacts: list[tuple[str, str, int]] = []
@@ -758,6 +767,8 @@ class AnalysisProcessor:
             reducer.add(classified_offer)
             relationship_reducer.add(classified_offer)
             assortment_accumulator.add(classified_offer)
+            if matching_v2_accumulator is not None:
+                matching_v2_accumulator.add(classified_offer)
             normalized_batches[retailer_id].append(normalized_offer)
             classified_batches[retailer_id].append(classified_offer)
             if len(normalized_batches[retailer_id]) >= batch_size:
@@ -837,6 +848,62 @@ class AnalysisProcessor:
 
         comparison_offers = reducer.offers()
         relationship_offers = relationship_reducer.offers()
+
+        if matching_v2_accumulator is not None:
+            preferred_profile_id = str(
+                pack.reporting["decision_rules"]["preferred_scorecard_profile_id"]
+            )
+            shadow_evaluator = MatchingShadowEvaluatorV2(pack, preferred_profile_id)
+            shadow_decided_at = (
+                max(observed_values) if observed_values else datetime.now(UTC).isoformat()
+            )
+            maximum_candidate_pairs = int(
+                (pack.matching_v2 or {}).get("maximum_candidate_pairs", 250_000)
+            )
+            benchmark_listings = matching_v2_accumulator.listings(benchmark)
+            for competitor_index, competitor in enumerate(competitors):
+                try:
+                    shadow_result = shadow_evaluator.evaluate_listings(
+                        benchmark_listings,
+                        matching_v2_accumulator.listings(competitor),
+                        benchmark_retailer_id=benchmark,
+                        competitor_retailer_id=competitor,
+                        decided_at=shadow_decided_at,
+                        maximum_candidate_pairs=maximum_candidate_pairs,
+                    )
+                    shadow_document = {
+                        **shadow_result.summary(),
+                        "analysis_run_id": job.id,
+                        "collection_run_id": job.collection_run_id,
+                        "authoritative_metrics_affected": False,
+                        "edges": [edge.to_contract() for edge in shadow_result.edges],
+                    }
+                    shadow_artifact = await self._dataset_writer.write_matching_v2_shadow(
+                        shadow_document,
+                        run_id=job.collection_run_id,
+                        retailer_id=competitor,
+                        partition=competitor_index,
+                    )
+                    await self._collections.record_artifact(job.collection_run_id, shadow_artifact)
+                    logger.info(
+                        "matching v2 shadow projection completed",
+                        extra={
+                            "event": "matching_v2_shadow_completed",
+                            "collection_run_id": job.collection_run_id,
+                            "competitor_retailer_id": competitor,
+                            "evaluated_pairs": shadow_result.evaluated_pairs,
+                            "blocked_pairs": shadow_result.blocked_pairs,
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "matching v2 shadow projection failed without affecting analysis",
+                        extra={
+                            "event": "matching_v2_shadow_failed",
+                            "collection_run_id": job.collection_run_id,
+                            "competitor_retailer_id": competitor,
+                        },
+                    )
 
         comparison_facts: list[ComparisonFact] = []
         comparison_evidence_sets: list[dict[str, Any]] = []

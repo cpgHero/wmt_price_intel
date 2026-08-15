@@ -58,6 +58,11 @@ class ProductPack:
         return tuple(dict(value) for value in self.document["matching_profiles"])
 
     @property
+    def matching_v2(self) -> JsonObject | None:
+        value = self.document.get("matching_v2")
+        return dict(value) if isinstance(value, dict) else None
+
+    @property
     def reporting(self) -> JsonObject:
         return dict(self.document["reporting"])
 
@@ -199,6 +204,14 @@ class ProductPackLoader:
                 raise ContractError(
                     f"profile {profile['id']} has unknown availability policy "
                     f"{availability_policy!r}"
+                )
+        matching_v2 = document.get("matching_v2")
+        if isinstance(matching_v2, dict):
+            configured_attributes = set(str(value) for value in matching_v2["attribute_roles"])
+            unknown_v2_attributes = configured_attributes - known
+            if unknown_v2_attributes:
+                raise ContractError(
+                    f"matching_v2 references unknown attributes {sorted(unknown_v2_attributes)}"
                 )
         strict_required = {
             str(attribute["name"])
