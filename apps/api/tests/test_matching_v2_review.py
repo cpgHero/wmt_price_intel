@@ -152,9 +152,9 @@ async def test_review_service_preserves_large_integers_from_raw_queue_json() -> 
 
     assert result["imported"] is True
     assert repository.imported is not None
-    imported_value = repository.imported["queue"]["cases"][0]["benchmark_listing"][
-        "attributes"
-    ]["provider_sequence"]["value"]
+    imported_value = repository.imported["queue"]["cases"][0]["benchmark_listing"]["attributes"][
+        "provider_sequence"
+    ]["value"]
     assert imported_value == large_integer
 
 
