@@ -129,6 +129,35 @@ async def test_review_service_validates_queue_checksum_before_import() -> None:
         await service.import_queue(invalid)
 
 
+async def test_review_service_preserves_large_integers_from_raw_queue_json() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    document = _queue()
+    large_integer = 10_000_000_000_000_001
+    document["cases"][0]["benchmark_listing"]["attributes"]["provider_sequence"] = {
+        "value": large_integer,
+        "source": "search",
+        "reliability": 1.0,
+        "review_status": "unreviewed",
+    }
+    document.pop("checksum")
+    document["checksum"] = hashlib.sha256(_canonical(document).encode()).hexdigest()
+    request = ImportReviewQueueRequest(
+        organization_id="00000000-0000-0000-0000-000000000001",
+        imported_by="review-admin",
+        queue_json=json.dumps(document, ensure_ascii=False),
+    )
+
+    result = await service.import_queue(request)
+
+    assert result["imported"] is True
+    assert repository.imported is not None
+    imported_value = repository.imported["queue"]["cases"][0]["benchmark_listing"][
+        "attributes"
+    ]["provider_sequence"]["value"]
+    assert imported_value == large_integer
+
+
 async def test_review_and_adjudication_require_governed_tiers_and_two_submissions() -> None:
     repository = ReviewRepository()
     service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)

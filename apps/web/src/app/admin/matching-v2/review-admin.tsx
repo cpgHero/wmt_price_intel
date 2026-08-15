@@ -275,17 +275,23 @@ export function MatchingV2ReviewAdmin() {
     setBusy(true);
     setError(null);
     try {
-      const queue = JSON.parse(await file.text()) as Record<string, unknown>;
-      await jsonRequest("/api/admin/matching-v2/review-queues/import", {
-        method: "POST",
-        body: JSON.stringify({
-          organization_id: DEFAULT_ORGANIZATION_ID,
-          imported_by: "authenticated-match-certification-admin",
-          queue,
-        }),
-      });
+      // Keep the queue as raw JSON until the Python API validates it. Parsing and
+      // re-serializing here can round integers beyond JavaScript's safe range and
+      // invalidate the queue's canonical checksum.
+      const queueJson = await file.text();
+      const response = await jsonRequest<{ queue_id: string }>(
+        "/api/admin/matching-v2/review-queues/import",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            organization_id: DEFAULT_ORGANIZATION_ID,
+            imported_by: "authenticated-match-certification-admin",
+            queue_json: queueJson,
+          }),
+        },
+      );
       await loadQueues();
-      setSelectedQueueId(String(queue.queue_id));
+      setSelectedQueueId(response.queue_id);
     } catch (cause) {
       handleError(cause);
     } finally {

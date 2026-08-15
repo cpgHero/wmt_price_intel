@@ -53,7 +53,8 @@ class ImportReviewQueueRequest(BaseModel):
 
     organization_id: str = Field(min_length=1)
     imported_by: str = Field(min_length=1, max_length=200)
-    queue: dict[str, Any]
+    queue: dict[str, Any] | None = None
+    queue_json: str | None = Field(default=None, min_length=2)
 
 
 class ReviewSubmissionRequest(BaseModel):
@@ -790,23 +791,34 @@ class MatchingV2ReviewService:
         }
 
     async def import_queue(self, request: ImportReviewQueueRequest) -> dict[str, Any]:
+        if request.queue_json is not None:
+            try:
+                queue = json.loads(request.queue_json)
+            except json.JSONDecodeError as exc:
+                raise ValueError("review queue JSON is invalid") from exc
+            if not isinstance(queue, dict):
+                raise ValueError("review queue JSON must contain an object")
+        elif request.queue is not None:
+            queue = request.queue
+        else:
+            raise ValueError("review queue import requires queue_json or queue")
         try:
             validate_instance(
                 self._root,
                 "matching-v2-review-queue.schema.json",
-                request.queue,
+                queue,
                 label="matching v2 review queue import",
             )
         except ContractError as exc:
             raise ValueError(str(exc)) from exc
-        expected_checksum = str(request.queue["checksum"])
-        unsigned = dict(request.queue)
+        expected_checksum = str(queue["checksum"])
+        unsigned = dict(queue)
         unsigned.pop("checksum", None)
         if _checksum(unsigned) != expected_checksum:
             raise ValueError("review queue checksum does not match its canonical document")
         return await self._repository.import_queue(
             request.organization_id,
-            request.queue,
+            queue,
             imported_by=request.imported_by,
         )
 
