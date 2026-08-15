@@ -190,6 +190,7 @@ function scopedProductSummaries(
   candidates: ProductMatchCandidate[],
   decisions: ProductDecision[],
   governedFallback = false,
+  includeAnalysisCandidates = false,
 ): ScorecardProductSummary[] {
   const competitorTokens = new Set([
     retailerIdentityToken(scope.competitor_id),
@@ -212,7 +213,11 @@ function scopedProductSummaries(
     decisions.filter(admitted).map((row) => [productPairKey(row), row]),
   );
   const scopedCandidates = candidates.filter(
-    (row) => admitted(row) && row.profile_id === scope.profile_id,
+    (row) =>
+      competitorTokens.has(retailerIdentityToken(row.competitor)) &&
+      row.profile_id === scope.profile_id &&
+      (row.matches ?? 0) > 0 &&
+      (includeAnalysisCandidates || admitted(row)),
   );
   const scopedDecisions = decisions.filter(
     (row) =>
@@ -346,6 +351,8 @@ export function cohortProductSummaries(
     },
     candidates,
     decisions,
+    false,
+    true,
   );
   if (cohort.overall) return products;
   const cohortAttributes = Object.entries(cohort.attributes);

@@ -1731,8 +1731,9 @@ function IncludedProductsDrawer({
                 : `Products included in ${cohort?.cohort.segment ?? "this cohort"}`}
             </h2>
             <p>
-              One summary per governed {benchmark.name}–{competitor} product
-              relationship. Store-level rows are intentionally omitted.
+              One summary per {benchmark.name}–{competitor} product pair
+              represented by this result. Store-level rows are intentionally
+              omitted.
             </p>
           </div>
           <button
@@ -1767,7 +1768,7 @@ function IncludedProductsDrawer({
           <p>
             {scorecard
               ? "These are the admitted product relationships represented by the scorecard's governed comparison profile."
-              : "These are the admitted one-to-one relationships whose Product Pack attributes place them in this cohort. The cohort does not create one-to-many product matches."}{" "}
+              : "These are the analysis-source product pairs whose Product Pack attributes place them in this immutable cohort result. Their current relationship status is shown on each row; the cohort does not create one-to-many product matches."}{" "}
             Search observations remain authoritative for price and location; PDP
             enrichment supplies identity and imagery where available.
           </p>
@@ -1808,7 +1809,7 @@ function IncludedProductsDrawer({
             <p className="scorecard-products-empty">
               {query
                 ? "No included products match this search."
-                : "No admitted product identities are available for this summary in the current publication."}
+                : "No product identities are available for this summary in the current publication."}
             </p>
           ) : null}
         </div>
@@ -1947,7 +1948,13 @@ function ScorecardProductRow({
           <span>
             {product.relationship_status === "confirmed"
               ? "User-confirmed relationship"
-              : "Engine-suggested governed relationship"}
+              : product.relationship_status === "suggested"
+                ? "Engine-suggested governed relationship"
+                : product.relationship_status === "ambiguous"
+                  ? "Ambiguous relationship · review required"
+                  : product.relationship_status === "rejected"
+                    ? "Rejected relationship in current governance"
+                    : "Analysis-source pair · not yet governed"}
           </span>
           <button type="button" onClick={onReviewMatch}>
             Open match details →
