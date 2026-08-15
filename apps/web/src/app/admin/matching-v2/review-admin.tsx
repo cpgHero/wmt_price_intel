@@ -194,7 +194,9 @@ export function MatchingV2ReviewAdmin() {
       queues: QueueSummary[];
     }>("/api/admin/matching-v2/review-queues?limit=100");
     setQueues(response.queues);
-    setSelectedQueueId((current) => current ?? response.queues[0]?.queue_id ?? null);
+    setSelectedQueueId(
+      (current) => current ?? response.queues[0]?.queue_id ?? null,
+    );
   }, []);
 
   const loadQueue = useCallback(async () => {
@@ -225,7 +227,9 @@ export function MatchingV2ReviewAdmin() {
       })
       .catch((cause: unknown) =>
         setError(
-          cause instanceof Error ? cause.message : "Unable to load admin access.",
+          cause instanceof Error
+            ? cause.message
+            : "Unable to load admin access.",
         ),
       );
   }, [loadQueues]);
@@ -316,8 +320,7 @@ export function MatchingV2ReviewAdmin() {
           body: JSON.stringify({
             reviewer_id: reviewerId.trim(),
             verdict: draft.verdict,
-            allowed_tiers:
-              draft.verdict === "comparable" ? [draft.tier] : [],
+            allowed_tiers: draft.verdict === "comparable" ? [draft.tier] : [],
             rationale: draft.rationale,
             evidence_refs: reviewCase.evidence_refs,
           }),
@@ -377,7 +380,9 @@ export function MatchingV2ReviewAdmin() {
   }
 
   if (session === null)
-    return <div className="builder-loading">Checking administrator access…</div>;
+    return (
+      <div className="builder-loading">Checking administrator access…</div>
+    );
   if (!session.authenticated) {
     return (
       <section className="admin-auth-card">
@@ -403,7 +408,9 @@ export function MatchingV2ReviewAdmin() {
             </button>
           </form>
         ) : (
-          <p className="form-error">Administrator sessions are not configured.</p>
+          <p className="form-error">
+            Administrator sessions are not configured.
+          </p>
         )}
         {error ? <p className="form-error">{error}</p> : null}
       </section>
@@ -508,7 +515,8 @@ export function MatchingV2ReviewAdmin() {
 
           <div className="cert-case-list">
             {view.cases.map((reviewCase) => {
-              const draft = drafts[reviewCase.case_id] ?? defaultDraft(reviewCase);
+              const draft =
+                drafts[reviewCase.case_id] ?? defaultDraft(reviewCase);
               return (
                 <article className="cert-case" key={reviewCase.case_id}>
                   <header>
@@ -552,7 +560,9 @@ export function MatchingV2ReviewAdmin() {
                             <small>{label(evidence.role)}</small>
                           </span>
                           <span>{evidenceValue(evidence.benchmark_value)}</span>
-                          <span>{evidenceValue(evidence.competitor_value)}</span>
+                          <span>
+                            {evidenceValue(evidence.competitor_value)}
+                          </span>
                           <span className={`evidence-${evidence.outcome}`}>
                             {label(evidence.outcome)}
                           </span>
@@ -575,7 +585,9 @@ export function MatchingV2ReviewAdmin() {
 
                   {reviewCase.adjudication ? (
                     <p className="cert-final-decision">
-                      <b>Final decision: {label(reviewCase.adjudication.verdict)}</b>
+                      <b>
+                        Final decision: {label(reviewCase.adjudication.verdict)}
+                      </b>
                       {reviewCase.adjudication.rationale}
                     </p>
                   ) : (
@@ -586,7 +598,8 @@ export function MatchingV2ReviewAdmin() {
                           value={draft.verdict}
                           onChange={(event) =>
                             updateDraft(reviewCase.case_id, {
-                              verdict: event.target.value as ReviewDraft["verdict"],
+                              verdict: event.target
+                                .value as ReviewDraft["verdict"],
                             })
                           }
                         >
@@ -663,18 +676,23 @@ export function MatchingV2ReviewAdmin() {
                 className="button secondary"
                 type="button"
                 disabled={busy || offset === 0}
-                onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
+                onClick={() =>
+                  setOffset((current) => Math.max(0, current - PAGE_SIZE))
+                }
               >
                 Previous cases
               </button>
               <span>
-                {offset + 1}–{Math.min(offset + PAGE_SIZE, view.selected_case_count)} of{" "}
+                {offset + 1}–
+                {Math.min(offset + PAGE_SIZE, view.selected_case_count)} of{" "}
                 {view.selected_case_count.toLocaleString()}
               </span>
               <button
                 className="button secondary"
                 type="button"
-                disabled={busy || offset + PAGE_SIZE >= view.selected_case_count}
+                disabled={
+                  busy || offset + PAGE_SIZE >= view.selected_case_count
+                }
                 onClick={() => setOffset((current) => current + PAGE_SIZE)}
               >
                 Next cases
@@ -685,7 +703,9 @@ export function MatchingV2ReviewAdmin() {
       ) : (
         <section className="cert-empty">
           <h2>No review queue selected</h2>
-          <p>Import one of the validated Matching v2 queue JSON files to begin.</p>
+          <p>
+            Import one of the validated Matching v2 queue JSON files to begin.
+          </p>
         </section>
       )}
     </section>
