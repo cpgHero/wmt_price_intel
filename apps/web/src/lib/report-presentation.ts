@@ -1,7 +1,9 @@
 import type {
   AnalysisReportView,
   ProductDecision,
+  ProductMatchCandidate,
   ReportSectionView,
+  RetailerScorecard,
 } from "./api";
 import { displayLabel, displayValue } from "./presentation";
 
@@ -98,6 +100,36 @@ export function governedOutcomeCounts(
 export type ProductDecisionStance =
   "attention" | "protect" | "parity" | "mixed";
 
+export interface ScorecardProductSummary {
+  id: string;
+  relationship_id: string | null;
+  relationship_status: ProductMatchCandidate["relationship_status"];
+  profile_id: string | null;
+  comparison_metric: string | null;
+  match_rationale: string | null;
+  match_attributes: Record<string, unknown>;
+  benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_image_url: string | null;
+  benchmark_product_url: string | null;
+  competitor: string;
+  competitor_product_id: string;
+  competitor_product_name: string;
+  competitor_image_url: string | null;
+  competitor_product_url: string | null;
+  matches: number;
+  geographies: number;
+  benchmark_lower: number;
+  competitor_lower: number;
+  parity: number;
+  benchmark_lower_share: number;
+  competitor_lower_share: number;
+  median_benchmark_price: number | null;
+  median_competitor_price: number | null;
+  median_gap: number | null;
+  stance: ProductDecisionStance;
+}
+
 /**
  * Convert complete directional evidence into an honest merchant-facing stance.
  * A retailer win requires a majority of matched observations; otherwise the card
@@ -121,6 +153,142 @@ export function productDecisionStance(
     return "parity";
   }
   return "mixed";
+}
+
+function retailerIdentityToken(value: unknown) {
+  return String(value ?? "")
+    .toLocaleLowerCase("en-US")
+    .replace(/\(us\)/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function productPairKey(row: {
+  competitor: string;
+  benchmark_product_id: string;
+  competitor_product_id: string;
+  profile_id?: string | null;
+}) {
+  return [
+    retailerIdentityToken(row.competitor),
+    row.benchmark_product_id,
+    row.competitor_product_id,
+    row.profile_id ?? "",
+  ].join("::");
+}
+
+/**
+ * Project relationship-level evidence for a scorecard without recalculating it.
+ * Preferred scorecards use admitted candidates for the exact scorecard profile;
+ * the legacy governed-products fallback uses the same decision rows from which
+ * that fallback scorecard was reconciled on the server.
+ */
+export function scorecardProductSummaries(
+  scorecard: RetailerScorecard,
+  candidates: ProductMatchCandidate[],
+  decisions: ProductDecision[],
+): ScorecardProductSummary[] {
+  const competitorTokens = new Set([
+    retailerIdentityToken(scorecard.competitor_id),
+    retailerIdentityToken(scorecard.competitor),
+  ]);
+  const admitted = (row: {
+    competitor: string;
+    relationship_status?: ProductMatchCandidate["relationship_status"];
+    qa_status?: ProductMatchCandidate["qa_status"];
+    profile_id?: string | null;
+    matches?: number;
+  }) =>
+    competitorTokens.has(retailerIdentityToken(row.competitor)) &&
+    (row.relationship_status === "suggested" ||
+      row.relationship_status === "confirmed") &&
+    (row.qa_status ?? "ready") === "ready" &&
+    (row.matches ?? 0) > 0;
+
+  const decisionIndex = new Map(
+    decisions.filter(admitted).map((row) => [productPairKey(row), row]),
+  );
+  const governedFallback = scorecard.profile_id === "governed_products";
+  const sourceRows: Array<ProductMatchCandidate | ProductDecision> =
+    governedFallback
+      ? decisions.filter(admitted)
+      : candidates.filter(
+          (row) => admitted(row) && row.profile_id === scorecard.profile_id,
+        );
+  const summaries = sourceRows.map((row) => {
+    const decision = decisionIndex.get(productPairKey(row));
+    const source = decision ?? row;
+    const matches = finiteNumber(source.matches) ?? 0;
+    const benchmarkLower = finiteNumber(source.benchmark_lower) ?? 0;
+    const competitorLower = finiteNumber(source.competitor_lower) ?? 0;
+    const parity = finiteNumber(source.parity) ?? 0;
+    const completeOutcomes =
+      matches > 0 && benchmarkLower + competitorLower + parity === matches;
+    const benchmarkShare =
+      finiteNumber(source.benchmark_lower_share) ??
+      (completeOutcomes ? benchmarkLower / matches : 0);
+    const competitorShare =
+      finiteNumber(source.competitor_lower_share) ??
+      (completeOutcomes ? competitorLower / matches : 0);
+    const parityShare = completeOutcomes ? parity / matches : 0;
+    return {
+      id: source.id,
+      relationship_id: source.relationship_id ?? null,
+      relationship_status: source.relationship_status,
+      profile_id: source.profile_id ?? null,
+      comparison_metric: source.comparison_metric ?? null,
+      match_rationale:
+        "match_rationale" in row ? (row.match_rationale ?? null) : null,
+      match_attributes:
+        "match_attributes" in row ? (row.match_attributes ?? {}) : {},
+      benchmark_product_id: source.benchmark_product_id,
+      benchmark_product_name: source.benchmark_product_name,
+      benchmark_image_url: source.benchmark_image_url ?? null,
+      benchmark_product_url: source.benchmark_product_url ?? null,
+      competitor: source.competitor,
+      competitor_product_id: source.competitor_product_id,
+      competitor_product_name:
+        source.competitor_product_name ?? source.competitor_product_id,
+      competitor_image_url: source.competitor_image_url ?? null,
+      competitor_product_url: source.competitor_product_url ?? null,
+      matches,
+      geographies: finiteNumber(source.geographies) ?? 0,
+      benchmark_lower: benchmarkLower,
+      competitor_lower: competitorLower,
+      parity,
+      benchmark_lower_share: benchmarkShare,
+      competitor_lower_share: competitorShare,
+      median_benchmark_price: finiteNumber(source.median_benchmark_price),
+      median_competitor_price: finiteNumber(source.median_competitor_price),
+      median_gap: finiteNumber(source.median_gap),
+      stance: productDecisionStance({
+        matches,
+        benchmark_lower_share: benchmarkShare,
+        competitor_lower_share: competitorShare,
+        parity: completeOutcomes ? parity : parityShare * matches,
+      }),
+    } satisfies ScorecardProductSummary;
+  });
+  const deduplicated = new Map<string, ScorecardProductSummary>();
+  for (const row of summaries) {
+    const key =
+      row.relationship_id ??
+      [
+        retailerIdentityToken(row.competitor),
+        row.benchmark_product_id,
+        row.competitor_product_id,
+        row.profile_id ?? "",
+      ].join("::");
+    if (!deduplicated.has(key)) deduplicated.set(key, row);
+  }
+  return [...deduplicated.values()].sort(
+    (left, right) =>
+      right.matches - left.matches ||
+      left.benchmark_product_name.localeCompare(right.benchmark_product_name),
+  );
 }
 
 export const reportGroups = [

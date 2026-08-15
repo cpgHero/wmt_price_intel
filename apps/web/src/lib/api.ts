@@ -106,13 +106,31 @@ export interface ProductMatchCandidate {
     | "unavailable";
   qa_status?: "ready" | "review_required" | "suppressed";
   profile_id?: string | null;
+  profile_label?: string | null;
+  comparison_metric?: string | null;
+  match_basis?: "exact_package" | "normalized_unit" | string | null;
+  match_rationale?: string | null;
   benchmark_product_id: string;
   benchmark_product_name: string;
   benchmark_image_url?: string | null;
+  benchmark_product_url?: string | null;
   competitor: string;
   competitor_product_id: string;
+  competitor_product_name?: string | null;
+  competitor_image_url?: string | null;
+  competitor_product_url?: string | null;
   geographies?: number;
   matches?: number;
+  benchmark_lower?: number;
+  competitor_lower?: number;
+  parity?: number;
+  benchmark_lower_share?: number;
+  competitor_lower_share?: number;
+  median_benchmark_price?: number;
+  median_competitor_price?: number;
+  median_gap?: number;
+  plain_insight?: string | null;
+  match_attributes?: Record<string, unknown>;
 }
 
 export interface AssortmentProduct {

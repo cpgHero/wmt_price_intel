@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProductDecision, ReportSectionView } from "./api";
+import type {
+  ProductDecision,
+  ProductMatchCandidate,
+  ReportSectionView,
+  RetailerScorecard,
+} from "./api";
 import {
   comparisonBasisDescription,
   compactMetricName,
@@ -13,6 +18,7 @@ import {
   priceUnitLabel,
   primaryComparisonRows,
   productDecisionStance,
+  scorecardProductSummaries,
 } from "./report-presentation";
 
 function section(id: string, kind: string): ReportSectionView {
@@ -221,6 +227,88 @@ describe("report presentation", () => {
 
     expect(primaryComparisonRows([normalized, exact])).toEqual([
       exact.records[0],
+    ]);
+  });
+
+  it("lists only admitted product relationships from the scorecard profile", () => {
+    const scorecard = {
+      competitor_id: "aldi_us",
+      competitor: "ALDI",
+      profile_id: "strict",
+    } as RetailerScorecard;
+    const base = {
+      id: "candidate-1",
+      relationship_id: "relationship-1",
+      relationship_status: "suggested",
+      qa_status: "ready",
+      profile_id: "strict",
+      comparison_metric: "package_price",
+      benchmark_product_id: "w1",
+      benchmark_product_name: "Walmart milk",
+      competitor: "aldi_us",
+      competitor_product_id: "a1",
+      competitor_product_name: "ALDI milk",
+      matches: 40,
+      geographies: 30,
+      benchmark_lower: 10,
+      competitor_lower: 25,
+      parity: 5,
+      benchmark_lower_share: 0.25,
+      competitor_lower_share: 0.625,
+      median_benchmark_price: 3.98,
+      median_competitor_price: 3.75,
+      median_gap: -0.23,
+    } satisfies ProductMatchCandidate;
+    const candidates = [
+      base,
+      { ...base, id: "unmatched", relationship_status: "unmatched" as const },
+      { ...base, id: "other-lens", profile_id: "per-gallon" },
+      { ...base, id: "other-retailer", competitor: "amazon_us" },
+    ];
+
+    const rows = scorecardProductSummaries(scorecard, candidates, []);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      relationship_id: "relationship-1",
+      matches: 40,
+      stance: "attention",
+      benchmark_product_name: "Walmart milk",
+      competitor_product_name: "ALDI milk",
+    });
+  });
+
+  it("uses server-reconciled decision rows for a governed-products fallback scorecard", () => {
+    const scorecard = {
+      competitor_id: "aldi_us",
+      competitor: "ALDI",
+      profile_id: "governed_products",
+    } as RetailerScorecard;
+    const decision = {
+      id: "decision-1",
+      relationship_id: "relationship-1",
+      relationship_status: "confirmed",
+      qa_status: "ready",
+      profile_id: "strict",
+      benchmark_product_id: "w1",
+      benchmark_product_name: "Walmart milk",
+      competitor: "aldi_us",
+      competitor_product_id: "a1",
+      competitor_product_name: "ALDI milk",
+      matches: 20,
+      geographies: 18,
+      benchmark_lower: 12,
+      competitor_lower: 6,
+      parity: 2,
+      benchmark_lower_share: 0.6,
+      competitor_lower_share: 0.3,
+      median_benchmark_price: 3.5,
+      median_competitor_price: 3.8,
+      median_gap: 0.3,
+    } as ProductDecision;
+
+    expect(scorecardProductSummaries(scorecard, [], [decision])).toMatchObject([
+      { relationship_id: "relationship-1", stance: "protect", matches: 20 },
     ]);
   });
 });

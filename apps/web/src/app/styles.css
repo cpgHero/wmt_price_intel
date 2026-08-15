@@ -9610,6 +9610,29 @@ tbody tr:last-child td {
 .retailer-scorecard-row > div > strong {
   font-size: 1.05rem;
 }
+.retailer-scorecard-evidence > button {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.64rem;
+  font-weight: 850;
+  justify-self: start;
+  margin-top: 0.25rem;
+  padding: 0;
+  text-align: left;
+}
+.retailer-scorecard-evidence > button:hover,
+.retailer-scorecard-evidence > button:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.retailer-scorecard-evidence > button:disabled {
+  color: var(--muted);
+  cursor: default;
+  font-weight: 650;
+  text-decoration: none;
+}
 .retailer-share-bars {
   display: grid;
   gap: 0.3rem;
@@ -9679,6 +9702,298 @@ tbody tr:last-child td {
   margin-top: 1rem;
   padding: 0;
 }
+.scorecard-products-layer {
+  z-index: 1100;
+}
+.scorecard-products-drawer {
+  max-width: 1040px;
+  width: min(96vw, 1040px);
+}
+.scorecard-products-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 0.75fr 0.9fr 0.85fr 1.7fr;
+  margin: 1.25rem 0 0.85rem;
+}
+.scorecard-products-summary > div {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.85rem;
+}
+.scorecard-products-summary span,
+.scorecard-products-summary small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.4;
+}
+.scorecard-products-summary span {
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.scorecard-products-summary strong {
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+.scorecard-products-summary > div:last-child strong {
+  font-size: 0.78rem;
+}
+.scorecard-products-authority {
+  background: linear-gradient(105deg, var(--green-soft), var(--card));
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+}
+.scorecard-products-authority strong {
+  font-size: 0.72rem;
+}
+.scorecard-products-authority p {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.scorecard-products-toolbar {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 1rem 0 0.75rem;
+}
+.scorecard-products-toolbar label {
+  display: grid;
+  flex: 0 1 520px;
+  gap: 0.35rem;
+}
+.scorecard-products-toolbar label > span,
+.scorecard-products-toolbar > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.scorecard-products-toolbar label > span {
+  font-weight: 800;
+}
+.scorecard-products-toolbar input {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 0 0.8rem;
+  width: 100%;
+}
+.scorecard-product-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.scorecard-product-row {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: 14px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.2fr);
+  padding: 0.9rem;
+}
+.scorecard-product-row.attention {
+  border-left-color: var(--amber);
+}
+.scorecard-product-row.protect {
+  border-left-color: var(--green);
+}
+.scorecard-product-pair {
+  align-content: start;
+  display: grid;
+  gap: 0.45rem;
+}
+.scorecard-product-pair > div {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 94px minmax(0, 1fr);
+}
+.scorecard-product-pair > b {
+  color: var(--muted);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  margin-left: 42px;
+  text-transform: uppercase;
+}
+.scorecard-product-pair .product-pair-image {
+  height: 78px;
+  width: 94px;
+}
+.scorecard-product-pair .product-pair-image i {
+  display: none;
+}
+.scorecard-product-pair > div > span {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.scorecard-product-pair small {
+  color: var(--green);
+  font-size: 0.57rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.scorecard-product-pair strong {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.scorecard-product-pair code {
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.58rem;
+  overflow-wrap: anywhere;
+}
+.scorecard-product-outcome {
+  align-content: start;
+  display: grid;
+  gap: 0.55rem;
+}
+.scorecard-product-stance {
+  border-radius: 999px;
+  font-size: 0.56rem;
+  font-weight: 850;
+  justify-self: start;
+  letter-spacing: 0.045em;
+  padding: 0.3rem 0.5rem;
+  text-transform: uppercase;
+}
+.scorecard-product-stance.attention {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
+.scorecard-product-stance.protect {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.scorecard-product-stance.parity,
+.scorecard-product-stance.mixed {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+.scorecard-product-outcome > strong {
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.scorecard-product-outcome > small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+.scorecard-product-share {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+}
+.scorecard-product-share i {
+  display: block;
+  height: 100%;
+}
+.scorecard-product-share i.benchmark {
+  background: var(--ink);
+}
+.scorecard-product-share i.competitor {
+  background: var(--green);
+}
+.scorecard-product-share i.parity {
+  background: var(--amber);
+}
+.scorecard-product-prices {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.scorecard-product-prices span {
+  background: var(--surface-alt);
+  border-radius: 9px;
+  color: var(--muted);
+  display: grid;
+  font-size: 0.53rem;
+  gap: 0.2rem;
+  line-height: 1.35;
+  padding: 0.55rem;
+}
+.scorecard-product-prices b {
+  color: var(--ink);
+  font-size: 0.64rem;
+}
+.scorecard-product-basis {
+  border-top: 1px solid var(--soft-line);
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.55rem;
+}
+.scorecard-product-basis p {
+  color: var(--muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+  margin: 0;
+}
+.scorecard-product-basis > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.scorecard-product-basis > div span {
+  background: var(--green-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.54rem;
+  padding: 0.28rem 0.45rem;
+}
+.scorecard-product-outcome > footer {
+  align-items: center;
+  border-top: 1px solid var(--soft-line);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.55rem;
+}
+.scorecard-product-outcome > footer span {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+.scorecard-product-outcome > footer button {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 850;
+  padding: 0;
+}
+.scorecard-products-more {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  margin: 1rem auto 0;
+  padding: 0.7rem 1rem;
+}
+.scorecard-products-empty {
+  background: var(--surface-alt);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin: 0;
+  padding: 1.2rem;
+  text-align: center;
+}
 .retailer-scope-note {
   background: var(--green-soft);
   border-left: 3px solid var(--green);
@@ -9695,6 +10010,20 @@ tbody tr:last-child td {
   }
   .retailer-scope-control label {
     flex-basis: auto;
+  }
+  .scorecard-products-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .scorecard-products-toolbar,
+  .scorecard-product-outcome > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .scorecard-product-row {
+    grid-template-columns: 1fr;
+  }
+  .scorecard-product-prices {
+    grid-template-columns: 1fr;
   }
 }
 

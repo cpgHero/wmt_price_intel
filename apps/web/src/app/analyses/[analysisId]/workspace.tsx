@@ -25,6 +25,7 @@ import type {
   ProductDecision,
   ProductEvidenceResponse,
   ProductHighlight,
+  ProductMatchCandidate,
   QualityObservation,
   ReportSectionView,
   RetailerOption,
@@ -49,6 +50,8 @@ import {
   priceUnitLabel,
   primaryComparisonRows,
   productDecisionStance,
+  scorecardProductSummaries,
+  type ScorecardProductSummary,
 } from "@/lib/report-presentation";
 
 const tabs = [
@@ -374,7 +377,9 @@ function BlueprintAnalysisWorkspace({
     },
     [],
   );
-  const reviewDecision = (decision: ProductDecision) => {
+  const reviewDecision = (
+    decision: ProductDecision | ScorecardProductSummary,
+  ) => {
     const pairReference =
       decision.relationship_id ||
       `${decision.benchmark_product_id}::${decision.competitor_product_id}`;
@@ -771,7 +776,10 @@ function BlueprintAnalysisWorkspace({
               <RetailerScorecardPanel
                 benchmark={reportView.retailer_scope.benchmark}
                 rows={selectedScorecards}
+                candidates={reportView.match_candidates ?? []}
+                decisions={reportView.product_decisions ?? []}
                 onSelect={selectCompetitor}
+                onReviewMatch={reviewDecision}
               />
             ) : null}
             {activeGroup === "price-segments" ? (
@@ -1407,112 +1415,468 @@ function formatScorecardRate(value: number | null) {
 function RetailerScorecardPanel({
   benchmark,
   rows,
+  candidates,
+  decisions,
   onSelect,
+  onReviewMatch,
 }: Readonly<{
   benchmark: RetailerOption;
   rows: RetailerScorecard[];
+  candidates: ProductMatchCandidate[];
+  decisions: ProductDecision[];
   onSelect: (retailerId: string) => void;
+  onReviewMatch: (product: ScorecardProductSummary) => void;
 }>) {
-  const ranked = [...rows].sort(
-    (left, right) => (right.matches ?? 0) - (left.matches ?? 0),
+  const [selectedScorecard, setSelectedScorecard] =
+    useState<RetailerScorecard | null>(null);
+  const ranked = useMemo(
+    () =>
+      [...rows].sort(
+        (left, right) => (right.matches ?? 0) - (left.matches ?? 0),
+      ),
+    [rows],
   );
+  const productsByScorecard = useMemo(
+    () =>
+      new Map(
+        ranked.map((row) => [
+          `${row.competitor_id}::${row.profile_id}`,
+          scorecardProductSummaries(row, candidates, decisions),
+        ]),
+      ),
+    [candidates, decisions, ranked],
+  );
+  const selectedProducts = selectedScorecard
+    ? (productsByScorecard.get(
+        `${selectedScorecard.competitor_id}::${selectedScorecard.profile_id}`,
+      ) ?? [])
+    : [];
   return (
-    <Section
-      title={
-        rows.length === 1
-          ? `${rows[0].competitor} scorecard`
-          : "Retailer scorecard"
-      }
-      note={`Each row names its governed Product Pack comparison basis. Lower-price shares include ${benchmark.name}, the competitor, and parity; the price-position statement uses the paired median gap.`}
-    >
-      <div className="retailer-scorecard-table">
-        <div className="retailer-scorecard-head">
-          <span>Competitor</span>
-          <span>Matched evidence</span>
-          <span>Lower-price share</span>
-          <span>Paired median price position</span>
-          <span>Status</span>
-        </div>
-        {ranked.map((row) => (
-          <div className="retailer-scorecard-row" key={row.competitor_id}>
-            <button type="button" onClick={() => onSelect(row.competitor_id)}>
-              <strong>{row.competitor}</strong>
-              <span>{row.comparison_lens}</span>
-              <small>
-                {displayLabel(row.comparison_metric)} ·{" "}
-                {priceUnitLabel(row.price_unit)} · {displayLabel(row.geography)}
-              </small>
-            </button>
-            <div>
-              <strong>{(row.matches ?? 0).toLocaleString()}</strong>
-              <span>matched observations</span>
-              <small>
-                {row.matched_geographies === null
-                  ? "Matched ZIP count unavailable"
-                  : `${row.matched_geographies.toLocaleString()} matched ZIP markets`}
-              </small>
-            </div>
-            <div className="retailer-share-bars">
-              <span>
-                {benchmark.name}
-                <b>{formatScorecardRate(row.benchmark_lower_rate)}</b>
-              </span>
-              <i>
-                <b
-                  className="benchmark"
-                  style={{
-                    width: `${Math.max((row.benchmark_lower_rate ?? 0) * 100, 1)}%`,
-                  }}
-                />
-              </i>
-              <span>
-                {row.competitor}
-                <b>{formatScorecardRate(row.competitor_lower_rate)}</b>
-              </span>
-              <i>
-                <b
-                  className="competitor"
-                  style={{
-                    width: `${Math.max((row.competitor_lower_rate ?? 0) * 100, 1)}%`,
-                  }}
-                />
-              </i>
-              <span>
-                Parity
-                <b>{formatScorecardRate(row.parity_rate)}</b>
-              </span>
-              <i>
-                <b
-                  className="parity"
-                  style={{
-                    width: `${Math.max((row.parity_rate ?? 0) * 100, 1)}%`,
-                  }}
-                />
-              </i>
-            </div>
-            <strong className="retailer-price-position">
-              {row.price_position}
-            </strong>
-            <span
-              className={`retailer-score-status ${row.status}`}
-              title={row.readiness_reason}
-            >
-              <b>{row.status === "ready" ? "Ready" : "Limited evidence"}</b>
-              <small>{row.readiness_reason}</small>
-            </span>
+    <>
+      <Section
+        title={
+          rows.length === 1
+            ? `${rows[0].competitor} scorecard`
+            : "Retailer scorecard"
+        }
+        note={`Each row names its governed Product Pack comparison basis. Lower-price shares include ${benchmark.name}, the competitor, and parity; the price-position statement uses the paired median gap. Open the included-products view to see the governed product relationships behind each scorecard.`}
+      >
+        <div className="retailer-scorecard-table">
+          <div className="retailer-scorecard-head">
+            <span>Competitor</span>
+            <span>Matched evidence</span>
+            <span>Lower-price share</span>
+            <span>Paired median price position</span>
+            <span>Status</span>
           </div>
-        ))}
-      </div>
-      {rows.length === 1 ? (
-        <button
-          className="retailer-show-all"
-          type="button"
-          onClick={() => onSelect("all")}
-        >
-          Return to all competitors
-        </button>
+          {ranked.map((row) => {
+            const includedProducts =
+              productsByScorecard.get(
+                `${row.competitor_id}::${row.profile_id}`,
+              ) ?? [];
+            return (
+              <div className="retailer-scorecard-row" key={row.competitor_id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(row.competitor_id)}
+                >
+                  <strong>{row.competitor}</strong>
+                  <span>{row.comparison_lens}</span>
+                  <small>
+                    {displayLabel(row.comparison_metric)} ·{" "}
+                    {priceUnitLabel(row.price_unit)} ·{" "}
+                    {displayLabel(row.geography)}
+                  </small>
+                </button>
+                <div className="retailer-scorecard-evidence">
+                  <strong>{(row.matches ?? 0).toLocaleString()}</strong>
+                  <span>matched observations</span>
+                  <small>
+                    {row.matched_geographies === null
+                      ? "Matched ZIP count unavailable"
+                      : `${row.matched_geographies.toLocaleString()} matched ZIP markets`}
+                  </small>
+                  <button
+                    type="button"
+                    disabled={includedProducts.length === 0}
+                    onClick={() => setSelectedScorecard(row)}
+                  >
+                    {includedProducts.length > 0
+                      ? `View ${includedProducts.length.toLocaleString()} included product${includedProducts.length === 1 ? "" : "s"}`
+                      : "Product summary unavailable"}
+                  </button>
+                </div>
+                <div className="retailer-share-bars">
+                  <span>
+                    {benchmark.name}
+                    <b>{formatScorecardRate(row.benchmark_lower_rate)}</b>
+                  </span>
+                  <i>
+                    <b
+                      className="benchmark"
+                      style={{
+                        width: `${Math.max((row.benchmark_lower_rate ?? 0) * 100, 1)}%`,
+                      }}
+                    />
+                  </i>
+                  <span>
+                    {row.competitor}
+                    <b>{formatScorecardRate(row.competitor_lower_rate)}</b>
+                  </span>
+                  <i>
+                    <b
+                      className="competitor"
+                      style={{
+                        width: `${Math.max((row.competitor_lower_rate ?? 0) * 100, 1)}%`,
+                      }}
+                    />
+                  </i>
+                  <span>
+                    Parity
+                    <b>{formatScorecardRate(row.parity_rate)}</b>
+                  </span>
+                  <i>
+                    <b
+                      className="parity"
+                      style={{
+                        width: `${Math.max((row.parity_rate ?? 0) * 100, 1)}%`,
+                      }}
+                    />
+                  </i>
+                </div>
+                <strong className="retailer-price-position">
+                  {row.price_position}
+                </strong>
+                <span
+                  className={`retailer-score-status ${row.status}`}
+                  title={row.readiness_reason}
+                >
+                  <b>{row.status === "ready" ? "Ready" : "Limited evidence"}</b>
+                  <small>{row.readiness_reason}</small>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        {rows.length === 1 ? (
+          <button
+            className="retailer-show-all"
+            type="button"
+            onClick={() => onSelect("all")}
+          >
+            Return to all competitors
+          </button>
+        ) : null}
+      </Section>
+      {selectedScorecard ? (
+        <ScorecardProductsDrawer
+          key={`${selectedScorecard.competitor_id}::${selectedScorecard.profile_id}`}
+          benchmark={benchmark}
+          scorecard={selectedScorecard}
+          products={selectedProducts}
+          onClose={() => setSelectedScorecard(null)}
+          onReviewMatch={onReviewMatch}
+        />
       ) : null}
-    </Section>
+    </>
+  );
+}
+
+function ScorecardProductsDrawer({
+  benchmark,
+  scorecard,
+  products,
+  onClose,
+  onReviewMatch,
+}: Readonly<{
+  benchmark: RetailerOption;
+  scorecard: RetailerScorecard;
+  products: ScorecardProductSummary[];
+  onClose: () => void;
+  onReviewMatch: (product: ScorecardProductSummary) => void;
+}>) {
+  const [query, setQuery] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(25);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  const filteredProducts = useMemo(() => {
+    const token = query.trim().toLocaleLowerCase("en-US");
+    if (!token) return products;
+    return products.filter((product) =>
+      [
+        product.benchmark_product_name,
+        product.benchmark_product_id,
+        product.competitor_product_name,
+        product.competitor_product_id,
+        product.match_rationale ?? "",
+        ...Object.entries(product.match_attributes).flatMap(([name, value]) => [
+          name,
+          displayValue(value),
+        ]),
+      ]
+        .join(" ")
+        .toLocaleLowerCase("en-US")
+        .includes(token),
+    );
+  }, [products, query]);
+  const visibleProducts = filteredProducts.slice(0, visibleLimit);
+  return (
+    <div
+      className="evidence-drawer-backdrop scorecard-products-layer"
+      role="presentation"
+      onClick={onClose}
+    >
+      <aside
+        className="evidence-drawer scorecard-products-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scorecard-products-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Retailer scorecard evidence</span>
+            <h2 id="scorecard-products-title">
+              Products included in {scorecard.competitor} scorecard
+            </h2>
+            <p>
+              One summary per governed {benchmark.name}–{scorecard.competitor}{" "}
+              product relationship. Store-level rows are intentionally omitted.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close included products"
+          >
+            ×
+          </button>
+        </header>
+        <div className="scorecard-products-summary">
+          <div>
+            <span>Included relationships</span>
+            <strong>{products.length.toLocaleString()}</strong>
+          </div>
+          <div>
+            <span>Matched observations</span>
+            <strong>{(scorecard.matches ?? 0).toLocaleString()}</strong>
+          </div>
+          <div>
+            <span>Matched ZIP markets</span>
+            <strong>
+              {scorecard.matched_geographies?.toLocaleString() ?? "—"}
+            </strong>
+          </div>
+          <div>
+            <span>Comparison basis</span>
+            <strong>{scorecard.comparison_lens}</strong>
+            <small>
+              {displayLabel(scorecard.comparison_metric)} ·{" "}
+              {priceUnitLabel(scorecard.price_unit)} ·{" "}
+              {displayLabel(scorecard.geography)}
+            </small>
+          </div>
+        </div>
+        <div className="scorecard-products-authority">
+          <strong>How to read this list</strong>
+          <p>
+            These are the admitted product relationships represented by the
+            scorecard&apos;s governed comparison profile. Search observations
+            remain authoritative for price and location; PDP enrichment supplies
+            identity and imagery where available.
+          </p>
+        </div>
+        <div className="scorecard-products-toolbar">
+          <label>
+            <span>Find a product</span>
+            <input
+              type="search"
+              value={query}
+              placeholder="Search by product name, item ID, or attribute"
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setVisibleLimit(25);
+              }}
+            />
+          </label>
+          <span>
+            Showing {Math.min(visibleLimit, filteredProducts.length)} of{" "}
+            {filteredProducts.length.toLocaleString()} relationships
+          </span>
+        </div>
+        <div className="scorecard-product-list">
+          {visibleProducts.map((product) => (
+            <ScorecardProductRow
+              key={
+                product.relationship_id ??
+                `${product.benchmark_product_id}::${product.competitor_product_id}`
+              }
+              benchmark={benchmark}
+              scorecard={scorecard}
+              product={product}
+              onReviewMatch={() => onReviewMatch(product)}
+            />
+          ))}
+          {visibleProducts.length === 0 ? (
+            <p className="scorecard-products-empty">
+              No included products match this search.
+            </p>
+          ) : null}
+        </div>
+        {visibleLimit < filteredProducts.length ? (
+          <button
+            className="scorecard-products-more"
+            type="button"
+            onClick={() => setVisibleLimit((value) => value + 25)}
+          >
+            Show 25 more products
+          </button>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
+function ScorecardProductRow({
+  benchmark,
+  scorecard,
+  product,
+  onReviewMatch,
+}: Readonly<{
+  benchmark: RetailerOption;
+  scorecard: RetailerScorecard;
+  product: ScorecardProductSummary;
+  onReviewMatch: () => void;
+}>) {
+  const parityShare = product.matches ? product.parity / product.matches : 0;
+  const outcome =
+    product.stance === "attention"
+      ? `${scorecard.competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)} of matched observations`
+      : product.stance === "protect"
+        ? `${benchmark.name} is lower in ${formatScorecardRate(product.benchmark_lower_share)} of matched observations`
+        : product.stance === "parity"
+          ? `Prices are tied in ${formatScorecardRate(parityShare)} of matched observations`
+          : `Mixed result: ${benchmark.name} is lower in ${formatScorecardRate(product.benchmark_lower_share)}, ${scorecard.competitor} is lower in ${formatScorecardRate(product.competitor_lower_share)}, and ${formatScorecardRate(parityShare)} are tied`;
+  const attributeRows = Object.entries(product.match_attributes)
+    .filter(
+      ([, value]) => value !== null && value !== undefined && value !== "",
+    )
+    .slice(0, 6);
+  return (
+    <article className={`scorecard-product-row ${product.stance}`}>
+      <div className="scorecard-product-pair">
+        <div>
+          <ProductImage
+            imageUrl={product.benchmark_image_url}
+            name={product.benchmark_product_name}
+            retailer={benchmark.name}
+          />
+          <span>
+            <small>{benchmark.name}</small>
+            <strong>{product.benchmark_product_name}</strong>
+            <code>Item {product.benchmark_product_id}</code>
+          </span>
+        </div>
+        <b>vs</b>
+        <div>
+          <ProductImage
+            imageUrl={product.competitor_image_url}
+            name={product.competitor_product_name}
+            retailer={scorecard.competitor}
+          />
+          <span>
+            <small>{scorecard.competitor}</small>
+            <strong>{product.competitor_product_name}</strong>
+            <code>Item {product.competitor_product_id}</code>
+          </span>
+        </div>
+      </div>
+      <div className="scorecard-product-outcome">
+        <span className={`scorecard-product-stance ${product.stance}`}>
+          {product.stance === "attention"
+            ? "Needs attention"
+            : product.stance === "protect"
+              ? "Position to protect"
+              : product.stance === "parity"
+                ? "Price parity"
+                : "Mixed result"}
+        </span>
+        <strong>{outcome}</strong>
+        <small>
+          {product.matches.toLocaleString()} matched observations across{" "}
+          {product.geographies.toLocaleString()} ZIP markets
+        </small>
+        <div
+          className="scorecard-product-share"
+          aria-label={`${benchmark.name} lower ${formatScorecardRate(product.benchmark_lower_share)}, ${scorecard.competitor} lower ${formatScorecardRate(product.competitor_lower_share)}, parity ${formatScorecardRate(parityShare)}`}
+        >
+          <i
+            className="benchmark"
+            style={{ width: `${product.benchmark_lower_share * 100}%` }}
+          />
+          <i
+            className="competitor"
+            style={{ width: `${product.competitor_lower_share * 100}%` }}
+          />
+          <i className="parity" style={{ width: `${parityShare * 100}%` }} />
+        </div>
+        <div className="scorecard-product-prices">
+          <span>
+            {benchmark.name} median price
+            <b>
+              {formatPriceForBasis(
+                product.median_benchmark_price,
+                scorecard.price_unit,
+              )}
+            </b>
+          </span>
+          <span>
+            {scorecard.competitor} median price
+            <b>
+              {formatPriceForBasis(
+                product.median_competitor_price,
+                scorecard.price_unit,
+              )}
+            </b>
+          </span>
+          <span>
+            Paired median gap · competitor minus {benchmark.name}
+            <b>
+              {formatPriceForBasis(product.median_gap, scorecard.price_unit)}
+            </b>
+          </span>
+        </div>
+        {product.match_rationale || attributeRows.length ? (
+          <div className="scorecard-product-basis">
+            {product.match_rationale ? <p>{product.match_rationale}</p> : null}
+            {attributeRows.length ? (
+              <div>
+                {attributeRows.map(([name, value]) => (
+                  <span key={name}>
+                    {displayLabel(name)}: {displayValue(value)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <footer>
+          <span>
+            {product.relationship_status === "confirmed"
+              ? "User-confirmed relationship"
+              : "Engine-suggested governed relationship"}
+          </span>
+          <button type="button" onClick={onReviewMatch}>
+            Open match details →
+          </button>
+        </footer>
+      </div>
+    </article>
   );
 }
 
