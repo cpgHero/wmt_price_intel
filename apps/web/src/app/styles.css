@@ -8268,7 +8268,7 @@ tbody tr:last-child td {
 .comparison-model-guide,
 .assortment-model-guide {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.55rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .comparison-model-guide article,
@@ -8276,11 +8276,11 @@ tbody tr:last-child td {
   align-items: start;
   background: var(--surface-alt);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   display: grid;
-  gap: 0.7rem;
-  grid-template-columns: 28px minmax(0, 1fr);
-  padding: 0.8rem;
+  gap: 0.6rem;
+  grid-template-columns: 26px minmax(0, 1fr);
+  padding: 0.7rem;
 }
 .assortment-model-guide article {
   gap: 0.25rem;
@@ -8292,6 +8292,7 @@ tbody tr:last-child td {
   box-shadow: inset 0 3px 0 var(--green);
 }
 .comparison-model-guide article.actionable {
+  grid-template-columns: minmax(0, 1fr);
   padding: 0;
   transition:
     border-color 140ms ease,
@@ -8302,15 +8303,18 @@ tbody tr:last-child td {
   transform: translateY(-1px);
 }
 .comparison-model-guide article.actionable > button {
+  align-items: start;
   background: transparent;
   border: 0;
   color: inherit;
   cursor: pointer;
   display: grid;
   font: inherit;
-  gap: 0.7rem;
-  grid-template-columns: 28px minmax(0, 1fr);
-  padding: 0.8rem;
+  gap: 0.6rem;
+  grid-column: 1 / -1;
+  grid-template-columns: 26px minmax(0, 1fr);
+  min-width: 0;
+  padding: 0.7rem;
   text-align: left;
   width: 100%;
 }
@@ -8324,8 +8328,9 @@ tbody tr:last-child td {
   display: flex;
   font-size: 0.7rem;
   font-weight: 900;
-  height: 28px;
+  height: 26px;
   justify-content: center;
+  width: 26px;
 }
 .comparison-model-guide article div,
 .assortment-model-guide article {
@@ -8343,24 +8348,24 @@ tbody tr:last-child td {
 .comparison-model-guide strong,
 .assortment-model-guide strong {
   display: block;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   line-height: 1.35;
   margin-top: 0.1rem;
 }
 .comparison-model-guide p,
 .assortment-model-guide span {
   color: var(--muted);
-  font-size: 0.64rem;
-  line-height: 1.45;
+  font-size: 0.61rem;
+  line-height: 1.4;
   margin: 0.2rem 0 0;
 }
 .comparison-model-guide em {
   color: var(--green);
   display: block;
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-style: normal;
   font-weight: 800;
-  margin-top: 0.45rem;
+  margin-top: 0.35rem;
 }
 .cohort-toolbar {
   align-items: end;
