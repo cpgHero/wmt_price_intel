@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from rci_api.matching_v2_review import (
     AdjudicationRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
+    PostgresMatchingV2ReviewRepository,
     ReviewSubmissionRequest,
     get_matching_v2_review_service,
 )
@@ -31,6 +33,15 @@ def _queue() -> dict[str, Any]:
     document.pop("checksum")
     document["checksum"] = hashlib.sha256(_canonical(document).encode()).hexdigest()
     return document
+
+
+def test_postgres_review_filters_cast_nullable_text_parameters() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository._case_rows)
+
+    assert "CAST(:competitor_retailer_id AS text) IS NULL" in source
+    assert "competitor_retailer_id = CAST(:competitor_retailer_id AS text)" in source
+    assert "CAST(:stratum AS text) IS NULL" in source
+    assert "stratum = CAST(:stratum AS text)" in source
 
 
 class ReviewRepository:

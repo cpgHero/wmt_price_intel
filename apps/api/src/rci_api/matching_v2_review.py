@@ -387,9 +387,10 @@ class PostgresMatchingV2ReviewRepository:
                            stratum, critical, case_document, created_at
                     FROM matching_v2_review_case
                     WHERE review_queue_id = CAST(:review_queue_id AS uuid)
-                      AND (:competitor_retailer_id IS NULL
-                           OR competitor_retailer_id = :competitor_retailer_id)
-                      AND (:stratum IS NULL OR stratum = :stratum)
+                      AND (CAST(:competitor_retailer_id AS text) IS NULL
+                           OR competitor_retailer_id = CAST(:competitor_retailer_id AS text))
+                      AND (CAST(:stratum AS text) IS NULL
+                           OR stratum = CAST(:stratum AS text))
                     ORDER BY critical DESC, stratum, external_case_id
                     """
                 ),
