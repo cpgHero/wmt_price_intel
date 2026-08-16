@@ -342,6 +342,11 @@ class PostgresMatchingV2ReviewRepository:
             )
             if queue is None:
                 raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+            competitor_retailers = await self._competitor_retailers(
+                connection,
+                str(queue["id"]),
+                stratum=stratum,
+            )
             cases = await self._case_rows(
                 connection,
                 str(queue["id"]),
@@ -380,6 +385,7 @@ class PostgresMatchingV2ReviewRepository:
                 "stratum": stratum,
                 "review_status": review_status,
             },
+            "competitor_retailers": competitor_retailers,
             "status_counts": dict(sorted(summary_counts.items())),
             "total_cases": total_cases,
             "selected_case_count": len(documents),
@@ -387,6 +393,40 @@ class PostgresMatchingV2ReviewRepository:
             "limit": limit,
             "cases": documents[offset : offset + limit],
         }
+
+    @staticmethod
+    async def _competitor_retailers(
+        connection: AsyncConnection,
+        review_queue_id: str,
+        *,
+        stratum: str | None,
+    ) -> list[dict[str, Any]]:
+        rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT competitor_retailer_id, count(*) AS case_count
+                    FROM matching_v2_review_case
+                    WHERE review_queue_id = CAST(:review_queue_id AS uuid)
+                      AND (CAST(:stratum AS text) IS NULL
+                           OR stratum = CAST(:stratum AS text))
+                    GROUP BY competitor_retailer_id
+                    ORDER BY competitor_retailer_id
+                    """
+                ),
+                {
+                    "review_queue_id": review_queue_id,
+                    "stratum": stratum,
+                },
+            )
+        ).mappings()
+        return [
+            {
+                "retailer_id": str(row["competitor_retailer_id"]),
+                "case_count": int(row["case_count"]),
+            }
+            for row in rows
+        ]
 
     @staticmethod
     async def _case_rows(

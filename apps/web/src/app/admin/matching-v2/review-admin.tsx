@@ -118,6 +118,10 @@ interface QueueView {
   authoritative: false;
   queue: QueueSummary;
   status_counts: Record<string, number>;
+  competitor_retailers: Array<{
+    retailer_id: string;
+    case_count: number;
+  }>;
   total_cases: number;
   selected_case_count: number;
   offset: number;
@@ -215,6 +219,7 @@ export function MatchingV2ReviewAdmin() {
   const [queueRefresh, setQueueRefresh] = useState(0);
   const [view, setView] = useState<QueueView | null>(null);
   const [reviewerId, setReviewerId] = useState("");
+  const [competitorFilter, setCompetitorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [offset, setOffset] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
@@ -244,6 +249,9 @@ export function MatchingV2ReviewAdmin() {
       limit: String(PAGE_SIZE),
       offset: String(offset),
     });
+    if (competitorFilter !== "all") {
+      query.set("competitor_retailer_id", competitorFilter);
+    }
     if (statusFilter !== "all") query.set("review_status", statusFilter);
     const response = await jsonRequest<QueueView>(
       `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}?${query}`,
@@ -262,7 +270,7 @@ export function MatchingV2ReviewAdmin() {
       }
       return next;
     });
-  }, [offset, selectedQueueId, statusFilter]);
+  }, [competitorFilter, offset, selectedQueueId, statusFilter]);
 
   useEffect(() => {
     void jsonRequest<AdminSession>("/api/admin/session")
@@ -547,6 +555,7 @@ export function MatchingV2ReviewAdmin() {
               const value = event.target.value;
               setSelectedQueueId(value || null);
               if (!value) setView(null);
+              setCompetitorFilter("all");
               setOffset(0);
             }}
           >
@@ -555,6 +564,23 @@ export function MatchingV2ReviewAdmin() {
               <option value={queue.queue_id} key={queue.queue_id}>
                 {label(queue.product_pack.id)} · queue v{queue.version} ·{" "}
                 {queue.case_count} cases
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Competitor retailer</span>
+          <select
+            value={competitorFilter}
+            onChange={(event) => {
+              setCompetitorFilter(event.target.value);
+              setOffset(0);
+            }}
+          >
+            <option value="all">All competitor retailers</option>
+            {(view?.competitor_retailers ?? []).map((retailer) => (
+              <option value={retailer.retailer_id} key={retailer.retailer_id}>
+                {label(retailer.retailer_id)} · {retailer.case_count} cases
               </option>
             ))}
           </select>
@@ -905,15 +931,20 @@ export function MatchingV2ReviewAdmin() {
                       </div>
                       {activeCase.edge.attribute_evidence.map((evidence) => (
                         <div role="row" key={evidence.attribute}>
-                          <span>
+                          <span data-label="Attribute">
                             <b>{label(evidence.attribute)}</b>
                             <small>{label(evidence.role)}</small>
                           </span>
-                          <span>{evidenceValue(evidence.benchmark_value)}</span>
-                          <span>
+                          <span data-label="Primary">
+                            {evidenceValue(evidence.benchmark_value)}
+                          </span>
+                          <span data-label="Competitor">
                             {evidenceValue(evidence.competitor_value)}
                           </span>
-                          <span className={`evidence-${evidence.outcome}`}>
+                          <span
+                            className={`evidence-${evidence.outcome}`}
+                            data-label="Outcome"
+                          >
                             {label(evidence.outcome)}
                           </span>
                         </div>

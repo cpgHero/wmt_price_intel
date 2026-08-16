@@ -230,11 +230,16 @@ async def test_review_queue_route_is_authenticated_surface_and_non_authoritative
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(
             "/api/v1/matching-v2/review-queues/milk-release-review-contract-fixture",
-            params={"review_status": "pending", "limit": 20},
+            params={
+                "competitor_retailer_id": "aldi_us",
+                "review_status": "pending",
+                "limit": 20,
+            },
         )
 
     assert response.status_code == 200
     assert response.json()["authoritative"] is False
+    assert response.json()["filters"]["competitor_retailer_id"] == "aldi_us"
 
 
 async def test_review_submission_route_is_scoped_to_its_queue() -> None:

@@ -3805,8 +3805,8 @@ tbody tr:last-child td {
   display: grid;
   gap: 0.8rem;
   grid-template-columns:
-    minmax(220px, 1.15fr) minmax(150px, 0.7fr) minmax(220px, 1fr)
-    auto;
+    minmax(210px, 1.1fr) repeat(2, minmax(145px, 0.68fr))
+    minmax(210px, 1fr) auto;
   padding: 1rem;
   position: sticky;
   top: 58px;
@@ -4049,6 +4049,7 @@ tbody tr:last-child td {
 .cert-evidence {
   border: 1px solid var(--soft-line);
   border-radius: 11px;
+  min-width: 0;
   overflow: hidden;
 }
 .cert-evidence summary {
@@ -4060,6 +4061,8 @@ tbody tr:last-child td {
 .cert-evidence [role="table"] {
   border-top: 1px solid var(--soft-line);
   display: grid;
+  min-width: 0;
+  overflow-x: auto;
 }
 .cert-evidence [role="row"] {
   display: grid;
@@ -4069,6 +4072,10 @@ tbody tr:last-child td {
     minmax(130px, 0.9fr) repeat(2, minmax(140px, 1fr))
     minmax(90px, 0.55fr);
   padding: 0.55rem 0.8rem;
+}
+.cert-evidence [role="row"] > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .cert-evidence [role="row"] + [role="row"] {
   border-top: 1px solid var(--soft-line);
@@ -4215,10 +4222,14 @@ tbody tr:last-child td {
     justify-self: center;
   }
   .cert-evidence [role="table"] {
-    overflow-x: auto;
+    overflow-x: hidden;
   }
   .cert-evidence [role="row"] {
-    min-width: 680px;
+    gap: 0.35rem;
+    grid-template-columns:
+      minmax(105px, 1.15fr) repeat(2, minmax(0, 1fr))
+      minmax(70px, 0.65fr);
+    min-width: 0;
   }
   .cert-pagination {
     flex-wrap: wrap;
@@ -4274,6 +4285,7 @@ tbody tr:last-child td {
   height: 100dvh;
   margin-left: auto;
   max-width: 1040px;
+  min-width: 0;
   width: min(88vw, 1040px);
 }
 .cert-drawer-header {
@@ -4300,8 +4312,11 @@ tbody tr:last-child td {
 .cert-drawer-body {
   display: grid;
   gap: 0.85rem;
+  min-width: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 1rem 1.2rem 1.5rem;
+  scrollbar-gutter: stable;
 }
 .cert-governance-grid {
   display: grid;
@@ -4470,6 +4485,8 @@ tbody tr:last-child td {
 }
 .cert-ai-result details {
   border-top: 1px solid var(--soft-line);
+  min-width: 0;
+  overflow: hidden;
   padding-top: 0.55rem;
 }
 .cert-ai-result summary {
@@ -4486,6 +4503,10 @@ tbody tr:last-child td {
   display: grid;
   gap: 0.1rem;
   grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+}
+.cert-ai-result dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .cert-ai-result dt,
 .cert-ai-result dd {
@@ -4513,9 +4534,18 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 900px) {
-  .cert-case-compact,
-  .cert-review-form-drawer {
+  .cert-case-compact {
     grid-template-columns: 1fr;
+  }
+  .cert-review-form-drawer {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 0.55fr);
+  }
+  .cert-review-form-drawer fieldset,
+  .cert-review-form-drawer .cert-rationale {
+    grid-column: 1 / -1;
+  }
+  .cert-review-form-drawer .cert-rationale {
+    grid-row: auto;
   }
   .cert-case-compact > .button {
     justify-self: start;
@@ -4540,6 +4570,33 @@ tbody tr:last-child td {
   }
   .cert-pair-mark {
     justify-self: start;
+  }
+  .cert-review-form-drawer {
+    grid-template-columns: 1fr;
+  }
+  .cert-evidence-head {
+    display: none !important;
+  }
+  .cert-evidence [role="row"] {
+    gap: 0.45rem 0.8rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.7rem 0.8rem;
+  }
+  .cert-evidence [role="row"] > span:first-child {
+    grid-column: 1 / -1;
+  }
+  .cert-evidence [role="row"] > span::before {
+    color: var(--muted);
+    content: attr(data-label);
+    display: block;
+    font-size: 0.52rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.14rem;
+    text-transform: uppercase;
+  }
+  .cert-ai-result dl div {
+    grid-template-columns: 1fr;
   }
 }
 
