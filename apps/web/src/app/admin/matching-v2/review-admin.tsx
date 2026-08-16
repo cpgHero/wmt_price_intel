@@ -65,6 +65,32 @@ interface FinalDecision extends ReviewSubmission {
 
 type AIDraftStatus = "queued" | "running" | "succeeded" | "needs_review";
 
+interface AIReviewBatchSummary {
+  id: string;
+  requested_by: string;
+  model_id: string;
+  requested_case_count: number;
+  task_count: number;
+  queued: number;
+  running: number;
+  succeeded: number;
+  needs_review: number;
+  completed_count: number;
+  progress_percent: number;
+  estimated_seconds_remaining: number | null;
+  estimated_cost_usd: number;
+  submitted_at: string;
+  started_at: string | null;
+  last_activity_at: string | null;
+  completed_at: string | null;
+}
+
+interface AIReviewSummary {
+  active_task_count: number;
+  status_counts: Record<AIDraftStatus, number>;
+  latest_batch: AIReviewBatchSummary | null;
+}
+
 interface ReviewCase {
   case_id: string;
   stratum: string;
@@ -100,6 +126,7 @@ interface ReviewCase {
   };
   ai_draft?: null | {
     id: string;
+    batch_id: string;
     status: AIDraftStatus;
     model_id: string;
     requested_by: string;
@@ -126,7 +153,13 @@ interface ReviewCase {
     usage?: {
       estimated_cost_usd?: number | null;
     };
+    attempt_count: number;
+    max_attempts: number;
+    last_error_type?: string | null;
     last_error_message?: string | null;
+    created_at: string;
+    updated_at: string;
+    completed_at?: string | null;
   };
 }
 
@@ -142,6 +175,7 @@ interface QueueView {
     authoritative: false;
     human_review_required: true;
   };
+  ai_review_summary?: AIReviewSummary;
   status_counts: Record<string, number>;
   competitor_retailers: Array<{
     retailer_id: string;
@@ -231,6 +265,24 @@ function aiDraftStatusLabel(status: AIDraftStatus) {
   }
 }
 
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "Not started";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatDuration(seconds: number | null) {
+  if (seconds === null) return "Calculating after the first draft finishes";
+  if (seconds < 60) return "Less than a minute";
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `About ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `About ${hours} hr${hours === 1 ? "" : "s"}${remainder ? ` ${remainder} min` : ""}`;
+}
+
 function evidenceValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "Unknown";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -302,6 +354,7 @@ export function MatchingV2ReviewAdmin() {
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [refreshingAI, setRefreshingAI] = useState(false);
   const reviewerInputRef = useRef<HTMLInputElement>(null);
+  const queueRequestSequence = useRef(0);
 
   const loadQueues = useCallback(async () => {
     const response = await jsonRequest<{
@@ -321,6 +374,7 @@ export function MatchingV2ReviewAdmin() {
 
   const loadQueue = useCallback(async () => {
     if (!selectedQueueId) return;
+    const requestSequence = ++queueRequestSequence.current;
     const query = new URLSearchParams({
       limit: String(PAGE_SIZE),
       offset: String(offset),
@@ -332,6 +386,7 @@ export function MatchingV2ReviewAdmin() {
     const response = await jsonRequest<QueueView>(
       `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}?${query}`,
     );
+    if (requestSequence !== queueRequestSequence.current) return;
     setView(response);
     setActiveCaseId((current) =>
       current &&
@@ -425,12 +480,14 @@ export function MatchingV2ReviewAdmin() {
   );
   const hasRunningAIDrafts = useMemo(
     () =>
-      (view?.cases ?? []).some((reviewCase) =>
-        ["queued", "running"].includes(reviewCase.ai_draft?.status ?? ""),
-      ),
+      (view?.ai_review_summary?.active_task_count ??
+        (view?.cases ?? []).filter((reviewCase) =>
+          ["queued", "running"].includes(reviewCase.ai_draft?.status ?? ""),
+        ).length) > 0,
     [view],
   );
   const aiDraftStatusCounts = useMemo(() => {
+    if (view?.ai_review_summary) return view.ai_review_summary.status_counts;
     const counts: Record<AIDraftStatus, number> = {
       queued: 0,
       running: 0,
@@ -446,12 +503,13 @@ export function MatchingV2ReviewAdmin() {
     (total, count) => total + count,
     0,
   );
+  const latestAIBatch = view?.ai_review_summary?.latest_batch ?? null;
 
   useEffect(() => {
     if (!hasRunningAIDrafts) return;
     const timer = window.setTimeout(
       () => void loadQueue().catch(handleError),
-      2000,
+      2500,
     );
     return () => window.clearTimeout(timer);
   }, [hasRunningAIDrafts, loadQueue]);
@@ -922,7 +980,7 @@ export function MatchingV2ReviewAdmin() {
               </button>
             </div>
             <div className="cert-ai-status-summary" aria-live="polite">
-              <div>
+              <div className="cert-ai-status-counts">
                 <span className="queued">
                   <i aria-hidden="true" />
                   <strong>{aiDraftStatusCounts.queued}</strong> queued
@@ -941,12 +999,51 @@ export function MatchingV2ReviewAdmin() {
                   attention
                 </span>
               </div>
+              {latestAIBatch ? (
+                <div className="cert-ai-progress-panel">
+                  <div>
+                    <strong>
+                      Latest batch · {latestAIBatch.completed_count} of{" "}
+                      {latestAIBatch.task_count} complete
+                    </strong>
+                    <span>
+                      Submitted {formatTimestamp(latestAIBatch.submitted_at)} by{" "}
+                      {latestAIBatch.requested_by}
+                    </span>
+                  </div>
+                  <div
+                    className="cert-ai-progress-track"
+                    role="progressbar"
+                    aria-label="Latest AI review batch progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={latestAIBatch.progress_percent}
+                  >
+                    <span
+                      style={{ width: `${latestAIBatch.progress_percent}%` }}
+                    />
+                  </div>
+                  <div className="cert-ai-batch-meta">
+                    <span>
+                      {latestAIBatch.completed_at
+                        ? `Finished ${formatTimestamp(latestAIBatch.completed_at)}`
+                        : `Estimated remaining: ${formatDuration(latestAIBatch.estimated_seconds_remaining)}`}
+                    </span>
+                    <span>
+                      Recorded cost $
+                      {latestAIBatch.estimated_cost_usd.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p>No AI review batches are recorded for this queue yet.</p>
+              )}
               <p>
                 {hasRunningAIDrafts
-                  ? "Status refreshes automatically while AI work is queued or running."
+                  ? "Queue-wide status refreshes automatically while AI work is queued or running."
                   : visibleAIDraftCount
-                    ? "Open Review evidence on a ready case to inspect and independently decide the match."
-                    : "No AI drafts are recorded on this filtered page yet."}
+                    ? "Queue-wide status is current. Open Review evidence on a ready case to make the final human decision."
+                    : "No AI drafts are recorded for this queue yet."}
               </p>
               <button
                 className="button secondary"
@@ -1279,9 +1376,28 @@ export function MatchingV2ReviewAdmin() {
                             ) : null}
                           </>
                         ) : activeCase.ai_draft.last_error_message ? (
-                          <p>{activeCase.ai_draft.last_error_message}</p>
+                          <div className="cert-ai-error-detail" role="status">
+                            <strong>
+                              {activeCase.ai_draft.status === "needs_review"
+                                ? "The AI draft could not be completed"
+                                : "The worker will retry this draft"}
+                            </strong>
+                            <p>{activeCase.ai_draft.last_error_message}</p>
+                            <small>
+                              {activeCase.ai_draft.last_error_type
+                                ? `${activeCase.ai_draft.last_error_type} · `
+                                : ""}
+                              Attempt {activeCase.ai_draft.attempt_count} of{" "}
+                              {activeCase.ai_draft.max_attempts} · Last activity{" "}
+                              {formatTimestamp(activeCase.ai_draft.updated_at)}
+                            </small>
+                          </div>
                         ) : (
-                          <p>The worker is preparing this advisory draft.</p>
+                          <p>
+                            The worker is preparing this advisory draft. Attempt{" "}
+                            {activeCase.ai_draft.attempt_count} of{" "}
+                            {activeCase.ai_draft.max_attempts}.
+                          </p>
                         )}
                       </div>
                     ) : null}

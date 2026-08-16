@@ -315,6 +315,8 @@ class ReviewRepository:
         draft = {
             "queue_id": external_queue_id,
             "case_id": external_case_id,
+            "batch_id": "00000000-0000-0000-0000-000000000099",
+            "created_at": "2026-08-16T12:00:00+00:00",
             "requested_by": requested_by,
             "model_id": model_id,
             "prompt": prompt,
@@ -498,6 +500,11 @@ async def test_ai_review_batch_is_bounded_idempotent_input_and_human_gated() -> 
     assert result["authoritative"] is False
     assert result["human_review_required"] is True
     assert result["requested_case_count"] == 2
+    assert result["batch"] == {
+        "id": "00000000-0000-0000-0000-000000000099",
+        "created_at": "2026-08-16T12:00:00+00:00",
+        "requested_case_count": 2,
+    }
     assert [draft["case_id"] for draft in repository.ai_drafts] == ["case-1", "case-2"]
     assert len({draft["prompt"]["checksum"] for draft in repository.ai_drafts}) == 1
 

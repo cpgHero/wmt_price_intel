@@ -94,6 +94,7 @@ OPENAI_TIMEOUT_SECONDS=60
 OPENAI_MAX_OUTPUT_TOKENS=8000
 OPENAI_MAX_REQUEST_COST_USD=1.00
 MATCHING_V2_AI_REVIEW_ENABLED=false
+MATCHING_V2_AI_REVIEW_CONCURRENCY=2
 OPENAI_MATCHING_TIMEOUT_SECONDS=90
 OPENAI_MATCHING_MAX_OUTPUT_TOKENS=3000
 OPENAI_MATCHING_MAX_REQUEST_COST_USD=0.35
@@ -120,7 +121,11 @@ deterministic pipeline.
 OpenAI credential: it only creates an authenticated durable draft task. `OPENAI_API_KEY` remains a
 sealed worker-only secret. The worker claims tasks with `FOR UPDATE SKIP LOCKED`, uses the explicit
 matching-review model and per-request cost ceiling, and writes a non-authoritative result for human
-review.
+review. `MATCHING_V2_AI_REVIEW_CONCURRENCY` is worker-only, defaults to `2`, and is clamped to `1–4`.
+At the default, no more than two matching-review calls can be in flight per worker process, so the
+configured $0.35 per-request ceiling implies at most $0.70 of simultaneous request exposure per
+worker. The UI reads durable batch and task status from Postgres; it does not infer progress from
+the currently visible page.
 
 ### scheduler
 

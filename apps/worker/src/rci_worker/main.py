@@ -166,6 +166,10 @@ async def run() -> None:
     )
     assistant: GovernedAnalysisAssistant | None = None
     matching_review_worker: MatchingReviewAIWorker | None = None
+    matching_review_concurrency = max(
+        1,
+        min(int(os.getenv("MATCHING_V2_AI_REVIEW_CONCURRENCY", "2")), 4),
+    )
     if _enabled(os.getenv("AI_ENABLED")):
         assistant = GovernedAnalysisAssistant(
             repository_root=repository_root,
@@ -364,7 +368,9 @@ async def run() -> None:
                 await study_discovery_worker.run_once() if study_discovery_worker is not None else 0
             )
             matching_reviews = (
-                await matching_review_worker.run_once() if matching_review_worker is not None else 0
+                await matching_review_worker.run_many(matching_review_concurrency)
+                if matching_review_worker is not None
+                else 0
             )
             if (
                 claimed

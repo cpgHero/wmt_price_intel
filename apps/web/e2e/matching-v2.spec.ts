@@ -102,6 +102,34 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
           authoritative: false,
           human_review_required: true,
         },
+        ai_review_summary: {
+          active_task_count: 2,
+          status_counts: {
+            queued: 1,
+            running: 1,
+            succeeded: 1,
+            needs_review: 1,
+          },
+          latest_batch: {
+            id: "batch-1",
+            requested_by: "fixture@cpghero.com",
+            model_id: "gpt-5.6-terra",
+            requested_case_count: 4,
+            task_count: 4,
+            queued: 1,
+            running: 1,
+            succeeded: 1,
+            needs_review: 1,
+            completed_count: 2,
+            progress_percent: 50,
+            estimated_seconds_remaining: 90,
+            estimated_cost_usd: 0.1234,
+            submitted_at: "2026-08-16T12:00:00Z",
+            started_at: "2026-08-16T12:00:02Z",
+            last_activity_at: "2026-08-16T12:01:00Z",
+            completed_at: null,
+          },
+        },
         status_counts: { adjudicated: 0 },
         competitor_retailers: [{ retailer_id: "aldi_us", case_count: 30 }],
         total_cases: 30,
@@ -122,6 +150,12 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   await expect(statusSummary).toContainText("1 reviewing");
   await expect(statusSummary).toContainText("1 drafts ready");
   await expect(statusSummary).toContainText("1 needs attention");
+  await expect(statusSummary).toContainText("Latest batch · 2 of 4 complete");
+  await expect(statusSummary).toContainText("Estimated remaining: About 2 min");
+  await expect(statusSummary).toContainText("Recorded cost $0.1234");
+  await expect(statusSummary).toContainText(
+    "Queue-wide status refreshes automatically",
+  );
   await expect(
     statusSummary.getByRole("button", { name: "Refresh AI status" }),
   ).toBeVisible();

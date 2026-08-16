@@ -646,7 +646,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The draft is advisory, cannot certify a match, and must be adopted and submitted by a human. Vision proposals cite the source image and never treat an unseen claim as false.",
+          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The draft is advisory, cannot certify a match, and must be adopted and submitted by a human. Vision proposals cite the source image and never treat an unseen claim as false.",
         },
         {
           kind: "callout",
@@ -897,7 +897,7 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "worker",
-              "Collection, normalization, analysis, PDP, Product Pack validation, AI, and Matching v2 tasks.",
+              "Collection, normalization, analysis, PDP, Product Pack validation, AI, and bounded-concurrency Matching v2 review batches.",
               "Durable Postgres claims; provider and OpenAI credentials live here.",
             ],
             [
@@ -1278,6 +1278,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented",
+              "Match Certification AI review gained durable batch observability and bounded concurrency.",
+              "Administrators now see queue-wide progress, timestamps, ETA, cost, retries, and terminal errors while the worker processes two cases concurrently by default.",
+            ],
             [
               "2026-08-16",
               "Verified",

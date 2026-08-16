@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import secrets
 from collections import defaultdict
@@ -446,6 +447,7 @@ class PostgresMatchingV2ReviewRepository:
             submissions = await self._submission_rows(connection, case_ids)
             adjudications = await self._adjudication_rows(connection, case_ids)
             ai_drafts = await self._ai_draft_rows(connection, case_ids)
+            ai_review_summary = await self._ai_review_summary(connection, str(queue["id"]))
         documents = self._case_documents(cases, submissions, adjudications, ai_drafts)
         _apply_observed_location_sidecar(
             documents,
@@ -482,6 +484,7 @@ class PostgresMatchingV2ReviewRepository:
                 "review_status": review_status,
             },
             "competitor_retailers": competitor_retailers,
+            "ai_review_summary": ai_review_summary,
             "status_counts": dict(sorted(summary_counts.items())),
             "total_cases": total_cases,
             "selected_case_count": len(documents),
@@ -620,11 +623,13 @@ class PostgresMatchingV2ReviewRepository:
                 text(
                     """
                     SELECT DISTINCT ON (review_case_id)
-                           id::text, review_case_id::text, status, requested_by,
+                           id::text, batch_id::text, review_case_id::text,
+                           status, requested_by,
                            model_provider, model_id, prompt_id, prompt_version,
                            prompt_checksum, input_checksum, output_checksum,
                            output_document, usage, attempt_count, max_attempts,
-                           last_error_type, last_error_message, created_at, completed_at
+                           last_error_type, last_error_message, created_at,
+                           updated_at, locked_at, lease_expires_at, completed_at
                     FROM matching_v2_ai_review_task
                     WHERE review_case_id = ANY(CAST(:case_ids AS uuid[]))
                     ORDER BY review_case_id, created_at DESC, id DESC
@@ -634,6 +639,133 @@ class PostgresMatchingV2ReviewRepository:
             )
         ).mappings()
         return [dict(row) for row in rows]
+
+    @staticmethod
+    async def _ai_review_summary(
+        connection: AsyncConnection, review_queue_id: str
+    ) -> dict[str, Any]:
+        status_row = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        WITH latest AS (
+                          SELECT DISTINCT ON (task.review_case_id)
+                                 task.status
+                          FROM matching_v2_ai_review_task task
+                          JOIN matching_v2_review_case review_case
+                            ON review_case.id = task.review_case_id
+                          WHERE review_case.review_queue_id = CAST(:review_queue_id AS uuid)
+                          ORDER BY task.review_case_id, task.created_at DESC, task.id DESC
+                        )
+                        SELECT count(*) FILTER (WHERE status = 'queued') AS queued,
+                               count(*) FILTER (WHERE status = 'running') AS running,
+                               count(*) FILTER (WHERE status = 'succeeded') AS succeeded,
+                               count(*) FILTER (WHERE status = 'needs_review') AS needs_review
+                        FROM latest
+                        """
+                    ),
+                    {"review_queue_id": review_queue_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        batch = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT batch.id::text, batch.requested_by, batch.model_provider,
+                               batch.model_id, batch.requested_case_count,
+                               batch.created_at AS submitted_at,
+                               min(task.locked_at) AS started_at,
+                               max(task.updated_at) AS last_activity_at,
+                               CASE
+                                 WHEN count(task.id) > 0
+                                  AND count(task.id) FILTER (
+                                    WHERE task.status IN ('queued', 'running')
+                                  ) = 0
+                                 THEN max(coalesce(task.completed_at, task.updated_at))
+                                 ELSE NULL
+                               END AS completed_at,
+                               count(task.id) AS task_count,
+                               count(task.id) FILTER (WHERE task.status = 'queued') AS queued,
+                               count(task.id) FILTER (WHERE task.status = 'running') AS running,
+                               count(task.id) FILTER (WHERE task.status = 'succeeded') AS succeeded,
+                               count(task.id) FILTER (
+                                 WHERE task.status = 'needs_review'
+                               ) AS needs_review,
+                               coalesce(sum(
+                                 CASE
+                                   WHEN task.usage ? 'estimated_cost_usd'
+                                   THEN (task.usage->>'estimated_cost_usd')::numeric
+                                   ELSE 0
+                                 END
+                               ), 0) AS estimated_cost_usd
+                        FROM matching_v2_ai_review_batch batch
+                        LEFT JOIN matching_v2_ai_review_task task
+                          ON task.batch_id = batch.id
+                        WHERE batch.review_queue_id = CAST(:review_queue_id AS uuid)
+                        GROUP BY batch.id
+                        ORDER BY batch.created_at DESC, batch.id DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"review_queue_id": review_queue_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        counts = {
+            key: int(status_row[key] or 0)
+            for key in ("queued", "running", "succeeded", "needs_review")
+        }
+        if batch is None:
+            return {
+                "active_task_count": counts["queued"] + counts["running"],
+                "status_counts": counts,
+                "latest_batch": None,
+            }
+        batch_counts = {
+            key: int(batch[key] or 0) for key in ("queued", "running", "succeeded", "needs_review")
+        }
+        completed_count = batch_counts["succeeded"] + batch_counts["needs_review"]
+        task_count = int(batch["task_count"] or 0)
+        estimated_seconds_remaining: int | None = None
+        if completed_count and batch_counts["queued"] + batch_counts["running"]:
+            elapsed = max(
+                0.0,
+                (batch["last_activity_at"] - batch["submitted_at"]).total_seconds(),
+            )
+            estimated_seconds_remaining = math.ceil(
+                (elapsed / completed_count) * (task_count - completed_count)
+            )
+        iso_fields = {
+            key: (batch[key].isoformat() if batch[key] is not None else None)
+            for key in ("submitted_at", "started_at", "last_activity_at", "completed_at")
+        }
+        return {
+            "active_task_count": counts["queued"] + counts["running"],
+            "status_counts": counts,
+            "latest_batch": {
+                "id": str(batch["id"]),
+                "requested_by": str(batch["requested_by"]),
+                "model_provider": str(batch["model_provider"]),
+                "model_id": str(batch["model_id"]),
+                "requested_case_count": int(batch["requested_case_count"]),
+                "task_count": task_count,
+                **batch_counts,
+                "completed_count": completed_count,
+                "progress_percent": (
+                    round((completed_count / task_count) * 100, 1) if task_count else 0.0
+                ),
+                "estimated_seconds_remaining": estimated_seconds_remaining,
+                "estimated_cost_usd": float(batch["estimated_cost_usd"] or 0),
+                **iso_fields,
+            },
+        }
 
     @staticmethod
     def _case_documents(
@@ -750,7 +882,7 @@ class PostgresMatchingV2ReviewRepository:
                               LIMIT 1
                             )
                             SELECT c.id::text, c.external_case_id, c.case_document,
-                                   c.case_checksum,
+                                   c.case_checksum, c.review_queue_id::text,
                                    (
                                      SELECT decision.verdict
                                      FROM (
@@ -790,23 +922,91 @@ class PostgresMatchingV2ReviewRepository:
             ]
             if finalized:
                 raise ValueError(f"finalized review cases cannot request AI drafts: {finalized!r}")
+            batch = await self._insert_ai_review_batch(
+                connection,
+                review_queue_id=str(rows[0]["review_queue_id"]),
+                external_case_ids=external_case_ids,
+                requested_by=requested_by,
+                model_id=model_id,
+                prompt=prompt,
+            )
             tasks = [
                 await self._insert_ai_draft_task(
                     connection,
                     dict(rows_by_case[case_id]),
+                    batch_id=str(batch["id"]),
                     requested_by=requested_by,
                     model_id=model_id,
                     prompt=prompt,
                 )
                 for case_id in external_case_ids
             ]
+            if any(str(task["batch_id"]) != str(batch["id"]) for task in tasks):
+                raise ValueError(
+                    "one or more selected cases already belong to a different AI review batch"
+                )
         return tasks
+
+    @staticmethod
+    async def _insert_ai_review_batch(
+        connection: AsyncConnection,
+        *,
+        review_queue_id: str,
+        external_case_ids: Sequence[str],
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+    ) -> dict[str, Any]:
+        idempotency_key = _checksum(
+            {
+                "review_queue_id": review_queue_id,
+                "case_ids": sorted(external_case_ids),
+                "model_id": model_id,
+                "prompt_checksum": prompt["checksum"],
+            }
+        )
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO matching_v2_ai_review_batch (
+                          review_queue_id, idempotency_key, requested_by,
+                          model_provider, model_id, prompt_id, prompt_version,
+                          prompt_checksum, requested_case_count
+                        ) VALUES (
+                          CAST(:review_queue_id AS uuid), :idempotency_key,
+                          :requested_by, 'openai', :model_id, :prompt_id,
+                          :prompt_version, :prompt_checksum, :requested_case_count
+                        )
+                        ON CONFLICT (idempotency_key) DO UPDATE SET
+                          updated_at = matching_v2_ai_review_batch.updated_at
+                        RETURNING id::text, created_at, requested_case_count
+                        """
+                    ),
+                    {
+                        "review_queue_id": review_queue_id,
+                        "idempotency_key": idempotency_key,
+                        "requested_by": requested_by,
+                        "model_id": model_id,
+                        "prompt_id": prompt["id"],
+                        "prompt_version": prompt["version"],
+                        "prompt_checksum": prompt["checksum"],
+                        "requested_case_count": len(external_case_ids),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return dict(row)
 
     @staticmethod
     async def _insert_ai_draft_task(
         connection: AsyncConnection,
         row: Mapping[str, Any],
         *,
+        batch_id: str,
         requested_by: str,
         model_id: str,
         prompt: Mapping[str, str],
@@ -828,24 +1028,26 @@ class PostgresMatchingV2ReviewRepository:
                     text(
                         """
                         INSERT INTO matching_v2_ai_review_task (
-                          review_case_id, idempotency_key, requested_by, status,
+                          review_case_id, batch_id, idempotency_key, requested_by, status,
                           prompt_id, prompt_version, prompt_checksum,
                           model_provider, model_id, input_checksum, input_document
                         ) VALUES (
-                          CAST(:review_case_id AS uuid), :idempotency_key, :requested_by,
+                          CAST(:review_case_id AS uuid), CAST(:batch_id AS uuid),
+                          :idempotency_key, :requested_by,
                           'queued', :prompt_id, :prompt_version, :prompt_checksum,
                           'openai', :model_id, :input_checksum,
                           CAST(:input_document AS jsonb)
                         )
                         ON CONFLICT (idempotency_key) DO UPDATE SET
                           requested_by = matching_v2_ai_review_task.requested_by
-                        RETURNING id::text, status, model_provider, model_id,
+                        RETURNING id::text, batch_id::text, status, model_provider, model_id,
                                   prompt_id, prompt_version, input_checksum,
                                   attempt_count, max_attempts, created_at
                         """
                     ),
                     {
                         "review_case_id": str(row["id"]),
+                        "batch_id": batch_id,
                         "idempotency_key": idempotency_key,
                         "requested_by": requested_by,
                         "prompt_id": prompt["id"],
@@ -1295,6 +1497,15 @@ class MatchingV2ReviewService:
             "human_review_required": True,
             "queue_id": external_queue_id,
             "requested_case_count": len(case_ids),
+            "batch": (
+                {
+                    "id": tasks[0]["batch_id"],
+                    "created_at": tasks[0]["created_at"],
+                    "requested_case_count": len(case_ids),
+                }
+                if tasks
+                else None
+            ),
             "tasks": tasks,
         }
 

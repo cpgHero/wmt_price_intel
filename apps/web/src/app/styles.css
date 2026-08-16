@@ -3997,20 +3997,56 @@ tbody tr:last-child td {
   justify-content: flex-end;
 }
 .cert-ai-status-summary {
-  align-items: center;
+  align-items: start;
   background: color-mix(in srgb, var(--card) 76%, transparent);
   border: 1px solid var(--soft-line);
   border-radius: 11px;
   display: grid;
   gap: 0.7rem;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.8fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 0.7rem 0.8rem;
 }
-.cert-ai-status-summary > div {
+.cert-ai-status-summary > .cert-ai-status-counts {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.9rem;
+}
+.cert-ai-progress-panel {
+  border-top: 1px solid var(--soft-line);
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  padding-top: 0.7rem;
+}
+.cert-ai-progress-panel > div:first-child,
+.cert-ai-batch-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  justify-content: space-between;
+}
+.cert-ai-progress-panel > div:first-child > span,
+.cert-ai-batch-meta > span {
+  white-space: normal;
+}
+.cert-ai-progress-track {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+.cert-ai-progress-track > span {
+  background: linear-gradient(90deg, var(--green), var(--success));
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: width 240ms ease;
+}
+.cert-ai-batch-meta {
+  color: var(--muted);
+  font-size: 0.6rem;
 }
 .cert-ai-status-summary span {
   align-items: center;
@@ -4044,6 +4080,9 @@ tbody tr:last-child td {
   font-size: 0.6rem;
   line-height: 1.45;
 }
+.cert-ai-status-summary > p {
+  align-self: center;
+}
 .cert-ai-status-summary .button {
   min-height: 34px;
   padding: 0.52rem 0.7rem;
@@ -4061,6 +4100,17 @@ tbody tr:last-child td {
 }
 .cert-ai-policy-note {
   grid-column: 1 / -1;
+}
+.cert-ai-error-detail {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--soft-line));
+  border-radius: 10px;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.7rem;
+}
+.cert-ai-error-detail p {
+  margin: 0;
 }
 .cert-ai-batch-confirm {
   align-items: center;
@@ -4770,10 +4820,6 @@ tbody tr:last-child td {
   }
   .cert-ai-status-summary {
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .cert-ai-status-summary > p {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
   .cert-case-compact {
     grid-template-columns: 1fr;

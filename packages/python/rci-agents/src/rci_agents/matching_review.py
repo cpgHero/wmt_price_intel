@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -16,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from rci_agents.models import JsonObject, ProviderResponse
 from rci_agents.provider import PINNED_MODEL_PRICING, ModelPricing
 from rci_contracts import validate_instance
+
+logger = logging.getLogger(__name__)
 
 _ALLOWED_TIERS = {
     "exact_item",
@@ -279,12 +283,15 @@ def _validate_matching_review_result(result: object, *, image_urls: list[str]) -
 @dataclass(frozen=True, slots=True)
 class MatchingReviewTask:
     task_id: str
+    batch_id: str
     model_id: str
     prompt_id: str
     prompt_version: str
     prompt_checksum: str
     input_checksum: str
     input_document: JsonObject
+    attempt_count: int
+    max_attempts: int
 
 
 class PostgresMatchingReviewTaskRepository:
@@ -319,8 +326,10 @@ class PostgresMatchingReviewTaskRepository:
                             FROM candidate
                             WHERE task.id = candidate.id
                             RETURNING task.id::text, task.model_id, task.prompt_id,
+                                      task.batch_id::text,
                                       task.prompt_version, task.prompt_checksum,
-                                      task.input_checksum, task.input_document
+                                      task.input_checksum, task.input_document,
+                                      task.attempt_count, task.max_attempts
                             """
                         ),
                         {"worker_id": worker_id, "lease_seconds": lease_seconds},
@@ -333,12 +342,15 @@ class PostgresMatchingReviewTaskRepository:
             return None
         return MatchingReviewTask(
             task_id=str(row["id"]),
+            batch_id=str(row["batch_id"]),
             model_id=str(row["model_id"]),
             prompt_id=str(row["prompt_id"]),
             prompt_version=str(row["prompt_version"]),
             prompt_checksum=str(row["prompt_checksum"]),
             input_checksum=str(row["input_checksum"]),
             input_document=dict(row["input_document"]),
+            attempt_count=int(row["attempt_count"]),
+            max_attempts=int(row["max_attempts"]),
         )
 
     async def succeed(
@@ -426,12 +438,39 @@ class MatchingReviewAIWorker:
         self._prompt = load_matching_review_prompt(repository_root)
 
     async def run_once(self) -> int:
-        task = await self._repository.claim(
-            worker_id=self._worker_id,
-            lease_seconds=self._lease_seconds,
-        )
-        if task is None:
+        return await self.run_many(1)
+
+    async def run_many(self, concurrency: int) -> int:
+        """Claim and process a bounded number of independent review tasks."""
+
+        limit = max(1, min(int(concurrency), 4))
+        tasks: list[MatchingReviewTask] = []
+        for _ in range(limit):
+            task = await self._repository.claim(
+                worker_id=self._worker_id,
+                lease_seconds=self._lease_seconds,
+            )
+            if task is None:
+                break
+            tasks.append(task)
+        if not tasks:
             return 0
+        await asyncio.gather(*(self._process_task(task) for task in tasks))
+        return len(tasks)
+
+    async def _process_task(self, task: MatchingReviewTask) -> None:
+        started_at = perf_counter()
+        logger.info(
+            "AI matching review started",
+            extra={
+                "event": "matching_review_started",
+                "task_id": task.task_id,
+                "batch_id": task.batch_id,
+                "model_id": task.model_id,
+                "attempt_count": task.attempt_count,
+                "max_attempts": task.max_attempts,
+            },
+        )
         try:
             if (
                 task.prompt_id != self._prompt.id
@@ -470,6 +509,18 @@ class MatchingReviewAIWorker:
                 output=output,
                 usage=usage,
             )
+            logger.info(
+                "AI matching review succeeded",
+                extra={
+                    "event": "matching_review_succeeded",
+                    "task_id": task.task_id,
+                    "batch_id": task.batch_id,
+                    "model_id": task.model_id,
+                    "attempt_count": task.attempt_count,
+                    "latency_ms": round((perf_counter() - started_at) * 1000),
+                    "estimated_cost_usd": response.estimated_cost_usd,
+                },
+            )
         except Exception as exc:
             await self._repository.fail(
                 task.task_id,
@@ -477,4 +528,25 @@ class MatchingReviewAIWorker:
                 error_type=type(exc).__name__,
                 error_message=str(exc) or "AI matching review failed",
             )
-        return 1
+            terminal = task.attempt_count >= task.max_attempts
+            logger.warning(
+                (
+                    "AI matching review needs attention"
+                    if terminal
+                    else "AI matching review retry queued"
+                ),
+                extra={
+                    "event": (
+                        "matching_review_needs_attention"
+                        if terminal
+                        else "matching_review_retry_queued"
+                    ),
+                    "task_id": task.task_id,
+                    "batch_id": task.batch_id,
+                    "model_id": task.model_id,
+                    "attempt_count": task.attempt_count,
+                    "max_attempts": task.max_attempts,
+                    "latency_ms": round((perf_counter() - started_at) * 1000),
+                    "error_type": type(exc).__name__,
+                },
+            )
