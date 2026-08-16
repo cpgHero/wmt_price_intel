@@ -2263,8 +2263,11 @@ p {
   color: var(--red);
 }
 .button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.6;
+}
+.button[aria-busy="true"] {
+  cursor: progress;
 }
 .signal-card {
   align-self: center;
@@ -3825,6 +3828,11 @@ tbody tr:last-child td {
   letter-spacing: 0.075em;
   text-transform: uppercase;
 }
+.cert-reviewer-field > small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.35;
+}
 .cert-toolbar input,
 .cert-toolbar select,
 .cert-review-form select,
@@ -3967,6 +3975,10 @@ tbody tr:last-child td {
   display: grid;
   font-size: 0.68rem;
   gap: 0.12rem;
+}
+.cert-ai-batch-actions .cert-ai-requirement {
+  color: var(--amber);
+  font-weight: 750;
 }
 .cert-ai-batch-actions {
   align-items: end;

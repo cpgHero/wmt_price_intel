@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface AdminSession {
   configured: boolean;
@@ -246,6 +253,7 @@ export function MatchingV2ReviewAdmin() {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const reviewerInputRef = useRef<HTMLInputElement>(null);
 
   const loadQueues = useCallback(async () => {
     const response = await jsonRequest<{
@@ -537,6 +545,18 @@ export function MatchingV2ReviewAdmin() {
     }
   }
 
+  function openBatchConfirmation() {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before reviewing selected cases with AI.",
+      );
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    setError(null);
+    setBatchConfirmOpen(true);
+  }
+
   function adoptAIProposal(reviewCase: ReviewCase) {
     const proposal = reviewCase.ai_draft?.output_document?.result;
     if (!proposal) return;
@@ -693,13 +713,18 @@ export function MatchingV2ReviewAdmin() {
             <option value="all">All cases</option>
           </select>
         </label>
-        <label>
+        <label className="cert-reviewer-field">
           <span>Current reviewer identity</span>
           <input
+            ref={reviewerInputRef}
             value={reviewerId}
-            onChange={(event) => setReviewerId(event.target.value)}
+            onChange={(event) => {
+              setReviewerId(event.target.value);
+              if (event.target.value.trim()) setError(null);
+            }}
             placeholder="name@company.com"
           />
+          <small>Required for human reviews and AI-assisted drafts.</small>
         </label>
         <label className="button secondary cert-file-button">
           {busy ? "Working…" : "Import review queue"}
@@ -799,23 +824,28 @@ export function MatchingV2ReviewAdmin() {
               <span>
                 <strong>{selectedCaseIds.length}</strong> selected
                 {selectedCaseIds.length ? (
-                  <small>
-                    Maximum policy exposure: ${selectedMaximumCost.toFixed(2)}
-                  </small>
+                  <>
+                    <small>
+                      Maximum policy exposure: ${selectedMaximumCost.toFixed(2)}
+                    </small>
+                    {!reviewerId.trim() ? (
+                      <small className="cert-ai-requirement" role="status">
+                        Enter your reviewer identity above to continue.
+                      </small>
+                    ) : null}
+                  </>
                 ) : null}
               </span>
               <button
                 className="button secondary"
                 type="button"
-                disabled={
-                  busy ||
-                  !aiPolicy.enabled ||
-                  !selectedCaseIds.length ||
-                  !reviewerId.trim()
-                }
-                onClick={() => setBatchConfirmOpen(true)}
+                disabled={busy || !aiPolicy.enabled || !selectedCaseIds.length}
+                aria-busy={busy}
+                onClick={openBatchConfirmation}
               >
-                Review selected with AI
+                {selectedCaseIds.length
+                  ? `Review ${selectedCaseIds.length} selected with AI`
+                  : "Review selected with AI"}
               </button>
             </div>
             {!aiPolicy.enabled ? (
@@ -849,6 +879,7 @@ export function MatchingV2ReviewAdmin() {
                   className="button primary"
                   type="button"
                   disabled={busy}
+                  aria-busy={busy}
                   onClick={() => void requestSelectedAIReviews()}
                 >
                   {busy ? "Queueing…" : "Confirm advisory review"}
