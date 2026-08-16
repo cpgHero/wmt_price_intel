@@ -67,7 +67,9 @@ development and polishing phases.
 The web unit tests verify unique guide IDs, required lifecycle/governance content, valid internal
 links, current certification language, and the presence of a change-order log. Navigation tests
 verify the page is exposed in Administration. Browser tests verify protected access, guide
-rendering, search, and guide selection.
+rendering, search, and guide selection. The Product Pack abstraction audit explicitly classifies
+the canonical Platform Docs content file as non-executable content while continuing to scan every
+executable Python, TypeScript, and TSX core path for product-category branching.
 
 ```bash
 pnpm format:check

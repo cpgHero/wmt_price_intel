@@ -35,6 +35,9 @@ CORE_SOURCE_ROOTS = (
     "packages/python/rci-results/src",
     "packages/typescript/contracts/src",
 )
+NON_EXECUTABLE_CONTENT_PATHS = {
+    "apps/web/src/lib/platform-docs.ts",
+}
 
 
 @pytest.fixture(scope="module")
@@ -489,7 +492,9 @@ def test_core_engine_contains_no_product_specific_code_paths() -> None:
         str(path.relative_to(REPOSITORY_ROOT)): token
         for relative_root in CORE_SOURCE_ROOTS
         for path in (REPOSITORY_ROOT / relative_root).rglob("*")
-        if path.suffix in {".py", ".ts", ".tsx"} and ".test." not in path.name
+        if path.suffix in {".py", ".ts", ".tsx"}
+        and ".test." not in path.name
+        and str(path.relative_to(REPOSITORY_ROOT)) not in NON_EXECUTABLE_CONTENT_PATHS
         for token in prohibited
         if token in path.read_text(encoding="utf-8").casefold()
     }
