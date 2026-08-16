@@ -238,8 +238,6 @@ test("reports a plain-text submission failure without a JSON parsing error", asy
     .click();
 
   const submissionError = page.locator(".cert-error");
-  await expect(submissionError).toContainText(
-    "Internal Server Error (500)",
-  );
+  await expect(submissionError).toContainText("Internal Server Error (500)");
   await expect(submissionError).not.toContainText("Unexpected token");
 });

@@ -179,10 +179,12 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "content-type": "application/json", ...init?.headers },
   });
   const payload = await response.text();
-  let body: (T & {
-    error?: string;
-    detail?: string;
-  }) | null = null;
+  let body:
+    | (T & {
+        error?: string;
+        detail?: string;
+      })
+    | null = null;
   if (payload) {
     try {
       body = JSON.parse(payload) as T & { error?: string; detail?: string };
@@ -249,7 +251,7 @@ function ProductIdentity({ listing }: Readonly<{ listing: ListingSummary }>) {
         <span>{listing.brand || "Brand unresolved"}</span>
         {listing.observed_location_count !== undefined ? (
           <span>
-            {listing.observed_location_count.toLocaleString()} observed {" "}
+            {listing.observed_location_count.toLocaleString()} observed{" "}
             {listing.retailer_id === "amazon_us_same_day"
               ? "ZIPs"
               : "stores/locations"}
