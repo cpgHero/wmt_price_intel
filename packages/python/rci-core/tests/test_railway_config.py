@@ -67,7 +67,5 @@ def test_governed_agent_package_and_prompts_are_in_runtime_build_contexts() -> N
     assert "packages/python/rci-agents/pyproject.toml" in api_dockerfile
     assert "COPY --chown=rci:rci agent-prompts agent-prompts" in api_dockerfile
     for service in ("api", "worker"):
-        config = json.loads(
-            (REPOSITORY_ROOT / f"infra/railway/{service}.json").read_text()
-        )
+        config = json.loads((REPOSITORY_ROOT / f"infra/railway/{service}.json").read_text())
         assert "/agent-prompts/**" in set(config["build"]["watchPatterns"])
