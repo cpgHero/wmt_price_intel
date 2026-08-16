@@ -25,6 +25,7 @@ function listing(retailerId: string, index: number) {
   };
 }
 
+const aiStatuses = ["queued", "running", "succeeded", "needs_review"];
 const cases = Array.from({ length: 30 }, (_, index) => ({
   case_id: `case-${index}`,
   stratum: "exact_specification",
@@ -42,7 +43,15 @@ const cases = Array.from({ length: 30 }, (_, index) => ({
   review_status: "pending",
   review_submissions: [],
   adjudication: null,
-  ai_draft: null,
+  ai_draft:
+    index < aiStatuses.length
+      ? {
+          id: `ai-draft-${index}`,
+          status: aiStatuses[index],
+          model_id: "gpt-5.6-terra",
+          requested_by: "fixture@cpghero.com",
+        }
+      : null,
 }));
 
 test("explains the reviewer prerequisite before a bounded AI review", async ({
@@ -61,9 +70,13 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
     if (request.method() === "POST") {
       aiDraftRequests += 1;
       await route.fulfill({
-        status: 500,
+        status: 202,
         contentType: "application/json",
-        body: JSON.stringify({ error: "The confirmation must not submit." }),
+        body: JSON.stringify({
+          authoritative: false,
+          human_review_required: true,
+          tasks: [],
+        }),
       });
       return;
     }
@@ -103,6 +116,14 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   const batch = page.getByRole("region", {
     name: "AI review drafts for selected cases",
   });
+  const statusSummary = batch.locator(".cert-ai-status-summary");
+  await expect(statusSummary).toContainText("1 queued");
+  await expect(statusSummary).toContainText("1 reviewing");
+  await expect(statusSummary).toContainText("1 drafts ready");
+  await expect(statusSummary).toContainText("1 needs attention");
+  await expect(
+    statusSummary.getByRole("button", { name: "Refresh AI status" }),
+  ).toBeVisible();
   await batch
     .getByRole("checkbox", { name: /Select eligible cases on this page/ })
     .check();
@@ -135,4 +156,11 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
     batch.getByRole("button", { name: "Confirm advisory review" }),
   ).toBeVisible();
   expect(aiDraftRequests).toBe(0);
+  await batch.getByRole("button", { name: "Confirm advisory review" }).click();
+  await expect(
+    page.getByText(
+      "25 AI review drafts were accepted. Status refreshes automatically while the work is queued or running.",
+    ),
+  ).toBeVisible();
+  expect(aiDraftRequests).toBe(1);
 });

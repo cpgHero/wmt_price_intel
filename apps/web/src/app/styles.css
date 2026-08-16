@@ -3866,6 +3866,16 @@ tbody tr:last-child td {
   margin: 0;
   padding: 0.8rem 1rem;
 }
+.cert-notice {
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+  border-radius: 12px;
+  color: var(--success);
+  font-size: 0.7rem;
+  font-weight: 750;
+  margin: 0;
+  padding: 0.8rem 1rem;
+}
 .cert-summary {
   align-items: center;
   background:
@@ -3985,6 +3995,69 @@ tbody tr:last-child td {
   display: flex;
   gap: 0.7rem;
   justify-content: flex-end;
+}
+.cert-ai-status-summary {
+  align-items: center;
+  background: color-mix(in srgb, var(--card) 76%, transparent);
+  border: 1px solid var(--soft-line);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.7rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.8fr) auto;
+  padding: 0.7rem 0.8rem;
+}
+.cert-ai-status-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+}
+.cert-ai-status-summary span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.62rem;
+  gap: 0.28rem;
+  white-space: nowrap;
+}
+.cert-ai-status-summary span > i {
+  background: var(--muted);
+  border-radius: 999px;
+  height: 7px;
+  width: 7px;
+}
+.cert-ai-status-summary span.queued > i {
+  background: var(--amber);
+}
+.cert-ai-status-summary span.running > i {
+  animation: cert-ai-pulse 1.15s ease-in-out infinite alternate;
+  background: var(--green);
+}
+.cert-ai-status-summary span.succeeded > i {
+  background: var(--success);
+}
+.cert-ai-status-summary span.needs-review > i {
+  background: var(--red);
+}
+.cert-ai-status-summary p {
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+.cert-ai-status-summary .button {
+  min-height: 34px;
+  padding: 0.52rem 0.7rem;
+  white-space: nowrap;
+}
+@keyframes cert-ai-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 40%, transparent);
+    opacity: 0.55;
+  }
+  to {
+    box-shadow: 0 0 0 5px transparent;
+    opacity: 1;
+  }
 }
 .cert-ai-policy-note {
   grid-column: 1 / -1;
@@ -4651,6 +4724,13 @@ tbody tr:last-child td {
   .cert-ai-batch-confirm {
     grid-column: 1 / -1;
   }
+  .cert-ai-status-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .cert-ai-status-summary > p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   .cert-case-compact {
     grid-template-columns: 1fr;
   }
@@ -4692,6 +4772,16 @@ tbody tr:last-child td {
   .cert-ai-batch-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+  .cert-ai-status-summary {
+    grid-template-columns: 1fr;
+  }
+  .cert-ai-status-summary > p {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .cert-ai-status-summary .button {
+    justify-self: stretch;
   }
   .cert-case-products,
   .cert-product-pair {

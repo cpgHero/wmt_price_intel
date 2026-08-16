@@ -57,6 +57,8 @@ interface ReviewSubmission {
   evidence_refs: string[];
 }
 
+type AIDraftStatus = "queued" | "running" | "succeeded" | "needs_review";
+
 interface ReviewCase {
   case_id: string;
   stratum: string;
@@ -91,7 +93,7 @@ interface ReviewCase {
   };
   ai_draft?: null | {
     id: string;
-    status: "queued" | "running" | "succeeded" | "needs_review";
+    status: AIDraftStatus;
     model_id: string;
     requested_by: string;
     output_document?: {
@@ -193,6 +195,19 @@ function label(value: string | null | undefined) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function aiDraftStatusLabel(status: AIDraftStatus) {
+  switch (status) {
+    case "queued":
+      return "AI queued";
+    case "running":
+      return "AI reviewing";
+    case "succeeded":
+      return "AI draft ready";
+    case "needs_review":
+      return "AI needs attention";
+  }
+}
+
 function evidenceValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "Unknown";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -249,10 +264,12 @@ export function MatchingV2ReviewAdmin() {
   const [offset, setOffset] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [refreshingAI, setRefreshingAI] = useState(false);
   const reviewerInputRef = useRef<HTMLInputElement>(null);
 
   const loadQueues = useCallback(async () => {
@@ -377,6 +394,22 @@ export function MatchingV2ReviewAdmin() {
       ),
     [view],
   );
+  const aiDraftStatusCounts = useMemo(() => {
+    const counts: Record<AIDraftStatus, number> = {
+      queued: 0,
+      running: 0,
+      succeeded: 0,
+      needs_review: 0,
+    };
+    for (const reviewCase of view?.cases ?? []) {
+      if (reviewCase.ai_draft) counts[reviewCase.ai_draft.status] += 1;
+    }
+    return counts;
+  }, [view]);
+  const visibleAIDraftCount = Object.values(aiDraftStatusCounts).reduce(
+    (total, count) => total + count,
+    0,
+  );
 
   useEffect(() => {
     if (!hasRunningAIDrafts) return;
@@ -388,6 +421,7 @@ export function MatchingV2ReviewAdmin() {
   }, [hasRunningAIDrafts, loadQueue]);
 
   function handleError(cause: unknown) {
+    setNotice(null);
     setError(cause instanceof Error ? cause.message : "The request failed.");
   }
 
@@ -462,6 +496,7 @@ export function MatchingV2ReviewAdmin() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await jsonRequest(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/submissions`,
@@ -491,6 +526,7 @@ export function MatchingV2ReviewAdmin() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await jsonRequest(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/ai-drafts`,
@@ -524,6 +560,8 @@ export function MatchingV2ReviewAdmin() {
     }
     setBusy(true);
     setError(null);
+    setNotice(null);
+    const requestedCount = selectedCaseIds.length;
     try {
       await jsonRequest(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-drafts`,
@@ -537,6 +575,9 @@ export function MatchingV2ReviewAdmin() {
       );
       setBatchConfirmOpen(false);
       setSelectedCaseIds([]);
+      setNotice(
+        `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted. Status refreshes automatically while the work is queued or running.`,
+      );
       await loadQueue();
     } catch (cause) {
       handleError(cause);
@@ -554,7 +595,20 @@ export function MatchingV2ReviewAdmin() {
       return;
     }
     setError(null);
+    setNotice(null);
     setBatchConfirmOpen(true);
+  }
+
+  async function refreshAIStatus() {
+    setRefreshingAI(true);
+    setError(null);
+    try {
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setRefreshingAI(false);
+    }
   }
 
   function adoptAIProposal(reviewCase: ReviewCase) {
@@ -742,6 +796,11 @@ export function MatchingV2ReviewAdmin() {
       </div>
 
       {error ? <p className="form-error cert-error">{error}</p> : null}
+      {notice ? (
+        <p className="cert-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       {view ? (
         <>
@@ -848,6 +907,43 @@ export function MatchingV2ReviewAdmin() {
                   : "Review selected with AI"}
               </button>
             </div>
+            <div className="cert-ai-status-summary" aria-live="polite">
+              <div>
+                <span className="queued">
+                  <i aria-hidden="true" />
+                  <strong>{aiDraftStatusCounts.queued}</strong> queued
+                </span>
+                <span className="running">
+                  <i aria-hidden="true" />
+                  <strong>{aiDraftStatusCounts.running}</strong> reviewing
+                </span>
+                <span className="succeeded">
+                  <i aria-hidden="true" />
+                  <strong>{aiDraftStatusCounts.succeeded}</strong> drafts ready
+                </span>
+                <span className="needs-review">
+                  <i aria-hidden="true" />
+                  <strong>{aiDraftStatusCounts.needs_review}</strong> needs
+                  attention
+                </span>
+              </div>
+              <p>
+                {hasRunningAIDrafts
+                  ? "Status refreshes automatically while AI work is queued or running."
+                  : visibleAIDraftCount
+                    ? "Open Review evidence on a ready case to inspect and independently decide the match."
+                    : "No AI drafts are recorded on this filtered page yet."}
+              </p>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={refreshingAI}
+                aria-busy={refreshingAI}
+                onClick={() => void refreshAIStatus()}
+              >
+                {refreshingAI ? "Refreshing…" : "Refresh AI status"}
+              </button>
+            </div>
             {!aiPolicy.enabled ? (
               <p className="cert-ai-policy-note">
                 The advisory worker is not enabled in this environment. Human
@@ -919,7 +1015,7 @@ export function MatchingV2ReviewAdmin() {
                   />
                   <span>
                     {reviewCase.ai_draft
-                      ? `AI ${label(reviewCase.ai_draft.status)}`
+                      ? aiDraftStatusLabel(reviewCase.ai_draft.status)
                       : reviewCase.adjudication
                         ? "Adjudicated"
                         : "Select for AI"}
