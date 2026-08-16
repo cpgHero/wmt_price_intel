@@ -272,6 +272,7 @@ def build_matching_v2_evidence_profile(
     competitor_retailer_ids: tuple[str, ...] = (),
     per_stratum_limit: int = 40,
     pdp_archives: tuple[Path, ...] = (),
+    review_queue_version: str = "1.0.0",
 ) -> tuple[JsonObject, JsonObject]:
     """Build a data-quality profile and non-authoritative review queue.
 
@@ -445,7 +446,7 @@ def build_matching_v2_evidence_profile(
     queue = build_matching_v2_review_queue(
         results,
         queue_id=f"{product_pack_id}-matching-v2-release-review",
-        queue_version="1.0.0",
+        queue_version=review_queue_version,
         benchmark_source_reference=benchmark_reference,
         source_references=competitor_references,
         sampling=MatchingV2ReviewSampling(per_stratum_limit=per_stratum_limit),
@@ -507,6 +508,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--profile")
     parser.add_argument("--decided-at", required=True)
     parser.add_argument("--per-stratum-limit", type=int, default=40)
+    parser.add_argument("--review-queue-version", default="1.0.0")
     parser.add_argument("--output-directory", type=Path, required=True)
     parser.add_argument(
         "--pdp-archive",
@@ -542,6 +544,7 @@ def main() -> None:
         competitor_retailer_ids=tuple(args.competitor),
         per_stratum_limit=args.per_stratum_limit,
         pdp_archives=tuple(Path(value) for value in args.pdp_archive),
+        review_queue_version=args.review_queue_version,
     )
     output_directory = args.output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)

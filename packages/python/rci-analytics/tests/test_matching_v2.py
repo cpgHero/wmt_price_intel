@@ -422,6 +422,7 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
         competitor_retailer_ids=("aldi_us",),
         per_stratum_limit=5,
         pdp_archives=(pdp_archive,),
+        review_queue_version="1.1.0",
     )
 
     walmart_profile = next(
@@ -440,6 +441,7 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     }
     assert profile["release_use"]["eligible"] is False
     assert queue["authoritative"] is False
+    assert queue["version"] == "1.1.0"
     assert queue["cases"]
     assert queue["cases"][0]["benchmark_listing"]["image_url"] == ("https://example.com/wm1.png")
     assert queue["cases"][0]["benchmark_listing"]["seller_governance"]["status"] == (
