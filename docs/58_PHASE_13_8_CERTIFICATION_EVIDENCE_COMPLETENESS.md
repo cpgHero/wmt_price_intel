@@ -82,3 +82,17 @@ marketplace seller decision and is not a claim that missing evidence has been ve
 - The complete repository test suite and web build must pass.
 - Production verification must confirm observed-location labels on strawberries and at least one
   additional formerly incomplete queue, plus the first-party bulk guardrail and queue counts.
+
+## Production verification
+
+Railway production was verified after deployment without writing a match decision:
+
+- Strawberry cards display source-reconciled Walmart, ALDI, and Amazon Same Day footprints; the
+  leading one-pound Walmart listing shows 3,652 observed stores/locations and its ALDI comparison
+  shows 2,594.
+- The 1,217-case egg queue displays footprints across all 13 competitor retailers; the leading
+  Marketside listing shows 4,468 observed Walmart stores/locations.
+- The egg evidence drawer identifies the Walmart PDP seller as `Walmart.com` with `Verified First
+  Party` eligibility. A non-marketplace Safeway comparison remains honestly labeled `Not Governed`.
+- The active queue sizes remain 94 bananas, 72 strawberries, 210 ground beef, 311 milk, and 1,217
+  eggs. Existing final decisions and completed AI drafts were preserved.

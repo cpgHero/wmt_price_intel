@@ -1292,7 +1292,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented; production verification pending",
+              "Deployed & verified",
               "All active Match Certification queues gained source-reconciled observed footprints and defense-in-depth first-party eligibility.",
               "Legacy queue views recover distinct positive-price Search location counts without replacing immutable queues; known third-party offers are rejected at import, hidden from legacy views, blocked from paid AI review, and blocked from individual or bulk certification. Permitted blank seller evidence remains explicitly unverified.",
             ],
