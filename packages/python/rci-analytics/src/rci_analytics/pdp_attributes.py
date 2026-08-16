@@ -99,6 +99,7 @@ def complete_attributes_from_pdp(
             )
             if not current_brand_resolved and pdp_brand_resolved:
                 # PDP may complete product identity, but not Search price or placement.
+                assert isinstance(pdp_brand_governance, dict)
                 attributes["_brand_governance"] = dict(pdp_brand_governance)
                 pdp_brand = pdp_classified.attributes.get("brand")
                 if pdp_brand:

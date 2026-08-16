@@ -121,6 +121,7 @@ def _pdp_context_from_archives(
                 category = payload.get("category")
                 if category is None and isinstance(payload.get("extras"), dict):
                     category = payload["extras"].get("category")
+                category_path: object
                 if isinstance(category, list):
                     category_path = [
                         str(value.get("name") if isinstance(value, dict) else value)

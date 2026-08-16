@@ -185,7 +185,8 @@ class OpenAIMatchingReviewProvider:
             for image_url in image_urls
         )
         started_at = perf_counter()
-        response = await self._client.responses.create(
+        client: Any = self._client
+        response = await client.responses.create(
             model=model_id,
             instructions=prompt.instructions,
             input=[{"role": "user", "content": content}],

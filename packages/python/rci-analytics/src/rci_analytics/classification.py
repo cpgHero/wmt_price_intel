@@ -190,7 +190,7 @@ class OfferClassifier:
                     str(observed_brand) if observed_brand else None,
                     category=self.pack.name,
                 )
-                resolution_source = resolution.resolution_method
+                resolution_source: str = resolution.resolution_method
                 if resolution.status != "resolved":
                     title_resolution = self._brand_resolver.resolve_from_text(
                         offer.retailer_id,
