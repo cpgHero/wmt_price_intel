@@ -4,6 +4,6 @@ export interface RetailCompetitiveIntelligenceGovernedAgentPrompt {
   schema_version: "1.0.0";
   id: string;
   version: string;
-  role: "insight" | "narrative";
+  role: "insight" | "narrative" | "matching_review";
   instructions: string;
 }

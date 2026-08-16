@@ -60,6 +60,9 @@ export interface RetailCompetitiveIntelligenceRetailerPack {
     search_fields_are_immutable: true;
     default_cache_ttl_days?: number;
   };
+  seller_policy?: {
+    [k: string]: unknown;
+  };
   matching_boundary: {
     brand_role: "candidate_generation_only";
     requires_product_pack_compatibility: true;

@@ -184,7 +184,7 @@
           "if": { "properties": { "mode": { "const": "first_party_only" } } },
           "then": {
             "properties": {
-              "allowed_first_party_sellers": { "minItems": 1 }
+              "allowed_first_party_sellers": { "type": "array", "minItems": 1 }
             }
           }
         }
