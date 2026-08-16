@@ -1286,9 +1286,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented",
+              "Deployed & verified",
               "Match Certification gained guarded bulk acceptance for corroborated AI match recommendations.",
-              "Administrators can preview a checksum-bound safe subset, inspect exclusion reasons, and finalize up to 50 exact/equivalent matches in one auditable human action; substitute/custom tiers remain individual and reporting never reruns automatically.",
+              "Administrators can preview a checksum-bound safe subset, inspect exclusion reasons, and finalize up to 50 exact/equivalent matches in one auditable human action; substitute/custom tiers remain individual and reporting never reruns automatically. The protected production page and its no-eligible-recommendations state were verified without changing live match decisions.",
             ],
             [
               "2026-08-16",

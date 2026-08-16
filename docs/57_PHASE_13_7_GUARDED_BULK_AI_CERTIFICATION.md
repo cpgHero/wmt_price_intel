@@ -82,3 +82,13 @@ continues to enforce its signed administrator session and same-origin mutation c
   success wording, and the no-automatic-reanalysis boundary.
 - Migration upgrade/downgrade, full API tests, web typecheck/lint/unit/e2e, production builds, and
   Railway health checks are required before this phase is marked deployed.
+
+## Production verification
+
+- Commit `d322836` passed the complete GitHub Actions pipeline, including Postgres migration
+  upgrade/downgrade/re-upgrade checks, API tests, browser tests, and all service container builds.
+- Railway deployed the web and API services successfully; the API pre-deploy migration advanced the
+  production database to the new migration head.
+- The protected Match Certification page rendered the guarded bulk-certification panel, its policy
+  guardrails, and its safe no-eligible-recommendations state against the current banana queue.
+- Production verification was read-only: no live match decision was approved, rejected, or reopened.
