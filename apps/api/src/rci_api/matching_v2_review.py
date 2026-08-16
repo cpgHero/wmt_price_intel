@@ -69,7 +69,7 @@ def _apply_observed_location_sidecar(
     queue_version: str,
     root: Path,
 ) -> None:
-    """Backfill derived footprint counts without mutating immutable review evidence."""
+    """Complete legacy read views without mutating immutable review evidence."""
 
     catalog_path = root / "config" / "matching-v2-review-footprints.json"
     if not catalog_path.is_file():
@@ -92,23 +92,51 @@ def _apply_observed_location_sidecar(
         None,
     )
     counts_by_case = matching_queue.get("cases") if isinstance(matching_queue, Mapping) else None
+    listings_by_id = matching_queue.get("listings") if isinstance(matching_queue, Mapping) else None
     if not isinstance(counts_by_case, Mapping):
-        return
+        counts_by_case = {}
+    if not isinstance(listings_by_id, Mapping):
+        listings_by_id = {}
     for document in documents:
         counts = counts_by_case.get(document.get("case_id"))
         if not isinstance(counts, Mapping):
-            continue
+            counts = {}
         for side in ("benchmark", "competitor"):
             listing = document.get(f"{side}_listing")
-            count = counts.get(f"{side}_observed_location_count")
+            if not isinstance(listing, dict):
+                continue
+            listing_id = str(
+                listing.get("listing_id")
+                or document.get(f"{side}_listing_id")
+                or (
+                    f"{listing.get('retailer_id')}:{listing.get('retailer_product_id')}"
+                    if listing.get("retailer_id") and listing.get("retailer_product_id")
+                    else ""
+                )
+                or ""
+            )
+            listing_evidence = listings_by_id.get(listing_id)
+            if not isinstance(listing_evidence, Mapping):
+                listing_evidence = {}
+            count = counts.get(
+                f"{side}_observed_location_count",
+                listing_evidence.get("observed_location_count"),
+            )
             if (
-                isinstance(listing, dict)
-                and "observed_location_count" not in listing
+                "observed_location_count" not in listing
                 and isinstance(count, int)
                 and not isinstance(count, bool)
                 and count >= 0
             ):
                 listing["observed_location_count"] = count
+            governance = listing.get("seller_governance")
+            sidecar_governance = listing_evidence.get("seller_governance")
+            if not isinstance(governance, Mapping) and isinstance(sidecar_governance, Mapping):
+                listing["seller_governance"] = {
+                    **dict(sidecar_governance),
+                    "source": "reconciled_release_evidence",
+                    "resolution_method": "legacy_queue_sidecar",
+                }
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -224,6 +252,8 @@ def _known_third_party_seller(listing: Mapping[str, Any]) -> bool:
     governance = listing.get("seller_governance")
     if not isinstance(governance, Mapping):
         return False
+    if governance.get("eligible") is False:
+        return True
     status_value = (
         str(governance.get("status") or governance.get("eligibility") or "").strip().lower()
     )
@@ -232,6 +262,17 @@ def _known_third_party_seller(listing: Mapping[str, Any]) -> bool:
     if "first_party" in status_value or "first-party" in status_value:
         return False
     return any(token in status_value for token in ("third_party", "third-party", "excluded"))
+
+
+def _case_has_known_third_party_seller(case: Mapping[str, Any]) -> bool:
+    return any(
+        _known_third_party_seller(listing)
+        for listing in (
+            case.get("benchmark_listing"),
+            case.get("competitor_listing"),
+        )
+        if isinstance(listing, Mapping)
+    )
 
 
 def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any]:
@@ -725,11 +766,6 @@ class PostgresMatchingV2ReviewRepository:
             )
             if queue is None:
                 raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
-            competitor_retailers = await self._competitor_retailers(
-                connection,
-                str(queue["id"]),
-                stratum=stratum,
-            )
             cases = await self._case_rows(
                 connection,
                 str(queue["id"]),
@@ -748,7 +784,19 @@ class PostgresMatchingV2ReviewRepository:
             queue_version=str(queue["version"]),
             root=_repository_root(),
         )
+        documents = [
+            document for document in documents if not _case_has_known_third_party_seller(document)
+        ]
         documents.sort(key=_case_order_key)
+        competitor_counts: dict[str, int] = defaultdict(int)
+        for document in documents:
+            retailer_id = str(document.get("competitor_retailer_id") or "")
+            if retailer_id:
+                competitor_counts[retailer_id] += 1
+        competitor_retailers = [
+            {"retailer_id": retailer_id, "case_count": case_count}
+            for retailer_id, case_count in sorted(competitor_counts.items())
+        ]
         summary_counts: dict[str, int] = defaultdict(int)
         for row in documents:
             summary_counts[str(row["review_status"])] += 1
@@ -1252,7 +1300,14 @@ class PostgresMatchingV2ReviewRepository:
                     "ai_output_checksum": str(row["ai_output_checksum"] or ""),
                 }
             )
-        return str(rows[0]["review_queue_id"]), str(rows[0]["queue_version"]), snapshots
+        queue_version = str(rows[0]["queue_version"])
+        _apply_observed_location_sidecar(
+            snapshots,
+            queue_id=external_queue_id,
+            queue_version=queue_version,
+            root=_repository_root(),
+        )
+        return str(rows[0]["review_queue_id"]), queue_version, snapshots
 
     async def preview_ai_bulk_certification(
         self,
@@ -1547,7 +1602,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                             WITH selected_queue AS (
-                              SELECT id
+                              SELECT id, version
                               FROM matching_v2_review_queue
                               WHERE external_queue_id = :queue_id
                               ORDER BY created_at DESC
@@ -1555,6 +1610,7 @@ class PostgresMatchingV2ReviewRepository:
                             )
                             SELECT c.id::text, c.external_case_id, c.case_document,
                                    c.case_checksum, c.review_queue_id::text,
+                                   q.version AS queue_version,
                                    (
                                      SELECT decision.verdict
                                      FROM (
@@ -1586,6 +1642,26 @@ class PostgresMatchingV2ReviewRepository:
                 raise KeyError(
                     f"matching v2 review cases {missing!r} were not found in queue "
                     f"{external_queue_id!r}"
+                )
+            sidecar_documents = {
+                case_id: dict(rows_by_case[case_id]["case_document"])
+                for case_id in external_case_ids
+            }
+            _apply_observed_location_sidecar(
+                list(sidecar_documents.values()),
+                queue_id=external_queue_id,
+                queue_version=str(rows[0]["queue_version"]),
+                root=_repository_root(),
+            )
+            excluded_seller_cases = [
+                case_id
+                for case_id in external_case_ids
+                if _case_has_known_third_party_seller(sidecar_documents[case_id])
+            ]
+            if excluded_seller_cases:
+                raise ValueError(
+                    "known third-party marketplace seller cases cannot request AI drafts: "
+                    f"{excluded_seller_cases!r}"
                 )
             finalized = [
                 case_id
@@ -1757,6 +1833,33 @@ class PostgresMatchingV2ReviewRepository:
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
                 {"case_id": case_id},
             )
+            case_row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                        SELECT review_case.case_document, review_queue.version
+                        FROM matching_v2_review_case review_case
+                        JOIN matching_v2_review_queue review_queue
+                          ON review_queue.id = review_case.review_queue_id
+                        WHERE review_case.id = CAST(:case_id AS uuid)
+                        """
+                        ),
+                        {"case_id": case_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            case_document = dict(case_row["case_document"])
+            _apply_observed_location_sidecar(
+                [case_document],
+                queue_id=external_queue_id,
+                queue_version=str(case_row["version"]),
+                root=_repository_root(),
+            )
+            if _case_has_known_third_party_seller(case_document):
+                raise ValueError("a known third-party marketplace seller case cannot be certified")
             existing = (
                 (
                     await connection.execute(
@@ -2102,6 +2205,16 @@ class MatchingV2ReviewService:
         unsigned.pop("checksum", None)
         if _checksum(unsigned) != expected_checksum:
             raise ValueError("review queue checksum does not match its canonical document")
+        excluded_seller_cases = [
+            str(case.get("case_id") or "")
+            for case in queue["cases"]
+            if _case_has_known_third_party_seller(case)
+        ]
+        if excluded_seller_cases:
+            raise ValueError(
+                "review queue contains known third-party marketplace seller cases: "
+                f"{excluded_seller_cases!r}"
+            )
         return await self._repository.import_queue(
             request.organization_id,
             queue,

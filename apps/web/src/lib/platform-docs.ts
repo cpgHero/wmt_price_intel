@@ -613,7 +613,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Create high-recall candidates",
               detail:
-                "Use category blocks, identifiers, package and attribute evidence, and no known hard conflicts. Price similarity is excluded from semantic evidence.",
+                "Use category blocks, identifiers, package and attribute evidence, and no known hard conflicts. Price similarity is excluded from semantic evidence. Known third-party marketplace offers are removed by Retailer Pack policy before candidates exist.",
             },
             {
               title: "Evaluate deterministic evidence",
@@ -653,6 +653,12 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "success",
           title: "Guarded bulk acceptance",
           text: "An administrator may assess up to 50 completed affirmative AI recommendations from the current filtered page. The server includes only pending exact-item, exact-specification, or equivalent-product recommendations when AI and the deterministic engine agree on tier, critical evidence coverage is 100%, there are no AI or Product Pack hard-blocker conflicts, every AI-proposed attribute is at least 85% confident, immutable evidence references exist, and no listing has a known third-party seller exclusion. The preview names every exclusion and binds the eligible case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval. No report reanalysis runs automatically; decisions remain final until flagged. Comparable-substitute and custom tiers always require individual review.",
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Observed footprint completeness",
+          text: "Every certification product shows the number of distinct normalized store/location keys where Search observed that retailer product with a non-null price greater than zero. Modern queue documents carry the count directly. A versioned reconciliation catalog fills the field for older immutable queues without replacing their AI work or human decisions. Existing queue evidence is never overwritten. The same compatibility view supplements missing seller-governance status, suppresses any known third-party case, and leaves permitted blank sellers explicitly unverified.",
         },
         {
           kind: "callout",
@@ -1284,6 +1290,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented; production verification pending",
+              "All active Match Certification queues gained source-reconciled observed footprints and defense-in-depth first-party eligibility.",
+              "Legacy queue views recover distinct positive-price Search location counts without replacing immutable queues; known third-party offers are rejected at import, hidden from legacy views, blocked from paid AI review, and blocked from individual or bulk certification. Permitted blank seller evidence remains explicitly unverified.",
+            ],
             [
               "2026-08-16",
               "Deployed & verified",

@@ -110,10 +110,19 @@ def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
                     {
                         "queue_id": "banana-review",
                         "queue_version": "1.1.0",
+                        "listings": {
+                            "walmart_us:one": {
+                                "observed_location_count": 4200,
+                                "seller_governance": {
+                                    "eligible": True,
+                                    "status": "verified_first_party",
+                                },
+                            },
+                            "aldi_us:one": {"observed_location_count": 1700},
+                        },
                         "cases": {
                             "case-one": {
-                                "benchmark_observed_location_count": 4200,
-                                "competitor_observed_location_count": 1700,
+                                "competitor_observed_location_count": 1600,
                             }
                         },
                     }
@@ -124,8 +133,13 @@ def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
     documents = [
         {
             "case_id": "case-one",
-            "benchmark_listing": {},
-            "competitor_listing": {"observed_location_count": 12},
+            "benchmark_listing_id": "walmart_us:one",
+            "competitor_listing_id": "aldi_us:one",
+            "benchmark_listing": {"listing_id": "walmart_us:one"},
+            "competitor_listing": {
+                "listing_id": "aldi_us:one",
+                "observed_location_count": 12,
+            },
         }
     ]
 
@@ -138,6 +152,42 @@ def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
 
     assert documents[0]["benchmark_listing"]["observed_location_count"] == 4200
     assert documents[0]["competitor_listing"]["observed_location_count"] == 12
+    assert documents[0]["benchmark_listing"]["seller_governance"] == {
+        "eligible": True,
+        "status": "verified_first_party",
+        "source": "reconciled_release_evidence",
+        "resolution_method": "legacy_queue_sidecar",
+    }
+
+
+def test_active_release_queue_reconciliation_is_complete_and_has_no_known_third_party() -> None:
+    catalog = json.loads(
+        (REPOSITORY_ROOT / "config/matching-v2-review-footprints.json").read_text()
+    )
+    expected = {
+        "fresh_bananas-matching-v2-release-review": ("1.1.0", 94),
+        "fresh_strawberries-matching-v2-release-review": ("1.1.0", 72),
+        "fresh_ground_beef-matching-v2-release-review": ("1.1.0", 210),
+        "fresh_fluid_milk-matching-v2-release-review": ("1.0.0", 311),
+        "fresh_shell_eggs-matching-v2-release-review": ("1.1.0", 1217),
+    }
+    queues = {queue["queue_id"]: queue for queue in catalog["queues"]}
+
+    assert catalog["schema_version"] == "2.0.0"
+    assert set(queues) == set(expected)
+    for queue_id, (queue_version, case_count) in expected.items():
+        queue = queues[queue_id]
+        assert queue["queue_version"] == queue_version
+        assert queue["source"]["replay_case_count"] == case_count
+        assert queue["listings"]
+        for listing in queue["listings"].values():
+            assert listing["observed_location_count"] > 0
+            assert listing["seller_governance"]["eligible"] is True
+            assert listing["seller_governance"]["status"] in {
+                "verified_first_party",
+                "seller_unverified",
+                "not_governed",
+            }
 
 
 def test_latest_human_decision_is_final_until_flagged_and_then_replaced() -> None:
@@ -397,6 +447,29 @@ async def test_review_service_validates_queue_checksum_before_import() -> None:
     invalid.queue["checksum"] = "0" * 64
     with pytest.raises(ValueError, match="checksum"):
         await service.import_queue(invalid)
+
+
+async def test_review_service_rejects_known_third_party_seller_queue() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    document = _queue()
+    document["cases"][0]["benchmark_listing"]["seller_governance"] = {
+        "eligible": False,
+        "status": "excluded_third_party",
+    }
+    document.pop("checksum")
+    document["checksum"] = hashlib.sha256(_canonical(document).encode()).hexdigest()
+
+    with pytest.raises(ValueError, match="known third-party marketplace seller"):
+        await service.import_queue(
+            ImportReviewQueueRequest(
+                organization_id="00000000-0000-0000-0000-000000000001",
+                imported_by="review-admin",
+                queue=document,
+            )
+        )
+
+    assert repository.imported is None
 
 
 async def test_review_service_preserves_large_integers_from_raw_queue_json() -> None:
