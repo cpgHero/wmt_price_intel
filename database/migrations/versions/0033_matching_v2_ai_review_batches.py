@@ -1,6 +1,6 @@
 """Add durable batch observability for Matching v2 AI review.
 
-Revision ID: 0033_matching_v2_ai_review_batches
+Revision ID: 0033_ai_review_batches
 Revises: 0032_matching_v2_ai_drafts
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0033_matching_v2_ai_review_batches"
+revision: str = "0033_ai_review_batches"
 down_revision: str | None = "0032_matching_v2_ai_drafts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
