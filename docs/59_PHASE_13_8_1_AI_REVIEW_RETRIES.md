@@ -1,6 +1,6 @@
 # Phase 13.8.1 — Governed AI Review Retries
 
-Status: implemented and locally verified; production verification pending deployment
+Status: deployed and production-verified
 
 ## Outcome
 
@@ -57,7 +57,12 @@ retains the sealed key and the configured per-request cost ceiling.
 
 The proportional automated gate covers request validation, advisory output, immutable-history
 behavior, seller/finalization/integrity guards, retry policy classification, the protected API
-route, TypeScript types, and Playwright individual/bulk confirmation paths. Local API, type,
-component, lint, and build gates passed. The local sandbox could not launch headless Chromium, so the
-Playwright and live migration paths remain CI gates before deployment. Tests use mocked AI
-responses; no paid OpenAI calls are required to verify this control-plane feature.
+route, TypeScript types, and Playwright individual/bulk confirmation paths. CI run `31979462641`
+passed migration upgrade, downgrade-to-base, and upgrade-to-head; 480 Python tests; contracts;
+formatting, lint, and typecheck; 57 web tests; 10 browser tests; the production build; and all four
+container builds.
+
+The protected production Match Certification page exposed the new retry policy and queue-wide
+needs-attention state. Existing banana and strawberry failures were attached to finalized cases, so
+the UI correctly withheld retry controls. The live Matching guide documented terminal retries and
+history preservation. Verification did not submit a retry and incurred no paid OpenAI call.

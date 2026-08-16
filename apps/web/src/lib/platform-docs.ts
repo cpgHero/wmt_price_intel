@@ -1292,9 +1292,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented; deployment verification pending",
+              "Deployed & verified",
               "Terminal Match Certification AI failures gained governed individual and bulk retry controls.",
-              "Each confirmed retry creates a new lineage-linked Postgres task, preserves failed attempts/errors/cost, reapplies seller and final-decision guards, blocks evidence-integrity failures, caps administrator retries at three rounds, and retains mandatory human review. Local API, type, component, lint, and build gates passed without paid AI calls; migration/browser CI and production verification remain pending.",
+              "Each confirmed retry creates a new lineage-linked Postgres task, preserves failed attempts/errors/cost, reapplies seller and final-decision guards, blocks evidence-integrity failures, caps administrator retries at three rounds, and retains mandatory human review. CI run 31979462641 passed migrations in both directions, 480 Python tests, 57 web tests, 10 browser tests, and all container builds. The live protected page and owner docs were verified without a paid AI call; existing failures attached to finalized cases correctly remained non-retryable.",
             ],
             [
               "2026-08-16",
