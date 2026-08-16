@@ -212,6 +212,7 @@ export function MatchingV2ReviewAdmin() {
   const [password, setPassword] = useState("");
   const [queues, setQueues] = useState<QueueSummary[]>([]);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
+  const [queueRefresh, setQueueRefresh] = useState(0);
   const [view, setView] = useState<QueueView | null>(null);
   const [reviewerId, setReviewerId] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
@@ -225,9 +226,15 @@ export function MatchingV2ReviewAdmin() {
     const response = await jsonRequest<{
       queues: QueueSummary[];
     }>("/api/admin/matching-v2/review-queues?limit=100");
-    setQueues(response.queues);
+    const latestQueues = response.queues.filter(
+      (queue, index, allQueues) =>
+        allQueues.findIndex(
+          (candidate) => candidate.queue_id === queue.queue_id,
+        ) === index,
+    );
+    setQueues(latestQueues);
     setSelectedQueueId(
-      (current) => current ?? response.queues[0]?.queue_id ?? null,
+      (current) => current ?? latestQueues[0]?.queue_id ?? null,
     );
   }, []);
 
@@ -277,7 +284,7 @@ export function MatchingV2ReviewAdmin() {
     // the selected server-backed queue whenever its filters change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (session?.authenticated) void loadQueue().catch(handleError);
-  }, [loadQueue, session?.authenticated]);
+  }, [loadQueue, queueRefresh, session?.authenticated]);
 
   useEffect(() => {
     if (!activeCaseId) return;
@@ -360,6 +367,7 @@ export function MatchingV2ReviewAdmin() {
       );
       await loadQueues();
       setSelectedQueueId(response.queue_id);
+      setQueueRefresh((current) => current + 1);
     } catch (cause) {
       handleError(cause);
     } finally {
@@ -545,7 +553,8 @@ export function MatchingV2ReviewAdmin() {
             <option value="">Select a queue</option>
             {queues.map((queue) => (
               <option value={queue.queue_id} key={queue.queue_id}>
-                {label(queue.product_pack.id)} · {queue.case_count} cases
+                {label(queue.product_pack.id)} · queue v{queue.version} ·{" "}
+                {queue.case_count} cases
               </option>
             ))}
           </select>
