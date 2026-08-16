@@ -1,4 +1,4 @@
-"""Authenticated human review and adjudication API for Matching v2."""
+"""Authenticated human certification API for Matching v2."""
 
 from __future__ import annotations
 
@@ -566,13 +566,12 @@ class PostgresMatchingV2ReviewRepository:
             await connection.execute(
                 text(
                     """
-                    SELECT DISTINCT ON (review_case_id, reviewer_id)
-                           id::text, review_case_id::text, reviewer_id, verdict,
+                    SELECT id::text, review_case_id::text, reviewer_id, verdict,
                            allowed_tiers, rationale, evidence_refs,
                            submission_checksum, supersedes_submission_id::text, created_at
                     FROM matching_v2_review_submission
                     WHERE review_case_id = ANY(CAST(:case_ids AS uuid[]))
-                    ORDER BY review_case_id, reviewer_id, created_at DESC, id DESC
+                    ORDER BY review_case_id, created_at DESC, id DESC
                     """
                 ),
                 {"case_ids": list(case_ids)},
@@ -667,14 +666,36 @@ class PostgresMatchingV2ReviewRepository:
             case_id = str(row["id"])
             reviews = submissions_by_case.get(case_id, [])
             adjudication = adjudication_by_case.get(case_id)
+            decision_candidates: list[dict[str, Any]] = []
+            if reviews:
+                decision_candidates.append(
+                    {
+                        **reviews[0],
+                        "source": "review_submission",
+                        "reviewer_id": reviews[0]["reviewer_id"],
+                    }
+                )
             if adjudication is not None:
-                review_status = "adjudicated"
-            elif len({str(review["reviewer_id"]) for review in reviews}) >= 2:
-                review_status = "ready_for_adjudication"
-            elif reviews:
-                review_status = "in_review"
-            else:
+                decision_candidates.append(
+                    {
+                        **adjudication,
+                        "source": "legacy_adjudication",
+                        "reviewer_id": adjudication["adjudicator_id"],
+                    }
+                )
+            final_decision = max(
+                decision_candidates,
+                key=lambda decision: decision["created_at"],
+                default=None,
+            )
+            if final_decision is None:
                 review_status = "pending"
+            elif final_decision["verdict"] == "comparable":
+                review_status = "approved"
+            elif final_decision["verdict"] == "not_comparable":
+                review_status = "rejected"
+            else:
+                review_status = "flagged"
             output.append(
                 {
                     **dict(row["case_document"]),
@@ -682,6 +703,7 @@ class PostgresMatchingV2ReviewRepository:
                     "review_status": review_status,
                     "review_submissions": reviews,
                     "adjudication": adjudication,
+                    "final_decision": final_decision,
                     "ai_draft": ai_draft_by_case.get(case_id),
                 }
             )
@@ -729,11 +751,20 @@ class PostgresMatchingV2ReviewRepository:
                             )
                             SELECT c.id::text, c.external_case_id, c.case_document,
                                    c.case_checksum,
-                                   EXISTS (
-                                     SELECT 1
-                                     FROM matching_v2_adjudication a
-                                     WHERE a.review_case_id = c.id
-                                   ) AS is_adjudicated
+                                   (
+                                     SELECT decision.verdict
+                                     FROM (
+                                       SELECT s.verdict, s.created_at, s.id
+                                       FROM matching_v2_review_submission s
+                                       WHERE s.review_case_id = c.id
+                                       UNION ALL
+                                       SELECT a.verdict, a.created_at, a.id
+                                       FROM matching_v2_adjudication a
+                                       WHERE a.review_case_id = c.id
+                                     ) decision
+                                     ORDER BY decision.created_at DESC, decision.id DESC
+                                     LIMIT 1
+                                   ) AS current_verdict
                             FROM matching_v2_review_case c
                             JOIN selected_queue q ON q.id = c.review_queue_id
                             WHERE c.external_case_id = ANY(CAST(:case_ids AS text[]))
@@ -752,15 +783,13 @@ class PostgresMatchingV2ReviewRepository:
                     f"matching v2 review cases {missing!r} were not found in queue "
                     f"{external_queue_id!r}"
                 )
-            adjudicated = [
+            finalized = [
                 case_id
                 for case_id in external_case_ids
-                if bool(rows_by_case[case_id]["is_adjudicated"])
+                if rows_by_case[case_id]["current_verdict"] in {"comparable", "not_comparable"}
             ]
-            if adjudicated:
-                raise ValueError(
-                    f"adjudicated review cases cannot request AI drafts: {adjudicated!r}"
-                )
+            if finalized:
+                raise ValueError(f"finalized review cases cannot request AI drafts: {finalized!r}")
             tasks = [
                 await self._insert_ai_draft_task(
                     connection,
@@ -854,19 +883,63 @@ class PostgresMatchingV2ReviewRepository:
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
                 {"case_id": case_id},
             )
-            finalized = await connection.scalar(
-                text(
-                    """
-                    SELECT EXISTS (
-                      SELECT 1 FROM matching_v2_adjudication
-                      WHERE review_case_id = CAST(:case_id AS uuid)
+            existing = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT id::text, created_at
+                            FROM matching_v2_review_submission
+                            WHERE submission_checksum = :checksum
+                            """
+                        ),
+                        {"checksum": submission_checksum},
                     )
-                    """
-                ),
-                {"case_id": case_id},
+                )
+                .mappings()
+                .first()
             )
-            if finalized:
-                raise ValueError("an adjudicated review case cannot accept new submissions")
+            if existing is not None:
+                return {
+                    "id": str(existing["id"]),
+                    "queue_id": external_queue_id,
+                    "case_id": external_case_id,
+                    "checksum": submission_checksum,
+                    "created_at": existing["created_at"].isoformat(),
+                }
+            current_decision = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT decision.verdict
+                            FROM (
+                              SELECT verdict, created_at, id
+                              FROM matching_v2_review_submission
+                              WHERE review_case_id = CAST(:case_id AS uuid)
+                              UNION ALL
+                              SELECT verdict, created_at, id
+                              FROM matching_v2_adjudication
+                              WHERE review_case_id = CAST(:case_id AS uuid)
+                            ) decision
+                            ORDER BY decision.created_at DESC, decision.id DESC
+                            LIMIT 1
+                            """
+                        ),
+                        {"case_id": case_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                current_decision is not None
+                and current_decision["verdict"] in {"comparable", "not_comparable"}
+                and submission["verdict"] != "insufficient_evidence"
+            ):
+                raise ValueError(
+                    "a finalized review case must be flagged before its decision can change"
+                )
             supersedes_submission_id = submission.get("supersedes_submission_id")
             if supersedes_submission_id is not None:
                 superseded = (
@@ -878,13 +951,11 @@ class PostgresMatchingV2ReviewRepository:
                                 FROM matching_v2_review_submission
                                 WHERE id = CAST(:submission_id AS uuid)
                                   AND review_case_id = CAST(:case_id AS uuid)
-                                  AND reviewer_id = :reviewer_id
                                 """
                             ),
                             {
                                 "submission_id": supersedes_submission_id,
                                 "case_id": case_id,
-                                "reviewer_id": submission["reviewer_id"],
                             },
                         )
                     )
@@ -892,9 +963,7 @@ class PostgresMatchingV2ReviewRepository:
                     .first()
                 )
                 if superseded is None:
-                    raise ValueError(
-                        "a superseded review must belong to the same case and reviewer"
-                    )
+                    raise ValueError("a superseded review must belong to the same case")
             row = (
                 (
                     await connection.execute(
@@ -1267,37 +1336,49 @@ class MatchingV2ReviewService:
             external_queue_id,
             competitor_retailer_id=None,
             stratum=None,
-            review_status="adjudicated",
+            review_status=None,
             offset=0,
             limit=1_000_000,
         )
         labels: list[dict[str, Any]] = []
         for case in view["cases"]:
-            adjudication = case["adjudication"]
-            if adjudication["verdict"] == "insufficient_evidence":
+            if case["review_status"] not in {"approved", "rejected"}:
                 continue
-            linked = set(adjudication["submission_ids"])
-            reviews = [review for review in case["review_submissions"] if review["id"] in linked]
+            decision = case["final_decision"]
+            if decision is None:
+                continue
+            linked = set(decision.get("submission_ids", []))
+            reviews = (
+                [review for review in case["review_submissions"] if review["id"] in linked]
+                if linked
+                else [decision]
+            )
             evidence_refs = sorted(
                 {
                     *case["evidence_refs"],
-                    *adjudication["evidence_refs"],
+                    *decision["evidence_refs"],
                     *(reference for review in reviews for reference in review["evidence_refs"]),
                 }
             )
+            legacy_adjudication = decision["source"] == "legacy_adjudication"
             labels.append(
                 {
                     "case_id": case["case_id"],
                     "benchmark_listing_id": case["benchmark_listing_id"],
                     "competitor_listing_id": case["competitor_listing_id"],
-                    "expected_comparable": adjudication["verdict"] == "comparable",
-                    "allowed_tiers": list(adjudication["allowed_tiers"]),
+                    "expected_comparable": decision["verdict"] == "comparable",
+                    "allowed_tiers": list(decision["allowed_tiers"]),
                     "critical": case["critical"],
                     "stratum": case["stratum"],
-                    "review_status": "adjudicated",
-                    "reviewers": sorted({str(review["reviewer_id"]) for review in reviews}),
+                    "review_status": ("adjudicated" if legacy_adjudication else "single_reviewed"),
+                    "reviewers": sorted(
+                        {
+                            str(review.get("reviewer_id") or review.get("adjudicator_id"))
+                            for review in reviews
+                        }
+                    ),
                     "evidence_refs": evidence_refs,
-                    "rationale": adjudication["rationale"],
+                    "rationale": decision["rationale"],
                 }
             )
         document = {
@@ -1316,7 +1397,7 @@ class MatchingV2ReviewService:
                 self._root,
                 "matching-v2-gold-set.schema.json",
                 document,
-                label="matching v2 adjudicated gold set",
+                label="matching v2 certified gold set",
             )
         return document
 

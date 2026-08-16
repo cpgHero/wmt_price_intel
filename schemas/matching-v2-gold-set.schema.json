@@ -104,8 +104,10 @@
           "labels": {
             "items": {
               "properties": {
-                "review_status": { "const": "adjudicated" },
-                "reviewers": { "minItems": 2 },
+                "review_status": {
+                  "enum": ["single_reviewed", "adjudicated"]
+                },
+                "reviewers": { "minItems": 1 },
                 "evidence_refs": { "minItems": 1 }
               }
             }

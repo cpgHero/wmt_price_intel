@@ -93,7 +93,8 @@ export const applicationNavigation: readonly NavigationGroup[] = [
       },
       {
         label: "Match Certification",
-        description: "Dual-review Matching v2 evidence and release gold sets",
+        description:
+          "Single-decision Matching v2 evidence and release gold sets",
         href: "/admin/matching-v2",
         icon: "quality",
         match: "prefix",

@@ -56,9 +56,9 @@ Phase 13.1 introduces repository contracts before exposing any new public mutati
   result.
 
 These contracts are consumed internally during shadow certification. Existing match-review routes
-remain authoritative until category cutover. Phase 13.4 adds protected, queue-scoped human review
-and adjudication routes; those writes create immutable certification evidence and never alter report
-matches.
+remain authoritative until category cutover. Phase 13.4 adds protected, queue-scoped human
+certification routes; approvals, rejections, and flags create immutable evidence and never alter
+report matches.
 
 `GET /api/v1/analyses/{analysis_id}/matching-v2-shadow` exposes bounded, read-only shadow evidence
 only when `MATCHING_V2_SHADOW_API_ENABLED=true`. It accepts competitor, tier, status, benchmark

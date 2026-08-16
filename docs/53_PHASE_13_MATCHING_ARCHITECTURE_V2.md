@@ -232,13 +232,13 @@ The first report-facing surface is deliberately read-only and identified as shad
 exposes policy, tier, attribute outcomes, evidence coverage, brand relationship, eligible price
 bases, and decision rationale inside the existing Match Workbench.
 
-Phase 13.4 adds a separate protected certification workbench. Its append-only review and
-adjudication routes create release evidence only; they do not mutate report matches or make v2
-authoritative. See `docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`.
+Phase 13.4 adds a separate protected certification workbench. Its append-only decisions and flags
+create release evidence only; they do not mutate report matches or make v2 authoritative. See
+`docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`.
 
 Release certification uses `matching-v2-gold-set.schema.json`. Synthetic fixtures can test the
-contract but cannot pass a release gate. Every release label must be adjudicated by at least two
-reviewers and cite immutable evidence. Candidate recall and automatic-approval precision are
+contract but cannot pass a release gate. Every release label must have one final identified human
+decision and cite immutable evidence. Candidate recall and automatic-approval precision are
 reported separately overall and by stratum; every automatic approval must have a gold label.
 
 ### 13.5 — Bounded AI and vision
@@ -253,13 +253,13 @@ an advisory draft separately from human submissions. Structured evidence is alwa
 product images are included only when critical structured evidence is incomplete or conflicting.
 Every image-derived proposal must cite visible evidence and one of the exact input image URLs.
 Drafts always set `authoritative=false` and `human_review_required=true`. A reviewer may explicitly
-copy a proposal into their form, edit it, and submit it as their own independent decision. The AI
-path cannot certify a match, adjudicate reviewers, change an edge, or update report metrics.
+copy a proposal into their form, edit it, and submit it as their own final decision. The AI
+path cannot certify a match, flag a decision, change an edge, or update report metrics.
 
 The workbench may enqueue an explicitly selected batch of at most 25 eligible cases from the
 current queue page. It never provides an unbounded “review the queue” action. Before confirmation,
 the UI names the model, selected-case count, per-request policy ceiling, and maximum aggregate
-policy exposure. Existing drafts and adjudicated cases are ineligible; task idempotency is still
+policy exposure. Existing drafts and finalized cases are ineligible; task idempotency is still
 defined per case evidence checksum, prompt checksum, and model. Batch submission changes only task
 creation ergonomics and does not broaden model authority.
 

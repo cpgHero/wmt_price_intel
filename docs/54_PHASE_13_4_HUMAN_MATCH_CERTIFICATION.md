@@ -27,7 +27,7 @@ The replay made no provider, PDP, OpenAI, or vision calls.
 
 Egg Search exports do not contain enough critical attribute evidence for safe automatic matching.
 Complete critical-attribute coverage ranges from 0% to 10.9% by retailer; Walmart is 1.1% and ALDI
-is 0%. Eggs therefore require targeted PDP/label/vision evidence plus human adjudication before
+is 0%. Eggs therefore require targeted PDP/label/vision evidence plus human certification before
 certification. This is an evidence gap, not permission to infer missing claims from title similarity.
 
 The other category profiles are materially stronger but are not certified merely because their
@@ -51,13 +51,14 @@ selection policy and is never represented as a unit/price basis.
    records.
 3. The workbench presents the product pair, governed tier proposal, attributes, provenance,
    reliability, and immutable evidence references.
-4. Two distinct reviewer identities independently submit decisions.
-5. Adjudication can only cite the current submission from each reviewer. Case-scoped PostgreSQL
-   advisory locks prevent a review/adjudication race.
-6. An adjudicated case rejects further review submissions. Any future correction must be an
-   explicit superseding adjudication, preserving the complete audit chain.
-7. Gold-set export includes only adjudicated, evidence-backed labels. `insufficient_evidence`
-   decisions remain in the audit trail but do not become positive or negative release labels.
+4. One identified human reviewer approves or rejects the relationship and that decision becomes
+   final immediately.
+5. A finalized decision cannot be replaced directly. Another identified reviewer must first flag
+   it with a reason; case-scoped PostgreSQL advisory locks prevent concurrent decision races.
+6. The next approval or rejection resolves the flag and becomes the new final decision. Every
+   decision and flag remains append-only, preserving the complete audit chain.
+7. Gold-set export includes approved and rejected evidence-backed labels. Flagged or
+   `insufficient_evidence` cases remain in the audit trail but do not become release labels.
 
 The tables created by migration `0030_matching_v2_human_review` are append-only. Database triggers
 reject updates and deletes for queues, cases, submissions, adjudications, and adjudication links.
@@ -72,7 +73,6 @@ same-origin validation for writes.
 - `GET /api/v1/matching-v2/review-queues`
 - `GET /api/v1/matching-v2/review-queues/{queue_id}`
 - `POST /api/v1/matching-v2/review-queues/{queue_id}/cases/{case_id}/submissions`
-- `POST /api/v1/matching-v2/review-queues/{queue_id}/cases/{case_id}/adjudications`
 - `GET /api/v1/matching-v2/review-queues/{queue_id}/gold-set`
 
 Queue-scoped case routes are deliberate: the same pair can appear in multiple evidence/policy
@@ -89,15 +89,14 @@ versions without a review being written to the wrong release queue.
 - inspectable attribute evidence and engine rationale;
 - retailer filtering with Walmart fixed as the benchmark side;
 - explicitly selected AI-draft batches capped at 25 cases with cost-ceiling disclosure;
-- independent decision and tier selection with required rationale;
-- reviewer history and two-review consensus finalization;
+- single final decision and tier selection with required rationale;
+- immutable decision history and explicit flag-to-reopen controls;
 - truthful whole-queue progress; and
-- adjudicated gold-set access.
+- certified gold-set access.
 
 Reviewer identity is currently a stable, manually entered identity inside a protected administrator
 session. Cryptographically verified individual identity must be added with application accounts and
-RBAC before external production release; the shared administrator password alone cannot prove two
-different humans performed the reviews.
+RBAC before external production release.
 
 ## Remaining certification sequence
 
@@ -105,7 +104,7 @@ different humans performed the reviews.
 2. Enable the protected review API and import the five validated queue documents.
 3. Acquire targeted missing identity evidence, beginning with eggs; do not recollect store-level
    prices for this purpose.
-4. Complete two-person review and adjudication by stratum.
+4. Complete single-review certification by stratum and resolve any explicitly flagged decisions.
 5. Run release metrics overall and per stratum: candidate recall, automatic-tier precision, hard
    conflicts, coverage reasons, determinism, and local-comparison reconciliation.
 6. Certify and cut over one Product Pack at a time in the order eggs, milk, ground beef,

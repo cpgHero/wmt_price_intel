@@ -42,6 +42,7 @@ const cases = Array.from({ length: 30 }, (_, index) => ({
   evidence_refs: [],
   review_status: "pending",
   review_submissions: [],
+  final_decision: null,
   adjudication: null,
   ai_draft:
     index < aiStatuses.length
@@ -233,11 +234,120 @@ test("reports a plain-text submission failure without a JSON parsing error", asy
   await drawer
     .getByRole("textbox", { name: "Evidence rationale" })
     .fill("The governed package attributes agree.");
-  await drawer
-    .getByRole("button", { name: "Submit independent review" })
-    .click();
+  await drawer.getByRole("button", { name: "Save final decision" }).click();
 
   const submissionError = page.locator(".cert-error");
   await expect(submissionError).toContainText("Internal Server Error (500)");
   await expect(submissionError).not.toContainText("Unexpected token");
+});
+
+test("finalizes one human decision and requires an explicit flag before review", async ({
+  page,
+}) => {
+  const submittedVerdicts: string[] = [];
+  let reviewCase = {
+    ...cases[4],
+    ai_draft: null,
+    evidence_refs: ["source-file:test.csv#sha256=test"],
+  };
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        reviewer_id: string;
+        verdict: string;
+        rationale: string;
+      };
+      submittedVerdicts.push(body.verdict);
+      reviewCase = {
+        ...reviewCase,
+        review_status:
+          body.verdict === "insufficient_evidence" ? "flagged" : "approved",
+        final_decision: {
+          id: `decision-${submittedVerdicts.length}`,
+          source: "review_submission",
+          reviewer_id: body.reviewer_id,
+          verdict: body.verdict,
+          allowed_tiers:
+            body.verdict === "comparable" ? ["exact_specification"] : [],
+          rationale: body.rationale,
+          evidence_refs: reviewCase.evidence_refs,
+        },
+      };
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: `decision-${submittedVerdicts.length}` }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        status_counts: {
+          [reviewCase.review_status]: 1,
+        },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 1 }],
+        total_cases: 1,
+        selected_case_count: 1,
+        offset: 0,
+        limit: 50,
+        cases: [reviewCase],
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  await page.getByRole("button", { name: "Review evidence" }).click();
+  let drawer = page.getByRole("dialog", { name: "Match evidence review" });
+  await drawer.getByRole("button", { name: "Approve match" }).click();
+  await drawer
+    .getByRole("textbox", { name: "Evidence rationale" })
+    .fill("The governed package attributes agree.");
+  await drawer.getByRole("button", { name: "Save final decision" }).click();
+  await expect(
+    page.getByText(
+      "Match approved and finalized. It remains final unless someone flags it.",
+    ),
+  ).toBeVisible();
+  await page.getByLabel("Queue status").selectOption("approved");
+  await page.getByRole("button", { name: "View decision" }).click();
+  drawer = page.getByRole("dialog", { name: "Match evidence review" });
+  await drawer
+    .getByRole("textbox", { name: "Reason to flag this decision" })
+    .fill("The new package image conflicts with the approved attributes.");
+  await drawer.getByRole("button", { name: "Flag for re-review" }).click();
+
+  await expect(
+    page.getByText("Case flagged and returned to the review queue."),
+  ).toBeVisible();
+  expect(submittedVerdicts).toEqual(["comparable", "insufficient_evidence"]);
 });

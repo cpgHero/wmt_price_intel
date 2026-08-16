@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import json
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from rci_api.matching_v2_review import (
     _apply_observed_location_sidecar,
     get_matching_v2_review_service,
 )
+from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -132,6 +134,96 @@ def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
 
     assert documents[0]["benchmark_listing"]["observed_location_count"] == 4200
     assert documents[0]["competitor_listing"]["observed_location_count"] == 12
+
+
+def test_latest_human_decision_is_final_until_flagged_and_then_replaced() -> None:
+    created = datetime(2026, 8, 16, tzinfo=UTC)
+    cases = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "case_document": {"case_id": "case-one"},
+        }
+    ]
+    approval = {
+        "id": "approval",
+        "review_case_id": cases[0]["id"],
+        "reviewer_id": "reviewer-a",
+        "verdict": "comparable",
+        "allowed_tiers": ["equivalent_product"],
+        "rationale": "Attributes agree.",
+        "evidence_refs": ["artifact://approval"],
+        "created_at": created,
+    }
+    flag = {
+        "id": "flag",
+        "review_case_id": cases[0]["id"],
+        "reviewer_id": "reviewer-b",
+        "verdict": "insufficient_evidence",
+        "allowed_tiers": [],
+        "rationale": "Package image conflicts.",
+        "evidence_refs": ["artifact://flag"],
+        "created_at": created + timedelta(minutes=1),
+    }
+    replacement = {
+        "id": "replacement",
+        "review_case_id": cases[0]["id"],
+        "reviewer_id": "reviewer-c",
+        "verdict": "not_comparable",
+        "allowed_tiers": [],
+        "rationale": "Package forms differ.",
+        "evidence_refs": ["artifact://replacement"],
+        "created_at": created + timedelta(minutes=2),
+    }
+
+    approved = PostgresMatchingV2ReviewRepository._case_documents(cases, [approval], [], [])[0]
+    flagged = PostgresMatchingV2ReviewRepository._case_documents(cases, [flag, approval], [], [])[0]
+    rejected = PostgresMatchingV2ReviewRepository._case_documents(
+        cases, [replacement, flag, approval], [], []
+    )[0]
+
+    assert approved["review_status"] == "approved"
+    assert approved["final_decision"]["source"] == "review_submission"
+    assert flagged["review_status"] == "flagged"
+    assert rejected["review_status"] == "rejected"
+    assert rejected["final_decision"]["reviewer_id"] == "reviewer-c"
+
+
+def test_finalized_case_requires_flag_before_replacement_submission() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.submit_review)
+
+    assert "must be flagged before its decision can change" in source
+    assert 'submission["verdict"] != "insufficient_evidence"' in source
+
+
+def test_release_gold_set_accepts_one_final_human_reviewer() -> None:
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-gold-set.schema.json",
+        {
+            "schema_version": "2.0.0",
+            "gold_set_id": "single-review-release",
+            "version": "1.0.0",
+            "purpose": "release_certification",
+            "product_pack": {"id": "fresh_bananas", "version": "1.2.0"},
+            "source_evidence": ["artifact://banana-evidence"],
+            "labels": [
+                {
+                    "case_id": "case-one",
+                    "benchmark_listing_id": "walmart_us:one",
+                    "competitor_listing_id": "aldi_us:one",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["equivalent_product"],
+                    "critical": True,
+                    "stratum": "exact_specification",
+                    "review_status": "single_reviewed",
+                    "reviewers": ["reviewer@cpghero.com"],
+                    "evidence_refs": ["artifact://banana-evidence"],
+                    "rationale": "The governed package attributes agree.",
+                }
+            ],
+        },
+        label="single-review release gold set",
+    )
 
 
 class ReviewRepository:

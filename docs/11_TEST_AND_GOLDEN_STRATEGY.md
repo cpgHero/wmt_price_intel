@@ -31,10 +31,10 @@ Strawberries: 297,443 source rows in validated run. Headline assertions are in `
 
 ## Matching Architecture v2 certification
 
-Matching v2 uses a separate, human-adjudicated pair-label gold set; aggregate price-report goldens
+Matching v2 uses a separate, human-certified pair-label gold set; aggregate price-report goldens
 cannot substitute for match labels. A release set must validate against
-`schemas/matching-v2-gold-set.schema.json`, cite immutable Search/PDP evidence, and record at least
-two reviewers per label. Certification reports candidate recall separately from automatic-tier
+`schemas/matching-v2-gold-set.schema.json`, cite immutable Search/PDP evidence, and record the
+identified final reviewer for each label. Certification reports candidate recall separately from automatic-tier
 precision, includes per-stratum metrics, fails any unlabeled automatic approval, and does not permit
 synthetic contract fixtures to claim release readiness. The five-category order is eggs, milk,
 ground beef, strawberries, then bananas.

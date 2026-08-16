@@ -56,6 +56,11 @@ interface ReviewSubmission {
   allowed_tiers: string[];
   rationale: string;
   evidence_refs: string[];
+  created_at?: string;
+}
+
+interface FinalDecision extends ReviewSubmission {
+  source: "review_submission" | "legacy_adjudication";
 }
 
 type AIDraftStatus = "queued" | "running" | "succeeded" | "needs_review";
@@ -87,6 +92,7 @@ interface ReviewCase {
   evidence_refs: string[];
   review_status: string;
   review_submissions: ReviewSubmission[];
+  final_decision: FinalDecision | null;
   adjudication: null | {
     verdict: string;
     allowed_tiers: string[];
@@ -345,7 +351,7 @@ export function MatchingV2ReviewAdmin() {
         response.cases.some(
           (reviewCase) =>
             reviewCase.case_id === caseId &&
-            !reviewCase.adjudication &&
+            ["pending", "flagged"].includes(reviewCase.review_status) &&
             !reviewCase.ai_draft,
         ),
       ),
@@ -391,7 +397,10 @@ export function MatchingV2ReviewAdmin() {
   const progress = useMemo(() => {
     if (!view) return 0;
     return view.total_cases
-      ? ((view.status_counts.adjudicated ?? 0) / view.total_cases) * 100
+      ? (((view.status_counts.approved ?? 0) +
+          (view.status_counts.rejected ?? 0)) /
+          view.total_cases) *
+          100
       : 0;
   }, [view]);
   const activeCase = useMemo(
@@ -403,7 +412,9 @@ export function MatchingV2ReviewAdmin() {
   const eligibleCases = useMemo(
     () =>
       (view?.cases ?? []).filter(
-        (reviewCase) => !reviewCase.adjudication && !reviewCase.ai_draft,
+        (reviewCase) =>
+          ["pending", "flagged"].includes(reviewCase.review_status) &&
+          !reviewCase.ai_draft,
       ),
     [view],
   );
@@ -505,8 +516,12 @@ export function MatchingV2ReviewAdmin() {
     }));
   }
 
-  async function submitReview(reviewCase: ReviewCase) {
+  async function submitReview(
+    reviewCase: ReviewCase,
+    verdictOverride?: "insufficient_evidence",
+  ) {
     const draft = drafts[reviewCase.case_id];
+    const verdict = verdictOverride ?? draft?.verdict;
     if (!reviewerId.trim()) {
       setError("Enter a stable reviewer identity before submitting a review.");
       return;
@@ -515,7 +530,7 @@ export function MatchingV2ReviewAdmin() {
       setError("Explain the evidence behind the review decision.");
       return;
     }
-    if (!draft.verdict) {
+    if (!verdict) {
       setError("Choose an explicit review decision before submitting.");
       return;
     }
@@ -529,16 +544,24 @@ export function MatchingV2ReviewAdmin() {
           method: "POST",
           body: JSON.stringify({
             reviewer_id: reviewerId.trim(),
-            verdict: draft.verdict,
-            allowed_tiers: draft.verdict === "comparable" ? [draft.tier] : [],
+            verdict,
+            allowed_tiers: verdict === "comparable" ? [draft.tier] : [],
             rationale: draft.rationale,
             evidence_refs: reviewCase.evidence_refs,
           }),
         },
       );
       setNotice(
-        "Independent review submitted. A second reviewer must submit separately before adjudication.",
+        verdict === "comparable"
+          ? "Match approved and finalized. It remains final unless someone flags it."
+          : verdict === "not_comparable"
+            ? "Match rejected and finalized. It remains final unless someone flags it."
+            : "Case flagged and returned to the review queue.",
       );
+      setDrafts((current) => ({
+        ...current,
+        [reviewCase.case_id]: defaultDraft(reviewCase),
+      }));
       setActiveCaseId(null);
       await loadQueue();
     } catch (cause) {
@@ -650,51 +673,6 @@ export function MatchingV2ReviewAdmin() {
     });
   }
 
-  async function finalizeConsensus(reviewCase: ReviewCase) {
-    const reviews = reviewCase.review_submissions;
-    const reviewers = new Set(reviews.map((review) => review.reviewer_id));
-    if (reviewers.size < 2) {
-      setError("Two independent reviewer submissions are required.");
-      return;
-    }
-    const signatures = new Set(
-      reviews.map(
-        (review) =>
-          `${review.verdict}:${[...review.allowed_tiers].sort().join(",")}`,
-      ),
-    );
-    if (signatures.size !== 1) {
-      setError("Reviewer decisions disagree and require manual adjudication.");
-      return;
-    }
-    const consensus = reviews[0];
-    setBusy(true);
-    setError(null);
-    try {
-      await jsonRequest(
-        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/adjudications`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            adjudicator_id: reviewerId.trim() || "dual-review-consensus",
-            verdict: consensus.verdict,
-            allowed_tiers: consensus.allowed_tiers,
-            rationale: `Independent reviewer consensus: ${reviews
-              .map((review) => review.rationale)
-              .join(" | ")}`,
-            evidence_refs: reviewCase.evidence_refs,
-            submission_ids: reviews.map((review) => review.id),
-          }),
-        },
-      );
-      await loadQueue();
-    } catch (cause) {
-      handleError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (session === null)
     return (
       <div className="builder-loading">Checking administrator access…</div>
@@ -790,9 +768,9 @@ export function MatchingV2ReviewAdmin() {
             }}
           >
             <option value="pending">Pending</option>
-            <option value="in_review">One review</option>
-            <option value="ready_for_adjudication">Two reviews</option>
-            <option value="adjudicated">Adjudicated</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="flagged">Flagged</option>
             <option value="all">All cases</option>
           </select>
         </label>
@@ -851,8 +829,11 @@ export function MatchingV2ReviewAdmin() {
               <span>Cases matching this view</span>
             </div>
             <div>
-              <strong>{view.status_counts.adjudicated ?? 0}</strong>
-              <span>Adjudicated</span>
+              <strong>
+                {(view.status_counts.approved ?? 0) +
+                  (view.status_counts.rejected ?? 0)}
+              </strong>
+              <span>Finalized</span>
             </div>
             <div className="cert-progress">
               <span style={{ width: `${progress}%` }} />
@@ -864,7 +845,7 @@ export function MatchingV2ReviewAdmin() {
               target="_blank"
               rel="noreferrer"
             >
-              Open adjudicated gold set
+              Open certified gold set
             </a>
           </section>
 
@@ -908,7 +889,7 @@ export function MatchingV2ReviewAdmin() {
                 Select eligible cases on this page
                 <small>
                   {eligibleCases.length.toLocaleString()} without an existing
-                  draft or adjudication
+                  draft or final decision
                 </small>
               </span>
             </label>
@@ -1030,7 +1011,9 @@ export function MatchingV2ReviewAdmin() {
                     checked={selectedCaseIds.includes(reviewCase.case_id)}
                     disabled={
                       !aiPolicy.enabled ||
-                      Boolean(reviewCase.adjudication) ||
+                      !["pending", "flagged"].includes(
+                        reviewCase.review_status,
+                      ) ||
                       Boolean(reviewCase.ai_draft)
                     }
                     onChange={(event) => {
@@ -1049,8 +1032,10 @@ export function MatchingV2ReviewAdmin() {
                   <span>
                     {reviewCase.ai_draft
                       ? aiDraftStatusLabel(reviewCase.ai_draft.status)
-                      : reviewCase.adjudication
-                        ? "Adjudicated"
+                      : ["approved", "rejected"].includes(
+                            reviewCase.review_status,
+                          )
+                        ? "Finalized"
                         : "Select for AI"}
                   </span>
                 </label>
@@ -1077,7 +1062,9 @@ export function MatchingV2ReviewAdmin() {
                   type="button"
                   onClick={() => setActiveCaseId(reviewCase.case_id)}
                 >
-                  Review evidence
+                  {["approved", "rejected"].includes(reviewCase.review_status)
+                    ? "View decision"
+                    : "Review evidence"}
                 </button>
               </article>
             ))}
@@ -1144,7 +1131,7 @@ export function MatchingV2ReviewAdmin() {
                     <p>
                       Engine suggestion:{" "}
                       {label(activeCase.engine_proposal.tier)}. The reviewer
-                      must make an independent decision.
+                      makes the final human decision.
                     </p>
                   </div>
                   <button
@@ -1179,12 +1166,22 @@ export function MatchingV2ReviewAdmin() {
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={busy || Boolean(activeCase.ai_draft)}
+                        disabled={
+                          busy ||
+                          ["approved", "rejected"].includes(
+                            activeCase.review_status,
+                          ) ||
+                          Boolean(activeCase.ai_draft)
+                        }
                         onClick={() => void requestAIReview(activeCase)}
                       >
                         {activeCase.ai_draft
                           ? `AI ${label(activeCase.ai_draft.status)}`
-                          : "Run AI evidence review"}
+                          : ["approved", "rejected"].includes(
+                                activeCase.review_status,
+                              )
+                            ? "Decision finalized"
+                            : "Run AI evidence review"}
                       </button>
                     </header>
                     {activeCase.ai_draft ? (
@@ -1397,17 +1394,45 @@ export function MatchingV2ReviewAdmin() {
                   ) : null}
                 </div>
                 <footer className="cert-drawer-footer">
-                  {activeCase.adjudication ? (
-                    <p className="cert-final-decision">
-                      <b>
-                        Final decision: {label(activeCase.adjudication.verdict)}
-                      </b>
-                      {activeCase.adjudication.rationale}
-                    </p>
+                  {activeCase.final_decision &&
+                  ["approved", "rejected"].includes(
+                    activeCase.review_status,
+                  ) ? (
+                    <div className="cert-final-decision">
+                      <p>
+                        <b>Final decision: {label(activeCase.review_status)}</b>
+                        {activeCase.final_decision.rationale}
+                        <small>
+                          Decided by {activeCase.final_decision.reviewer_id}
+                        </small>
+                      </p>
+                      <label className="cert-rationale">
+                        <span>Reason to flag this decision</span>
+                        <textarea
+                          value={drafts[activeCase.case_id]?.rationale ?? ""}
+                          onChange={(event) =>
+                            updateDraft(activeCase.case_id, {
+                              rationale: event.target.value,
+                            })
+                          }
+                          placeholder="Explain what evidence or product detail should be reconsidered."
+                        />
+                      </label>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void submitReview(activeCase, "insufficient_evidence")
+                        }
+                      >
+                        Flag for re-review
+                      </button>
+                    </div>
                   ) : (
                     <div className="cert-review-form cert-review-form-drawer">
                       <fieldset>
-                        <legend>Independent decision</legend>
+                        <legend>Final decision</legend>
                         {(
                           [
                             ["comparable", "Approve match"],
@@ -1472,18 +1497,8 @@ export function MatchingV2ReviewAdmin() {
                         disabled={busy}
                         onClick={() => void submitReview(activeCase)}
                       >
-                        Submit independent review
+                        Save final decision
                       </button>
-                      {activeCase.review_status === "ready_for_adjudication" ? (
-                        <button
-                          className="button secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void finalizeConsensus(activeCase)}
-                        >
-                          Finalize reviewer consensus
-                        </button>
-                      ) : null}
                     </div>
                   )}
                 </footer>

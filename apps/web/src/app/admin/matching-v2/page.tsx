@@ -12,8 +12,9 @@ export default function MatchingV2ReviewPage() {
         </div>
         <div className="page-header-actions">
           <p>
-            Independently review deterministic product relationships, resolve
-            disagreements, and create immutable category gold sets.
+            Approve or reject deterministic product relationships once, retain
+            an immutable audit trail, and reopen only decisions that are
+            explicitly flagged.
           </p>
         </div>
       </header>
