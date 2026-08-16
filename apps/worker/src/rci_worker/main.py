@@ -348,6 +348,7 @@ async def run() -> None:
         extra={
             "event": "service_started",
             "worker_id": worker_id,
+            "matching_review_concurrency": matching_review_concurrency,
             "status": "ready",
         },
     )
