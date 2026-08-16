@@ -117,6 +117,15 @@ interface ReviewCase {
 interface QueueView {
   authoritative: false;
   queue: QueueSummary;
+  ai_review_policy?: {
+    enabled: boolean;
+    model_id: string | null;
+    max_batch_cases: number;
+    max_request_cost_usd: number;
+    vision_policy: string;
+    authoritative: false;
+    human_review_required: true;
+  };
   status_counts: Record<string, number>;
   competitor_retailers: Array<{
     retailer_id: string;
@@ -144,6 +153,15 @@ const TIERS = [
   "custom_approved",
 ] as const;
 const PAGE_SIZE = 50;
+const DISABLED_AI_POLICY: NonNullable<QueueView["ai_review_policy"]> = {
+  enabled: false,
+  model_id: null,
+  max_batch_cases: 25,
+  max_request_cost_usd: 0,
+  vision_policy: "missing_or_conflicting_critical_evidence_only",
+  authoritative: false,
+  human_review_required: true,
+};
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -226,6 +244,8 @@ export function MatchingV2ReviewAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
 
   const loadQueues = useCallback(async () => {
     const response = await jsonRequest<{
@@ -270,6 +290,16 @@ export function MatchingV2ReviewAdmin() {
       }
       return next;
     });
+    setSelectedCaseIds((current) =>
+      current.filter((caseId) =>
+        response.cases.some(
+          (reviewCase) =>
+            reviewCase.case_id === caseId &&
+            !reviewCase.adjudication &&
+            !reviewCase.ai_draft,
+        ),
+      ),
+    );
   }, [competitorFilter, offset, selectedQueueId, statusFilter]);
 
   useEffect(() => {
@@ -320,16 +350,34 @@ export function MatchingV2ReviewAdmin() {
       null,
     [activeCaseId, view],
   );
+  const eligibleCases = useMemo(
+    () =>
+      (view?.cases ?? []).filter(
+        (reviewCase) => !reviewCase.adjudication && !reviewCase.ai_draft,
+      ),
+    [view],
+  );
+  const aiPolicy = view?.ai_review_policy ?? DISABLED_AI_POLICY;
+  const selectedMaximumCost = useMemo(
+    () => selectedCaseIds.length * aiPolicy.max_request_cost_usd,
+    [aiPolicy.max_request_cost_usd, selectedCaseIds.length],
+  );
+  const hasRunningAIDrafts = useMemo(
+    () =>
+      (view?.cases ?? []).some((reviewCase) =>
+        ["queued", "running"].includes(reviewCase.ai_draft?.status ?? ""),
+      ),
+    [view],
+  );
 
   useEffect(() => {
-    if (!activeCase?.ai_draft) return;
-    if (!["queued", "running"].includes(activeCase.ai_draft.status)) return;
+    if (!hasRunningAIDrafts) return;
     const timer = window.setTimeout(
       () => void loadQueue().catch(handleError),
       2000,
     );
     return () => window.clearTimeout(timer);
-  }, [activeCase?.ai_draft, loadQueue]);
+  }, [hasRunningAIDrafts, loadQueue]);
 
   function handleError(cause: unknown) {
     setError(cause instanceof Error ? cause.message : "The request failed.");
@@ -451,6 +499,44 @@ export function MatchingV2ReviewAdmin() {
     }
   }
 
+  async function requestSelectedAIReviews() {
+    if (!reviewerId.trim()) {
+      setError("Enter your reviewer identity before requesting AI drafts.");
+      return;
+    }
+    if (!selectedCaseIds.length) {
+      setError("Select at least one eligible case for AI evidence review.");
+      return;
+    }
+    if (selectedCaseIds.length > aiPolicy.max_batch_cases) {
+      setError(
+        `Select no more than ${aiPolicy.max_batch_cases} cases per batch.`,
+      );
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await jsonRequest(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-drafts`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            requested_by: reviewerId.trim(),
+            case_ids: selectedCaseIds,
+          }),
+        },
+      );
+      setBatchConfirmOpen(false);
+      setSelectedCaseIds([]);
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function adoptAIProposal(reviewCase: ReviewCase) {
     const proposal = reviewCase.ai_draft?.output_document?.result;
     if (!proposal) return;
@@ -557,6 +643,8 @@ export function MatchingV2ReviewAdmin() {
               if (!value) setView(null);
               setCompetitorFilter("all");
               setOffset(0);
+              setSelectedCaseIds([]);
+              setBatchConfirmOpen(false);
             }}
           >
             <option value="">Select a queue</option>
@@ -575,6 +663,8 @@ export function MatchingV2ReviewAdmin() {
             onChange={(event) => {
               setCompetitorFilter(event.target.value);
               setOffset(0);
+              setSelectedCaseIds([]);
+              setBatchConfirmOpen(false);
             }}
           >
             <option value="all">All competitor retailers</option>
@@ -592,6 +682,8 @@ export function MatchingV2ReviewAdmin() {
             onChange={(event) => {
               setStatusFilter(event.target.value);
               setOffset(0);
+              setSelectedCaseIds([]);
+              setBatchConfirmOpen(false);
             }}
           >
             <option value="pending">Pending</option>
@@ -659,12 +751,149 @@ export function MatchingV2ReviewAdmin() {
             </a>
           </section>
 
+          <section
+            className="cert-ai-batch"
+            aria-labelledby="cert-ai-batch-title"
+          >
+            <div>
+              <small>Bounded evidence assistance</small>
+              <h3 id="cert-ai-batch-title">
+                AI review drafts for selected cases
+              </h3>
+              <p>
+                Select up to {aiPolicy.max_batch_cases} cases from this filtered
+                page. Drafts remain advisory, cannot certify a match, and use
+                product images only when critical structured evidence is
+                incomplete or conflicting.
+              </p>
+            </div>
+            <label className="cert-ai-select-all">
+              <input
+                type="checkbox"
+                checked={
+                  eligibleCases.length > 0 &&
+                  selectedCaseIds.length ===
+                    Math.min(eligibleCases.length, aiPolicy.max_batch_cases)
+                }
+                disabled={!aiPolicy.enabled || !eligibleCases.length}
+                onChange={(event) => {
+                  setSelectedCaseIds(
+                    event.target.checked
+                      ? eligibleCases
+                          .slice(0, aiPolicy.max_batch_cases)
+                          .map((reviewCase) => reviewCase.case_id)
+                      : [],
+                  );
+                  setBatchConfirmOpen(false);
+                }}
+              />
+              <span>
+                Select eligible cases on this page
+                <small>
+                  {eligibleCases.length.toLocaleString()} without an existing
+                  draft or adjudication
+                </small>
+              </span>
+            </label>
+            <div className="cert-ai-batch-actions">
+              <span>
+                <strong>{selectedCaseIds.length}</strong> selected
+                {selectedCaseIds.length ? (
+                  <small>
+                    Maximum policy exposure: ${selectedMaximumCost.toFixed(2)}
+                  </small>
+                ) : null}
+              </span>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={
+                  busy ||
+                  !aiPolicy.enabled ||
+                  !selectedCaseIds.length ||
+                  !reviewerId.trim()
+                }
+                onClick={() => setBatchConfirmOpen(true)}
+              >
+                Review selected with AI
+              </button>
+            </div>
+            {!aiPolicy.enabled ? (
+              <p className="cert-ai-policy-note">
+                The advisory worker is not enabled in this environment. Human
+                certification remains available.
+              </p>
+            ) : null}
+            {batchConfirmOpen ? (
+              <div className="cert-ai-batch-confirm" role="alert">
+                <div>
+                  <strong>
+                    Queue {selectedCaseIds.length} advisory drafts?
+                  </strong>
+                  <p>
+                    Model: {aiPolicy.model_id}. The configured per-request
+                    ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)};
+                    actual usage is recorded per case. Human review is still
+                    required for every decision.
+                  </p>
+                </div>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setBatchConfirmOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void requestSelectedAIReviews()}
+                >
+                  {busy ? "Queueing…" : "Confirm advisory review"}
+                </button>
+              </div>
+            ) : null}
+          </section>
+
           <div className="cert-case-list">
             {view.cases.map((reviewCase) => (
               <article
                 className="cert-case cert-case-compact"
                 key={reviewCase.case_id}
               >
+                <label className="cert-case-select">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${reviewCase.benchmark_listing.title ?? reviewCase.benchmark_listing.retailer_product_id} versus ${reviewCase.competitor_listing.title ?? reviewCase.competitor_listing.retailer_product_id} for AI evidence review`}
+                    checked={selectedCaseIds.includes(reviewCase.case_id)}
+                    disabled={
+                      !aiPolicy.enabled ||
+                      Boolean(reviewCase.adjudication) ||
+                      Boolean(reviewCase.ai_draft)
+                    }
+                    onChange={(event) => {
+                      setSelectedCaseIds((current) =>
+                        event.target.checked
+                          ? current.length < aiPolicy.max_batch_cases
+                            ? [...current, reviewCase.case_id]
+                            : current
+                          : current.filter(
+                              (caseId) => caseId !== reviewCase.case_id,
+                            ),
+                      );
+                      setBatchConfirmOpen(false);
+                    }}
+                  />
+                  <span>
+                    {reviewCase.ai_draft
+                      ? `AI ${label(reviewCase.ai_draft.status)}`
+                      : reviewCase.adjudication
+                        ? "Adjudicated"
+                        : "Select for AI"}
+                  </span>
+                </label>
                 <div className="cert-case-products">
                   <ProductIdentity listing={reviewCase.benchmark_listing} />
                   <span className="cert-pair-mark">versus</span>
@@ -705,9 +934,11 @@ export function MatchingV2ReviewAdmin() {
                 className="button secondary"
                 type="button"
                 disabled={busy || offset === 0}
-                onClick={() =>
-                  setOffset((current) => Math.max(0, current - PAGE_SIZE))
-                }
+                onClick={() => {
+                  setOffset((current) => Math.max(0, current - PAGE_SIZE));
+                  setSelectedCaseIds([]);
+                  setBatchConfirmOpen(false);
+                }}
               >
                 Previous cases
               </button>
@@ -722,7 +953,11 @@ export function MatchingV2ReviewAdmin() {
                 disabled={
                   busy || offset + PAGE_SIZE >= view.selected_case_count
                 }
-                onClick={() => setOffset((current) => current + PAGE_SIZE)}
+                onClick={() => {
+                  setOffset((current) => current + PAGE_SIZE);
+                  setSelectedCaseIds([]);
+                  setBatchConfirmOpen(false);
+                }}
               >
                 Next cases
               </button>
@@ -784,15 +1019,11 @@ export function MatchingV2ReviewAdmin() {
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={
-                          busy ||
-                          activeCase.ai_draft?.status === "queued" ||
-                          activeCase.ai_draft?.status === "running"
-                        }
+                        disabled={busy || Boolean(activeCase.ai_draft)}
                         onClick={() => void requestAIReview(activeCase)}
                       >
                         {activeCase.ai_draft
-                          ? "Refresh governed draft"
+                          ? `AI ${label(activeCase.ai_draft.status)}`
                           : "Run AI evidence review"}
                       </button>
                     </header>
@@ -851,6 +1082,21 @@ export function MatchingV2ReviewAdmin() {
                                             proposal.confidence * 100,
                                           )}
                                           % confidence
+                                          {proposal.visible_text ? (
+                                            <small>
+                                              Visible evidence: “
+                                              {proposal.visible_text}”
+                                            </small>
+                                          ) : null}
+                                          {proposal.source_image_url ? (
+                                            <a
+                                              href={proposal.source_image_url}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                            >
+                                              Open cited product image
+                                            </a>
+                                          ) : null}
                                         </dd>
                                       </div>
                                     ),
@@ -865,6 +1111,15 @@ export function MatchingV2ReviewAdmin() {
                             >
                               Copy proposal into my review
                             </button>
+                            {activeCase.ai_draft.usage?.estimated_cost_usd !=
+                            null ? (
+                              <small>
+                                Recorded estimated cost: $
+                                {activeCase.ai_draft.usage.estimated_cost_usd.toFixed(
+                                  4,
+                                )}
+                              </small>
+                            ) : null}
                           </>
                         ) : activeCase.ai_draft.last_error_message ? (
                           <p>{activeCase.ai_draft.last_error_message}</p>

@@ -87,6 +87,8 @@ versions without a review being written to the wrong release queue.
 - full pagination for large queues;
 - side-by-side product identity, imagery, retailer links, brand class, and identifiers;
 - inspectable attribute evidence and engine rationale;
+- retailer filtering with Walmart fixed as the benchmark side;
+- explicitly selected AI-draft batches capped at 25 cases with cost-ceiling disclosure;
 - independent decision and tier selection with required rationale;
 - reviewer history and two-review consensus finalization;
 - truthful whole-queue progress; and

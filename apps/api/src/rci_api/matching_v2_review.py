@@ -86,6 +86,13 @@ class AIReviewDraftRequest(BaseModel):
     requested_by: str = Field(min_length=1, max_length=200)
 
 
+class AIReviewBatchRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    requested_by: str = Field(min_length=1, max_length=200)
+    case_ids: list[str] = Field(min_length=1, max_length=25)
+
+
 class MatchingV2ReviewRepository(Protocol):
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]: ...
 
@@ -135,6 +142,16 @@ class MatchingV2ReviewRepository(Protocol):
         model_id: str,
         prompt: Mapping[str, str],
     ) -> dict[str, Any]: ...
+
+    async def request_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+    ) -> list[dict[str, Any]]: ...
 
 
 class PostgresMatchingV2ReviewRepository:
@@ -600,81 +617,141 @@ class PostgresMatchingV2ReviewRepository:
         model_id: str,
         prompt: Mapping[str, str],
     ) -> dict[str, Any]:
+        tasks = await self.request_ai_drafts(
+            external_queue_id,
+            [external_case_id],
+            requested_by=requested_by,
+            model_id=model_id,
+            prompt=prompt,
+        )
+        return tasks[0]
+
+    async def request_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+    ) -> list[dict[str, Any]]:
         async with self._engine.begin() as connection:
-            row = (
+            rows = list(
                 (
                     await connection.execute(
                         text(
                             """
-                            SELECT c.id::text, c.case_document, c.case_checksum
-                            FROM matching_v2_review_case c
-                            JOIN matching_v2_review_queue q ON q.id = c.review_queue_id
-                            WHERE q.external_queue_id = :queue_id
-                              AND c.external_case_id = :case_id
-                            ORDER BY q.created_at DESC
-                            LIMIT 1
-                            """
-                        ),
-                        {"queue_id": external_queue_id, "case_id": external_case_id},
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if row is None:
-                raise KeyError(
-                    f"matching v2 review case {external_case_id!r} was not found "
-                    f"in queue {external_queue_id!r}"
-                )
-            input_document = dict(row["case_document"])
-            input_checksum = _checksum(input_document)
-            idempotency_key = _checksum(
-                {
-                    "review_case_id": str(row["id"]),
-                    "case_checksum": str(row["case_checksum"]),
-                    "model_id": model_id,
-                    "prompt_checksum": prompt["checksum"],
-                    "input_checksum": input_checksum,
-                }
-            )
-            task = (
-                (
-                    await connection.execute(
-                        text(
-                            """
-                            INSERT INTO matching_v2_ai_review_task (
-                              review_case_id, idempotency_key, requested_by, status,
-                              prompt_id, prompt_version, prompt_checksum,
-                              model_provider, model_id, input_checksum, input_document
-                            ) VALUES (
-                              CAST(:review_case_id AS uuid), :idempotency_key, :requested_by,
-                              'queued', :prompt_id, :prompt_version, :prompt_checksum,
-                              'openai', :model_id, :input_checksum,
-                              CAST(:input_document AS jsonb)
+                            WITH selected_queue AS (
+                              SELECT id
+                              FROM matching_v2_review_queue
+                              WHERE external_queue_id = :queue_id
+                              ORDER BY created_at DESC
+                              LIMIT 1
                             )
-                            ON CONFLICT (idempotency_key) DO UPDATE SET
-                              requested_by = matching_v2_ai_review_task.requested_by
-                            RETURNING id::text, status, model_provider, model_id,
-                                      prompt_id, prompt_version, input_checksum,
-                                      attempt_count, max_attempts, created_at
+                            SELECT c.id::text, c.external_case_id, c.case_document,
+                                   c.case_checksum,
+                                   EXISTS (
+                                     SELECT 1
+                                     FROM matching_v2_adjudication a
+                                     WHERE a.review_case_id = c.id
+                                   ) AS is_adjudicated
+                            FROM matching_v2_review_case c
+                            JOIN selected_queue q ON q.id = c.review_queue_id
+                            WHERE c.external_case_id = ANY(CAST(:case_ids AS text[]))
                             """
                         ),
-                        {
-                            "review_case_id": str(row["id"]),
-                            "idempotency_key": idempotency_key,
-                            "requested_by": requested_by,
-                            "prompt_id": prompt["id"],
-                            "prompt_version": prompt["version"],
-                            "prompt_checksum": prompt["checksum"],
-                            "model_id": model_id,
-                            "input_checksum": input_checksum,
-                            "input_document": _canonical(input_document),
-                        },
+                        {"queue_id": external_queue_id, "case_ids": list(external_case_ids)},
                     )
                 )
                 .mappings()
-                .one()
+                .all()
             )
+            rows_by_case = {str(row["external_case_id"]): row for row in rows}
+            missing = [case_id for case_id in external_case_ids if case_id not in rows_by_case]
+            if missing:
+                raise KeyError(
+                    f"matching v2 review cases {missing!r} were not found in queue "
+                    f"{external_queue_id!r}"
+                )
+            adjudicated = [
+                case_id
+                for case_id in external_case_ids
+                if bool(rows_by_case[case_id]["is_adjudicated"])
+            ]
+            if adjudicated:
+                raise ValueError(
+                    f"adjudicated review cases cannot request AI drafts: {adjudicated!r}"
+                )
+            tasks = [
+                await self._insert_ai_draft_task(
+                    connection,
+                    dict(rows_by_case[case_id]),
+                    requested_by=requested_by,
+                    model_id=model_id,
+                    prompt=prompt,
+                )
+                for case_id in external_case_ids
+            ]
+        return tasks
+
+    @staticmethod
+    async def _insert_ai_draft_task(
+        connection: AsyncConnection,
+        row: Mapping[str, Any],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+    ) -> dict[str, Any]:
+        input_document = dict(row["case_document"])
+        input_checksum = _checksum(input_document)
+        idempotency_key = _checksum(
+            {
+                "review_case_id": str(row["id"]),
+                "case_checksum": str(row["case_checksum"]),
+                "model_id": model_id,
+                "prompt_checksum": prompt["checksum"],
+                "input_checksum": input_checksum,
+            }
+        )
+        task = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO matching_v2_ai_review_task (
+                          review_case_id, idempotency_key, requested_by, status,
+                          prompt_id, prompt_version, prompt_checksum,
+                          model_provider, model_id, input_checksum, input_document
+                        ) VALUES (
+                          CAST(:review_case_id AS uuid), :idempotency_key, :requested_by,
+                          'queued', :prompt_id, :prompt_version, :prompt_checksum,
+                          'openai', :model_id, :input_checksum,
+                          CAST(:input_document AS jsonb)
+                        )
+                        ON CONFLICT (idempotency_key) DO UPDATE SET
+                          requested_by = matching_v2_ai_review_task.requested_by
+                        RETURNING id::text, status, model_provider, model_id,
+                                  prompt_id, prompt_version, input_checksum,
+                                  attempt_count, max_attempts, created_at
+                        """
+                    ),
+                    {
+                        "review_case_id": str(row["id"]),
+                        "idempotency_key": idempotency_key,
+                        "requested_by": requested_by,
+                        "prompt_id": prompt["id"],
+                        "prompt_version": prompt["version"],
+                        "prompt_checksum": prompt["checksum"],
+                        "model_id": model_id,
+                        "input_checksum": input_checksum,
+                        "input_document": _canonical(input_document),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
         return {
             **{
                 key: (value.isoformat() if hasattr(value, "isoformat") else value)
@@ -1038,17 +1115,7 @@ class MatchingV2ReviewService:
         *,
         model_id: str,
     ) -> dict[str, Any]:
-        path = self._root / "agent-prompts" / "matching_v2_evidence_review.json"
-        body = path.read_bytes()
-        document = json.loads(body)
-        validate_instance(self._root, "agent-prompt.schema.json", document, label=str(path))
-        if document["role"] != "matching_review":
-            raise ValueError("matching review prompt has the wrong role")
-        prompt = {
-            "id": str(document["id"]),
-            "version": str(document["version"]),
-            "checksum": hashlib.sha256(body).hexdigest(),
-        }
+        prompt = self._matching_review_prompt()
         return await self._repository.request_ai_draft(
             external_queue_id,
             external_case_id,
@@ -1056,6 +1123,45 @@ class MatchingV2ReviewService:
             model_id=model_id,
             prompt=prompt,
         )
+
+    async def request_ai_drafts(
+        self,
+        external_queue_id: str,
+        request: AIReviewBatchRequest,
+        *,
+        model_id: str,
+    ) -> dict[str, Any]:
+        case_ids = list(dict.fromkeys(request.case_ids))
+        if len(case_ids) != len(request.case_ids):
+            raise ValueError("AI draft batch case IDs must be unique")
+        prompt = self._matching_review_prompt()
+        tasks = await self._repository.request_ai_drafts(
+            external_queue_id,
+            case_ids,
+            requested_by=request.requested_by,
+            model_id=model_id,
+            prompt=prompt,
+        )
+        return {
+            "authoritative": False,
+            "human_review_required": True,
+            "queue_id": external_queue_id,
+            "requested_case_count": len(case_ids),
+            "tasks": tasks,
+        }
+
+    def _matching_review_prompt(self) -> dict[str, str]:
+        path = self._root / "agent-prompts" / "matching_v2_evidence_review.json"
+        body = path.read_bytes()
+        document = json.loads(body)
+        validate_instance(self._root, "agent-prompt.schema.json", document, label=str(path))
+        if document["role"] != "matching_review":
+            raise ValueError("matching review prompt has the wrong role")
+        return {
+            "id": str(document["id"]),
+            "version": str(document["version"]),
+            "checksum": hashlib.sha256(body).hexdigest(),
+        }
 
     async def adjudicate(
         self,
@@ -1183,6 +1289,42 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
+def _matching_ai_review_policy() -> dict[str, Any]:
+    enabled = _enabled(os.getenv("MATCHING_V2_AI_REVIEW_ENABLED"))
+    model_id = (
+        os.getenv("OPENAI_MODEL_MATCHING_REVIEW") or os.getenv("OPENAI_MODEL_NARRATIVE") or ""
+    ).strip()
+    try:
+        max_request_cost_usd = float(os.getenv("OPENAI_MATCHING_MAX_REQUEST_COST_USD", "0.35"))
+    except ValueError:
+        max_request_cost_usd = 0.35
+    return {
+        "enabled": enabled and bool(model_id),
+        "model_id": model_id or None,
+        "max_batch_cases": 25,
+        "max_request_cost_usd": max_request_cost_usd,
+        "vision_policy": "missing_or_conflicting_critical_evidence_only",
+        "authoritative": False,
+        "human_review_required": True,
+    }
+
+
+def _require_matching_ai_review() -> str:
+    policy = _matching_ai_review_policy()
+    if not _enabled(os.getenv("MATCHING_V2_AI_REVIEW_ENABLED")):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Matching v2 AI draft review is not enabled.",
+        )
+    model_id = str(policy["model_id"] or "")
+    if not model_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No Matching v2 AI review model is configured.",
+        )
+    return model_id
+
+
 @router.post("/review-queues/import", status_code=status.HTTP_201_CREATED)
 async def import_matching_v2_review_queue(
     request: Request,
@@ -1222,7 +1364,7 @@ async def get_matching_v2_review_queue(
 ) -> dict[str, Any]:
     _require_review_access(request, x_rci_admin_token)
     try:
-        return await service.queue_view(
+        document = await service.queue_view(
             queue_id,
             competitor_retailer_id=competitor_retailer_id,
             stratum=stratum,
@@ -1230,6 +1372,8 @@ async def get_matching_v2_review_queue(
             offset=offset,
             limit=limit,
         )
+        document["ai_review_policy"] = _matching_ai_review_policy()
+        return document
     except KeyError as exc:
         raise _http_error(exc) from exc
 
@@ -1266,19 +1410,7 @@ async def request_matching_v2_ai_draft(
     x_rci_admin_token: AdminToken = None,
 ) -> dict[str, Any]:
     _require_review_access(request, x_rci_admin_token)
-    if not _enabled(os.getenv("MATCHING_V2_AI_REVIEW_ENABLED")):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Matching v2 AI draft review is not enabled.",
-        )
-    model_id = (
-        os.getenv("OPENAI_MODEL_MATCHING_REVIEW") or os.getenv("OPENAI_MODEL_NARRATIVE") or ""
-    ).strip()
-    if not model_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No Matching v2 AI review model is configured.",
-        )
+    model_id = _require_matching_ai_review()
     try:
         return await service.request_ai_draft(
             queue_id,
@@ -1286,6 +1418,25 @@ async def request_matching_v2_ai_draft(
             body,
             model_id=model_id,
         )
+    except (ContractError, KeyError, OSError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/ai-drafts",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def request_matching_v2_ai_draft_batch(
+    queue_id: str,
+    request: Request,
+    body: AIReviewBatchRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    model_id = _require_matching_ai_review()
+    try:
+        return await service.request_ai_drafts(queue_id, body, model_id=model_id)
     except (ContractError, KeyError, OSError, ValueError) as exc:
         raise _http_error(exc) from exc
 

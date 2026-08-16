@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from rci_api.main import create_app
 from rci_api.matching_v2_review import (
     AdjudicationRequest,
+    AIReviewBatchRequest,
     AIReviewDraftRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
@@ -59,13 +61,13 @@ class ReviewRepository:
     async def import_queue(
         self,
         organization_id: str,
-        queue: dict[str, Any],
+        queue: Mapping[str, Any],
         *,
         imported_by: str,
     ) -> dict[str, Any]:
         self.imported = {
             "organization_id": organization_id,
-            "queue": queue,
+            "queue": dict(queue),
             "imported_by": imported_by,
         }
         return {"queue_id": queue["queue_id"], "imported": True, "case_count": 1}
@@ -90,7 +92,7 @@ class ReviewRepository:
         self,
         external_queue_id: str,
         external_case_id: str,
-        submission: dict[str, Any],
+        submission: Mapping[str, Any],
         *,
         submission_checksum: str,
     ) -> dict[str, Any]:
@@ -108,7 +110,7 @@ class ReviewRepository:
         self,
         external_queue_id: str,
         external_case_id: str,
-        adjudication: dict[str, Any],
+        adjudication: Mapping[str, Any],
         *,
         adjudication_checksum: str,
     ) -> dict[str, Any]:
@@ -129,7 +131,7 @@ class ReviewRepository:
         *,
         requested_by: str,
         model_id: str,
-        prompt: dict[str, str],
+        prompt: Mapping[str, str],
     ) -> dict[str, Any]:
         draft = {
             "queue_id": external_queue_id,
@@ -141,6 +143,26 @@ class ReviewRepository:
         }
         self.ai_drafts.append(draft)
         return draft
+
+    async def request_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+    ) -> list[dict[str, Any]]:
+        return [
+            await self.request_ai_draft(
+                external_queue_id,
+                case_id,
+                requested_by=requested_by,
+                model_id=model_id,
+                prompt=prompt,
+            )
+            for case_id in external_case_ids
+        ]
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:
@@ -279,3 +301,56 @@ async def test_ai_review_draft_is_advisory_and_uses_versioned_prompt() -> None:
     assert repository.ai_drafts[0]["model_id"] == "gpt-5.6-terra"
     assert repository.ai_drafts[0]["prompt"]["id"] == "matching_v2_evidence_review"
     assert len(repository.ai_drafts[0]["prompt"]["checksum"]) == 64
+
+
+async def test_ai_review_batch_is_bounded_idempotent_input_and_human_gated() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    result = await service.request_ai_drafts(
+        "queue-1",
+        AIReviewBatchRequest(
+            requested_by="reviewer-a",
+            case_ids=["case-1", "case-2"],
+        ),
+        model_id="gpt-5.6-terra",
+    )
+
+    assert result["authoritative"] is False
+    assert result["human_review_required"] is True
+    assert result["requested_case_count"] == 2
+    assert [draft["case_id"] for draft in repository.ai_drafts] == ["case-1", "case-2"]
+    assert len({draft["prompt"]["checksum"] for draft in repository.ai_drafts}) == 1
+
+    with pytest.raises(ValueError, match="unique"):
+        await service.request_ai_drafts(
+            "queue-1",
+            AIReviewBatchRequest(
+                requested_by="reviewer-a",
+                case_ids=["case-1", "case-1"],
+            ),
+            model_id="gpt-5.6-terra",
+        )
+
+
+async def test_ai_review_batch_route_requires_explicit_enablement_and_remains_advisory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    app = create_app()
+    app.dependency_overrides[get_matching_v2_review_service] = lambda: service
+    monkeypatch.setenv("MATCHING_V2_AI_REVIEW_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_MODEL_MATCHING_REVIEW", "gpt-5.6-terra")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/matching-v2/review-queues/queue-1/ai-drafts",
+            json={"requested_by": "reviewer-a", "case_ids": ["case-1", "case-2"]},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["authoritative"] is False
+    assert response.json()["human_review_required"] is True
+    assert response.json()["requested_case_count"] == 2
+    assert [draft["case_id"] for draft in repository.ai_drafts] == ["case-1", "case-2"]
