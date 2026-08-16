@@ -304,7 +304,9 @@ test("retries terminal AI failures as confirmed linked individual or bulk work",
     .getByRole("button", { name: "Retry 2 needs-attention items" })
     .click();
   await expect(page.getByText("Retry 2 terminal AI failures?")).toBeVisible();
-  await expect(page.getByText("Maximum new policy exposure: $0.70")).toBeVisible();
+  await expect(
+    page.getByText("Maximum new policy exposure: $0.70"),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Confirm governed retry" }).click();
   expect(retryPayloads[0]).toMatchObject({
     requested_by: "reviewer@cpghero.com",
@@ -313,8 +315,12 @@ test("retries terminal AI failures as confirmed linked individual or bulk work",
 
   await page.getByRole("button", { name: "Review evidence" }).first().click();
   const drawer = page.getByRole("dialog", { name: "Match evidence review" });
-  await expect(drawer).toContainText("Provider timed out before returning output.");
-  await drawer.getByRole("button", { name: "Retry AI evidence review" }).click();
+  await expect(drawer).toContainText(
+    "Provider timed out before returning output.",
+  );
+  await drawer
+    .getByRole("button", { name: "Retry AI evidence review" })
+    .click();
   await expect(drawer).toContainText("Prior attempts, this exact error");
   await drawer.getByRole("button", { name: "Confirm governed retry" }).click();
   expect(retryPayloads[1]).toMatchObject({
