@@ -19,6 +19,7 @@ from rci_api.matching_v2_review import (
     MatchingV2ReviewService,
     PostgresMatchingV2ReviewRepository,
     ReviewSubmissionRequest,
+    _apply_observed_location_sidecar,
     get_matching_v2_review_service,
 )
 
@@ -88,6 +89,49 @@ def test_review_cases_order_by_observed_benchmark_then_competitor_footprint() ->
         "large-primary-small-competitor",
         "small-primary",
     ]
+
+
+def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "matching-v2-review-footprints.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0.0",
+                "queues": [
+                    {
+                        "queue_id": "banana-review",
+                        "queue_version": "1.1.0",
+                        "cases": {
+                            "case-one": {
+                                "benchmark_observed_location_count": 4200,
+                                "competitor_observed_location_count": 1700,
+                            }
+                        },
+                    }
+                ],
+            }
+        )
+    )
+    documents = [
+        {
+            "case_id": "case-one",
+            "benchmark_listing": {},
+            "competitor_listing": {"observed_location_count": 12},
+        }
+    ]
+
+    _apply_observed_location_sidecar(
+        documents,
+        queue_id="banana-review",
+        queue_version="1.1.0",
+        root=tmp_path,
+    )
+
+    assert documents[0]["benchmark_listing"]["observed_location_count"] == 4200
+    assert documents[0]["competitor_listing"]["observed_location_count"] == 12
 
 
 class ReviewRepository:

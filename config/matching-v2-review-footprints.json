@@ -1,0 +1,392 @@
+{
+  "queues": [
+    {
+      "cases": {
+        "case-00bb395ec8fa733ae313013a": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 54
+        },
+        "case-013f5ef51cc48efeaecca2c0": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 2535
+        },
+        "case-023e3bfda36696b32f8afd33": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 11
+        },
+        "case-034b5d645d554c1e22a341e6": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 210
+        },
+        "case-06b09b9ab8bbae1cd7df208a": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 2
+        },
+        "case-0eb51c7604095aea29de416d": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 2535
+        },
+        "case-11bf9f2e374398f63ae6a9dc": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 646
+        },
+        "case-140259a55f37e6e809a006fd": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 43
+        },
+        "case-14a77c74e809ffe1e49e6e30": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 2
+        },
+        "case-14f1334ecd26057ce6055bb5": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 642
+        },
+        "case-1a74fe1e29fef2bd242206d5": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 236
+        },
+        "case-1ac58c493f3a2a112c8ae167": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 5
+        },
+        "case-2381f3b62bbcbff2b6a806a9": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 1599
+        },
+        "case-2a7eadfae2c7ef3c0267cd51": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 2535
+        },
+        "case-2ded5403e7058f730c117441": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 1599
+        },
+        "case-386bcedae7d08fc32ad612d1": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 2
+        },
+        "case-38d3a509b70b7d463420b321": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 2
+        },
+        "case-3d1eada836202bb19ed08018": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 1599
+        },
+        "case-3dfdab48b43112dca68cf514": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 13
+        },
+        "case-3e52c61ffb38d68772f70b32": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 236
+        },
+        "case-4164893d286648737f9f2680": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 13
+        },
+        "case-442ff4b4b72c6c7bf6aef898": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 642
+        },
+        "case-4435abcd4603e3344b158a97": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 43
+        },
+        "case-46fe322db7a5e0c6df4f2777": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 496
+        },
+        "case-4add41b139aa11df664423ae": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 2535
+        },
+        "case-53e0f426c9db80d318eddcf6": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 11
+        },
+        "case-57982308272acb2552a4b3f7": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 54
+        },
+        "case-58d59b6918224d0246f438c8": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 236
+        },
+        "case-5a58d2ba4cfe7348d9d4ead8": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 642
+        },
+        "case-5abba94523e4f88bd4b2fed5": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 11
+        },
+        "case-5ba079b696440e53ece0e52e": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 2
+        },
+        "case-5ca6094bc718681722898bd3": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 13
+        },
+        "case-5df7d578df1febb69fa29e04": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 236
+        },
+        "case-5fc6445a4c88c2b3d74fa5e3": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 2
+        },
+        "case-6249fc2cdc527f4089852c30": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 5
+        },
+        "case-62e21ecafeabb51d44bea346": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 496
+        },
+        "case-65b528788b27bc07c9bece6a": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 2535
+        },
+        "case-664b85d6d4c6ae3bd1e9d84c": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 11
+        },
+        "case-6857e84a20a25716f05b130c": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 11
+        },
+        "case-695b27636948a42bd778cca4": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 11
+        },
+        "case-6c90f885b9841ab965544deb": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 1599
+        },
+        "case-7043bc1d51c6a7258d2e4635": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 7
+        },
+        "case-787d171c3713638b27a20016": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 11
+        },
+        "case-7e8d81b64295373a73abdec4": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 11
+        },
+        "case-807917b24a9cbddab6137c3d": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 11
+        },
+        "case-8115d7e1a1afbd67d85eb793": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 5
+        },
+        "case-81775f36580bfbd4a48c2c68": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 5
+        },
+        "case-8297ae9664d47b373f4be10a": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 2535
+        },
+        "case-881deb5bc1a3ab4efd8f962c": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 54
+        },
+        "case-897d3487bf675ef92c227e9d": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 642
+        },
+        "case-89c8ab9fa37f3a7190807f09": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 11
+        },
+        "case-8afd1b4cd8be04aaac62ab90": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 1599
+        },
+        "case-8bc4f1e19dbdf8635155d2ef": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 646
+        },
+        "case-8c98ce24ad747c8d0a77b16e": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 2
+        },
+        "case-8d8b87de90a84e27a95aabf7": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 646
+        },
+        "case-941eb7efea9bfe862d1def7f": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 5
+        },
+        "case-955cbb816c077b3220fd9bc8": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 11
+        },
+        "case-959b01fe3ae80de612d88d3c": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 5
+        },
+        "case-99b8abfac60932022f595de8": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 2535
+        },
+        "case-9a1f2b712363966e01c493ee": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 1599
+        },
+        "case-9ad73353ec625ecd2c92afa9": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 5
+        },
+        "case-9d2e952032648920772e84cf": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 646
+        },
+        "case-a9155c8b94d2abe8fd014946": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 11
+        },
+        "case-a91b89b538a7fa8d35a09826": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 1599
+        },
+        "case-abaaf10f56c360320a593652": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 1599
+        },
+        "case-ae04d369c79a7b641d2d49b7": {
+          "benchmark_observed_location_count": 138,
+          "competitor_observed_location_count": 5
+        },
+        "case-ae0d4fa6ca05ee7ef01b0117": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 210
+        },
+        "case-ae36c87f7d88c0ee57d5d6e5": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 11
+        },
+        "case-b4f6e9894966a488aa98e9e5": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 1599
+        },
+        "case-b4faedfbc8d23c2de65f98ae": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 2535
+        },
+        "case-bb5ae160aada269511ab0c3e": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 1599
+        },
+        "case-bbe1bbc3928ff105a65366e5": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 496
+        },
+        "case-bd450ec58cc2a74a6cf38da3": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 2535
+        },
+        "case-c2ae4bf0116bdd7bf96a971c": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 1599
+        },
+        "case-c39b1cae52e43be6ed7a93ee": {
+          "benchmark_observed_location_count": 152,
+          "competitor_observed_location_count": 210
+        },
+        "case-c4e73b7b95e57d288fe626c7": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 5
+        },
+        "case-c678b319712f89ac3fe53517": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 11
+        },
+        "case-cad30c787c5565111cca9bd7": {
+          "benchmark_observed_location_count": 3,
+          "competitor_observed_location_count": 646
+        },
+        "case-cb9870bc0efa9b0a23b6fc16": {
+          "benchmark_observed_location_count": 109,
+          "competitor_observed_location_count": 5
+        },
+        "case-cc9778fa60f65e17c8489abe": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 2535
+        },
+        "case-d60652b6b0ed5db7e8e0935c": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 13
+        },
+        "case-d770573278d081e2f5504f27": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 11
+        },
+        "case-d9b69a6c2213919a5fcd875c": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 2535
+        },
+        "case-e215c6f35ed5f37a588773b8": {
+          "benchmark_observed_location_count": 122,
+          "competitor_observed_location_count": 484
+        },
+        "case-ea53328645e6f651f20292dd": {
+          "benchmark_observed_location_count": 5,
+          "competitor_observed_location_count": 7
+        },
+        "case-eada58f699c48c0eafebef69": {
+          "benchmark_observed_location_count": 16,
+          "competitor_observed_location_count": 642
+        },
+        "case-ed6a4f800171bc381af8d2ee": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 2
+        },
+        "case-ef626b139e53408616f60d95": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 11
+        },
+        "case-f00a162cd3b7272b1a30bf87": {
+          "benchmark_observed_location_count": 4027,
+          "competitor_observed_location_count": 2
+        },
+        "case-f63698de396b1c954b396147": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 7
+        },
+        "case-f7780e9243089f39b2683d1b": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 54
+        },
+        "case-f9005f0a31ed55b55389cb32": {
+          "benchmark_observed_location_count": 4103,
+          "competitor_observed_location_count": 642
+        },
+        "case-fa5c0efb5b0ff0c36bdafcd0": {
+          "benchmark_observed_location_count": 4294,
+          "competitor_observed_location_count": 1599
+        },
+        "case-fd72345e95473638b2c59626": {
+          "benchmark_observed_location_count": 8,
+          "competitor_observed_location_count": 484
+        }
+      },
+      "queue_id": "fresh_bananas-matching-v2-release-review",
+      "queue_version": "1.1.0",
+      "source": {
+        "description": "Derived from the version 1.2.0 banana evidence profile using the same deterministic case identifiers. This preserves the immutable 1.1.0 queue and its AI review drafts.",
+        "queue_checksum": "57e6b2ec843b2fbe4565123f09d071d91e50bb26ead50e401e3a98c9febbb88c",
+        "queue_version": "1.2.0"
+      }
+    }
+  ],
+  "schema_version": "1.0.0"
+}

@@ -61,6 +61,55 @@ def _case_order_key(case: Mapping[str, Any]) -> tuple[int, int, int, str, str]:
     )
 
 
+def _apply_observed_location_sidecar(
+    documents: Sequence[dict[str, Any]],
+    *,
+    queue_id: str,
+    queue_version: str,
+    root: Path,
+) -> None:
+    """Backfill derived footprint counts without mutating immutable review evidence."""
+
+    catalog_path = root / "config" / "matching-v2-review-footprints.json"
+    if not catalog_path.is_file():
+        return
+    try:
+        catalog = json.loads(catalog_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    queues = catalog.get("queues") if isinstance(catalog, Mapping) else None
+    if not isinstance(queues, list):
+        return
+    matching_queue = next(
+        (
+            item
+            for item in queues
+            if isinstance(item, Mapping)
+            and item.get("queue_id") == queue_id
+            and item.get("queue_version") == queue_version
+        ),
+        None,
+    )
+    counts_by_case = matching_queue.get("cases") if isinstance(matching_queue, Mapping) else None
+    if not isinstance(counts_by_case, Mapping):
+        return
+    for document in documents:
+        counts = counts_by_case.get(document.get("case_id"))
+        if not isinstance(counts, Mapping):
+            continue
+        for side in ("benchmark", "competitor"):
+            listing = document.get(f"{side}_listing")
+            count = counts.get(f"{side}_observed_location_count")
+            if (
+                isinstance(listing, dict)
+                and "observed_location_count" not in listing
+                and isinstance(count, int)
+                and not isinstance(count, bool)
+                and count >= 0
+            ):
+                listing["observed_location_count"] = count
+
+
 def _enabled(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
@@ -398,6 +447,12 @@ class PostgresMatchingV2ReviewRepository:
             adjudications = await self._adjudication_rows(connection, case_ids)
             ai_drafts = await self._ai_draft_rows(connection, case_ids)
         documents = self._case_documents(cases, submissions, adjudications, ai_drafts)
+        _apply_observed_location_sidecar(
+            documents,
+            queue_id=external_queue_id,
+            queue_version=str(queue["version"]),
+            root=_repository_root(),
+        )
         documents.sort(key=_case_order_key)
         summary_counts: dict[str, int] = defaultdict(int)
         for row in documents:
