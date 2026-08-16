@@ -156,6 +156,7 @@
         "brand_governance": { "type": "object" },
         "seller_governance": { "type": "object" },
         "pdp_evidence": { "type": "object" },
+        "observed_location_count": { "type": "integer", "minimum": 0 },
         "image_url": { "type": ["string", "null"] },
         "product_url": { "type": ["string", "null"] },
         "identifiers": {

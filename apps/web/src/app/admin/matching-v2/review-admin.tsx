@@ -37,6 +37,7 @@ interface ListingSummary {
   brand_governance?: Record<string, unknown>;
   seller_governance?: Record<string, unknown>;
   pdp_evidence?: Record<string, unknown>;
+  observed_location_count?: number;
   attributes: Record<
     string,
     {
@@ -177,14 +178,28 @@ async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "content-type": "application/json", ...init?.headers },
   });
-  const body = (await response.json()) as T & {
+  const payload = await response.text();
+  let body: (T & {
     error?: string;
     detail?: string;
-  };
+  }) | null = null;
+  if (payload) {
+    try {
+      body = JSON.parse(payload) as T & { error?: string; detail?: string };
+    } catch {
+      if (!response.ok) {
+        throw new Error(
+          `${payload.trim() || "The server returned an invalid response."} (${response.status})`,
+        );
+      }
+      throw new Error("The server returned an invalid JSON response.");
+    }
+  }
   if (!response.ok)
     throw new Error(
-      body.error ?? body.detail ?? `Request failed (${response.status})`,
+      body?.error ?? body?.detail ?? `Request failed (${response.status})`,
     );
+  if (body === null) throw new Error("The server returned an empty response.");
   return body;
 }
 
@@ -232,6 +247,14 @@ function ProductIdentity({ listing }: Readonly<{ listing: ListingSummary }>) {
         </small>
         <strong>{listing.title || listing.retailer_product_id}</strong>
         <span>{listing.brand || "Brand unresolved"}</span>
+        {listing.observed_location_count !== undefined ? (
+          <span>
+            {listing.observed_location_count.toLocaleString()} observed {" "}
+            {listing.retailer_id === "amazon_us_same_day"
+              ? "ZIPs"
+              : "stores/locations"}
+          </span>
+        ) : null}
         <code>{listing.retailer_product_id}</code>
         {listing.product_url ? (
           <a href={listing.product_url} target="_blank" rel="noreferrer">
@@ -511,6 +534,10 @@ export function MatchingV2ReviewAdmin() {
           }),
         },
       );
+      setNotice(
+        "Independent review submitted. A second reviewer must submit separately before adjudication.",
+      );
+      setActiveCaseId(null);
       await loadQueue();
     } catch (cause) {
       handleError(cause);
@@ -795,7 +822,11 @@ export function MatchingV2ReviewAdmin() {
         </label>
       </div>
 
-      {error ? <p className="form-error cert-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error cert-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       {notice ? (
         <p className="cert-notice" role="status">
           {notice}

@@ -164,3 +164,82 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   ).toBeVisible();
   expect(aiDraftRequests).toBe(1);
 });
+
+test("reports a plain-text submission failure without a JSON parsing error", async ({
+  page,
+}) => {
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "POST") {
+      await route.fulfill({
+        status: 500,
+        contentType: "text/plain",
+        body: "Internal Server Error",
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        status_counts: { pending: 1 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 1 }],
+        total_cases: 1,
+        selected_case_count: 1,
+        offset: 0,
+        limit: 50,
+        cases: [
+          {
+            ...cases[4],
+            ai_draft: null,
+            evidence_refs: ["source-file:test.csv#sha256=test"],
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  await page.getByRole("button", { name: "Review evidence" }).click();
+  const drawer = page.getByRole("dialog", { name: "Match evidence review" });
+  await drawer.getByRole("button", { name: "Approve match" }).click();
+  await drawer
+    .getByRole("textbox", { name: "Evidence rationale" })
+    .fill("The governed package attributes agree.");
+  await drawer
+    .getByRole("button", { name: "Submit independent review" })
+    .click();
+
+  const submissionError = page.locator(".cert-error");
+  await expect(submissionError).toContainText(
+    "Internal Server Error (500)",
+  );
+  await expect(submissionError).not.toContainText("Unexpected token");
+});

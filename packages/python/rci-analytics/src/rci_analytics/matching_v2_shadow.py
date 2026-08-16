@@ -95,6 +95,7 @@ class _ListingAccumulatorState:
     brand_governance: Counter[str] = field(default_factory=Counter)
     seller_governance: Counter[str] = field(default_factory=Counter)
     pdp_evidence: Counter[str] = field(default_factory=Counter)
+    location_keys: set[str] = field(default_factory=set)
 
 
 class ListingEvidenceAccumulatorV2:
@@ -116,6 +117,15 @@ class ListingEvidenceAccumulatorV2:
                 retailer_product_id=offer.retailer_product_id,
             ),
         )
+        location_key = (
+            f"store:{offer.store_number}"
+            if offer.store_number
+            else f"zip:{offer.zipcode}"
+            if offer.zipcode
+            else None
+        )
+        if location_key:
+            state.location_keys.add(location_key)
         for definition in self._pack.attributes:
             name = str(definition["name"])
             value = item.attributes.get(name)
@@ -212,6 +222,7 @@ class ListingEvidenceAccumulatorV2:
                     brand_governance=_representative_document(state.brand_governance),
                     seller_governance=_representative_document(state.seller_governance),
                     pdp_evidence=_representative_document(state.pdp_evidence),
+                    observed_location_count=len(state.location_keys),
                 )
             )
         return tuple(results)

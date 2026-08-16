@@ -47,6 +47,49 @@ def test_postgres_review_filters_cast_nullable_text_parameters() -> None:
     assert "stratum = CAST(:stratum AS text)" in source
 
 
+def test_postgres_review_case_lookup_qualifies_joined_primary_key() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository._case_id)
+
+    assert "SELECT c.id::text" in source
+    assert "SELECT id::text" not in source
+
+
+def test_review_cases_order_by_observed_benchmark_then_competitor_footprint() -> None:
+    from rci_api.matching_v2_review import _case_order_key
+
+    cases = [
+        {
+            "case_id": "small-primary",
+            "critical": True,
+            "stratum": "critical",
+            "benchmark_listing": {"observed_location_count": 10},
+            "competitor_listing": {"observed_location_count": 100},
+        },
+        {
+            "case_id": "large-primary-small-competitor",
+            "critical": False,
+            "stratum": "review",
+            "benchmark_listing": {"observed_location_count": 500},
+            "competitor_listing": {"observed_location_count": 20},
+        },
+        {
+            "case_id": "large-primary-large-competitor",
+            "critical": False,
+            "stratum": "review",
+            "benchmark_listing": {"observed_location_count": 500},
+            "competitor_listing": {"observed_location_count": 80},
+        },
+    ]
+
+    ordered = sorted(cases, key=_case_order_key)
+
+    assert [row["case_id"] for row in ordered] == [
+        "large-primary-large-competitor",
+        "large-primary-small-competitor",
+        "small-primary",
+    ]
+
+
 class ReviewRepository:
     def __init__(self) -> None:
         self.imported: dict[str, Any] | None = None

@@ -121,6 +121,11 @@ class ListingEvidence:
     brand_governance: Mapping[str, Any] = field(default_factory=dict)
     seller_governance: Mapping[str, Any] = field(default_factory=dict)
     pdp_evidence: Mapping[str, Any] = field(default_factory=dict)
+    observed_location_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.observed_location_count < 0:
+            raise ValueError("observed location count cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)

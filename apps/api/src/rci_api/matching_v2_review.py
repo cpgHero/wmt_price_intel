@@ -38,6 +38,29 @@ def _checksum(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
+def _observed_location_count(case: Mapping[str, Any], side: str) -> int:
+    listing = case.get(f"{side}_listing")
+    if not isinstance(listing, Mapping):
+        return 0
+    value = listing.get("observed_location_count", 0)
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _case_order_key(case: Mapping[str, Any]) -> tuple[int, int, int, str, str]:
+    """Rank the benchmark footprint first, then competitor reach and review risk."""
+
+    return (
+        -_observed_location_count(case, "benchmark"),
+        -_observed_location_count(case, "competitor"),
+        -int(bool(case.get("critical"))),
+        str(case.get("stratum") or ""),
+        str(case.get("case_id") or ""),
+    )
+
+
 def _enabled(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
@@ -375,6 +398,7 @@ class PostgresMatchingV2ReviewRepository:
             adjudications = await self._adjudication_rows(connection, case_ids)
             ai_drafts = await self._ai_draft_rows(connection, case_ids)
         documents = self._case_documents(cases, submissions, adjudications, ai_drafts)
+        documents.sort(key=_case_order_key)
         summary_counts: dict[str, int] = defaultdict(int)
         for row in documents:
             summary_counts[str(row["review_status"])] += 1
@@ -1018,7 +1042,7 @@ class PostgresMatchingV2ReviewRepository:
                 await connection.execute(
                     text(
                         """
-                    SELECT id::text
+                    SELECT c.id::text
                     FROM matching_v2_review_case c
                     JOIN matching_v2_review_queue q ON q.id = c.review_queue_id
                     WHERE q.external_queue_id = :queue_id

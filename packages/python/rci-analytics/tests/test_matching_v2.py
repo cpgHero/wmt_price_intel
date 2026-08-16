@@ -447,6 +447,8 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     assert queue["cases"][0]["benchmark_listing"]["seller_governance"]["status"] == (
         "verified_first_party"
     )
+    assert queue["cases"][0]["benchmark_listing"]["observed_location_count"] == 1
+    assert queue["cases"][0]["competitor_listing"]["observed_location_count"] == 1
     validate_instance(
         REPOSITORY_ROOT,
         "matching-v2-evidence-profile.schema.json",
