@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? "31958");
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,10 +19,11 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: `pnpm build && mkdir -p .next/standalone/apps/web/.next && cp -R .next/static .next/standalone/apps/web/.next/static && PORT=${port} node .next/standalone/apps/web/server.js`,
-    url: `http://127.0.0.1:${port}/health`,
-    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
-    timeout: 120_000,
-  },
+  webServer: reuseExistingServer
+    ? undefined
+    : {
+        command: `pnpm build && mkdir -p .next/standalone/apps/web/.next && cp -R .next/static .next/standalone/apps/web/.next/static && PORT=${port} HOSTNAME=127.0.0.1 node .next/standalone/apps/web/server.js`,
+        url: `http://127.0.0.1:${port}/health`,
+        timeout: 120_000,
+      },
 });

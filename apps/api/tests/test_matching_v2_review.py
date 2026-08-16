@@ -18,6 +18,7 @@ from rci_api.matching_v2_review import (
     AIBulkCertificationPreviewRequest,
     AIReviewBatchRequest,
     AIReviewDraftRequest,
+    AIReviewRetryRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
     PostgresMatchingV2ReviewRepository,
@@ -25,6 +26,7 @@ from rci_api.matching_v2_review import (
     _apply_observed_location_sidecar,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
+    _is_ai_retry_integrity_failure,
     get_matching_v2_review_service,
 )
 from rci_contracts import validate_instance
@@ -286,6 +288,7 @@ class ReviewRepository:
         self.submissions: list[dict[str, Any]] = []
         self.adjudications: list[dict[str, Any]] = []
         self.ai_drafts: list[dict[str, Any]] = []
+        self.ai_retries: list[dict[str, Any]] = []
         self.bulk_commits: list[dict[str, Any]] = []
 
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]:
@@ -399,6 +402,36 @@ class ReviewRepository:
             )
             for case_id in external_case_ids
         ]
+
+    async def retry_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+        retry_reason: str,
+    ) -> list[dict[str, Any]]:
+        tasks = [
+            {
+                "queue_id": external_queue_id,
+                "case_id": case_id,
+                "batch_id": "00000000-0000-0000-0000-000000000199",
+                "created_at": "2026-08-16T13:00:00+00:00",
+                "requested_by": requested_by,
+                "model_id": model_id,
+                "prompt": prompt,
+                "retry_of_task_id": f"failed-{case_id}",
+                "retry_sequence": 1,
+                "retry_reason": retry_reason,
+                "authoritative": False,
+                "human_review_required": True,
+            }
+            for case_id in external_case_ids
+        ]
+        self.ai_retries.extend(tasks)
+        return tasks
 
     async def preview_ai_bulk_certification(
         self,
@@ -626,6 +659,59 @@ async def test_ai_review_batch_is_bounded_idempotent_input_and_human_gated() -> 
         )
 
 
+async def test_ai_review_retry_is_new_linked_advisory_work_with_preserved_history() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    result = await service.retry_ai_drafts(
+        "queue-1",
+        AIReviewRetryRequest(
+            requested_by="reviewer-a",
+            case_ids=["case-1", "case-2"],
+            retry_reason="Administrator inspected the terminal failures.",
+        ),
+        model_id="gpt-5.6-terra",
+    )
+
+    assert result["authoritative"] is False
+    assert result["human_review_required"] is True
+    assert result["history_preserved"] is True
+    assert result["requested_case_count"] == 2
+    assert result["batch"]["id"] == "00000000-0000-0000-0000-000000000199"
+    assert [task["retry_of_task_id"] for task in repository.ai_retries] == [
+        "failed-case-1",
+        "failed-case-2",
+    ]
+    with pytest.raises(ValueError, match="unique"):
+        await service.retry_ai_drafts(
+            "queue-1",
+            AIReviewRetryRequest(
+                requested_by="reviewer-a",
+                case_ids=["case-1", "case-1"],
+                retry_reason="Retry duplicate should fail.",
+            ),
+            model_id="gpt-5.6-terra",
+        )
+
+
+def test_ai_review_retry_blocks_governed_integrity_failures() -> None:
+    assert _is_ai_retry_integrity_failure(
+        "AI matching review task does not match governed input or prompt"
+    )
+    assert not _is_ai_retry_integrity_failure("Provider timed out before returning output")
+
+
+def test_postgres_ai_review_retry_preserves_history_and_reapplies_guardrails() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.retry_ai_drafts)
+
+    assert "UPDATE matching_v2_ai_review_task" not in source
+    assert "_insert_ai_retry_task" in source
+    assert "known third-party marketplace seller cases cannot retry" in source
+    assert "finalized review cases cannot retry" in source
+    assert "governed input or prompt integrity failures" in source
+    assert "pg_advisory_xact_lock" in source
+
+
 def _bulk_eligible_case() -> dict[str, Any]:
     case = _queue()["cases"][0]
     case["review_status"] = "pending"
@@ -750,3 +836,29 @@ async def test_ai_review_batch_route_requires_explicit_enablement_and_remains_ad
     assert response.json()["human_review_required"] is True
     assert response.json()["requested_case_count"] == 2
     assert [draft["case_id"] for draft in repository.ai_drafts] == ["case-1", "case-2"]
+
+
+async def test_ai_review_retry_route_requires_explicit_confirmation_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    app = create_app()
+    app.dependency_overrides[get_matching_v2_review_service] = lambda: service
+    monkeypatch.setenv("MATCHING_V2_AI_REVIEW_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_MODEL_MATCHING_REVIEW", "gpt-5.6-terra")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/matching-v2/review-queues/queue-1/ai-drafts/retry",
+            json={
+                "requested_by": "reviewer-a",
+                "case_ids": ["case-1"],
+                "retry_reason": "Administrator inspected the terminal failure.",
+            },
+        )
+
+    assert response.status_code == 202
+    assert response.json()["history_preserved"] is True
+    assert response.json()["human_review_required"] is True
+    assert repository.ai_retries[0]["case_id"] == "case-1"

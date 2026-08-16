@@ -127,6 +127,14 @@ configured $0.35 per-request ceiling implies at most $0.70 of simultaneous reque
 worker. The UI reads durable batch and task status from Postgres; it does not infer progress from
 the currently visible page.
 
+A terminal Matching v2 task enters `needs_review` after its two automatic attempts. Retrying that
+work is an explicit administrator action, never an in-place reset. The individual or filtered-page
+bulk confirmation calls the protected API, which creates a new task linked to the failed task,
+preserves prior usage/error history, reapplies first-party seller and final-decision eligibility,
+blocks prompt/input integrity failures, and caps administrator retry rounds at three. Each new task
+uses the same worker-only model credential and per-request cost ceiling and remains advisory until a
+human makes the final match decision.
+
 ### scheduler
 
 ```dotenv

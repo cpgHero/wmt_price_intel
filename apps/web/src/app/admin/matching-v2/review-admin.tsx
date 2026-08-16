@@ -215,6 +215,9 @@ interface ReviewCase {
     };
     attempt_count: number;
     max_attempts: number;
+    retry_of_task_id?: string | null;
+    retry_sequence?: number;
+    retry_reason?: string | null;
     last_error_type?: string | null;
     last_error_message?: string | null;
     created_at: string;
@@ -231,6 +234,10 @@ interface QueueView {
     model_id: string | null;
     max_batch_cases: number;
     max_request_cost_usd: number;
+    max_retry_rounds: number;
+    retryable_statuses: AIDraftStatus[];
+    retry_preserves_history: boolean;
+    retry_blocks_integrity_failures: boolean;
     vision_policy: string;
     authoritative: false;
     human_review_required: true;
@@ -269,6 +276,10 @@ const DISABLED_AI_POLICY: NonNullable<QueueView["ai_review_policy"]> = {
   model_id: null,
   max_batch_cases: 25,
   max_request_cost_usd: 0,
+  max_retry_rounds: 3,
+  retryable_statuses: ["needs_review"],
+  retry_preserves_history: true,
+  retry_blocks_integrity_failures: true,
   vision_policy: "missing_or_conflicting_critical_evidence_only",
   authoritative: false,
   human_review_required: true,
@@ -324,6 +335,12 @@ function aiDraftStatusLabel(status: AIDraftStatus) {
     case "needs_review":
       return "AI needs attention";
   }
+}
+
+function _isRetryIntegrityFailure(message: string | null | undefined) {
+  return String(message ?? "")
+    .toLowerCase()
+    .includes("does not match governed input or prompt");
 }
 
 function formatTimestamp(value: string | null | undefined) {
@@ -444,6 +461,10 @@ export function MatchingV2ReviewAdmin() {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [retryConfirmCaseIds, setRetryConfirmCaseIds] = useState<string[]>([]);
+  const [retryConfirmationPlacement, setRetryConfirmationPlacement] = useState<
+    "batch" | "drawer" | null
+  >(null);
   const [bulkCertificationPreview, setBulkCertificationPreview] =
     useState<AIBulkCertificationPreview | null>(null);
   const [refreshingAI, setRefreshingAI] = useState(false);
@@ -528,11 +549,19 @@ export function MatchingV2ReviewAdmin() {
     if (session?.authenticated) void loadQueue().catch(handleError);
   }, [loadQueue, queueRefresh, session?.authenticated]);
 
+  const closeEvidenceDrawer = useCallback(() => {
+    setActiveCaseId(null);
+    if (retryConfirmationPlacement === "drawer") {
+      setRetryConfirmCaseIds([]);
+      setRetryConfirmationPlacement(null);
+    }
+  }, [retryConfirmationPlacement]);
+
   useEffect(() => {
     if (!activeCaseId) return;
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActiveCaseId(null);
+      if (event.key === "Escape") closeEvidenceDrawer();
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
@@ -540,7 +569,7 @@ export function MatchingV2ReviewAdmin() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [activeCaseId]);
+  }, [activeCaseId, closeEvidenceDrawer]);
 
   const progress = useMemo(() => {
     if (!view) return 0;
@@ -567,10 +596,25 @@ export function MatchingV2ReviewAdmin() {
     [view],
   );
   const aiPolicy = view?.ai_review_policy ?? DISABLED_AI_POLICY;
+  const retryableCases = useMemo(
+    () =>
+      (view?.cases ?? []).filter((reviewCase) => {
+        const draft = reviewCase.ai_draft;
+        return (
+          ["pending", "flagged"].includes(reviewCase.review_status) &&
+          draft?.status === "needs_review" &&
+          (draft.retry_sequence ?? 0) < aiPolicy.max_retry_rounds &&
+          !_isRetryIntegrityFailure(draft.last_error_message)
+        );
+      }),
+    [aiPolicy.max_retry_rounds, view],
+  );
   const selectedMaximumCost = useMemo(
     () => selectedCaseIds.length * aiPolicy.max_request_cost_usd,
     [aiPolicy.max_request_cost_usd, selectedCaseIds.length],
   );
+  const retryMaximumCost =
+    retryConfirmCaseIds.length * aiPolicy.max_request_cost_usd;
   const hasRunningAIDrafts = useMemo(
     () =>
       (view?.ai_review_summary?.active_task_count ??
@@ -726,7 +770,7 @@ export function MatchingV2ReviewAdmin() {
         ...current,
         [reviewCase.case_id]: defaultDraft(reviewCase),
       }));
-      setActiveCaseId(null);
+      closeEvidenceDrawer();
       await loadQueue();
     } catch (cause) {
       handleError(cause);
@@ -793,6 +837,61 @@ export function MatchingV2ReviewAdmin() {
       setSelectedCaseIds([]);
       setNotice(
         `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted. Status refreshes automatically while the work is queued or running.`,
+      );
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openRetryConfirmation(
+    caseIds: string[],
+    placement: "batch" | "drawer",
+  ) {
+    if (!reviewerId.trim()) {
+      setError("Enter your reviewer identity before retrying AI review.");
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    const uniqueCaseIds = [...new Set(caseIds)].slice(
+      0,
+      aiPolicy.max_batch_cases,
+    );
+    if (!uniqueCaseIds.length) {
+      setError("No retryable terminal AI failures are visible in this view.");
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    setRetryConfirmCaseIds(uniqueCaseIds);
+    setRetryConfirmationPlacement(placement);
+  }
+
+  async function requestAIRetries() {
+    if (!reviewerId.trim() || !retryConfirmCaseIds.length) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const requestedCount = retryConfirmCaseIds.length;
+    try {
+      await jsonRequest(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-drafts/retry`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            requested_by: reviewerId.trim(),
+            case_ids: retryConfirmCaseIds,
+            retry_reason:
+              "Administrator requested another governed AI evidence review after inspecting the terminal failure.",
+          }),
+        },
+      );
+      setRetryConfirmCaseIds([]);
+      setRetryConfirmationPlacement(null);
+      setNotice(
+        `${requestedCount} terminal AI ${requestedCount === 1 ? "failure was" : "failures were"} requeued as new, linked tasks. Prior attempts, errors, and recorded costs remain preserved.`,
       );
       await loadQueue();
     } catch (cause) {
@@ -1234,15 +1333,34 @@ export function MatchingV2ReviewAdmin() {
                     ? "Queue-wide status is current. Open Review evidence on a ready case to make the final human decision."
                     : "No AI drafts are recorded for this queue yet."}
               </p>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={refreshingAI}
-                aria-busy={refreshingAI}
-                onClick={() => void refreshAIStatus()}
-              >
-                {refreshingAI ? "Refreshing…" : "Refresh AI status"}
-              </button>
+              <div className="cert-ai-status-actions">
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={busy || !aiPolicy.enabled || !retryableCases.length}
+                  onClick={() =>
+                    openRetryConfirmation(
+                      retryableCases
+                        .slice(0, aiPolicy.max_batch_cases)
+                        .map((reviewCase) => reviewCase.case_id),
+                      "batch",
+                    )
+                  }
+                >
+                  {retryableCases.length
+                    ? `Retry ${Math.min(retryableCases.length, aiPolicy.max_batch_cases)} needs-attention ${retryableCases.length === 1 ? "item" : "items"}`
+                    : "No retryable failures"}
+                </button>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={refreshingAI}
+                  aria-busy={refreshingAI}
+                  onClick={() => void refreshAIStatus()}
+                >
+                  {refreshingAI ? "Refreshing…" : "Refresh AI status"}
+                </button>
+              </div>
             </div>
             <section
               className="cert-bulk-certification"
@@ -1438,6 +1556,46 @@ export function MatchingV2ReviewAdmin() {
                 </button>
               </div>
             ) : null}
+            {retryConfirmationPlacement === "batch" &&
+            retryConfirmCaseIds.length ? (
+              <div
+                className="cert-ai-batch-confirm cert-ai-retry-confirm"
+                role="alert"
+              >
+                <div>
+                  <strong>
+                    Retry {retryConfirmCaseIds.length} terminal AI failure
+                    {retryConfirmCaseIds.length === 1 ? "" : "s"}?
+                  </strong>
+                  <p>
+                    This creates new linked tasks; it does not reset or erase
+                    prior attempts. Model: {aiPolicy.model_id}. Maximum new
+                    policy exposure: ${retryMaximumCost.toFixed(2)}. Each new
+                    task still requires a human decision.
+                  </p>
+                </div>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setRetryConfirmCaseIds([]);
+                    setRetryConfirmationPlacement(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busy}
+                  aria-busy={busy}
+                  onClick={() => void requestAIRetries()}
+                >
+                  {busy ? "Queueing…" : "Confirm governed retry"}
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <div className="cert-case-list">
@@ -1557,7 +1715,7 @@ export function MatchingV2ReviewAdmin() {
               className="cert-drawer-backdrop"
               role="presentation"
               onMouseDown={(event) => {
-                if (event.target === event.currentTarget) setActiveCaseId(null);
+                if (event.target === event.currentTarget) closeEvidenceDrawer();
               }}
             >
               <aside
@@ -1579,7 +1737,7 @@ export function MatchingV2ReviewAdmin() {
                   <button
                     className="button secondary"
                     type="button"
-                    onClick={() => setActiveCaseId(null)}
+                    onClick={closeEvidenceDrawer}
                     aria-label="Close evidence drawer"
                   >
                     Close
@@ -1634,6 +1792,14 @@ export function MatchingV2ReviewAdmin() {
                           {label(activeCase.ai_draft.status)}
                         </span>
                         <small>{activeCase.ai_draft.model_id}</small>
+                        {(activeCase.ai_draft.retry_sequence ?? 0) > 0 ? (
+                          <small>
+                            Manual retry round{" "}
+                            {activeCase.ai_draft.retry_sequence}
+                            {" of "}
+                            {aiPolicy.max_retry_rounds} · Prior task preserved
+                          </small>
+                        ) : null}
                         {activeCase.ai_draft.output_document?.result ? (
                           <>
                             <strong>
@@ -1736,6 +1902,73 @@ export function MatchingV2ReviewAdmin() {
                               {activeCase.ai_draft.max_attempts} · Last activity{" "}
                               {formatTimestamp(activeCase.ai_draft.updated_at)}
                             </small>
+                            {activeCase.ai_draft.status === "needs_review" ? (
+                              (activeCase.ai_draft.retry_sequence ?? 0) <
+                                aiPolicy.max_retry_rounds &&
+                              !_isRetryIntegrityFailure(
+                                activeCase.ai_draft.last_error_message ?? "",
+                              ) ? (
+                                <button
+                                  className="button secondary"
+                                  type="button"
+                                  disabled={busy || !aiPolicy.enabled}
+                                  onClick={() =>
+                                    openRetryConfirmation(
+                                      [activeCase.case_id],
+                                      "drawer",
+                                    )
+                                  }
+                                >
+                                  Retry AI evidence review
+                                </button>
+                              ) : (
+                                <small>
+                                  {_isRetryIntegrityFailure(
+                                    activeCase.ai_draft.last_error_message,
+                                  )
+                                    ? "An evidence-integrity failure requires engineering review and cannot trigger another paid call."
+                                    : `The governed limit of ${aiPolicy.max_retry_rounds} manual retry rounds has been reached.`}
+                                </small>
+                              )
+                            ) : null}
+                            {retryConfirmationPlacement === "drawer" &&
+                            retryConfirmCaseIds.includes(activeCase.case_id) ? (
+                              <div className="cert-ai-drawer-retry-confirm">
+                                <strong>
+                                  Confirm a new linked retry task?
+                                </strong>
+                                <p>
+                                  Prior attempts, this exact error, and any
+                                  recorded cost remain preserved. The maximum
+                                  new policy exposure is $
+                                  {aiPolicy.max_request_cost_usd.toFixed(2)}.
+                                </p>
+                                <div>
+                                  <button
+                                    className="button secondary"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      setRetryConfirmCaseIds([]);
+                                      setRetryConfirmationPlacement(null);
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    className="button primary"
+                                    type="button"
+                                    disabled={busy}
+                                    aria-busy={busy}
+                                    onClick={() => void requestAIRetries()}
+                                  >
+                                    {busy
+                                      ? "Queueing…"
+                                      : "Confirm governed retry"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                           <p>

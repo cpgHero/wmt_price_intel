@@ -29,6 +29,8 @@ MatchTier = Literal[
     "custom_approved",
 ]
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
+_MAX_AI_RETRY_ROUNDS = 3
+_AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
 
 
 def _canonical(value: Any) -> str:
@@ -37,6 +39,12 @@ def _canonical(value: Any) -> str:
 
 def _checksum(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
+
+
+def _is_ai_retry_integrity_failure(message: object) -> bool:
+    """Keep governed input/prompt mismatches out of the paid retry boundary."""
+
+    return _AI_RETRY_BLOCKED_MESSAGE in str(message or "").strip().lower()
 
 
 def _observed_location_count(case: Mapping[str, Any], side: str) -> int:
@@ -192,6 +200,14 @@ class AIReviewBatchRequest(BaseModel):
 
     requested_by: str = Field(min_length=1, max_length=200)
     case_ids: list[str] = Field(min_length=1, max_length=25)
+
+
+class AIReviewRetryRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    requested_by: str = Field(min_length=1, max_length=200)
+    case_ids: list[str] = Field(min_length=1, max_length=25)
+    retry_reason: str = Field(min_length=1, max_length=1_000)
 
 
 class AIBulkCertificationPreviewRequest(BaseModel):
@@ -543,6 +559,17 @@ class MatchingV2ReviewRepository(Protocol):
         requested_by: str,
         model_id: str,
         prompt: Mapping[str, str],
+    ) -> list[dict[str, Any]]: ...
+
+    async def retry_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+        retry_reason: str,
     ) -> list[dict[str, Any]]: ...
 
     async def preview_ai_bulk_certification(
@@ -970,6 +997,7 @@ class PostgresMatchingV2ReviewRepository:
                            model_provider, model_id, prompt_id, prompt_version,
                            prompt_checksum, input_checksum, output_checksum,
                            output_document, usage, attempt_count, max_attempts,
+                           retry_of_task_id::text, retry_sequence, retry_reason,
                            last_error_type, last_error_message, created_at,
                            updated_at, locked_at, lease_expires_at, completed_at
                     FROM matching_v2_ai_review_task
@@ -1695,6 +1723,186 @@ class PostgresMatchingV2ReviewRepository:
                 )
         return tasks
 
+    async def retry_ai_drafts(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+        retry_reason: str,
+    ) -> list[dict[str, Any]]:
+        """Create new linked tasks for terminal failures without rewriting history."""
+
+        async with self._engine.begin() as connection:
+            for external_case_id in sorted(external_case_ids):
+                await connection.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                    {"lock_key": f"matching-v2-ai-retry:{external_queue_id}:{external_case_id}"},
+                )
+            rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH selected_queue AS (
+                              SELECT id, version
+                              FROM matching_v2_review_queue
+                              WHERE external_queue_id = :queue_id
+                              ORDER BY created_at DESC
+                              LIMIT 1
+                            )
+                            SELECT c.id::text, c.external_case_id, c.case_document,
+                                   c.case_checksum, c.review_queue_id::text,
+                                   q.version AS queue_version,
+                                   (
+                                     SELECT decision.verdict
+                                     FROM (
+                                       SELECT s.verdict, s.created_at, s.id
+                                       FROM matching_v2_review_submission s
+                                       WHERE s.review_case_id = c.id
+                                       UNION ALL
+                                       SELECT a.verdict, a.created_at, a.id
+                                       FROM matching_v2_adjudication a
+                                       WHERE a.review_case_id = c.id
+                                     ) decision
+                                     ORDER BY decision.created_at DESC, decision.id DESC
+                                     LIMIT 1
+                                   ) AS current_verdict,
+                                   latest_task.id::text AS ai_task_id,
+                                   latest_task.status AS ai_status,
+                                   latest_task.input_document AS ai_input_document,
+                                   latest_task.input_checksum AS ai_input_checksum,
+                                   latest_task.retry_sequence AS ai_retry_sequence,
+                                   latest_task.attempt_count AS ai_attempt_count,
+                                   latest_task.max_attempts AS ai_max_attempts,
+                                   latest_task.usage AS ai_usage,
+                                   latest_task.last_error_type AS ai_last_error_type,
+                                   latest_task.last_error_message AS ai_last_error_message,
+                                   (
+                                     SELECT count(*)
+                                     FROM matching_v2_ai_review_task active_task
+                                     WHERE active_task.review_case_id = c.id
+                                       AND active_task.status IN ('queued', 'running')
+                                   ) AS active_ai_task_count
+                            FROM matching_v2_review_case c
+                            JOIN selected_queue q ON q.id = c.review_queue_id
+                            LEFT JOIN LATERAL (
+                              SELECT task.*
+                              FROM matching_v2_ai_review_task task
+                              WHERE task.review_case_id = c.id
+                              ORDER BY task.created_at DESC, task.id DESC
+                              LIMIT 1
+                            ) latest_task ON true
+                            WHERE c.external_case_id = ANY(CAST(:case_ids AS text[]))
+                            FOR UPDATE OF c
+                            """
+                        ),
+                        {"queue_id": external_queue_id, "case_ids": list(external_case_ids)},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if not rows:
+                raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+            rows_by_case = {str(row["external_case_id"]): row for row in rows}
+            missing = [case_id for case_id in external_case_ids if case_id not in rows_by_case]
+            if missing:
+                raise KeyError(
+                    f"matching v2 review cases {missing!r} were not found in queue "
+                    f"{external_queue_id!r}"
+                )
+            sidecar_documents = {
+                case_id: dict(rows_by_case[case_id]["case_document"])
+                for case_id in external_case_ids
+            }
+            _apply_observed_location_sidecar(
+                list(sidecar_documents.values()),
+                queue_id=external_queue_id,
+                queue_version=str(rows[0]["queue_version"]),
+                root=_repository_root(),
+            )
+            excluded_seller_cases = [
+                case_id
+                for case_id in external_case_ids
+                if _case_has_known_third_party_seller(sidecar_documents[case_id])
+            ]
+            if excluded_seller_cases:
+                raise ValueError(
+                    "known third-party marketplace seller cases cannot retry AI drafts: "
+                    f"{excluded_seller_cases!r}"
+                )
+            finalized = [
+                case_id
+                for case_id in external_case_ids
+                if rows_by_case[case_id]["current_verdict"] in {"comparable", "not_comparable"}
+            ]
+            if finalized:
+                raise ValueError(f"finalized review cases cannot retry AI drafts: {finalized!r}")
+            without_terminal_failure = [
+                case_id
+                for case_id in external_case_ids
+                if rows_by_case[case_id]["ai_task_id"] is None
+                or rows_by_case[case_id]["ai_status"] != "needs_review"
+                or int(rows_by_case[case_id]["active_ai_task_count"] or 0) > 0
+            ]
+            if without_terminal_failure:
+                raise ValueError(
+                    "AI retries require the latest task to be a terminal needs-review failure "
+                    f"with no active task: {without_terminal_failure!r}"
+                )
+            exhausted = [
+                case_id
+                for case_id in external_case_ids
+                if int(rows_by_case[case_id]["ai_retry_sequence"] or 0) >= _MAX_AI_RETRY_ROUNDS
+            ]
+            if exhausted:
+                raise ValueError(
+                    f"AI retry limit of {_MAX_AI_RETRY_ROUNDS} rounds reached: {exhausted!r}"
+                )
+            integrity_failures = [
+                case_id
+                for case_id in external_case_ids
+                if _is_ai_retry_integrity_failure(rows_by_case[case_id]["ai_last_error_message"])
+            ]
+            if integrity_failures:
+                raise ValueError(
+                    "governed input or prompt integrity failures require engineering review, "
+                    f"not another paid AI call: {integrity_failures!r}"
+                )
+            retry_context = _checksum(
+                {
+                    "operation": "retry",
+                    "prior_task_ids": sorted(
+                        str(rows_by_case[case_id]["ai_task_id"]) for case_id in external_case_ids
+                    ),
+                }
+            )
+            batch = await self._insert_ai_review_batch(
+                connection,
+                review_queue_id=str(rows[0]["review_queue_id"]),
+                external_case_ids=external_case_ids,
+                requested_by=requested_by,
+                model_id=model_id,
+                prompt=prompt,
+                idempotency_context=retry_context,
+            )
+            tasks = [
+                await self._insert_ai_retry_task(
+                    connection,
+                    dict(rows_by_case[case_id]),
+                    batch_id=str(batch["id"]),
+                    requested_by=requested_by,
+                    model_id=model_id,
+                    prompt=prompt,
+                    retry_reason=retry_reason,
+                )
+                for case_id in external_case_ids
+            ]
+        return tasks
+
     @staticmethod
     async def _insert_ai_review_batch(
         connection: AsyncConnection,
@@ -1704,15 +1912,17 @@ class PostgresMatchingV2ReviewRepository:
         requested_by: str,
         model_id: str,
         prompt: Mapping[str, str],
+        idempotency_context: str | None = None,
     ) -> dict[str, Any]:
-        idempotency_key = _checksum(
-            {
-                "review_queue_id": review_queue_id,
-                "case_ids": sorted(external_case_ids),
-                "model_id": model_id,
-                "prompt_checksum": prompt["checksum"],
-            }
-        )
+        idempotency_document = {
+            "review_queue_id": review_queue_id,
+            "case_ids": sorted(external_case_ids),
+            "model_id": model_id,
+            "prompt_checksum": prompt["checksum"],
+        }
+        if idempotency_context is not None:
+            idempotency_document["context"] = idempotency_context
+        idempotency_key = _checksum(idempotency_document)
         row = (
             (
                 await connection.execute(
@@ -1748,6 +1958,92 @@ class PostgresMatchingV2ReviewRepository:
             .one()
         )
         return dict(row)
+
+    @staticmethod
+    async def _insert_ai_retry_task(
+        connection: AsyncConnection,
+        row: Mapping[str, Any],
+        *,
+        batch_id: str,
+        requested_by: str,
+        model_id: str,
+        prompt: Mapping[str, str],
+        retry_reason: str,
+    ) -> dict[str, Any]:
+        input_document = dict(row["ai_input_document"])
+        input_checksum = _checksum(input_document)
+        if input_checksum != str(row["ai_input_checksum"]):
+            raise ValueError(
+                f"stored AI input checksum is invalid for case {row['external_case_id']!r}"
+            )
+        retry_sequence = int(row["ai_retry_sequence"] or 0) + 1
+        idempotency_key = _checksum(
+            {
+                "operation": "retry",
+                "retry_of_task_id": str(row["ai_task_id"]),
+                "retry_sequence": retry_sequence,
+                "model_id": model_id,
+                "prompt_checksum": prompt["checksum"],
+                "input_checksum": input_checksum,
+            }
+        )
+        task = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO matching_v2_ai_review_task (
+                          review_case_id, batch_id, idempotency_key, requested_by, status,
+                          prompt_id, prompt_version, prompt_checksum,
+                          model_provider, model_id, input_checksum, input_document,
+                          retry_of_task_id, retry_sequence, retry_reason
+                        ) VALUES (
+                          CAST(:review_case_id AS uuid), CAST(:batch_id AS uuid),
+                          :idempotency_key, :requested_by, 'queued',
+                          :prompt_id, :prompt_version, :prompt_checksum,
+                          'openai', :model_id, :input_checksum, CAST(:input_document AS jsonb),
+                          CAST(:retry_of_task_id AS uuid), :retry_sequence, :retry_reason
+                        )
+                        RETURNING id::text, batch_id::text, status, model_provider, model_id,
+                                  prompt_id, prompt_version, input_checksum,
+                                  attempt_count, max_attempts, retry_of_task_id::text,
+                                  retry_sequence, retry_reason, created_at
+                        """
+                    ),
+                    {
+                        "review_case_id": str(row["id"]),
+                        "batch_id": batch_id,
+                        "idempotency_key": idempotency_key,
+                        "requested_by": requested_by,
+                        "prompt_id": prompt["id"],
+                        "prompt_version": prompt["version"],
+                        "prompt_checksum": prompt["checksum"],
+                        "model_id": model_id,
+                        "input_checksum": input_checksum,
+                        "input_document": _canonical(input_document),
+                        "retry_of_task_id": str(row["ai_task_id"]),
+                        "retry_sequence": retry_sequence,
+                        "retry_reason": retry_reason,
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return {
+            **{
+                key: (value.isoformat() if hasattr(value, "isoformat") else value)
+                for key, value in task.items()
+            },
+            "case_id": str(row["external_case_id"]),
+            "previous_attempt_count": int(row["ai_attempt_count"] or 0),
+            "previous_max_attempts": int(row["ai_max_attempts"] or 0),
+            "previous_usage": dict(row["ai_usage"] or {}),
+            "previous_error_type": row["ai_last_error_type"],
+            "previous_error_message": row["ai_last_error_message"],
+            "authoritative": False,
+            "human_review_required": True,
+        }
 
     @staticmethod
     async def _insert_ai_draft_task(
@@ -2294,6 +2590,43 @@ class MatchingV2ReviewService:
             "tasks": tasks,
         }
 
+    async def retry_ai_drafts(
+        self,
+        external_queue_id: str,
+        request: AIReviewRetryRequest,
+        *,
+        model_id: str,
+    ) -> dict[str, Any]:
+        case_ids = list(dict.fromkeys(request.case_ids))
+        if len(case_ids) != len(request.case_ids):
+            raise ValueError("AI retry case IDs must be unique")
+        prompt = self._matching_review_prompt()
+        tasks = await self._repository.retry_ai_drafts(
+            external_queue_id,
+            case_ids,
+            requested_by=request.requested_by,
+            model_id=model_id,
+            prompt=prompt,
+            retry_reason=request.retry_reason,
+        )
+        return {
+            "authoritative": False,
+            "human_review_required": True,
+            "history_preserved": True,
+            "queue_id": external_queue_id,
+            "requested_case_count": len(case_ids),
+            "batch": (
+                {
+                    "id": tasks[0]["batch_id"],
+                    "created_at": tasks[0]["created_at"],
+                    "requested_case_count": len(case_ids),
+                }
+                if tasks
+                else None
+            ),
+            "tasks": tasks,
+        }
+
     async def preview_ai_bulk_certification(
         self,
         external_queue_id: str,
@@ -2487,6 +2820,10 @@ def _matching_ai_review_policy() -> dict[str, Any]:
         "model_id": model_id or None,
         "max_batch_cases": 25,
         "max_request_cost_usd": max_request_cost_usd,
+        "max_retry_rounds": _MAX_AI_RETRY_ROUNDS,
+        "retryable_statuses": ["needs_review"],
+        "retry_preserves_history": True,
+        "retry_blocks_integrity_failures": True,
         "vision_policy": "missing_or_conflicting_critical_evidence_only",
         "authoritative": False,
         "human_review_required": True,
@@ -2622,6 +2959,25 @@ async def request_matching_v2_ai_draft_batch(
     model_id = _require_matching_ai_review()
     try:
         return await service.request_ai_drafts(queue_id, body, model_id=model_id)
+    except (ContractError, KeyError, OSError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/ai-drafts/retry",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_matching_v2_ai_draft_batch(
+    queue_id: str,
+    request: Request,
+    body: AIReviewRetryRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    model_id = _require_matching_ai_review()
+    try:
+        return await service.retry_ai_drafts(queue_id, body, model_id=model_id)
     except (ContractError, KeyError, OSError, ValueError) as exc:
         raise _http_error(exc) from exc
 

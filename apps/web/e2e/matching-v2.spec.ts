@@ -200,6 +200,129 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   expect(aiDraftRequests).toBe(1);
 });
 
+test("retries terminal AI failures as confirmed linked individual or bulk work", async ({
+  page,
+}) => {
+  const retryPayloads: Array<Record<string, unknown>> = [];
+  const terminalCases = [0, 1].map((index) => ({
+    ...cases[index + 4],
+    ai_draft: {
+      id: `failed-ai-${index}`,
+      batch_id: "failed-batch",
+      status: "needs_review",
+      model_id: "gpt-5.6-terra",
+      requested_by: "fixture@cpghero.com",
+      usage: { estimated_cost_usd: 0.031 + index / 1000 },
+      attempt_count: 2,
+      max_attempts: 2,
+      retry_of_task_id: null,
+      retry_sequence: 0,
+      retry_reason: null,
+      last_error_type: "TimeoutError",
+      last_error_message: "Provider timed out before returning output.",
+      created_at: "2026-08-16T12:00:00Z",
+      updated_at: "2026-08-16T12:02:00Z",
+    },
+  }));
+
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/ai-drafts/retry")) {
+      retryPayloads.push(request.postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          authoritative: false,
+          human_review_required: true,
+          history_preserved: true,
+          requested_case_count: (
+            request.postDataJSON() as { case_ids: string[] }
+          ).case_ids.length,
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          max_retry_rounds: 3,
+          retryable_statuses: ["needs_review"],
+          retry_preserves_history: true,
+          retry_blocks_integrity_failures: true,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        ai_review_summary: {
+          active_task_count: 0,
+          status_counts: {
+            queued: 0,
+            running: 0,
+            succeeded: 0,
+            needs_review: 2,
+          },
+          latest_batch: null,
+        },
+        status_counts: { pending: 2 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 2 }],
+        total_cases: 2,
+        selected_case_count: 2,
+        offset: 0,
+        limit: 50,
+        cases: terminalCases,
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  await page
+    .getByRole("button", { name: "Retry 2 needs-attention items" })
+    .click();
+  await expect(page.getByText("Retry 2 terminal AI failures?")).toBeVisible();
+  await expect(page.getByText("Maximum new policy exposure: $0.70")).toBeVisible();
+  await page.getByRole("button", { name: "Confirm governed retry" }).click();
+  expect(retryPayloads[0]).toMatchObject({
+    requested_by: "reviewer@cpghero.com",
+    case_ids: [terminalCases[0].case_id, terminalCases[1].case_id],
+  });
+
+  await page.getByRole("button", { name: "Review evidence" }).first().click();
+  const drawer = page.getByRole("dialog", { name: "Match evidence review" });
+  await expect(drawer).toContainText("Provider timed out before returning output.");
+  await drawer.getByRole("button", { name: "Retry AI evidence review" }).click();
+  await expect(drawer).toContainText("Prior attempts, this exact error");
+  await drawer.getByRole("button", { name: "Confirm governed retry" }).click();
+  expect(retryPayloads[1]).toMatchObject({
+    requested_by: "reviewer@cpghero.com",
+    case_ids: [terminalCases[0].case_id],
+  });
+});
+
 test("previews guardrail exclusions before a human bulk-certifies AI matches", async ({
   page,
 }) => {

@@ -4088,6 +4088,13 @@ tbody tr:last-child td {
   padding: 0.52rem 0.7rem;
   white-space: nowrap;
 }
+.cert-ai-status-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
 @keyframes cert-ai-pulse {
   from {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 40%, transparent);
@@ -4326,6 +4333,24 @@ tbody tr:last-child td {
   font-size: 0.62rem;
   line-height: 1.45;
   margin-top: 0.15rem;
+}
+.cert-ai-retry-confirm {
+  border-color: color-mix(in srgb, var(--amber) 38%, var(--line));
+}
+.cert-ai-drawer-retry-confirm {
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--amber) 34%, var(--line));
+  border-radius: 9px;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  padding: 0.65rem;
+}
+.cert-ai-drawer-retry-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
 }
 .cert-case-list {
   display: grid;

@@ -646,7 +646,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The draft remains advisory. Vision proposals cite the source image and never treat an unseen claim as false.",
+          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most three administrator retry rounds. Known third-party listings, finalized decisions, active tasks, and governed input/prompt integrity failures cannot cross this paid-call boundary. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. Every draft remains advisory and requires a human decision. Vision proposals cite the source image and never treat an unseen claim as false.",
         },
         {
           kind: "callout",
@@ -1290,6 +1290,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented; deployment verification pending",
+              "Terminal Match Certification AI failures gained governed individual and bulk retry controls.",
+              "Each confirmed retry creates a new lineage-linked Postgres task, preserves failed attempts/errors/cost, reapplies seller and final-decision guards, blocks evidence-integrity failures, caps administrator retries at three rounds, and retains mandatory human review. Local API, type, component, lint, and build gates passed without paid AI calls; migration/browser CI and production verification remain pending.",
+            ],
             [
               "2026-08-16",
               "Deployed & verified",
