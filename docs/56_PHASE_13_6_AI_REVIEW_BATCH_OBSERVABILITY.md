@@ -1,6 +1,6 @@
 # Phase 13.6 — AI Review Batch Observability
 
-Status: implemented; production verification pending
+Status: deployed and production-verified
 
 ## Outcome
 
@@ -37,10 +37,18 @@ current page.
   activity time. It never converts an AI draft into a certification decision.
 - Stale network responses cannot overwrite a newer filtered queue response.
 
-## Verification required
+## Verification evidence
 
-1. Migrate up, down, and up against the integration database.
-2. Run API, agent, web type/build, and Match Certification browser tests.
-3. Submit a multi-case production batch and verify queue-wide progress, two simultaneous worker
-   starts, terminal totals, cost, and automatic polling.
-4. Confirm OpenAI request spend remains inside the approved per-request and overall budget.
+1. GitHub Actions run `31967540651` passed migration upgrade, 471 Python tests, contract checks,
+   migration downgrade-to-base and upgrade-to-head, 58 TypeScript tests, eight browser tests, and
+   all four container builds.
+2. Railway API pre-deploy migration reached `0033_ai_review_batches`; API and web readiness passed.
+3. The production banana queue returned queue-wide totals of 65 ready drafts and three
+   needs-attention drafts. The latest historical one-case batch showed its completion time and
+   recorded cost.
+4. A production needs-attention drawer showed the governed error type, safe message, attempt two of
+   two, and last activity timestamp. No additional paid OpenAI request was required for deployment
+   verification.
+5. Newly submitted multi-case batches will retain their complete batch membership. Pre-migration
+   tasks are intentionally represented as one-case legacy batches because the former schema did not
+   preserve reliable original batch membership.

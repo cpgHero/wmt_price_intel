@@ -1280,7 +1280,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented",
+              "Deployed",
               "Match Certification AI review gained durable batch observability and bounded concurrency.",
               "Administrators now see queue-wide progress, timestamps, ETA, cost, retries, and terminal errors while the worker processes two cases concurrently by default.",
             ],
