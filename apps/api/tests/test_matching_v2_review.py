@@ -14,6 +14,8 @@ from httpx import ASGITransport, AsyncClient
 from rci_api.main import create_app
 from rci_api.matching_v2_review import (
     AdjudicationRequest,
+    AIBulkCertificationCommitRequest,
+    AIBulkCertificationPreviewRequest,
     AIReviewBatchRequest,
     AIReviewDraftRequest,
     ImportReviewQueueRequest,
@@ -21,6 +23,8 @@ from rci_api.matching_v2_review import (
     PostgresMatchingV2ReviewRepository,
     ReviewSubmissionRequest,
     _apply_observed_location_sidecar,
+    _bulk_ai_certification_eligibility,
+    _bulk_preview_document,
     get_matching_v2_review_service,
 )
 from rci_contracts import validate_instance
@@ -232,6 +236,7 @@ class ReviewRepository:
         self.submissions: list[dict[str, Any]] = []
         self.adjudications: list[dict[str, Any]] = []
         self.ai_drafts: list[dict[str, Any]] = []
+        self.bulk_commits: list[dict[str, Any]] = []
 
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]:
         assert limit > 0
@@ -344,6 +349,35 @@ class ReviewRepository:
             )
             for case_id in external_case_ids
         ]
+
+    async def preview_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+    ) -> dict[str, Any]:
+        return {
+            "queue_id": external_queue_id,
+            "eligible_case_count": len(external_case_ids),
+            "eligible_cases": [{"case_id": case_id} for case_id in external_case_ids],
+            "confirmation_checksum": "a" * 64,
+        }
+
+    async def commit_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any]:
+        result = {
+            "queue_id": external_queue_id,
+            "approved_case_ids": list(external_case_ids),
+            "reviewer_id": reviewer_id,
+            "confirmation_checksum": confirmation_checksum,
+        }
+        self.bulk_commits.append(result)
+        return result
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:
@@ -516,6 +550,109 @@ async def test_ai_review_batch_is_bounded_idempotent_input_and_human_gated() -> 
                 case_ids=["case-1", "case-1"],
             ),
             model_id="gpt-5.6-terra",
+        )
+
+
+def _bulk_eligible_case() -> dict[str, Any]:
+    case = _queue()["cases"][0]
+    case["review_status"] = "pending"
+    case["case_checksum"] = "b" * 64
+    case["ai_output_checksum"] = "c" * 64
+    case["benchmark_listing"]["seller_governance"] = {"status": "verified_first_party"}
+    case["competitor_listing"]["seller_governance"] = {"status": "not_governed"}
+    case["ai_draft"] = {
+        "id": "ai-task-one",
+        "status": "succeeded",
+        "output_document": {
+            "authoritative": False,
+            "human_review_required": True,
+            "result": {
+                "verdict_proposal": "comparable",
+                "tier_proposal": "exact_specification",
+                "rationale": "The governed package facts agree.",
+                "attribute_proposals": [],
+                "conflicts": [],
+                "requires_human_review": True,
+            },
+        },
+    }
+    return case
+
+
+def test_guarded_bulk_ai_certification_accepts_only_corroborated_matches() -> None:
+    eligible = _bulk_eligible_case()
+
+    evaluation = _bulk_ai_certification_eligibility(eligible)
+
+    assert evaluation["eligible"] is True
+    assert evaluation["reason_codes"] == []
+    assert evaluation["recommended_tier"] == "exact_specification"
+
+    conflicting = _bulk_eligible_case()
+    conflicting["ai_draft"]["output_document"]["result"]["conflicts"] = [
+        "Package count is unresolved."
+    ]
+    conflicting["competitor_listing"]["seller_governance"] = {"status": "excluded_third_party"}
+    conflicting["ai_draft"]["output_document"]["result"]["tier_proposal"] = "comparable_substitute"
+
+    rejected = _bulk_ai_certification_eligibility(conflicting)
+
+    assert rejected["eligible"] is False
+    assert {
+        "tier_not_bulk_eligible",
+        "ai_engine_tier_disagreement",
+        "ai_conflict_present",
+        "known_third_party_seller",
+    }.issubset(rejected["reason_codes"])
+
+
+def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> None:
+    first = _bulk_eligible_case()
+    preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=[first],
+    )
+    changed = _bulk_eligible_case()
+    changed["ai_output_checksum"] = "d" * 64
+    changed_preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=[changed],
+    )
+
+    assert preview["eligible_case_count"] == 1
+    assert preview["excluded_case_count"] == 0
+    assert len(preview["confirmation_checksum"]) == 64
+    assert preview["confirmation_checksum"] != changed_preview["confirmation_checksum"]
+    assert preview["human_confirmation_required"] is True
+    assert preview["automatically_changes_reporting"] is False
+
+
+async def test_bulk_ai_certification_service_requires_unique_cases_and_human_identity() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    preview = await service.preview_ai_bulk_certification(
+        "queue-1",
+        AIBulkCertificationPreviewRequest(case_ids=["case-1", "case-2"]),
+    )
+    committed = await service.commit_ai_bulk_certification(
+        "queue-1",
+        AIBulkCertificationCommitRequest(
+            reviewer_id="reviewer@cpghero.com",
+            case_ids=["case-1", "case-2"],
+            confirmation_checksum="a" * 64,
+        ),
+    )
+
+    assert preview["eligible_case_count"] == 2
+    assert committed["approved_case_ids"] == ["case-1", "case-2"]
+    assert repository.bulk_commits[0]["reviewer_id"] == "reviewer@cpghero.com"
+    with pytest.raises(ValueError, match="unique"):
+        await service.preview_ai_bulk_certification(
+            "queue-1",
+            AIBulkCertificationPreviewRequest(case_ids=["case-1", "case-1"]),
         )
 
 

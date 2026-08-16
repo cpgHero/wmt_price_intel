@@ -83,10 +83,10 @@ const lastVerified = "August 16, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.0.0",
+  version: "1.1.0",
   lastVerified,
   baseline:
-    "Production implementation through Matching Architecture v2 Phase 13.5",
+    "Production implementation through guarded bulk AI match certification Phase 13.7",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -646,7 +646,13 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The draft is advisory, cannot certify a match, and must be adopted and submitted by a human. Vision proposals cite the source image and never treat an unseen claim as false.",
+          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The draft remains advisory. Vision proposals cite the source image and never treat an unseen claim as false.",
+        },
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Guarded bulk acceptance",
+          text: "An administrator may assess up to 50 completed affirmative AI recommendations from the current filtered page. The server includes only pending exact-item, exact-specification, or equivalent-product recommendations when AI and the deterministic engine agree on tier, critical evidence coverage is 100%, there are no AI or Product Pack hard-blocker conflicts, every AI-proposed attribute is at least 85% confident, immutable evidence references exist, and no listing has a known third-party seller exclusion. The preview names every exclusion and binds the eligible case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval. No report reanalysis runs automatically; decisions remain final until flagged. Comparable-substitute and custom tiers always require individual review.",
         },
         {
           kind: "callout",
@@ -775,7 +781,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Certify v2 independently",
               detail:
-                "Work the queue in descending observed-location exposure. Approve or reject once; use Needs evidence/Flag only when a final decision needs to be reopened. AI drafts remain advisory.",
+                "Work the queue in descending observed-location exposure. Approve or reject once; use Needs evidence/Flag only when a final decision needs to be reopened. For completed affirmative AI drafts, use guarded bulk acceptance only after reading the eligible set and exclusion reasons; the administrator—not AI—confirms the final decisions.",
               link: {
                 href: "/admin/matching-v2",
                 label: "Match Certification",
@@ -1278,6 +1284,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented",
+              "Match Certification gained guarded bulk acceptance for corroborated AI match recommendations.",
+              "Administrators can preview a checksum-bound safe subset, inspect exclusion reasons, and finalize up to 50 exact/equivalent matches in one auditable human action; substitute/custom tiers remain individual and reporting never reruns automatically.",
+            ],
             [
               "2026-08-16",
               "Deployed",

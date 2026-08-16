@@ -200,6 +200,219 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   expect(aiDraftRequests).toBe(1);
 });
 
+test("previews guardrail exclusions before a human bulk-certifies AI matches", async ({
+  page,
+}) => {
+  let commitPayload: Record<string, unknown> | null = null;
+  const readyCases = [0, 1].map((index) => ({
+    ...cases[index + 4],
+    ai_draft: {
+      id: `ready-ai-${index}`,
+      batch_id: "batch-ready",
+      status: "succeeded",
+      model_id: "gpt-5.6-terra",
+      requested_by: "fixture@cpghero.com",
+      output_document: {
+        authoritative: false,
+        human_review_required: true,
+        result: {
+          verdict_proposal: "comparable",
+          tier_proposal: "exact_specification",
+          rationale: `Governed package evidence agrees for pair ${index + 1}.`,
+          attribute_proposals: [],
+          conflicts: [],
+          requires_human_review: true,
+        },
+      },
+      attempt_count: 1,
+      max_attempts: 3,
+      created_at: "2026-08-16T12:00:00Z",
+      updated_at: "2026-08-16T12:01:00Z",
+    },
+  }));
+
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/ai-bulk-certification/preview")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          queue_id: queue.queue_id,
+          queue_version: queue.version,
+          policy: {
+            id: "guarded_ai_match_bulk_accept",
+            version: "1.0.0",
+            max_cases: 50,
+            allowed_tiers: [
+              "exact_item",
+              "exact_specification",
+              "equivalent_product",
+            ],
+            minimum_critical_coverage: 1,
+            minimum_ai_attribute_confidence: 0.85,
+            checksum: "b".repeat(64),
+            human_confirmation_required: true,
+            automatically_changes_reporting: false,
+          },
+          requested_case_count: 2,
+          eligible_case_count: 1,
+          excluded_case_count: 1,
+          eligible_cases: [
+            {
+              case_id: readyCases[0].case_id,
+              eligible: true,
+              reason_codes: [],
+              reasons: [],
+              recommended_tier: "exact_specification",
+              critical_coverage: 1,
+              engine_status: "proposed",
+              ai_task_id: "ready-ai-0",
+              ai_rationale: "Governed package evidence agrees for pair 1.",
+              benchmark_product: {
+                retailer_id: "walmart_us",
+                retailer_product_id: "walmart-product-4",
+                title: "Walmart milk 4",
+                brand: "Great Value",
+                image_url: null,
+                observed_location_count: 4200,
+              },
+              competitor_product: {
+                retailer_id: "aldi_us",
+                retailer_product_id: "aldi-product-4",
+                title: "ALDI milk 4",
+                brand: "Friendly Farms",
+                image_url: null,
+                observed_location_count: 1700,
+              },
+            },
+          ],
+          excluded_cases: [],
+          exclusion_summary: [
+            {
+              reason_code: "ai_conflict_present",
+              reason:
+                "The AI draft identifies one or more unresolved conflicts.",
+              case_count: 1,
+            },
+          ],
+          confirmation_checksum: "a".repeat(64),
+          human_confirmation_required: true,
+          final_until_flagged: true,
+          automatically_changes_reporting: false,
+        }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/ai-bulk-certification/commit")) {
+      commitPayload = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          action_id: "bulk-action-1",
+          approved_case_count: 1,
+          approved_case_ids: [readyCases[0].case_id],
+          idempotent_replay: false,
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        ai_bulk_certification_policy: {
+          id: "guarded_ai_match_bulk_accept",
+          version: "1.0.0",
+          max_cases: 50,
+          allowed_tiers: [
+            "exact_item",
+            "exact_specification",
+            "equivalent_product",
+          ],
+          minimum_critical_coverage: 1,
+          minimum_ai_attribute_confidence: 0.85,
+          checksum: "b".repeat(64),
+          human_confirmation_required: true,
+          automatically_changes_reporting: false,
+        },
+        ai_review_summary: {
+          active_task_count: 0,
+          status_counts: {
+            queued: 0,
+            running: 0,
+            succeeded: 2,
+            needs_review: 0,
+          },
+          latest_batch: null,
+        },
+        status_counts: { pending: 2 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 2 }],
+        total_cases: 2,
+        selected_case_count: 2,
+        offset: 0,
+        limit: 50,
+        cases: readyCases,
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  const bulkSection = page.getByRole("region", {
+    name: "Bulk accept corroborated AI match recommendations",
+  });
+  await bulkSection
+    .getByRole("button", { name: "Assess 2 recommendations" })
+    .click();
+  const preview = page.getByRole("region", {
+    name: "Bulk certification preview",
+  });
+  await expect(preview).toContainText("1 eligible · 1 excluded");
+  await expect(preview).toContainText("Walmart milk 4");
+  await preview.getByText(/Why 1 case was excluded/).click();
+  await expect(preview).toContainText(
+    "The AI draft identifies one or more unresolved conflicts.",
+  );
+  await preview.getByRole("button", { name: "Approve 1 match" }).click();
+  await expect(
+    page.getByText(
+      "1 AI-recommended match was approved by reviewer@cpghero.com and finalized. Reporting is not recalculated automatically; each decision remains final until flagged.",
+    ),
+  ).toBeVisible();
+  expect(commitPayload).toMatchObject({
+    reviewer_id: "reviewer@cpghero.com",
+    case_ids: [readyCases[0].case_id],
+    confirmation_checksum: "a".repeat(64),
+  });
+});
+
 test("reports a plain-text submission failure without a JSON parsing error", async ({
   page,
 }) => {

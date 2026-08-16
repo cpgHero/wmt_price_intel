@@ -166,6 +166,284 @@ class AIReviewBatchRequest(BaseModel):
     case_ids: list[str] = Field(min_length=1, max_length=25)
 
 
+class AIBulkCertificationPreviewRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    case_ids: list[str] = Field(min_length=1, max_length=50)
+
+
+class AIBulkCertificationCommitRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reviewer_id: str = Field(min_length=1, max_length=200)
+    case_ids: list[str] = Field(min_length=1, max_length=50)
+    confirmation_checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+_AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
+    "id": "guarded_ai_match_bulk_accept",
+    "version": "1.0.0",
+    "max_cases": 50,
+    "action": "approve_ai_matches",
+    "allowed_tiers": [
+        "exact_item",
+        "exact_specification",
+        "equivalent_product",
+    ],
+    "minimum_critical_coverage": 1.0,
+    "minimum_ai_attribute_confidence": 0.85,
+    "require_ai_engine_tier_agreement": True,
+    "require_zero_ai_conflicts": True,
+    "require_no_hard_blocker_conflicts": True,
+    "require_no_known_third_party_seller": True,
+    "final_decision": "final_until_flagged",
+}
+
+
+_AI_BULK_REASON_LABELS = {
+    "final_decision_exists": "A final human decision already exists.",
+    "ai_draft_not_ready": "The latest AI draft is not successfully completed.",
+    "ai_draft_invalid": "The completed AI draft does not contain valid governed output.",
+    "ai_not_comparable": "The AI recommendation is not an affirmative comparable match.",
+    "tier_not_bulk_eligible": "The recommended tier requires individual review.",
+    "engine_tier_missing": "The deterministic engine did not propose a match tier.",
+    "ai_engine_tier_disagreement": "The AI and deterministic engine propose different tiers.",
+    "engine_proposal_blocked": "The deterministic engine marked the pair ineligible or rejected.",
+    "critical_evidence_incomplete": "Critical deterministic evidence is incomplete.",
+    "ai_conflict_present": "The AI draft identifies one or more unresolved conflicts.",
+    "hard_blocker_conflict": "A Product Pack hard-blocker attribute conflicts or is unresolved.",
+    "low_confidence_ai_attribute": "An AI-proposed attribute is below the bulk confidence floor.",
+    "known_third_party_seller": (
+        "A known third-party marketplace seller makes the listing ineligible."
+    ),
+    "evidence_refs_missing": "The case has no immutable source-evidence references.",
+}
+
+
+def _known_third_party_seller(listing: Mapping[str, Any]) -> bool:
+    governance = listing.get("seller_governance")
+    if not isinstance(governance, Mapping):
+        return False
+    status_value = (
+        str(governance.get("status") or governance.get("eligibility") or "").strip().lower()
+    )
+    if not status_value:
+        return False
+    if "first_party" in status_value or "first-party" in status_value:
+        return False
+    return any(token in status_value for token in ("third_party", "third-party", "excluded"))
+
+
+def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any]:
+    """Evaluate a case under deterministic, server-owned bulk-certification guardrails."""
+
+    reason_codes: list[str] = []
+    if case.get("review_status") != "pending":
+        reason_codes.append("final_decision_exists")
+
+    ai_draft = case.get("ai_draft")
+    if not isinstance(ai_draft, Mapping) or ai_draft.get("status") != "succeeded":
+        reason_codes.append("ai_draft_not_ready")
+        result: Mapping[str, Any] = {}
+    else:
+        output = ai_draft.get("output_document")
+        candidate_result = output.get("result") if isinstance(output, Mapping) else None
+        output_checksum = str(case.get("ai_output_checksum") or "")
+        if (
+            not isinstance(output, Mapping)
+            or output.get("authoritative") is not False
+            or output.get("human_review_required") is not True
+            or not isinstance(candidate_result, Mapping)
+            or candidate_result.get("requires_human_review") is not True
+            or len(output_checksum) != 64
+        ):
+            reason_codes.append("ai_draft_invalid")
+            result = {}
+        else:
+            result = candidate_result
+
+    verdict = str(result.get("verdict_proposal") or "")
+    ai_tier = str(result.get("tier_proposal") or "")
+    if result and verdict != "comparable":
+        reason_codes.append("ai_not_comparable")
+    if result and ai_tier not in _AI_BULK_CERTIFICATION_POLICY["allowed_tiers"]:
+        reason_codes.append("tier_not_bulk_eligible")
+
+    engine = case.get("engine_proposal")
+    engine = engine if isinstance(engine, Mapping) else {}
+    engine_tier = str(engine.get("tier") or "")
+    if not engine_tier:
+        reason_codes.append("engine_tier_missing")
+    elif ai_tier and ai_tier != engine_tier:
+        reason_codes.append("ai_engine_tier_disagreement")
+    engine_status = str(engine.get("status") or "").lower()
+    if any(token in engine_status for token in ("reject", "block", "ineligible")):
+        reason_codes.append("engine_proposal_blocked")
+
+    coverage = engine.get("evidence_coverage")
+    coverage = coverage if isinstance(coverage, Mapping) else {}
+    try:
+        critical_coverage = float(coverage.get("critical_coverage", 0))
+    except (TypeError, ValueError):
+        critical_coverage = 0.0
+    if critical_coverage < _AI_BULK_CERTIFICATION_POLICY["minimum_critical_coverage"]:
+        reason_codes.append("critical_evidence_incomplete")
+
+    conflicts = result.get("conflicts", []) if result else []
+    if isinstance(conflicts, list) and conflicts:
+        reason_codes.append("ai_conflict_present")
+
+    edge = case.get("edge")
+    edge = edge if isinstance(edge, Mapping) else {}
+    attribute_evidence = edge.get("attribute_evidence", [])
+    if isinstance(attribute_evidence, list) and any(
+        isinstance(evidence, Mapping)
+        and str(evidence.get("role") or "") == "hard_blocker"
+        and str(evidence.get("outcome") or "") != "match"
+        for evidence in attribute_evidence
+    ):
+        reason_codes.append("hard_blocker_conflict")
+
+    attribute_proposals = result.get("attribute_proposals", []) if result else []
+    if isinstance(attribute_proposals, list):
+        for proposal in attribute_proposals:
+            if not isinstance(proposal, Mapping):
+                reason_codes.append("low_confidence_ai_attribute")
+                break
+            try:
+                confidence = float(proposal.get("confidence", 0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            if confidence < _AI_BULK_CERTIFICATION_POLICY["minimum_ai_attribute_confidence"]:
+                reason_codes.append("low_confidence_ai_attribute")
+                break
+
+    if any(
+        _known_third_party_seller(listing)
+        for listing in (
+            case.get("benchmark_listing"),
+            case.get("competitor_listing"),
+        )
+        if isinstance(listing, Mapping)
+    ):
+        reason_codes.append("known_third_party_seller")
+    if not case.get("evidence_refs"):
+        reason_codes.append("evidence_refs_missing")
+
+    reason_codes = list(dict.fromkeys(reason_codes))
+    return {
+        "case_id": str(case.get("case_id") or ""),
+        "eligible": not reason_codes,
+        "reason_codes": reason_codes,
+        "reasons": [_AI_BULK_REASON_LABELS[code] for code in reason_codes],
+        "recommended_tier": ai_tier or None,
+        "critical_coverage": critical_coverage,
+        "engine_status": engine_status or None,
+        "ai_task_id": (str(ai_draft.get("id")) if isinstance(ai_draft, Mapping) else None),
+        "ai_rationale": str(result.get("rationale") or "") or None,
+        "benchmark_product": _bulk_product_summary(case.get("benchmark_listing")),
+        "competitor_product": _bulk_product_summary(case.get("competitor_listing")),
+    }
+
+
+def _bulk_product_summary(value: Any) -> dict[str, Any]:
+    listing = value if isinstance(value, Mapping) else {}
+    return {
+        "retailer_id": listing.get("retailer_id"),
+        "retailer_product_id": listing.get("retailer_product_id"),
+        "title": listing.get("title"),
+        "brand": listing.get("brand"),
+        "image_url": listing.get("image_url"),
+        "observed_location_count": _observed_location_count({"listing": listing}, "listing"),
+    }
+
+
+def _ai_bulk_certification_policy() -> dict[str, Any]:
+    return {
+        **_AI_BULK_CERTIFICATION_POLICY,
+        "checksum": _checksum(_AI_BULK_CERTIFICATION_POLICY),
+        "human_confirmation_required": True,
+        "automatically_changes_reporting": False,
+    }
+
+
+def _bulk_confirmation_checksum(
+    *,
+    queue_id: str,
+    queue_version: str,
+    candidates: Sequence[Mapping[str, Any]],
+) -> str:
+    policy = _ai_bulk_certification_policy()
+    return _checksum(
+        {
+            "queue_id": queue_id,
+            "queue_version": queue_version,
+            "policy_checksum": policy["checksum"],
+            "cases": [
+                {
+                    "case_id": candidate["case_id"],
+                    "case_checksum": candidate["case_checksum"],
+                    "ai_task_id": candidate["ai_task_id"],
+                    "ai_output_checksum": candidate["ai_output_checksum"],
+                    "recommended_tier": candidate["recommended_tier"],
+                }
+                for candidate in sorted(candidates, key=lambda row: str(row["case_id"]))
+            ],
+        }
+    )
+
+
+def _bulk_preview_document(
+    *,
+    queue_id: str,
+    queue_version: str,
+    snapshots: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    evaluated: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        candidate = _bulk_ai_certification_eligibility(snapshot)
+        candidate["case_checksum"] = str(snapshot.get("case_checksum") or "")
+        candidate["ai_output_checksum"] = str(snapshot.get("ai_output_checksum") or "")
+        evaluated.append(candidate)
+    eligible = [candidate for candidate in evaluated if candidate["eligible"]]
+    excluded = [candidate for candidate in evaluated if not candidate["eligible"]]
+    reason_counts: dict[str, int] = defaultdict(int)
+    for candidate in excluded:
+        for reason_code in candidate["reason_codes"]:
+            reason_counts[reason_code] += 1
+    return {
+        "schema_version": "1.0.0-ai-bulk-certification-preview",
+        "queue_id": queue_id,
+        "queue_version": queue_version,
+        "policy": _ai_bulk_certification_policy(),
+        "requested_case_count": len(evaluated),
+        "eligible_case_count": len(eligible),
+        "excluded_case_count": len(excluded),
+        "eligible_cases": eligible,
+        "excluded_cases": excluded,
+        "exclusion_summary": [
+            {
+                "reason_code": reason_code,
+                "reason": _AI_BULK_REASON_LABELS[reason_code],
+                "case_count": count,
+            }
+            for reason_code, count in sorted(reason_counts.items())
+        ],
+        "confirmation_checksum": (
+            _bulk_confirmation_checksum(
+                queue_id=queue_id,
+                queue_version=queue_version,
+                candidates=eligible,
+            )
+            if eligible
+            else None
+        ),
+        "human_confirmation_required": True,
+        "final_until_flagged": True,
+        "automatically_changes_reporting": False,
+    }
+
+
 class MatchingV2ReviewRepository(Protocol):
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]: ...
 
@@ -225,6 +503,21 @@ class MatchingV2ReviewRepository(Protocol):
         model_id: str,
         prompt: Mapping[str, str],
     ) -> list[dict[str, Any]]: ...
+
+    async def preview_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+    ) -> dict[str, Any]: ...
+
+    async def commit_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any]: ...
 
 
 class PostgresMatchingV2ReviewRepository:
@@ -571,7 +864,8 @@ class PostgresMatchingV2ReviewRepository:
                     """
                     SELECT id::text, review_case_id::text, reviewer_id, verdict,
                            allowed_tiers, rationale, evidence_refs,
-                           submission_checksum, supersedes_submission_id::text, created_at
+                           submission_checksum, supersedes_submission_id::text,
+                           bulk_action_id::text, created_at
                     FROM matching_v2_review_submission
                     WHERE review_case_id = ANY(CAST(:case_ids AS uuid[]))
                     ORDER BY review_case_id, created_at DESC, id DESC
@@ -840,6 +1134,384 @@ class PostgresMatchingV2ReviewRepository:
                 }
             )
         return output
+
+    @staticmethod
+    async def _bulk_ai_snapshot(
+        connection: AsyncConnection,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        lock_cases: bool,
+    ) -> tuple[str, str, list[dict[str, Any]]]:
+        lock_clause = "FOR UPDATE OF review_case" if lock_cases else ""
+        rows = list(
+            (
+                await connection.execute(
+                    text(
+                        f"""
+                        WITH selected_queue AS (
+                          SELECT id, version
+                          FROM matching_v2_review_queue
+                          WHERE external_queue_id = :queue_id
+                          ORDER BY created_at DESC
+                          LIMIT 1
+                        )
+                        SELECT selected_queue.id::text AS review_queue_id,
+                               selected_queue.version AS queue_version,
+                               review_case.id::text AS review_case_id,
+                               review_case.external_case_id,
+                               review_case.case_document,
+                               review_case.case_checksum,
+                               current_decision.verdict AS current_verdict,
+                               ai_task.id::text AS ai_task_id,
+                               ai_task.status AS ai_status,
+                               ai_task.output_document AS ai_output_document,
+                               ai_task.output_checksum AS ai_output_checksum,
+                               ai_task.model_id AS ai_model_id,
+                               ai_task.requested_by AS ai_requested_by,
+                               ai_task.created_at AS ai_created_at,
+                               ai_task.updated_at AS ai_updated_at
+                        FROM selected_queue
+                        JOIN matching_v2_review_case review_case
+                          ON review_case.review_queue_id = selected_queue.id
+                        LEFT JOIN LATERAL (
+                          SELECT decision.verdict
+                          FROM (
+                            SELECT submission.verdict, submission.created_at, submission.id
+                            FROM matching_v2_review_submission submission
+                            WHERE submission.review_case_id = review_case.id
+                            UNION ALL
+                            SELECT adjudication.verdict, adjudication.created_at, adjudication.id
+                            FROM matching_v2_adjudication adjudication
+                            WHERE adjudication.review_case_id = review_case.id
+                          ) decision
+                          ORDER BY decision.created_at DESC, decision.id DESC
+                          LIMIT 1
+                        ) current_decision ON true
+                        LEFT JOIN LATERAL (
+                          SELECT task.id, task.status, task.output_document,
+                                 task.output_checksum, task.model_id, task.requested_by,
+                                 task.created_at, task.updated_at
+                          FROM matching_v2_ai_review_task task
+                          WHERE task.review_case_id = review_case.id
+                          ORDER BY task.created_at DESC, task.id DESC
+                          LIMIT 1
+                        ) ai_task ON true
+                        WHERE review_case.external_case_id = ANY(CAST(:case_ids AS text[]))
+                        ORDER BY review_case.external_case_id
+                        {lock_clause}
+                        """
+                    ),
+                    {"queue_id": external_queue_id, "case_ids": list(external_case_ids)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if not rows:
+            raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+        rows_by_case = {str(row["external_case_id"]): row for row in rows}
+        missing = [case_id for case_id in external_case_ids if case_id not in rows_by_case]
+        if missing:
+            raise KeyError(
+                f"matching v2 review cases {missing!r} were not found in queue "
+                f"{external_queue_id!r}"
+            )
+        snapshots: list[dict[str, Any]] = []
+        for external_case_id in external_case_ids:
+            row = rows_by_case[external_case_id]
+            document = dict(row["case_document"])
+            current_verdict = row["current_verdict"]
+            if current_verdict is None:
+                review_status = "pending"
+            elif current_verdict == "comparable":
+                review_status = "approved"
+            elif current_verdict == "not_comparable":
+                review_status = "rejected"
+            else:
+                review_status = "flagged"
+            ai_draft = None
+            if row["ai_task_id"] is not None:
+                ai_draft = {
+                    "id": str(row["ai_task_id"]),
+                    "status": str(row["ai_status"]),
+                    "output_document": row["ai_output_document"],
+                    "output_checksum": row["ai_output_checksum"],
+                    "model_id": row["ai_model_id"],
+                    "requested_by": row["ai_requested_by"],
+                    "created_at": row["ai_created_at"].isoformat(),
+                    "updated_at": row["ai_updated_at"].isoformat(),
+                }
+            snapshots.append(
+                {
+                    **document,
+                    "review_case_id": str(row["review_case_id"]),
+                    "case_checksum": str(row["case_checksum"]),
+                    "review_status": review_status,
+                    "ai_draft": ai_draft,
+                    "ai_output_checksum": str(row["ai_output_checksum"] or ""),
+                }
+            )
+        return str(rows[0]["review_queue_id"]), str(rows[0]["queue_version"]), snapshots
+
+    async def preview_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+    ) -> dict[str, Any]:
+        async with self._engine.connect() as connection:
+            _, queue_version, snapshots = await self._bulk_ai_snapshot(
+                connection,
+                external_queue_id,
+                external_case_ids,
+                lock_cases=False,
+            )
+        return _bulk_preview_document(
+            queue_id=external_queue_id,
+            queue_version=queue_version,
+            snapshots=snapshots,
+        )
+
+    async def commit_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        external_case_ids: Sequence[str],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any]:
+        idempotency_key = _checksum(
+            {
+                "queue_id": external_queue_id,
+                "reviewer_id": reviewer_id,
+                "confirmation_checksum": confirmation_checksum,
+            }
+        )
+        async with self._engine.begin() as connection:
+            existing = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT id::text, case_ids, case_count, created_at
+                            FROM matching_v2_bulk_certification_action
+                            WHERE idempotency_key = :idempotency_key
+                            """
+                        ),
+                        {"idempotency_key": idempotency_key},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if existing is not None:
+                return {
+                    "action_id": str(existing["id"]),
+                    "queue_id": external_queue_id,
+                    "approved_case_ids": list(existing["case_ids"]),
+                    "approved_case_count": int(existing["case_count"]),
+                    "confirmation_checksum": confirmation_checksum,
+                    "created_at": existing["created_at"].isoformat(),
+                    "idempotent_replay": True,
+                    "final_until_flagged": True,
+                    "automatically_changes_reporting": False,
+                }
+
+            case_id_rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT review_case.id::text
+                            FROM matching_v2_review_case review_case
+                            JOIN matching_v2_review_queue review_queue
+                              ON review_queue.id = review_case.review_queue_id
+                            WHERE review_queue.external_queue_id = :queue_id
+                              AND review_case.external_case_id = ANY(CAST(:case_ids AS text[]))
+                            ORDER BY review_case.id
+                            """
+                        ),
+                        {
+                            "queue_id": external_queue_id,
+                            "case_ids": list(external_case_ids),
+                        },
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for review_case_id in case_id_rows:
+                await connection.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
+                    {"case_id": str(review_case_id)},
+                )
+
+            review_queue_id, queue_version, snapshots = await self._bulk_ai_snapshot(
+                connection,
+                external_queue_id,
+                external_case_ids,
+                lock_cases=True,
+            )
+            preview = _bulk_preview_document(
+                queue_id=external_queue_id,
+                queue_version=queue_version,
+                snapshots=snapshots,
+            )
+            if preview["excluded_case_count"]:
+                excluded = ", ".join(
+                    f"{candidate['case_id']} ({', '.join(candidate['reason_codes'])})"
+                    for candidate in preview["excluded_cases"]
+                )
+                raise ValueError(
+                    "bulk certification stopped because one or more cases changed or no "
+                    f"longer pass policy: {excluded}"
+                )
+            current_checksum = str(preview["confirmation_checksum"] or "")
+            if not secrets.compare_digest(current_checksum, confirmation_checksum):
+                raise ValueError(
+                    "bulk certification preview is stale; assess the recommendations again"
+                )
+
+            policy = _ai_bulk_certification_policy()
+            audit_document = {
+                "schema_version": "1.0.0-ai-bulk-certification-action",
+                "queue_id": external_queue_id,
+                "queue_version": queue_version,
+                "reviewer_id": reviewer_id,
+                "policy": policy,
+                "confirmation_checksum": confirmation_checksum,
+                "cases": [
+                    {
+                        "case_id": candidate["case_id"],
+                        "case_checksum": candidate["case_checksum"],
+                        "ai_task_id": candidate["ai_task_id"],
+                        "ai_output_checksum": candidate["ai_output_checksum"],
+                        "recommended_tier": candidate["recommended_tier"],
+                    }
+                    for candidate in preview["eligible_cases"]
+                ],
+                "human_confirmation_required": True,
+                "final_until_flagged": True,
+                "automatically_changes_reporting": False,
+            }
+            action = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO matching_v2_bulk_certification_action (
+                              review_queue_id, reviewer_id, action_type, policy_id,
+                              policy_version, policy_checksum, confirmation_checksum,
+                              idempotency_key, case_ids, case_count, audit_document
+                            ) VALUES (
+                              CAST(:review_queue_id AS uuid), :reviewer_id,
+                              'approve_ai_matches', :policy_id, :policy_version,
+                              :policy_checksum, :confirmation_checksum, :idempotency_key,
+                              :case_ids, :case_count, CAST(:audit_document AS jsonb)
+                            )
+                            RETURNING id::text, created_at
+                            """
+                        ),
+                        {
+                            "review_queue_id": review_queue_id,
+                            "reviewer_id": reviewer_id,
+                            "policy_id": policy["id"],
+                            "policy_version": policy["version"],
+                            "policy_checksum": policy["checksum"],
+                            "confirmation_checksum": confirmation_checksum,
+                            "idempotency_key": idempotency_key,
+                            "case_ids": list(external_case_ids),
+                            "case_count": len(external_case_ids),
+                            "audit_document": _canonical(audit_document),
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            action_id = str(action["id"])
+            snapshots_by_case = {str(row["case_id"]): row for row in snapshots}
+            preview_by_case = {str(row["case_id"]): row for row in preview["eligible_cases"]}
+            decisions: list[dict[str, Any]] = []
+            for external_case_id in external_case_ids:
+                snapshot = snapshots_by_case[external_case_id]
+                candidate = preview_by_case[external_case_id]
+                ai_reference = (
+                    f"matching-v2-ai-review://{candidate['ai_task_id']}"
+                    f"#sha256={candidate['ai_output_checksum']}"
+                )
+                evidence_refs = list(
+                    dict.fromkeys([*snapshot.get("evidence_refs", []), ai_reference])
+                )
+                rationale = (
+                    "Administrator bulk-certified this AI recommendation after the "
+                    f"{policy['id']} v{policy['version']} preview passed every guardrail. "
+                    f"AI evidence rationale: {candidate['ai_rationale']}"
+                )
+                submission_checksum = _checksum(
+                    {
+                        "queue_id": external_queue_id,
+                        "case_id": external_case_id,
+                        "reviewer_id": reviewer_id,
+                        "verdict": "comparable",
+                        "allowed_tiers": [candidate["recommended_tier"]],
+                        "rationale": rationale,
+                        "evidence_refs": evidence_refs,
+                        "bulk_action_id": action_id,
+                    }
+                )
+                submission = (
+                    (
+                        await connection.execute(
+                            text(
+                                """
+                                INSERT INTO matching_v2_review_submission (
+                                  review_case_id, reviewer_id, verdict, allowed_tiers,
+                                  rationale, evidence_refs, submission_checksum,
+                                  supersedes_submission_id, bulk_action_id
+                                ) VALUES (
+                                  CAST(:review_case_id AS uuid), :reviewer_id,
+                                  'comparable', :allowed_tiers, :rationale,
+                                  CAST(:evidence_refs AS jsonb), :submission_checksum,
+                                  NULL, CAST(:bulk_action_id AS uuid)
+                                )
+                                RETURNING id::text, created_at
+                                """
+                            ),
+                            {
+                                "review_case_id": snapshot["review_case_id"],
+                                "reviewer_id": reviewer_id,
+                                "allowed_tiers": [candidate["recommended_tier"]],
+                                "rationale": rationale,
+                                "evidence_refs": _canonical(evidence_refs),
+                                "submission_checksum": submission_checksum,
+                                "bulk_action_id": action_id,
+                            },
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                decisions.append(
+                    {
+                        "case_id": external_case_id,
+                        "submission_id": str(submission["id"]),
+                        "tier": candidate["recommended_tier"],
+                        "created_at": submission["created_at"].isoformat(),
+                    }
+                )
+        return {
+            "action_id": action_id,
+            "queue_id": external_queue_id,
+            "approved_case_ids": list(external_case_ids),
+            "approved_case_count": len(external_case_ids),
+            "confirmation_checksum": confirmation_checksum,
+            "decisions": decisions,
+            "created_at": action["created_at"].isoformat(),
+            "idempotent_replay": False,
+            "final_until_flagged": True,
+            "automatically_changes_reporting": False,
+        }
 
     async def request_ai_draft(
         self,
@@ -1509,6 +2181,34 @@ class MatchingV2ReviewService:
             "tasks": tasks,
         }
 
+    async def preview_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        request: AIBulkCertificationPreviewRequest,
+    ) -> dict[str, Any]:
+        case_ids = list(dict.fromkeys(request.case_ids))
+        if len(case_ids) != len(request.case_ids):
+            raise ValueError("bulk certification case IDs must be unique")
+        return await self._repository.preview_ai_bulk_certification(
+            external_queue_id,
+            case_ids,
+        )
+
+    async def commit_ai_bulk_certification(
+        self,
+        external_queue_id: str,
+        request: AIBulkCertificationCommitRequest,
+    ) -> dict[str, Any]:
+        case_ids = list(dict.fromkeys(request.case_ids))
+        if len(case_ids) != len(request.case_ids):
+            raise ValueError("bulk certification case IDs must be unique")
+        return await self._repository.commit_ai_bulk_certification(
+            external_queue_id,
+            case_ids,
+            reviewer_id=request.reviewer_id,
+            confirmation_checksum=request.confirmation_checksum,
+        )
+
     def _matching_review_prompt(self) -> dict[str, str]:
         path = self._root / "agent-prompts" / "matching_v2_evidence_review.json"
         body = path.read_bytes()
@@ -1744,6 +2444,7 @@ async def get_matching_v2_review_queue(
             limit=limit,
         )
         document["ai_review_policy"] = _matching_ai_review_policy()
+        document["ai_bulk_certification_policy"] = _ai_bulk_certification_policy()
         return document
     except KeyError as exc:
         raise _http_error(exc) from exc
@@ -1809,6 +2510,39 @@ async def request_matching_v2_ai_draft_batch(
     try:
         return await service.request_ai_drafts(queue_id, body, model_id=model_id)
     except (ContractError, KeyError, OSError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/review-queues/{queue_id}/ai-bulk-certification/preview")
+async def preview_matching_v2_ai_bulk_certification(
+    queue_id: str,
+    request: Request,
+    body: AIBulkCertificationPreviewRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.preview_ai_bulk_certification(queue_id, body)
+    except (KeyError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/ai-bulk-certification/commit",
+    status_code=status.HTTP_201_CREATED,
+)
+async def commit_matching_v2_ai_bulk_certification(
+    queue_id: str,
+    request: Request,
+    body: AIBulkCertificationCommitRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.commit_ai_bulk_certification(queue_id, body)
+    except (KeyError, ValueError) as exc:
         raise _http_error(exc) from exc
 
 

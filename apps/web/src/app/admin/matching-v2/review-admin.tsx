@@ -91,6 +91,66 @@ interface AIReviewSummary {
   latest_batch: AIReviewBatchSummary | null;
 }
 
+interface AIBulkCertificationPolicy {
+  id: string;
+  version: string;
+  max_cases: number;
+  allowed_tiers: string[];
+  minimum_critical_coverage: number;
+  minimum_ai_attribute_confidence: number;
+  checksum: string;
+  human_confirmation_required: true;
+  automatically_changes_reporting: false;
+}
+
+interface AIBulkCertificationCandidate {
+  case_id: string;
+  eligible: boolean;
+  reason_codes: string[];
+  reasons: string[];
+  recommended_tier: string | null;
+  critical_coverage: number;
+  engine_status: string | null;
+  ai_task_id: string | null;
+  ai_rationale: string | null;
+  benchmark_product: {
+    retailer_id: string;
+    retailer_product_id: string;
+    title: string | null;
+    brand: string | null;
+    image_url: string | null;
+    observed_location_count: number;
+  };
+  competitor_product: {
+    retailer_id: string;
+    retailer_product_id: string;
+    title: string | null;
+    brand: string | null;
+    image_url: string | null;
+    observed_location_count: number;
+  };
+}
+
+interface AIBulkCertificationPreview {
+  queue_id: string;
+  queue_version: string;
+  policy: AIBulkCertificationPolicy;
+  requested_case_count: number;
+  eligible_case_count: number;
+  excluded_case_count: number;
+  eligible_cases: AIBulkCertificationCandidate[];
+  excluded_cases: AIBulkCertificationCandidate[];
+  exclusion_summary: Array<{
+    reason_code: string;
+    reason: string;
+    case_count: number;
+  }>;
+  confirmation_checksum: string | null;
+  human_confirmation_required: true;
+  final_until_flagged: true;
+  automatically_changes_reporting: false;
+}
+
 interface ReviewCase {
   case_id: string;
   stratum: string;
@@ -176,6 +236,7 @@ interface QueueView {
     human_review_required: true;
   };
   ai_review_summary?: AIReviewSummary;
+  ai_bulk_certification_policy?: AIBulkCertificationPolicy;
   status_counts: Record<string, number>;
   competitor_retailers: Array<{
     retailer_id: string;
@@ -326,6 +387,37 @@ function ProductIdentity({ listing }: Readonly<{ listing: ListingSummary }>) {
   );
 }
 
+function BulkProductIdentity({
+  product,
+}: Readonly<{
+  product: AIBulkCertificationCandidate["benchmark_product"];
+}>) {
+  return (
+    <span className="cert-bulk-product">
+      <span className="cert-bulk-product-image">
+        {product.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.image_url} alt="" />
+        ) : (
+          <b>
+            {String(product.retailer_id || "?")
+              .slice(0, 1)
+              .toUpperCase()}
+          </b>
+        )}
+      </span>
+      <span>
+        <small>{label(product.retailer_id)}</small>
+        <strong>{product.title || product.retailer_product_id}</strong>
+        <small>
+          {product.brand || "Brand unresolved"} ·{" "}
+          {product.observed_location_count.toLocaleString()} observed
+        </small>
+      </span>
+    </span>
+  );
+}
+
 function defaultDraft(reviewCase: ReviewCase): ReviewDraft {
   return {
     verdict: "",
@@ -352,6 +444,8 @@ export function MatchingV2ReviewAdmin() {
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [bulkCertificationPreview, setBulkCertificationPreview] =
+    useState<AIBulkCertificationPreview | null>(null);
   const [refreshingAI, setRefreshingAI] = useState(false);
   const reviewerInputRef = useRef<HTMLInputElement>(null);
   const queueRequestSequence = useRef(0);
@@ -431,7 +525,6 @@ export function MatchingV2ReviewAdmin() {
   useEffect(() => {
     // The state updates occur after the queue fetch resolves; this effect synchronizes
     // the selected server-backed queue whenever its filters change.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (session?.authenticated) void loadQueue().catch(handleError);
   }, [loadQueue, queueRefresh, session?.authenticated]);
 
@@ -504,6 +597,19 @@ export function MatchingV2ReviewAdmin() {
     0,
   );
   const latestAIBatch = view?.ai_review_summary?.latest_batch ?? null;
+  const visibleBulkRecommendationCases = useMemo(
+    () =>
+      (view?.cases ?? [])
+        .filter(
+          (reviewCase) =>
+            reviewCase.review_status === "pending" &&
+            reviewCase.ai_draft?.status === "succeeded" &&
+            reviewCase.ai_draft.output_document?.result.verdict_proposal ===
+              "comparable",
+        )
+        .slice(0, view?.ai_bulk_certification_policy?.max_cases ?? PAGE_SIZE),
+    [view],
+  );
 
   useEffect(() => {
     if (!hasRunningAIDrafts) return;
@@ -721,6 +827,86 @@ export function MatchingV2ReviewAdmin() {
     }
   }
 
+  async function assessBulkAIRecommendations() {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before assessing AI recommendations for bulk certification.",
+      );
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    if (!visibleBulkRecommendationCases.length) {
+      setError(
+        "No completed affirmative AI match recommendations are visible in this filtered page.",
+      );
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const preview = await jsonRequest<AIBulkCertificationPreview>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-bulk-certification/preview`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            case_ids: visibleBulkRecommendationCases.map(
+              (reviewCase) => reviewCase.case_id,
+            ),
+          }),
+        },
+      );
+      setBulkCertificationPreview(preview);
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitBulkAIRecommendations() {
+    const preview = bulkCertificationPreview;
+    if (!preview?.confirmation_checksum || !preview.eligible_case_count) {
+      setError("Assess the current AI recommendations before confirming them.");
+      return;
+    }
+    if (!reviewerId.trim()) {
+      setError("Enter your reviewer identity before confirming these matches.");
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await jsonRequest<{
+        approved_case_count: number;
+        idempotent_replay: boolean;
+      }>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-bulk-certification/commit`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reviewer_id: reviewerId.trim(),
+            case_ids: preview.eligible_cases.map(
+              (candidate) => candidate.case_id,
+            ),
+            confirmation_checksum: preview.confirmation_checksum,
+          }),
+        },
+      );
+      setBulkCertificationPreview(null);
+      setNotice(
+        `${response.approved_case_count} AI-recommended ${response.approved_case_count === 1 ? "match was" : "matches were"} approved by ${reviewerId.trim()} and finalized. Reporting is not recalculated automatically; each decision remains final until flagged.`,
+      );
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function adoptAIProposal(reviewCase: ReviewCase) {
     const proposal = reviewCase.ai_draft?.output_document?.result;
     if (!proposal) return;
@@ -784,6 +970,7 @@ export function MatchingV2ReviewAdmin() {
               setOffset(0);
               setSelectedCaseIds([]);
               setBatchConfirmOpen(false);
+              setBulkCertificationPreview(null);
             }}
           >
             <option value="">Select a queue</option>
@@ -804,6 +991,7 @@ export function MatchingV2ReviewAdmin() {
               setOffset(0);
               setSelectedCaseIds([]);
               setBatchConfirmOpen(false);
+              setBulkCertificationPreview(null);
             }}
           >
             <option value="all">All competitor retailers</option>
@@ -823,6 +1011,7 @@ export function MatchingV2ReviewAdmin() {
               setOffset(0);
               setSelectedCaseIds([]);
               setBatchConfirmOpen(false);
+              setBulkCertificationPreview(null);
             }}
           >
             <option value="pending">Pending</option>
@@ -1055,6 +1244,162 @@ export function MatchingV2ReviewAdmin() {
                 {refreshingAI ? "Refreshing…" : "Refresh AI status"}
               </button>
             </div>
+            <section
+              className="cert-bulk-certification"
+              aria-labelledby="cert-bulk-certification-title"
+            >
+              <header>
+                <div>
+                  <small>Guarded human certification</small>
+                  <h3 id="cert-bulk-certification-title">
+                    Bulk accept corroborated AI match recommendations
+                  </h3>
+                  <p>
+                    The server screens the completed AI recommendations on this
+                    page. Only affirmative matches that agree with the
+                    deterministic engine and pass every evidence guardrail can
+                    reach the confirmation step.
+                  </p>
+                </div>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={busy || !visibleBulkRecommendationCases.length}
+                  aria-busy={busy}
+                  onClick={() => void assessBulkAIRecommendations()}
+                >
+                  {busy
+                    ? "Assessing…"
+                    : visibleBulkRecommendationCases.length
+                      ? `Assess ${visibleBulkRecommendationCases.length} recommendations`
+                      : "No affirmative AI drafts on this page"}
+                </button>
+              </header>
+              <div
+                className="cert-bulk-guardrails"
+                aria-label="Bulk acceptance guardrails"
+              >
+                <span>AI + engine tier agreement</span>
+                <span>100% critical evidence</span>
+                <span>No unresolved conflicts</span>
+                <span>No known third-party seller</span>
+                <span>Exact or equivalent tiers only</span>
+              </div>
+              <p className="cert-bulk-boundary">
+                Comparable-substitute and custom matches always remain
+                individual-review decisions. A bulk approval is recorded under
+                your reviewer identity, is final until flagged, and does not
+                trigger reanalysis automatically.
+              </p>
+              {bulkCertificationPreview ? (
+                <div
+                  className="cert-bulk-preview"
+                  role="region"
+                  aria-label="Bulk certification preview"
+                >
+                  <header>
+                    <div>
+                      <small>Checksum-bound preview</small>
+                      <h4>
+                        {bulkCertificationPreview.eligible_case_count} eligible
+                        {bulkCertificationPreview.excluded_case_count
+                          ? ` · ${bulkCertificationPreview.excluded_case_count} excluded`
+                          : " · no exclusions"}
+                      </h4>
+                    </div>
+                    <code>
+                      Policy {bulkCertificationPreview.policy.id} v
+                      {bulkCertificationPreview.policy.version}
+                    </code>
+                  </header>
+                  {bulkCertificationPreview.eligible_cases.length ? (
+                    <div className="cert-bulk-candidate-list">
+                      {bulkCertificationPreview.eligible_cases.map(
+                        (candidate) => (
+                          <article key={candidate.case_id}>
+                            <div className="cert-bulk-pair">
+                              <BulkProductIdentity
+                                product={candidate.benchmark_product}
+                              />
+                              <span>matches</span>
+                              <BulkProductIdentity
+                                product={candidate.competitor_product}
+                              />
+                            </div>
+                            <div className="cert-bulk-evidence-summary">
+                              <strong>
+                                {label(candidate.recommended_tier)}
+                              </strong>
+                              <span>
+                                {Math.round(candidate.critical_coverage * 100)}%
+                                critical evidence ·{" "}
+                                {label(candidate.engine_status)}
+                              </span>
+                              <p>{candidate.ai_rationale}</p>
+                            </div>
+                          </article>
+                        ),
+                      )}
+                    </div>
+                  ) : (
+                    <p className="cert-bulk-empty">
+                      No recommendation passed every bulk-certification
+                      guardrail. Review these cases individually.
+                    </p>
+                  )}
+                  {bulkCertificationPreview.exclusion_summary.length ? (
+                    <details className="cert-bulk-exclusions">
+                      <summary>
+                        Why {bulkCertificationPreview.excluded_case_count}{" "}
+                        {bulkCertificationPreview.excluded_case_count === 1
+                          ? "case was"
+                          : "cases were"}{" "}
+                        excluded
+                      </summary>
+                      <ul>
+                        {bulkCertificationPreview.exclusion_summary.map(
+                          (reason) => (
+                            <li key={reason.reason_code}>
+                              <b>{reason.case_count}</b> {reason.reason}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </details>
+                  ) : null}
+                  <footer>
+                    <p>
+                      <b>Human confirmation required.</b> You are approving
+                      these exact product relationships—not delegating the
+                      decision to AI.
+                    </p>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setBulkCertificationPreview(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={
+                        busy ||
+                        !bulkCertificationPreview.eligible_case_count ||
+                        !bulkCertificationPreview.confirmation_checksum
+                      }
+                      aria-busy={busy}
+                      onClick={() => void commitBulkAIRecommendations()}
+                    >
+                      {busy
+                        ? "Finalizing…"
+                        : `Approve ${bulkCertificationPreview.eligible_case_count} ${bulkCertificationPreview.eligible_case_count === 1 ? "match" : "matches"}`}
+                    </button>
+                  </footer>
+                </div>
+              ) : null}
+            </section>
             {!aiPolicy.enabled ? (
               <p className="cert-ai-policy-note">
                 The advisory worker is not enabled in this environment. Human
