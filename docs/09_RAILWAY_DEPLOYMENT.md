@@ -89,9 +89,15 @@ PRODUCT_DETAIL_RENORMALIZATION_LEASE_SECONDS=300
 AI_ENABLED=false
 OPENAI_MODEL_INSIGHT=<explicit model ID; required only when AI_ENABLED=true>
 OPENAI_MODEL_NARRATIVE=<explicit model ID; required only when AI_ENABLED=true>
+OPENAI_MODEL_MATCHING_REVIEW=<explicit model ID; required for AI match drafts>
 OPENAI_TIMEOUT_SECONDS=60
 OPENAI_MAX_OUTPUT_TOKENS=8000
 OPENAI_MAX_REQUEST_COST_USD=1.00
+MATCHING_V2_AI_REVIEW_ENABLED=false
+OPENAI_MATCHING_TIMEOUT_SECONDS=90
+OPENAI_MATCHING_MAX_OUTPUT_TOKENS=3000
+OPENAI_MATCHING_MAX_REQUEST_COST_USD=0.35
+OPENAI_MATCHING_REASONING_EFFORT=high
 AI_MAX_METRICS=360
 AI_MAX_ATTEMPTS=2
 AI_LEASE_SECONDS=900
@@ -109,6 +115,12 @@ IDs explicitly, and then set `AI_ENABLED=true`. The worker rejects unknown model
 whose conservative maximum cost exceeds `OPENAI_MAX_REQUEST_COST_USD`; with two sequential roles,
 the default maximum is $2 per analysis. OpenAI credentials and models are not required for the
 deterministic pipeline.
+
+`MATCHING_V2_AI_REVIEW_ENABLED` must be set consistently on `api` and `worker`. The API receives no
+OpenAI credential: it only creates an authenticated durable draft task. `OPENAI_API_KEY` remains a
+sealed worker-only secret. The worker claims tasks with `FOR UPDATE SKIP LOCKED`, uses the explicit
+matching-review model and per-request cost ceiling, and writes a non-authoritative result for human
+review.
 
 ### scheduler
 

@@ -7,8 +7,10 @@ from rci_retailer_packs import (
     BrandFoundationLoader,
     FileRetailerPackCatalog,
     GovernedBrandResolver,
+    GovernedSellerResolver,
     canonical_checksum,
     normalize_brand_name,
+    normalize_seller_name,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -59,6 +61,34 @@ def test_brand_normalization_matches_governed_possessive_and_ampersand_keys() ->
     assert normalize_brand_name("Sam's Choice") == "sams_choice"
     assert normalize_brand_name("Good & Gather") == "good_and_gather"
     assert normalize_brand_name("CAFE Olé") == "cafe_ole"
+    assert normalize_seller_name("Walmart.com") == "walmart_com"
+
+
+def test_marketplace_seller_policy_is_exact_fail_closed_and_allows_missing() -> None:
+    resolver = GovernedSellerResolver.from_repository(REPOSITORY_ROOT)
+
+    first_party = resolver.resolve("walmart_us", "Walmart.com")
+    missing = resolver.resolve("walmart_us", "  ")
+    marketplace = resolver.resolve("walmart_us", "Food Service Direct")
+    ordinary_retailer = resolver.resolve("aldi_us", "aldi.us")
+
+    assert first_party.status == "verified_first_party"
+    assert first_party.eligible is True
+    assert missing.status == "seller_unverified"
+    assert missing.eligible is True
+    assert marketplace.status == "excluded_third_party"
+    assert marketplace.eligible is False
+    assert ordinary_retailer.status == "not_governed"
+    assert ordinary_retailer.eligible is True
+
+
+def test_amazon_same_day_policy_retains_owned_banners_and_excludes_marketplace_sellers() -> None:
+    resolver = GovernedSellerResolver.from_repository(REPOSITORY_ROOT)
+
+    assert resolver.resolve("amazon_us_same_day", "Amazon.com").eligible is True
+    assert resolver.resolve("amazon_us_same_day", "AmazonFresh").eligible is True
+    assert resolver.resolve("amazon_us_same_day", "Whole Foods Market").eligible is True
+    assert resolver.resolve("amazon_us_same_day", "ZQUARED").eligible is False
 
 
 def test_resolution_is_retailer_scoped_exact_and_fail_closed() -> None:
@@ -76,6 +106,25 @@ def test_resolution_is_retailer_scoped_exact_and_fail_closed() -> None:
     assert wrong_retailer.status == "unresolved"
     assert unknown.status == "unresolved"
     assert unknown.strict_private_label is False
+
+
+def test_exact_title_fallback_recovers_one_unambiguous_governed_brand() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    marketside = resolver.resolve_from_text(
+        "walmart_us",
+        "Marketside Organic Cage Free Large Brown Eggs, 12 Count",
+        category="Fresh Shell Eggs",
+    )
+    ambiguous = resolver.resolve_from_text(
+        "walmart_us",
+        "Great Value alternative to Vital Farms large eggs",
+        category="Fresh Shell Eggs",
+    )
+
+    assert marketside.canonical_brand_name == "Marketside"
+    assert marketside.strict_private_label is True
+    assert ambiguous.status == "unresolved"
 
 
 def test_acquired_brand_is_not_strict_private_label() -> None:

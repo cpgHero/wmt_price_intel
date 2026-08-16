@@ -99,6 +99,9 @@ def _listing_summary(listing: ListingEvidence) -> JsonObject:
         "brand": listing.brand,
         "brand_type": listing.brand_type,
         "brand_verified": listing.brand_verified,
+        "brand_governance": dict(listing.brand_governance),
+        "seller_governance": dict(listing.seller_governance),
+        "pdp_evidence": dict(listing.pdp_evidence),
         "image_url": listing.image_url,
         "product_url": listing.product_url,
         "identifiers": [

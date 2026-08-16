@@ -9,7 +9,7 @@
     "schema_version": { "const": "1.0.0" },
     "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
     "version": { "type": "string", "minLength": 1 },
-    "role": { "enum": ["insight", "narrative"] },
+    "role": { "enum": ["insight", "narrative", "matching_review"] },
     "instructions": { "type": "string", "minLength": 1 }
   }
 }

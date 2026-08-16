@@ -149,6 +149,15 @@ mapping, Search/PDP field precedence, private-label ownership and aliases, selle
 eligibility, fulfillment defaults, sponsorship mapping, PDP freshness, known placement-duplicate
 behavior, catchment options, and provider endpoint versions.
 
+Marketplace retailers additionally declare a versioned `seller_policy`. A known PDP seller must
+exactly resolve to an approved first-party seller to remain eligible. A missing seller is retained
+as `seller_unverified` when the Retailer Pack permits it; it is never silently called first-party.
+Known non-first-party sellers are removed before matching and reporting with the explicit reason
+`known third-party marketplace seller excluded by Retailer Pack policy`. The rule is currently
+active for Walmart and Amazon Same Day. Target's policy is defined but remains
+`needs_verification` until live Target PDP seller values have been certified. Retailers without a
+configured marketplace policy remain eligible and are recorded as `not_governed`.
+
 ## PDP and model-assisted evidence
 
 Every distinct in-scope listing is eligible for cached PDP enrichment before final match admission;
@@ -238,6 +247,19 @@ reported separately overall and by stratum; every automatic approval must have a
   priority after the deterministic gold set exists.
 - Never allow a model-only score to overwrite a governed edge.
 
+The first bounded implementation is user-triggered in Match Certification. It creates a durable,
+leased PostgreSQL task, processes it only on the worker that owns the OpenAI credential, and stores
+an advisory draft separately from human submissions. Structured evidence is always supplied;
+product images are included only when critical structured evidence is incomplete or conflicting.
+Every image-derived proposal must cite visible evidence and one of the exact input image URLs.
+Drafts always set `authoritative=false` and `human_review_required=true`. A reviewer may explicitly
+copy a proposal into their form, edit it, and submit it as their own independent decision. The AI
+path cannot certify a match, adjudicate reviewers, change an edge, or update report metrics.
+
+Before any broader AI queue review is enabled, performance must be measured against the independent
+human gold set by category and evidence stratum. Model, prompt, schema, input checksum, token usage,
+cost, conflicts, and source images remain audit fields.
+
 ### 13.6 — Five-category certification and cutover
 
 - Eggs → milk → ground beef → strawberries → bananas.
@@ -257,6 +279,9 @@ reported separately overall and by stratum; every automatic approval must have a
 - 100% of unscored local contexts have a primary coverage reason.
 - Identical evidence and versions produce identical checksums and metrics.
 - Governed reanalysis queues zero provider or AI calls.
+- Known marketplace sellers outside the active Retailer Pack allowlist contribute zero in-scope
+  Search observations, matching candidates, or report metrics; blank sellers remain separately
+  countable as unverified.
 - Displayed losing-store counts exactly reconcile with their detail/export population.
 - Sponsored/organic duplicate placements cannot duplicate product/location price facts.
 - Product Pack or engine changes that alter golden results require an explicit documented update.

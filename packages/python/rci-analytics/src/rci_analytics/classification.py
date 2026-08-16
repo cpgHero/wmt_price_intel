@@ -190,10 +190,20 @@ class OfferClassifier:
                     str(observed_brand) if observed_brand else None,
                     category=self.pack.name,
                 )
+                resolution_source = resolution.resolution_method
+                if resolution.status != "resolved":
+                    title_resolution = self._brand_resolver.resolve_from_text(
+                        offer.retailer_id,
+                        offer.title,
+                        category=self.pack.name,
+                    )
+                    if title_resolution.status == "resolved":
+                        resolution = title_resolution
+                        resolution_source = "retailer_pack_title"
                 attributes["_brand_governance"] = resolution.to_record()
-                if observed_brand and resolution.canonical_brand_name:
+                if resolution.canonical_brand_name:
                     attributes["brand"] = resolution.canonical_brand_name
-                    provenance.setdefault("brand", resolution.resolution_method)
+                    provenance["brand"] = resolution_source
 
         metrics = self._metrics(offer, attributes) if in_scope else {}
         return ClassifiedOffer(

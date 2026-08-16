@@ -11,7 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -118,6 +118,9 @@ class ListingEvidence:
     brand: str | None = None
     brand_type: BrandType = "unclassified"
     brand_verified: bool = False
+    brand_governance: Mapping[str, Any] = field(default_factory=dict)
+    seller_governance: Mapping[str, Any] = field(default_factory=dict)
+    pdp_evidence: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

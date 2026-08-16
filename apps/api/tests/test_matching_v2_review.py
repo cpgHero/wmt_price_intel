@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from rci_api.main import create_app
 from rci_api.matching_v2_review import (
     AdjudicationRequest,
+    AIReviewDraftRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
     PostgresMatchingV2ReviewRepository,
@@ -49,6 +50,7 @@ class ReviewRepository:
         self.imported: dict[str, Any] | None = None
         self.submissions: list[dict[str, Any]] = []
         self.adjudications: list[dict[str, Any]] = []
+        self.ai_drafts: list[dict[str, Any]] = []
 
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]:
         assert limit > 0
@@ -119,6 +121,26 @@ class ReviewRepository:
             }
         )
         return {"case_id": external_case_id, "checksum": adjudication_checksum}
+
+    async def request_ai_draft(
+        self,
+        external_queue_id: str,
+        external_case_id: str,
+        *,
+        requested_by: str,
+        model_id: str,
+        prompt: dict[str, str],
+    ) -> dict[str, Any]:
+        draft = {
+            "queue_id": external_queue_id,
+            "case_id": external_case_id,
+            "requested_by": requested_by,
+            "model_id": model_id,
+            "prompt": prompt,
+            "authoritative": False,
+        }
+        self.ai_drafts.append(draft)
+        return draft
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:
@@ -235,3 +257,20 @@ async def test_review_submission_route_is_scoped_to_its_queue() -> None:
     assert response.status_code == 201
     assert repository.submissions[0]["queue_id"] == "queue-1"
     assert repository.submissions[0]["case_id"] == "case-1"
+
+
+async def test_ai_review_draft_is_advisory_and_uses_versioned_prompt() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    result = await service.request_ai_draft(
+        "queue-1",
+        "case-1",
+        AIReviewDraftRequest(requested_by="reviewer-a"),
+        model_id="gpt-5.6-terra",
+    )
+
+    assert result["authoritative"] is False
+    assert repository.ai_drafts[0]["model_id"] == "gpt-5.6-terra"
+    assert repository.ai_drafts[0]["prompt"]["id"] == "matching_v2_evidence_review"
+    assert len(repository.ai_drafts[0]["prompt"]["checksum"]) == 64

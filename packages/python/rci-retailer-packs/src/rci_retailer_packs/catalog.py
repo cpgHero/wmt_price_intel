@@ -455,6 +455,50 @@ class GovernedBrandResolver:
         eligible = self._strict_eligible(row) and method != "legacy_alias"
         return self._resolved(retailer_id, observed, normalized, row, method, eligible)
 
+    def resolve_from_text(
+        self,
+        retailer_id: str,
+        text: str | None,
+        *,
+        category: str | None = None,
+    ) -> BrandResolution:
+        """Resolve one unambiguous governed brand mentioned in product text.
+
+        This is an exact token-boundary fallback for missing or unresolved structured
+        brand fields. It deliberately fails closed when text contains more than one
+        governed brand, and never uses fuzzy similarity as resolution authority.
+        """
+
+        observed_text = str(text or "").strip()
+        normalized_text = normalize_brand_name(observed_text)
+        if not normalized_text:
+            return self._unresolved(retailer_id, "", "")
+        padded = f"_{normalized_text}_"
+        keys = (
+            {
+                normalized
+                for candidate_retailer, normalized in self._canonical
+                if candidate_retailer == retailer_id
+            }
+            | {
+                normalized
+                for candidate_retailer, normalized in self._aliases
+                if candidate_retailer == retailer_id
+            }
+            | set(self._global_canonical)
+            | set(self._global_aliases)
+        )
+        matches: dict[str, BrandResolution] = {}
+        for candidate in sorted(keys, key=lambda value: (-len(value.split("_")), -len(value))):
+            if len(candidate) < 3 or candidate.isdigit() or f"_{candidate}_" not in padded:
+                continue
+            resolution = self.resolve(retailer_id, candidate, category=category)
+            if resolution.status == "resolved" and resolution.canonical_brand_id:
+                matches.setdefault(resolution.canonical_brand_id, resolution)
+        if len(matches) == 1:
+            return next(iter(matches.values()))
+        return self._unresolved(retailer_id, observed_text, normalized_text)
+
     def suggest(
         self,
         retailer_id: str,

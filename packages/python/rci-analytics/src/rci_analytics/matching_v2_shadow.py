@@ -85,12 +85,16 @@ class _ListingAccumulatorState:
     attribute_sources: dict[str, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
     identifiers: dict[tuple[str, str], IdentifierEvidence] = field(default_factory=dict)
     titles: Counter[str] = field(default_factory=Counter)
+    pdp_titles: Counter[str] = field(default_factory=Counter)
     image_urls: Counter[str] = field(default_factory=Counter)
     product_urls: Counter[str] = field(default_factory=Counter)
     brands: set[str] = field(default_factory=set)
     brand_types: Counter[str] = field(default_factory=Counter)
     branded_rows: int = 0
     verified_brand_rows: int = 0
+    brand_governance: Counter[str] = field(default_factory=Counter)
+    seller_governance: Counter[str] = field(default_factory=Counter)
+    pdp_evidence: Counter[str] = field(default_factory=Counter)
 
 
 class ListingEvidenceAccumulatorV2:
@@ -131,6 +135,21 @@ class ListingEvidenceAccumulatorV2:
             state.image_urls[offer.image_url] += 1
         if offer.product_url:
             state.product_urls[offer.product_url] += 1
+        pdp_evidence = item.attributes.get("_pdp_evidence")
+        if isinstance(pdp_evidence, dict):
+            state.pdp_evidence[_canonical(pdp_evidence)] += 1
+            if pdp_evidence.get("name"):
+                state.pdp_titles[str(pdp_evidence["name"])] += 1
+            if pdp_evidence.get("image_url"):
+                state.image_urls[str(pdp_evidence["image_url"])] += 1
+            if pdp_evidence.get("url"):
+                state.product_urls[str(pdp_evidence["url"])] += 1
+        brand_governance = item.attributes.get("_brand_governance")
+        if isinstance(brand_governance, dict):
+            state.brand_governance[_canonical(brand_governance)] += 1
+        seller_governance = item.attributes.get("_seller_governance")
+        if isinstance(seller_governance, dict):
+            state.seller_governance[_canonical(seller_governance)] += 1
         brand = item.attributes.get("brand") or offer.brand
         if brand:
             state.brands.add(str(brand).strip())
@@ -183,12 +202,16 @@ class ListingEvidenceAccumulatorV2:
                     identifiers=tuple(
                         sorted(state.identifiers.values(), key=lambda row: (row.scheme, row.value))
                     ),
-                    title=_representative_text(state.titles),
+                    title=_representative_text(state.pdp_titles)
+                    or _representative_text(state.titles),
                     image_url=_representative_text(state.image_urls),
                     product_url=_representative_text(state.product_urls),
                     brand=brand,
                     brand_type=brand_type,  # type: ignore[arg-type]
                     brand_verified=bool(brand) and state.branded_rows == state.verified_brand_rows,
+                    brand_governance=_representative_document(state.brand_governance),
+                    seller_governance=_representative_document(state.seller_governance),
+                    pdp_evidence=_representative_document(state.pdp_evidence),
                 )
             )
         return tuple(results)
@@ -198,6 +221,14 @@ def _representative_text(values: Counter[str]) -> str | None:
     if not values:
         return None
     return sorted(values.items(), key=lambda row: (-row[1], row[0]))[0][0]
+
+
+def _representative_document(values: Counter[str]) -> dict[str, Any]:
+    selected = _representative_text(values)
+    if selected is None:
+        return {}
+    value = json.loads(selected)
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def build_listing_evidence_v2(

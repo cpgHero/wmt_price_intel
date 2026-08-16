@@ -4225,6 +4225,324 @@ tbody tr:last-child td {
   }
 }
 
+.cert-case-compact {
+  align-items: center;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.2fr) auto;
+  padding: 0.7rem;
+}
+.cert-case-products {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.cert-case-compact .cert-product {
+  background: transparent;
+  border: 0;
+  grid-template-columns: 48px minmax(0, 1fr);
+  padding: 0;
+}
+.cert-case-compact .cert-product a,
+.cert-case-compact .cert-product code {
+  display: none;
+}
+.cert-case-meta {
+  display: grid;
+  gap: 0.28rem;
+  justify-items: start;
+}
+.cert-case-meta strong {
+  font-size: 0.7rem;
+}
+.cert-case-meta small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+.cert-drawer-backdrop {
+  background: rgba(5, 10, 14, 0.62);
+  inset: 0;
+  position: fixed;
+  z-index: 120;
+}
+.cert-drawer {
+  background: var(--card);
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.22);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  margin-left: auto;
+  max-width: 1040px;
+  width: min(88vw, 1040px);
+}
+.cert-drawer-header {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.05rem 1.2rem;
+}
+.cert-drawer-header h2,
+.cert-drawer-header p {
+  margin: 0;
+}
+.cert-drawer-header h2 {
+  font-size: 1.2rem;
+  margin: 0.18rem 0 0.25rem;
+}
+.cert-drawer-header p,
+.cert-drawer-header small {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+.cert-drawer-body {
+  display: grid;
+  gap: 0.85rem;
+  overflow: auto;
+  padding: 1rem 1.2rem 1.5rem;
+}
+.cert-governance-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cert-governance-grid article {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+.cert-governance-grid article > small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.cert-governance-grid dl {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.65rem 0 0;
+}
+.cert-governance-grid dl div {
+  display: grid;
+  gap: 0.12rem;
+}
+.cert-governance-grid dt {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+.cert-governance-grid dd {
+  font-size: 0.69rem;
+  font-weight: 750;
+  margin: 0;
+}
+.cert-evidence > h3 {
+  font-size: 0.75rem;
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+}
+.cert-pdp-evidence {
+  border: 1px solid var(--soft-line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.cert-pdp-evidence summary {
+  cursor: pointer;
+  font-size: 0.67rem;
+  font-weight: 800;
+  padding: 0.7rem 0.8rem;
+}
+.cert-pdp-evidence > div {
+  border-top: 1px solid var(--soft-line);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.7rem;
+}
+.cert-pdp-evidence article {
+  min-width: 0;
+}
+.cert-pdp-evidence pre {
+  background: var(--surface-alt);
+  border-radius: 8px;
+  font-size: 0.58rem;
+  line-height: 1.45;
+  margin: 0.4rem 0 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 0.65rem;
+  white-space: pre-wrap;
+}
+.cert-drawer-footer {
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  padding: 0.85rem 1.2rem;
+}
+.cert-review-form-drawer {
+  grid-template-columns:
+    minmax(260px, 1fr) minmax(150px, 0.55fr) minmax(260px, 1fr)
+    auto;
+  padding: 0;
+}
+.cert-review-form-drawer fieldset {
+  border: 0;
+  display: flex;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+.cert-review-form-drawer legend {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 850;
+  margin-bottom: 0.38rem;
+  text-transform: uppercase;
+}
+.cert-review-form-drawer fieldset button {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 750;
+  min-height: 42px;
+  padding: 0.55rem 0.62rem;
+}
+.cert-review-form-drawer fieldset button.selected {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
+}
+.cert-ai-draft {
+  background: color-mix(in srgb, var(--green-soft) 52%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--green) 28%, var(--line));
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem;
+}
+.cert-ai-draft > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.cert-ai-draft h3,
+.cert-ai-draft p {
+  margin: 0;
+}
+.cert-ai-draft h3 {
+  font-size: 0.82rem;
+  margin: 0.12rem 0 0.2rem;
+}
+.cert-ai-draft header small,
+.cert-ai-draft header p,
+.cert-ai-result small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+.cert-ai-result {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem;
+}
+.cert-ai-result > strong {
+  font-size: 0.75rem;
+}
+.cert-ai-result > p,
+.cert-ai-result li {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+.cert-ai-result ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.cert-ai-result details {
+  border-top: 1px solid var(--soft-line);
+  padding-top: 0.55rem;
+}
+.cert-ai-result summary {
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+.cert-ai-result dl {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+}
+.cert-ai-result dl div {
+  display: grid;
+  gap: 0.1rem;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+}
+.cert-ai-result dt,
+.cert-ai-result dd {
+  font-size: 0.62rem;
+  margin: 0;
+}
+.cert-ai-result dt {
+  font-weight: 800;
+}
+.cert-ai-result > .button {
+  justify-self: start;
+}
+.cert-status.queued,
+.cert-status.running {
+  background: var(--info-soft);
+  color: var(--blue);
+}
+.cert-status.succeeded {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.cert-status.needs_review {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
+
+@media (max-width: 900px) {
+  .cert-case-compact,
+  .cert-review-form-drawer {
+    grid-template-columns: 1fr;
+  }
+  .cert-case-compact > .button {
+    justify-self: start;
+  }
+  .cert-drawer {
+    width: 100vw;
+  }
+  .cert-governance-grid,
+  .cert-pdp-evidence > div {
+    grid-template-columns: 1fr;
+  }
+  .cert-ai-draft > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 620px) {
+  .cert-case-products,
+  .cert-product-pair {
+    grid-template-columns: 1fr;
+  }
+  .cert-pair-mark {
+    justify-self: start;
+  }
+}
+
 /* Phase 12.3: product-scoped single-retailer Price Intelligence */
 .pi-masthead {
   align-items: center;

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import json
+import zipfile
 from decimal import Decimal
 from pathlib import Path
 
@@ -357,7 +359,8 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     walmart.write_text(
         header
         + "Walmart,Great Value 2% Reduced Fat Milk 1 Gallon,Great Value,3.98,72712,100,wm1\n"
-        + "Walmart,Great Value 2% Reduced Fat Milk 1 Gallon,Great Value,3.98,72712,100,wm1\n",
+        + "Walmart,Great Value 2% Reduced Fat Milk 1 Gallon,Great Value,3.98,72712,100,wm1\n"
+        + "Walmart,Marketplace 2% Reduced Fat Milk 1 Gallon,Unknown,8.98,72712,100,wm2\n",
         encoding="utf-8",
     )
     aldi.write_text(
@@ -365,6 +368,47 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
         + "ALDI,Friendly Farms 2% Reduced Fat Milk 1 Gallon,Friendly Farms,3.79,72712,10,al1\n",
         encoding="utf-8",
     )
+    pdp_archive = tmp_path / "pdp.zip"
+    manifest = {
+        "snapshots": [
+            {
+                "retailer_id": "walmart_us",
+                "retailer_product_id": "wm1",
+                "http_status": 200,
+                "observed_at": DECIDED_AT,
+                "response_file": "responses/walmart_us/wm1/one.json",
+            },
+            {
+                "retailer_id": "walmart_us",
+                "retailer_product_id": "wm2",
+                "http_status": 200,
+                "observed_at": DECIDED_AT,
+                "response_file": "responses/walmart_us/wm2/two.json",
+            },
+        ]
+    }
+    with zipfile.ZipFile(pdp_archive, "w") as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr(
+            "responses/walmart_us/wm1/one.json",
+            json.dumps(
+                {
+                    "name": "Great Value 2% Reduced Fat Milk, 1 Gallon",
+                    "brand": "Great Value",
+                    "seller": "Walmart.com",
+                    "image_primary": "https://example.com/wm1.png",
+                }
+            ),
+        )
+        archive.writestr(
+            "responses/walmart_us/wm2/two.json",
+            json.dumps(
+                {
+                    "name": "Marketplace 2% Reduced Fat Milk, 1 Gallon",
+                    "seller": "Food Service Direct",
+                }
+            ),
+        )
 
     profile, queue = build_matching_v2_evidence_profile(
         REPOSITORY_ROOT,
@@ -377,22 +421,30 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
         decided_at=DECIDED_AT,
         competitor_retailer_ids=("aldi_us",),
         per_stratum_limit=5,
+        pdp_archives=(pdp_archive,),
     )
 
     walmart_profile = next(
         row for row in profile["retailers"] if row["retailer_id"] == "walmart_us"
     )
     assert profile["totals"] == {
-        "source_rows": 3,
-        "normalized_unique_rows": 2,
+        "source_rows": 4,
+        "normalized_unique_rows": 3,
         "normalization_failures": 0,
         "expected_retailer_mismatches": 0,
     }
     assert walmart_profile["duplicate_rows"] == 1
     assert walmart_profile["distinct_in_scope_products"] == 1
+    assert walmart_profile["out_of_scope_reasons"] == {
+        "known third-party marketplace seller excluded by Retailer Pack policy": 1
+    }
     assert profile["release_use"]["eligible"] is False
     assert queue["authoritative"] is False
     assert queue["cases"]
+    assert queue["cases"][0]["benchmark_listing"]["image_url"] == ("https://example.com/wm1.png")
+    assert queue["cases"][0]["benchmark_listing"]["seller_governance"]["status"] == (
+        "verified_first_party"
+    )
     validate_instance(
         REPOSITORY_ROOT,
         "matching-v2-evidence-profile.schema.json",

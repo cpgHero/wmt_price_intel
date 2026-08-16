@@ -6,6 +6,7 @@ import argparse
 import csv
 import hashlib
 import json
+import zipfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -24,8 +25,9 @@ from rci_analytics.matching_v2_shadow import (
 )
 from rci_analytics.models import JsonObject
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
+from rci_analytics.pdp_attributes import complete_attributes_from_pdp
 from rci_analytics.product_pack import ProductPackLoader
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 
 def _canonical(value: Any) -> str:
@@ -74,6 +76,89 @@ def _location_key(retailer_id: str, store_number: str | None, zipcode: str | Non
 
 def _source_reference(path: Path, checksum: str) -> str:
     return f"source-file:{path.name}#sha256={checksum}"
+
+
+def _pdp_archive_reference(path: Path, checksum: str) -> str:
+    return f"pdp-archive:{path.name}#sha256={checksum}"
+
+
+def _pdp_context_from_archives(
+    paths: tuple[Path, ...],
+) -> tuple[dict[str, JsonObject], list[JsonObject], dict[str, set[str]]]:
+    contexts: dict[str, JsonObject] = {}
+    observed_at: dict[str, str] = {}
+    sources: list[JsonObject] = []
+    retailer_references: dict[str, set[str]] = defaultdict(set)
+    for source_path in paths:
+        path = source_path.resolve()
+        digest = _file_checksum(path)
+        reference = _pdp_archive_reference(path, digest)
+        retailer_counts: Counter[str] = Counter()
+        with zipfile.ZipFile(path) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            snapshots = manifest.get("snapshots", [])
+            for snapshot in sorted(
+                snapshots,
+                key=lambda value: str(value.get("observed_at") or ""),
+            ):
+                if int(snapshot.get("http_status") or 0) != 200:
+                    continue
+                retailer_id = str(snapshot.get("retailer_id") or "")
+                product_id = str(snapshot.get("retailer_product_id") or "")
+                response_file = str(snapshot.get("response_file") or "")
+                if not retailer_id or not product_id or not response_file:
+                    continue
+                try:
+                    payload = json.loads(archive.read(response_file))
+                except (KeyError, json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                if not isinstance(payload, dict) or not payload.get("name"):
+                    continue
+                key = f"{retailer_id}:{product_id}"
+                timestamp = str(snapshot.get("observed_at") or "")
+                if key in contexts and timestamp < observed_at[key]:
+                    continue
+                category = payload.get("category")
+                if category is None and isinstance(payload.get("extras"), dict):
+                    category = payload["extras"].get("category")
+                if isinstance(category, list):
+                    category_path = [
+                        str(value.get("name") if isinstance(value, dict) else value)
+                        for value in category
+                        if value not in (None, "")
+                    ]
+                else:
+                    category_path = category
+                contexts[key] = {
+                    "name": payload.get("name"),
+                    "brand": payload.get("brand"),
+                    "seller": payload.get("seller"),
+                    "description": payload.get("description_full")
+                    or payload.get("description_short"),
+                    "category_path": category_path,
+                    "identifiers": payload.get("product_identifiers", {}),
+                    "specification": payload.get("specification", {}),
+                    "physical_properties": payload.get("physical_properties", {}),
+                    "variant_configuration": payload.get("variant_configuration", {}),
+                    "item_condition": payload.get("item_condition"),
+                    "image_url": payload.get("image_primary"),
+                    "url": payload.get("url"),
+                }
+                observed_at[key] = timestamp
+                retailer_counts[retailer_id] += 1
+                retailer_references[retailer_id].add(reference)
+        sources.append(
+            {
+                "file_name": path.name,
+                "sha256": digest,
+                "size_bytes": path.stat().st_size,
+                "row_count": sum(retailer_counts.values()),
+                "declared_retailer_id": None,
+                "normalized_retailer_counts": dict(sorted(retailer_counts.items())),
+                "evidence_reference": reference,
+            }
+        )
+    return contexts, sources, retailer_references
 
 
 def _single_source_reference(retailer_id: str, references: set[str]) -> str:
@@ -186,6 +271,7 @@ def build_matching_v2_evidence_profile(
     profile_id: str | None = None,
     competitor_retailer_ids: tuple[str, ...] = (),
     per_stratum_limit: int = 40,
+    pdp_archives: tuple[Path, ...] = (),
 ) -> tuple[JsonObject, JsonObject]:
     """Build a data-quality profile and non-authoritative review queue.
 
@@ -207,7 +293,12 @@ def build_matching_v2_evidence_profile(
     normalizer = CanonicalOfferNormalizer(
         RetailerIdentityMap.from_catalog(root / "config" / "retailer-catalog.json")
     )
-    classifier = OfferClassifier(pack, GovernedBrandResolver.from_repository(root))
+    brand_resolver = GovernedBrandResolver.from_repository(root)
+    seller_resolver = GovernedSellerResolver.from_repository(root)
+    classifier = OfferClassifier(pack, brand_resolver)
+    pdp_context, pdp_source_documents, pdp_retailer_references = _pdp_context_from_archives(
+        pdp_archives
+    )
     accumulator = ListingEvidenceAccumulatorV2(pack)
     retailer_profiles: dict[str, _RetailerProfile] = defaultdict(_RetailerProfile)
     retailer_sources: dict[str, set[str]] = defaultdict(set)
@@ -261,7 +352,13 @@ def build_matching_v2_evidence_profile(
                         profile.location_keys.add(location_key)
                     if offer.price is not None and offer.price > 0:
                         profile.positive_price_rows += 1
-                    classified = classifier.classify(offer)
+                    classified = complete_attributes_from_pdp(
+                        classifier.classify(offer),
+                        pdp_context.get(f"{offer.retailer_id}:{offer.retailer_product_id}"),
+                        classifier=classifier,
+                        pack=pack,
+                        seller_resolver=seller_resolver,
+                    )
                     if classified.in_scope:
                         profile.in_scope_rows += 1
                         profile.in_scope_product_ids.add(offer.retailer_product_id)
@@ -283,6 +380,10 @@ def build_matching_v2_evidence_profile(
             )
     finally:
         csv.field_size_limit(previous_limit)
+
+    source_documents.extend(pdp_source_documents)
+    for retailer_id, references in pdp_retailer_references.items():
+        retailer_sources[retailer_id].update(references)
 
     observed_retailers = sorted(retailer_profiles)
     if benchmark_retailer_id not in retailer_profiles:
@@ -408,6 +509,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--per-stratum-limit", type=int, default=40)
     parser.add_argument("--output-directory", type=Path, required=True)
     parser.add_argument(
+        "--pdp-archive",
+        action="append",
+        default=[],
+        help="Raw PDP export ZIP containing manifest.json and response JSON files.",
+    )
+    parser.add_argument(
         "--input",
         action="append",
         required=True,
@@ -434,6 +541,7 @@ def main() -> None:
         profile_id=args.profile,
         competitor_retailer_ids=tuple(args.competitor),
         per_stratum_limit=args.per_stratum_limit,
+        pdp_archives=tuple(Path(value) for value in args.pdp_archive),
     )
     output_directory = args.output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=True)

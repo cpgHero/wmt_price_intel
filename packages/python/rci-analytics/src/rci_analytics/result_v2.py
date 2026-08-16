@@ -296,7 +296,16 @@ class AnalysisResultV2Builder:
                 ("in_scope_offers", "Qualifying offers", "offers"),
                 ("in_scope_zips", "Qualifying ZIPs", "zipcodes"),
                 ("in_scope_stores", "Qualifying stores", "stores"),
+                (
+                    "seller_verified_first_party_offers",
+                    "First-party seller verified offers",
+                    "offers",
+                ),
+                ("seller_unverified_offers", "Seller-unverified retained offers", "offers"),
+                ("third_party_excluded_offers", "Third-party excluded offers", "offers"),
             ):
+                if field not in fact:
+                    continue
                 metric_id = f"coverage.{_id(retailer)}.{field.replace('in_scope_', 'qualifying_')}"
                 metric_refs.append(
                     registry.add(

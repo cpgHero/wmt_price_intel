@@ -11,7 +11,7 @@ import io
 import json
 import logging
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -58,7 +58,11 @@ from rci_providers import MetricsCartAdapterRegistry
 from rci_results import AnalysisResultService, ReportBlueprintLoader
 from rci_results.brand_review import BrandReviewRepository, BrandRuleRecord
 from rci_results.match_review import MatchReviewRepository
-from rci_retailer_packs import BrandDecisionOverride, GovernedBrandResolver
+from rci_retailer_packs import (
+    BrandDecisionOverride,
+    GovernedBrandResolver,
+    GovernedSellerResolver,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -647,6 +651,7 @@ class AnalysisProcessor:
                 ]
             )
         classifier = OfferClassifier(pack, brand_resolver)
+        seller_resolver = GovernedSellerResolver.from_repository(self._root)
         engine = ComparisonEngine(pack, brand_resolver)
         governed_rules: list[ProductMatchRule] = []
         if job.match_revision_id is not None:
@@ -688,6 +693,7 @@ class AnalysisProcessor:
         in_scope_counts: dict[str, int] = defaultdict(int)
         in_scope_zips: dict[str, set[str]] = defaultdict(set)
         in_scope_stores: dict[str, set[str]] = defaultdict(set)
+        seller_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
         classified_evidence_artifacts: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
         observed_values: list[str] = []
         normalized_batches: dict[str, list[Any]] = defaultdict(list)
@@ -753,11 +759,15 @@ class AnalysisProcessor:
                 ),
                 classifier=classifier,
                 pack=pack,
+                seller_resolver=seller_resolver,
             )
             review_offer_count += bool(classified_offer.review_reasons)
             zero_or_missing_price_count += (
                 normalized_offer.price is None or normalized_offer.price <= 0
             )
+            seller_governance = classified_offer.attributes.get("_seller_governance")
+            if isinstance(seller_governance, dict) and seller_governance.get("status"):
+                seller_status_counts[retailer_id][str(seller_governance["status"])] += 1
             if classified_offer.in_scope:
                 in_scope_counts[retailer_id] += 1
                 if normalized_offer.zipcode is not None:
@@ -1084,6 +1094,13 @@ class AnalysisProcessor:
                 "in_scope_offers": in_scope_counts[retailer_id],
                 "in_scope_zips": len(in_scope_zips[retailer_id]),
                 "in_scope_stores": len(in_scope_stores[retailer_id]),
+                "seller_verified_first_party_offers": seller_status_counts[retailer_id][
+                    "verified_first_party"
+                ],
+                "seller_unverified_offers": seller_status_counts[retailer_id]["seller_unverified"],
+                "third_party_excluded_offers": seller_status_counts[retailer_id][
+                    "excluded_third_party"
+                ],
                 "evidence_ref": f"evidence.classified.{retailer_id}",
             }
             for retailer_id, offers in sorted(offer_counts.items())

@@ -13,8 +13,11 @@ from uuid import uuid4
 
 from rci_agents import (
     GovernedAnalysisAssistant,
+    MatchingReviewAIWorker,
+    OpenAIMatchingReviewProvider,
     OpenAIResponsesProvider,
     PostgresAgentTaskRepository,
+    PostgresMatchingReviewTaskRepository,
 )
 
 from rci_analytics import CatalogProductPackLoader, ParquetDatasetWriter
@@ -162,6 +165,7 @@ async def run() -> None:
         lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
     )
     assistant: GovernedAnalysisAssistant | None = None
+    matching_review_worker: MatchingReviewAIWorker | None = None
     if _enabled(os.getenv("AI_ENABLED")):
         assistant = GovernedAnalysisAssistant(
             repository_root=repository_root,
@@ -180,6 +184,29 @@ async def run() -> None:
             max_attempts=int(os.getenv("AI_MAX_ATTEMPTS", "2")),
             lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
         )
+        if _enabled(os.getenv("MATCHING_V2_AI_REVIEW_ENABLED")):
+            matching_model = (
+                os.getenv("OPENAI_MODEL_MATCHING_REVIEW")
+                or os.getenv("OPENAI_MODEL_NARRATIVE")
+                or ""
+            ).strip()
+            if not matching_model:
+                raise ValueError("OPENAI_MODEL_MATCHING_REVIEW is required for AI match review")
+            matching_review_worker = MatchingReviewAIWorker(
+                PostgresMatchingReviewTaskRepository(database.engine),
+                OpenAIMatchingReviewProvider(
+                    api_key=os.environ["OPENAI_API_KEY"],
+                    timeout_seconds=float(os.getenv("OPENAI_MATCHING_TIMEOUT_SECONDS", "90")),
+                    max_output_tokens=int(os.getenv("OPENAI_MATCHING_MAX_OUTPUT_TOKENS", "3000")),
+                    max_request_cost_usd=float(
+                        os.getenv("OPENAI_MATCHING_MAX_REQUEST_COST_USD", "0.35")
+                    ),
+                    reasoning_effort=os.getenv("OPENAI_MATCHING_REASONING_EFFORT", "high"),
+                ),
+                repository_root=repository_root,
+                worker_id=f"{worker_id}-matching-agent",
+                lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
+            )
     analysis_worker: AnalysisWorker | None = None
     study_discovery_worker: StudyDiscoveryWorker | None = None
     if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
@@ -336,6 +363,9 @@ async def run() -> None:
             study_jobs = (
                 await study_discovery_worker.run_once() if study_discovery_worker is not None else 0
             )
+            matching_reviews = (
+                await matching_review_worker.run_once() if matching_review_worker is not None else 0
+            )
             if (
                 claimed
                 + analyses
@@ -343,6 +373,7 @@ async def run() -> None:
                 + product_detail_normalizations
                 + product_pack_validations
                 + study_jobs
+                + matching_reviews
                 == 0
             ):
                 with suppress(TimeoutError):

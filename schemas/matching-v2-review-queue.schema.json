@@ -153,6 +153,9 @@
           "enum": ["private_label", "regional", "national", "unclassified"]
         },
         "brand_verified": { "type": "boolean" },
+        "brand_governance": { "type": "object" },
+        "seller_governance": { "type": "object" },
+        "pdp_evidence": { "type": "object" },
         "image_url": { "type": ["string", "null"] },
         "product_url": { "type": ["string", "null"] },
         "identifiers": {

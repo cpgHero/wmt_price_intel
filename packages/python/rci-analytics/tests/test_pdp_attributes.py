@@ -9,7 +9,7 @@ from rci_analytics.classification import OfferClassifier
 from rci_analytics.models import NormalizedOffer
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp, product_context_index
 from rci_analytics.product_pack import ProductPackLoader
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -163,3 +163,50 @@ def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact
         "walmart__great_value"
     )
     assert enriched.attributes["_brand_governance"]["strict_private_label"] is True
+
+
+def test_pdp_seller_policy_excludes_known_third_party_but_retains_missing() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    classifier = OfferClassifier(pack, GovernedBrandResolver.from_repository(REPOSITORY_ROOT))
+    seller_resolver = GovernedSellerResolver.from_repository(REPOSITORY_ROOT)
+    offer = NormalizedOffer(
+        offer_id="egg-1",
+        retailer_id="walmart_us",
+        retailer_product_id="egg-product",
+        title="Marketside Large Eggs, 12 Count",
+        brand=None,
+        price=Decimal("3.97"),
+        currency="USD",
+        zipcode="72712",
+        store_number="100",
+        latitude=36.37,
+        longitude=-94.2,
+        in_stock=True,
+        product_url=None,
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+    classified = classifier.classify(offer)
+
+    third_party = complete_attributes_from_pdp(
+        classified,
+        {"name": offer.title, "seller": "Food Service Direct"},
+        classifier=classifier,
+        pack=pack,
+        seller_resolver=seller_resolver,
+    )
+    missing = complete_attributes_from_pdp(
+        classified,
+        {"name": offer.title, "seller": None},
+        classifier=classifier,
+        pack=pack,
+        seller_resolver=seller_resolver,
+    )
+
+    assert third_party.in_scope is False
+    assert third_party.metrics == {}
+    assert third_party.attributes["_seller_governance"]["status"] == "excluded_third_party"
+    assert missing.in_scope is True
+    assert missing.attributes["_seller_governance"]["status"] == "seller_unverified"
+    assert missing.attributes["_brand_governance"]["canonical_brand_name"] == "Marketside"

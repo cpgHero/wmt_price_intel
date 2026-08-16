@@ -8,6 +8,7 @@ from typing import Any
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.models import ClassifiedOffer, JsonObject
 from rci_analytics.product_pack import ProductPack
+from rci_retailer_packs import GovernedSellerResolver
 
 
 def product_context_index(values: list[JsonObject]) -> dict[str, JsonObject]:
@@ -26,6 +27,7 @@ def complete_attributes_from_pdp(
     *,
     classifier: OfferClassifier,
     pack: ProductPack,
+    seller_resolver: GovernedSellerResolver | None = None,
 ) -> ClassifiedOffer:
     """Fill unresolved Product Pack attributes from PDP text without changing price.
 
@@ -35,73 +37,84 @@ def complete_attributes_from_pdp(
     override, or configured-constant evidence. Inferred defaults are not evidence.
     """
 
-    if not classified.in_scope or context is None:
+    if not classified.in_scope:
         return classified
-    pdp_text = _pdp_text(context)
-    if not pdp_text:
-        return classified
-    enriched_offer = replace(
-        classified.offer,
-        title=pdp_text,
-        brand=str(context.get("brand")) if context.get("brand") else classified.offer.brand,
-    )
-    pdp_classified = classifier.classify(enriched_offer)
     attributes = dict(classified.attributes)
-    search_provenance = (
+    provenance = (
         dict(attributes.get("_attribute_provenance", {}))
         if isinstance(attributes.get("_attribute_provenance"), dict)
         else {}
     )
-    pdp_provenance = (
-        dict(pdp_classified.attributes.get("_attribute_provenance", {}))
-        if isinstance(pdp_classified.attributes.get("_attribute_provenance"), dict)
-        else {}
-    )
-    provenance: JsonObject = dict(search_provenance)
-    for definition in pack.attributes:
-        name = str(definition["name"])
-        current = attributes.get(name)
-        candidate = pdp_classified.attributes.get(name)
-        unknown_values = definition.get("unknown_values", [])
-        current_source = str(search_provenance.get(name) or "unresolved")
-        candidate_source = str(pdp_provenance.get(name) or "unresolved")
-        current_unknown = (
-            current is None
-            or current in unknown_values
-            or current_source in {"unresolved", "product_pack_default"}
-        )
-        candidate_known = (
-            candidate is not None
-            and candidate not in unknown_values
-            and candidate_source not in {"unresolved", "product_pack_default"}
-        )
-        if current_unknown and candidate_known:
-            attributes[name] = candidate
-            provenance[name] = "pdp"
-        elif not current_unknown:
-            provenance[name] = current_source
-        else:
-            provenance[name] = "unresolved"
-    attributes["_attribute_provenance"] = provenance
-    current_brand_governance = attributes.get("_brand_governance")
-    pdp_brand_governance = pdp_classified.attributes.get("_brand_governance")
-    current_brand_resolved = (
-        isinstance(current_brand_governance, dict)
-        and current_brand_governance.get("status") == "resolved"
-    )
-    pdp_brand_resolved = (
-        isinstance(pdp_brand_governance, dict) and pdp_brand_governance.get("status") == "resolved"
-    )
-    if not current_brand_resolved and pdp_brand_resolved:
-        # Search remains authoritative for price, location, and availability. PDP may
-        # complete unresolved product identity, including governed brand identity.
-        attributes["_brand_governance"] = dict(
-            pdp_brand_governance if isinstance(pdp_brand_governance, dict) else {}
-        )
     metrics = dict(classified.metrics)
-    for name, value in pdp_classified.metrics.items():
-        if metrics.get(name) is None and value is not None:
-            metrics[name] = value
+    if context is not None:
+        attributes["_pdp_evidence"] = _pdp_evidence(context)
+        pdp_text = _pdp_text(context)
+        if pdp_text:
+            enriched_offer = replace(
+                classified.offer,
+                title=pdp_text,
+                brand=(
+                    str(context.get("brand")) if context.get("brand") else classified.offer.brand
+                ),
+            )
+            pdp_classified = classifier.classify(enriched_offer)
+            pdp_provenance = (
+                dict(pdp_classified.attributes.get("_attribute_provenance", {}))
+                if isinstance(pdp_classified.attributes.get("_attribute_provenance"), dict)
+                else {}
+            )
+            for definition in pack.attributes:
+                name = str(definition["name"])
+                current = attributes.get(name)
+                candidate = pdp_classified.attributes.get(name)
+                unknown_values = definition.get("unknown_values", [])
+                current_source = str(provenance.get(name) or "unresolved")
+                candidate_source = str(pdp_provenance.get(name) or "unresolved")
+                current_unknown = (
+                    current is None
+                    or current in unknown_values
+                    or current_source in {"unresolved", "product_pack_default"}
+                )
+                candidate_known = (
+                    candidate is not None
+                    and candidate not in unknown_values
+                    and candidate_source not in {"unresolved", "product_pack_default"}
+                )
+                if current_unknown and candidate_known:
+                    attributes[name] = candidate
+                    provenance[name] = "pdp"
+                elif not current_unknown:
+                    provenance[name] = current_source
+                else:
+                    provenance[name] = "unresolved"
+            current_brand_governance = attributes.get("_brand_governance")
+            pdp_brand_governance = pdp_classified.attributes.get("_brand_governance")
+            current_brand_resolved = (
+                isinstance(current_brand_governance, dict)
+                and current_brand_governance.get("status") == "resolved"
+            )
+            pdp_brand_resolved = (
+                isinstance(pdp_brand_governance, dict)
+                and pdp_brand_governance.get("status") == "resolved"
+            )
+            if not current_brand_resolved and pdp_brand_resolved:
+                # PDP may complete product identity, but not Search price or placement.
+                attributes["_brand_governance"] = dict(pdp_brand_governance)
+                pdp_brand = pdp_classified.attributes.get("brand")
+                if pdp_brand:
+                    attributes["brand"] = pdp_brand
+                    provenance["brand"] = "pdp"
+            for name, value in pdp_classified.metrics.items():
+                if metrics.get(name) is None and value is not None:
+                    metrics[name] = value
+    attributes["_attribute_provenance"] = provenance
+    seller_decision = None
+    if seller_resolver is not None:
+        seller_decision = seller_resolver.resolve(
+            classified.offer.retailer_id,
+            context.get("seller") if context is not None else None,
+        )
+        attributes["_seller_governance"] = seller_decision.to_record()
     review_reasons = tuple(
         reason
         for reason in classified.review_reasons
@@ -115,10 +128,38 @@ def complete_attributes_from_pdp(
     )
     return replace(
         classified,
+        in_scope=(classified.in_scope and (seller_decision is None or seller_decision.eligible)),
+        scope_reason=(
+            "known third-party marketplace seller excluded by Retailer Pack policy"
+            if seller_decision is not None and not seller_decision.eligible
+            else classified.scope_reason
+        ),
         attributes=attributes,
-        metrics=metrics,
+        metrics=(metrics if seller_decision is None or seller_decision.eligible else {}),
         review_reasons=review_reasons,
     )
+
+
+def _pdp_evidence(context: JsonObject) -> JsonObject:
+    """Retain bounded identity evidence needed for matching certification."""
+
+    fields = (
+        "name",
+        "brand",
+        "seller",
+        "description",
+        "category_path",
+        "identifiers",
+        "specification",
+        "physical_properties",
+        "variant_configuration",
+        "item_condition",
+        "image_url",
+        "url",
+        "pdp_source_field_inventory",
+        "pdp_unmapped_source_fields",
+    )
+    return {name: context.get(name) for name in fields if context.get(name) not in (None, "")}
 
 
 def _pdp_text(context: JsonObject) -> str:

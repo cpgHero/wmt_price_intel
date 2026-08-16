@@ -12,6 +12,11 @@ from rci_retailer_packs.catalog import (
     canonical_checksum,
     normalize_brand_name,
 )
+from rci_retailer_packs.seller import (
+    GovernedSellerResolver,
+    SellerResolution,
+    normalize_seller_name,
+)
 
 __all__ = [
     "BrandCandidateSuggestion",
@@ -21,7 +26,10 @@ __all__ = [
     "BrandResolution",
     "FileRetailerPackCatalog",
     "GovernedBrandResolver",
+    "GovernedSellerResolver",
     "RetailerPack",
+    "SellerResolution",
     "canonical_checksum",
     "normalize_brand_name",
+    "normalize_seller_name",
 ]

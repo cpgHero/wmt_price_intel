@@ -27,6 +27,9 @@ interface ListingSummary {
   brand_verified: boolean;
   image_url: string | null;
   product_url: string | null;
+  brand_governance?: Record<string, unknown>;
+  seller_governance?: Record<string, unknown>;
+  pdp_evidence?: Record<string, unknown>;
   attributes: Record<
     string,
     {
@@ -79,6 +82,36 @@ interface ReviewCase {
     allowed_tiers: string[];
     rationale: string;
   };
+  ai_draft?: null | {
+    id: string;
+    status: "queued" | "running" | "succeeded" | "needs_review";
+    model_id: string;
+    requested_by: string;
+    output_document?: {
+      authoritative: false;
+      human_review_required: true;
+      result: {
+        verdict_proposal:
+          "comparable" | "not_comparable" | "insufficient_evidence";
+        tier_proposal: string | null;
+        rationale: string;
+        attribute_proposals: Array<{
+          attribute: string;
+          value: string;
+          evidence_source: "structured" | "image";
+          confidence: number;
+          visible_text: string | null;
+          source_image_url: string | null;
+        }>;
+        conflicts: string[];
+        requires_human_review: true;
+      };
+    };
+    usage?: {
+      estimated_cost_usd?: number | null;
+    };
+    last_error_message?: string | null;
+  };
 }
 
 interface QueueView {
@@ -93,7 +126,7 @@ interface QueueView {
 }
 
 interface ReviewDraft {
-  verdict: "comparable" | "not_comparable" | "insufficient_evidence";
+  verdict: "" | "comparable" | "not_comparable" | "insufficient_evidence";
   tier: string;
   rationale: string;
 }
@@ -168,9 +201,7 @@ function ProductIdentity({ listing }: Readonly<{ listing: ListingSummary }>) {
 
 function defaultDraft(reviewCase: ReviewCase): ReviewDraft {
   return {
-    verdict: reviewCase.engine_proposal.tier
-      ? "comparable"
-      : "insufficient_evidence",
+    verdict: "",
     tier: reviewCase.engine_proposal.tier ?? "equivalent_product",
     rationale: "",
   };
@@ -188,6 +219,7 @@ export function MatchingV2ReviewAdmin() {
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
 
   const loadQueues = useCallback(async () => {
     const response = await jsonRequest<{
@@ -210,6 +242,12 @@ export function MatchingV2ReviewAdmin() {
       `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}?${query}`,
     );
     setView(response);
+    setActiveCaseId((current) =>
+      current &&
+      response.cases.some((reviewCase) => reviewCase.case_id === current)
+        ? current
+        : null,
+    );
     setDrafts((current) => {
       const next = { ...current };
       for (const reviewCase of response.cases) {
@@ -241,12 +279,42 @@ export function MatchingV2ReviewAdmin() {
     if (session?.authenticated) void loadQueue().catch(handleError);
   }, [loadQueue, session?.authenticated]);
 
+  useEffect(() => {
+    if (!activeCaseId) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActiveCaseId(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [activeCaseId]);
+
   const progress = useMemo(() => {
     if (!view) return 0;
     return view.total_cases
       ? ((view.status_counts.adjudicated ?? 0) / view.total_cases) * 100
       : 0;
   }, [view]);
+  const activeCase = useMemo(
+    () =>
+      view?.cases.find((reviewCase) => reviewCase.case_id === activeCaseId) ??
+      null,
+    [activeCaseId, view],
+  );
+
+  useEffect(() => {
+    if (!activeCase?.ai_draft) return;
+    if (!["queued", "running"].includes(activeCase.ai_draft.status)) return;
+    const timer = window.setTimeout(
+      () => void loadQueue().catch(handleError),
+      2000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [activeCase?.ai_draft, loadQueue]);
 
   function handleError(cause: unknown) {
     setError(cause instanceof Error ? cause.message : "The request failed.");
@@ -316,6 +384,10 @@ export function MatchingV2ReviewAdmin() {
       setError("Explain the evidence behind the review decision.");
       return;
     }
+    if (!draft.verdict) {
+      setError("Choose an explicit review decision before submitting.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -338,6 +410,39 @@ export function MatchingV2ReviewAdmin() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function requestAIReview(reviewCase: ReviewCase) {
+    if (!reviewerId.trim()) {
+      setError("Enter your reviewer identity before requesting an AI draft.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await jsonRequest(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/ai-drafts`,
+        {
+          method: "POST",
+          body: JSON.stringify({ requested_by: reviewerId.trim() }),
+        },
+      );
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function adoptAIProposal(reviewCase: ReviewCase) {
+    const proposal = reviewCase.ai_draft?.output_document?.result;
+    if (!proposal) return;
+    updateDraft(reviewCase.case_id, {
+      verdict: proposal.verdict_proposal,
+      tier: proposal.tier_proposal ?? "equivalent_product",
+      rationale: `AI draft considered; independently reviewed by ${reviewerId.trim() || "human reviewer"}. ${proposal.rationale}`,
+    });
   }
 
   async function finalizeConsensus(reviewCase: ReviewCase) {
@@ -520,155 +625,38 @@ export function MatchingV2ReviewAdmin() {
           </section>
 
           <div className="cert-case-list">
-            {view.cases.map((reviewCase) => {
-              const draft =
-                drafts[reviewCase.case_id] ?? defaultDraft(reviewCase);
-              return (
-                <article className="cert-case" key={reviewCase.case_id}>
-                  <header>
-                    <div>
-                      <small>{label(reviewCase.stratum)}</small>
-                      <strong>{label(reviewCase.engine_proposal.tier)}</strong>
-                    </div>
-                    <span className={`cert-status ${reviewCase.review_status}`}>
-                      {label(reviewCase.review_status)}
-                    </span>
-                    <em>
-                      {Math.round(
-                        reviewCase.engine_proposal.evidence_coverage
-                          .critical_coverage * 100,
-                      )}
-                      % critical evidence
-                    </em>
-                  </header>
-                  <div className="cert-product-pair">
-                    <ProductIdentity listing={reviewCase.benchmark_listing} />
-                    <span className="cert-pair-mark">compared with</span>
-                    <ProductIdentity listing={reviewCase.competitor_listing} />
-                  </div>
-                  <p className="cert-engine-reason">
-                    <b>Engine proposal:</b>{" "}
-                    {reviewCase.engine_proposal.decision_reason}
-                  </p>
-                  <details className="cert-evidence">
-                    <summary>Inspect attribute evidence</summary>
-                    <div role="table">
-                      <div role="row" className="cert-evidence-head">
-                        <span>Attribute</span>
-                        <span>Primary</span>
-                        <span>Competitor</span>
-                        <span>Outcome</span>
-                      </div>
-                      {reviewCase.edge.attribute_evidence.map((evidence) => (
-                        <div role="row" key={evidence.attribute}>
-                          <span>
-                            <b>{label(evidence.attribute)}</b>
-                            <small>{label(evidence.role)}</small>
-                          </span>
-                          <span>{evidenceValue(evidence.benchmark_value)}</span>
-                          <span>
-                            {evidenceValue(evidence.competitor_value)}
-                          </span>
-                          <span className={`evidence-${evidence.outcome}`}>
-                            {label(evidence.outcome)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-
-                  {reviewCase.review_submissions.length ? (
-                    <div className="cert-review-history">
-                      {reviewCase.review_submissions.map((review) => (
-                        <span key={review.id}>
-                          <b>{review.reviewer_id}</b>
-                          {label(review.verdict)}
-                          <small>{review.rationale}</small>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {reviewCase.adjudication ? (
-                    <p className="cert-final-decision">
-                      <b>
-                        Final decision: {label(reviewCase.adjudication.verdict)}
-                      </b>
-                      {reviewCase.adjudication.rationale}
-                    </p>
-                  ) : (
-                    <div className="cert-review-form">
-                      <label>
-                        <span>Decision</span>
-                        <select
-                          value={draft.verdict}
-                          onChange={(event) =>
-                            updateDraft(reviewCase.case_id, {
-                              verdict: event.target
-                                .value as ReviewDraft["verdict"],
-                            })
-                          }
-                        >
-                          <option value="comparable">Comparable</option>
-                          <option value="not_comparable">Not comparable</option>
-                          <option value="insufficient_evidence">
-                            Insufficient evidence
-                          </option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>Approved tier</span>
-                        <select
-                          value={draft.tier}
-                          disabled={draft.verdict !== "comparable"}
-                          onChange={(event) =>
-                            updateDraft(reviewCase.case_id, {
-                              tier: event.target.value,
-                            })
-                          }
-                        >
-                          {TIERS.map((tier) => (
-                            <option value={tier} key={tier}>
-                              {label(tier)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="cert-rationale">
-                        <span>Evidence rationale</span>
-                        <textarea
-                          value={draft.rationale}
-                          onChange={(event) =>
-                            updateDraft(reviewCase.case_id, {
-                              rationale: event.target.value,
-                            })
-                          }
-                          placeholder="Explain the package, claims, identity, and conflicts that support this decision."
-                        />
-                      </label>
-                      <button
-                        className="button primary"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void submitReview(reviewCase)}
-                      >
-                        Submit independent review
-                      </button>
-                      {reviewCase.review_status === "ready_for_adjudication" ? (
-                        <button
-                          className="button secondary"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void finalizeConsensus(reviewCase)}
-                        >
-                          Finalize reviewer consensus
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
+            {view.cases.map((reviewCase) => (
+              <article
+                className="cert-case cert-case-compact"
+                key={reviewCase.case_id}
+              >
+                <div className="cert-case-products">
+                  <ProductIdentity listing={reviewCase.benchmark_listing} />
+                  <span className="cert-pair-mark">versus</span>
+                  <ProductIdentity listing={reviewCase.competitor_listing} />
+                </div>
+                <div className="cert-case-meta">
+                  <span className={`cert-status ${reviewCase.review_status}`}>
+                    {label(reviewCase.review_status)}
+                  </span>
+                  <strong>{label(reviewCase.engine_proposal.tier)}</strong>
+                  <small>
+                    {Math.round(
+                      reviewCase.engine_proposal.evidence_coverage
+                        .critical_coverage * 100,
+                    )}
+                    % critical evidence
+                  </small>
+                </div>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => setActiveCaseId(reviewCase.case_id)}
+                >
+                  Review evidence
+                </button>
+              </article>
+            ))}
             {view.cases.length === 0 ? (
               <section className="cert-empty">
                 <h2>No cases match this status</h2>
@@ -704,6 +692,348 @@ export function MatchingV2ReviewAdmin() {
                 Next cases
               </button>
             </nav>
+          ) : null}
+          {activeCase ? (
+            <div
+              className="cert-drawer-backdrop"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) setActiveCaseId(null);
+              }}
+            >
+              <aside
+                className="cert-drawer"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cert-drawer-title"
+              >
+                <header className="cert-drawer-header">
+                  <div>
+                    <small>{label(activeCase.stratum)}</small>
+                    <h2 id="cert-drawer-title">Match evidence review</h2>
+                    <p>
+                      Engine suggestion:{" "}
+                      {label(activeCase.engine_proposal.tier)}. The reviewer
+                      must make an independent decision.
+                    </p>
+                  </div>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => setActiveCaseId(null)}
+                    aria-label="Close evidence drawer"
+                  >
+                    Close
+                  </button>
+                </header>
+                <div className="cert-drawer-body">
+                  <div className="cert-product-pair">
+                    <ProductIdentity listing={activeCase.benchmark_listing} />
+                    <span className="cert-pair-mark">compared with</span>
+                    <ProductIdentity listing={activeCase.competitor_listing} />
+                  </div>
+                  <p className="cert-engine-reason">
+                    <b>Why the engine surfaced this pair:</b>{" "}
+                    {activeCase.engine_proposal.decision_reason}
+                  </p>
+                  <section className="cert-ai-draft">
+                    <header>
+                      <div>
+                        <small>Advisory evidence assistant</small>
+                        <h3>AI draft review</h3>
+                        <p>
+                          The draft can inspect incomplete label evidence, but
+                          it cannot approve a relationship or alter reporting.
+                        </p>
+                      </div>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={
+                          busy ||
+                          activeCase.ai_draft?.status === "queued" ||
+                          activeCase.ai_draft?.status === "running"
+                        }
+                        onClick={() => void requestAIReview(activeCase)}
+                      >
+                        {activeCase.ai_draft
+                          ? "Refresh governed draft"
+                          : "Run AI evidence review"}
+                      </button>
+                    </header>
+                    {activeCase.ai_draft ? (
+                      <div className="cert-ai-result">
+                        <span
+                          className={`cert-status ${activeCase.ai_draft.status}`}
+                        >
+                          {label(activeCase.ai_draft.status)}
+                        </span>
+                        <small>{activeCase.ai_draft.model_id}</small>
+                        {activeCase.ai_draft.output_document?.result ? (
+                          <>
+                            <strong>
+                              Proposed:{" "}
+                              {label(
+                                activeCase.ai_draft.output_document.result
+                                  .verdict_proposal,
+                              )}
+                              {activeCase.ai_draft.output_document.result
+                                .tier_proposal
+                                ? ` · ${label(activeCase.ai_draft.output_document.result.tier_proposal)}`
+                                : ""}
+                            </strong>
+                            <p>
+                              {
+                                activeCase.ai_draft.output_document.result
+                                  .rationale
+                              }
+                            </p>
+                            {activeCase.ai_draft.output_document.result
+                              .conflicts.length ? (
+                              <ul>
+                                {activeCase.ai_draft.output_document.result.conflicts.map(
+                                  (conflict) => (
+                                    <li key={conflict}>{conflict}</li>
+                                  ),
+                                )}
+                              </ul>
+                            ) : null}
+                            {activeCase.ai_draft.output_document.result
+                              .attribute_proposals.length ? (
+                              <details>
+                                <summary>Inspect proposed attributes</summary>
+                                <dl>
+                                  {activeCase.ai_draft.output_document.result.attribute_proposals.map(
+                                    (proposal) => (
+                                      <div
+                                        key={`${proposal.attribute}-${proposal.value}`}
+                                      >
+                                        <dt>{label(proposal.attribute)}</dt>
+                                        <dd>
+                                          {proposal.value} ·{" "}
+                                          {label(proposal.evidence_source)} ·{" "}
+                                          {Math.round(
+                                            proposal.confidence * 100,
+                                          )}
+                                          % confidence
+                                        </dd>
+                                      </div>
+                                    ),
+                                  )}
+                                </dl>
+                              </details>
+                            ) : null}
+                            <button
+                              className="button secondary"
+                              type="button"
+                              onClick={() => adoptAIProposal(activeCase)}
+                            >
+                              Copy proposal into my review
+                            </button>
+                          </>
+                        ) : activeCase.ai_draft.last_error_message ? (
+                          <p>{activeCase.ai_draft.last_error_message}</p>
+                        ) : (
+                          <p>The worker is preparing this advisory draft.</p>
+                        )}
+                      </div>
+                    ) : null}
+                  </section>
+                  <section className="cert-governance-grid">
+                    {[
+                      activeCase.benchmark_listing,
+                      activeCase.competitor_listing,
+                    ].map((listing) => (
+                      <article key={listing.listing_id}>
+                        <small>{label(listing.retailer_id)} governance</small>
+                        <dl>
+                          <div>
+                            <dt>Brand</dt>
+                            <dd>{listing.brand || "Unresolved"}</dd>
+                          </div>
+                          <div>
+                            <dt>Brand status</dt>
+                            <dd>
+                              {label(
+                                String(
+                                  listing.brand_governance?.status ??
+                                    "unresolved",
+                                ),
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>PDP seller</dt>
+                            <dd>
+                              {evidenceValue(
+                                listing.seller_governance?.observed_seller,
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Seller eligibility</dt>
+                            <dd>
+                              {label(
+                                String(
+                                  listing.seller_governance?.status ??
+                                    "not governed",
+                                ),
+                              )}
+                            </dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </section>
+                  <section className="cert-evidence">
+                    <h3>Attribute evidence</h3>
+                    <div role="table">
+                      <div role="row" className="cert-evidence-head">
+                        <span>Attribute</span>
+                        <span>Primary</span>
+                        <span>Competitor</span>
+                        <span>Outcome</span>
+                      </div>
+                      {activeCase.edge.attribute_evidence.map((evidence) => (
+                        <div role="row" key={evidence.attribute}>
+                          <span>
+                            <b>{label(evidence.attribute)}</b>
+                            <small>{label(evidence.role)}</small>
+                          </span>
+                          <span>{evidenceValue(evidence.benchmark_value)}</span>
+                          <span>
+                            {evidenceValue(evidence.competitor_value)}
+                          </span>
+                          <span className={`evidence-${evidence.outcome}`}>
+                            {label(evidence.outcome)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                  <details className="cert-pdp-evidence">
+                    <summary>Product Details evidence</summary>
+                    <div>
+                      {[
+                        activeCase.benchmark_listing,
+                        activeCase.competitor_listing,
+                      ].map((listing) => (
+                        <article key={listing.listing_id}>
+                          <strong>{label(listing.retailer_id)}</strong>
+                          <pre>
+                            {Object.keys(listing.pdp_evidence ?? {}).length
+                              ? JSON.stringify(listing.pdp_evidence, null, 2)
+                              : "No PDP evidence is attached to this queue version."}
+                          </pre>
+                        </article>
+                      ))}
+                    </div>
+                  </details>
+                  {activeCase.review_submissions.length ? (
+                    <div className="cert-review-history">
+                      {activeCase.review_submissions.map((review) => (
+                        <span key={review.id}>
+                          <b>{review.reviewer_id}</b>
+                          {label(review.verdict)}
+                          <small>{review.rationale}</small>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <footer className="cert-drawer-footer">
+                  {activeCase.adjudication ? (
+                    <p className="cert-final-decision">
+                      <b>
+                        Final decision: {label(activeCase.adjudication.verdict)}
+                      </b>
+                      {activeCase.adjudication.rationale}
+                    </p>
+                  ) : (
+                    <div className="cert-review-form cert-review-form-drawer">
+                      <fieldset>
+                        <legend>Independent decision</legend>
+                        {(
+                          [
+                            ["comparable", "Approve match"],
+                            ["not_comparable", "Reject match"],
+                            ["insufficient_evidence", "Needs evidence"],
+                          ] as const
+                        ).map(([verdict, text]) => (
+                          <button
+                            className={
+                              drafts[activeCase.case_id]?.verdict === verdict
+                                ? "selected"
+                                : ""
+                            }
+                            type="button"
+                            key={verdict}
+                            onClick={() =>
+                              updateDraft(activeCase.case_id, { verdict })
+                            }
+                          >
+                            {text}
+                          </button>
+                        ))}
+                      </fieldset>
+                      <label>
+                        <span>Approved tier</span>
+                        <select
+                          value={
+                            drafts[activeCase.case_id]?.tier ??
+                            defaultDraft(activeCase).tier
+                          }
+                          disabled={
+                            drafts[activeCase.case_id]?.verdict !== "comparable"
+                          }
+                          onChange={(event) =>
+                            updateDraft(activeCase.case_id, {
+                              tier: event.target.value,
+                            })
+                          }
+                        >
+                          {TIERS.map((tier) => (
+                            <option value={tier} key={tier}>
+                              {label(tier)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="cert-rationale">
+                        <span>Evidence rationale</span>
+                        <textarea
+                          value={drafts[activeCase.case_id]?.rationale ?? ""}
+                          onChange={(event) =>
+                            updateDraft(activeCase.case_id, {
+                              rationale: event.target.value,
+                            })
+                          }
+                          placeholder="Explain the product identity, package, claims, and any conflicts."
+                        />
+                      </label>
+                      <button
+                        className="button primary"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void submitReview(activeCase)}
+                      >
+                        Submit independent review
+                      </button>
+                      {activeCase.review_status === "ready_for_adjudication" ? (
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void finalizeConsensus(activeCase)}
+                        >
+                          Finalize reviewer consensus
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </footer>
+              </aside>
+            </div>
           ) : null}
         </>
       ) : (

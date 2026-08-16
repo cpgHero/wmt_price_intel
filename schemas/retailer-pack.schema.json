@@ -154,6 +154,42 @@
         "default_cache_ttl_days": { "type": "integer", "minimum": 1 }
       }
     },
+    "seller_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "source",
+        "allow_when_missing",
+        "allowed_first_party_sellers",
+        "non_first_party_behavior"
+      ],
+      "properties": {
+        "mode": { "enum": ["first_party_only", "allow_all"] },
+        "source": { "const": "pdp_seller" },
+        "allow_when_missing": { "type": "boolean" },
+        "allowed_first_party_sellers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "non_first_party_behavior": { "const": "exclude_as_marketplace_noise" },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "first_party_only" } } },
+          "then": {
+            "properties": {
+              "allowed_first_party_sellers": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
     "matching_boundary": {
       "type": "object",
       "additionalProperties": false,

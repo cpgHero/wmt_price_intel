@@ -43,6 +43,7 @@ from rci_results import (
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 from rci_worker.analysis import PostgresAnalysisQueue, S3HistoricalCSVReader, historical_source_row
 
 
@@ -317,7 +318,9 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(repository_root / "config/retailer-catalog.json")
         )
-        classifier = OfferClassifier(pack)
+        brand_resolver = GovernedBrandResolver.from_repository(repository_root)
+        seller_resolver = GovernedSellerResolver.from_repository(repository_root)
+        classifier = OfferClassifier(pack, brand_resolver)
         relationship_reducer = RelationshipInputReducer(
             pack,
             profile_ids={str(value["id"]) for value in review_profiles},
@@ -350,6 +353,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         ),
                         classifier=classifier,
                         pack=pack,
+                        seller_resolver=seller_resolver,
                     )
                     if normalized.price is None or normalized.price <= 0:
                         quality_sampler.add(
@@ -511,6 +515,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                                 ),
                                 classifier=classifier,
                                 pack=pack,
+                                seller_resolver=seller_resolver,
                             )
                         )
         product_evidence = benchmark_product_evidence(

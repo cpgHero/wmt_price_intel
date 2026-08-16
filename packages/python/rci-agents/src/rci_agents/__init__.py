@@ -7,6 +7,13 @@ from rci_agents.governance import (
     MetricCitationRenderer,
     apply_governed_outputs,
 )
+from rci_agents.matching_review import (
+    MatchingReviewAIWorker,
+    MatchingReviewPrompt,
+    OpenAIMatchingReviewProvider,
+    PostgresMatchingReviewTaskRepository,
+    load_matching_review_prompt,
+)
 from rci_agents.models import AgentTaskReservation, AgentTaskSpec, PromptTemplate, ProviderResponse
 from rci_agents.prompts import PromptTemplateLoader
 from rci_agents.provider import (
@@ -35,12 +42,17 @@ __all__ = [
     "GovernedAnalysisAssistant",
     "GovernedOutputBuilder",
     "InMemoryAgentTaskRepository",
+    "MatchingReviewAIWorker",
+    "MatchingReviewPrompt",
     "MetricCitationRenderer",
     "ModelPricing",
+    "OpenAIMatchingReviewProvider",
     "OpenAIResponsesProvider",
     "PostgresAgentTaskRepository",
+    "PostgresMatchingReviewTaskRepository",
     "PromptTemplate",
     "PromptTemplateLoader",
     "ProviderResponse",
     "apply_governed_outputs",
+    "load_matching_review_prompt",
 ]
