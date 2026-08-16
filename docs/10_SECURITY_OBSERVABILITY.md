@@ -14,6 +14,11 @@ V1 roles: Admin, Analyst, Viewer.
 - Analyst: create/run collections, review QA, publish analyses.
 - Viewer: read completed analyses/reports.
 
+`/admin/docs` uses the existing eight-hour administrator session and returns its content through a
+private, no-store same-origin route only after authentication. It documents operating controls but
+contains no secret values, raw private object URIs, or credentials. Full individual accounts and
+RBAC remain future work and are called out as an explicit limitation in the owner/admin guide.
+
 ## Artifact access
 
 Private bucket by default. Generate short-lived signed URLs. Raw provider responses are more restricted than leadership reports.

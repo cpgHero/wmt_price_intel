@@ -109,3 +109,8 @@ Phase 12.10 consolidates Price Intelligence around Product Overview, Price Archi
 Review, and Product History; moves footprint and market detail into contextual drawers; disables
 overview clustering; and exposes only governed Search in-stock and sponsorship signals. See
 `docs/51_PHASE_12_10_PRICE_INTELLIGENCE_COHESION.md`.
+
+The protected owner and administrator operating manual is available at `/admin/docs`. Its
+maintenance contract, information architecture, access boundary, and change-order requirement are
+defined in `docs/55_OWNER_ADMIN_DOCUMENTATION_CENTER.md`. Behavioral changes are not complete until
+the affected guide and append-only change-order log are updated.

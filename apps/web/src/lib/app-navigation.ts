@@ -8,6 +8,7 @@ export type NavigationIcon =
   | "quality"
   | "matches"
   | "studies"
+  | "docs"
   | "product-packs";
 
 export interface NavigationItem {
@@ -84,6 +85,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     id: "administration",
     label: "Administration",
     items: [
+      {
+        label: "Platform Docs",
+        description: "Owner and administrator operating guide",
+        href: "/admin/docs",
+        icon: "docs",
+        match: "prefix",
+      },
       {
         label: "Match Workbench",
         description: "Review and govern product relationships across reports",

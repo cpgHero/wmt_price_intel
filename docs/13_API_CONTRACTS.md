@@ -88,3 +88,12 @@ administrator token; every queue response remains `authoritative=false`.
 
 ## Internal worker endpoints
 Prefer direct DB queue claims for workers rather than public worker HTTP routes. If internal endpoints are used, protect them with private networking/service credentials.
+
+## Protected Platform Docs
+
+The Next.js same-origin route `GET /api/admin/docs` returns the serializable owner/admin operating
+manual only when the existing administrator session is valid. It returns `401` otherwise and uses
+`Cache-Control: private, no-store`. The content contains no credentials or private evidence URIs.
+The canonical user-facing document model is `apps/web/src/lib/platform-docs.ts`; the route keeps
+the content behind the same access boundary as Product Packs, Study Discovery, and Match
+Certification.

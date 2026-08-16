@@ -38,6 +38,14 @@ Treat these as normative:
 
 If implementation needs a contract change, update schema, examples, migrations, docs, and tests together.
 
+## Owner and administrator documentation
+
+- `/admin/docs` is the maintained operating manual for the platform owner and platform administrators. Its canonical user-facing content lives in `apps/web/src/lib/platform-docs.ts`.
+- Any change to a workflow, metric, source-authority rule, Product Pack or Retailer Pack behavior, queue, budget, paid-call boundary, security control, API, service responsibility, administrator surface, testing gate, or production limitation MUST update the affected Platform Docs guide in the same change.
+- Every such change MUST append a dated entry to the Platform Docs change-order log. Never rewrite older entries to hide implementation history.
+- Clearly distinguish current authoritative production behavior, shadow/certification behavior, and planned or deferred behavior. Planned behavior must never be documented as current.
+- Update a guide's `lastVerified` date only after its described behavior has passed proportional tests. Route, label, or navigation changes must update the Platform Docs links and navigation tests.
+
 ## Test gates
 
 1. Contract/schema tests.
@@ -64,3 +72,4 @@ Fresh Strawberries must be implemented through generic Product Pack capabilities
 - API contracts are documented.
 - No secrets or large local artifacts are committed accidentally.
 - Acceptance criteria in the corresponding prompt are demonstrated.
+- The owner/admin Platform Docs and change-order log reflect the completed work.

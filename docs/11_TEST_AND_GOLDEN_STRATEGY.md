@@ -15,6 +15,17 @@
 11. Cron/timezone, schedule-slot idempotency, budget-window, historical comparison, alert evidence,
     cooldown, and email retry tests.
 12. PostgreSQL multi-claimer integration tests for schedules, analysis evaluation, and email delivery.
+13. Protected owner/admin Platform Docs content, navigation, search, authority, limitation, and
+    change-order maintenance tests.
+
+### Owner/admin documentation gate
+
+The Platform Docs are a maintained production surface, not release notes. Web tests require unique
+guide IDs, coverage of every documentation group, valid internal application links and tables,
+explicit Search/location/PDP authority, current Matching v2 certification language, honest
+limitations, and a dated change-order log. Browser acceptance verifies protected access, guide
+navigation, and full-text search. A behavior change that leaves these checks technically green but
+the operating description stale is still a release failure under `AGENTS.md`.
 
 ## Golden rule
 
