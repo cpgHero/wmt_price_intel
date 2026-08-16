@@ -37,10 +37,13 @@ _RESULT_SCHEMA: JsonObject = {
         "requires_human_review",
     ],
     "properties": {
-        "verdict_proposal": {"enum": ["comparable", "not_comparable", "insufficient_evidence"]},
+        "verdict_proposal": {
+            "type": "string",
+            "enum": ["comparable", "not_comparable", "insufficient_evidence"],
+        },
         "tier_proposal": {
             "anyOf": [
-                {"enum": sorted(_ALLOWED_TIERS)},
+                {"type": "string", "enum": sorted(_ALLOWED_TIERS)},
                 {"type": "null"},
             ]
         },
@@ -62,7 +65,10 @@ _RESULT_SCHEMA: JsonObject = {
                 "properties": {
                     "attribute": {"type": "string", "minLength": 1, "maxLength": 120},
                     "value": {"type": "string", "minLength": 1, "maxLength": 500},
-                    "evidence_source": {"enum": ["structured", "image"]},
+                    "evidence_source": {
+                        "type": "string",
+                        "enum": ["structured", "image"],
+                    },
                     "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "visible_text": {
                         "anyOf": [{"type": "string", "maxLength": 500}, {"type": "null"}]
@@ -78,7 +84,7 @@ _RESULT_SCHEMA: JsonObject = {
             "maxItems": 24,
             "items": {"type": "string", "minLength": 1, "maxLength": 1000},
         },
-        "requires_human_review": {"const": True},
+        "requires_human_review": {"type": "boolean", "const": True},
     },
 }
 

@@ -86,6 +86,13 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
     assert response.result["requires_human_review"] is True
     assert endpoint.kwargs["store"] is False
     assert endpoint.kwargs["text"]["format"]["strict"] is True
+    result_schema = endpoint.kwargs["text"]["format"]["schema"]
+    assert result_schema["properties"]["verdict_proposal"]["type"] == "string"
+    assert result_schema["properties"]["tier_proposal"]["anyOf"][0]["type"] == "string"
+    assert result_schema["properties"]["requires_human_review"] == {
+        "type": "boolean",
+        "const": True,
+    }
     content = endpoint.kwargs["input"][0]["content"]
     assert [item["type"] for item in content] == [
         "input_text",
