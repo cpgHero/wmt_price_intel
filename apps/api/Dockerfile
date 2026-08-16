@@ -37,6 +37,7 @@ COPY --chown=rci:rci fixtures/location_master fixtures/location_master
 COPY --chown=rci:rci product-packs product-packs
 COPY --chown=rci:rci retailer-packs retailer-packs
 COPY --chown=rci:rci brand-foundations brand-foundations
+COPY --chown=rci:rci agent-prompts agent-prompts
 COPY --chown=rci:rci report-blueprints report-blueprints
 COPY --chown=rci:rci schemas schemas
 RUN uv sync --frozen --no-dev --package rci-api

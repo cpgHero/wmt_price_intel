@@ -62,8 +62,12 @@ def test_report_catalog_is_packaged_and_watched_by_runtime_consumers() -> None:
         assert "/report-blueprints/**" in watch_patterns
 
 
-def test_governed_agent_package_and_prompts_are_in_the_worker_build_context() -> None:
+def test_governed_agent_package_and_prompts_are_in_runtime_build_contexts() -> None:
     api_dockerfile = (REPOSITORY_ROOT / "apps/api/Dockerfile").read_text()
     assert "packages/python/rci-agents/pyproject.toml" in api_dockerfile
-    worker_config = json.loads((REPOSITORY_ROOT / "infra/railway/worker.json").read_text())
-    assert "/agent-prompts/**" in set(worker_config["build"]["watchPatterns"])
+    assert "COPY --chown=rci:rci agent-prompts agent-prompts" in api_dockerfile
+    for service in ("api", "worker"):
+        config = json.loads(
+            (REPOSITORY_ROOT / f"infra/railway/{service}.json").read_text()
+        )
+        assert "/agent-prompts/**" in set(config["build"]["watchPatterns"])

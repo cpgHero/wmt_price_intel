@@ -6,6 +6,7 @@
     "watchPatterns": [
       "/apps/api/**",
       "/packages/python/**",
+      "/agent-prompts/**",
       "/config/**",
       "/product-packs/**",
       "/report-blueprints/**",
