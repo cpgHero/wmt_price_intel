@@ -1,6 +1,6 @@
 """Bind immutable Matching v2 gold-set releases to governed analysis runs.
 
-Revision ID: 0039_matching_v2_reporting_release
+Revision ID: 0039_match_v2_report_release
 Revises: 0038_large_ai_batches
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0039_matching_v2_reporting_release"
+revision: str = "0039_match_v2_report_release"
 down_revision: str | None = "0038_large_ai_batches"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
