@@ -88,7 +88,8 @@ versions without a review being written to the wrong release queue.
 - side-by-side product identity, imagery, retailer links, brand class, and identifiers;
 - inspectable attribute evidence and engine rationale;
 - retailer filtering with Walmart fixed as the benchmark side;
-- explicitly selected AI-draft batches capped at 25 cases with cost-ceiling disclosure;
+- explicit or queue-wide AI-draft batches capped at 1,500 cases with exact scope and aggregate
+  cost-ceiling disclosure;
 - single final decision and tier selection with required rationale;
 - immutable decision history and explicit flag-to-reopen controls;
 - truthful whole-queue progress; and

@@ -26,6 +26,7 @@ from rci_api.matching_v2_review import (
     _apply_observed_location_sidecar,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
+    _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     get_matching_v2_review_service,
 )
@@ -97,6 +98,19 @@ def test_review_cases_order_by_observed_benchmark_then_competitor_footprint() ->
         "large-primary-small-competitor",
         "small-primary",
     ]
+
+
+def test_ai_review_requires_both_search_observed_footprints() -> None:
+    case = {
+        "benchmark_listing": {"observed_location_count": 4_525},
+        "competitor_listing": {"observed_location_count": 2_595},
+    }
+
+    assert _has_complete_observed_location_evidence(case)
+    case["competitor_listing"]["observed_location_count"] = 0
+    assert not _has_complete_observed_location_evidence(case)
+    case["competitor_listing"]["observed_location_count"] = None
+    assert not _has_complete_observed_location_evidence(case)
 
 
 def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
@@ -403,6 +417,23 @@ class ReviewRepository:
             for case_id in external_case_ids
         ]
 
+    async def eligible_ai_review_cases(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        case_ids = [f"case-{index}" for index in range(30)][:limit]
+        return {
+            "queue_id": external_queue_id,
+            "competitor_retailer_id": competitor_retailer_id,
+            "eligible_case_count": 30,
+            "selected_case_count": len(case_ids),
+            "deferred_case_count": 30 - len(case_ids),
+            "case_ids": case_ids,
+        }
+
     async def retry_ai_drafts(
         self,
         external_queue_id: str,
@@ -661,6 +692,48 @@ async def test_ai_review_batch_is_bounded_idempotent_input_and_human_gated() -> 
             ),
             model_id="gpt-5.6-terra",
         )
+
+
+def test_ai_review_batch_supports_active_release_queue_scale() -> None:
+    request = AIReviewBatchRequest(
+        requested_by="reviewer-a",
+        case_ids=[f"case-{index}" for index in range(1_217)],
+    )
+
+    assert len(request.case_ids) == 1_217
+    with pytest.raises(ValueError):
+        AIReviewBatchRequest(
+            requested_by="reviewer-a",
+            case_ids=[f"case-{index}" for index in range(1_501)],
+        )
+
+
+async def test_ai_review_eligible_scope_is_queue_wide_and_retailer_scoped() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    result = await service.eligible_ai_review_cases(
+        "queue-1",
+        competitor_retailer_id="aldi_us",
+    )
+
+    assert result["competitor_retailer_id"] == "aldi_us"
+    assert result["eligible_case_count"] == 30
+    assert result["selected_case_count"] == 30
+    assert result["deferred_case_count"] == 0
+    assert result["case_ids"][0] == "case-0"
+
+
+def test_postgres_ai_review_scope_excludes_finalized_existing_drafts_and_third_party() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.eligible_ai_review_cases)
+
+    assert "NOT IN ('comparable', 'not_comparable')" in source
+    assert "matching_v2_ai_review_task" in source
+    assert "_case_has_known_third_party_seller" in source
+    assert "documents.sort(key=_case_order_key)" in source
+    request_source = inspect.getsource(PostgresMatchingV2ReviewRepository.request_ai_drafts)
+    assert '"case_document": sidecar_documents[case_id]' in request_source
+    assert "nonzero Search-derived observed-location evidence" in request_source
 
 
 async def test_ai_review_retry_is_new_linked_advisory_work_with_preserved_history() -> None:
@@ -1003,6 +1076,32 @@ async def test_ai_review_batch_route_requires_explicit_enablement_and_remains_ad
     assert response.json()["human_review_required"] is True
     assert response.json()["requested_case_count"] == 2
     assert [draft["case_id"] for draft in repository.ai_drafts] == ["case-1", "case-2"]
+
+
+async def test_ai_review_eligible_scope_route_is_lightweight_and_human_gated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    app = create_app()
+    app.dependency_overrides[get_matching_v2_review_service] = lambda: service
+    monkeypatch.setenv("MATCHING_V2_AI_REVIEW_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_MODEL_MATCHING_REVIEW", "gpt-5.6-terra")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/matching-v2/review-queues/queue-1/ai-drafts/eligible-cases",
+            params={"competitor_retailer_id": "aldi_us"},
+        )
+
+    assert response.status_code == 200
+    document = response.json()
+    assert document["authoritative"] is False
+    assert document["human_review_required"] is True
+    assert document["competitor_retailer_id"] == "aldi_us"
+    assert document["selected_case_count"] == 30
+    assert document["policy"]["max_batch_cases"] == 1_500
+    assert document["policy"]["queue_wide_selection"] is True
 
 
 async def test_ai_review_retry_route_requires_explicit_confirmation_context(

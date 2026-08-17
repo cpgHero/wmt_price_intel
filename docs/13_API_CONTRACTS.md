@@ -70,6 +70,13 @@ Protected Matching v2 certification routes are documented in
 `docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`. They require the production feature flag and
 administrator token; every queue response remains `authoritative=false`.
 
+`GET /api/v1/matching-v2/review-queues/{queue_id}/ai-drafts/eligible-cases` returns only the
+exposure-ranked case IDs and counts needed to prepare a queue-wide paid AI-review confirmation. It
+may be scoped by `competitor_retailer_id`, excludes existing tasks and final decisions, reapplies
+first-party seller policy, and fails closed when Search-derived observed-location evidence is
+missing. `POST .../ai-drafts` accepts the confirmed unique IDs (1–1,500) and creates one durable,
+idempotent, non-authoritative batch; it never certifies a relationship.
+
 ## Automation
 
 - `GET /collection-schedules`

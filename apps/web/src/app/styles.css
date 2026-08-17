@@ -3993,6 +3993,7 @@ tbody tr:last-child td {
 .cert-ai-batch-actions {
   align-items: end;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.7rem;
   justify-content: flex-end;
 }

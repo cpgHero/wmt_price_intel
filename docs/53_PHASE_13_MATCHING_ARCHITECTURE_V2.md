@@ -256,12 +256,14 @@ Drafts always set `authoritative=false` and `human_review_required=true`. A revi
 copy a proposal into their form, edit it, and submit it as their own final decision. The AI
 path cannot certify a match, flag a decision, change an edge, or update report metrics.
 
-The workbench may enqueue an explicitly selected batch of at most 25 eligible cases from the
-current queue page. It never provides an unbounded “review the queue” action. Before confirmation,
-the UI names the model, selected-case count, per-request policy ceiling, and maximum aggregate
-policy exposure. Existing drafts and finalized cases are ineligible; task idempotency is still
-defined per case evidence checksum, prompt checksum, and model. Batch submission changes only task
-creation ergonomics and does not broaden model authority.
+The workbench may enqueue an explicit page selection or every currently eligible case in the
+active queue and competitor-retailer filter. One governed batch is capped at 1,500 cases; this is
+large enough for every current five-category release queue but remains a bounded paid-call action.
+Before confirmation, the UI names the model, exact case count, per-request policy ceiling, and
+maximum aggregate policy exposure. Existing tasks, final comparable/not-comparable decisions,
+known third-party cases, and candidates missing nonzero Search-derived observed-location evidence
+are ineligible. Task idempotency remains defined per case evidence checksum, prompt checksum, and
+model. Larger batch ergonomics do not broaden model authority or bypass human certification.
 
 Before any broader AI queue review is enabled, performance must be measured against the independent
 human gold set by category and evidence stratum. Model, prompt, schema, input checksum, token usage,

@@ -127,6 +127,13 @@ configured $0.35 per-request ceiling implies at most $0.70 of simultaneous reque
 worker. The UI reads durable batch and task status from Postgres; it does not infer progress from
 the currently visible page.
 
+One Match Certification AI-review batch may contain up to 1,500 explicitly selected or
+queue-wide eligible cases. The server ranks queue-wide scope by Search-derived benchmark and
+competitor exposure, rejects known third-party/finalized/already-drafted cases, and refuses paid
+work when either product has missing or zero observed-location evidence. The UI requires an
+identified administrator to confirm the exact case count and worst-case aggregate policy exposure.
+The worker concurrency control above—not the batch size—limits simultaneous OpenAI calls.
+
 A terminal Matching v2 task enters `needs_review` after its two automatic attempts. Retrying that
 work is an explicit administrator action, never an in-place reset. The individual or filtered-page
 bulk confirmation calls the protected API, which creates a new task linked to the failed task,

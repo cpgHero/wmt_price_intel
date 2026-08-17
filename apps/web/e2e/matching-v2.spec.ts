@@ -21,6 +21,7 @@ function listing(retailerId: string, index: number) {
     brand_verified: false,
     image_url: null,
     product_url: null,
+    observed_location_count: index + 1,
     attributes: {},
   };
 }
@@ -153,6 +154,9 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   await expect(statusSummary).toContainText("Latest batch · 2 of 4 complete");
   await expect(statusSummary).toContainText("Estimated remaining: About 2 min");
   await expect(statusSummary).toContainText("Recorded cost $0.1234");
+  await expect(
+    page.getByText("1 observed stores/locations").first(),
+  ).toBeVisible();
   await expect(statusSummary).toContainText(
     "Queue-wide status refreshes automatically",
   );
@@ -198,6 +202,126 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
     ),
   ).toBeVisible();
   expect(aiDraftRequests).toBe(1);
+});
+
+test("prepares and confirms every eligible case in the retailer-scoped queue", async ({
+  page,
+}) => {
+  let submittedCaseIds: string[] = [];
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/ai-drafts/eligible-cases")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          queue_id: queue.queue_id,
+          competitor_retailer_id: "aldi_us",
+          eligible_case_count: 26,
+          selected_case_count: 26,
+          deferred_case_count: 0,
+          case_ids: cases.slice(4).map((reviewCase) => reviewCase.case_id),
+          authoritative: false,
+          human_review_required: true,
+        }),
+      });
+      return;
+    }
+    if (request.method() === "POST" && url.pathname.endsWith("/ai-drafts")) {
+      submittedCaseIds = (request.postDataJSON() as { case_ids: string[] })
+        .case_ids;
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          authoritative: false,
+          human_review_required: true,
+          requested_case_count: submittedCaseIds.length,
+          tasks: [],
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 1500,
+          queue_wide_selection: true,
+          queue_wide_scope: "current_queue_and_competitor_filter",
+          max_request_cost_usd: 0.35,
+          max_retry_rounds: 4,
+          retryable_statuses: ["needs_review"],
+          retry_preserves_history: true,
+          retry_blocks_integrity_failures: true,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        ai_review_summary: {
+          active_task_count: 0,
+          status_counts: {
+            queued: 1,
+            running: 1,
+            succeeded: 1,
+            needs_review: 1,
+          },
+          latest_batch: null,
+        },
+        status_counts: { pending: 30 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 30 }],
+        total_cases: 30,
+        selected_case_count: 30,
+        offset: 0,
+        limit: 50,
+        cases,
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  await page
+    .getByRole("combobox", { name: "Competitor retailer" })
+    .selectOption("aldi_us");
+  const batch = page.getByRole("region", {
+    name: "AI review drafts for selected cases",
+  });
+  await batch
+    .getByRole("button", { name: "Review all eligible Aldi Us cases" })
+    .click();
+
+  await expect(batch.getByText("Queue 26 advisory drafts?")).toBeVisible();
+  await expect(batch.getByText("worst-case policy exposure")).toContainText(
+    "$9.10",
+  );
+  expect(submittedCaseIds).toHaveLength(0);
+  await batch.getByRole("button", { name: "Confirm advisory review" }).click();
+  expect(submittedCaseIds).toHaveLength(26);
+  await expect(
+    page.getByText(
+      "26 AI review drafts were accepted from the queue-wide eligible scope. Status refreshes automatically while the work is queued or running.",
+    ),
+  ).toBeVisible();
 });
 
 test("retries terminal AI failures as confirmed linked individual or bulk work", async ({

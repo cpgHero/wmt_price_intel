@@ -30,6 +30,7 @@ MatchTier = Literal[
 ]
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
 _MAX_AI_RETRY_ROUNDS = 4
+_MAX_AI_REVIEW_BATCH_CASES = 1_500
 _AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
 
 
@@ -56,6 +57,12 @@ def _observed_location_count(case: Mapping[str, Any], side: str) -> int:
         return max(0, int(value))
     except (TypeError, ValueError):
         return 0
+
+
+def _has_complete_observed_location_evidence(case: Mapping[str, Any]) -> bool:
+    """Every review candidate must represent products actually seen in Search."""
+
+    return all(_observed_location_count(case, side) > 0 for side in ("benchmark", "competitor"))
 
 
 def _case_order_key(case: Mapping[str, Any]) -> tuple[int, int, int, str, str]:
@@ -199,7 +206,10 @@ class AIReviewBatchRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     requested_by: str = Field(min_length=1, max_length=200)
-    case_ids: list[str] = Field(min_length=1, max_length=25)
+    case_ids: list[str] = Field(
+        min_length=1,
+        max_length=_MAX_AI_REVIEW_BATCH_CASES,
+    )
 
 
 class AIReviewRetryRequest(BaseModel):
@@ -623,6 +633,14 @@ class MatchingV2ReviewRepository(Protocol):
         model_id: str,
         prompt: Mapping[str, str],
     ) -> list[dict[str, Any]]: ...
+
+    async def eligible_ai_review_cases(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+        limit: int,
+    ) -> dict[str, Any]: ...
 
     async def retry_ai_drafts(
         self,
@@ -1720,6 +1738,124 @@ class PostgresMatchingV2ReviewRepository:
         )
         return tasks[0]
 
+    async def eligible_ai_review_cases(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        """Return a lightweight, exposure-ranked scope for a paid AI review run."""
+
+        async with self._engine.connect() as connection:
+            rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH selected_queue AS (
+                              SELECT id, version
+                              FROM matching_v2_review_queue
+                              WHERE external_queue_id = :queue_id
+                              ORDER BY created_at DESC
+                              LIMIT 1
+                            )
+                            SELECT c.external_case_id, c.case_document,
+                                   q.version AS queue_version
+                            FROM matching_v2_review_case c
+                            JOIN selected_queue q ON q.id = c.review_queue_id
+                            LEFT JOIN LATERAL (
+                              SELECT decision.verdict
+                              FROM (
+                                SELECT s.verdict, s.created_at, s.id
+                                FROM matching_v2_review_submission s
+                                WHERE s.review_case_id = c.id
+                                UNION ALL
+                                SELECT a.verdict, a.created_at, a.id
+                                FROM matching_v2_adjudication a
+                                WHERE a.review_case_id = c.id
+                              ) decision
+                              ORDER BY decision.created_at DESC, decision.id DESC
+                              LIMIT 1
+                            ) current_decision ON true
+                            WHERE (CAST(:competitor_retailer_id AS text) IS NULL
+                                   OR c.competitor_retailer_id =
+                                      CAST(:competitor_retailer_id AS text))
+                              AND coalesce(current_decision.verdict, 'pending')
+                                  NOT IN ('comparable', 'not_comparable')
+                              AND NOT EXISTS (
+                                SELECT 1
+                                FROM matching_v2_ai_review_task task
+                                WHERE task.review_case_id = c.id
+                              )
+                            """
+                        ),
+                        {
+                            "queue_id": external_queue_id,
+                            "competitor_retailer_id": competitor_retailer_id,
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        if not rows:
+            # Distinguish an empty eligible scope from an unknown queue.
+            async with self._engine.connect() as connection:
+                queue_exists = (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT 1
+                            FROM matching_v2_review_queue
+                            WHERE external_queue_id = :queue_id
+                            LIMIT 1
+                            """
+                        ),
+                        {"queue_id": external_queue_id},
+                    )
+                ).scalar_one_or_none()
+            if queue_exists is None:
+                raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+            return {
+                "queue_id": external_queue_id,
+                "competitor_retailer_id": competitor_retailer_id,
+                "eligible_case_count": 0,
+                "selected_case_count": 0,
+                "deferred_case_count": 0,
+                "case_ids": [],
+            }
+        documents = [dict(row["case_document"]) for row in rows]
+        _apply_observed_location_sidecar(
+            documents,
+            queue_id=external_queue_id,
+            queue_version=str(rows[0]["queue_version"]),
+            root=_repository_root(),
+        )
+        documents = [
+            document for document in documents if not _case_has_known_third_party_seller(document)
+        ]
+        incomplete_footprints = [
+            str(document.get("case_id") or "")
+            for document in documents
+            if not _has_complete_observed_location_evidence(document)
+        ]
+        if incomplete_footprints:
+            raise ValueError(
+                "AI review scope has incomplete Search-derived observed-location evidence: "
+                f"{incomplete_footprints[:10]!r}"
+            )
+        documents.sort(key=_case_order_key)
+        selected = documents[:limit]
+        return {
+            "queue_id": external_queue_id,
+            "competitor_retailer_id": competitor_retailer_id,
+            "eligible_case_count": len(documents),
+            "selected_case_count": len(selected),
+            "deferred_case_count": max(0, len(documents) - len(selected)),
+            "case_ids": [str(document["case_id"]) for document in selected],
+        }
+
     async def request_ai_drafts(
         self,
         external_queue_id: str,
@@ -1797,6 +1933,16 @@ class PostgresMatchingV2ReviewRepository:
                     "known third-party marketplace seller cases cannot request AI drafts: "
                     f"{excluded_seller_cases!r}"
                 )
+            incomplete_footprints = [
+                case_id
+                for case_id in external_case_ids
+                if not _has_complete_observed_location_evidence(sidecar_documents[case_id])
+            ]
+            if incomplete_footprints:
+                raise ValueError(
+                    "AI review requires nonzero Search-derived observed-location evidence: "
+                    f"{incomplete_footprints!r}"
+                )
             finalized = [
                 case_id
                 for case_id in external_case_ids
@@ -1815,7 +1961,10 @@ class PostgresMatchingV2ReviewRepository:
             tasks = [
                 await self._insert_ai_draft_task(
                     connection,
-                    dict(rows_by_case[case_id]),
+                    {
+                        **dict(rows_by_case[case_id]),
+                        "case_document": sidecar_documents[case_id],
+                    },
                     batch_id=str(batch["id"]),
                     requested_by=requested_by,
                     model_id=model_id,
@@ -1939,6 +2088,16 @@ class PostgresMatchingV2ReviewRepository:
                 raise ValueError(
                     "known third-party marketplace seller cases cannot retry AI drafts: "
                     f"{excluded_seller_cases!r}"
+                )
+            incomplete_footprints = [
+                case_id
+                for case_id in external_case_ids
+                if not _has_complete_observed_location_evidence(sidecar_documents[case_id])
+            ]
+            if incomplete_footprints:
+                raise ValueError(
+                    "AI review retry requires nonzero Search-derived observed-location evidence: "
+                    f"{incomplete_footprints!r}"
                 )
             finalized = [
                 case_id
@@ -2696,6 +2855,18 @@ class MatchingV2ReviewService:
             "tasks": tasks,
         }
 
+    async def eligible_ai_review_cases(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+    ) -> dict[str, Any]:
+        return await self._repository.eligible_ai_review_cases(
+            external_queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+            limit=_MAX_AI_REVIEW_BATCH_CASES,
+        )
+
     async def retry_ai_drafts(
         self,
         external_queue_id: str,
@@ -2924,7 +3095,9 @@ def _matching_ai_review_policy() -> dict[str, Any]:
     return {
         "enabled": enabled and bool(model_id),
         "model_id": model_id or None,
-        "max_batch_cases": 25,
+        "max_batch_cases": _MAX_AI_REVIEW_BATCH_CASES,
+        "queue_wide_selection": True,
+        "queue_wide_scope": "current_queue_and_competitor_filter",
         "max_request_cost_usd": max_request_cost_usd,
         "max_retry_rounds": _MAX_AI_RETRY_ROUNDS,
         "retryable_statuses": ["needs_review"],
@@ -3066,6 +3239,29 @@ async def request_matching_v2_ai_draft_batch(
     try:
         return await service.request_ai_drafts(queue_id, body, model_id=model_id)
     except (ContractError, KeyError, OSError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/review-queues/{queue_id}/ai-drafts/eligible-cases")
+async def list_matching_v2_ai_draft_eligible_cases(
+    queue_id: str,
+    request: Request,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+    competitor_retailer_id: str | None = Query(default=None),
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    _require_matching_ai_review()
+    try:
+        document = await service.eligible_ai_review_cases(
+            queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+        )
+        document["policy"] = _matching_ai_review_policy()
+        document["authoritative"] = False
+        document["human_review_required"] = True
+        return document
+    except (KeyError, ValueError) as exc:
         raise _http_error(exc) from exc
 
 

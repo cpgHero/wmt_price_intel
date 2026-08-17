@@ -646,7 +646,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Known third-party listings, finalized decisions, active tasks, and governed input/prompt integrity failures cannot cross this paid-call boundary. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The strict response schema is bound to each request: without input images the model cannot claim image evidence, and with images every image proposal must cite visible evidence and an exact allowed source URL. Every draft remains advisory and requires a human decision. Vision never treats an unseen claim as false.",
+          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. Every draft remains advisory and requires a human decision.",
         },
         {
           kind: "callout",
@@ -1290,6 +1290,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented · deployment validation pending",
+              "Match Certification adds governed large and queue-wide AI review runs.",
+              "Administrators can submit explicit selections larger than 25 or prepare every eligible case in the current queue/retailer filter, up to 1,500 cases in one durable batch. Exact count and worst-case model exposure require confirmation; existing tasks, final decisions, third-party items, and missing observed-location evidence are blocked. Production read-only validation found complete nonzero Milk footprints for all 311 candidates (Walmart 1–4,525 locations; competitors 1–2,595). No paid AI work was started during validation.",
+            ],
             [
               "2026-08-16",
               "Deployed & verified",

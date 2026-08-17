@@ -243,6 +243,8 @@ interface QueueView {
     enabled: boolean;
     model_id: string | null;
     max_batch_cases: number;
+    queue_wide_selection?: boolean;
+    queue_wide_scope?: string;
     max_request_cost_usd: number;
     max_retry_rounds: number;
     retryable_statuses: AIDraftStatus[];
@@ -272,6 +274,17 @@ interface ReviewDraft {
   rationale: string;
 }
 
+interface EligibleAIReviewScope {
+  queue_id: string;
+  competitor_retailer_id: string | null;
+  eligible_case_count: number;
+  selected_case_count: number;
+  deferred_case_count: number;
+  case_ids: string[];
+  authoritative: false;
+  human_review_required: true;
+}
+
 const DEFAULT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000001";
 const TIERS = [
   "exact_item",
@@ -285,7 +298,9 @@ const BULK_DISCOVERY_PAGE_SIZE = 500;
 const DISABLED_AI_POLICY: NonNullable<QueueView["ai_review_policy"]> = {
   enabled: false,
   model_id: null,
-  max_batch_cases: 25,
+  max_batch_cases: 1500,
+  queue_wide_selection: true,
+  queue_wide_scope: "current_queue_and_competitor_filter",
   max_request_cost_usd: 0,
   max_retry_rounds: 4,
   retryable_statuses: ["needs_review"],
@@ -480,6 +495,11 @@ export function MatchingV2ReviewAdmin() {
   const [busy, setBusy] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [selectionScope, setSelectionScope] = useState<"manual" | "queue-wide">(
+    "manual",
+  );
+  const [selectionDeferredCaseCount, setSelectionDeferredCaseCount] =
+    useState(0);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [retryConfirmCaseIds, setRetryConfirmCaseIds] = useState<string[]>([]);
   const [retryConfirmationPlacement, setRetryConfirmationPlacement] = useState<
@@ -536,16 +556,19 @@ export function MatchingV2ReviewAdmin() {
       }
       return next;
     });
-    setSelectedCaseIds((current) =>
-      current.filter((caseId) =>
-        response.cases.some(
-          (reviewCase) =>
-            reviewCase.case_id === caseId &&
-            ["pending", "flagged"].includes(reviewCase.review_status) &&
-            !reviewCase.ai_draft,
-        ),
-      ),
-    );
+    setSelectedCaseIds((current) => {
+      const visibleCases = new Map(
+        response.cases.map((reviewCase) => [reviewCase.case_id, reviewCase]),
+      );
+      return current.filter((caseId) => {
+        const reviewCase = visibleCases.get(caseId);
+        return (
+          !reviewCase ||
+          (["pending", "flagged"].includes(reviewCase.review_status) &&
+            !reviewCase.ai_draft)
+        );
+      });
+    });
   }, [competitorFilter, offset, selectedQueueId, statusFilter]);
 
   useEffect(() => {
@@ -841,8 +864,10 @@ export function MatchingV2ReviewAdmin() {
       );
       setBatchConfirmOpen(false);
       setSelectedCaseIds([]);
+      setSelectionScope("manual");
+      setSelectionDeferredCaseCount(0);
       setNotice(
-        `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted. Status refreshes automatically while the work is queued or running.`,
+        `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted${selectionScope === "queue-wide" ? " from the queue-wide eligible scope" : ""}. Status refreshes automatically while the work is queued or running.`,
       );
       await loadQueue();
     } catch (cause) {
@@ -917,7 +942,44 @@ export function MatchingV2ReviewAdmin() {
     }
     setError(null);
     setNotice(null);
+    setSelectionScope("manual");
+    setSelectionDeferredCaseCount(0);
     setBatchConfirmOpen(true);
+  }
+
+  async function openQueueWideAIReviewConfirmation() {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before reviewing the eligible queue with AI.",
+      );
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const query = new URLSearchParams();
+      if (competitorFilter !== "all") {
+        query.set("competitor_retailer_id", competitorFilter);
+      }
+      const scope = await jsonRequest<EligibleAIReviewScope>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-drafts/eligible-cases${query.size ? `?${query}` : ""}`,
+      );
+      if (!scope.case_ids.length) {
+        throw new Error(
+          "No eligible cases remain without an AI draft or final decision in the current queue and competitor filter.",
+        );
+      }
+      setSelectedCaseIds(scope.case_ids);
+      setSelectionScope("queue-wide");
+      setSelectionDeferredCaseCount(scope.deferred_case_count);
+      setBatchConfirmOpen(true);
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function refreshAIStatus() {
@@ -1117,6 +1179,8 @@ export function MatchingV2ReviewAdmin() {
               setCompetitorFilter("all");
               setOffset(0);
               setSelectedCaseIds([]);
+              setSelectionScope("manual");
+              setSelectionDeferredCaseCount(0);
               setBatchConfirmOpen(false);
               setBulkCertificationPreview(null);
             }}
@@ -1138,6 +1202,8 @@ export function MatchingV2ReviewAdmin() {
               setCompetitorFilter(event.target.value);
               setOffset(0);
               setSelectedCaseIds([]);
+              setSelectionScope("manual");
+              setSelectionDeferredCaseCount(0);
               setBatchConfirmOpen(false);
               setBulkCertificationPreview(null);
             }}
@@ -1158,6 +1224,8 @@ export function MatchingV2ReviewAdmin() {
               setStatusFilter(event.target.value);
               setOffset(0);
               setSelectedCaseIds([]);
+              setSelectionScope("manual");
+              setSelectionDeferredCaseCount(0);
               setBatchConfirmOpen(false);
               setBulkCertificationPreview(null);
             }}
@@ -1254,10 +1322,12 @@ export function MatchingV2ReviewAdmin() {
                 AI review drafts for selected cases
               </h3>
               <p>
-                Select up to {aiPolicy.max_batch_cases} cases from this filtered
-                page. Drafts remain advisory, cannot certify a match, and use
-                product images only when critical structured evidence is
-                incomplete or conflicting.
+                Select cases on this page or prepare every eligible candidate in
+                the current queue and competitor filter, up to the governed{" "}
+                {aiPolicy.max_batch_cases.toLocaleString()}-case run limit.
+                Drafts remain advisory, cannot certify a match, and use product
+                images only when critical structured evidence is incomplete or
+                conflicting.
               </p>
             </div>
             <label className="cert-ai-select-all">
@@ -1265,18 +1335,27 @@ export function MatchingV2ReviewAdmin() {
                 type="checkbox"
                 checked={
                   eligibleCases.length > 0 &&
-                  selectedCaseIds.length ===
-                    Math.min(eligibleCases.length, aiPolicy.max_batch_cases)
+                  eligibleCases.every((reviewCase) =>
+                    selectedCaseIds.includes(reviewCase.case_id),
+                  )
                 }
                 disabled={!aiPolicy.enabled || !eligibleCases.length}
                 onChange={(event) => {
-                  setSelectedCaseIds(
-                    event.target.checked
-                      ? eligibleCases
-                          .slice(0, aiPolicy.max_batch_cases)
-                          .map((reviewCase) => reviewCase.case_id)
-                      : [],
+                  const pageCaseIds = eligibleCases.map(
+                    (reviewCase) => reviewCase.case_id,
                   );
+                  setSelectedCaseIds((current) =>
+                    event.target.checked
+                      ? [...new Set([...current, ...pageCaseIds])].slice(
+                          0,
+                          aiPolicy.max_batch_cases,
+                        )
+                      : current.filter(
+                          (caseId) => !pageCaseIds.includes(caseId),
+                        ),
+                  );
+                  setSelectionScope("manual");
+                  setSelectionDeferredCaseCount(0);
                   setBatchConfirmOpen(false);
                 }}
               />
@@ -1314,6 +1393,25 @@ export function MatchingV2ReviewAdmin() {
                 {selectedCaseIds.length
                   ? `Review ${selectedCaseIds.length} selected with AI`
                   : "Review selected with AI"}
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                disabled={
+                  busy ||
+                  !aiPolicy.enabled ||
+                  aiPolicy.queue_wide_selection !== true
+                }
+                aria-busy={busy}
+                onClick={() => void openQueueWideAIReviewConfirmation()}
+              >
+                {aiPolicy.queue_wide_selection !== true
+                  ? "Queue-wide review unavailable"
+                  : busy
+                    ? "Assessing eligible queue…"
+                    : competitorFilter === "all"
+                      ? "Review all eligible with AI"
+                      : `Review all eligible ${label(competitorFilter)} cases`}
               </button>
             </div>
             <div className="cert-ai-status-summary" aria-live="polite">
@@ -1610,13 +1708,18 @@ export function MatchingV2ReviewAdmin() {
               <div className="cert-ai-batch-confirm" role="alert">
                 <div>
                   <strong>
-                    Queue {selectedCaseIds.length} advisory drafts?
+                    Queue {selectedCaseIds.length.toLocaleString()} advisory
+                    drafts?
                   </strong>
                   <p>
+                    {selectionScope === "queue-wide"
+                      ? `This is the complete currently eligible ${competitorFilter === "all" ? "queue" : label(competitorFilter) + " scope"}${selectionDeferredCaseCount ? ` within the ${aiPolicy.max_batch_cases.toLocaleString()}-case governed run limit; ${selectionDeferredCaseCount.toLocaleString()} additional eligible cases will remain for a subsequent run` : ""}. `
+                      : "This is the explicitly selected page scope. "}
                     Model: {aiPolicy.model_id}. The configured per-request
-                    ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)};
-                    actual usage is recorded per case. Human review is still
-                    required for every decision.
+                    ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)} per
+                    case, so the worst-case policy exposure for this run is $
+                    {selectedMaximumCost.toFixed(2)}. Actual usage is recorded
+                    per case. Human review is still required for every decision.
                   </p>
                 </div>
                 <button
@@ -1708,6 +1811,8 @@ export function MatchingV2ReviewAdmin() {
                               (caseId) => caseId !== reviewCase.case_id,
                             ),
                       );
+                      setSelectionScope("manual");
+                      setSelectionDeferredCaseCount(0);
                       setBatchConfirmOpen(false);
                     }}
                   />
