@@ -745,6 +745,24 @@ class AnalysisProcessor:
             if not callable(loader):
                 raise ValueError("Matching v2 replay requires a gold-set release repository")
             matching_v2_release = await loader(job.matching_v2_gold_set_release_id)
+            release_checksum = hashlib.sha256(
+                json.dumps(
+                    matching_v2_release["document"],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                    default=str,
+                ).encode()
+            ).hexdigest()
+            if release_checksum != matching_v2_release["document_checksum"]:
+                raise ValueError("Matching v2 release checksum does not match its document")
+            release_coverage = matching_v2_release["coverage"]
+            if int(release_coverage["queue_case_count"]) != (
+                int(release_coverage["certified_comparable_count"])
+                + int(release_coverage["certified_not_comparable_count"])
+                + int(release_coverage["unresolved_excluded_count"])
+            ):
+                raise ValueError("Matching v2 release coverage does not reconcile")
             if (
                 matching_v2_release["product_pack_id"] != pack.id
                 or matching_v2_release["product_pack_version"] != pack.version
