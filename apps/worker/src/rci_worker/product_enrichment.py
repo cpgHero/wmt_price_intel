@@ -39,6 +39,13 @@ def _enabled(value: str | None, *, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _selected_product_pack_version(source_version: str, override: str | None) -> str:
+    version = override.strip() if override is not None else source_version
+    if not version:
+        raise ValueError("Product Pack version cannot be empty")
+    return version
+
+
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -47,6 +54,14 @@ def _arguments() -> argparse.Namespace:
         )
     )
     parser.add_argument("--analysis-id", required=True)
+    parser.add_argument(
+        "--product-pack-version",
+        help=(
+            "Use an exact published Product Pack version to reclassify the persisted "
+            "source observations before planning enrichment. The source analysis remains "
+            "immutable, and both versions are recorded in the estimate/run audit output."
+        ),
+    )
     parser.add_argument(
         "--repository-root",
         type=Path,
@@ -117,10 +132,14 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         source = record.result.get("source")
         if not isinstance(source, dict) or source.get("kind") != "historical_import":
             raise ValueError("PDP replay currently requires a persisted historical analysis")
+        enrichment_product_pack_version = _selected_product_pack_version(
+            record.product_pack_version,
+            args.product_pack_version,
+        )
         pack = await CatalogProductPackLoader(
             repository_root,
             PostgresProductPackCatalog(database.engine),
-        ).load(record.product_pack_id, record.product_pack_version)
+        ).load(record.product_pack_id, enrichment_product_pack_version)
         benchmark = str(record.result["benchmark_retailer"])
         competitors = [str(value) for value in record.result.get("competitors", [])]
         configured_modes = {
@@ -282,6 +301,15 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
         summary: dict[str, object] = {
             "status": "estimate" if not args.confirm_paid_calls else "queued",
             "analysis_id": record.analysis_id,
+            "source_product_pack": {
+                "id": record.product_pack_id,
+                "version": record.product_pack_version,
+            },
+            "enrichment_product_pack": {
+                "id": pack.id,
+                "version": pack.version,
+                "override": pack.version != record.product_pack_version,
+            },
             "candidate_product_relationships": len(selected_pairs),
             "in_scope_retailer_products": len(in_scope_products),
             "admitted_offer_observations": len(analysis_offer_ids),
@@ -340,6 +368,10 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 context={
                     "source": "analysis_in_scope_product",
                     "analysis_id": record.analysis_id,
+                    "source_product_pack_id": record.product_pack_id,
+                    "source_product_pack_version": record.product_pack_version,
+                    "enrichment_product_pack_id": pack.id,
+                    "enrichment_product_pack_version": pack.version,
                     "source_artifact_id": source_artifact_by_offer_id.get(
                         candidate.source_offer_id
                     ),
