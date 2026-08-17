@@ -6,6 +6,9 @@
 > disagreement, incomplete evidence, conflicts, and confidence limits remain visible advisory
 > warnings and are copied into the audit comment. Final decisions, invalid/non-affirmative drafts,
 > known third-party sellers, and missing immutable evidence remain blocking exclusions.
+> Phase 13.10 further amended the workflow to policy v1.2.0: both `comparable` and
+> `not_comparable` AI recommendations can be explicitly accepted in one guarded administrator
+> batch. `insufficient_evidence` remains non-final and cannot be bulk-certified.
 
 ## Outcome
 

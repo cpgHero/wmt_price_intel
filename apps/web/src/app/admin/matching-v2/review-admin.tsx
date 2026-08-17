@@ -96,6 +96,7 @@ interface AIBulkCertificationPolicy {
   version: string;
   max_cases: number;
   max_candidates_assessed?: number;
+  allowed_verdicts?: Array<"comparable" | "not_comparable">;
   allowed_tiers: string[];
   minimum_critical_coverage: number;
   minimum_ai_attribute_confidence: number;
@@ -111,6 +112,7 @@ interface AIBulkCertificationCandidate {
   reasons: string[];
   warning_codes: string[];
   warnings: string[];
+  recommended_verdict: "comparable" | "not_comparable";
   recommended_tier: string | null;
   critical_coverage: number;
   engine_status: string | null;
@@ -957,8 +959,10 @@ export function MatchingV2ReviewAdmin() {
             (reviewCase) =>
               reviewCase.review_status === "pending" &&
               reviewCase.ai_draft?.status === "succeeded" &&
-              reviewCase.ai_draft.output_document?.result.verdict_proposal ===
-                "comparable",
+              ["comparable", "not_comparable"].includes(
+                reviewCase.ai_draft.output_document?.result.verdict_proposal ??
+                  "",
+              ),
           ),
         );
         discoveryOffset += response.cases.length;
@@ -972,7 +976,7 @@ export function MatchingV2ReviewAdmin() {
         .map((reviewCase) => reviewCase.case_id);
       if (!candidateIds.length) {
         throw new Error(
-          "No pending affirmative AI match recommendations were found in the current queue and retailer filter.",
+          "No pending comparable or not-comparable AI recommendations were found in the current queue and retailer filter.",
         );
       }
       const preview = await jsonRequest<AIBulkCertificationPreview>(
@@ -1008,7 +1012,10 @@ export function MatchingV2ReviewAdmin() {
     setNotice(null);
     try {
       const response = await jsonRequest<{
-        approved_case_count: number;
+        certified_case_count?: number;
+        comparable_case_count?: number;
+        not_comparable_case_count?: number;
+        approved_case_count?: number;
         idempotent_replay: boolean;
       }>(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-bulk-certification/commit`,
@@ -1023,9 +1030,13 @@ export function MatchingV2ReviewAdmin() {
           }),
         },
       );
+      const certifiedCount =
+        response.certified_case_count ?? response.approved_case_count ?? 0;
+      const comparableCount = response.comparable_case_count ?? certifiedCount;
+      const notComparableCount = response.not_comparable_case_count ?? 0;
       setBulkCertificationPreview(null);
       setNotice(
-        `${response.approved_case_count} AI-recommended ${response.approved_case_count === 1 ? "match was" : "matches were"} approved by ${reviewerId.trim()} and finalized. Reporting is not recalculated automatically; each decision remains final until flagged.`,
+        `${certifiedCount} AI ${certifiedCount === 1 ? "recommendation was" : "recommendations were"} accepted by ${reviewerId.trim()} and finalized (${comparableCount} comparable, ${notComparableCount} not comparable). Reporting is not recalculated automatically; each decision remains final until flagged.`,
       );
       await loadQueue();
     } catch (cause) {
@@ -1399,12 +1410,13 @@ export function MatchingV2ReviewAdmin() {
                 <div>
                   <small>Guarded human certification</small>
                   <h3 id="cert-bulk-certification-title">
-                    Bulk accept affirmative AI match recommendations
+                    Bulk accept AI certification recommendations
                   </h3>
                   <p>
-                    The app finds completed affirmative AI recommendations
-                    across the pending queue and current retailer filter, then
-                    the server prepares up to 50 at a time. True eligibility
+                    The app finds completed comparable and not-comparable AI
+                    recommendations across the pending queue and current
+                    retailer filter, then the server prepares up to 50 at a
+                    time. Insufficient-evidence proposals and true eligibility
                     failures stay blocked; evidence and confidence concerns are
                     shown as warnings for your explicit decision.
                   </p>
@@ -1423,7 +1435,7 @@ export function MatchingV2ReviewAdmin() {
                 className="cert-bulk-guardrails"
                 aria-label="Bulk acceptance guardrails"
               >
-                <span>Affirmative AI recommendation</span>
+                <span>Comparable or not comparable</span>
                 <span>Valid governed draft</span>
                 <span>No known third-party seller</span>
                 <span>Immutable source evidence</span>
@@ -1467,14 +1479,20 @@ export function MatchingV2ReviewAdmin() {
                               <BulkProductIdentity
                                 product={candidate.benchmark_product}
                               />
-                              <span>matches</span>
+                              <span>
+                                {candidate.recommended_verdict === "comparable"
+                                  ? "matches"
+                                  : "is not comparable with"}
+                              </span>
                               <BulkProductIdentity
                                 product={candidate.competitor_product}
                               />
                             </div>
                             <div className="cert-bulk-evidence-summary">
                               <strong>
-                                {label(candidate.recommended_tier)}
+                                {candidate.recommended_verdict === "comparable"
+                                  ? label(candidate.recommended_tier)
+                                  : "Not comparable"}
                               </strong>
                               <span>
                                 {Math.round(candidate.critical_coverage * 100)}%
@@ -1496,9 +1514,8 @@ export function MatchingV2ReviewAdmin() {
                     </div>
                   ) : (
                     <p className="cert-bulk-empty">
-                      No affirmative recommendation passed the required
-                      certification gates. Review the blocking exclusions before
-                      proceeding.
+                      No AI recommendation passed the required certification
+                      gates. Review the blocking exclusions before proceeding.
                     </p>
                   )}
                   {bulkCertificationPreview.exclusion_summary.length ? (
@@ -1539,10 +1556,11 @@ export function MatchingV2ReviewAdmin() {
                   ) : null}
                   <footer>
                     <p>
-                      <b>Human confirmation required.</b> You are approving
-                      these exact product relationships—not delegating the
-                      decision to AI. The complete AI evidence rationale is
-                      copied into each final reviewer comment for auditability.
+                      <b>Human confirmation required.</b> You are accepting each
+                      displayed comparable or not-comparable outcome—not
+                      delegating the decision to AI. The complete AI evidence
+                      rationale is copied into each final reviewer comment for
+                      auditability.
                     </p>
                     <button
                       className="button secondary"
@@ -1565,7 +1583,7 @@ export function MatchingV2ReviewAdmin() {
                     >
                       {busy
                         ? "Finalizing…"
-                        : `Approve ${bulkCertificationPreview.eligible_case_count} ${bulkCertificationPreview.eligible_case_count === 1 ? "match" : "matches"}`}
+                        : `Finalize ${bulkCertificationPreview.eligible_case_count} ${bulkCertificationPreview.eligible_case_count === 1 ? "recommendation" : "recommendations"}`}
                     </button>
                   </footer>
                 </div>

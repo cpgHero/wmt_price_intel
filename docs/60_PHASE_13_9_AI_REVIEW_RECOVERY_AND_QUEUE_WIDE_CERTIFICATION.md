@@ -70,6 +70,12 @@ relationship:
 If more than 50 recommendations are pending, the administrator confirms successive bounded batches.
 This remains human bulk certification, not autonomous AI approval.
 
+Phase 13.10 supersedes only the verdict boundary described above. Queue-wide discovery, bounded
+50-case confirmation, warnings, immutable evidence, final-until-flagged behavior, and explicit
+administrator confirmation remain unchanged. The client and server now discover and certify valid
+`comparable` and `not_comparable` recommendations; `insufficient_evidence` remains blocked from a
+final bulk decision.
+
 ## Production evidence collected before the fix
 
 Read-only production queries and Railway logs established:

@@ -329,12 +329,19 @@ test("retries terminal AI failures as confirmed linked individual or bulk work",
   });
 });
 
-test("previews advisory warnings and exclusions before bulk certification", async ({
+test("bulk-certifies comparable and not-comparable AI recommendations", async ({
   page,
 }) => {
   let commitPayload: Record<string, unknown> | null = null;
-  const readyCases = [0, 1].map((index) => ({
+  const readyCases = [0, 1, 2].map((index) => ({
     ...cases[index + 4],
+    benchmark_listing:
+      index === 2
+        ? {
+            ...cases[index + 4].benchmark_listing,
+            seller_governance: { status: "excluded_third_party" },
+          }
+        : cases[index + 4].benchmark_listing,
     ai_draft: {
       id: `ready-ai-${index}`,
       batch_id: "batch-ready",
@@ -345,8 +352,8 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
         authoritative: false,
         human_review_required: true,
         result: {
-          verdict_proposal: "comparable",
-          tier_proposal: "exact_specification",
+          verdict_proposal: index === 1 ? "not_comparable" : "comparable",
+          tier_proposal: index === 1 ? null : "exact_specification",
           rationale: `Governed package evidence agrees for pair ${index + 1}.`,
           attribute_proposals: [],
           conflicts: [],
@@ -376,9 +383,10 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
           queue_id: queue.queue_id,
           queue_version: queue.version,
           policy: {
-            id: "guarded_ai_match_bulk_accept",
-            version: "1.1.0",
+            id: "guarded_ai_recommendation_bulk_certification",
+            version: "1.2.0",
             max_cases: 50,
+            allowed_verdicts: ["comparable", "not_comparable"],
             allowed_tiers: [
               "exact_item",
               "exact_specification",
@@ -392,8 +400,8 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
             human_confirmation_required: true,
             automatically_changes_reporting: false,
           },
-          requested_case_count: 2,
-          eligible_case_count: 1,
+          requested_case_count: 3,
+          eligible_case_count: 2,
           excluded_case_count: 1,
           eligible_cases: [
             {
@@ -405,6 +413,7 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
               warnings: [
                 "The AI draft identifies one or more unresolved conflicts.",
               ],
+              recommended_verdict: "comparable",
               recommended_tier: "exact_specification",
               critical_coverage: 1,
               engine_status: "proposed",
@@ -427,8 +436,72 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
                 observed_location_count: 1700,
               },
             },
+            {
+              case_id: readyCases[1].case_id,
+              eligible: true,
+              reason_codes: [],
+              reasons: [],
+              warning_codes: [],
+              warnings: [],
+              recommended_verdict: "not_comparable",
+              recommended_tier: null,
+              critical_coverage: 1,
+              engine_status: "rejected",
+              ai_task_id: "ready-ai-1",
+              ai_rationale:
+                "A material package-size conflict makes this pair not comparable.",
+              benchmark_product: {
+                retailer_id: "walmart_us",
+                retailer_product_id: "walmart-product-5",
+                title: "Walmart milk 5",
+                brand: "Great Value",
+                image_url: null,
+                observed_location_count: 3900,
+              },
+              competitor_product: {
+                retailer_id: "aldi_us",
+                retailer_product_id: "aldi-product-5",
+                title: "ALDI milk 5",
+                brand: "Friendly Farms",
+                image_url: null,
+                observed_location_count: 1600,
+              },
+            },
           ],
-          excluded_cases: [],
+          excluded_cases: [
+            {
+              case_id: readyCases[2].case_id,
+              eligible: false,
+              reason_codes: ["known_third_party_seller"],
+              reasons: [
+                "A known third-party marketplace seller makes the listing ineligible.",
+              ],
+              warning_codes: [],
+              warnings: [],
+              recommended_verdict: "comparable",
+              recommended_tier: "exact_specification",
+              critical_coverage: 1,
+              engine_status: "proposed",
+              ai_task_id: "ready-ai-2",
+              ai_rationale: "The governed package evidence otherwise agrees.",
+              benchmark_product: {
+                retailer_id: "walmart_us",
+                retailer_product_id: "marketplace-product",
+                title: "Marketplace milk",
+                brand: "Third Party",
+                image_url: null,
+                observed_location_count: 20,
+              },
+              competitor_product: {
+                retailer_id: "aldi_us",
+                retailer_product_id: "aldi-product-6",
+                title: "ALDI milk 6",
+                brand: "Friendly Farms",
+                image_url: null,
+                observed_location_count: 1400,
+              },
+            },
+          ],
           exclusion_summary: [
             {
               reason_code: "known_third_party_seller",
@@ -460,8 +533,12 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
         contentType: "application/json",
         body: JSON.stringify({
           action_id: "bulk-action-1",
-          approved_case_count: 1,
-          approved_case_ids: [readyCases[0].case_id],
+          certified_case_count: 2,
+          certified_case_ids: [readyCases[0].case_id, readyCases[1].case_id],
+          comparable_case_count: 1,
+          not_comparable_case_count: 1,
+          approved_case_count: 2,
+          approved_case_ids: [readyCases[0].case_id, readyCases[1].case_id],
           idempotent_replay: false,
         }),
       });
@@ -489,9 +566,10 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
           human_review_required: true,
         },
         ai_bulk_certification_policy: {
-          id: "guarded_ai_match_bulk_accept",
-          version: "1.1.0",
+          id: "guarded_ai_recommendation_bulk_certification",
+          version: "1.2.0",
           max_cases: 50,
+          allowed_verdicts: ["comparable", "not_comparable"],
           allowed_tiers: [
             "exact_item",
             "exact_specification",
@@ -510,15 +588,15 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
           status_counts: {
             queued: 0,
             running: 0,
-            succeeded: 2,
+            succeeded: 3,
             needs_review: 0,
           },
           latest_batch: null,
         },
-        status_counts: { pending: 2 },
-        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 2 }],
-        total_cases: 2,
-        selected_case_count: 2,
+        status_counts: { pending: 3 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 3 }],
+        total_cases: 3,
+        selected_case_count: 3,
         offset: 0,
         limit: 50,
         cases: readyCases,
@@ -531,7 +609,7 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
     .getByRole("textbox", { name: "Current reviewer identity" })
     .fill("reviewer@cpghero.com");
   const bulkSection = page.getByRole("region", {
-    name: "Bulk accept affirmative AI match recommendations",
+    name: "Bulk accept AI certification recommendations",
   });
   await bulkSection
     .getByRole("button", { name: "Assess queue-wide recommendations" })
@@ -539,8 +617,10 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
   const preview = page.getByRole("region", {
     name: "Bulk certification preview",
   });
-  await expect(preview).toContainText("1 eligible · 1 excluded");
+  await expect(preview).toContainText("2 eligible · 1 excluded");
   await expect(preview).toContainText("Walmart milk 4");
+  await expect(preview).toContainText("Walmart milk 5");
+  await expect(preview).toContainText("is not comparable with");
   await preview.getByText(/Why 1 case was excluded/).click();
   await expect(preview).toContainText(
     "A known third-party marketplace seller makes the listing ineligible.",
@@ -548,20 +628,22 @@ test("previews advisory warnings and exclusions before bulk certification", asyn
   await expect(preview).toContainText(
     "The AI draft identifies one or more unresolved conflicts.",
   );
-  await preview.getByRole("button", { name: "Approve 1 match" }).click();
+  await preview
+    .getByRole("button", { name: "Finalize 2 recommendations" })
+    .click();
   await expect(
     page.getByText(
-      "1 AI-recommended match was approved by reviewer@cpghero.com and finalized. Reporting is not recalculated automatically; each decision remains final until flagged.",
+      "2 AI recommendations were accepted by reviewer@cpghero.com and finalized (1 comparable, 1 not comparable). Reporting is not recalculated automatically; each decision remains final until flagged.",
     ),
   ).toBeVisible();
   expect(commitPayload).toMatchObject({
     reviewer_id: "reviewer@cpghero.com",
-    case_ids: [readyCases[0].case_id],
+    case_ids: [readyCases[0].case_id, readyCases[1].case_id],
     confirmation_checksum: "a".repeat(64),
   });
 });
 
-test("discovers affirmative AI recommendations beyond the visible page", async ({
+test("discovers not-comparable AI recommendations beyond the visible page", async ({
   page,
 }) => {
   const attentionCases = Array.from({ length: 50 }, (_, index) => ({
@@ -594,9 +676,10 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
         authoritative: false,
         human_review_required: true,
         result: {
-          verdict_proposal: "comparable",
-          tier_proposal: "exact_specification",
-          rationale: "The structured package evidence agrees.",
+          verdict_proposal: "not_comparable",
+          tier_proposal: null,
+          rationale:
+            "The structured package evidence contains a material conflict.",
           attribute_proposals: [],
           conflicts: [],
           requires_human_review: true,
@@ -627,9 +710,10 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
           queue_id: queue.queue_id,
           queue_version: queue.version,
           policy: {
-            id: "guarded_ai_match_bulk_accept",
-            version: "1.1.0",
+            id: "guarded_ai_recommendation_bulk_certification",
+            version: "1.2.0",
             max_cases: 50,
+            allowed_verdicts: ["comparable", "not_comparable"],
             allowed_tiers: ["exact_specification"],
             minimum_critical_coverage: 1,
             minimum_ai_attribute_confidence: 0.85,
@@ -648,11 +732,13 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
               reasons: [],
               warning_codes: [],
               warnings: [],
-              recommended_tier: "exact_specification",
+              recommended_verdict: "not_comparable",
+              recommended_tier: null,
               critical_coverage: 1,
               engine_status: "proposed",
               ai_task_id: "ready-ai-second-page",
-              ai_rationale: "The structured package evidence agrees.",
+              ai_rationale:
+                "The structured package evidence contains a material conflict.",
               benchmark_product: {
                 retailer_id: "walmart_us",
                 retailer_product_id: "walmart-product-4",
@@ -715,9 +801,10 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
           human_review_required: true,
         },
         ai_bulk_certification_policy: {
-          id: "guarded_ai_match_bulk_accept",
-          version: "1.1.0",
+          id: "guarded_ai_recommendation_bulk_certification",
+          version: "1.2.0",
           max_cases: 50,
+          allowed_verdicts: ["comparable", "not_comparable"],
           allowed_tiers: ["exact_specification"],
           minimum_critical_coverage: 1,
           minimum_ai_attribute_confidence: 0.85,

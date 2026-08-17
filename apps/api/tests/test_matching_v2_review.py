@@ -455,6 +455,10 @@ class ReviewRepository:
     ) -> dict[str, Any]:
         result = {
             "queue_id": external_queue_id,
+            "certified_case_ids": list(external_case_ids),
+            "certified_case_count": len(external_case_ids),
+            "comparable_case_count": len(external_case_ids),
+            "not_comparable_case_count": 0,
             "approved_case_ids": list(external_case_ids),
             "reviewer_id": reviewer_id,
             "confirmation_checksum": confirmation_checksum,
@@ -738,6 +742,21 @@ def _bulk_eligible_case() -> dict[str, Any]:
     return case
 
 
+def _bulk_not_comparable_case() -> dict[str, Any]:
+    case = _bulk_eligible_case()
+    case["case_id"] = "case-not-comparable"
+    case["case_checksum"] = "d" * 64
+    case["ai_output_checksum"] = "e" * 64
+    case["ai_draft"]["id"] = "ai-task-not-comparable"
+    result = case["ai_draft"]["output_document"]["result"]
+    result["verdict_proposal"] = "not_comparable"
+    result["tier_proposal"] = None
+    result["rationale"] = "The governed package facts contain a material conflict."
+    case["engine_proposal"]["tier"] = None
+    case["engine_proposal"]["status"] = "rejected"
+    return case
+
+
 def test_bulk_ai_certification_accepts_affirmative_recommendations_with_warnings() -> None:
     eligible = _bulk_eligible_case()
 
@@ -789,6 +808,36 @@ def test_bulk_ai_certification_accepts_affirmative_recommendations_with_warnings
     ]
 
 
+def test_bulk_ai_certification_accepts_not_comparable_but_not_insufficient_evidence() -> None:
+    not_comparable = _bulk_not_comparable_case()
+
+    accepted = _bulk_ai_certification_eligibility(not_comparable)
+
+    assert accepted["eligible"] is True
+    assert accepted["recommended_verdict"] == "not_comparable"
+    assert accepted["recommended_tier"] is None
+    assert accepted["reason_codes"] == []
+
+    insufficient = _bulk_not_comparable_case()
+    result = insufficient["ai_draft"]["output_document"]["result"]
+    result["verdict_proposal"] = "insufficient_evidence"
+
+    blocked = _bulk_ai_certification_eligibility(insufficient)
+
+    assert blocked["eligible"] is False
+    assert blocked["reason_codes"] == ["ai_verdict_not_certifiable"]
+
+
+def test_bulk_ai_certification_rejects_not_comparable_with_a_match_tier() -> None:
+    invalid = _bulk_not_comparable_case()
+    invalid["ai_draft"]["output_document"]["result"]["tier_proposal"] = "exact_specification"
+
+    evaluation = _bulk_ai_certification_eligibility(invalid)
+
+    assert evaluation["eligible"] is False
+    assert evaluation["reason_codes"] == ["not_comparable_tier_present"]
+
+
 def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> None:
     first = _bulk_eligible_case()
     preview = _bulk_preview_document(
@@ -810,6 +859,31 @@ def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> No
     assert preview["confirmation_checksum"] != changed_preview["confirmation_checksum"]
     assert preview["human_confirmation_required"] is True
     assert preview["automatically_changes_reporting"] is False
+
+
+def test_bulk_ai_preview_binds_recommended_verdict_to_confirmation_checksum() -> None:
+    comparable = _bulk_eligible_case()
+    not_comparable = _bulk_not_comparable_case()
+    not_comparable["case_id"] = comparable["case_id"]
+    not_comparable["case_checksum"] = comparable["case_checksum"]
+    not_comparable["ai_draft"]["id"] = comparable["ai_draft"]["id"]
+    not_comparable["ai_output_checksum"] = comparable["ai_output_checksum"]
+
+    comparable_preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=[comparable],
+    )
+    not_comparable_preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=[not_comparable],
+    )
+
+    assert (
+        comparable_preview["confirmation_checksum"]
+        != (not_comparable_preview["confirmation_checksum"])
+    )
 
 
 def test_bulk_ai_preview_surfaces_advisory_warnings_without_blocking_confirmation() -> None:
@@ -888,7 +962,7 @@ async def test_bulk_ai_certification_service_requires_unique_cases_and_human_ide
     )
 
     assert preview["eligible_case_count"] == 2
-    assert committed["approved_case_ids"] == ["case-1", "case-2"]
+    assert committed["certified_case_ids"] == ["case-1", "case-2"]
     assert repository.bulk_commits[0]["reviewer_id"] == "reviewer@cpghero.com"
     with pytest.raises(ValueError, match="unique"):
         await service.preview_ai_bulk_certification(
@@ -903,6 +977,9 @@ def test_postgres_bulk_certification_copies_warnings_and_complete_ai_rationale()
     assert "Advisory warnings acknowledged:" in source
     assert "AI evidence rationale:" in source
     assert "candidate['ai_rationale']" in source
+    assert "'certify_ai_recommendations'" in source
+    assert '"verdict": recommended_verdict' in source
+    assert "else []" in source
 
 
 async def test_ai_review_batch_route_requires_explicit_enablement_and_remains_advisory(

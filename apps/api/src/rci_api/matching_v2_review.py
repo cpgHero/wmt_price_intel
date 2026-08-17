@@ -225,11 +225,12 @@ class AIBulkCertificationCommitRequest(BaseModel):
 
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
-    "id": "guarded_ai_match_bulk_accept",
-    "version": "1.1.0",
+    "id": "guarded_ai_recommendation_bulk_certification",
+    "version": "1.2.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
-    "action": "approve_ai_matches",
+    "action": "certify_ai_recommendations",
+    "allowed_verdicts": ["comparable", "not_comparable"],
     "allowed_tiers": [
         "exact_item",
         "exact_specification",
@@ -254,6 +255,7 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
 _AI_BULK_WARNING_CODES = {
     "engine_tier_missing",
     "ai_engine_tier_disagreement",
+    "ai_engine_verdict_disagreement",
     "engine_proposal_blocked",
     "critical_evidence_incomplete",
     "ai_conflict_present",
@@ -266,10 +268,18 @@ _AI_BULK_REASON_LABELS = {
     "final_decision_exists": "A final human decision already exists.",
     "ai_draft_not_ready": "The latest AI draft is not successfully completed.",
     "ai_draft_invalid": "The completed AI draft does not contain valid governed output.",
-    "ai_not_comparable": "The AI recommendation is not an affirmative comparable match.",
-    "tier_not_bulk_eligible": "The affirmative recommendation has no supported match tier.",
+    "ai_verdict_not_certifiable": (
+        "The AI recommendation is insufficient evidence and cannot become a final bulk decision."
+    ),
+    "tier_not_bulk_eligible": "The comparable recommendation has no supported match tier.",
+    "not_comparable_tier_present": (
+        "A not-comparable recommendation cannot also carry a match tier."
+    ),
     "engine_tier_missing": "The deterministic engine did not propose a match tier.",
     "ai_engine_tier_disagreement": "The AI and deterministic engine propose different tiers.",
+    "ai_engine_verdict_disagreement": (
+        "The AI recommends not comparable while the deterministic engine proposes a match."
+    ),
     "engine_proposal_blocked": "The deterministic engine marked the pair ineligible or rejected.",
     "critical_evidence_incomplete": "Critical deterministic evidence is incomplete.",
     "ai_conflict_present": "The AI draft identifies one or more unresolved conflicts.",
@@ -343,21 +353,28 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
 
     verdict = str(result.get("verdict_proposal") or "")
     ai_tier = str(result.get("tier_proposal") or "")
-    if result and verdict != "comparable":
-        reason_codes.append("ai_not_comparable")
-    if result and ai_tier not in _AI_BULK_CERTIFICATION_POLICY["allowed_tiers"]:
-        reason_codes.append("tier_not_bulk_eligible")
+    if result and verdict not in _AI_BULK_CERTIFICATION_POLICY["allowed_verdicts"]:
+        reason_codes.append("ai_verdict_not_certifiable")
+    if result and verdict == "comparable":
+        if ai_tier not in _AI_BULK_CERTIFICATION_POLICY["allowed_tiers"]:
+            reason_codes.append("tier_not_bulk_eligible")
+    elif result and verdict == "not_comparable" and ai_tier:
+        reason_codes.append("not_comparable_tier_present")
 
     engine = case.get("engine_proposal")
     engine = engine if isinstance(engine, Mapping) else {}
     engine_tier = str(engine.get("tier") or "")
-    if not engine_tier:
-        reason_codes.append("engine_tier_missing")
-    elif ai_tier and ai_tier != engine_tier:
-        reason_codes.append("ai_engine_tier_disagreement")
     engine_status = str(engine.get("status") or "").lower()
-    if any(token in engine_status for token in ("reject", "block", "ineligible")):
-        reason_codes.append("engine_proposal_blocked")
+    engine_rejects = any(token in engine_status for token in ("reject", "block", "ineligible"))
+    if verdict == "comparable":
+        if not engine_tier:
+            reason_codes.append("engine_tier_missing")
+        elif ai_tier and ai_tier != engine_tier:
+            reason_codes.append("ai_engine_tier_disagreement")
+        if engine_rejects:
+            reason_codes.append("engine_proposal_blocked")
+    elif verdict == "not_comparable" and engine_tier and not engine_rejects:
+        reason_codes.append("ai_engine_verdict_disagreement")
 
     coverage = engine.get("evidence_coverage")
     coverage = coverage if isinstance(coverage, Mapping) else {}
@@ -419,6 +436,7 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
         "reasons": [_AI_BULK_REASON_LABELS[code] for code in blocking_reason_codes],
         "warning_codes": warning_codes,
         "warnings": [_AI_BULK_REASON_LABELS[code] for code in warning_codes],
+        "recommended_verdict": verdict or None,
         "recommended_tier": ai_tier or None,
         "critical_coverage": critical_coverage,
         "engine_status": engine_status or None,
@@ -468,6 +486,7 @@ def _bulk_confirmation_checksum(
                     "case_checksum": candidate["case_checksum"],
                     "ai_task_id": candidate["ai_task_id"],
                     "ai_output_checksum": candidate["ai_output_checksum"],
+                    "recommended_verdict": candidate["recommended_verdict"],
                     "recommended_tier": candidate["recommended_tier"],
                 }
                 for candidate in sorted(candidates, key=lambda row: str(row["case_id"]))
@@ -1420,7 +1439,7 @@ class PostgresMatchingV2ReviewRepository:
                     await connection.execute(
                         text(
                             """
-                            SELECT id::text, case_ids, case_count, created_at
+                            SELECT id::text, case_ids, case_count, audit_document, created_at
                             FROM matching_v2_bulk_certification_action
                             WHERE idempotency_key = :idempotency_key
                             """
@@ -1432,9 +1451,25 @@ class PostgresMatchingV2ReviewRepository:
                 .first()
             )
             if existing is not None:
+                existing_audit = existing["audit_document"]
+                existing_audit = existing_audit if isinstance(existing_audit, Mapping) else {}
+                existing_cases = existing_audit.get("cases", [])
+                existing_cases = existing_cases if isinstance(existing_cases, list) else []
+                not_comparable_count = sum(
+                    1
+                    for candidate in existing_cases
+                    if isinstance(candidate, Mapping)
+                    and candidate.get("recommended_verdict") == "not_comparable"
+                )
+                comparable_count = int(existing["case_count"]) - not_comparable_count
                 return {
                     "action_id": str(existing["id"]),
                     "queue_id": external_queue_id,
+                    "certified_case_ids": list(existing["case_ids"]),
+                    "certified_case_count": int(existing["case_count"]),
+                    "comparable_case_count": comparable_count,
+                    "not_comparable_case_count": not_comparable_count,
+                    # Compatibility aliases for a web/API rolling deployment.
                     "approved_case_ids": list(existing["case_ids"]),
                     "approved_case_count": int(existing["case_count"]),
                     "confirmation_checksum": confirmation_checksum,
@@ -1501,7 +1536,7 @@ class PostgresMatchingV2ReviewRepository:
 
             policy = _ai_bulk_certification_policy()
             audit_document = {
-                "schema_version": "1.0.0-ai-bulk-certification-action",
+                "schema_version": "1.1.0-ai-bulk-certification-action",
                 "queue_id": external_queue_id,
                 "queue_version": queue_version,
                 "reviewer_id": reviewer_id,
@@ -1513,6 +1548,7 @@ class PostgresMatchingV2ReviewRepository:
                         "case_checksum": candidate["case_checksum"],
                         "ai_task_id": candidate["ai_task_id"],
                         "ai_output_checksum": candidate["ai_output_checksum"],
+                        "recommended_verdict": candidate["recommended_verdict"],
                         "recommended_tier": candidate["recommended_tier"],
                     }
                     for candidate in preview["eligible_cases"]
@@ -1532,7 +1568,7 @@ class PostgresMatchingV2ReviewRepository:
                               idempotency_key, case_ids, case_count, audit_document
                             ) VALUES (
                               CAST(:review_queue_id AS uuid), :reviewer_id,
-                              'approve_ai_matches', :policy_id, :policy_version,
+                              'certify_ai_recommendations', :policy_id, :policy_version,
                               :policy_checksum, :confirmation_checksum, :idempotency_key,
                               :case_ids, :case_count, CAST(:audit_document AS jsonb)
                             )
@@ -1570,8 +1606,18 @@ class PostgresMatchingV2ReviewRepository:
                 evidence_refs = list(
                     dict.fromkeys([*snapshot.get("evidence_refs", []), ai_reference])
                 )
+                recommended_verdict = str(candidate["recommended_verdict"])
+                allowed_tiers = (
+                    [candidate["recommended_tier"]] if recommended_verdict == "comparable" else []
+                )
+                certified_outcome = (
+                    f"comparable at {candidate['recommended_tier']}"
+                    if recommended_verdict == "comparable"
+                    else "not comparable"
+                )
                 rationale = (
-                    "Administrator bulk-certified this AI recommendation after the "
+                    f"Administrator bulk-certified this AI recommendation as {certified_outcome} "
+                    "after the "
                     f"{policy['id']} v{policy['version']} preview passed every required gate. "
                     + (
                         "Advisory warnings acknowledged: " + "; ".join(candidate["warnings"]) + ". "
@@ -1585,8 +1631,8 @@ class PostgresMatchingV2ReviewRepository:
                         "queue_id": external_queue_id,
                         "case_id": external_case_id,
                         "reviewer_id": reviewer_id,
-                        "verdict": "comparable",
-                        "allowed_tiers": [candidate["recommended_tier"]],
+                        "verdict": recommended_verdict,
+                        "allowed_tiers": allowed_tiers,
                         "rationale": rationale,
                         "evidence_refs": evidence_refs,
                         "bulk_action_id": action_id,
@@ -1603,7 +1649,7 @@ class PostgresMatchingV2ReviewRepository:
                                   supersedes_submission_id, bulk_action_id
                                 ) VALUES (
                                   CAST(:review_case_id AS uuid), :reviewer_id,
-                                  'comparable', :allowed_tiers, :rationale,
+                                  :verdict, :allowed_tiers, :rationale,
                                   CAST(:evidence_refs AS jsonb), :submission_checksum,
                                   NULL, CAST(:bulk_action_id AS uuid)
                                 )
@@ -1613,7 +1659,8 @@ class PostgresMatchingV2ReviewRepository:
                             {
                                 "review_case_id": snapshot["review_case_id"],
                                 "reviewer_id": reviewer_id,
-                                "allowed_tiers": [candidate["recommended_tier"]],
+                                "verdict": recommended_verdict,
+                                "allowed_tiers": allowed_tiers,
                                 "rationale": rationale,
                                 "evidence_refs": _canonical(evidence_refs),
                                 "submission_checksum": submission_checksum,
@@ -1628,13 +1675,23 @@ class PostgresMatchingV2ReviewRepository:
                     {
                         "case_id": external_case_id,
                         "submission_id": str(submission["id"]),
+                        "verdict": recommended_verdict,
                         "tier": candidate["recommended_tier"],
                         "created_at": submission["created_at"].isoformat(),
                     }
                 )
+        comparable_case_count = sum(
+            1 for decision in decisions if decision["verdict"] == "comparable"
+        )
+        not_comparable_case_count = len(decisions) - comparable_case_count
         return {
             "action_id": action_id,
             "queue_id": external_queue_id,
+            "certified_case_ids": list(external_case_ids),
+            "certified_case_count": len(external_case_ids),
+            "comparable_case_count": comparable_case_count,
+            "not_comparable_case_count": not_comparable_case_count,
+            # Compatibility aliases for a web/API rolling deployment.
             "approved_case_ids": list(external_case_ids),
             "approved_case_count": len(external_case_ids),
             "confirmation_checksum": confirmation_checksum,

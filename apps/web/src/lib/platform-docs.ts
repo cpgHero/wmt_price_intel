@@ -652,7 +652,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "success",
           title: "Administrator-confirmed bulk acceptance",
-          text: "An administrator may assess completed affirmative AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. A valid pending affirmative recommendation across any supported match tier can be confirmed. Deterministic tier disagreement, incomplete critical evidence, engine or Product Pack conflicts, AI conflicts, and confidence limits remain visible advisory warnings; they do not silently block an administrator's explicit decision. A final decision, invalid or non-affirmative AI draft, missing supported tier, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. No report reanalysis runs automatically; decisions remain final until flagged.",
+          text: "An administrator may assess completed comparable and not-comparable AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. Comparable recommendations require a supported match tier; not-comparable recommendations must have no tier. Insufficient-evidence recommendations remain non-final and blocked. Deterministic disagreement, incomplete critical evidence, engine or Product Pack conflicts, AI conflicts, and confidence limits remain visible advisory warnings; they do not silently override an administrator's explicit decision. A final decision, invalid draft, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds each recommended verdict and tier with case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. The completion result separately counts comparable and not-comparable decisions. No report reanalysis runs automatically; decisions remain final until flagged.",
         },
         {
           kind: "callout",
@@ -787,7 +787,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Certify v2 independently",
               detail:
-                "Work the queue in descending observed-location exposure. Approve or reject once; use Needs evidence/Flag only when a final decision needs to be reopened. For completed affirmative AI drafts, use guarded bulk acceptance only after reading the eligible set and exclusion reasons; the administrator—not AI—confirms the final decisions.",
+                "Work the queue in descending observed-location exposure. Approve or reject once; use Needs evidence/Flag only when a final decision needs to be reopened. For completed comparable or not-comparable AI drafts, use guarded bulk acceptance only after reading the eligible set, warnings, and exclusion reasons; the administrator—not AI—confirms the final decisions. Insufficient-evidence drafts remain in review.",
               link: {
                 href: "/admin/matching-v2",
                 label: "Match Certification",
@@ -1290,6 +1290,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented; deployment verification pending",
+              "Bulk certification policy v1.2.0 adds guarded acceptance of not-comparable AI recommendations.",
+              "A checksum-bound batch may contain comparable and not-comparable outcomes, each persisted as its own final verdict with the complete AI rationale and advisory warnings. Comparable decisions require a governed tier; not-comparable decisions write no tier; insufficient-evidence proposals remain blocked. The completion result reports both outcome counts and reporting still does not rerun automatically.",
+            ],
             [
               "2026-08-16",
               "Deployed & verified",
