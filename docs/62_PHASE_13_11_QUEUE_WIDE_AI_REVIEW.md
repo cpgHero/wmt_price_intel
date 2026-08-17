@@ -1,6 +1,6 @@
 # Phase 13.11 — Governed Large and Queue-Wide AI Review
 
-Status: implemented; deployment validation pending
+Status: deployed and verified
 
 ## Outcome
 
@@ -61,3 +61,13 @@ zero-footprint regression cannot silently enter queue-wide AI review.
 - reversible migration, full Python/web tests, typecheck, lint, build, containers, and read-only
   production verification;
 - no paid AI request during deployment validation.
+
+## Production verification
+
+Deployment `a5263dc7-6f61-4130-8f08-a7e323d79b36` became the active Railway API
+deployment on August 16, 2026. GitHub Actions run `31992528978` passed the full Python,
+TypeScript, browser, contract, reversible-migration, build, and four-container gates. A read-only
+production check confirmed migration `0038_large_ai_batches` at head, a 1,500-case maximum,
+queue-wide selection enabled, and the 311-case Milk queue returning positive observed-location
+counts (4,525 Walmart locations and 61 competitor locations on the sampled highest-coverage
+case). No paid AI or MetricsCart call was made.

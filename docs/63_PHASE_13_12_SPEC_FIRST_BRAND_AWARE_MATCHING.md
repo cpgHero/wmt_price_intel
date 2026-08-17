@@ -1,6 +1,6 @@
 # Phase 13.12 — Spec-First, Brand-Aware Milk and Egg Matching
 
-Status: implemented; deployment validation pending
+Status: deployed and verified
 
 ## Decision
 
@@ -51,3 +51,12 @@ retained, and reanalysis does not run automatically.
 - prompt-version and instruction regression coverage;
 - full Milk and Egg golden regression, full Python/web suites, reversible migrations, build,
   deployment, and read-only production verification.
+
+## Production verification
+
+GitHub Actions run `31992528978` passed the complete release gate, including the real Milk and
+Egg Product Pack regressions and all four service-container builds. Railway deployment
+`a5263dc7-6f61-4130-8f08-a7e323d79b36` is active. A read-only API-console check confirmed Fresh
+Fluid Milk Product Pack `1.4.0`, report blueprint `1.3.0`, and migration
+`0038_large_ai_batches`. The versioned blueprint preserves historical Milk `1.2.0` publications
+instead of mutating an immutable report definition. No paid AI or MetricsCart call was made.

@@ -1298,15 +1298,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented · deployment validation pending",
+              "Deployed & verified",
               "Fresh Milk and Fresh Eggs matching is explicitly spec-first and brand-aware.",
-              "Milk's primary profile now compares compatible specifications without requiring brand equality, while same-brand and private-label views remain secondary analytical lenses. Eggs retain their existing spec-first profiles. Matching v2 keeps brand descriptive/noncritical for both Product Packs, and AI prompt 1.0.3 is prohibited from using a different or unknown descriptive brand as the sole reason for not-comparable or insufficient-evidence. A matching brand remains useful identity evidence but cannot override a hard specification conflict.",
+              "Milk's primary profile now compares compatible specifications without requiring brand equality, while same-brand and private-label views remain secondary analytical lenses. Eggs retain their existing spec-first profiles. Matching v2 keeps brand descriptive/noncritical for both Product Packs, and AI prompt 1.0.3 is prohibited from using a different or unknown descriptive brand as the sole reason for not-comparable or insufficient-evidence. A matching brand remains useful identity evidence but cannot override a hard specification conflict. CI run 31992528978 passed the complete release gate and all four containers. Railway API deployment a5263dc7-6f61-4130-8f08-a7e323d79b36 is active with Milk Product Pack 1.4.0 and versioned blueprint 1.3.0.",
             ],
             [
               "2026-08-16",
-              "Implemented · deployment validation pending",
+              "Deployed & verified",
               "Match Certification adds governed large and queue-wide AI review runs.",
-              "Administrators can submit explicit selections larger than 25 or prepare every eligible case in the current queue/retailer filter, up to 1,500 cases in one durable batch. Exact count and worst-case model exposure require confirmation; existing tasks, final decisions, third-party items, and missing observed-location evidence are blocked. Production read-only validation found complete nonzero Milk footprints for all 311 candidates (Walmart 1–4,525 locations; competitors 1–2,595). No paid AI work was started during validation.",
+              "Administrators can submit explicit selections larger than 25 or prepare every eligible case in the current queue/retailer filter, up to 1,500 cases in one durable batch. Exact count and worst-case model exposure require confirmation; existing tasks, final decisions, third-party items, and missing observed-location evidence are blocked. Production read-only validation found complete nonzero Milk footprints for all 311 candidates (Walmart 1–4,525 locations; competitors 1–2,595). Migration 0038_large_ai_batches is live, queue-wide selection is enabled, and CI run 31992528978 passed the complete release gate. No paid AI or MetricsCart work was started during validation.",
             ],
             [
               "2026-08-16",
