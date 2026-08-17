@@ -794,6 +794,7 @@ class ComparisonEngine:
         profile_id: str,
         rules: Iterable[ProductMatchRule] = (),
         product_candidates: bool = False,
+        allow_automatic: bool = True,
     ) -> list[MatchRecord]:
         """Apply an immutable, context-one-to-one decision snapshot to generic matches."""
 
@@ -830,11 +831,15 @@ class ComparisonEngine:
                     )
         automatic = []
         comparison = self.compare_products if product_candidates else self.compare
-        for match in comparison(
-            offers,
-            benchmark_id=benchmark_id,
-            competitor_id=competitor_id,
-            profile_id=profile_id,
+        for match in (
+            ()
+            if not allow_automatic
+            else comparison(
+                offers,
+                benchmark_id=benchmark_id,
+                competitor_id=competitor_id,
+                profile_id=profile_id,
+            )
         ):
             benchmark = offer_index.get(match.benchmark_offer_id)
             competitor = offer_index.get(match.competitor_offer_id)

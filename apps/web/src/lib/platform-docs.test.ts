@@ -28,7 +28,8 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("retailer packs");
     expect(text).toContain("product packs");
     expect(text).toContain("deterministic code computes");
-    expect(text).toContain("matching v2 is a shadow and certification system");
+    expect(text).toContain("matching v2 gold-set replay");
+    expect(text).toContain("disables automatic match fallback");
     expect(text).toContain("one identified reviewer approves or rejects once");
     expect(text).toContain("final until someone explicitly flags it");
     expect(text).toContain("kroger product details uses the provider-catalog");

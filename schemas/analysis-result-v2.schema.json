@@ -529,6 +529,32 @@
           "type": ["string", "null"],
           "format": "uuid"
         },
+        "matching_v2_gold_set_release_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "matching_v2_gold_set_checksum": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "matching_v2_certification_coverage": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": [
+            "authority", "queue_case_count", "certified_label_count",
+            "certified_comparable_count", "certified_not_comparable_count",
+            "unresolved_excluded_count", "automatic_fallback_enabled"
+          ],
+          "properties": {
+            "authority": {"const": "matching_v2_certified_gold_set"},
+            "queue_case_count": {"type": "integer", "minimum": 0},
+            "certified_label_count": {"type": "integer", "minimum": 0},
+            "certified_comparable_count": {"type": "integer", "minimum": 0},
+            "certified_not_comparable_count": {"type": "integer", "minimum": 0},
+            "unresolved_excluded_count": {"type": "integer", "minimum": 0},
+            "automatic_fallback_enabled": {"const": false}
+          }
+        },
         "brand_revision_id": {
           "type": ["string", "null"],
           "format": "uuid"

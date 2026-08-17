@@ -92,6 +92,51 @@ def apply_brand_classification_rules(
     return replace(pack, document=document)
 
 
+def matching_v2_gold_set_rules(
+    release: dict[str, Any], pack: ProductPack
+) -> list[ProductMatchRule]:
+    """Translate certified labels into generic, scope-aware comparison rules."""
+
+    exact_tiers = {"exact_item", "exact_specification"}
+    all_profiles = tuple(str(profile["id"]) for profile in pack.matching_profiles)
+    compatible_profiles = tuple(
+        str(profile["id"])
+        for profile in pack.matching_profiles
+        if str(profile.get("unknown_policy", "reject")) != "reject"
+    )
+    rules: list[ProductMatchRule] = []
+    for label in release["document"].get("labels", []):
+        benchmark_listing = str(label["benchmark_listing_id"])
+        competitor_listing = str(label["competitor_listing_id"])
+        if ":" not in benchmark_listing or ":" not in competitor_listing:
+            raise ValueError("certified listing IDs must include retailer and product ID")
+        _, benchmark_product_id = benchmark_listing.split(":", 1)
+        competitor_id, competitor_product_id = competitor_listing.split(":", 1)
+        allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
+        eligible_profiles = (
+            all_profiles if allowed_tiers and allowed_tiers <= exact_tiers else compatible_profiles
+        )
+        if bool(label["expected_comparable"]) and not eligible_profiles:
+            raise ValueError(f"case {label['case_id']!r} has no eligible profile")
+        profile_id = eligible_profiles[0] if eligible_profiles else all_profiles[0]
+        scope_definition: dict[str, Any] = {}
+        rules.append(
+            ProductMatchRule(
+                competitor_id=competitor_id,
+                profile_id=profile_id,
+                benchmark_product_id=benchmark_product_id,
+                competitor_product_id=competitor_product_id,
+                decision=("confirmed" if label["expected_comparable"] else "rejected"),
+                eligible_profile_ids=eligible_profiles,
+                comparison_family_key=f"matching_v2:{label['case_id']}",
+                scope_mode="observed_benchmark_product_footprint",
+                scope_definition=scope_definition,
+                scope_checksum=hashlib.sha256(b"{}").hexdigest(),
+            )
+        )
+    return rules
+
+
 @dataclass(frozen=True, slots=True)
 class AnalysisJob:
     id: str
@@ -105,6 +150,7 @@ class AnalysisJob:
     max_attempts: int
     match_revision_id: str | None = None
     brand_revision_id: str | None = None
+    matching_v2_gold_set_release_id: str | None = None
     source_analysis_id: str | None = None
 
 
@@ -230,6 +276,7 @@ class PostgresAnalysisQueue:
                                 AND (
                                   :historical_replay_enabled OR ar.match_revision_id IS NOT NULL OR
                                   ar.brand_revision_id IS NOT NULL OR
+                                  ar.matching_v2_gold_set_release_id IS NOT NULL OR
                                   NOT EXISTS (
                                     SELECT 1 FROM analysis_input_set source
                                     WHERE source.id = ar.input_set_id
@@ -258,6 +305,7 @@ class PostgresAnalysisQueue:
                               ar.attempt_count, ar.max_attempts, v.config,
                               ar.match_revision_id::text,
                               ar.brand_revision_id::text,
+                              ar.matching_v2_gold_set_release_id::text,
                               (
                                 SELECT source_result.analysis_id
                                 FROM analysis_result source_result
@@ -297,6 +345,11 @@ class PostgresAnalysisQueue:
                         if row["brand_revision_id"] is not None
                         else None
                     ),
+                    matching_v2_gold_set_release_id=(
+                        str(row["matching_v2_gold_set_release_id"])
+                        if row["matching_v2_gold_set_release_id"] is not None
+                        else None
+                    ),
                     source_analysis_id=(
                         str(row["source_analysis_id"])
                         if row["source_analysis_id"] is not None
@@ -305,6 +358,36 @@ class PostgresAnalysisQueue:
                 )
                 for row in rows
             ]
+
+    async def matching_v2_gold_set_release(self, release_id: str) -> dict[str, Any]:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                        SELECT id::text, external_gold_set_id, version, product_pack_id,
+                               product_pack_version, document, coverage, document_checksum,
+                               released_by, created_at
+                        FROM matching_v2_gold_set_release
+                        WHERE id = CAST(:release_id AS uuid)
+                        """
+                        ),
+                        {"release_id": release_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if row is None:
+            raise KeyError(f"matching v2 gold-set release {release_id!r} was not found")
+        return {
+            **dict(row),
+            "id": str(row["id"]),
+            "document": dict(row["document"]),
+            "coverage": dict(row["coverage"]),
+            "created_at": row["created_at"].isoformat(),
+        }
 
     async def extend_lease(self, job_id: str, worker_id: str, lease_seconds: int) -> bool:
         async with self._engine.begin() as connection:
@@ -654,6 +737,20 @@ class AnalysisProcessor:
         seller_resolver = GovernedSellerResolver.from_repository(self._root)
         engine = ComparisonEngine(pack, brand_resolver)
         governed_rules: list[ProductMatchRule] = []
+        matching_v2_release: dict[str, Any] | None = None
+        if job.match_revision_id is not None and job.matching_v2_gold_set_release_id is not None:
+            raise ValueError("analysis cannot combine legacy and Matching v2 match authorities")
+        if job.matching_v2_gold_set_release_id is not None:
+            loader = getattr(self._queue, "matching_v2_gold_set_release", None)
+            if not callable(loader):
+                raise ValueError("Matching v2 replay requires a gold-set release repository")
+            matching_v2_release = await loader(job.matching_v2_gold_set_release_id)
+            if (
+                matching_v2_release["product_pack_id"] != pack.id
+                or matching_v2_release["product_pack_version"] != pack.version
+            ):
+                raise ValueError("Matching v2 release Product Pack does not match analysis job")
+            governed_rules = matching_v2_gold_set_rules(matching_v2_release, pack)
         if job.match_revision_id is not None:
             if self._match_reviews is None:
                 raise ValueError("governed reanalysis requires a match-review repository")
@@ -948,8 +1045,10 @@ class AnalysisProcessor:
                         profile_id=profile_id,
                         rules=governed_rules,
                         product_candidates=True,
+                        allow_automatic=job.matching_v2_gold_set_release_id is None,
                     )
                     if job.match_revision_id is not None
+                    or job.matching_v2_gold_set_release_id is not None
                     else engine.compare_products(
                         relationship_offers,
                         benchmark_id=benchmark,
@@ -1109,6 +1208,8 @@ class AnalysisProcessor:
         analysis_id = f"{pack.id}-{job.collection_run_id}"
         if job.match_revision_id is not None:
             analysis_id = f"{analysis_id}-match-{job.match_revision_id[:8]}"
+        if job.matching_v2_gold_set_release_id is not None:
+            analysis_id = f"{analysis_id}-match-v2-{job.matching_v2_gold_set_release_id[:8]}"
         if job.brand_revision_id is not None:
             analysis_id = f"{analysis_id}-brand-{job.brand_revision_id[:8]}"
         if not source_evidence_artifacts:
@@ -1136,6 +1237,13 @@ class AnalysisProcessor:
                     job.collection_run_id if job.source_kind == "live_collection" else None
                 ),
                 "match_revision_id": job.match_revision_id,
+                "matching_v2_gold_set_release_id": job.matching_v2_gold_set_release_id,
+                "matching_v2_gold_set_checksum": (
+                    matching_v2_release["document_checksum"] if matching_v2_release else None
+                ),
+                "matching_v2_certification_coverage": (
+                    matching_v2_release["coverage"] if matching_v2_release else None
+                ),
                 "brand_revision_id": job.brand_revision_id,
                 "source_analysis_id": job.source_analysis_id,
                 "observed_start": min(observed_values) if observed_values else None,
@@ -1156,6 +1264,21 @@ class AnalysisProcessor:
                 "normalization_rejections": provider_rows_count - normalized_count,
                 "review_offers": review_offer_count,
                 "zero_or_missing_price_offers": zero_or_missing_price_count,
+                **(
+                    {
+                        "matching_v2_unresolved_excluded": int(
+                            matching_v2_release["coverage"]["unresolved_excluded_count"]
+                        ),
+                        "matching_v2_certified_comparable": int(
+                            matching_v2_release["coverage"]["certified_comparable_count"]
+                        ),
+                        "matching_v2_certified_not_comparable": int(
+                            matching_v2_release["coverage"]["certified_not_comparable_count"]
+                        ),
+                    }
+                    if matching_v2_release
+                    else {}
+                ),
             },
             evidence_sets=evidence_sets,
             raw_source_artifact_ids=raw_artifact_ids,
@@ -1251,6 +1374,7 @@ class AnalysisProcessor:
             self._assistant is not None
             and job.match_revision_id is None
             and job.brand_revision_id is None
+            and job.matching_v2_gold_set_release_id is None
             and isinstance(analysis_options, dict)
             and bool(analysis_options.get("enable_ai_fallback", True))
         ):

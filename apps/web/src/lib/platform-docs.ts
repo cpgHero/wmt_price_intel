@@ -158,7 +158,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative for current reports. Matching v2 is a shadow and certification system until a Product Pack passes its release gates and is explicitly cut over. A certification decision does not silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -1324,6 +1324,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented; production replay pending",
+              "Matching v2 certified gold sets gained an explicit governed reporting cutover.",
+              "A checksum-bound release can queue an idempotent replay from an existing analysis. The worker uses certified comparable relationships only, disables automatic fallback, scopes regional relationships to observed benchmark-product footprints, excludes unresolved cases, and publishes certification coverage in report provenance and quality metrics.",
+            ],
             [
               "2026-08-17",
               "Deployed and production-verified",

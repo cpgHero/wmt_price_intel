@@ -948,6 +948,43 @@ def test_confirmed_relationship_is_preserved_when_products_are_not_market_floor(
     )
 
 
+def test_governed_gold_set_mode_never_adds_automatic_relationships() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row("walmart_us", "w-1", "Fresh Organic Strawberries, 1 lb", "2.00"),
+                _row("walmart_us", "w-2", "Fresh Organic Strawberries, 1 lb", "4.00"),
+                _row("aldi_us", "a-1", "Fresh Organic Strawberries, 1 lb", "2.50"),
+                _row("aldi_us", "a-2", "Fresh Organic Strawberries, 1 lb", "4.50"),
+            ]
+        )
+    )
+    governed = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=(
+            ProductMatchRule(
+                competitor_id="aldi_us",
+                profile_id="strict",
+                benchmark_product_id="w-2",
+                competitor_product_id="a-2",
+                decision="confirmed",
+            ),
+        ),
+        product_candidates=True,
+        allow_automatic=False,
+    )
+
+    offer_index = {item.offer.offer_id: item.offer.retailer_product_id for item in offers}
+    assert {
+        (offer_index[match.benchmark_offer_id], offer_index[match.competitor_offer_id])
+        for match in governed
+    } == {("w-2", "a-2")}
+
+
 def test_conflicting_product_identity_attributes_require_manual_review() -> None:
     normalizer, classifier, engine = _pipeline()
     offers = classifier.classify_many(

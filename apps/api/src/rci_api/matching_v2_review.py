@@ -362,6 +362,15 @@ class AIBulkCertificationCommitRequest(BaseModel):
     confirmation_checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class GoldSetReplayRequest(BaseModel):
+    """Explicitly bind a certified snapshot to a governed analysis replay."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_analysis_id: str = Field(min_length=1, max_length=300)
+    released_by: str = Field(min_length=1, max_length=200)
+
+
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
     "version": "1.3.0",
@@ -801,6 +810,16 @@ class MatchingV2ReviewRepository(Protocol):
         *,
         reviewer_id: str,
         confirmation_checksum: str,
+    ) -> dict[str, Any]: ...
+
+    async def create_gold_set_replay(
+        self,
+        external_queue_id: str,
+        gold_set: Mapping[str, Any],
+        *,
+        document_checksum: str,
+        released_by: str,
+        source_analysis_id: str,
     ) -> dict[str, Any]: ...
 
 
@@ -2908,6 +2927,174 @@ class PostgresMatchingV2ReviewRepository:
             "created_at": row["created_at"].isoformat(),
         }
 
+    async def create_gold_set_replay(
+        self,
+        external_queue_id: str,
+        gold_set: Mapping[str, Any],
+        *,
+        document_checksum: str,
+        released_by: str,
+        source_analysis_id: str,
+    ) -> dict[str, Any]:
+        labels = list(gold_set.get("labels", []))
+        comparable = sum(bool(label.get("expected_comparable")) for label in labels)
+        async with self._engine.begin() as connection:
+            queue = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                        SELECT q.id::text, q.organization_id::text, q.version,
+                               q.product_pack_id, q.product_pack_version,
+                               count(c.id)::integer AS queue_case_count
+                        FROM matching_v2_review_queue q
+                        JOIN matching_v2_review_case c ON c.review_queue_id = q.id
+                        WHERE q.external_queue_id = :queue_id
+                        GROUP BY q.id
+                        ORDER BY q.created_at DESC
+                        LIMIT 1
+                        """
+                        ),
+                        {"queue_id": external_queue_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if queue is None:
+                raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+            source = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                        SELECT result.id::text AS result_id, run.collection_run_id::text,
+                               run.input_set_id::text, run.product_pack_id,
+                               run.product_pack_version, run.code_version, run.max_attempts
+                        FROM analysis_result result
+                        JOIN analysis_run run ON run.id = result.analysis_run_id
+                        WHERE result.archived_at IS NULL
+                          AND result.result->>'analysis_id' = :analysis_id
+                        ORDER BY result.created_at DESC
+                        LIMIT 1
+                        """
+                        ),
+                        {"analysis_id": source_analysis_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if source is None:
+                raise KeyError(f"source analysis {source_analysis_id!r} was not found")
+            expected_pack = (str(queue["product_pack_id"]), str(queue["product_pack_version"]))
+            source_pack = (str(source["product_pack_id"]), str(source["product_pack_version"]))
+            if source_pack != expected_pack:
+                raise ValueError(
+                    "source analysis Product Pack does not match the certified review queue: "
+                    f"{source_pack!r} != {expected_pack!r}"
+                )
+            coverage = {
+                "authority": "matching_v2_certified_gold_set",
+                "queue_case_count": int(queue["queue_case_count"]),
+                "certified_label_count": len(labels),
+                "certified_comparable_count": comparable,
+                "certified_not_comparable_count": len(labels) - comparable,
+                "unresolved_excluded_count": int(queue["queue_case_count"]) - len(labels),
+                "automatic_fallback_enabled": False,
+            }
+            release = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                        INSERT INTO matching_v2_gold_set_release (
+                          organization_id, review_queue_id, external_gold_set_id, version,
+                          product_pack_id, product_pack_version, document, coverage,
+                          document_checksum, released_by
+                        ) VALUES (
+                          CAST(:organization_id AS uuid), CAST(:review_queue_id AS uuid),
+                          :gold_set_id, :version, :product_pack_id, :product_pack_version,
+                          CAST(:document AS jsonb), CAST(:coverage AS jsonb), :checksum,
+                          :released_by
+                        )
+                        ON CONFLICT (review_queue_id, document_checksum)
+                        DO UPDATE SET released_by = matching_v2_gold_set_release.released_by
+                        RETURNING id::text, created_at
+                        """
+                        ),
+                        {
+                            "organization_id": queue["organization_id"],
+                            "review_queue_id": queue["id"],
+                            "gold_set_id": gold_set["gold_set_id"],
+                            "version": gold_set["version"],
+                            "product_pack_id": queue["product_pack_id"],
+                            "product_pack_version": queue["product_pack_version"],
+                            "document": _canonical(gold_set),
+                            "coverage": _canonical(coverage),
+                            "checksum": document_checksum,
+                            "released_by": released_by,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            run = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO analysis_run (
+                              collection_run_id, input_set_id, product_pack_id,
+                              product_pack_version, status, code_version, max_attempts,
+                              source_analysis_result_id, matching_v2_gold_set_release_id
+                            ) VALUES (
+                              CAST(:collection_run_id AS uuid), CAST(:input_set_id AS uuid),
+                              :product_pack_id, :product_pack_version, 'queued', :code_version,
+                              :max_attempts, CAST(:source_result_id AS uuid),
+                              CAST(:release_id AS uuid)
+                            )
+                            ON CONFLICT ON CONSTRAINT analysis_run_source_matching_v2_release_uq
+                            DO NOTHING
+                            RETURNING id::text, status
+                            """
+                        ),
+                        {
+                            **dict(source),
+                            "source_result_id": source["result_id"],
+                            "release_id": release["id"],
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if run is None:
+                run = (
+                    (
+                        await connection.execute(
+                            text(
+                                """
+                            SELECT id::text, status FROM analysis_run
+                            WHERE source_analysis_result_id = CAST(:source_result_id AS uuid)
+                              AND matching_v2_gold_set_release_id = CAST(:release_id AS uuid)
+                            """
+                            ),
+                            {"source_result_id": source["result_id"], "release_id": release["id"]},
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+        return {
+            "gold_set_release_id": str(release["id"]),
+            "gold_set_checksum": document_checksum,
+            "analysis_run_id": str(run["id"]),
+            "analysis_status": str(run["status"]),
+            "coverage": coverage,
+        }
+
     @staticmethod
     async def _case_id(
         connection: AsyncConnection,
@@ -3283,6 +3470,22 @@ class MatchingV2ReviewService:
             )
         return document
 
+    async def create_gold_set_replay(
+        self,
+        external_queue_id: str,
+        request: GoldSetReplayRequest,
+    ) -> dict[str, Any]:
+        gold_set = await self.gold_set(external_queue_id)
+        if not gold_set["labels"]:
+            raise ValueError("a governed replay requires at least one certified label")
+        return await self._repository.create_gold_set_replay(
+            external_queue_id,
+            gold_set,
+            document_checksum=_checksum(gold_set),
+            released_by=request.released_by,
+            source_analysis_id=request.source_analysis_id,
+        )
+
     @staticmethod
     def _validate_tiers(verdict: ReviewVerdict, tiers: Sequence[MatchTier]) -> None:
         if verdict == "comparable" and not tiers:
@@ -3594,5 +3797,23 @@ async def export_matching_v2_gold_set(
     _require_review_access(request, x_rci_admin_token)
     try:
         return await service.gold_set(queue_id)
+    except (ContractError, KeyError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/gold-set/replays",
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_matching_v2_gold_set_replay(
+    queue_id: str,
+    request: Request,
+    body: GoldSetReplayRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.create_gold_set_replay(queue_id, body)
     except (ContractError, KeyError, ValueError) as exc:
         raise _http_error(exc) from exc

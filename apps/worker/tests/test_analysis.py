@@ -24,10 +24,42 @@ from rci_worker.analysis import (
     S3HistoricalCSVReader,
     apply_brand_classification_rules,
     historical_source_row,
+    matching_v2_gold_set_rules,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 RUN_ID = "00000000-0000-0000-0000-000000000701"
+
+
+def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    release = {
+        "document": {
+            "labels": [
+                {
+                    "case_id": "case-1",
+                    "benchmark_listing_id": "walmart_us:123",
+                    "competitor_listing_id": "aldi_us:abc:456",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["equivalent_product"],
+                },
+                {
+                    "case_id": "case-2",
+                    "benchmark_listing_id": "walmart_us:789",
+                    "competitor_listing_id": "target_us:987",
+                    "expected_comparable": False,
+                    "allowed_tiers": [],
+                },
+            ]
+        }
+    }
+
+    rules = matching_v2_gold_set_rules(release, pack)
+
+    assert [rule.decision for rule in rules] == ["confirmed", "rejected"]
+    assert rules[0].competitor_product_id == "abc:456"
+    assert rules[0].scope_mode == "observed_benchmark_product_footprint"
+    assert rules[0].eligible_profile_ids
 
 
 def _task(

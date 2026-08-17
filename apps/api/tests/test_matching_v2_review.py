@@ -19,6 +19,7 @@ from rci_api.matching_v2_review import (
     AIReviewBatchRequest,
     AIReviewDraftRequest,
     AIReviewRetryRequest,
+    GoldSetReplayRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
     PostgresMatchingV2ReviewRepository,
@@ -306,6 +307,7 @@ class ReviewRepository:
         self.ai_drafts: list[dict[str, Any]] = []
         self.ai_retries: list[dict[str, Any]] = []
         self.bulk_commits: list[dict[str, Any]] = []
+        self.replays: list[dict[str, Any]] = []
 
     async def list_queues(self, *, limit: int) -> list[dict[str, Any]]:
         assert limit > 0
@@ -498,6 +500,42 @@ class ReviewRepository:
         }
         self.bulk_commits.append(result)
         return result
+
+    async def create_gold_set_replay(
+        self,
+        external_queue_id: str,
+        gold_set: Mapping[str, Any],
+        **values: Any,
+    ) -> dict[str, Any]:
+        record = {"queue_id": external_queue_id, "gold_set": dict(gold_set), **values}
+        self.replays.append(record)
+        return {"analysis_run_id": "run-1", "analysis_status": "queued", **record}
+
+
+async def test_gold_set_replay_binds_exact_certified_snapshot(monkeypatch: Any) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    gold_set = {
+        "gold_set_id": "egg-gold",
+        "version": "1.2.0",
+        "labels": [{"case_id": "case-1", "expected_comparable": True}],
+    }
+
+    async def current_gold_set(_queue_id: str) -> dict[str, Any]:
+        return gold_set
+
+    monkeypatch.setattr(service, "gold_set", current_gold_set)
+    result = await service.create_gold_set_replay(
+        "egg-queue",
+        GoldSetReplayRequest(source_analysis_id="egg-analysis", released_by="owner"),
+    )
+
+    assert result["analysis_status"] == "queued"
+    assert repository.replays[0]["gold_set"] == gold_set
+    assert (
+        repository.replays[0]["document_checksum"]
+        == hashlib.sha256(_canonical(gold_set).encode()).hexdigest()
+    )
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:
