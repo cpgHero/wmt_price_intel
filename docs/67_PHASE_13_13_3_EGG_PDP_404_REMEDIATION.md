@@ -43,23 +43,38 @@ The heavy subsets were not equivalent:
 
 ## Bounded paid preflight
 
-Deployment alone does not authorize a broad retry. The controlled preflight ceiling is nine
-credits / **$0.018** and uses no secret in source or output:
+Deployment alone did not authorize a broad retry. The controlled preflight used nine credits /
+**$0.018** and exposed no secret in source or output:
 
 1. The owner-provided Target catalog example (three credits).
 2. A real Target shell-Egg URL at its positive-price observed ZIP/store (three credits).
 3. The owner-provided Sam's Club Egg example (two credits).
 4. One real Trader Joe's Egg with the restored six-digit ID (one credit).
 
-The preflight records only request metadata, HTTP status, response content type, and a minimal
+All four requests returned HTTP 200 JSON with the expected product identity and a populated name.
+The preflight recorded only request metadata, HTTP status, response content type, and a minimal
 identity check. Response bodies remain out of Git and user-visible logs.
 
 ## Retry gate
 
-A corrected subset may be replanned only when its preflight proves the contract. The new plan must
-be read-only first, use Product Pack 1.2.1, reuse fresh cache, admit one positive-price observed
-context per distinct in-scope product, and state exact calls/credits. ALDI and Walmart 404s remain
-excluded unless a separate product/location investigation identifies a correct alternate context.
+A corrected subset may be replanned only when its preflight proves the contract. The enrichment
+CLI accepts an exact published `--product-pack-version`; its estimate and queued-product context
+record both the immutable source-analysis version and the enrichment version. This prevents an
+older analysis pin from silently re-admitting products rejected by newer scope governance.
+
+The first read-only estimate under the historical Egg 1.0.0 pin found 65 calls / 168 credits. No
+paid work was created. Reclassification with Product Pack 1.2.1 reduced the plan to 38 distinct
+positive-price observed products and 91 credits: 17 Target, 19 Sam's Club, and two Trader Joe's.
+There were no invalid candidates.
+
+Production run `81311e57-f31f-4a82-838b-4f94dc7c8c99` was then created with a hard 91-credit
+ceiling. It completed all 38 jobs with HTTP 200: Target 17/17, Sam's Club 19/19, and Trader Joe's
+2/2. There were no 404s, other HTTP failures, failed jobs, uncommitted raw responses, or credits
+above plan. The run cost **$0.182**; together with the controlled preflight, remediation cost was
+exactly **$0.200**.
+
+ALDI and Walmart 404s remain excluded unless a separate product/location investigation identifies
+a correct alternate context.
 
 ## Verification checklist
 
@@ -68,13 +83,13 @@ excluded unless a separate product/location investigation identifies a correct a
 - [x] Trader Joe's leading-zero normalization is configuration, not retailer code.
 - [x] Request and cache identities use the same normalized parameters.
 - [x] Egg noise and true-shell-Egg regression fixtures pass.
-- [ ] CI and Railway deployment pass.
-- [ ] The bounded paid preflight is complete and its outcomes are recorded.
-- [ ] Any retry estimate is reviewed before a durable paid run is created.
+- [x] CI and Railway deployment pass.
+- [x] The bounded paid preflight is complete and its outcomes are recorded.
+- [x] The historical-pin and Product Pack 1.2.1 estimates were reviewed before the durable paid run.
+- [x] The bounded retry completed 38/38 with HTTP 200 under its exact 91-credit ceiling.
 
 ## Explicitly deferred
 
-- Broad retry of any 404 subset.
 - Retrying ALDI or Walmart just to improve coverage.
-- Replaying Egg analysis/reporting until corrected PDP evidence is collected and Matching v2 is
-  ready for the separately governed reporting cutover.
+- Replaying Egg analysis/reporting until Matching v2 is ready for the separately governed
+  reporting cutover.
