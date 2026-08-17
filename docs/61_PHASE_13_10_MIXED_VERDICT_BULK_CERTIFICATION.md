@@ -44,7 +44,7 @@ evidence rationale. The response reports total, comparable, and not-comparable c
 `approved_case_*` response aliases remain temporarily available so web and API replicas can roll
 without breaking an in-flight request.
 
-Migration `0037_bulk_ai_verdict_certification` retains the historical `approve_ai_matches` action
+Migration `0037_bulk_ai_verdicts` retains the historical `approve_ai_matches` action
 type and permits the new, outcome-neutral action type. Its downgrade restores the historical
 constraint and is safe before new mixed-verdict actions are written, which is the expected boundary
 for a data-bearing operational downgrade.
