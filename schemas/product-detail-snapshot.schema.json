@@ -46,7 +46,7 @@
         },
         "path": {
           "type": "string",
-          "pattern": "^/mc/"
+          "pattern": "^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$"
         },
         "method": {
           "const": "GET"

@@ -424,13 +424,14 @@ def test_unchanged_v1_endpoint_preserves_existing_cache_checksum() -> None:
 
 def test_verified_kroger_contract_preserves_observed_request_context() -> None:
     endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("kroger_us")
+    context = ProductDetailRequestContext(
+        product_id="0001111060914",
+        zipcode="72801",
+        store="02500624",
+        fulfillment_type="pickup",
+    )
     request = MetricsCartProductDetailAdapter(endpoint).build_request(
-        ProductDetailRequestContext(
-            product_id="0001111060914",
-            zipcode="72801",
-            store="02500624",
-            fulfillment_type="pickup",
-        )
+        context
     )
 
     assert endpoint.paid_calls_enabled is True
@@ -442,3 +443,52 @@ def test_verified_kroger_contract_preserves_observed_request_context() -> None:
         "store": "02500624",
         "fulfillment_type": "pickup",
     }
+
+    normalized = MetricsCartProductDetailAdapter(endpoint).normalize(
+        {
+            "name": "Kroger® Grade A Large White Eggs",
+            "retailer_product_id": "0001111060914",
+            "seller": "kroger.com",
+            "zipcode": "72801",
+            "source": "pdp",
+        },
+        context,
+    )
+    job = ProductDetailJob(
+        id="00000000-0000-0000-0000-000000000011",
+        run_id="00000000-0000-0000-0000-000000000012",
+        canonical_product_db_id="00000000-0000-0000-0000-000000000013",
+        canonical_product_id="kroger_us:0001111060914",
+        retailer_id="kroger_us",
+        endpoint=endpoint,
+        context=context,
+        request_checksum=context.checksum(endpoint),
+        credits_per_call=endpoint.credits_per_successful_page,
+        status="running",
+        attempt_count=1,
+        max_attempts=3,
+    )
+    document = snapshot_document(
+        job,
+        ProductDetailFetchResult(
+            observed_at=datetime(2026, 8, 17, 12, tzinfo=UTC),
+            http_status=200,
+            billable=True,
+            credits=endpoint.credits_per_successful_page,
+            raw_artifact=ProductDetailRawArtifact(
+                artifact_id="raw-kroger-preflight",
+                storage_uri="s3://fixture/kroger-pdp.json.gz",
+                checksum="b" * 64,
+                byte_size=1,
+                metadata={},
+            ),
+            normalized=normalized,
+        ),
+        snapshot_id="snapshot-kroger-preflight",
+    )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "product-detail-snapshot.schema.json",
+        document,
+        label="verified-kroger-snapshot",
+    )
