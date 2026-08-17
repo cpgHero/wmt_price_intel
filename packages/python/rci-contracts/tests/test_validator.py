@@ -73,8 +73,9 @@ def test_product_detail_catalog_reconciles_to_supplied_endpoint_source() -> None
         )
         assert endpoint["supported_params"] == row["all_params"].split("|")
 
-    assert configured[("kroger_us", "105")]["paid_calls_enabled"] is False
-    assert approved_paths[("kroger_us", "105")]["disposition"] == "paid_preflight_required"
+    assert configured[("kroger_us", "105")]["paid_calls_enabled"] is True
+    assert configured[("kroger_us", "105")]["path"] == "/kroger/pdp/zipcode/"
+    assert approved_paths[("kroger_us", "105")]["disposition"] == ("owner_verified_runtime_path")
 
 
 def test_normalized_metricscart_catalog_has_full_auditable_provenance() -> None:

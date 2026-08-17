@@ -14,9 +14,9 @@
       "retailer_id": "kroger_us",
       "endpoint_id": "105",
       "provider_catalog_path": "/kroger/pdp/zipcode/",
-      "runtime_path": "/mc/kroger/pdp/zipcode",
-      "disposition": "paid_preflight_required",
-      "reason": "The 2026-08-16 export conflicts with the prior /mc route; paid batch execution is blocked until a controlled single-call preflight resolves the contract."
+      "runtime_path": "/kroger/pdp/zipcode/",
+      "disposition": "owner_verified_runtime_path",
+      "reason": "A controlled 2026-08-17 preflight returned HTTP 200 for an observed Egg product at the provider-catalog route; the prior /mc route is retired."
     }
   ]
 }

@@ -31,7 +31,8 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("matching v2 is a shadow and certification system");
     expect(text).toContain("one identified reviewer approves or rejects once");
     expect(text).toContain("final until someone explicitly flags it");
-    expect(text).toContain("kroger product details is intentionally blocked");
+    expect(text).toContain("kroger product details uses the provider-catalog");
+    expect(text).toContain("kroger pdp contract is verified");
     expect(text).toContain("cache-adjusted estimate");
   });
 

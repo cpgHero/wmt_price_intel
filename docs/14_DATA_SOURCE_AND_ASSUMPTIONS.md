@@ -39,7 +39,8 @@ by retailer-specific API fixtures and endpoint contracts.
   make no provider calls. Known marketplace sellers are excluded once governed PDP seller evidence
   exists; missing PDP seller evidence cannot be pre-filtered without making the very call being
   estimated.
-- The 2026-08-16 Kroger PDP path conflicts with the previously staged route. Kroger is represented
-  in estimates as a blocked invalid candidate until a single controlled paid preflight is approved.
+- The 2026-08-16 Kroger PDP path originally conflicted with the previously staged route. A
+  controlled 2026-08-17 call for Egg product `0001111060914`, observed at ZIP `72801` / store
+  `02500624`, returned HTTP 200 at `/kroger/pdp/zipcode/`. The prior `/mc` route is retired.
 - No CI test calls the live provider. Provider samples validate field inventories and normalization
   breadth but do not replace owner-approved live endpoint certification.

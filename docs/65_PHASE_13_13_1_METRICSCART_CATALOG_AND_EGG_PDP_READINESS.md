@@ -36,7 +36,7 @@ URL instead of the internal canonical product ID because its provider endpoint d
 `product_id`. Request checksums include the effective supported parameters, endpoint path, and
 contract version so cache reuse remains correct when provider contracts change.
 
-## Path discrepancies and paid-call gate
+## Path discrepancy at phase close
 
 Two differences are explicit in `config/metricscart-endpoint-overrides.json`:
 
@@ -46,6 +46,10 @@ Two differences are explicit in `config/metricscart-endpoint-overrides.json`:
 
 No batch may silently choose between conflicting billable routes. Kroger requires an owner-approved
 single-call preflight before `paid_calls_enabled` can become true.
+
+Phase 13.13.2 subsequently resolved this gate: the 2026-08-17 observed Egg preflight returned HTTP
+200 at `/kroger/pdp/zipcode/`. The provider-catalog route is now enabled and the prior `/mc` route
+is retired. See `docs/66_PHASE_13_13_2_KROGER_PREFLIGHT_AND_EGG_PDP_COLLECTION.md`.
 
 ## Cost boundary
 
@@ -125,6 +129,6 @@ unknown seller without first obtaining its PDP evidence.
 ## Explicitly deferred
 
 - Paid PDP collection.
-- Kroger endpoint preflight.
+- Kroger endpoint preflight (subsequently completed in Phase 13.13.2).
 - Target seller-value activation.
 - Egg Matching v2 authoritative cutover and report replay.

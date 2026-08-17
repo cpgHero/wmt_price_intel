@@ -83,10 +83,10 @@ const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.3",
+  version: "1.3.4",
   lastVerified,
   baseline:
-    "Production implementation through MetricsCart catalog and Egg PDP readiness Phase 13.13.1",
+    "Production implementation through verified Kroger PDP contract Phase 13.13.2",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -515,9 +515,9 @@ export const platformDocumentation: PlatformDocumentation = {
         },
         {
           kind: "callout",
-          tone: "attention",
-          title: "Kroger PDP contract is blocked",
-          text: "The August 16 provider catalog lists /kroger/pdp/zipcode/ while the prior application catalog used an /mc/kroger route. Kroger paid PDP work remains fail-closed until one controlled preflight resolves the contract; no batch silently guesses a billable path.",
+          tone: "information",
+          title: "Kroger PDP contract is verified",
+          text: "A controlled August 17 preflight used an Egg product observed at the supplied store and ZIP and returned HTTP 200 from /kroger/pdp/zipcode/. The provider-catalog route is enabled; the prior /mc route is retired.",
         },
         {
           kind: "callout",
@@ -1241,7 +1241,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
             "Automatic Matching v2 approval tiers are currently empty. Equivalent and substitute tiers remain human-approved.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
-            "Kroger Product Details is intentionally blocked pending a controlled single-call endpoint preflight.",
+            "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
             "Target marketplace seller rules are defined but not active until live seller values are certified.",
             "Product History is not presented until comparable cross-run snapshots, version compatibility, and continuity are certified.",
@@ -1311,6 +1311,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Verified; deployment pending",
+              "Kroger Product Details contract passed its controlled paid preflight.",
+              "One observed Egg product at ZIP 72801 / store 02500624 returned HTTP 200 from /kroger/pdp/zipcode/. The call consumed one credit ($0.002), exposed no credential, and established the catalog route as authoritative; the prior /mc route is retired.",
+            ],
             [
               "2026-08-17",
               "Deployed and production-verified",

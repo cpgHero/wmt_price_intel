@@ -422,11 +422,23 @@ def test_unchanged_v1_endpoint_preserves_existing_cache_checksum() -> None:
     assert context.checksum(endpoint) == sha256_document(legacy_identity)
 
 
-def test_conflicting_kroger_contract_is_fail_closed() -> None:
+def test_verified_kroger_contract_preserves_observed_request_context() -> None:
     endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("kroger_us")
-
-    assert endpoint.paid_calls_enabled is False
-    with pytest.raises(ValueError, match="blocked pending controlled contract preflight"):
-        MetricsCartProductDetailAdapter(endpoint).build_request(
-            ProductDetailRequestContext(product_id="12345", zipcode="72712", store="123")
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(
+        ProductDetailRequestContext(
+            product_id="0001111060914",
+            zipcode="72801",
+            store="02500624",
+            fulfillment_type="pickup",
         )
+    )
+
+    assert endpoint.paid_calls_enabled is True
+    assert endpoint.contract_version == "2026-08-17"
+    assert request.path == "/kroger/pdp/zipcode/"
+    assert request.params == {
+        "product_id": "0001111060914",
+        "zipcode": "72801",
+        "store": "02500624",
+        "fulfillment_type": "pickup",
+    }

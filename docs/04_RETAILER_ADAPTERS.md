@@ -89,8 +89,9 @@ outside Git. The runtime design is:
    and retailer, so the 3 RPS / 180 RPM limits remain shared across replicas.
 8. Resolve required defaults such as `fulfillment_type=pickup` and ShopRite
    `shopping_type=pickup` from endpoint configuration, never category branches.
-9. Keep disputed endpoint paths fail-closed. Kroger PDP calls remain blocked until a controlled
-   one-call preflight resolves `/kroger/pdp/zipcode/` versus the prior `/mc/kroger/...` route.
+9. Keep disputed endpoint paths fail-closed until a controlled preflight resolves them. The
+   2026-08-17 Kroger preflight returned HTTP 200 for an observed Egg product at
+   `/kroger/pdp/zipcode/`; that provider-catalog route is now the only enabled Kroger PDP path.
 
 This stage can power product drill-down and an action queue for high-impact products without
 coupling PDP payload shapes to the core analytics engine. Each additional retailer still needs its
