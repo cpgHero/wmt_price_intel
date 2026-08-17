@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_version": "2026-08-16",
+  "overrides": [
+    {
+      "retailer_id": "amazon_us_same_day",
+      "endpoint_id": "41",
+      "provider_catalog_path": "/mc/amazon/pdp/zipcode",
+      "runtime_path": "/mc/amazon/pdp/zipcode/",
+      "disposition": "owner_verified_runtime_path",
+      "reason": "Retain the trailing slash from the owner-provided successful PDP contract."
+    },
+    {
+      "retailer_id": "kroger_us",
+      "endpoint_id": "105",
+      "provider_catalog_path": "/kroger/pdp/zipcode/",
+      "runtime_path": "/mc/kroger/pdp/zipcode",
+      "disposition": "paid_preflight_required",
+      "reason": "The 2026-08-16 export conflicts with the prior /mc route; paid batch execution is blocked until a controlled single-call preflight resolves the contract."
+    }
+  ]
+}

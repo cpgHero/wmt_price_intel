@@ -62,6 +62,7 @@ def snapshot_document(
     snapshot_id: str,
 ) -> JsonObject:
     context = job.context
+    request_parameters = {**job.endpoint.defaults(), **context.parameters()}
     document: JsonObject = {
         "schema_version": "1.0.0",
         "snapshot_id": snapshot_id,
@@ -79,7 +80,8 @@ def snapshot_document(
             "url": context.url,
             "zipcode": context.zipcode,
             "store": context.store,
-            "fulfillment_type": context.fulfillment_type,
+            "fulfillment_type": request_parameters.get("fulfillment_type"),
+            "shopping_type": request_parameters.get("shopping_type"),
             "request_checksum_sha256": job.request_checksum,
         },
         "observed_at": result.observed_at.isoformat(),

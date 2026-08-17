@@ -90,6 +90,29 @@ async def test_one_cached_pdp_enriches_all_linked_serp_observations_without_over
 
     assert await worker.run_once() == 1
     assert fetcher.calls == 1
+    assert (
+        await repository.has_fresh_cache(
+            retailer_id="walmart_us",
+            retailer_product_id="677669806",
+            endpoint=endpoint,
+            context=context,
+        )
+        is True
+    )
+    assert (
+        await repository.has_fresh_cache(
+            retailer_id="walmart_us",
+            retailer_product_id="677669806",
+            endpoint=endpoint,
+            context=ProductDetailRequestContext(
+                product_id="677669806",
+                zipcode="10001",
+                store="1234",
+                fulfillment_type="pickup",
+            ),
+        )
+        is False
+    )
     completed = await repository.get_run(run.id)
     assert completed.planned_credits == 2
     assert completed.actual_credits == 2

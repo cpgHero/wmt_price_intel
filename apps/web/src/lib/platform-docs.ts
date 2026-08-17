@@ -83,10 +83,10 @@ const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.2",
+  version: "1.3.3",
   lastVerified,
   baseline:
-    "Production implementation through exact Milk package-volume governance Phase 13.13",
+    "Production implementation through MetricsCart catalog and Egg PDP readiness Phase 13.13.1",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -314,7 +314,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "10. Enrich distinct admitted products",
               detail:
-                "Reuse fresh PDP cache, then collect at most one representative observed location per distinct in-scope product unless contradictory evidence or a governed price-regime diagnostic requires another sample. PDP enhances identity—not local price.",
+                "Create a read-only, cache-adjusted estimate first. Reuse fresh PDP cache, then collect at most one representative observed location per distinct in-scope product unless contradictory evidence or a governed price-regime diagnostic requires another sample. PDP enhances identity—not local price.",
             },
             {
               title: "11. Resolve identity, brands, and attributes",
@@ -509,8 +509,15 @@ export const platformDocumentation: PlatformDocumentation = {
             "Use a representative location where Search observed the product with a positive price.",
             "Add a targeted location sample only for contradictory identity evidence or a separately governed diagnostic; a price difference alone never changes Search price authority.",
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
+            "Validate retailer-specific parameters from the versioned endpoint catalog. Pickup and ShopRite shopping defaults are configuration, not category code.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
           ],
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Kroger PDP contract is blocked",
+          text: "The August 16 provider catalog lists /kroger/pdp/zipcode/ while the prior application catalog used an /mc/kroger route. Kroger paid PDP work remains fail-closed until one controlled preflight resolves the contract; no batch silently guesses a billable path.",
         },
         {
           kind: "callout",
@@ -870,6 +877,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Definitions may enforce daily and monthly credit budgets; queued/running work reserves its estimate and completed work counts actual credits.",
             "Search, PDP, and AI have separate approval and limiter domains.",
             "PDP planning deduplicates to distinct admitted identities and reuses cache according to cadence.",
+            "The PDP estimate is read-only and reports eligible requests, exact fresh-cache hits, blocked contracts, calls, and credits before --confirm-paid-calls can enqueue anything.",
             "OpenAI model IDs, output limits, reasoning effort, timeouts, and maximum request cost are explicit worker configuration.",
             "HTTP 200 and 404 provider responses may be billable and are retained in the cost ledger; retries remain bounded and idempotent.",
           ],
@@ -1233,6 +1241,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
             "Automatic Matching v2 approval tiers are currently empty. Equivalent and substitute tiers remain human-approved.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
+            "Kroger Product Details is intentionally blocked pending a controlled single-call endpoint preflight.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
             "Target marketplace seller rules are defined but not active until live seller values are certified.",
             "Product History is not presented until comparable cross-run snapshots, version compatibility, and continuity are certified.",
@@ -1302,6 +1311,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented; production verification pending",
+              "The complete MetricsCart catalog is normalized and all 14 Egg retailers have staged PDP contracts.",
+              "The repository records 217 active endpoint contracts without copying provider response bodies, adds eight Retailer Packs, supports generic request defaults, preserves unchanged cache identities, reports fresh cache hits in dry-run estimates, and blocks the conflicting Kroger path before paid execution. No provider calls were made.",
+            ],
             [
               "2026-08-17",
               "Deployed & verified",

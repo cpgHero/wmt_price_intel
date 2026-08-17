@@ -191,6 +191,29 @@ class InMemoryProductDetailRepository:
                 created=True,
             )
 
+    async def has_fresh_cache(
+        self,
+        *,
+        retailer_id: str,
+        retailer_product_id: str,
+        endpoint: ProductDetailEndpoint,
+        context: ProductDetailRequestContext,
+    ) -> bool:
+        checksum = context.checksum(endpoint)
+        now = datetime.now(UTC)
+        async with self._lock:
+            product_id = self._product_by_key.get((retailer_id, retailer_product_id))
+            if product_id is None:
+                return False
+            return any(
+                snapshot.request_checksum == checksum
+                and snapshot.cache_expires_at is not None
+                and snapshot.cache_expires_at > now
+                and snapshot.document.get("normalized") is not None
+                for snapshot in self._snapshots.values()
+                if snapshot.canonical_product_db_id == product_id
+            )
+
     async def claim(
         self,
         worker_id: str,

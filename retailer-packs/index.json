@@ -1,6 +1,11 @@
 {
   "schema_version": "1.0.0",
   "packs": [
+    {
+      "id": "albertsons_us",
+      "version": "1.0.0",
+      "file": "albertsons_us/1.0.0.json"
+    },
     { "id": "walmart_us", "version": "1.0.0", "file": "walmart_us/1.0.0.json" },
     { "id": "walmart_us", "version": "1.1.0", "file": "walmart_us/1.1.0.json" },
     { "id": "walmart_us", "version": "1.2.0", "file": "walmart_us/1.2.0.json" },
@@ -28,6 +33,33 @@
     { "id": "target_us", "version": "1.0.0", "file": "target_us/1.0.0.json" },
     { "id": "target_us", "version": "1.1.0", "file": "target_us/1.1.0.json" },
     { "id": "target_us", "version": "1.2.0", "file": "target_us/1.2.0.json" },
+    {
+      "id": "giant_eagle_us",
+      "version": "1.0.0",
+      "file": "giant_eagle_us/1.0.0.json"
+    },
+    { "id": "meijer_us", "version": "1.0.0", "file": "meijer_us/1.0.0.json" },
+    {
+      "id": "sams_club_us",
+      "version": "1.0.0",
+      "file": "sams_club_us/1.0.0.json"
+    },
+    {
+      "id": "safeway_us",
+      "version": "1.0.0",
+      "file": "safeway_us/1.0.0.json"
+    },
+    {
+      "id": "shoprite_us",
+      "version": "1.0.0",
+      "file": "shoprite_us/1.0.0.json"
+    },
+    {
+      "id": "trader_joes_us",
+      "version": "1.0.0",
+      "file": "trader_joes_us/1.0.0.json"
+    },
+    { "id": "wegmans_us", "version": "1.0.0", "file": "wegmans_us/1.0.0.json" },
     {
       "id": "whole_foods_market_us",
       "version": "1.0.0",

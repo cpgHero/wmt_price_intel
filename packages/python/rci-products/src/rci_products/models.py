@@ -30,9 +30,14 @@ class ProductDetailEndpoint:
     method: str
     path: str
     credits_per_successful_page: int
+    paid_calls_enabled: bool
     required_params: tuple[str, ...]
     supported_params: tuple[str, ...]
     contract_version: str = "1.0.0"
+    default_params: tuple[tuple[str, str], ...] = ()
+
+    def defaults(self) -> JsonObject:
+        return dict(self.default_params)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +46,7 @@ class ProductDetailRequestContext:
     zipcode: str | None = None
     store: str | None = None
     fulfillment_type: str | None = None
+    shopping_type: str | None = None
     url: str | None = None
 
     def parameters(self) -> JsonObject:
@@ -52,12 +58,14 @@ class ProductDetailRequestContext:
                 "zipcode": self.zipcode,
                 "store": self.store,
                 "fulfillment_type": self.fulfillment_type,
+                "shopping_type": self.shopping_type,
             }.items()
             if value is not None and str(value).strip()
         }
 
     def cache_identity(self, endpoint: ProductDetailEndpoint) -> JsonObject:
-        return {
+        supplied = {**endpoint.defaults(), **self.parameters()}
+        identity: JsonObject = {
             "provider": "metricscart",
             "retailer_id": endpoint.retailer_id,
             "endpoint_id": endpoint.endpoint_id,
@@ -66,8 +74,11 @@ class ProductDetailRequestContext:
             "url": self.url,
             "zipcode": self.zipcode,
             "store": self.store,
-            "fulfillment_type": self.fulfillment_type,
+            "fulfillment_type": supplied.get("fulfillment_type"),
         }
+        if "shopping_type" in supplied:
+            identity["shopping_type"] = supplied["shopping_type"]
+        return identity
 
     def checksum(self, endpoint: ProductDetailEndpoint) -> str:
         return sha256_document(self.cache_identity(endpoint))

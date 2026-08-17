@@ -55,6 +55,15 @@ class ProductDetailRepository(Protocol):
         max_attempts: int = 3,
     ) -> EnqueueProductDetailResult: ...
 
+    async def has_fresh_cache(
+        self,
+        *,
+        retailer_id: str,
+        retailer_product_id: str,
+        endpoint: ProductDetailEndpoint,
+        context: ProductDetailRequestContext,
+    ) -> bool: ...
+
     async def claim(
         self,
         worker_id: str,

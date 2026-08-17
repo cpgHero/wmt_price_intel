@@ -16,6 +16,7 @@ from rci_products.models import (
     ProductDetailNormalizationCandidate,
     ProductDetailRawArtifact,
     ProductDetailRequestContext,
+    sha256_document,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -320,3 +321,112 @@ def test_regional_retailer_requests_preserve_verified_trailing_slash(
         "zipcode": zipcode,
         "store": store,
     }
+
+
+def test_egg_retailer_catalog_is_complete_and_defaults_are_generic() -> None:
+    catalog = ProductDetailCatalog.from_path(REPOSITORY_ROOT)
+    egg_retailers = {
+        "albertsons_us",
+        "aldi_us",
+        "amazon_us_same_day",
+        "giant_eagle_us",
+        "heb_us",
+        "kroger_us",
+        "meijer_us",
+        "safeway_us",
+        "sams_club_us",
+        "shoprite_us",
+        "target_us",
+        "trader_joes_us",
+        "walmart_us",
+        "wegmans_us",
+    }
+
+    for retailer_id in egg_retailers:
+        assert catalog.get(retailer_id).retailer_id == retailer_id
+
+    shoprite = catalog.get("shoprite_us")
+    request = MetricsCartProductDetailAdapter(shoprite).build_request(
+        ProductDetailRequestContext(
+            product_id="12345",
+            zipcode="07001",
+            store="321",
+            url="https://www.shoprite.com/product/12345",
+        )
+    )
+    assert request.params["shopping_type"] == "pickup"
+
+    sams = catalog.get("sams_club_us")
+    request = MetricsCartProductDetailAdapter(sams).build_request(
+        ProductDetailRequestContext(
+            product_id="not-sent",
+            zipcode="72712",
+            store="4969",
+            url="https://www.samsclub.com/p/example/prod123",
+        )
+    )
+    assert request.params == {
+        "url": "https://www.samsclub.com/p/example/prod123",
+        "zipcode": "72712",
+        "store": "4969",
+        "fulfillment_type": "pickup",
+    }
+
+
+def test_endpoint_defaults_and_contract_version_change_cache_identity() -> None:
+    catalog = ProductDetailCatalog.from_path(REPOSITORY_ROOT)
+    endpoint = catalog.get("shoprite_us")
+    context = ProductDetailRequestContext(
+        product_id="12345",
+        zipcode="07001",
+        store="321",
+    )
+    altered = type(endpoint)(
+        retailer_id=endpoint.retailer_id,
+        provider_retailer=endpoint.provider_retailer,
+        domain=endpoint.domain,
+        endpoint_id=endpoint.endpoint_id,
+        method=endpoint.method,
+        path=endpoint.path,
+        credits_per_successful_page=endpoint.credits_per_successful_page,
+        paid_calls_enabled=endpoint.paid_calls_enabled,
+        required_params=endpoint.required_params,
+        supported_params=endpoint.supported_params,
+        contract_version="2026-08-16.1",
+        default_params=(("shopping_type", "delivery"),),
+    )
+
+    assert context.checksum(endpoint) != context.checksum(altered)
+
+
+def test_unchanged_v1_endpoint_preserves_existing_cache_checksum() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    context = ProductDetailRequestContext(
+        product_id="677669806",
+        zipcode="90020",
+        store="2464",
+        fulfillment_type="pickup",
+    )
+    legacy_identity = {
+        "provider": "metricscart",
+        "retailer_id": "walmart_us",
+        "endpoint_id": "3",
+        "endpoint_version": "1.0.0",
+        "product_id": "677669806",
+        "url": None,
+        "zipcode": "90020",
+        "store": "2464",
+        "fulfillment_type": "pickup",
+    }
+
+    assert context.checksum(endpoint) == sha256_document(legacy_identity)
+
+
+def test_conflicting_kroger_contract_is_fail_closed() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("kroger_us")
+
+    assert endpoint.paid_calls_enabled is False
+    with pytest.raises(ValueError, match="blocked pending controlled contract preflight"):
+        MetricsCartProductDetailAdapter(endpoint).build_request(
+            ProductDetailRequestContext(product_id="12345", zipcode="72712", store="123")
+        )

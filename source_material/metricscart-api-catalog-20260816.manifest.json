@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_version": "2026-08-16",
+  "source_archive": {
+    "filename": "metricscart-api-catalog-20260816.zip",
+    "byte_size": 2409685,
+    "sha256": "19cce83776b0d8af8d6b0846a0ab68908b726a0d74a7b15baa7ba86b95a6bf54"
+  },
+  "archive_crc_valid": true,
+  "files": {
+    "README.md": {
+      "byte_size": 78688,
+      "sha256": "5fd1235cf73e7891ab67f2cd50845c64190d1864a5bee2baa15b29452839104d"
+    },
+    "endpoints-flat.json": {
+      "byte_size": 6196277,
+      "sha256": "ed3d9b8809cae52ce444208e2421b786b9dffd504e0e3c32fa573d55cb751183"
+    },
+    "endpoints.csv": {
+      "byte_size": 31798,
+      "sha256": "3331ed6b0882fe635d8152304ee6668e90e5619b765188b0077015fc792e6b9b"
+    },
+    "playground-api-catalog.json": {
+      "byte_size": 12021120,
+      "sha256": "1d8c86d34f9095f404a89e58613ead8480aaa101e3555da97f8c84c4ce36d3f5"
+    },
+    "raw-api_endpoint.json": {
+      "byte_size": 4981471,
+      "sha256": "b8966bf3d6c3fa592673a9d6d257293dbf48477a8efb3be737403e70e256408d"
+    },
+    "raw-api_endpoint_parameter.json": {
+      "byte_size": 180700,
+      "sha256": "596430e53495e00f75a8e57300e7e7c7f0ea85ff3849450fcf457d195621955c"
+    },
+    "raw-data_source.json": {
+      "byte_size": 21985,
+      "sha256": "1819696e8beef5a17599acd424b7956ab1602d9481a23888e9aac44547776b64"
+    }
+  },
+  "notes": [
+    "The source archive remains owner-supplied and is not committed.",
+    "The normalized catalog stores sample hashes and field inventories, not response bodies.",
+    "No provider credential is present; the export uses the MY_API_KEY placeholder."
+  ]
+}

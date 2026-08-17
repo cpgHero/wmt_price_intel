@@ -194,6 +194,85 @@
       ]
     },
     {
+      "id": "giant_eagle_us",
+      "display_name": "Giant Eagle",
+      "location_provider": "Giant Eagle",
+      "api_retailer_aliases": ["giant eagle", "gianteagle.com"],
+      "endpoint": "/mc/gianteagle/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "required_params": ["zipcode", "store"],
+      "search_inputs": ["keyword", "url"],
+      "status": "catalogued"
+    },
+    {
+      "id": "meijer_us",
+      "display_name": "Meijer",
+      "location_provider": "Meijer",
+      "api_retailer_aliases": ["meijer", "meijer.com"],
+      "endpoint": "/mc/meijer/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "required_params": ["zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "status": "catalogued"
+    },
+    {
+      "id": "sams_club_us",
+      "display_name": "Sam's Club",
+      "location_provider": "Sam's Club",
+      "api_retailer_aliases": ["sam's club", "sams club", "samsclub.com"],
+      "endpoint": "/mc/samsclub/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "required_params": ["keyword", "zipcode", "store", "page"],
+      "search_inputs": ["keyword"],
+      "status": "catalogued"
+    },
+    {
+      "id": "shoprite_us",
+      "display_name": "ShopRite",
+      "location_provider": "ShopRite",
+      "api_retailer_aliases": ["shoprite", "shoprite.com"],
+      "endpoint": "/mc/shoprite/serp/zipcode",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "required_params": ["zipcode", "store", "shopping_type"],
+      "search_inputs": ["keyword", "url"],
+      "status": "catalogued",
+      "quirks": ["shopping_type defaults to pickup in the provider catalog"]
+    },
+    {
+      "id": "trader_joes_us",
+      "display_name": "Trader Joe's",
+      "location_provider": "Trader Joe's",
+      "api_retailer_aliases": ["trader joe's", "trader joes", "traderjoes.com"],
+      "endpoint": "/mc/traderjoes/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "required_params": ["keyword", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "status": "catalogued"
+    },
+    {
+      "id": "wegmans_us",
+      "display_name": "Wegmans",
+      "location_provider": "Wegmans",
+      "api_retailer_aliases": ["wegmans", "wegmans.com"],
+      "endpoint": "/mc/wegmans/serp/store/",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "required_params": ["keyword", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "status": "catalogued"
+    },
+    {
       "id": "walmart_mx",
       "display_name": "Walmart (Mexico)",
       "location_provider": null,
@@ -205,56 +284,6 @@
     }
   ],
   "normalization_only_retailers": [
-    {
-      "id": "giant_eagle_us",
-      "display_name": "Giant Eagle",
-      "api_retailer_aliases": [
-        "giant eagle",
-        "gianteagle.com"
-      ]
-    },
-    {
-      "id": "meijer_us",
-      "display_name": "Meijer",
-      "api_retailer_aliases": [
-        "meijer",
-        "meijer.com"
-      ]
-    },
-    {
-      "id": "sams_club_us",
-      "display_name": "Sam's Club",
-      "api_retailer_aliases": [
-        "sam's club",
-        "sams club",
-        "samsclub.com"
-      ]
-    },
-    {
-      "id": "shoprite_us",
-      "display_name": "ShopRite",
-      "api_retailer_aliases": [
-        "shoprite",
-        "shoprite.com"
-      ]
-    },
-    {
-      "id": "trader_joes_us",
-      "display_name": "Trader Joe's",
-      "api_retailer_aliases": [
-        "trader joe's",
-        "trader joes",
-        "traderjoes.com"
-      ]
-    },
-    {
-      "id": "wegmans_us",
-      "display_name": "Wegmans",
-      "api_retailer_aliases": [
-        "wegmans",
-        "wegmans.com"
-      ]
-    },
     {
       "id": "whole_foods_market_us",
       "display_name": "Whole Foods Market",

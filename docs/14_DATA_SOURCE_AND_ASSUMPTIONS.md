@@ -9,8 +9,13 @@
 5. Human-validated competitive-intelligence analyses for eggs, milk, bananas, and strawberries.
 6. `CCF_Search_Data_08.03.2026_v2.csv` - 386,889 consolidated egg-search export rows from 14
    retailer domains, attached separately for full golden reconciliation.
-7. `metricscart_product_details_by_zipcode_apis.csv` - owner-supplied endpoint, parameter, example,
-   and per-success credit details for ten Product Details by ZIP endpoints.
+7. `metricscart-api-catalog-20260816.zip` - owner-supplied catalog of 81 retailer sources, 217
+   active endpoints, 709 provider parameters, and 217 stored sample responses. The archive remains
+   outside Git; its checksum/file inventory is committed in
+   `source_material/metricscart-api-catalog-20260816.manifest.json`.
+8. `metricscart_product_details_by_zipcode_apis_20260816.csv` - normalized endpoint, parameter,
+   sample-response hash, and credit details for the 16 Product Details by ZIP endpoints currently
+   staged by the application, including all 14 Egg retailers.
 
 The consolidated egg export is an offline analytical source. Its common 27-column shape is not a
 substitute for any retailer's direct MetricsCart SERP or PDP payload. Live adapters remain governed
@@ -29,6 +34,12 @@ by retailer-specific API fixtures and endpoint contracts.
 - Target: newer catalog lists `/target/search/zipcode`; older snapshot had `/target/search`. Adapter remains disabled/needs verification until a live request confirms parameters.
 - Exact provider page-size/has-more semantics are not documented in supplied material. V1 relies on max-pages and stop-on-empty, not guessed short-page pagination.
 - The cost catalog gives credits/page but not a dollar conversion; store credits now and add dollar cost only when authoritative credit-to-dollar mapping is provided.
-- Product Details by ZIP remains operationally disabled by default, but the supplied Walmart,
-  ALDI, and Amazon fixtures now govern the V1 normalizers. Enabling work requires an explicit,
-  separately capped enrichment run; no CI test calls the live provider.
+- Product Details by ZIP remains an explicitly approved, separately capped workflow. Dry-run plans
+  exclude Product Pack noise, validate request completeness, reuse exact fresh cache entries, and
+  make no provider calls. Known marketplace sellers are excluded once governed PDP seller evidence
+  exists; missing PDP seller evidence cannot be pre-filtered without making the very call being
+  estimated.
+- The 2026-08-16 Kroger PDP path conflicts with the previously staged route. Kroger is represented
+  in estimates as a blocked invalid candidate until a single controlled paid preflight is approved.
+- No CI test calls the live provider. Provider samples validate field inventories and normalization
+  breadth but do not replace owner-approved live endpoint certification.

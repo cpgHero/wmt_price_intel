@@ -56,20 +56,23 @@ Generic normalizer checks in order:
 The adapter may override only if a retailer actually differs.
 
 ## Catalogued later adapters
-Albertsons, H-E-B, Kroger, Safeway, Target, Walmart Mexico are in `config/retailer-catalog.json`. Target remains `needs_verification` because the newer catalog and older endpoint snapshot conflict.
 
-The catalog also carries normalization-only identities for Giant Eagle, Meijer, Sam's Club,
-ShopRite, Trader Joe's, and Wegmans. These aliases let historical consolidated exports normalize
-without implying that a live MetricsCart adapter exists. Moving any of them into collection scope
-requires its endpoint contract, credit cost, response fixtures, and adapter tests.
+Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,
+Trader Joe's, Wegmans, and Walmart Mexico are catalogued in `config/retailer-catalog.json`.
+Catalogued means that endpoint metadata, credit cost, aliases, location grain, and a Retailer Pack
+exist; it does not mean that Search collection is enabled. Target remains `needs_verification`
+because the newer catalog and older endpoint snapshot conflict. Whole Foods Market remains a
+normalization-only identity.
 
 ## Optional product-detail enrichment
 
 Product Details by ZIP is an implemented, default-off enrichment stage. Owner-supplied Walmart,
-ALDI, and Amazon response fixtures govern the three V1 adapters. The endpoint/credit matrix remains
-preserved in `source_material/metricscart_product_details_by_zipcode_apis.csv` and normalized into
-the shared, schema-validated `config/product-detail-catalog.json`. It covers ten PDP endpoints; only
-Walmart US, ALDI US, and Amazon US overlap the enabled V1 SERP adapters. The runtime design is:
+ALDI, and Amazon response fixtures govern the three V1 adapters. The 2026-08-16 endpoint/credit
+matrix is preserved as a compact, checksummed source manifest and normalized into the shared,
+schema-validated `config/product-detail-catalog.json`. It covers 16 PDP endpoints, including all 14
+retailers in the Egg source. The complete 217-endpoint provider catalog is retained as endpoint
+contracts plus sample-response hashes and field inventories; large provider response bodies stay
+outside Git. The runtime design is:
 
 1. SERP collection remains the source of location-specific price, availability, and ranking.
 2. After normalization, enqueue at most one PDP request per retailer/product ID and product-version
@@ -84,8 +87,13 @@ Walmart US, ALDI US, and Amazon US overlap the enabled V1 SERP adapters. The run
    durable, and the request checksum is the idempotency key.
 7. Enforce rate and cooldown state under a Postgres row lock keyed by credential hash, request type,
    and retailer, so the 3 RPS / 180 RPM limits remain shared across replicas.
+8. Resolve required defaults such as `fulfillment_type=pickup` and ShopRite
+   `shopping_type=pickup` from endpoint configuration, never category branches.
+9. Keep disputed endpoint paths fail-closed. Kroger PDP calls remain blocked until a controlled
+   one-call preflight resolves `/kroger/pdp/zipcode/` versus the prior `/mc/kroger/...` route.
 
 This stage can power product drill-down and an action queue for high-impact products without
 coupling PDP payload shapes to the core analytics engine. Each additional retailer still needs its
 own PDP adapter fixture because the consolidated historical export is not an API-response contract.
-See `docs/20_PHASE_9_5_4_PRODUCT_IDENTITY_PDP.md` for the acceptance ledger.
+See `docs/20_PHASE_9_5_4_PRODUCT_IDENTITY_PDP.md` and
+`docs/65_PHASE_13_13_1_METRICSCART_CATALOG_AND_EGG_PDP_READINESS.md` for the acceptance ledger.

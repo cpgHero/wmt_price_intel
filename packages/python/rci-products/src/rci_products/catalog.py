@@ -33,8 +33,16 @@ class ProductDetailCatalog:
                 method=str(value["method"]).upper(),
                 path=str(value["path"]),
                 credits_per_successful_page=int(value["credits_per_successful_page"]),
+                paid_calls_enabled=bool(value["paid_calls_enabled"]),
                 required_params=tuple(str(item) for item in value["required_params"]),
                 supported_params=tuple(str(item) for item in value["supported_params"]),
+                contract_version=str(value.get("contract_version", "1.0.0")),
+                default_params=tuple(
+                    sorted(
+                        (str(name), str(parameter_value))
+                        for name, parameter_value in value.get("default_params", {}).items()
+                    )
+                ),
             )
             if endpoint.retailer_id in endpoints:
                 raise ValueError(f"duplicate Product Details endpoint {endpoint.retailer_id!r}")

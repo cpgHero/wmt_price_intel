@@ -579,6 +579,7 @@ def _pdp_plan(products: list[dict[str, Any]], root: Path) -> tuple[dict[str, Any
                     context.get("fulfillment_type")
                     or ("pickup" if product["retailer_id"] in {"walmart_us", "aldi_us"} else None)
                 ),
+                shopping_type=context.get("shopping_type"),
                 url=product.get("url"),
             )
             try:
@@ -591,7 +592,9 @@ def _pdp_plan(products: list[dict[str, Any]], root: Path) -> tuple[dict[str, Any
                     }
                 )
                 continue
-            parameters = request_context.parameters()
+            parameters = (
+                MetricsCartProductDetailAdapter(endpoint).build_request(request_context).params
+            )
             calls.append(
                 {
                     "retailer_id": product["retailer_id"],
@@ -709,10 +712,11 @@ async def launch_pdp(
         for call in calls:
             context_document = dict(call["request_context"])
             context = ProductDetailRequestContext(
-                product_id=str(context_document["product_id"]),
+                product_id=str(call["retailer_product_id"]),
                 zipcode=context_document.get("zipcode"),
                 store=context_document.get("store"),
                 fulfillment_type=context_document.get("fulfillment_type"),
+                shopping_type=context_document.get("shopping_type"),
                 url=context_document.get("url"),
             )
             product = await product_repository.upsert_serp_product(

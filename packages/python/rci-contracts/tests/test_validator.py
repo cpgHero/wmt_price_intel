@@ -45,23 +45,60 @@ def test_product_detail_catalog_reconciles_to_supplied_endpoint_source() -> None
     catalog = json.loads(
         (REPOSITORY_ROOT / "config/product-detail-catalog.json").read_text(encoding="utf-8")
     )
-    configured = {(row["provider_retailer"], row["domain"]): row for row in catalog["endpoints"]}
-    with (REPOSITORY_ROOT / "source_material/metricscart_product_details_by_zipcode_apis.csv").open(
-        newline="", encoding="utf-8-sig"
-    ) as handle:
+    overrides = json.loads(
+        (REPOSITORY_ROOT / "config/metricscart-endpoint-overrides.json").read_text(encoding="utf-8")
+    )
+    configured = {(row["retailer_id"], row["endpoint_id"]): row for row in catalog["endpoints"]}
+    approved_paths = {
+        (row["retailer_id"], row["endpoint_id"]): row for row in overrides["overrides"]
+    }
+    with (REPOSITORY_ROOT / catalog["source"]).open(newline="", encoding="utf-8-sig") as handle:
         supplied = list(csv.DictReader(handle))
 
-    assert len(supplied) == len(configured) == 10
+    assert len(supplied) == len(configured) == 16
     for row in supplied:
-        endpoint = configured[(row["provider"], row["domain"])]
+        key = (row["retailer_id"], row["endpoint_id"])
+        endpoint = configured[key]
         assert endpoint["endpoint_id"] == row["endpoint_id"]
+        assert endpoint["provider_retailer"] == row["provider"]
+        assert endpoint["domain"] == row["domain"]
         assert endpoint["method"] == row["method"]
-        assert endpoint["path"].rstrip("/") == row["inferred_metricscart_path"].rstrip("/")
+        if endpoint["path"].rstrip("/") != row["inferred_metricscart_path"].rstrip("/"):
+            override = approved_paths[key]
+            assert override["provider_catalog_path"] == row["inferred_metricscart_path"]
+            assert override["runtime_path"] == endpoint["path"]
         assert endpoint["credits_per_successful_page"] == int(row["credits"])
         assert endpoint["required_params"] == (
             row["required_params"].split("|") if row["required_params"] else []
         )
         assert endpoint["supported_params"] == row["all_params"].split("|")
+
+    assert configured[("kroger_us", "105")]["paid_calls_enabled"] is False
+    assert approved_paths[("kroger_us", "105")]["disposition"] == "paid_preflight_required"
+
+
+def test_normalized_metricscart_catalog_has_full_auditable_provenance() -> None:
+    catalog = json.loads(
+        (REPOSITORY_ROOT / "config/metricscart-api-catalog-20260816.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest = json.loads(
+        (
+            REPOSITORY_ROOT / "source_material/metricscart-api-catalog-20260816.manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert catalog["counts"] == {
+        "retailers": 81,
+        "endpoints": 217,
+        "active_endpoints": 217,
+        "endpoints_with_sample_response": 217,
+    }
+    assert manifest["archive_crc_valid"] is True
+    assert manifest["source_archive"] == catalog["source_archive"]
+    assert len(manifest["files"]) == 7
+    assert all(len(row["sample_response"]["sha256"]) == 64 for row in catalog["endpoints"])
 
 
 def test_phase_9_5_contracts_preserve_identifiers_and_source_authority() -> None:

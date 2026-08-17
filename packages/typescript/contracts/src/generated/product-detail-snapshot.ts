@@ -20,6 +20,7 @@ export type RetailCompetitiveIntelligenceProductDetailSnapshot = {
     zipcode: string | null;
     store: string | null;
     fulfillment_type: string | null;
+    shopping_type?: string | null;
     request_checksum_sha256: string;
   };
   observed_at: string;

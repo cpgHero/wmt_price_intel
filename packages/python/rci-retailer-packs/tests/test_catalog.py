@@ -20,9 +20,20 @@ def test_file_catalog_validates_every_versioned_retailer_pack() -> None:
     records = FileRetailerPackCatalog(REPOSITORY_ROOT).versions()
 
     assert {record.id for record in records} >= {
+        "albertsons_us",
         "walmart_us",
         "aldi_us",
         "amazon_us_same_day",
+        "giant_eagle_us",
+        "heb_us",
+        "kroger_us",
+        "meijer_us",
+        "safeway_us",
+        "sams_club_us",
+        "shoprite_us",
+        "target_us",
+        "trader_joes_us",
+        "wegmans_us",
     }
     assert all(record.checksum == canonical_checksum(record.document) for record in records)
 

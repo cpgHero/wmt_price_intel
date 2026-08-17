@@ -79,6 +79,9 @@
         "fulfillment_type": {
           "type": ["string", "null"]
         },
+        "shopping_type": {
+          "type": ["string", "null"]
+        },
         "request_checksum_sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"

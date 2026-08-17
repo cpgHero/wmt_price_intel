@@ -79,9 +79,11 @@ def _endpoint_document(endpoint: ProductDetailEndpoint) -> JsonObject:
         "method": endpoint.method,
         "path": endpoint.path,
         "credits_per_successful_page": endpoint.credits_per_successful_page,
+        "paid_calls_enabled": endpoint.paid_calls_enabled,
         "required_params": list(endpoint.required_params),
         "supported_params": list(endpoint.supported_params),
         "contract_version": endpoint.contract_version,
+        "default_params": endpoint.defaults(),
     }
 
 
@@ -95,9 +97,18 @@ def _endpoint(value: object) -> ProductDetailEndpoint:
         method=str(document["method"]),
         path=str(document["path"]),
         credits_per_successful_page=int(document["credits_per_successful_page"]),
+        paid_calls_enabled=bool(document.get("paid_calls_enabled", True)),
         required_params=tuple(str(item) for item in document["required_params"]),
         supported_params=tuple(str(item) for item in document["supported_params"]),
-        contract_version=str(document["contract_version"]),
+        contract_version=str(document.get("contract_version", "1.0.0")),
+        default_params=tuple(
+            sorted(
+                (str(name), str(parameter_value))
+                for name, parameter_value in cast(
+                    JsonObject, document.get("default_params", {})
+                ).items()
+            )
+        ),
     )
 
 
@@ -107,6 +118,7 @@ def _context_document(context: ProductDetailRequestContext) -> JsonObject:
         "zipcode": context.zipcode,
         "store": context.store,
         "fulfillment_type": context.fulfillment_type,
+        "shopping_type": context.shopping_type,
         "url": context.url,
     }
 
@@ -121,6 +133,9 @@ def _context(value: object) -> ProductDetailRequestContext:
             str(document["fulfillment_type"])
             if document.get("fulfillment_type") is not None
             else None
+        ),
+        shopping_type=(
+            str(document["shopping_type"]) if document.get("shopping_type") is not None else None
         ),
         url=str(document["url"]) if document.get("url") is not None else None,
     )
@@ -414,6 +429,44 @@ class PostgresProductDetailRepository:
                 cached=False,
                 created=True,
             )
+
+    async def has_fresh_cache(
+        self,
+        *,
+        retailer_id: str,
+        retailer_product_id: str,
+        endpoint: ProductDetailEndpoint,
+        context: ProductDetailRequestContext,
+    ) -> bool:
+        checksum = context.checksum(endpoint)
+        async with self._engine.connect() as connection:
+            cached = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT s.id::text
+                        FROM canonical_product p
+                        JOIN product_detail_snapshot s ON s.canonical_product_id = p.id
+                        WHERE p.organization_id::text = :organization_id
+                          AND p.retailer_id = :retailer_id
+                          AND p.retailer_product_id = :retailer_product_id
+                          AND s.request_checksum = :checksum
+                          AND s.normalized
+                          AND s.http_status = 200
+                          AND s.cache_expires_at > now()
+                        ORDER BY s.observed_at DESC, s.id DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "organization_id": self._organization_id,
+                        "retailer_id": retailer_id,
+                        "retailer_product_id": retailer_product_id,
+                        "checksum": checksum,
+                    },
+                )
+            ).scalar_one_or_none()
+        return cached is not None
 
     async def claim(
         self,

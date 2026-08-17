@@ -260,8 +260,24 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                 )
                 continue
             valid_candidates.append((candidate, endpoint))
+        product_repository = PostgresProductDetailRepository(database.engine, repository_root)
+        cached_request_checksums = {
+            candidate.context.checksum(endpoint)
+            for candidate, endpoint in valid_candidates
+            if await product_repository.has_fresh_cache(
+                retailer_id=candidate.retailer_id,
+                retailer_product_id=candidate.retailer_product_id,
+                endpoint=endpoint,
+                context=candidate.context,
+            )
+        }
+        payable_candidates = [
+            (candidate, endpoint)
+            for candidate, endpoint in valid_candidates
+            if candidate.context.checksum(endpoint) not in cached_request_checksums
+        ]
         required_credits = sum(
-            endpoint.credits_per_successful_page for _candidate, endpoint in valid_candidates
+            endpoint.credits_per_successful_page for _candidate, endpoint in payable_candidates
         )
         summary: dict[str, object] = {
             "status": "estimate" if not args.confirm_paid_calls else "queued",
@@ -275,7 +291,9 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     for candidate, _ in valid_candidates
                 }
             ),
-            "planned_calls": len(valid_candidates),
+            "eligible_requests": len(valid_candidates),
+            "cache_hits": len(cached_request_checksums),
+            "planned_calls": len(payable_candidates),
             "required_credits": required_credits,
             "credit_ceiling": args.max_credits,
             "retailer_filter": sorted(retailer_filter),
@@ -284,10 +302,12 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     {
                         retailer: sum(
                             endpoint.credits_per_successful_page
-                            for candidate, endpoint in valid_candidates
+                            for candidate, endpoint in payable_candidates
                             if candidate.retailer_id == retailer
                         )
-                        for retailer in {candidate.retailer_id for candidate, _ in valid_candidates}
+                        for retailer in {
+                            candidate.retailer_id for candidate, _ in payable_candidates
+                        }
                     }
                 )
             ),
@@ -303,7 +323,7 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError(
                 f"planned PDP cost {required_credits} credits exceeds {args.max_credits} ceiling"
             )
-        repository = PostgresProductDetailRepository(database.engine, repository_root)
+        repository = product_repository
         run = await repository.create_run(max_credits=args.max_credits)
         queued = 0
         cached = 0

@@ -144,14 +144,19 @@ class MetricsCartProductDetailAdapter:
         self.retailer_id = endpoint.retailer_id
 
     def build_request(self, context: ProductDetailRequestContext) -> ProviderRequest:
-        supplied = context.parameters()
+        if not self.endpoint.paid_calls_enabled:
+            raise ValueError(
+                "Product Details endpoint is blocked pending controlled contract preflight"
+            )
+        supplied = {**self.endpoint.defaults(), **context.parameters()}
         if not context.product_id and not context.url:
             raise ValueError("Product Details requires a product_id or url")
-        unsupported = set(supplied) - set(self.endpoint.supported_params)
-        if unsupported:
-            raise ValueError(
-                f"unsupported Product Details parameters: {', '.join(sorted(unsupported))}"
-            )
+        if not any(
+            supplied.get(name)
+            for name in ("product_id", "url")
+            if name in self.endpoint.supported_params
+        ):
+            raise ValueError("Product Details requires an endpoint-supported product_id or url")
         missing = [name for name in self.endpoint.required_params if not supplied.get(name)]
         if missing:
             raise ValueError(
