@@ -83,10 +83,10 @@ const lastVerified = "August 16, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.2.0",
+  version: "1.3.0",
   lastVerified,
   baseline:
-    "Production implementation through Matching v2 AI recovery and queue-wide certification Phase 13.9",
+    "Production implementation through governed queue-wide review and spec-first brand-aware matching Phase 13.12",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -605,6 +605,12 @@ export const platformDocumentation: PlatformDocumentation = {
               "Must retain rationale and effective scope.",
             ],
           ],
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Milk and eggs are spec-first and brand-aware",
+          text: "For Fresh Fluid Milk and Fresh Shell Eggs, a different, regional, private-label, national, or unknown brand cannot independently reject or stall a product relationship. Package and category specifications determine comparability. A verified same-brand relationship remains valuable identity evidence, and brand name/type remain available for separate private-label, regional, national, and same-brand reporting. Brand agreement never overrides a conflicting hard-blocker specification. Milk's primary scorecard uses the specification-equivalent profile; its same-brand and private-label profiles remain secondary analytical lenses.",
         },
         {
           kind: "steps",
@@ -1290,6 +1296,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-16",
+              "Implemented · deployment validation pending",
+              "Fresh Milk and Fresh Eggs matching is explicitly spec-first and brand-aware.",
+              "Milk's primary profile now compares compatible specifications without requiring brand equality, while same-brand and private-label views remain secondary analytical lenses. Eggs retain their existing spec-first profiles. Matching v2 keeps brand descriptive/noncritical for both Product Packs, and AI prompt 1.0.3 is prohibited from using a different or unknown descriptive brand as the sole reason for not-comparable or insufficient-evidence. A matching brand remains useful identity evidence but cannot override a hard specification conflict.",
+            ],
             [
               "2026-08-16",
               "Implemented · deployment validation pending",

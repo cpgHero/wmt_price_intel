@@ -1,7 +1,7 @@
 {
   "id": "fresh_fluid_milk",
   "name": "Fresh Fluid Milk",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "category_family": "dairy",
   "scope": {
     "target_terms": [
@@ -376,7 +376,7 @@
     "package_equivalence_policy": "exact_package_first"
   },
   "matching_v2": {
-    "policy_version": "2.0.0-shadow.1",
+    "policy_version": "2.0.0-shadow.2",
     "certification_state": "shadow",
     "attribute_roles": {
       "volume_oz": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0.5},
@@ -481,7 +481,7 @@
     },
     {
       "id": "all_brand",
-      "label": "All-brand equivalent",
+      "label": "Specification-equivalent (brand-aware)",
       "geography": "exact_zip",
       "dimensions": [
         "volume_oz",
@@ -607,7 +607,8 @@
       "lactose_free"
     ],
     "required_caveats": [
-      "same-brand and private-label results must remain separate",
+      "specification-equivalent price eligibility must not fail on brand alone",
+      "same-brand and private-label results remain separate brand lenses",
       "search presence is not fulfillment confirmation"
     ],
     "recommended_charts": [
@@ -634,8 +635,8 @@
       }
     ],
     "decision_rules": {
-      "preferred_scorecard_profile_id": "same_brand_exact",
-      "profile_priority": ["same_brand_exact", "private_label", "all_brand"],
+      "preferred_scorecard_profile_id": "all_brand",
+      "profile_priority": ["all_brand", "same_brand_exact", "private_label"],
       "minimum_observations": 25,
       "minimum_geographies": 25,
       "executive_relationship_states": ["suggested", "confirmed"],
@@ -652,7 +653,7 @@
       "version": "1.2.0"
     },
     "narrative_playbook": {
-      "leadership_objective": "Separate Walmart's conventional milk strengths from specialty vulnerabilities and distinguish Amazon same-brand, private-label, and broader equivalent-product economics.",
+      "leadership_objective": "Lead with specification-equivalent local milk economics across regional brand footprints, then distinguish same-brand, private-label, regional, and national-brand performance without letting brand alone determine comparability.",
       "required_topics": [
         "data_scope",
         "footprint",

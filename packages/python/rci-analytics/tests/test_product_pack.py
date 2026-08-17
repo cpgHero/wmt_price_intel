@@ -43,7 +43,7 @@ def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
         ("fresh_strawberries", "strict"),
         ("fresh_ground_beef", "strict"),
         ("fresh_shell_eggs", "strict"),
-        ("fresh_fluid_milk", "same_brand_exact"),
+        ("fresh_fluid_milk", "all_brand"),
         ("fresh_bananas", "strict_each"),
     ],
 )
@@ -83,7 +83,9 @@ def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
 def test_milk_uses_generic_distribution_scope_and_brand_portfolios() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
 
-    assert pack.version == "1.3.0"
+    assert pack.version == "1.4.0"
+    assert pack.reporting["decision_rules"]["preferred_scorecard_profile_id"] == "all_brand"
+    assert pack.profile("all_brand")["brand_policy"] == "ignore_brand"
     assert all(
         profile["relationship_scope_policy"]
         == {

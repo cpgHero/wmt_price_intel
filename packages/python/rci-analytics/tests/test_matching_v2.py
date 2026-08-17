@@ -660,6 +660,92 @@ def test_policy_compiler_is_category_neutral(pack_id: str) -> None:
     assert len({attribute.name for attribute in policy.attributes}) == len(policy.attributes)
 
 
+@pytest.mark.parametrize(
+    ("pack_id", "profile_id", "hard_blocker"),
+    [
+        ("fresh_fluid_milk", "all_brand", "fat_type"),
+        ("fresh_shell_eggs", "strict", "size"),
+    ],
+)
+def test_spec_first_packs_do_not_fail_on_brand_alone(
+    pack_id: str,
+    profile_id: str,
+    hard_blocker: str,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load(pack_id)
+    profile = pack.profile(profile_id)
+    policy = compile_matching_policy_v2(pack, profile_id)
+    benchmark_attributes = {
+        rule.name: AttributeValue(
+            "Walmart Regional Dairy" if rule.name == "brand" else "same-spec",
+            f"pdp:walmart_us:w1:{rule.name}",
+        )
+        for rule in policy.attributes
+    }
+    competitor_attributes = {
+        rule.name: AttributeValue(
+            "Competitor Private Label" if rule.name == "brand" else "same-spec",
+            f"pdp:aldi_us:a1:{rule.name}",
+        )
+        for rule in policy.attributes
+    }
+    benchmark = ListingEvidence(
+        listing_id=f"listing-walmart-{pack_id}",
+        retailer_id="walmart_us",
+        retailer_product_id="w1",
+        attributes=benchmark_attributes,
+        brand="Walmart Regional Dairy",
+        brand_type="regional",
+        brand_verified=True,
+    )
+    competitor = ListingEvidence(
+        listing_id=f"listing-aldi-{pack_id}",
+        retailer_id="aldi_us",
+        retailer_product_id="a1",
+        attributes=competitor_attributes,
+        brand="Competitor Private Label",
+        brand_type="private_label",
+        brand_verified=True,
+    )
+
+    decision = DeterministicMatchEngineV2().evaluate(
+        benchmark,
+        competitor,
+        policy,
+        decided_at=DECIDED_AT,
+    )
+
+    brand = next(row for row in decision.evidence if row.attribute == "brand")
+    assert profile["brand_policy"] == "ignore_brand"
+    assert brand.role == "descriptive"
+    assert brand.outcome == "conflict"
+    assert decision.tier == "exact_specification"
+    assert decision.status == "candidate"
+
+    conflicting_attributes = dict(competitor_attributes)
+    conflicting_attributes[hard_blocker] = AttributeValue(
+        "different-spec",
+        f"pdp:aldi_us:a1:{hard_blocker}",
+    )
+    conflict = DeterministicMatchEngineV2().evaluate(
+        benchmark,
+        ListingEvidence(
+            listing_id=f"listing-aldi-conflict-{pack_id}",
+            retailer_id="aldi_us",
+            retailer_product_id="a2",
+            attributes=conflicting_attributes,
+            brand="Walmart Regional Dairy",
+            brand_type="regional",
+            brand_verified=True,
+        ),
+        policy,
+        decided_at=DECIDED_AT,
+    )
+
+    assert conflict.status == "not_comparable"
+    assert conflict.tier is None
+
+
 def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() -> None:
     base = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     document = copy.deepcopy(base.document)

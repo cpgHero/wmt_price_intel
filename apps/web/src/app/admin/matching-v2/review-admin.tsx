@@ -639,6 +639,20 @@ export function MatchingV2ReviewAdmin() {
     [view],
   );
   const aiPolicy = view?.ai_review_policy ?? DISABLED_AI_POLICY;
+  const selectedPageCaseCount = eligibleCases.filter((reviewCase) =>
+    selectedCaseIds.includes(reviewCase.case_id),
+  ).length;
+  const selectedOffPageCaseCount = Math.max(
+    0,
+    selectedCaseIds.length - selectedPageCaseCount,
+  );
+  const pageSelectionCapacity = Math.min(
+    eligibleCases.length,
+    Math.max(0, aiPolicy.max_batch_cases - selectedOffPageCaseCount),
+  );
+  const pageSelectionComplete =
+    pageSelectionCapacity > 0 &&
+    selectedPageCaseCount === pageSelectionCapacity;
   const retryableCases = useMemo(
     () =>
       (view?.cases ?? []).filter((reviewCase) => {
@@ -1333,13 +1347,12 @@ export function MatchingV2ReviewAdmin() {
             <label className="cert-ai-select-all">
               <input
                 type="checkbox"
-                checked={
-                  eligibleCases.length > 0 &&
-                  eligibleCases.every((reviewCase) =>
-                    selectedCaseIds.includes(reviewCase.case_id),
-                  )
+                checked={pageSelectionComplete}
+                disabled={
+                  !aiPolicy.enabled ||
+                  !eligibleCases.length ||
+                  pageSelectionCapacity === 0
                 }
-                disabled={!aiPolicy.enabled || !eligibleCases.length}
                 onChange={(event) => {
                   const pageCaseIds = eligibleCases.map(
                     (reviewCase) => reviewCase.case_id,
@@ -1363,7 +1376,9 @@ export function MatchingV2ReviewAdmin() {
                 Select eligible cases on this page
                 <small>
                   {eligibleCases.length.toLocaleString()} without an existing
-                  draft or final decision
+                  draft or final decision; up to{" "}
+                  {pageSelectionCapacity.toLocaleString()} fit in the current
+                  batch
                 </small>
               </span>
             </label>
@@ -1870,7 +1885,6 @@ export function MatchingV2ReviewAdmin() {
                 disabled={busy || offset === 0}
                 onClick={() => {
                   setOffset((current) => Math.max(0, current - PAGE_SIZE));
-                  setSelectedCaseIds([]);
                   setBatchConfirmOpen(false);
                 }}
               >
@@ -1889,7 +1903,6 @@ export function MatchingV2ReviewAdmin() {
                 }
                 onClick={() => {
                   setOffset((current) => current + PAGE_SIZE);
-                  setSelectedCaseIds([]);
                   setBatchConfirmOpen(false);
                 }}
               >

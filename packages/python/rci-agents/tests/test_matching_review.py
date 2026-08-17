@@ -57,6 +57,15 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
     }
 
 
+def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
+    prompt = load_matching_review_prompt(REPOSITORY_ROOT)
+
+    assert prompt.version == "1.0.3"
+    assert "Product Pack attribute roles" in prompt.instructions
+    assert "different or unknown brands do not independently prevent" in prompt.instructions
+    assert "Brand agreement never overrides" in prompt.instructions
+
+
 async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None:
     endpoint = FakeResponsesEndpoint(
         {
