@@ -518,7 +518,7 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
     name: "Bulk accept corroborated AI match recommendations",
   });
   await bulkSection
-    .getByRole("button", { name: "Assess 2 recommendations" })
+    .getByRole("button", { name: "Assess queue-wide recommendations" })
     .click();
   const preview = page.getByRole("region", {
     name: "Bulk certification preview",
@@ -539,6 +539,203 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
     reviewer_id: "reviewer@cpghero.com",
     case_ids: [readyCases[0].case_id],
     confirmation_checksum: "a".repeat(64),
+  });
+});
+
+test("discovers affirmative AI recommendations beyond the visible page", async ({
+  page,
+}) => {
+  const attentionCases = Array.from({ length: 50 }, (_, index) => ({
+    ...cases[index % cases.length],
+    case_id: `attention-${index}`,
+    review_status: "pending",
+    ai_draft: {
+      id: `attention-ai-${index}`,
+      status: "needs_review",
+      model_id: "gpt-5.6-terra",
+      requested_by: "fixture@cpghero.com",
+      output_document: null,
+      attempt_count: 2,
+      max_attempts: 2,
+      retry_sequence: 0,
+      created_at: "2026-08-16T12:00:00Z",
+      updated_at: "2026-08-16T12:01:00Z",
+    },
+  }));
+  const affirmative = {
+    ...cases[4],
+    case_id: "affirmative-on-second-page",
+    review_status: "pending",
+    ai_draft: {
+      id: "ready-ai-second-page",
+      status: "succeeded",
+      model_id: "gpt-5.6-terra",
+      requested_by: "fixture@cpghero.com",
+      output_document: {
+        authoritative: false,
+        human_review_required: true,
+        result: {
+          verdict_proposal: "comparable",
+          tier_proposal: "exact_specification",
+          rationale: "The structured package evidence agrees.",
+          attribute_proposals: [],
+          conflicts: [],
+          requires_human_review: true,
+        },
+      },
+      attempt_count: 1,
+      max_attempts: 2,
+      created_at: "2026-08-16T12:00:00Z",
+      updated_at: "2026-08-16T12:01:00Z",
+    },
+  };
+  let previewPayload: Record<string, unknown> | null = null;
+
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname.endsWith("/ai-bulk-certification/preview")) {
+      previewPayload = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          queue_id: queue.queue_id,
+          queue_version: queue.version,
+          policy: {
+            id: "guarded_ai_match_bulk_accept",
+            version: "1.0.0",
+            max_cases: 50,
+            allowed_tiers: ["exact_specification"],
+            minimum_critical_coverage: 1,
+            minimum_ai_attribute_confidence: 0.85,
+            checksum: "b".repeat(64),
+            human_confirmation_required: true,
+            automatically_changes_reporting: false,
+          },
+          requested_case_count: 1,
+          eligible_case_count: 1,
+          excluded_case_count: 0,
+          eligible_cases: [
+            {
+              case_id: affirmative.case_id,
+              eligible: true,
+              reason_codes: [],
+              reasons: [],
+              recommended_tier: "exact_specification",
+              critical_coverage: 1,
+              engine_status: "proposed",
+              ai_task_id: "ready-ai-second-page",
+              ai_rationale: "The structured package evidence agrees.",
+              benchmark_product: {
+                retailer_id: "walmart_us",
+                retailer_product_id: "walmart-product-4",
+                title: "Walmart milk 4",
+                brand: "Great Value",
+                image_url: null,
+                observed_location_count: 4200,
+              },
+              competitor_product: {
+                retailer_id: "aldi_us",
+                retailer_product_id: "aldi-product-4",
+                title: "ALDI milk 4",
+                brand: "Friendly Farms",
+                image_url: null,
+                observed_location_count: 1700,
+              },
+            },
+          ],
+          excluded_cases: [],
+          exclusion_summary: [],
+          confirmation_checksum: "a".repeat(64),
+          human_confirmation_required: true,
+          final_until_flagged: true,
+          automatically_changes_reporting: false,
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const discovery = url.searchParams.get("limit") === "500";
+    const responseCases = discovery
+      ? offset === 0
+        ? [...attentionCases, affirmative]
+        : []
+      : attentionCases;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          max_retry_rounds: 4,
+          retryable_statuses: ["needs_review"],
+          retry_preserves_history: true,
+          retry_blocks_integrity_failures: true,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        ai_bulk_certification_policy: {
+          id: "guarded_ai_match_bulk_accept",
+          version: "1.0.0",
+          max_cases: 50,
+          allowed_tiers: ["exact_specification"],
+          minimum_critical_coverage: 1,
+          minimum_ai_attribute_confidence: 0.85,
+          checksum: "b".repeat(64),
+          human_confirmation_required: true,
+          automatically_changes_reporting: false,
+        },
+        ai_review_summary: {
+          active_task_count: 0,
+          status_counts: {
+            queued: 0,
+            running: 0,
+            succeeded: 1,
+            needs_review: 50,
+          },
+          latest_batch: null,
+        },
+        status_counts: { pending: 51 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 51 }],
+        total_cases: 51,
+        selected_case_count: 51,
+        offset,
+        limit: discovery ? 500 : 50,
+        cases: responseCases,
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("reviewer@cpghero.com");
+  await page
+    .getByRole("button", { name: "Assess queue-wide recommendations" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Bulk certification preview" }),
+  ).toBeVisible();
+  expect(previewPayload).toMatchObject({
+    case_ids: ["affirmative-on-second-page"],
   });
 });
 

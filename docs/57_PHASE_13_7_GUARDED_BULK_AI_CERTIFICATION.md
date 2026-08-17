@@ -37,8 +37,9 @@ individual review workflow.
 
 ## Preview and commit protocol
 
-1. The administrator filters the queue and requests an assessment of the completed affirmative AI
-   recommendations visible on the page, up to 50 cases.
+1. The administrator filters the queue and requests an assessment of completed affirmative AI
+   recommendations across the full pending queue and active retailer filter. The current client can
+   submit up to 500 candidates; the server binds at most 50 eligible cases per confirmation.
 2. The API reloads each current case, final decision, and latest AI task from Postgres and evaluates
    the server-owned policy.
 3. For the eligible set, the API hashes the queue ID/version, policy checksum, case checksums, AI
@@ -50,6 +51,7 @@ individual review workflow.
    re-evaluates every case, and rejects the whole action if a case changed or the checksum is stale.
 7. One immutable `matching_v2_bulk_certification_action` audit record and one normal
    `matching_v2_review_submission` per case are committed atomically.
+   Each submission copies the complete AI evidence rationale into its reviewer rationale/comment.
 8. A retry with the same reviewer and checksum returns the original action instead of duplicating
    decisions.
 

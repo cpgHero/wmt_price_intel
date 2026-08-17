@@ -788,6 +788,37 @@ def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> No
     assert preview["automatically_changes_reporting"] is False
 
 
+def test_bulk_ai_preview_assesses_queue_wide_candidates_but_bounds_confirmation() -> None:
+    snapshots = []
+    for index in range(55):
+        case = _bulk_eligible_case()
+        case["case_id"] = f"case-{index:03d}"
+        case["case_checksum"] = f"{index:064x}"
+        case["ai_draft"] = {**case["ai_draft"], "id": f"ai-task-{index:03d}"}
+        case["ai_output_checksum"] = f"{index + 100:064x}"
+        snapshots.append(case)
+
+    preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=snapshots,
+    )
+
+    assert preview["requested_case_count"] == 55
+    assert preview["eligible_case_count"] == 50
+    assert preview["excluded_case_count"] == 5
+    assert preview["exclusion_summary"] == [
+        {
+            "reason_code": "bulk_batch_limit",
+            "reason": (
+                "The relationship passed the guardrails but is deferred to the next "
+                "50-case confirmation batch."
+            ),
+            "case_count": 5,
+        }
+    ]
+
+
 async def test_bulk_ai_certification_service_requires_unique_cases_and_human_identity() -> None:
     repository = ReviewRepository()
     service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)

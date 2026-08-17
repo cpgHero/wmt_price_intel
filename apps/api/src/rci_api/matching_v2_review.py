@@ -29,7 +29,7 @@ MatchTier = Literal[
     "custom_approved",
 ]
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
-_MAX_AI_RETRY_ROUNDS = 3
+_MAX_AI_RETRY_ROUNDS = 4
 _AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
 
 
@@ -213,7 +213,7 @@ class AIReviewRetryRequest(BaseModel):
 class AIBulkCertificationPreviewRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    case_ids: list[str] = Field(min_length=1, max_length=50)
+    case_ids: list[str] = Field(min_length=1, max_length=500)
 
 
 class AIBulkCertificationCommitRequest(BaseModel):
@@ -228,6 +228,7 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_match_bulk_accept",
     "version": "1.0.0",
     "max_cases": 50,
+    "max_candidates_assessed": 500,
     "action": "approve_ai_matches",
     "allowed_tiers": [
         "exact_item",
@@ -261,6 +262,10 @@ _AI_BULK_REASON_LABELS = {
         "A known third-party marketplace seller makes the listing ineligible."
     ),
     "evidence_refs_missing": "The case has no immutable source-evidence references.",
+    "bulk_batch_limit": (
+        "The relationship passed the guardrails but is deferred to the next 50-case "
+        "confirmation batch."
+    ),
 }
 
 
@@ -462,7 +467,13 @@ def _bulk_preview_document(
         candidate["case_checksum"] = str(snapshot.get("case_checksum") or "")
         candidate["ai_output_checksum"] = str(snapshot.get("ai_output_checksum") or "")
         evaluated.append(candidate)
-    eligible = [candidate for candidate in evaluated if candidate["eligible"]]
+    eligible_candidates = [candidate for candidate in evaluated if candidate["eligible"]]
+    maximum_cases = int(_AI_BULK_CERTIFICATION_POLICY["max_cases"])
+    eligible = eligible_candidates[:maximum_cases]
+    for candidate in eligible_candidates[maximum_cases:]:
+        candidate["eligible"] = False
+        candidate["reason_codes"].append("bulk_batch_limit")
+        candidate["reasons"].append(_AI_BULK_REASON_LABELS["bulk_batch_limit"])
     excluded = [candidate for candidate in evaluated if not candidate["eligible"]]
     reason_counts: dict[str, int] = defaultdict(int)
     for candidate in excluded:

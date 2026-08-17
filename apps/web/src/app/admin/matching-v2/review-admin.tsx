@@ -95,6 +95,7 @@ interface AIBulkCertificationPolicy {
   id: string;
   version: string;
   max_cases: number;
+  max_candidates_assessed?: number;
   allowed_tiers: string[];
   minimum_critical_coverage: number;
   minimum_ai_attribute_confidence: number;
@@ -271,12 +272,13 @@ const TIERS = [
   "custom_approved",
 ] as const;
 const PAGE_SIZE = 50;
+const BULK_DISCOVERY_PAGE_SIZE = 500;
 const DISABLED_AI_POLICY: NonNullable<QueueView["ai_review_policy"]> = {
   enabled: false,
   model_id: null,
   max_batch_cases: 25,
   max_request_cost_usd: 0,
-  max_retry_rounds: 3,
+  max_retry_rounds: 4,
   retryable_statuses: ["needs_review"],
   retry_preserves_history: true,
   retry_blocks_integrity_failures: true,
@@ -641,20 +643,6 @@ export function MatchingV2ReviewAdmin() {
     0,
   );
   const latestAIBatch = view?.ai_review_summary?.latest_batch ?? null;
-  const visibleBulkRecommendationCases = useMemo(
-    () =>
-      (view?.cases ?? [])
-        .filter(
-          (reviewCase) =>
-            reviewCase.review_status === "pending" &&
-            reviewCase.ai_draft?.status === "succeeded" &&
-            reviewCase.ai_draft.output_document?.result.verdict_proposal ===
-              "comparable",
-        )
-        .slice(0, view?.ai_bulk_certification_policy?.max_cases ?? PAGE_SIZE),
-    [view],
-  );
-
   useEffect(() => {
     if (!hasRunningAIDrafts) return;
     const timer = window.setTimeout(
@@ -934,24 +922,58 @@ export function MatchingV2ReviewAdmin() {
       reviewerInputRef.current?.focus();
       return;
     }
-    if (!visibleBulkRecommendationCases.length) {
-      setError(
-        "No completed affirmative AI match recommendations are visible in this filtered page.",
-      );
-      return;
-    }
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
+      const maximumCandidates =
+        view?.ai_bulk_certification_policy?.max_candidates_assessed ??
+        BULK_DISCOVERY_PAGE_SIZE;
+      const candidates: ReviewCase[] = [];
+      let discoveryOffset = 0;
+      let selectedCaseCount = 0;
+      do {
+        const query = new URLSearchParams({
+          limit: String(BULK_DISCOVERY_PAGE_SIZE),
+          offset: String(discoveryOffset),
+          review_status: "pending",
+        });
+        if (competitorFilter !== "all") {
+          query.set("competitor_retailer_id", competitorFilter);
+        }
+        const response = await jsonRequest<QueueView>(
+          `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}?${query}`,
+        );
+        selectedCaseCount = response.selected_case_count;
+        candidates.push(
+          ...response.cases.filter(
+            (reviewCase) =>
+              reviewCase.review_status === "pending" &&
+              reviewCase.ai_draft?.status === "succeeded" &&
+              reviewCase.ai_draft.output_document?.result.verdict_proposal ===
+                "comparable",
+          ),
+        );
+        discoveryOffset += response.cases.length;
+      } while (
+        candidates.length < maximumCandidates &&
+        discoveryOffset < selectedCaseCount &&
+        discoveryOffset > 0
+      );
+      const candidateIds = candidates
+        .slice(0, maximumCandidates)
+        .map((reviewCase) => reviewCase.case_id);
+      if (!candidateIds.length) {
+        throw new Error(
+          "No pending affirmative AI match recommendations were found in the current queue and retailer filter.",
+        );
+      }
       const preview = await jsonRequest<AIBulkCertificationPreview>(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-bulk-certification/preview`,
         {
           method: "POST",
           body: JSON.stringify({
-            case_ids: visibleBulkRecommendationCases.map(
-              (reviewCase) => reviewCase.case_id,
-            ),
+            case_ids: candidateIds,
           }),
         },
       );
@@ -1373,24 +1395,21 @@ export function MatchingV2ReviewAdmin() {
                     Bulk accept corroborated AI match recommendations
                   </h3>
                   <p>
-                    The server screens the completed AI recommendations on this
-                    page. Only affirmative matches that agree with the
-                    deterministic engine and pass every evidence guardrail can
-                    reach the confirmation step.
+                    The app finds completed affirmative AI recommendations
+                    across the pending queue and current retailer filter, then
+                    the server screens up to 50 at a time. Only matches that
+                    agree with the deterministic engine and pass every evidence
+                    guardrail can reach the confirmation step.
                   </p>
                 </div>
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={busy || !visibleBulkRecommendationCases.length}
+                  disabled={busy || !aiDraftStatusCounts.succeeded}
                   aria-busy={busy}
                   onClick={() => void assessBulkAIRecommendations()}
                 >
-                  {busy
-                    ? "Assessing…"
-                    : visibleBulkRecommendationCases.length
-                      ? `Assess ${visibleBulkRecommendationCases.length} recommendations`
-                      : "No affirmative AI drafts on this page"}
+                  {busy ? "Assessing…" : "Assess queue-wide recommendations"}
                 </button>
               </header>
               <div
@@ -1489,7 +1508,8 @@ export function MatchingV2ReviewAdmin() {
                     <p>
                       <b>Human confirmation required.</b> You are approving
                       these exact product relationships—not delegating the
-                      decision to AI.
+                      decision to AI. The complete AI evidence rationale is
+                      copied into each final reviewer comment for auditability.
                     </p>
                     <button
                       className="button secondary"

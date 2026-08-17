@@ -107,6 +107,69 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         "input_image",
         "input_image",
     ]
+    request_document = json.loads(content[0]["text"])
+    assert request_document["image_evidence_policy"] == {
+        "images_provided": True,
+        "allowed_source_image_urls": [
+            "https://example.com/walmart.jpg",
+            "https://example.com/aldi.jpg",
+        ],
+        "image_proposals_require_exact_source_url": True,
+        "image_proposals_require_visible_text": True,
+        "structured_proposals_require_null_image_fields": True,
+    }
+    proposal_variants = result_schema["properties"]["attribute_proposals"]["items"]["anyOf"]
+    assert proposal_variants[1]["properties"]["source_image_url"]["enum"] == [
+        "https://example.com/walmart.jpg",
+        "https://example.com/aldi.jpg",
+    ]
+
+
+async def test_matching_review_schema_disallows_image_claims_without_input_images() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "comparable",
+            "tier_proposal": "equivalent_product",
+            "rationale": "The governed structured attributes agree.",
+            "attribute_proposals": [
+                {
+                    "attribute": "fat_content",
+                    "value": "2%",
+                    "evidence_source": "structured",
+                    "confidence": 0.99,
+                    "visible_text": None,
+                    "source_image_url": None,
+                }
+            ],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+    case_document = _case(coverage=1)
+    case_document["edge"]["attribute_evidence"][0].update(
+        {"competitor_value": "2%", "outcome": "match"}
+    )
+
+    await provider.generate(
+        load_matching_review_prompt(REPOSITORY_ROOT),
+        case_document,
+        model_id="gpt-5.6-terra",
+    )
+
+    content = endpoint.kwargs["input"][0]["content"]
+    assert [item["type"] for item in content] == ["input_text"]
+    schema = endpoint.kwargs["text"]["format"]["schema"]
+    proposal = schema["properties"]["attribute_proposals"]["items"]
+    assert proposal["properties"]["evidence_source"]["enum"] == ["structured"]
+    assert proposal["properties"]["visible_text"] == {"type": "null"}
+    assert proposal["properties"]["source_image_url"] == {"type": "null"}
 
 
 async def test_matching_review_rejects_uncited_image_claim() -> None:

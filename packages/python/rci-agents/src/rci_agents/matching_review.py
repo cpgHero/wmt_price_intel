@@ -93,6 +93,71 @@ _RESULT_SCHEMA: JsonObject = {
 }
 
 
+def _result_schema(image_urls: list[str]) -> JsonObject:
+    """Bind image-derived proposals to the exact images sent to the model.
+
+    The prior static schema allowed ``evidence_source=image`` even when no image
+    was in the request, then rejected that otherwise structured response after
+    the paid call.  A request-specific schema makes the invalid state
+    unrepresentable while retaining the post-response integrity check.
+    """
+
+    schema = json.loads(json.dumps(_RESULT_SCHEMA))
+    proposals = schema["properties"]["attribute_proposals"]
+    if not image_urls:
+        proposals["items"]["properties"]["evidence_source"] = {
+            "type": "string",
+            "enum": ["structured"],
+        }
+        proposals["items"]["properties"]["visible_text"] = {"type": "null"}
+        proposals["items"]["properties"]["source_image_url"] = {"type": "null"}
+        return schema
+
+    common_properties: JsonObject = {
+        "attribute": {"type": "string", "minLength": 1, "maxLength": 120},
+        "value": {"type": "string", "minLength": 1, "maxLength": 500},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    }
+    required = [
+        "attribute",
+        "value",
+        "evidence_source",
+        "confidence",
+        "visible_text",
+        "source_image_url",
+    ]
+    proposals["items"] = {
+        "anyOf": [
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": required,
+                "properties": {
+                    **common_properties,
+                    "evidence_source": {"type": "string", "enum": ["structured"]},
+                    "visible_text": {"type": "null"},
+                    "source_image_url": {"type": "null"},
+                },
+            },
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": required,
+                "properties": {
+                    **common_properties,
+                    "evidence_source": {"type": "string", "enum": ["image"]},
+                    "visible_text": {"type": "string", "minLength": 1, "maxLength": 500},
+                    "source_image_url": {
+                        "type": "string",
+                        "enum": list(image_urls),
+                    },
+                },
+            },
+        ]
+    }
+    return schema
+
+
 def _canonical(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
@@ -185,6 +250,13 @@ class OpenAIMatchingReviewProvider:
                     {
                         "authoritative": False,
                         "human_review_required": True,
+                        "image_evidence_policy": {
+                            "images_provided": bool(image_urls),
+                            "allowed_source_image_urls": image_urls,
+                            "image_proposals_require_exact_source_url": True,
+                            "image_proposals_require_visible_text": True,
+                            "structured_proposals_require_null_image_fields": True,
+                        },
                         "case": case_document,
                     }
                 ),
@@ -209,7 +281,7 @@ class OpenAIMatchingReviewProvider:
                     "type": "json_schema",
                     "name": "rci_matching_review_draft",
                     "strict": True,
-                    "schema": _RESULT_SCHEMA,
+                    "schema": _result_schema(image_urls),
                 },
             },
         )

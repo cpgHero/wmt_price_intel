@@ -83,10 +83,10 @@ const lastVerified = "August 16, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.1.0",
+  version: "1.2.0",
   lastVerified,
   baseline:
-    "Production implementation through guarded bulk AI match certification Phase 13.7",
+    "Production implementation through Matching v2 AI recovery and queue-wide certification Phase 13.9",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -646,13 +646,13 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most three administrator retry rounds. Known third-party listings, finalized decisions, active tasks, and governed input/prompt integrity failures cannot cross this paid-call boundary. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. Every draft remains advisory and requires a human decision. Vision proposals cite the source image and never treat an unseen claim as false.",
+          text: "A user may request bounded AI drafts for up to 25 selected certification cases. Each request is a durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Known third-party listings, finalized decisions, active tasks, and governed input/prompt integrity failures cannot cross this paid-call boundary. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. The strict response schema is bound to each request: without input images the model cannot claim image evidence, and with images every image proposal must cite visible evidence and an exact allowed source URL. Every draft remains advisory and requires a human decision. Vision never treats an unseen claim as false.",
         },
         {
           kind: "callout",
           tone: "success",
           title: "Guarded bulk acceptance",
-          text: "An administrator may assess up to 50 completed affirmative AI recommendations from the current filtered page. The server includes only pending exact-item, exact-specification, or equivalent-product recommendations when AI and the deterministic engine agree on tier, critical evidence coverage is 100%, there are no AI or Product Pack hard-blocker conflicts, every AI-proposed attribute is at least 85% confident, immutable evidence references exist, and no listing has a known third-party seller exclusion. The preview names every exclusion and binds the eligible case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval. No report reanalysis runs automatically; decisions remain final until flagged. Comparable-substitute and custom tiers always require individual review.",
+          text: "An administrator may assess completed affirmative AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 eligible cases into each confirmation and defers additional passing cases to the next batch. The server includes only pending exact-item, exact-specification, or equivalent-product recommendations when AI and the deterministic engine agree on tier, critical evidence coverage is 100%, there are no AI or Product Pack hard-blocker conflicts, every AI-proposed attribute is at least 85% confident, immutable evidence references exist, and no listing has a known third-party seller exclusion. The preview names every exclusion and binds the eligible case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including the complete AI evidence rationale in the reviewer comment. No report reanalysis runs automatically; decisions remain final until flagged. Comparable-substitute and custom tiers always require individual review.",
         },
         {
           kind: "callout",
@@ -1292,9 +1292,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
+              "Implemented; production verification pending",
+              "Matching v2 AI review gained request-bound image evidence and queue-wide bulk discovery.",
+              "Retries can no longer repeat the known uncited-image invalid state, the fourth bounded retry can remediate legacy terminal lineages, and bulk assessment scans the full pending queue/current retailer filter. Final submissions copy the complete AI rationale into reviewer comments; no match or report changes automatically.",
+            ],
+            [
+              "2026-08-16",
               "Deployed & verified",
               "Terminal Match Certification AI failures gained governed individual and bulk retry controls.",
-              "Each confirmed retry creates a new lineage-linked Postgres task, preserves failed attempts/errors/cost, reapplies seller and final-decision guards, blocks evidence-integrity failures, caps administrator retries at three rounds, and retains mandatory human review. CI run 31979462641 passed migrations in both directions, 480 Python tests, 57 web tests, 10 browser tests, and all container builds. The live protected page and owner docs were verified without a paid AI call; existing failures attached to finalized cases correctly remained non-retryable.",
+              "Each confirmed retry creates a new lineage-linked Postgres task, preserves failed attempts/errors/cost, reapplies seller and final-decision guards, blocks evidence-integrity failures, and retains mandatory human review. Phase 13.9 later raised the ceiling from three to four specifically to remediate the request-schema defect while preserving all legacy history. CI run 31979462641 passed migrations in both directions, 480 Python tests, 57 web tests, 10 browser tests, and all container builds. The live protected page and owner docs were verified without a paid AI call; existing failures attached to finalized cases correctly remained non-retryable.",
             ],
             [
               "2026-08-16",
