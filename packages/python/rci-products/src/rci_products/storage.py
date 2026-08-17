@@ -159,6 +159,17 @@ class S3ProductDetailRawObjectStore:
         )
 
         def put_once() -> None:
+            metadata = {
+                "provider": "metricscart",
+                "source-type": "pdp",
+                "retailer-id": job.retailer_id,
+                "request-sha256": job.request_checksum,
+                "body-sha256": str(artifact.metadata["body_checksum"]),
+                "sha256": artifact.checksum,
+                "http-status": str(http_status),
+            }
+            if response_content_type:
+                metadata["response-content-type"] = response_content_type
             try:
                 self._client.put_object(
                     Bucket=self.bucket,
@@ -167,14 +178,7 @@ class S3ProductDetailRawObjectStore:
                     ContentType="application/json",
                     ContentEncoding="gzip",
                     IfNoneMatch="*",
-                    Metadata={
-                        "provider": "metricscart",
-                        "source-type": "pdp",
-                        "retailer-id": job.retailer_id,
-                        "request-sha256": job.request_checksum,
-                        "body-sha256": str(artifact.metadata["body_checksum"]),
-                        "sha256": artifact.checksum,
-                    },
+                    Metadata=metadata,
                 )
             except Exception as exc:
                 response = getattr(exc, "response", {})
