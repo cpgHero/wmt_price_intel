@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 16, 2026";
+const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.0",
+  version: "1.3.1",
   lastVerified,
   baseline:
-    "Production implementation through governed queue-wide review and spec-first brand-aware matching Phase 13.12",
+    "Implementation through exact Milk package-volume governance Phase 13.13; production verification is pending",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -624,7 +624,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Evaluate deterministic evidence",
               detail:
-                "Product Pack policy marks each attribute matched, conflicting, unknown, or ignored and calculates evidence coverage separately from similarity.",
+                "Product Pack policy marks each attribute matched, conflicting, unknown, or ignored and calculates evidence coverage separately from similarity. A comparable certification requires every current hard blocker to be known and compatible, even when an immutable older queue recorded a softer historical role.",
             },
             {
               title: "Resolve local applicability",
@@ -658,13 +658,19 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "success",
           title: "Administrator-confirmed bulk acceptance",
-          text: "An administrator may assess completed comparable and not-comparable AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. Comparable recommendations require a supported match tier; not-comparable recommendations must have no tier. Insufficient-evidence recommendations remain non-final and blocked. Deterministic disagreement, incomplete critical evidence, engine or Product Pack conflicts, AI conflicts, and confidence limits remain visible advisory warnings; they do not silently override an administrator's explicit decision. A final decision, invalid draft, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds each recommended verdict and tier with case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. The completion result separately counts comparable and not-comparable decisions. No report reanalysis runs automatically; decisions remain final until flagged.",
+          text: "An administrator may assess completed comparable and not-comparable AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. Comparable recommendations require a supported match tier and every current Product Pack hard blocker to be known and compatible; a hard-blocker conflict or unresolved value is a server-enforced exclusion that cannot be overridden. Not-comparable recommendations must have no tier and may be certified when a hard conflict supports rejection. Insufficient-evidence recommendations remain non-final and blocked. Deterministic tier disagreement, incomplete nonblocking evidence, AI conflicts, and confidence limits remain visible advisory warnings. A final decision, invalid draft, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds each recommended verdict and tier with case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. The completion result separately counts comparable and not-comparable decisions. No report reanalysis runs automatically; decisions remain final until flagged.",
         },
         {
           kind: "callout",
           tone: "information",
           title: "Observed footprint completeness",
           text: "Every certification product shows the number of distinct normalized store/location keys where Search observed that retailer product with a non-null price greater than zero. Modern queue documents carry the count directly. A versioned reconciliation catalog fills the field for older immutable queues without replacing their AI work or human decisions. Existing queue evidence is never overwritten. The same compatibility view supplements missing seller-governance status, suppresses any known third-party case, and leaves permitted blank sellers explicitly unverified.",
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Milk package volume is exact",
+          text: "Fresh Fluid Milk Product Pack 1.5.0 treats package volume as a hard compatibility requirement. A gallon, half gallon, quart, and pint are different products for matching; unit-price normalization may support price analysis only after a valid semantic relationship exists. Match Certification applies the current stricter rule as a derived view over immutable older queues, visibly blocks comparable approval when volume conflicts or is unresolved, and preserves the historical queue role for audit. Brand agreement never rescues a volume mismatch.",
         },
         {
           kind: "callout",
@@ -1296,6 +1302,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented; production verification pending",
+              "Fresh Milk exact package-volume governance closes legacy and current certification paths.",
+              "Milk Product Pack 1.5.0 makes volume_oz a hard blocker and blueprint 1.4.0 binds it for new definitions. AI prompt 1.0.4, new reviews, retries, individual approval, bulk approval, adjudication, certified gold-set export, and Match Certification UI all apply the current stricter rule without mutating older queues. Cross-volume comparable decisions are blocked; governed not-comparable decisions remain certifiable. Explicit gallon/half-gallon/quart/pint regressions pass; deployment and active-queue audit remain pending.",
+            ],
             [
               "2026-08-16",
               "Deployed & verified",

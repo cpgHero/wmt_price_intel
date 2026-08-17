@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from rci_analytics.product_pack import ProductPackLoader
 from rci_contracts import ContractError, validate_instance
 
 router = APIRouter(prefix="/api/v1/matching-v2", tags=["matching-v2-review"])
@@ -164,6 +165,133 @@ def _repository_root() -> Path:
     return Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
 
 
+def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
+    """Load the current Product Pack roles used at the certification boundary.
+
+    Review queues remain immutable historical evidence. Certification applies the stricter of
+    the queue snapshot and the currently active Product Pack so an unsafe legacy role cannot be
+    approved after the category policy is corrected.
+    """
+
+    pack = ProductPackLoader(_repository_root()).load(product_pack_id)
+    matching_v2 = pack.document.get("matching_v2")
+    matching_v2 = matching_v2 if isinstance(matching_v2, Mapping) else {}
+    configured_roles = matching_v2.get("attribute_roles")
+    configured_roles = configured_roles if isinstance(configured_roles, Mapping) else {}
+    attribute_roles = {
+        str(attribute): str(rule.get("role") or "")
+        for attribute, rule in configured_roles.items()
+        if isinstance(rule, Mapping) and str(rule.get("role") or "")
+    }
+    hard_blockers = sorted(
+        attribute for attribute, role in attribute_roles.items() if role == "hard_blocker"
+    )
+    if not hard_blockers:
+        raise ValueError(
+            f"active Product Pack {product_pack_id!r} defines no certification hard blockers"
+        )
+    return {
+        "product_pack_id": pack.id,
+        "product_pack_version": pack.version,
+        "attribute_roles": attribute_roles,
+        "hard_blocker_attributes": hard_blockers,
+        "policy_checksum": pack.checksum,
+        "queue_evidence_is_immutable": True,
+        "stricter_active_policy_wins": True,
+    }
+
+
+def _hard_blocker_issues(
+    case: Mapping[str, Any],
+    hard_blocker_attributes: Sequence[str],
+) -> list[dict[str, Any]]:
+    edge = case.get("edge")
+    edge = edge if isinstance(edge, Mapping) else {}
+    evidence_rows = edge.get("attribute_evidence")
+    evidence_rows = evidence_rows if isinstance(evidence_rows, list) else []
+    evidence_by_attribute = {
+        str(row.get("attribute") or ""): row
+        for row in evidence_rows
+        if isinstance(row, Mapping) and row.get("attribute")
+    }
+    issues: list[dict[str, Any]] = []
+    for attribute in hard_blocker_attributes:
+        evidence = evidence_by_attribute.get(attribute)
+        outcome = str(evidence.get("outcome") or "missing") if evidence else "missing"
+        if outcome in {"match", "within_tolerance"}:
+            continue
+        issues.append(
+            {
+                "attribute": attribute,
+                "outcome": outcome,
+                "benchmark_value": evidence.get("benchmark_value") if evidence else None,
+                "competitor_value": evidence.get("competitor_value") if evidence else None,
+                "reason": (
+                    "The active Product Pack requires this attribute to be known and compatible "
+                    "before a comparable decision can be certified."
+                ),
+            }
+        )
+    return issues
+
+
+def _apply_active_certification_policy(
+    case: Mapping[str, Any],
+    policy: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return a derived review view/input without mutating immutable queue evidence."""
+
+    document = dict(case)
+    edge = document.get("edge")
+    edge = dict(edge) if isinstance(edge, Mapping) else {}
+    rows = edge.get("attribute_evidence")
+    rows = rows if isinstance(rows, list) else []
+    active_roles = policy.get("attribute_roles")
+    active_roles = active_roles if isinstance(active_roles, Mapping) else {}
+    role_strength = {
+        "ignored": 0,
+        "descriptive": 0,
+        "identity": 1,
+        "soft_comparator": 2,
+        "required_exact": 3,
+        "hard_blocker": 4,
+    }
+    updated_rows: list[Any] = []
+    for value in rows:
+        if not isinstance(value, Mapping):
+            updated_rows.append(value)
+            continue
+        row = dict(value)
+        attribute = str(row.get("attribute") or "")
+        active_role = str(active_roles.get(attribute) or "")
+        queue_role = str(row.get("role") or "")
+        if active_role and role_strength.get(active_role, 0) > role_strength.get(queue_role, 0):
+            row["queue_role"] = queue_role or None
+            row["role"] = active_role
+            row["role_source"] = "active_product_pack_certification_policy"
+        updated_rows.append(row)
+    edge["attribute_evidence"] = updated_rows
+    document["edge"] = edge
+    document["certification_policy"] = dict(policy)
+    document["certification_hard_blocker_attributes"] = sorted(
+        {
+            *(str(value) for value in policy.get("hard_blocker_attributes") or []),
+            *(
+                str(row.get("attribute"))
+                for row in updated_rows
+                if isinstance(row, Mapping)
+                and row.get("attribute")
+                and str(row.get("role") or "") == "hard_blocker"
+            ),
+        }
+    )
+    document["certification_blockers"] = _hard_blocker_issues(
+        document,
+        document["certification_hard_blocker_attributes"],
+    )
+    return document
+
+
 class ImportReviewQueueRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -236,7 +364,7 @@ class AIBulkCertificationCommitRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "certify_ai_recommendations",
@@ -252,7 +380,7 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "minimum_ai_attribute_confidence": 0.85,
     "require_ai_engine_tier_agreement": False,
     "require_zero_ai_conflicts": False,
-    "require_no_hard_blocker_conflicts": False,
+    "require_no_hard_blocker_conflicts": True,
     "warn_on_ai_engine_tier_disagreement": True,
     "warn_on_ai_conflicts": True,
     "warn_on_hard_blocker_conflicts": True,
@@ -269,7 +397,6 @@ _AI_BULK_WARNING_CODES = {
     "engine_proposal_blocked",
     "critical_evidence_incomplete",
     "ai_conflict_present",
-    "hard_blocker_conflict",
     "low_confidence_ai_attribute",
 }
 
@@ -293,7 +420,9 @@ _AI_BULK_REASON_LABELS = {
     "engine_proposal_blocked": "The deterministic engine marked the pair ineligible or rejected.",
     "critical_evidence_incomplete": "Critical deterministic evidence is incomplete.",
     "ai_conflict_present": "The AI draft identifies one or more unresolved conflicts.",
-    "hard_blocker_conflict": "A Product Pack hard-blocker attribute conflicts or is unresolved.",
+    "hard_blocker_conflict": (
+        "A current Product Pack hard-blocker attribute conflicts or is unresolved."
+    ),
     "low_confidence_ai_attribute": "An AI-proposed attribute is below the bulk confidence floor.",
     "known_third_party_seller": (
         "A known third-party marketplace seller makes the listing ineligible."
@@ -399,15 +528,20 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
     if isinstance(conflicts, list) and conflicts:
         reason_codes.append("ai_conflict_present")
 
-    edge = case.get("edge")
-    edge = edge if isinstance(edge, Mapping) else {}
-    attribute_evidence = edge.get("attribute_evidence", [])
-    if isinstance(attribute_evidence, list) and any(
-        isinstance(evidence, Mapping)
-        and str(evidence.get("role") or "") == "hard_blocker"
-        and str(evidence.get("outcome") or "") != "match"
-        for evidence in attribute_evidence
-    ):
+    hard_blocker_attributes = case.get("certification_hard_blocker_attributes")
+    if not isinstance(hard_blocker_attributes, list):
+        edge = case.get("edge")
+        edge = edge if isinstance(edge, Mapping) else {}
+        attribute_evidence = edge.get("attribute_evidence", [])
+        hard_blocker_attributes = [
+            str(evidence.get("attribute"))
+            for evidence in attribute_evidence
+            if isinstance(evidence, Mapping)
+            and str(evidence.get("role") or "") == "hard_blocker"
+            and evidence.get("attribute")
+        ]
+    hard_blocker_issues = _hard_blocker_issues(case, hard_blocker_attributes)
+    if verdict == "comparable" and hard_blocker_issues:
         reason_codes.append("hard_blocker_conflict")
 
     attribute_proposals = result.get("attribute_proposals", []) if result else []
@@ -452,6 +586,7 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
         "engine_status": engine_status or None,
         "ai_task_id": (str(ai_draft.get("id")) if isinstance(ai_draft, Mapping) else None),
         "ai_rationale": str(result.get("rationale") or "") or None,
+        "hard_blocker_issues": hard_blocker_issues,
         "benchmark_product": _bulk_product_summary(case.get("benchmark_listing")),
         "competitor_product": _bulk_product_summary(case.get("competitor_listing")),
     }
@@ -1307,7 +1442,7 @@ class PostgresMatchingV2ReviewRepository:
                     text(
                         f"""
                         WITH selected_queue AS (
-                          SELECT id, version
+                          SELECT id, version, product_pack_id, product_pack_version
                           FROM matching_v2_review_queue
                           WHERE external_queue_id = :queue_id
                           ORDER BY created_at DESC
@@ -1315,6 +1450,8 @@ class PostgresMatchingV2ReviewRepository:
                         )
                         SELECT selected_queue.id::text AS review_queue_id,
                                selected_queue.version AS queue_version,
+                               selected_queue.product_pack_id,
+                               selected_queue.product_pack_version,
                                review_case.id::text AS review_case_id,
                                review_case.external_case_id,
                                review_case.case_document,
@@ -1374,10 +1511,13 @@ class PostgresMatchingV2ReviewRepository:
                 f"matching v2 review cases {missing!r} were not found in queue "
                 f"{external_queue_id!r}"
             )
+        certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
         snapshots: list[dict[str, Any]] = []
         for external_case_id in external_case_ids:
             row = rows_by_case[external_case_id]
-            document = dict(row["case_document"])
+            document = _apply_active_certification_policy(
+                dict(row["case_document"]), certification_policy
+            )
             current_verdict = row["current_verdict"]
             if current_verdict is None:
                 review_status = "pending"
@@ -1754,7 +1894,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                             WITH selected_queue AS (
-                              SELECT id, version
+                              SELECT id, version, product_pack_id
                               FROM matching_v2_review_queue
                               WHERE external_queue_id = :queue_id
                               ORDER BY created_at DESC
@@ -1872,7 +2012,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                             WITH selected_queue AS (
-                              SELECT id, version
+                              SELECT id, version, product_pack_id
                               FROM matching_v2_review_queue
                               WHERE external_queue_id = :queue_id
                               ORDER BY created_at DESC
@@ -1881,6 +2021,7 @@ class PostgresMatchingV2ReviewRepository:
                             SELECT c.id::text, c.external_case_id, c.case_document,
                                    c.case_checksum, c.review_queue_id::text,
                                    q.version AS queue_version,
+                                   q.product_pack_id,
                                    (
                                      SELECT decision.verdict
                                      FROM (
@@ -1923,6 +2064,11 @@ class PostgresMatchingV2ReviewRepository:
                 queue_version=str(rows[0]["queue_version"]),
                 root=_repository_root(),
             )
+            certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
+            sidecar_documents = {
+                case_id: _apply_active_certification_policy(document, certification_policy)
+                for case_id, document in sidecar_documents.items()
+            }
             excluded_seller_cases = [
                 case_id
                 for case_id in external_case_ids
@@ -2002,7 +2148,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                             WITH selected_queue AS (
-                              SELECT id, version
+                              SELECT id, version, product_pack_id
                               FROM matching_v2_review_queue
                               WHERE external_queue_id = :queue_id
                               ORDER BY created_at DESC
@@ -2011,6 +2157,7 @@ class PostgresMatchingV2ReviewRepository:
                             SELECT c.id::text, c.external_case_id, c.case_document,
                                    c.case_checksum, c.review_queue_id::text,
                                    q.version AS queue_version,
+                                   q.product_pack_id,
                                    (
                                      SELECT decision.verdict
                                      FROM (
@@ -2079,6 +2226,11 @@ class PostgresMatchingV2ReviewRepository:
                 queue_version=str(rows[0]["queue_version"]),
                 root=_repository_root(),
             )
+            certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
+            sidecar_documents = {
+                case_id: _apply_active_certification_policy(document, certification_policy)
+                for case_id, document in sidecar_documents.items()
+            }
             excluded_seller_cases = [
                 case_id
                 for case_id in external_case_ids
@@ -2163,6 +2315,7 @@ class PostgresMatchingV2ReviewRepository:
                     model_id=model_id,
                     prompt=prompt,
                     retry_reason=retry_reason,
+                    certification_policy=certification_policy,
                 )
                 for case_id in external_case_ids
             ]
@@ -2234,13 +2387,18 @@ class PostgresMatchingV2ReviewRepository:
         model_id: str,
         prompt: Mapping[str, str],
         retry_reason: str,
+        certification_policy: Mapping[str, Any],
     ) -> dict[str, Any]:
-        input_document = dict(row["ai_input_document"])
-        input_checksum = _checksum(input_document)
-        if input_checksum != str(row["ai_input_checksum"]):
+        stored_input_document = dict(row["ai_input_document"])
+        stored_input_checksum = _checksum(stored_input_document)
+        if stored_input_checksum != str(row["ai_input_checksum"]):
             raise ValueError(
                 f"stored AI input checksum is invalid for case {row['external_case_id']!r}"
             )
+        input_document = _apply_active_certification_policy(
+            stored_input_document, certification_policy
+        )
+        input_checksum = _checksum(input_document)
         retry_sequence = int(row["ai_retry_sequence"] or 0) + 1
         idempotency_key = _checksum(
             {
@@ -2399,7 +2557,8 @@ class PostgresMatchingV2ReviewRepository:
                     await connection.execute(
                         text(
                             """
-                        SELECT review_case.case_document, review_queue.version
+                        SELECT review_case.case_document, review_queue.version,
+                               review_queue.product_pack_id
                         FROM matching_v2_review_case review_case
                         JOIN matching_v2_review_queue review_queue
                           ON review_queue.id = review_case.review_queue_id
@@ -2421,6 +2580,21 @@ class PostgresMatchingV2ReviewRepository:
             )
             if _case_has_known_third_party_seller(case_document):
                 raise ValueError("a known third-party marketplace seller case cannot be certified")
+            case_document = _apply_active_certification_policy(
+                case_document,
+                _active_certification_policy(str(case_row["product_pack_id"])),
+            )
+            certification_blockers = case_document.get("certification_blockers")
+            if submission["verdict"] == "comparable" and certification_blockers:
+                blocked_attributes = ", ".join(
+                    str(issue.get("attribute") or "unknown")
+                    for issue in certification_blockers
+                    if isinstance(issue, Mapping)
+                )
+                raise ValueError(
+                    "a comparable decision cannot be certified while current Product Pack "
+                    f"hard blockers conflict or are unresolved: {blocked_attributes}"
+                )
             existing = (
                 (
                     await connection.execute(
@@ -2575,6 +2749,47 @@ class PostgresMatchingV2ReviewRepository:
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
                 {"case_id": case_id},
             )
+            case_row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT review_case.case_document, review_queue.version,
+                                   review_queue.product_pack_id
+                            FROM matching_v2_review_case review_case
+                            JOIN matching_v2_review_queue review_queue
+                              ON review_queue.id = review_case.review_queue_id
+                            WHERE review_case.id = CAST(:case_id AS uuid)
+                            """
+                        ),
+                        {"case_id": case_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            case_document = dict(case_row["case_document"])
+            _apply_observed_location_sidecar(
+                [case_document],
+                queue_id=external_queue_id,
+                queue_version=str(case_row["version"]),
+                root=_repository_root(),
+            )
+            case_document = _apply_active_certification_policy(
+                case_document,
+                _active_certification_policy(str(case_row["product_pack_id"])),
+            )
+            certification_blockers = case_document.get("certification_blockers")
+            if adjudication["verdict"] == "comparable" and certification_blockers:
+                blocked_attributes = ", ".join(
+                    str(issue.get("attribute") or "unknown")
+                    for issue in certification_blockers
+                    if isinstance(issue, Mapping)
+                )
+                raise ValueError(
+                    "a comparable adjudication cannot be certified while current Product Pack "
+                    f"hard blockers conflict or are unresolved: {blocked_attributes}"
+                )
             submissions = list(
                 (
                     await connection.execute(
@@ -2783,7 +2998,36 @@ class MatchingV2ReviewService:
         )
 
     async def queue_view(self, external_queue_id: str, **filters: Any) -> dict[str, Any]:
-        return await self._repository.queue_view(external_queue_id, **filters)
+        document = await self._repository.queue_view(external_queue_id, **filters)
+        queue = document.get("queue")
+        queue = queue if isinstance(queue, Mapping) else {}
+        product_pack = queue.get("product_pack")
+        product_pack = product_pack if isinstance(product_pack, Mapping) else {}
+        product_pack_id = str(product_pack.get("id") or "")
+        if not product_pack_id:
+            raise ValueError("matching v2 review queue does not identify its Product Pack")
+        certification_policy = _active_certification_policy(product_pack_id)
+        cases = document.get("cases")
+        cases = cases if isinstance(cases, list) else []
+        document["cases"] = [
+            _apply_active_certification_policy(case, certification_policy)
+            if isinstance(case, Mapping)
+            else case
+            for case in cases
+        ]
+        document["certification_policy"] = certification_policy
+        document["certification_blocker_summary"] = {
+            "visible_case_count": len(document["cases"]),
+            "blocked_case_count": sum(
+                1 for case in document["cases"] if case.get("certification_blockers")
+            ),
+            "finalized_comparable_case_count": sum(
+                1
+                for case in document["cases"]
+                if case.get("review_status") == "approved" and case.get("certification_blockers")
+            ),
+        }
+        return document
 
     async def submit_review(
         self,
@@ -2966,7 +3210,7 @@ class MatchingV2ReviewService:
         )
 
     async def gold_set(self, external_queue_id: str) -> dict[str, Any]:
-        view = await self._repository.queue_view(
+        view = await self.queue_view(
             external_queue_id,
             competitor_retailer_id=None,
             stratum=None,
@@ -2977,6 +3221,10 @@ class MatchingV2ReviewService:
         labels: list[dict[str, Any]] = []
         for case in view["cases"]:
             if case["review_status"] not in {"approved", "rejected"}:
+                continue
+            if case["review_status"] == "approved" and case.get("certification_blockers"):
+                # A formerly approved comparable relationship is not exportable after a
+                # stricter current Product Pack exposes a hard compatibility conflict.
                 continue
             decision = case["final_decision"]
             if decision is None:

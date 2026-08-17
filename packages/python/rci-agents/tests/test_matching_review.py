@@ -60,10 +60,12 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
 def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     prompt = load_matching_review_prompt(REPOSITORY_ROOT)
 
-    assert prompt.version == "1.0.3"
+    assert prompt.version == "1.0.4"
     assert "Product Pack attribute roles" in prompt.instructions
     assert "different or unknown brands do not independently prevent" in prompt.instructions
     assert "Brand agreement never overrides" in prompt.instructions
+    assert "gallon, half-gallon, quart, pint" in prompt.instructions
+    assert "unit-price normalization never creates a product match" in prompt.instructions
 
 
 async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None:

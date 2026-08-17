@@ -1047,6 +1047,98 @@ test("reports a plain-text submission failure without a JSON parsing error", asy
   await expect(submissionError).not.toContainText("Unexpected token");
 });
 
+test("blocks comparable approval when current Milk package volume conflicts", async ({
+  page,
+}) => {
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-terra",
+          max_batch_cases: 25,
+          max_request_cost_usd: 0.35,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        status_counts: { pending: 1 },
+        competitor_retailers: [{ retailer_id: "aldi_us", case_count: 1 }],
+        total_cases: 1,
+        selected_case_count: 1,
+        offset: 0,
+        limit: 50,
+        cases: [
+          {
+            ...cases[4],
+            ai_draft: null,
+            evidence_refs: ["source-file:test.csv#sha256=test"],
+            edge: {
+              attribute_evidence: [
+                {
+                  attribute: "volume_oz",
+                  role: "hard_blocker",
+                  queue_role: "soft_comparator",
+                  role_source: "active_product_pack_certification_policy",
+                  benchmark_value: 128,
+                  competitor_value: 64,
+                  outcome: "conflict",
+                  benchmark_source: "pdp:walmart_us:w1",
+                  competitor_source: "pdp:aldi_us:a1",
+                  reliability: 0.95,
+                },
+              ],
+            },
+            certification_blockers: [
+              {
+                attribute: "volume_oz",
+                outcome: "conflict",
+                benchmark_value: 128,
+                competitor_value: 64,
+                reason: "Current Product Pack requires exact volume.",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await expect(page.getByText("Package size blocked")).toBeVisible();
+  await page.getByRole("button", { name: "Review evidence" }).click();
+  const drawer = page.getByRole("dialog", { name: "Match evidence review" });
+  await expect(
+    drawer.getByRole("heading", {
+      name: "This pair cannot be approved as comparable",
+    }),
+  ).toBeVisible();
+  await expect(drawer.getByText("128 versus 64 · Conflict")).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "Approve match" }),
+  ).toBeDisabled();
+  await expect(
+    drawer.getByRole("button", { name: "Reject match" }),
+  ).toBeEnabled();
+});
+
 test("finalizes one human decision and requires an explicit flag before review", async ({
   page,
 }) => {

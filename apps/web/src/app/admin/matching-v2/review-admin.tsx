@@ -177,6 +177,8 @@ interface ReviewCase {
     attribute_evidence: Array<{
       attribute: string;
       role: string;
+      queue_role?: string | null;
+      role_source?: string | null;
       benchmark_value: unknown;
       competitor_value: unknown;
       outcome: string;
@@ -184,6 +186,19 @@ interface ReviewCase {
       competitor_source: string | null;
       reliability: number;
     }>;
+  };
+  certification_blockers?: Array<{
+    attribute: string;
+    outcome: string;
+    benchmark_value: unknown;
+    competitor_value: unknown;
+    reason: string;
+  }>;
+  certification_policy?: {
+    product_pack_id: string;
+    product_pack_version: string;
+    queue_evidence_is_immutable: boolean;
+    stricter_active_policy_wins: boolean;
   };
   evidence_refs: string[];
   review_status: string;
@@ -783,6 +798,14 @@ export function MatchingV2ReviewAdmin() {
     }
     if (!verdict) {
       setError("Choose an explicit review decision before submitting.");
+      return;
+    }
+    if (verdict === "comparable" && reviewCase.certification_blockers?.length) {
+      setError(
+        `This match cannot be approved because the current Product Pack has unresolved or conflicting hard requirements: ${reviewCase.certification_blockers
+          .map((issue) => label(issue.attribute))
+          .join(", ")}.`,
+      );
       return;
     }
     setBusy(true);
@@ -1858,6 +1881,15 @@ export function MatchingV2ReviewAdmin() {
                     )}
                     % critical evidence
                   </small>
+                  {reviewCase.certification_blockers?.length ? (
+                    <span className="cert-package-blocked">
+                      {reviewCase.certification_blockers.some(
+                        (issue) => issue.attribute === "volume_oz",
+                      )
+                        ? "Package size blocked"
+                        : "Compatibility blocked"}
+                    </span>
+                  ) : null}
                 </div>
                 <button
                   className="button secondary"
@@ -2226,6 +2258,36 @@ export function MatchingV2ReviewAdmin() {
                       </article>
                     ))}
                   </section>
+                  {activeCase.certification_blockers?.length ? (
+                    <section
+                      className="cert-certification-blocker"
+                      role="alert"
+                    >
+                      <div>
+                        <small>Current Product Pack guardrail</small>
+                        <h3>This pair cannot be approved as comparable</h3>
+                        <p>
+                          Package and compatibility rules use the current
+                          Product Pack even when this queue was created under an
+                          older version. Choose Reject match when the values
+                          conflict, or Needs evidence when a required value is
+                          unresolved.
+                        </p>
+                      </div>
+                      <ul>
+                        {activeCase.certification_blockers.map((issue) => (
+                          <li key={issue.attribute}>
+                            <b>{label(issue.attribute)}</b>
+                            <span>
+                              {evidenceValue(issue.benchmark_value)} versus{" "}
+                              {evidenceValue(issue.competitor_value)} ·{" "}
+                              {label(issue.outcome)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
                   <section className="cert-evidence">
                     <h3>Attribute evidence</h3>
                     <div role="table">
@@ -2240,6 +2302,13 @@ export function MatchingV2ReviewAdmin() {
                           <span data-label="Attribute">
                             <b>{label(evidence.attribute)}</b>
                             <small>{label(evidence.role)}</small>
+                            {evidence.queue_role &&
+                            evidence.queue_role !== evidence.role ? (
+                              <small>
+                                Queue role: {label(evidence.queue_role)} ·
+                                current policy applies
+                              </small>
+                            ) : null}
                           </span>
                           <span data-label="Primary">
                             {evidenceValue(evidence.benchmark_value)}
@@ -2342,6 +2411,10 @@ export function MatchingV2ReviewAdmin() {
                             }
                             type="button"
                             key={verdict}
+                            disabled={
+                              verdict === "comparable" &&
+                              Boolean(activeCase.certification_blockers?.length)
+                            }
                             onClick={() =>
                               updateDraft(activeCase.case_id, { verdict })
                             }
@@ -2388,7 +2461,12 @@ export function MatchingV2ReviewAdmin() {
                       <button
                         className="button primary"
                         type="button"
-                        disabled={busy}
+                        disabled={
+                          busy ||
+                          (drafts[activeCase.case_id]?.verdict ===
+                            "comparable" &&
+                            Boolean(activeCase.certification_blockers?.length))
+                        }
                         onClick={() => void submitReview(activeCase)}
                       >
                         Save final decision

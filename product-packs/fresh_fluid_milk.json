@@ -1,7 +1,7 @@
 {
   "id": "fresh_fluid_milk",
   "name": "Fresh Fluid Milk",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "category_family": "dairy",
   "scope": {
     "target_terms": [
@@ -379,7 +379,7 @@
     "policy_version": "2.0.0-shadow.2",
     "certification_state": "shadow",
     "attribute_roles": {
-      "volume_oz": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0.5},
+      "volume_oz": {"role": "hard_blocker", "critical": true, "weight": 5, "numeric_tolerance": 0.5},
       "fat_type": {"role": "hard_blocker", "critical": true, "weight": 6},
       "flavor": {"role": "hard_blocker", "critical": true, "weight": 5},
       "organic": {"role": "hard_blocker", "critical": true, "weight": 5},
@@ -650,7 +650,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_fluid_milk_leadership",
-      "version": "1.3.0"
+      "version": "1.4.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Lead with specification-equivalent local milk economics across regional brand footprints, then distinguish same-brand, private-label, regional, and national-brand performance without letting brand alone determine comparability.",

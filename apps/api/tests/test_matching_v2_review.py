@@ -23,6 +23,8 @@ from rci_api.matching_v2_review import (
     MatchingV2ReviewService,
     PostgresMatchingV2ReviewRepository,
     ReviewSubmissionRequest,
+    _active_certification_policy,
+    _apply_active_certification_policy,
     _apply_observed_location_sidecar,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
@@ -787,6 +789,55 @@ def test_postgres_ai_review_retry_preserves_history_and_reapplies_guardrails() -
     assert "finalized review cases cannot retry" in source
     assert "governed input or prompt integrity failures" in source
     assert "pg_advisory_xact_lock" in source
+    assert "_active_certification_policy" in source
+    assert "certification_policy=certification_policy" in source
+
+
+def test_all_comparable_certification_paths_apply_current_product_pack_hard_blockers() -> None:
+    submit_source = inspect.getsource(PostgresMatchingV2ReviewRepository.submit_review)
+    adjudicate_source = inspect.getsource(PostgresMatchingV2ReviewRepository.adjudicate)
+    bulk_source = inspect.getsource(PostgresMatchingV2ReviewRepository._bulk_ai_snapshot)
+    gold_source = inspect.getsource(MatchingV2ReviewService.gold_set)
+
+    assert "_active_certification_policy" in submit_source
+    assert 'submission["verdict"] == "comparable"' in submit_source
+    assert "_active_certification_policy" in adjudicate_source
+    assert 'adjudication["verdict"] == "comparable"' in adjudicate_source
+    assert "_apply_active_certification_policy" in bulk_source
+    assert 'case["review_status"] == "approved"' in gold_source
+    assert 'case.get("certification_blockers")' in gold_source
+
+
+def test_current_milk_policy_upgrades_legacy_volume_evidence_to_hard_blocker() -> None:
+    legacy = _queue()["cases"][0]
+    legacy["edge"]["attribute_evidence"].append(
+        {
+            "attribute": "volume_oz",
+            "role": "soft_comparator",
+            "benchmark_value": 128,
+            "competitor_value": 64,
+            "outcome": "conflict",
+            "benchmark_source": "pdp:walmart_us:w1",
+            "competitor_source": "pdp:aldi_us:a1",
+            "weight": 5,
+            "reliability": 0.95,
+            "rationale": None,
+        }
+    )
+
+    policy = _active_certification_policy("fresh_fluid_milk")
+    governed = _apply_active_certification_policy(legacy, policy)
+    volume = next(
+        row for row in governed["edge"]["attribute_evidence"] if row["attribute"] == "volume_oz"
+    )
+
+    assert policy["product_pack_version"] == "1.5.0"
+    assert volume["queue_role"] == "soft_comparator"
+    assert volume["role"] == "hard_blocker"
+    assert any(
+        issue["attribute"] == "volume_oz" and issue["outcome"] == "conflict"
+        for issue in governed["certification_blockers"]
+    )
 
 
 def _bulk_eligible_case() -> dict[str, Any]:
@@ -899,6 +950,48 @@ def test_bulk_ai_certification_accepts_not_comparable_but_not_insufficient_evide
 
     assert blocked["eligible"] is False
     assert blocked["reason_codes"] == ["ai_verdict_not_certifiable"]
+
+
+def test_bulk_certification_blocks_cross_volume_comparable_but_allows_rejection() -> None:
+    case = _bulk_eligible_case()
+    case["edge"]["attribute_evidence"] = [
+        {
+            "attribute": "volume_oz",
+            "role": "soft_comparator",
+            "benchmark_value": 128,
+            "competitor_value": 64,
+            "outcome": "conflict",
+        }
+    ]
+    governed = _apply_active_certification_policy(
+        case,
+        {
+            "product_pack_id": "fresh_fluid_milk",
+            "product_pack_version": "1.5.0",
+            "attribute_roles": {"volume_oz": "hard_blocker"},
+            "hard_blocker_attributes": ["volume_oz"],
+            "policy_checksum": "f" * 64,
+            "queue_evidence_is_immutable": True,
+            "stricter_active_policy_wins": True,
+        },
+    )
+
+    blocked = _bulk_ai_certification_eligibility(governed)
+
+    assert blocked["eligible"] is False
+    assert blocked["reason_codes"] == ["hard_blocker_conflict"]
+    assert blocked["hard_blocker_issues"][0]["attribute"] == "volume_oz"
+
+    result = governed["ai_draft"]["output_document"]["result"]
+    result["verdict_proposal"] = "not_comparable"
+    result["tier_proposal"] = None
+    governed["engine_proposal"]["tier"] = None
+    governed["engine_proposal"]["status"] = "rejected"
+
+    accepted_rejection = _bulk_ai_certification_eligibility(governed)
+
+    assert accepted_rejection["eligible"] is True
+    assert "hard_blocker_conflict" not in accepted_rejection["reason_codes"]
 
 
 def test_bulk_ai_certification_rejects_not_comparable_with_a_match_tier() -> None:

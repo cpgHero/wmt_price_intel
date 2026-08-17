@@ -663,7 +663,7 @@ def test_policy_compiler_is_category_neutral(pack_id: str) -> None:
 @pytest.mark.parametrize(
     ("pack_id", "profile_id", "hard_blocker"),
     [
-        ("fresh_fluid_milk", "all_brand", "fat_type"),
+        ("fresh_fluid_milk", "all_brand", "volume_oz"),
         ("fresh_shell_eggs", "strict", "size"),
     ],
 )
@@ -744,6 +744,61 @@ def test_spec_first_packs_do_not_fail_on_brand_alone(
 
     assert conflict.status == "not_comparable"
     assert conflict.tier is None
+
+
+@pytest.mark.parametrize(
+    ("benchmark_volume_oz", "competitor_volume_oz"),
+    [(128, 64), (64, 32), (32, 16)],
+)
+def test_milk_exact_package_volume_is_a_non_overridable_hard_blocker(
+    benchmark_volume_oz: int,
+    competitor_volume_oz: int,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    policy = compile_matching_policy_v2(pack, "all_brand")
+    base_attributes = {
+        rule.name: AttributeValue(
+            benchmark_volume_oz if rule.name == "volume_oz" else "same-spec",
+            f"pdp:walmart_us:w1:{rule.name}",
+        )
+        for rule in policy.attributes
+    }
+    competitor_attributes = {
+        rule.name: AttributeValue(
+            competitor_volume_oz if rule.name == "volume_oz" else "same-spec",
+            f"pdp:aldi_us:a1:{rule.name}",
+        )
+        for rule in policy.attributes
+    }
+
+    decision = DeterministicMatchEngineV2().evaluate(
+        ListingEvidence(
+            listing_id="listing-walmart-milk-volume",
+            retailer_id="walmart_us",
+            retailer_product_id="w1",
+            attributes=base_attributes,
+            brand="Same Regional Dairy",
+            brand_type="regional",
+            brand_verified=True,
+        ),
+        ListingEvidence(
+            listing_id="listing-aldi-milk-volume",
+            retailer_id="aldi_us",
+            retailer_product_id="a1",
+            attributes=competitor_attributes,
+            brand="Same Regional Dairy",
+            brand_type="regional",
+            brand_verified=True,
+        ),
+        policy,
+        decided_at=DECIDED_AT,
+    )
+
+    volume = next(row for row in decision.evidence if row.attribute == "volume_oz")
+    assert volume.role == "hard_blocker"
+    assert volume.outcome == "conflict"
+    assert decision.status == "not_comparable"
+    assert decision.tier is None
 
 
 def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() -> None:

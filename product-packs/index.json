@@ -12,7 +12,7 @@
     {
       "id": "fresh_fluid_milk",
       "name": "Fresh Fluid Milk",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "default_keyword": "milk",
       "file": "fresh_fluid_milk.json"
     },
