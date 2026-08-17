@@ -373,6 +373,89 @@ def test_egg_retailer_catalog_is_complete_and_defaults_are_generic() -> None:
     }
 
 
+def test_target_request_matches_owner_verified_url_contract() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("target_us")
+    context = ProductDetailRequestContext(
+        product_id="75665830",
+        url=(
+            "https://www.target.com/p/cottonelle-ultra-comfortcare-toilet-paper-"
+            "12-mega-rolls/-/A-75665830"
+        ),
+        zipcode="68203",
+        store="2485",
+        fulfillment_type="pickup",
+    )
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
+
+    assert request.path == "/mc/target/pdp/zipcode/"
+    assert request.params == {
+        "url": context.url,
+        "zipcode": "68203",
+        "store": "2485",
+        "fulfillment_type": "pickup",
+    }
+    assert context.cache_identity(endpoint)["product_id"] is None
+    assert context.cache_identity(endpoint)["url"] == context.url
+
+
+def test_sams_club_request_matches_owner_verified_url_contract() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("sams_club_us")
+    context = ProductDetailRequestContext(
+        product_id="13607813672",
+        url=(
+            "https://www.samsclub.com/ip/Member-s-Mark-Cage-Free-Grade-A-Large-White-"
+            "Eggs-2-dozen/13607813672"
+        ),
+        zipcode="10001",
+        store="4774",
+        fulfillment_type="pickup",
+    )
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
+
+    assert request.path == "/mc/samsclub/pdp/zipcode/"
+    assert request.params == {
+        "url": context.url,
+        "zipcode": "10001",
+        "store": "4774",
+        "fulfillment_type": "pickup",
+    }
+    assert context.cache_identity(endpoint)["product_id"] is None
+
+
+def test_trader_joes_request_restores_provider_catalog_leading_zero_id() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("trader_joes_us")
+    context = ProductDetailRequestContext(
+        product_id="62124",
+        url="https://www.traderjoes.com/home/products/pdp/pasture-raised-large-brown-eggs-062124",
+        zipcode="01035",
+        store="512",
+    )
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
+
+    assert request.path == "/mc/traderjoes/pdp/zipcode/"
+    assert request.params == {
+        "product_id": "062124",
+        "zipcode": "01035",
+        "store": "512",
+    }
+    assert context.cache_identity(endpoint)["product_id"] == "062124"
+    assert context.cache_identity(endpoint)["url"] is None
+
+
+@pytest.mark.parametrize("retailer_id", ["target_us", "sams_club_us"])
+def test_url_only_contract_rejects_product_id_without_url(retailer_id: str) -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)
+    with pytest.raises(ValueError, match="endpoint-supported product_id or url"):
+        MetricsCartProductDetailAdapter(endpoint).build_request(
+            ProductDetailRequestContext(
+                product_id="12345",
+                zipcode="01035",
+                store="123",
+                fulfillment_type="pickup",
+            )
+        )
+
+
 def test_endpoint_defaults_and_contract_version_change_cache_identity() -> None:
     catalog = ProductDetailCatalog.from_path(REPOSITORY_ROOT)
     endpoint = catalog.get("shoprite_us")

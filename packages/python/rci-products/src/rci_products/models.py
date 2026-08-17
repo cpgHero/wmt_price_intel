@@ -35,9 +35,33 @@ class ProductDetailEndpoint:
     supported_params: tuple[str, ...]
     contract_version: str = "1.0.0"
     default_params: tuple[tuple[str, str], ...] = ()
+    identity_param: Literal["product_id", "url"] | None = None
+    product_id_left_pad_width: int | None = None
 
     def defaults(self) -> JsonObject:
         return dict(self.default_params)
+
+    def request_parameters(self, parameters: JsonObject) -> JsonObject:
+        """Apply the versioned retailer contract without retailer branches."""
+
+        supplied = {**self.defaults(), **parameters}
+        requested = {
+            name: supplied[name]
+            for name in self.supported_params
+            if name in supplied and str(supplied[name]).strip()
+        }
+        if self.identity_param is not None:
+            for name in ("product_id", "url"):
+                if name != self.identity_param:
+                    requested.pop(name, None)
+        product_id = requested.get("product_id")
+        if (
+            product_id is not None
+            and self.product_id_left_pad_width is not None
+            and str(product_id).isdigit()
+        ):
+            requested["product_id"] = str(product_id).zfill(self.product_id_left_pad_width)
+        return requested
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,16 +88,16 @@ class ProductDetailRequestContext:
         }
 
     def cache_identity(self, endpoint: ProductDetailEndpoint) -> JsonObject:
-        supplied = {**endpoint.defaults(), **self.parameters()}
+        supplied = endpoint.request_parameters(self.parameters())
         identity: JsonObject = {
             "provider": "metricscart",
             "retailer_id": endpoint.retailer_id,
             "endpoint_id": endpoint.endpoint_id,
             "endpoint_version": endpoint.contract_version,
-            "product_id": self.product_id,
-            "url": self.url,
-            "zipcode": self.zipcode,
-            "store": self.store,
+            "product_id": supplied.get("product_id"),
+            "url": supplied.get("url"),
+            "zipcode": supplied.get("zipcode"),
+            "store": supplied.get("store"),
             "fulfillment_type": supplied.get("fulfillment_type"),
         }
         if "shopping_type" in supplied:

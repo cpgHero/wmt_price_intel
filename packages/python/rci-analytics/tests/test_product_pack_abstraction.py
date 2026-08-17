@@ -199,6 +199,56 @@ def test_scope_exclusions_remain_product_pack_data(
     assert not result.in_scope
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Old Fashioned Egg Nog, 1 Quart",
+        "Hard-Cooked Peeled Eggs, 6 Count",
+        "Plant-Based Egg Replacer",
+        "Frozen Sausage Egg Bites",
+        "Vegetable Egg Rolls, 12 Count",
+        "Decorative Easter Eggs",
+        "Pickled Eggs in Brine",
+        "Chicken and Egg Recipe Dog Food",
+        "Egg Graphic Tank Top",
+        "Egg Ornament",
+        "The Perfect Egg Cookbook, Hardcover",
+        "Egg Peptide Face Serum",
+    ],
+)
+def test_egg_pack_rejects_known_search_noise_before_paid_enrichment(
+    title: str,
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    result = OfferClassifier(pack).classify(
+        normalizer.normalize(_row("target_us", "noise", title, "4.99"))
+    )
+
+    assert not result.in_scope
+    assert result.scope_reason and result.scope_reason.startswith("excluded scope pattern:")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Grade A Large White Eggs, 12 Count",
+        "Organic Cage-Free Brown Eggs, 18 Count",
+        "Pasture-Raised Extra Large Shell Eggs, One Dozen",
+    ],
+)
+def test_egg_scope_hardening_preserves_true_shell_eggs(
+    title: str,
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    result = OfferClassifier(pack).classify(
+        normalizer.normalize(_row("target_us", "egg", title, "4.99"))
+    )
+
+    assert result.in_scope
+
+
 def test_curated_product_include_overrides_broad_scope_patterns(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:

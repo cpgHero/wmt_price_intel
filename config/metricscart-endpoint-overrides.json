@@ -17,6 +17,34 @@
       "runtime_path": "/kroger/pdp/zipcode/",
       "disposition": "owner_verified_runtime_path",
       "reason": "A controlled 2026-08-17 preflight returned HTTP 200 for an observed Egg product at the provider-catalog route; the prior /mc route is retired."
+    },
+    {
+      "retailer_id": "sams_club_us",
+      "endpoint_id": "155",
+      "provider_catalog_path": "/mc/samsclub/pdp/zipcode",
+      "runtime_path": "/mc/samsclub/pdp/zipcode/",
+      "disposition": "owner_verified_runtime_contract",
+      "runtime_identity_param": "url",
+      "reason": "Retain the trailing slash and URL identity from the owner-provided successful PDP contract."
+    },
+    {
+      "retailer_id": "target_us",
+      "endpoint_id": "172",
+      "provider_catalog_path": "/mc/target/pdp/zipcode",
+      "runtime_path": "/mc/target/pdp/zipcode/",
+      "disposition": "owner_verified_runtime_contract",
+      "runtime_identity_param": "url",
+      "reason": "Retain the trailing slash and URL-only identity from the owner-provided successful PDP contract."
+    },
+    {
+      "retailer_id": "trader_joes_us",
+      "endpoint_id": "178",
+      "provider_catalog_path": "/mc/traderjoes/pdp/zipcode/",
+      "runtime_path": "/mc/traderjoes/pdp/zipcode/",
+      "disposition": "provider_catalog_identifier_normalization",
+      "runtime_identity_param": "product_id",
+      "product_id_left_pad_width": 6,
+      "reason": "The provider catalog uses six-digit product IDs; Search URLs preserve leading zeros that the prior request plan lost."
     }
   ]
 }

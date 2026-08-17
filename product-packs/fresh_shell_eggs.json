@@ -1,7 +1,7 @@
 {
   "id": "fresh_shell_eggs",
   "name": "Fresh Shell Eggs",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "category_family": "dairy_eggs",
   "scope": {
     "target_terms": [
@@ -38,6 +38,24 @@
       "egg accessory",
       "plastic egg",
       "chocolate egg",
+      "egg nog",
+      "eggnog",
+      "hard cooked",
+      "hard-cooked",
+      "egg replacer",
+      "egg bite",
+      "egg roll",
+      "easter egg",
+      "pickled egg",
+      "dog food",
+      "t-shirt",
+      "tank top",
+      "ornament",
+      "tote bag",
+      "cookbook",
+      "paperback",
+      "hardcover",
+      "serum",
       "per case"
     ],
     "availability_policy": "retailer_specific"
@@ -364,7 +382,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_shell_eggs_leadership",
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     "narrative_playbook": {
       "leadership_objective": "Identify Walmart's broad fresh-shell-egg price position, the retailer and product segments that create material risk, and the regional or data-quality distinctions that should shape monitoring.",

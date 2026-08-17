@@ -36,6 +36,8 @@ export interface MetricsCartProductDetailCatalog {
         fulfillment_type?: string;
         shopping_type?: string;
       };
+      identity_param?: "product_id" | "url";
+      product_id_left_pad_width?: number;
     },
     ...{
       retailer_id: string;
@@ -63,6 +65,8 @@ export interface MetricsCartProductDetailCatalog {
         fulfillment_type?: string;
         shopping_type?: string;
       };
+      identity_param?: "product_id" | "url";
+      product_id_left_pad_width?: number;
     }[]
   ];
 }

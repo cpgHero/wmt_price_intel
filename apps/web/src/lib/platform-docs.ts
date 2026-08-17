@@ -83,10 +83,10 @@ const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.5",
+  version: "1.3.6",
   lastVerified,
   baseline:
-    "Production implementation through completed Egg PDP collection Phase 13.13.2",
+    "Production implementation through Egg PDP 404 remediation Phase 13.13.3",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -524,6 +524,12 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "information",
           title: "Egg PDP collection is complete",
           text: "Production run 11d33dad-0658-457d-8bdd-b72d2f45a212 completed with 269 new normalized PDPs, 117 billable 404s, one non-billable terminal 500, and 769 of 771 planned credits. Together with 527 fresh cache hits, 796 of 914 admitted Egg products have reusable normalized PDP evidence. All 269 new successes include seller evidence; 404-heavy retailers require contract or current-availability review before recollection.",
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "404-heavy Egg subsets are quarantined",
+          text: "Target and Sam's Club had systematic route signatures, while Trader Joe's lost leading-zero identifiers. Corrected catalog contracts and Egg Product Pack 1.2.1 are implemented, but no broad retry is permitted until the bounded nine-credit preflight proves each corrected request shape. ALDI and Walmart remain product/location investigations because both retailers already have substantial HTTP 200 coverage.",
         },
         {
           kind: "callout",
@@ -1317,6 +1323,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented; production preflight pending",
+              "Egg PDP 404-heavy subsets gained evidence-specific contract remediation and a bounded retry gate.",
+              "Target and Sam's Club now use owner-verified trailing-slash, URL-only request shapes; Trader Joe's preserves six-digit product IDs through generic endpoint configuration. Product Pack 1.2.1 removes known non-shell-Egg noise before paid planning. A broad retry remains prohibited until the nine-credit preflight and a new read-only estimate pass.",
+            ],
             [
               "2026-08-17",
               "Deployed and production-verified",

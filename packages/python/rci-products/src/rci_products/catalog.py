@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal, cast
 
 from rci_contracts import validate_instance
 from rci_products.models import ProductDetailEndpoint
@@ -42,6 +43,19 @@ class ProductDetailCatalog:
                         (str(name), str(parameter_value))
                         for name, parameter_value in value.get("default_params", {}).items()
                     )
+                ),
+                identity_param=(
+                    cast(
+                        Literal["product_id", "url"],
+                        str(value["identity_param"]),
+                    )
+                    if value.get("identity_param")
+                    else None
+                ),
+                product_id_left_pad_width=(
+                    int(value["product_id_left_pad_width"])
+                    if value.get("product_id_left_pad_width") is not None
+                    else None
                 ),
             )
             if endpoint.retailer_id in endpoints:

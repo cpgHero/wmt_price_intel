@@ -76,6 +76,14 @@ def test_product_detail_catalog_reconciles_to_supplied_endpoint_source() -> None
     assert configured[("kroger_us", "105")]["paid_calls_enabled"] is True
     assert configured[("kroger_us", "105")]["path"] == "/kroger/pdp/zipcode/"
     assert approved_paths[("kroger_us", "105")]["disposition"] == ("owner_verified_runtime_path")
+    assert configured[("target_us", "172")]["path"] == "/mc/target/pdp/zipcode/"
+    assert configured[("target_us", "172")]["identity_param"] == "url"
+    assert approved_paths[("target_us", "172")]["runtime_identity_param"] == "url"
+    assert configured[("sams_club_us", "155")]["path"] == "/mc/samsclub/pdp/zipcode/"
+    assert configured[("sams_club_us", "155")]["identity_param"] == "url"
+    assert approved_paths[("sams_club_us", "155")]["runtime_identity_param"] == "url"
+    assert configured[("trader_joes_us", "178")]["product_id_left_pad_width"] == 6
+    assert approved_paths[("trader_joes_us", "178")]["product_id_left_pad_width"] == 6
 
 
 def test_normalized_metricscart_catalog_has_full_auditable_provenance() -> None:

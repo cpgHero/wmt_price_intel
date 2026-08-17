@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -84,6 +84,8 @@ def _endpoint_document(endpoint: ProductDetailEndpoint) -> JsonObject:
         "supported_params": list(endpoint.supported_params),
         "contract_version": endpoint.contract_version,
         "default_params": endpoint.defaults(),
+        "identity_param": endpoint.identity_param,
+        "product_id_left_pad_width": endpoint.product_id_left_pad_width,
     }
 
 
@@ -108,6 +110,19 @@ def _endpoint(value: object) -> ProductDetailEndpoint:
                     JsonObject, document.get("default_params", {})
                 ).items()
             )
+        ),
+        identity_param=(
+            cast(
+                Literal["product_id", "url"],
+                str(document["identity_param"]),
+            )
+            if document.get("identity_param")
+            else None
+        ),
+        product_id_left_pad_width=(
+            int(document["product_id_left_pad_width"])
+            if document.get("product_id_left_pad_width") is not None
+            else None
         ),
     )
 

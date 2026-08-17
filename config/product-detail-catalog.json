@@ -128,14 +128,15 @@
       "provider_retailer": "samsclub",
       "domain": "samsclub.com",
       "endpoint_id": "155",
-      "contract_version": "2026-08-16",
+      "contract_version": "2026-08-17",
       "method": "GET",
-      "path": "/mc/samsclub/pdp/zipcode",
+      "path": "/mc/samsclub/pdp/zipcode/",
       "credits_per_successful_page": 2,
       "paid_calls_enabled": true,
       "required_params": ["zipcode", "store", "fulfillment_type"],
       "supported_params": ["url", "zipcode", "store", "fulfillment_type"],
-      "default_params": { "fulfillment_type": "pickup" }
+      "default_params": { "fulfillment_type": "pickup" },
+      "identity_param": "url"
     },
     {
       "retailer_id": "shoprite_us",
@@ -156,27 +157,30 @@
       "provider_retailer": "target",
       "domain": "target.com",
       "endpoint_id": "172",
-      "contract_version": "1.0.0",
+      "contract_version": "2026-08-17",
       "method": "GET",
-      "path": "/mc/target/pdp/zipcode",
+      "path": "/mc/target/pdp/zipcode/",
       "credits_per_successful_page": 3,
       "paid_calls_enabled": true,
       "required_params": ["zipcode", "store", "fulfillment_type"],
       "supported_params": ["product_id", "url", "zipcode", "store", "fulfillment_type"],
-      "default_params": { "fulfillment_type": "pickup" }
+      "default_params": { "fulfillment_type": "pickup" },
+      "identity_param": "url"
     },
     {
       "retailer_id": "trader_joes_us",
       "provider_retailer": "traderjoes",
       "domain": "traderjoes.com",
       "endpoint_id": "178",
-      "contract_version": "2026-08-16",
+      "contract_version": "2026-08-17",
       "method": "GET",
       "path": "/mc/traderjoes/pdp/zipcode/",
       "credits_per_successful_page": 1,
       "paid_calls_enabled": true,
       "required_params": ["zipcode", "store"],
-      "supported_params": ["url", "product_id", "zipcode", "store"]
+      "supported_params": ["url", "product_id", "zipcode", "store"],
+      "identity_param": "product_id",
+      "product_id_left_pad_width": 6
     },
     {
       "retailer_id": "walmart_mx",

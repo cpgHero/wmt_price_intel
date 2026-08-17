@@ -117,6 +117,14 @@
               "fulfillment_type": { "type": "string", "minLength": 1 },
               "shopping_type": { "type": "string", "minLength": 1 }
             }
+          },
+          "identity_param": {
+            "enum": ["product_id", "url"]
+          },
+          "product_id_left_pad_width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
           }
         }
       }

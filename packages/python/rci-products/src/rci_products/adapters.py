@@ -148,7 +148,7 @@ class MetricsCartProductDetailAdapter:
             raise ValueError(
                 "Product Details endpoint is blocked pending controlled contract preflight"
             )
-        supplied = {**self.endpoint.defaults(), **context.parameters()}
+        supplied = self.endpoint.request_parameters(context.parameters())
         if not context.product_id and not context.url:
             raise ValueError("Product Details requires a product_id or url")
         if not any(
@@ -165,9 +165,7 @@ class MetricsCartProductDetailAdapter:
         return ProviderRequest(
             method=self.endpoint.method,
             path=self.endpoint.path,
-            params={
-                name: supplied[name] for name in self.endpoint.supported_params if name in supplied
-            },
+            params=supplied,
         )
 
     def normalize(
