@@ -62,3 +62,24 @@ The operation is idempotent for the same review queue, gold-set checksum, and so
 - Legacy and Matching v2 authorities cannot be combined.
 - AnalysisResult contract validation passes.
 - Published Egg metrics reconcile to immutable match artifacts and the certified release.
+
+## Production verification — 2026-08-17
+
+- Release ID: `0dd6df6d-9f9c-4251-9041-7d294c7042c5`
+- Release checksum: `06373a3baabdfbaa2348c979e01ad51e36428f795b1b692ba49ebe2d0aa2e12c`
+- Governed analysis: `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-0dd6df6d`
+- Certified coverage: 1,305 queue cases; 99 comparable labels; 431 not-comparable
+  labels; 775 unresolved cases excluded; automatic fallback disabled.
+- Published evidence: 62 relationship records representing 62 retailer/product-ID pairs after
+  location/profile admission. Every published relationship is confirmed and belongs to the
+  certified comparable set; zero uncertified or certified-not-comparable relationships leaked
+  into reporting. Thirty-seven certified relationships had no admissible co-observation under the
+  current source data and Product Pack profiles and therefore produced no price comparison.
+- Result validation: all deterministic metrics are evidence-linked, metric-reference coverage is
+  100%, and unsupported numeric claims are zero. Overall validation remains `needs_review`
+  because unresolved certification coverage is disclosed as a warning rather than hidden.
+- Live UI: the report and included-product scorecard drawer were browser-verified in Railway
+  production.
+- Release evidence: GitHub Actions run `32080559215` passed Python, TypeScript, contracts,
+  reversible migrations, 13 Playwright scenarios, and all four container builds. Railway worker
+  deployment `883fad41-5f53-4c10-9e5d-04dcda19c487` is active.

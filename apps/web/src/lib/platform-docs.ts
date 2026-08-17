@@ -1326,9 +1326,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-17",
-              "Implemented; production replay pending",
+              "Deployed and production-verified",
               "Matching v2 certified gold sets gained an explicit governed reporting cutover.",
-              "A checksum-bound release can queue an idempotent replay from an existing analysis. The worker uses certified comparable relationships only, disables automatic fallback, scopes regional and many-to-one relationships to observed benchmark-product footprints, excludes unresolved cases, and publishes certification coverage in report provenance and quality metrics. Certified footprint relationships may overlap, but every report row still requires positive Search evidence for both products in that ZIP/store context; global and explicit-location rules retain strict one-to-one conflict validation.",
+              "A checksum-bound release can queue an idempotent replay from an existing analysis. Production Egg release 0dd6df6d-9f9c-4251-9041-7d294c7042c5 replayed 99 certified-comparable and 431 certified-not-comparable decisions while excluding 775 unresolved cases and disabling automatic fallback. The published report contains only certified comparable relationships with admissible Search co-observations; zero uncertified or not-comparable pairs leaked into metrics. Result validation reports 100% metric-reference coverage and zero unsupported numeric claims. GitHub Actions run 32080559215 passed and Railway worker deployment 883fad41-5f53-4c10-9e5d-04dcda19c487 is active.",
             ],
             [
               "2026-08-17",
