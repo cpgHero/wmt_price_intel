@@ -197,6 +197,17 @@ export interface Source {
   kind: "live_collection" | "historical_import";
   collection_run_id?: string | null;
   match_revision_id?: string | null;
+  matching_v2_gold_set_release_id?: string | null;
+  matching_v2_gold_set_checksum?: string | null;
+  matching_v2_certification_coverage?: {
+    authority: "matching_v2_certified_gold_set";
+    queue_case_count: number;
+    certified_label_count: number;
+    certified_comparable_count: number;
+    certified_not_comparable_count: number;
+    unresolved_excluded_count: number;
+    automatic_fallback_enabled: false;
+  } | null;
   brand_revision_id?: string | null;
   source_analysis_id?: string | null;
   observed_start?: string | null;
