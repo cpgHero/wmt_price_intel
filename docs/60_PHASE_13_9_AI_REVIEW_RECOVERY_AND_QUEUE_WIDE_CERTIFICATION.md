@@ -1,7 +1,6 @@
 # Phase 13.9 — AI Review Recovery and Queue-Wide Certification
 
-Status: retry recovery deployed and production-verified; bulk policy v1.1.0 implemented with
-production verification pending
+Status: deployed and production-verified
 
 ## Why this change exists
 
@@ -106,6 +105,11 @@ No live match was approved, rejected, flagged, or reopened during this investiga
   the only completed affirmative recommendation was excluded solely for advisory conflict and
   confidence conditions, which explained the user's no-update symptom. Production also confirmed
   that the prior bulk submission contains the complete AI rationale in a 743-character comment.
-- Policy v1.1.0 requires a post-deployment preview proving that the same affirmative recommendation
-  is confirmable with both advisory warnings displayed. That verification must remain preview-only;
-  no live match may be accepted by the deployment check.
+- Commit `013f829` passed GitHub Actions run `31986016902`: 483 Python tests, 57 web tests, 11
+  browser tests, migration upgrade/downgrade/re-upgrade, and all four service container builds.
+  Railway deployed the exact commit successfully to the web and API services.
+- The protected production preview returned policy `1.1.0`, scanned all 45 pending Ground Beef
+  cases, and found one completed affirmative AI recommendation. That recommendation was confirmable
+  with both `ai_conflict_present` and `low_confidence_ai_attribute` displayed as advisory warnings;
+  it produced a checksum-bound confirmation and no exclusions. The deployment check did not call the
+  commit endpoint and did not accept, reject, flag, or reopen any live match.

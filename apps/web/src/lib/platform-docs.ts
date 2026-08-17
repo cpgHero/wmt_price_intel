@@ -1292,9 +1292,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented; production verification pending",
+              "Deployed & verified",
               "Bulk certification policy v1.1.0 allows administrators to confirm every valid affirmative AI match recommendation.",
-              "Deterministic disagreement, incomplete evidence, conflicts, and confidence limits are displayed as advisory warnings and copied with the complete AI rationale into each final comment. Invalid/non-affirmative drafts, known third-party sellers, missing evidence, and existing final decisions remain blocked.",
+              "Deterministic disagreement, incomplete evidence, conflicts, and confidence limits are displayed as advisory warnings and copied with the complete AI rationale into each final comment. Invalid/non-affirmative drafts, known third-party sellers, missing evidence, and existing final decisions remain blocked. CI run 31986016902 passed 483 Python tests, 57 web tests, 11 browser tests, reversible migrations, and all container builds. The live preview made the current affirmative Ground Beef recommendation confirmable with both warnings visible; no commit or match decision was made.",
             ],
             [
               "2026-08-16",
