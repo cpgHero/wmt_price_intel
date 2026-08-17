@@ -650,7 +650,7 @@
     ],
     "report_blueprint": {
       "id": "fresh_fluid_milk_leadership",
-      "version": "1.2.0"
+      "version": "1.3.0"
     },
     "narrative_playbook": {
       "leadership_objective": "Lead with specification-equivalent local milk economics across regional brand footprints, then distinguish same-brand, private-label, regional, and national-brand performance without letting brand alone determine comparability.",

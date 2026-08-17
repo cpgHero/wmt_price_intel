@@ -17,6 +17,8 @@ hard-blocker specifications conflict.
 - Fresh Fluid Milk `1.4.0` makes `all_brand`—labeled **Specification-equivalent
   (brand-aware)**—the preferred scorecard profile. Its dimensions remain volume, fat type, flavor,
   organic, lactose-free, ultrafiltered, A2, grass-fed, omega-3/DHA, kids, and protein-fortified.
+- Milk report blueprint `fresh_fluid_milk_leadership` `1.3.0` binds that new immutable Product Pack
+  version without altering historical `1.2.0` publications.
 - Milk's same-brand and private-label profiles remain available as secondary lenses. They answer
   brand-specific questions; they are not the primary eligibility gate.
 - Fresh Shell Eggs already uses `ignore_brand` in both strict and compatible profiles. Count, size,
