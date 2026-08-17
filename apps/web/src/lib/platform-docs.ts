@@ -83,10 +83,10 @@ const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.1",
+  version: "1.3.2",
   lastVerified,
   baseline:
-    "Implementation through exact Milk package-volume governance Phase 13.13; production verification is pending",
+    "Production implementation through exact Milk package-volume governance Phase 13.13",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1304,9 +1304,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-17",
-              "Implemented; production verification pending",
+              "Deployed & verified",
               "Fresh Milk exact package-volume governance closes legacy and current certification paths.",
-              "Milk Product Pack 1.5.0 makes volume_oz a hard blocker and blueprint 1.4.0 binds it for new definitions. AI prompt 1.0.4, new reviews, retries, individual approval, bulk approval, adjudication, certified gold-set export, and Match Certification UI all apply the current stricter rule without mutating older queues. Cross-volume comparable decisions are blocked; governed not-comparable decisions remain certifiable. Explicit gallon/half-gallon/quart/pint regressions pass; deployment and active-queue audit remain pending.",
+              "Milk Product Pack 1.5.0 makes volume_oz a hard blocker and blueprint 1.4.0 binds it for new definitions. AI prompt 1.0.4, new reviews, retries, individual approval, bulk approval, adjudication, certified gold-set export, and Match Certification UI all apply the current stricter rule without mutating older queues. Cross-volume comparable decisions are blocked; governed not-comparable decisions remain certifiable. CI run 31999183989 passed the complete release gate and all four commit 83c6f8f Railway deployments succeeded. A read-only audit of all 311 active Milk cases found 128 volume conflicts and 68 unresolved-volume cases; seven prior approvals are now fail-closed and release-excluded, including 32 oz vs 64 oz and 32 oz vs 128 oz relationships. No paid AI or MetricsCart calls were made.",
             ],
             [
               "2026-08-16",

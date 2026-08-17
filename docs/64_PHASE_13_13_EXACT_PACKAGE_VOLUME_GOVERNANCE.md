@@ -1,6 +1,6 @@
 # Phase 13.13 — Exact Milk Package-Volume Governance
 
-Status: implemented; deployment verification pending
+Status: deployed and verified
 
 ## Decision
 
@@ -78,4 +78,22 @@ flagged and replaced, never rewritten in place.
 
 ## Production verification
 
-Pending deployment and read-only audit of active Milk certification queues.
+Verified August 17, 2026.
+
+- GitHub Actions run `31999183989` passed the complete Python, TypeScript, migration,
+  contract, browser, build, and four-container release gate. Local verification passed
+  `500` Python tests with `13` environment-dependent golden tests skipped by the repository's
+  standard gate, `52` normative contract validations, and `57` web unit tests.
+- Railway deployed commit `83c6f8f` successfully to web
+  (`804ba906-b4a7-40ee-97a0-0ca8bf6143b7`), API
+  (`02558013-a9c9-41d9-9364-e1d246583bc8`), worker
+  (`ce98b3cd-ada5-47c8-b7d7-65fc81c2ae64`), and scheduler
+  (`3c702f78-405c-4d8d-ba02-59d0f372457e`).
+- A read-only production audit evaluated all `311` cases in the active Fresh Fluid Milk queue.
+  The current Product Pack blocks `215` cases that have at least one unresolved or conflicting
+  hard attribute. This includes `128` volume conflicts and `68` cases with unresolved volume.
+- Seven previously approved comparable cases are now fail-closed under the current rule: two
+  confirmed cross-volume relationships (`32` oz vs `64` oz and `32` oz vs `128` oz) and five
+  relationships with unresolved volume evidence. They are excluded from new certified gold-set
+  output and cannot be newly approved as comparable until the evidence is corrected.
+- No paid MetricsCart or AI calls were made for this policy correction or verification.
