@@ -738,13 +738,14 @@ def _bulk_eligible_case() -> dict[str, Any]:
     return case
 
 
-def test_guarded_bulk_ai_certification_accepts_only_corroborated_matches() -> None:
+def test_bulk_ai_certification_accepts_affirmative_recommendations_with_warnings() -> None:
     eligible = _bulk_eligible_case()
 
     evaluation = _bulk_ai_certification_eligibility(eligible)
 
     assert evaluation["eligible"] is True
     assert evaluation["reason_codes"] == []
+    assert evaluation["warning_codes"] == []
     assert evaluation["recommended_tier"] == "exact_specification"
 
     conflicting = _bulk_eligible_case()
@@ -757,12 +758,35 @@ def test_guarded_bulk_ai_certification_accepts_only_corroborated_matches() -> No
     rejected = _bulk_ai_certification_eligibility(conflicting)
 
     assert rejected["eligible"] is False
+    assert rejected["reason_codes"] == ["known_third_party_seller"]
     assert {
-        "tier_not_bulk_eligible",
         "ai_engine_tier_disagreement",
         "ai_conflict_present",
-        "known_third_party_seller",
-    }.issubset(rejected["reason_codes"])
+    }.issubset(rejected["warning_codes"])
+
+    administrator_approvable = _bulk_eligible_case()
+    administrator_approvable["ai_draft"]["output_document"]["result"]["conflicts"] = [
+        "Package count is unresolved."
+    ]
+    administrator_approvable["ai_draft"]["output_document"]["result"]["attribute_proposals"] = [
+        {
+            "attribute": "package_count",
+            "value": "1",
+            "confidence": 0.6,
+            "evidence_source": "structured",
+            "visible_text": None,
+            "source_image_url": None,
+        }
+    ]
+
+    warned = _bulk_ai_certification_eligibility(administrator_approvable)
+
+    assert warned["eligible"] is True
+    assert warned["reason_codes"] == []
+    assert warned["warning_codes"] == [
+        "ai_conflict_present",
+        "low_confidence_ai_attribute",
+    ]
 
 
 def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> None:
@@ -788,6 +812,33 @@ def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> No
     assert preview["automatically_changes_reporting"] is False
 
 
+def test_bulk_ai_preview_surfaces_advisory_warnings_without_blocking_confirmation() -> None:
+    warned = _bulk_eligible_case()
+    warned["ai_draft"]["output_document"]["result"]["conflicts"] = [
+        "A governed attribute needs administrator judgment."
+    ]
+
+    preview = _bulk_preview_document(
+        queue_id="queue-one",
+        queue_version="1.0.0",
+        snapshots=[warned],
+    )
+
+    assert preview["eligible_case_count"] == 1
+    assert preview["excluded_case_count"] == 0
+    assert preview["eligible_cases"][0]["warnings"] == [
+        "The AI draft identifies one or more unresolved conflicts."
+    ]
+    assert preview["warning_summary"] == [
+        {
+            "warning_code": "ai_conflict_present",
+            "warning": "The AI draft identifies one or more unresolved conflicts.",
+            "case_count": 1,
+        }
+    ]
+    assert len(preview["confirmation_checksum"]) == 64
+
+
 def test_bulk_ai_preview_assesses_queue_wide_candidates_but_bounds_confirmation() -> None:
     snapshots = []
     for index in range(55):
@@ -811,7 +862,7 @@ def test_bulk_ai_preview_assesses_queue_wide_candidates_but_bounds_confirmation(
         {
             "reason_code": "bulk_batch_limit",
             "reason": (
-                "The relationship passed the guardrails but is deferred to the next "
+                "The relationship passed the required gates but is deferred to the next "
                 "50-case confirmation batch."
             ),
             "case_count": 5,
@@ -844,6 +895,14 @@ async def test_bulk_ai_certification_service_requires_unique_cases_and_human_ide
             "queue-1",
             AIBulkCertificationPreviewRequest(case_ids=["case-1", "case-1"]),
         )
+
+
+def test_postgres_bulk_certification_copies_warnings_and_complete_ai_rationale() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.commit_ai_bulk_certification)
+
+    assert "Advisory warnings acknowledged:" in source
+    assert "AI evidence rationale:" in source
+    assert "candidate['ai_rationale']" in source
 
 
 async def test_ai_review_batch_route_requires_explicit_enablement_and_remains_advisory(

@@ -1,6 +1,7 @@
 # Phase 13.9 — AI Review Recovery and Queue-Wide Certification
 
-Status: implemented; production verification pending
+Status: retry recovery deployed and production-verified; bulk policy v1.1.0 implemented with
+production verification pending
 
 ## Why this change exists
 
@@ -51,16 +52,24 @@ relationships into one confirmation, and marks additional passing relationships 
 next bounded batch. This prevents 50 ineligible relationships from hiding eligible work later in the
 queue.
 
-The server-owned v1.0.0 guardrails are unchanged. The administrator still reviews a checksum-bound
-eligible set and explicit exclusion reasons before committing. Every committed relationship:
+The server-owned policy is now v1.1.0. The administrator still reviews a checksum-bound set and
+explicit exclusions before committing. Valid pending affirmative AI recommendations across all five
+supported match tiers can be confirmed by the administrator. Deterministic tier disagreement,
+incomplete critical evidence, engine blockers, Product Pack conflicts, AI conflicts, and confidence
+limits remain visible advisory warnings; they do not silently override an administrator's explicit
+decision. A final decision, invalid or non-affirmative AI draft, missing supported tier, known
+third-party seller, or missing immutable evidence remains a blocking exclusion. Every committed
+relationship:
 
 - creates the normal final human review submission;
 - records the administrator identity;
-- copies the complete AI evidence rationale into the final rationale/comment;
+- copies all advisory warnings and the complete AI evidence rationale into the final
+  rationale/comment;
 - links to the immutable bulk action and AI output checksum; and
 - remains final until flagged without automatically rerunning reporting.
 
 If more than 50 recommendations are pending, the administrator confirms successive bounded batches.
+This remains human bulk certification, not autonomous AI approval.
 
 ## Production evidence collected before the fix
 
@@ -86,5 +95,17 @@ No live match was approved, rejected, flagged, or reopened during this investiga
 - TypeScript typecheck and lint cover the queue-wide discovery path.
 - Playwright covers an affirmative recommendation located beyond a visible page of terminal
   failures, previewing exclusions, explicit commit, rationale visibility, and plain-text failures.
-- Production verification must confirm the new prompt/schema deployment, one bounded AI retry, and
-  the protected queue-wide preview without accepting a live match.
+- Commit `fa22195` passed GitHub Actions run `31984408556`: 482 Python tests, 57 web tests, 11
+  browser tests, migration upgrade/downgrade/re-upgrade, and all four service container builds.
+- Railway deployed that exact commit to web, API, worker, and scheduler. Production reported database
+  revision `0036_ai_review_recovery` and governed prompt version `1.0.2`.
+- One bounded Ground Beef retry (`case-05c67945fcf7941852860142`) completed successfully in 11.6
+  seconds under prompt 1.0.2. It used 10,427 input tokens and 844 output tokens at an estimated
+  cost of $0.0387. No human submission or adjudication was created.
+- A protected queue-wide preview scanned all 45 pending Ground Beef cases. Before policy v1.1.0,
+  the only completed affirmative recommendation was excluded solely for advisory conflict and
+  confidence conditions, which explained the user's no-update symptom. Production also confirmed
+  that the prior bulk submission contains the complete AI rationale in a 743-character comment.
+- Policy v1.1.0 requires a post-deployment preview proving that the same affirmative recommendation
+  is confirmable with both advisory warnings displayed. That verification must remain preview-only;
+  no live match may be accepted by the deployment check.

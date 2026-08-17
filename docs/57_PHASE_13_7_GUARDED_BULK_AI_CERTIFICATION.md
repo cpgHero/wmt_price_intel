@@ -1,5 +1,12 @@
 # Phase 13.7 — Guarded Bulk AI Match Certification
 
+> Historical policy note: this document records the original v1.0.0 corroborated-only policy.
+> Phase 13.9 amended the administrator-confirmed workflow to policy v1.1.0. A valid pending
+> affirmative AI recommendation is now confirmable across every supported match tier; deterministic
+> disagreement, incomplete evidence, conflicts, and confidence limits remain visible advisory
+> warnings and are copied into the audit comment. Final decisions, invalid/non-affirmative drafts,
+> known third-party sellers, and missing immutable evidence remain blocking exclusions.
+
 ## Outcome
 
 Match Certification can turn a bounded set of corroborated AI match recommendations into final

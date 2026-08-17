@@ -651,8 +651,8 @@ export const platformDocumentation: PlatformDocumentation = {
         {
           kind: "callout",
           tone: "success",
-          title: "Guarded bulk acceptance",
-          text: "An administrator may assess completed affirmative AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 eligible cases into each confirmation and defers additional passing cases to the next batch. The server includes only pending exact-item, exact-specification, or equivalent-product recommendations when AI and the deterministic engine agree on tier, critical evidence coverage is 100%, there are no AI or Product Pack hard-blocker conflicts, every AI-proposed attribute is at least 85% confident, immutable evidence references exist, and no listing has a known third-party seller exclusion. The preview names every exclusion and binds the eligible case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including the complete AI evidence rationale in the reviewer comment. No report reanalysis runs automatically; decisions remain final until flagged. Comparable-substitute and custom tiers always require individual review.",
+          title: "Administrator-confirmed bulk acceptance",
+          text: "An administrator may assess completed affirmative AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. A valid pending affirmative recommendation across any supported match tier can be confirmed. Deterministic tier disagreement, incomplete critical evidence, engine or Product Pack conflicts, AI conflicts, and confidence limits remain visible advisory warnings; they do not silently block an administrator's explicit decision. A final decision, invalid or non-affirmative AI draft, missing supported tier, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. No report reanalysis runs automatically; decisions remain final until flagged.",
         },
         {
           kind: "callout",
@@ -1293,8 +1293,14 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-08-16",
               "Implemented; production verification pending",
+              "Bulk certification policy v1.1.0 allows administrators to confirm every valid affirmative AI match recommendation.",
+              "Deterministic disagreement, incomplete evidence, conflicts, and confidence limits are displayed as advisory warnings and copied with the complete AI rationale into each final comment. Invalid/non-affirmative drafts, known third-party sellers, missing evidence, and existing final decisions remain blocked.",
+            ],
+            [
+              "2026-08-16",
+              "Deployed & verified",
               "Matching v2 AI review gained request-bound image evidence and queue-wide bulk discovery.",
-              "Retries can no longer repeat the known uncited-image invalid state, the fourth bounded retry can remediate legacy terminal lineages, and bulk assessment scans the full pending queue/current retailer filter. Final submissions copy the complete AI rationale into reviewer comments; no match or report changes automatically.",
+              "Retries can no longer repeat the known uncited-image invalid state, the fourth bounded retry can remediate legacy terminal lineages, and bulk assessment scans the full pending queue/current retailer filter. CI run 31984408556 passed 482 Python tests, 57 web tests, 11 browser tests, reversible migrations, and all container builds. One live Ground Beef retry succeeded under prompt 1.0.2 in 11.6 seconds for an estimated $0.0387; no human decision was created.",
             ],
             [
               "2026-08-16",

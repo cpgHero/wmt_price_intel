@@ -109,6 +109,8 @@ interface AIBulkCertificationCandidate {
   eligible: boolean;
   reason_codes: string[];
   reasons: string[];
+  warning_codes: string[];
+  warnings: string[];
   recommended_tier: string | null;
   critical_coverage: number;
   engine_status: string | null;
@@ -144,6 +146,11 @@ interface AIBulkCertificationPreview {
   exclusion_summary: Array<{
     reason_code: string;
     reason: string;
+    case_count: number;
+  }>;
+  warning_summary: Array<{
+    warning_code: string;
+    warning: string;
     case_count: number;
   }>;
   confirmation_checksum: string | null;
@@ -1392,14 +1399,14 @@ export function MatchingV2ReviewAdmin() {
                 <div>
                   <small>Guarded human certification</small>
                   <h3 id="cert-bulk-certification-title">
-                    Bulk accept corroborated AI match recommendations
+                    Bulk accept affirmative AI match recommendations
                   </h3>
                   <p>
                     The app finds completed affirmative AI recommendations
                     across the pending queue and current retailer filter, then
-                    the server screens up to 50 at a time. Only matches that
-                    agree with the deterministic engine and pass every evidence
-                    guardrail can reach the confirmation step.
+                    the server prepares up to 50 at a time. True eligibility
+                    failures stay blocked; evidence and confidence concerns are
+                    shown as warnings for your explicit decision.
                   </p>
                 </div>
                 <button
@@ -1416,17 +1423,19 @@ export function MatchingV2ReviewAdmin() {
                 className="cert-bulk-guardrails"
                 aria-label="Bulk acceptance guardrails"
               >
-                <span>AI + engine tier agreement</span>
-                <span>100% critical evidence</span>
-                <span>No unresolved conflicts</span>
+                <span>Affirmative AI recommendation</span>
+                <span>Valid governed draft</span>
                 <span>No known third-party seller</span>
-                <span>Exact or equivalent tiers only</span>
+                <span>Immutable source evidence</span>
+                <span>Administrator confirmation</span>
               </div>
               <p className="cert-bulk-boundary">
-                Comparable-substitute and custom matches always remain
-                individual-review decisions. A bulk approval is recorded under
-                your reviewer identity, is final until flagged, and does not
-                trigger reanalysis automatically.
+                Engine disagreement, incomplete deterministic evidence, AI
+                conflicts, and confidence limits remain visible as advisory
+                warnings. Your explicit bulk approval accepts each displayed AI
+                recommendation, is recorded under your reviewer identity, is
+                final until flagged, and does not trigger reanalysis
+                automatically.
               </p>
               {bulkCertificationPreview ? (
                 <div
@@ -1473,6 +1482,13 @@ export function MatchingV2ReviewAdmin() {
                                 {label(candidate.engine_status)}
                               </span>
                               <p>{candidate.ai_rationale}</p>
+                              {candidate.warnings.length ? (
+                                <ul className="cert-bulk-warnings">
+                                  {candidate.warnings.map((warning) => (
+                                    <li key={warning}>{warning}</li>
+                                  ))}
+                                </ul>
+                              ) : null}
                             </div>
                           </article>
                         ),
@@ -1480,8 +1496,9 @@ export function MatchingV2ReviewAdmin() {
                     </div>
                   ) : (
                     <p className="cert-bulk-empty">
-                      No recommendation passed every bulk-certification
-                      guardrail. Review these cases individually.
+                      No affirmative recommendation passed the required
+                      certification gates. Review the blocking exclusions before
+                      proceeding.
                     </p>
                   )}
                   {bulkCertificationPreview.exclusion_summary.length ? (
@@ -1498,6 +1515,22 @@ export function MatchingV2ReviewAdmin() {
                           (reason) => (
                             <li key={reason.reason_code}>
                               <b>{reason.case_count}</b> {reason.reason}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </details>
+                  ) : null}
+                  {bulkCertificationPreview.warning_summary.length ? (
+                    <details className="cert-bulk-exclusions" open>
+                      <summary>
+                        Advisory warnings on accepted recommendations
+                      </summary>
+                      <ul>
+                        {bulkCertificationPreview.warning_summary.map(
+                          (warning) => (
+                            <li key={warning.warning_code}>
+                              <b>{warning.case_count}</b> {warning.warning}
                             </li>
                           ),
                         )}

@@ -329,7 +329,7 @@ test("retries terminal AI failures as confirmed linked individual or bulk work",
   });
 });
 
-test("previews guardrail exclusions before a human bulk-certifies AI matches", async ({
+test("previews advisory warnings and exclusions before bulk certification", async ({
   page,
 }) => {
   let commitPayload: Record<string, unknown> | null = null;
@@ -377,12 +377,14 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
           queue_version: queue.version,
           policy: {
             id: "guarded_ai_match_bulk_accept",
-            version: "1.0.0",
+            version: "1.1.0",
             max_cases: 50,
             allowed_tiers: [
               "exact_item",
               "exact_specification",
               "equivalent_product",
+              "comparable_substitute",
+              "custom_approved",
             ],
             minimum_critical_coverage: 1,
             minimum_ai_attribute_confidence: 0.85,
@@ -399,6 +401,10 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
               eligible: true,
               reason_codes: [],
               reasons: [],
+              warning_codes: ["ai_conflict_present"],
+              warnings: [
+                "The AI draft identifies one or more unresolved conflicts.",
+              ],
               recommended_tier: "exact_specification",
               critical_coverage: 1,
               engine_status: "proposed",
@@ -425,8 +431,16 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
           excluded_cases: [],
           exclusion_summary: [
             {
-              reason_code: "ai_conflict_present",
+              reason_code: "known_third_party_seller",
               reason:
+                "A known third-party marketplace seller makes the listing ineligible.",
+              case_count: 1,
+            },
+          ],
+          warning_summary: [
+            {
+              warning_code: "ai_conflict_present",
+              warning:
                 "The AI draft identifies one or more unresolved conflicts.",
               case_count: 1,
             },
@@ -476,12 +490,14 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
         },
         ai_bulk_certification_policy: {
           id: "guarded_ai_match_bulk_accept",
-          version: "1.0.0",
+          version: "1.1.0",
           max_cases: 50,
           allowed_tiers: [
             "exact_item",
             "exact_specification",
             "equivalent_product",
+            "comparable_substitute",
+            "custom_approved",
           ],
           minimum_critical_coverage: 1,
           minimum_ai_attribute_confidence: 0.85,
@@ -515,7 +531,7 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
     .getByRole("textbox", { name: "Current reviewer identity" })
     .fill("reviewer@cpghero.com");
   const bulkSection = page.getByRole("region", {
-    name: "Bulk accept corroborated AI match recommendations",
+    name: "Bulk accept affirmative AI match recommendations",
   });
   await bulkSection
     .getByRole("button", { name: "Assess queue-wide recommendations" })
@@ -526,6 +542,9 @@ test("previews guardrail exclusions before a human bulk-certifies AI matches", a
   await expect(preview).toContainText("1 eligible · 1 excluded");
   await expect(preview).toContainText("Walmart milk 4");
   await preview.getByText(/Why 1 case was excluded/).click();
+  await expect(preview).toContainText(
+    "A known third-party marketplace seller makes the listing ineligible.",
+  );
   await expect(preview).toContainText(
     "The AI draft identifies one or more unresolved conflicts.",
   );
@@ -609,7 +628,7 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
           queue_version: queue.version,
           policy: {
             id: "guarded_ai_match_bulk_accept",
-            version: "1.0.0",
+            version: "1.1.0",
             max_cases: 50,
             allowed_tiers: ["exact_specification"],
             minimum_critical_coverage: 1,
@@ -627,6 +646,8 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
               eligible: true,
               reason_codes: [],
               reasons: [],
+              warning_codes: [],
+              warnings: [],
               recommended_tier: "exact_specification",
               critical_coverage: 1,
               engine_status: "proposed",
@@ -652,6 +673,7 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
           ],
           excluded_cases: [],
           exclusion_summary: [],
+          warning_summary: [],
           confirmation_checksum: "a".repeat(64),
           human_confirmation_required: true,
           final_until_flagged: true,
@@ -694,7 +716,7 @@ test("discovers affirmative AI recommendations beyond the visible page", async (
         },
         ai_bulk_certification_policy: {
           id: "guarded_ai_match_bulk_accept",
-          version: "1.0.0",
+          version: "1.1.0",
           max_cases: 50,
           allowed_tiers: ["exact_specification"],
           minimum_critical_coverage: 1,

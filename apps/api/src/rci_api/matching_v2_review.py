@@ -226,7 +226,7 @@ class AIBulkCertificationCommitRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_match_bulk_accept",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "approve_ai_matches",
@@ -234,14 +234,31 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
         "exact_item",
         "exact_specification",
         "equivalent_product",
+        "comparable_substitute",
+        "custom_approved",
     ],
     "minimum_critical_coverage": 1.0,
     "minimum_ai_attribute_confidence": 0.85,
-    "require_ai_engine_tier_agreement": True,
-    "require_zero_ai_conflicts": True,
-    "require_no_hard_blocker_conflicts": True,
+    "require_ai_engine_tier_agreement": False,
+    "require_zero_ai_conflicts": False,
+    "require_no_hard_blocker_conflicts": False,
+    "warn_on_ai_engine_tier_disagreement": True,
+    "warn_on_ai_conflicts": True,
+    "warn_on_hard_blocker_conflicts": True,
     "require_no_known_third_party_seller": True,
+    "advisory_warnings_do_not_block_human_confirmation": True,
     "final_decision": "final_until_flagged",
+}
+
+
+_AI_BULK_WARNING_CODES = {
+    "engine_tier_missing",
+    "ai_engine_tier_disagreement",
+    "engine_proposal_blocked",
+    "critical_evidence_incomplete",
+    "ai_conflict_present",
+    "hard_blocker_conflict",
+    "low_confidence_ai_attribute",
 }
 
 
@@ -250,7 +267,7 @@ _AI_BULK_REASON_LABELS = {
     "ai_draft_not_ready": "The latest AI draft is not successfully completed.",
     "ai_draft_invalid": "The completed AI draft does not contain valid governed output.",
     "ai_not_comparable": "The AI recommendation is not an affirmative comparable match.",
-    "tier_not_bulk_eligible": "The recommended tier requires individual review.",
+    "tier_not_bulk_eligible": "The affirmative recommendation has no supported match tier.",
     "engine_tier_missing": "The deterministic engine did not propose a match tier.",
     "ai_engine_tier_disagreement": "The AI and deterministic engine propose different tiers.",
     "engine_proposal_blocked": "The deterministic engine marked the pair ineligible or rejected.",
@@ -263,7 +280,7 @@ _AI_BULK_REASON_LABELS = {
     ),
     "evidence_refs_missing": "The case has no immutable source-evidence references.",
     "bulk_batch_limit": (
-        "The relationship passed the guardrails but is deferred to the next 50-case "
+        "The relationship passed the required gates but is deferred to the next 50-case "
         "confirmation batch."
     ),
 }
@@ -393,11 +410,15 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
         reason_codes.append("evidence_refs_missing")
 
     reason_codes = list(dict.fromkeys(reason_codes))
+    warning_codes = [code for code in reason_codes if code in _AI_BULK_WARNING_CODES]
+    blocking_reason_codes = [code for code in reason_codes if code not in _AI_BULK_WARNING_CODES]
     return {
         "case_id": str(case.get("case_id") or ""),
-        "eligible": not reason_codes,
-        "reason_codes": reason_codes,
-        "reasons": [_AI_BULK_REASON_LABELS[code] for code in reason_codes],
+        "eligible": not blocking_reason_codes,
+        "reason_codes": blocking_reason_codes,
+        "reasons": [_AI_BULK_REASON_LABELS[code] for code in blocking_reason_codes],
+        "warning_codes": warning_codes,
+        "warnings": [_AI_BULK_REASON_LABELS[code] for code in warning_codes],
         "recommended_tier": ai_tier or None,
         "critical_coverage": critical_coverage,
         "engine_status": engine_status or None,
@@ -479,6 +500,10 @@ def _bulk_preview_document(
     for candidate in excluded:
         for reason_code in candidate["reason_codes"]:
             reason_counts[reason_code] += 1
+    warning_counts: dict[str, int] = defaultdict(int)
+    for candidate in eligible:
+        for warning_code in candidate["warning_codes"]:
+            warning_counts[warning_code] += 1
     return {
         "schema_version": "1.0.0-ai-bulk-certification-preview",
         "queue_id": queue_id,
@@ -496,6 +521,14 @@ def _bulk_preview_document(
                 "case_count": count,
             }
             for reason_code, count in sorted(reason_counts.items())
+        ],
+        "warning_summary": [
+            {
+                "warning_code": warning_code,
+                "warning": _AI_BULK_REASON_LABELS[warning_code],
+                "case_count": count,
+            }
+            for warning_code, count in sorted(warning_counts.items())
         ],
         "confirmation_checksum": (
             _bulk_confirmation_checksum(
@@ -1539,8 +1572,13 @@ class PostgresMatchingV2ReviewRepository:
                 )
                 rationale = (
                     "Administrator bulk-certified this AI recommendation after the "
-                    f"{policy['id']} v{policy['version']} preview passed every guardrail. "
-                    f"AI evidence rationale: {candidate['ai_rationale']}"
+                    f"{policy['id']} v{policy['version']} preview passed every required gate. "
+                    + (
+                        "Advisory warnings acknowledged: " + "; ".join(candidate["warnings"]) + ". "
+                        if candidate["warnings"]
+                        else ""
+                    )
+                    + f"AI evidence rationale: {candidate['ai_rationale']}"
                 )
                 submission_checksum = _checksum(
                     {
