@@ -1292,9 +1292,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-16",
-              "Implemented; deployment verification pending",
+              "Deployed & verified",
               "Bulk certification policy v1.2.0 adds guarded acceptance of not-comparable AI recommendations.",
-              "A checksum-bound batch may contain comparable and not-comparable outcomes, each persisted as its own final verdict with the complete AI rationale and advisory warnings. Comparable decisions require a governed tier; not-comparable decisions write no tier; insufficient-evidence proposals remain blocked. The completion result reports both outcome counts and reporting still does not rerun automatically.",
+              "A checksum-bound batch may contain comparable and not-comparable outcomes, each persisted as its own final verdict with the complete AI rationale and advisory warnings. Comparable decisions require a governed tier; not-comparable decisions write no tier; insufficient-evidence proposals remain blocked. CI run 31988362130 passed 487 Python tests, 57 web tests, 11 browser tests, reversible migrations, and all container builds. Production reached migration 0037_bulk_ai_verdicts; all five pending Ground Beef not-comparable recommendations produced an eligible checksum-bound preview while the one insufficient-evidence proposal remained non-final. No live decision was changed.",
             ],
             [
               "2026-08-16",

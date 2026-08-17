@@ -1,6 +1,6 @@
 # Phase 13.10 — Mixed-Verdict Bulk AI Certification
 
-Status: implemented; deployment verification pending
+Status: deployed and production-verified
 
 ## Outcome
 
@@ -68,3 +68,21 @@ all resulting decisions remain final until flagged.
   and queue-wide discovery of a not-comparable recommendation beyond the visible page;
 - web typecheck, lint, unit tests, Python lint/tests, reversible migrations, container builds, and
   preview-only production verification before deployment is marked complete.
+
+## Production verification
+
+- Commit `fd5a48a` passed GitHub Actions run `31988362130`: 487 Python tests, 57 web unit
+  tests, 11 browser tests, contract/format/lint/type/build gates, migration
+  upgrade/downgrade/re-upgrade, and all four service container builds.
+- Railway deployed the compatible API and web revisions successfully. The API reports ready with
+  Postgres available, and production Alembic revision `0037_bulk_ai_verdicts` is at head.
+- The live Ground Beef pending queue exposed policy v1.2.0 with both allowed final verdicts. It
+  contained five completed `not_comparable` recommendations and one `insufficient_evidence`
+  recommendation.
+- A protected, preview-only request submitted the five not-comparable case IDs. All five were
+  eligible, none was excluded, every preview row preserved the `not_comparable` verdict, and the
+  server returned a confirmation checksum. Conflict and Product Pack hard-blocker warnings appeared
+  on all five; four also carried a lower-confidence attribute warning.
+- The insufficient-evidence recommendation was not included in the finalizable set. The deployment
+  check did not call the commit endpoint and did not accept, reject, flag, reopen, or otherwise
+  change any live match decision.
