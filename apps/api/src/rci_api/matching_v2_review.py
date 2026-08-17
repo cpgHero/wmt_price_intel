@@ -2987,12 +2987,10 @@ class PostgresMatchingV2ReviewRepository:
             )
             if source is None:
                 raise KeyError(f"source analysis {source_analysis_id!r} was not found")
-            expected_pack = (str(queue["product_pack_id"]), str(queue["product_pack_version"]))
-            source_pack = (str(source["product_pack_id"]), str(source["product_pack_version"]))
-            if source_pack != expected_pack:
+            if str(source["product_pack_id"]) != str(queue["product_pack_id"]):
                 raise ValueError(
-                    "source analysis Product Pack does not match the certified review queue: "
-                    f"{source_pack!r} != {expected_pack!r}"
+                    "source analysis category does not match the certified review queue: "
+                    f"{source['product_pack_id']!r} != {queue['product_pack_id']!r}"
                 )
             coverage = {
                 "authority": "matching_v2_certified_gold_set",
@@ -3062,6 +3060,8 @@ class PostgresMatchingV2ReviewRepository:
                         ),
                         {
                             **dict(source),
+                            "product_pack_id": queue["product_pack_id"],
+                            "product_pack_version": queue["product_pack_version"],
                             "source_result_id": source["result_id"],
                             "release_id": release["id"],
                         },

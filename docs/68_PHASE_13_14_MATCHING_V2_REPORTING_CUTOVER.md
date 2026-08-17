@@ -51,7 +51,7 @@ The operation is idempotent for the same review queue, gold-set checksum, and so
 - Gold-set schema validation passes.
 - Certified-only matching test proves an eligible automatic pair is omitted.
 - Product IDs remain opaque strings.
-- Source Product Pack ID/version matches the review queue.
+- Source category ID matches the review queue; the replay intentionally advances to the exact Product Pack version certified by the queue.
 - Legacy and Matching v2 authorities cannot be combined.
 - AnalysisResult contract validation passes.
 - Published Egg metrics reconcile to immutable match artifacts and the certified release.
