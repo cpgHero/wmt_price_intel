@@ -73,6 +73,44 @@ Seller filtering cannot safely remove a never-enriched item from the estimate be
 PDP fact. Known cached non-first-party sellers remain excluded downstream by Retailer Pack policy;
 unknown sellers stay unverified until evidence exists.
 
+## Production verification — 2026-08-17
+
+Commit `7ecfd56` passed GitHub Actions run `32043978815`, including the full Python,
+TypeScript/browser, migration, contract, build, and four-container matrix. Railway then deployed the
+same release successfully to web, API, worker, and scheduler.
+
+The protected production command was executed twice without `--confirm-paid-calls`. Both runs
+returned `status=estimate` and `paid_calls_enqueued=0`. The compact reconciliation reported:
+
+- 914 Product Pack-admitted Egg retailer products/offer observations.
+- 871 request-valid unique retailer products.
+- 527 exact fresh-request cache hits.
+- 344 remaining Product Details calls requiring 728 credits, or **$1.456** at $0.002 per credit.
+- 43 invalid candidates, all Kroger, blocked before execution by the disputed-path safeguard.
+- Eight current candidate product relationships; PDP readiness intentionally covers every admitted
+  analysis product, not only already-resolved relationships.
+
+The remaining-credit distribution is:
+
+| Retailer | Calls/credits represented by the contract | Credits |
+|---|---:|---:|
+| Albertsons | 138 calls at 2 credits | 276 |
+| ALDI | 1 call at 1 credit | 1 |
+| Amazon Same Day | 4 calls at 2 credits | 8 |
+| Giant Eagle | 56 calls at 2 credits | 112 |
+| Meijer | 26 calls at 2 credits | 52 |
+| Sam's Club | 21 calls at 2 credits | 42 |
+| ShopRite | 49 calls at 1 credit | 49 |
+| Target | 123 calls at 1 credit | 123 |
+| Trader Joe's | 3 calls at 1 credit | 3 |
+| Walmart | 22 calls at 1 credit | 22 |
+| Wegmans | 20 calls at 2 credits | 40 |
+| **Total** | **344 calls** | **728** |
+
+H-E-B, Safeway, and Whole Foods require no new call under the current exact-cache identity. Seller
+policy remains enforced whenever PDP seller evidence is known; this estimate cannot pre-filter an
+unknown seller without first obtaining its PDP evidence.
+
 ## Acceptance tests
 
 - Every Egg retailer resolves to a Product Details endpoint and Retailer Pack.

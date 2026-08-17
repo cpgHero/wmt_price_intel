@@ -1313,9 +1313,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-17",
-              "Implemented; production verification pending",
+              "Deployed and production-verified",
               "The complete MetricsCart catalog is normalized and all 14 Egg retailers have staged PDP contracts.",
-              "The repository records 217 active endpoint contracts without copying provider response bodies, adds eight Retailer Packs, supports generic request defaults, preserves unchanged cache identities, reports fresh cache hits in dry-run estimates, and blocks the conflicting Kroger path before paid execution. No provider calls were made.",
+              "The repository records 217 active endpoint contracts without copying provider response bodies, adds eight Retailer Packs, supports generic request defaults, preserves unchanged cache identities, reports fresh cache hits in dry-run estimates, and blocks the conflicting Kroger path before paid execution. GitHub Actions run 32043978815 and all four Railway services passed. The production Egg dry-run found 914 admitted products, 871 valid requests, 527 fresh cache hits, 344 remaining calls (728 credits / $1.456), and 43 blocked Kroger candidates. No provider calls were made.",
             ],
             [
               "2026-08-17",
