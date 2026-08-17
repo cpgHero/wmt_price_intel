@@ -83,10 +83,10 @@ const lastVerified = "August 17, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.4",
+  version: "1.3.5",
   lastVerified,
   baseline:
-    "Production implementation through verified Kroger PDP contract Phase 13.13.2",
+    "Production implementation through completed Egg PDP collection Phase 13.13.2",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -518,6 +518,12 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "information",
           title: "Kroger PDP contract is verified",
           text: "A controlled August 17 preflight used an Egg product observed at the supplied store and ZIP and returned HTTP 200 from /kroger/pdp/zipcode/. The provider-catalog route is enabled; the prior /mc route is retired.",
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Egg PDP collection is complete",
+          text: "Production run 11d33dad-0658-457d-8bdd-b72d2f45a212 completed with 269 new normalized PDPs, 117 billable 404s, one non-billable terminal 500, and 769 of 771 planned credits. Together with 527 fresh cache hits, 796 of 914 admitted Egg products have reusable normalized PDP evidence. All 269 new successes include seller evidence; 404-heavy retailers require contract or current-availability review before recollection.",
         },
         {
           kind: "callout",
@@ -1313,7 +1319,13 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-17",
-              "Verified; deployment pending",
+              "Deployed and production-verified",
+              "The bounded Egg PDP collection completed with immutable-response recovery and an audited credit ledger.",
+              "The exact plan admitted 914 products, reused 527 fresh cache entries, and queued 387 calls under a 771-credit ceiling. A downstream path-contract defect was caught after immutable Kroger responses were stored; paid processing was paused, the snapshot schema was corrected, eight HTTP 200 responses and one HTTP 429 response were recovered without duplicate provider calls, and future raw objects now persist HTTP status metadata. The terminal run produced 269 HTTP 200s, 117 billable 404s, one non-billable HTTP 500, and 769 credits ($1.538). Including the one-credit preflight, phase spend was $1.540. GitHub Actions run 32049626190 and the Railway worker deployment passed.",
+            ],
+            [
+              "2026-08-17",
+              "Deployed and production-verified",
               "Kroger Product Details contract passed its controlled paid preflight.",
               "One observed Egg product at ZIP 72801 / store 02500624 returned HTTP 200 from /kroger/pdp/zipcode/. The call consumed one credit ($0.002), exposed no credential, and established the catalog route as authoritative; the prior /mc route is retired.",
             ],
