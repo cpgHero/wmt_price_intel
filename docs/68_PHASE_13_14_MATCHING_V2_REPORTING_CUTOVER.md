@@ -30,6 +30,13 @@ An administrator can explicitly snapshot the current certified Matching v2 gold 
 
 Only `certified_comparable` labels can produce price observations. A small reported population is therefore an honest reflection of current certification coverage, not permission to fill gaps automatically.
 
+Certified many-to-one relationships remain separate product-location evidence rows. A competitor
+product may therefore support more than one certified benchmark relationship where the benchmark
+products' observed footprints overlap. This does not create an automatic match or copy one price
+to an unobserved location: each row still requires positive Search evidence for both products in
+the applicable ZIP/store context. Global and explicit-location rules retain strict one-to-one
+conflict validation.
+
 ## API
 
 `POST /api/v1/matching-v2/review-queues/{queue_id}/gold-set/replays`

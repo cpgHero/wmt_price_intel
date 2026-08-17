@@ -445,6 +445,50 @@ def test_scoped_relationships_fail_closed_when_primary_scopes_overlap() -> None:
         )
 
 
+def test_certified_product_footprints_allow_many_to_one_relationship_evidence() -> None:
+    offers, engine = _classified()
+    rules = [
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-1",
+            "a-1",
+            "confirmed",
+            scope_mode="observed_benchmark_product_footprint",
+        ),
+        ProductMatchRule(
+            "aldi_us",
+            "strict",
+            "w-o",
+            "a-1",
+            "confirmed",
+            scope_mode="observed_benchmark_product_footprint",
+        ),
+    ]
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+        rules=rules,
+        allow_automatic=False,
+    )
+    resolution = resolve_one_to_one_relationships(
+        offers,
+        matches,
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert len(resolution.matches) == 2
+    assert {
+        (str(row["benchmark_product_id"]), str(row["competitor_product_id"]))
+        for row in resolution.relationships
+    } == {("w-1", "a-1"), ("w-o", "a-1")}
+    assert all(row["status"] == "confirmed" for row in resolution.relationships)
+
+
 def test_product_footprint_uses_positive_search_observations_at_store_grain() -> None:
     offers, _engine = _classified()
 

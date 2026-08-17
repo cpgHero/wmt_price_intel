@@ -290,6 +290,13 @@ def resolve_one_to_one_relationships(
                     for row in pair_rows[right]
                 }
                 if "global" in left_contexts | right_contexts or left_contexts & right_contexts:
+                    footprint_scoped = all(
+                        str(row.attributes.get("_scope_mode") or "global")
+                        == "observed_benchmark_product_footprint"
+                        for row in (*pair_rows[left], *pair_rows[right])
+                    )
+                    if footprint_scoped:
+                        continue
                     raise ValueError(
                         "confirmed product relationships must be one-to-one within each context"
                     )
@@ -822,6 +829,9 @@ class ComparisonEngine:
                 if not scopes_overlap:
                     continue
                 if (
+                    left.scope_mode != "observed_benchmark_product_footprint"
+                    or right.scope_mode != "observed_benchmark_product_footprint"
+                ) and (
                     left.benchmark_product_id == right.benchmark_product_id
                     or left.competitor_product_id == right.competitor_product_id
                 ):

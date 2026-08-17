@@ -1328,7 +1328,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-17",
               "Implemented; production replay pending",
               "Matching v2 certified gold sets gained an explicit governed reporting cutover.",
-              "A checksum-bound release can queue an idempotent replay from an existing analysis. The worker uses certified comparable relationships only, disables automatic fallback, scopes regional relationships to observed benchmark-product footprints, excludes unresolved cases, and publishes certification coverage in report provenance and quality metrics.",
+              "A checksum-bound release can queue an idempotent replay from an existing analysis. The worker uses certified comparable relationships only, disables automatic fallback, scopes regional and many-to-one relationships to observed benchmark-product footprints, excludes unresolved cases, and publishes certification coverage in report provenance and quality metrics. Certified footprint relationships may overlap, but every report row still requires positive Search evidence for both products in that ZIP/store context; global and explicit-location rules retain strict one-to-one conflict validation.",
             ],
             [
               "2026-08-17",
