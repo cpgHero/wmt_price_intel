@@ -112,7 +112,7 @@ interface AIBulkCertificationCandidate {
   reasons: string[];
   warning_codes: string[];
   warnings: string[];
-  recommended_verdict: "comparable" | "not_comparable";
+  recommended_verdict?: "comparable" | "not_comparable";
   recommended_tier: string | null;
   critical_coverage: number;
   engine_status: string | null;
@@ -333,6 +333,15 @@ function label(value: string | null | undefined) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function bulkCandidateVerdict(
+  candidate: AIBulkCertificationCandidate,
+): "comparable" | "not_comparable" {
+  return (
+    candidate.recommended_verdict ??
+    (candidate.recommended_tier ? "comparable" : "not_comparable")
+  );
 }
 
 function aiDraftStatusLabel(status: AIDraftStatus) {
@@ -1480,7 +1489,8 @@ export function MatchingV2ReviewAdmin() {
                                 product={candidate.benchmark_product}
                               />
                               <span>
-                                {candidate.recommended_verdict === "comparable"
+                                {bulkCandidateVerdict(candidate) ===
+                                "comparable"
                                   ? "matches"
                                   : "is not comparable with"}
                               </span>
@@ -1490,7 +1500,8 @@ export function MatchingV2ReviewAdmin() {
                             </div>
                             <div className="cert-bulk-evidence-summary">
                               <strong>
-                                {candidate.recommended_verdict === "comparable"
+                                {bulkCandidateVerdict(candidate) ===
+                                "comparable"
                                   ? label(candidate.recommended_tier)
                                   : "Not comparable"}
                               </strong>

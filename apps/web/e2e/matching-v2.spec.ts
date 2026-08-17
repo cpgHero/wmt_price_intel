@@ -413,7 +413,6 @@ test("bulk-certifies comparable and not-comparable AI recommendations", async ({
               warnings: [
                 "The AI draft identifies one or more unresolved conflicts.",
               ],
-              recommended_verdict: "comparable",
               recommended_tier: "exact_specification",
               critical_coverage: 1,
               engine_status: "proposed",
@@ -620,6 +619,7 @@ test("bulk-certifies comparable and not-comparable AI recommendations", async ({
   await expect(preview).toContainText("2 eligible · 1 excluded");
   await expect(preview).toContainText("Walmart milk 4");
   await expect(preview).toContainText("Walmart milk 5");
+  await expect(preview.getByText("matches", { exact: true })).toBeVisible();
   await expect(preview).toContainText("is not comparable with");
   await preview.getByText(/Why 1 case was excluded/).click();
   await expect(preview).toContainText(
