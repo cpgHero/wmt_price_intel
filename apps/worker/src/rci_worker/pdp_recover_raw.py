@@ -427,9 +427,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                     "recovered_from_immutable_raw": True,
                 },
             )
-            credits = (
-                item.job.credits_per_call if item.classification.billable else 0
-            )
+            credits = item.job.credits_per_call if item.classification.billable else 0
             await repository.record_fetch(
                 item.job,
                 worker_id,
@@ -445,9 +443,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                     should_retry=item.classification.should_retry,
                     retry_delay_seconds=item.classification.retry_delay_seconds,
                 ),
-                cache_ttl_seconds=int(
-                    os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")
-                ),
+                cache_ttl_seconds=int(os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")),
             )
             recovered += 1
             recovered_credits += credits

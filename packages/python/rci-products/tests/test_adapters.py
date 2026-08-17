@@ -430,9 +430,7 @@ def test_verified_kroger_contract_preserves_observed_request_context() -> None:
         store="02500624",
         fulfillment_type="pickup",
     )
-    request = MetricsCartProductDetailAdapter(endpoint).build_request(
-        context
-    )
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
 
     assert endpoint.paid_calls_enabled is True
     assert endpoint.contract_version == "2026-08-17"
