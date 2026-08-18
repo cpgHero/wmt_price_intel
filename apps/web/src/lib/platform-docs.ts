@@ -1331,9 +1331,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-18",
-              "Implemented and locally test-verified; production successor import pending",
+              "Deployed and production-verified",
               "Matching v2 review queues gained governed evidence-only succession with certified-decision carry-forward.",
-              "An administrator must name the exact predecessor version. Product Pack version and policy checksum must remain identical, every certified case must remain present, every prior primary image must remain in the successor image set, and case documents must be byte-equivalent after removing only image-reference fields. Eligible comparable and not-comparable submissions are copied into the successor with an immutable supersession link and evidence reference; replaced evidence or other changed fields fail the entire transaction. No paid AI call is triggered by import.",
+              "An administrator must name the exact predecessor version. Product Pack version and policy checksum must remain identical, every certified case must remain present, every prior primary image must remain in the successor image set, and case documents must be byte-equivalent after removing only image-reference fields. Egg queue 2.1.0 carried all 94 finalized decisions and left 132 pending. Its bounded gpt-5.6-terra remediation batch completed 132/132 with zero task failures for $8.2524; every draft remained insufficient evidence and no AI result was auto-certified.",
             ],
             [
               "2026-08-18",

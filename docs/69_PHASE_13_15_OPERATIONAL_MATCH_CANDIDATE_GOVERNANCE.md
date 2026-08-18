@@ -118,6 +118,19 @@ in `supersedes_submission_id`. Any changed governed attribute, pair identity, pr
 reference, or missing certified case aborts the complete import. The remaining successor cases stay
 pending for bounded AI or human remediation. Queue import itself never starts a paid AI call.
 
+Production queue `2.1.0` (checksum
+`b3f2ff97503d1796d4550603c09b3008def2785f04448fffce379d65b7f357a1`) passed the
+additive-evidence comparison for all 226 cases. The transactional import carried 90 comparable
+and four not-comparable submissions from `2.0.0`, each with an immutable supersession link, and
+left exactly 132 pending cases. Batch `4f5e9fbe-ea43-46d6-a8aa-493dd86c258f` then reviewed all
+132 pending cases with `gpt-5.6-terra`: 132 succeeded, zero entered needs-attention, and recorded
+cost was $8.2524. All 132 proposals remained `insufficient_evidence`; no human decision changed.
+Eighty-four cited unresolved organic evidence, one cited unresolved housing evidence, and 34
+cited shell-color differences; categories overlap. Two image-derived attributes were cited, and
+one case used the recorded structured-only fallback because its retailer image host was
+unavailable. This outcome is evidence about the current hard-blocker policy and source coverage,
+not permission to relax either automatically.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run
