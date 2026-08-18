@@ -86,7 +86,7 @@ export const platformDocumentation: PlatformDocumentation = {
   version: "1.3.8",
   lastVerified,
   baseline:
-    "Production implementation through Egg matching-policy 1.2.2 and operational certification queue 3.0.0",
+    "Production implementation through Egg matching-policy 1.2.2 and its certified governed replay",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1333,7 +1333,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-18",
               "Deployed and production-verified; certification pending",
               "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
-              "Product Pack and report blueprint 1.2.2 make a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Production queue 3.0.0 contains 185 pending cases, zero shell-color conflicts, 97 organic-unknown cases that remain reviewable, and one case blocked by unresolved housing. No prior decisions crossed the policy revision and no paid AI call started.",
+              "Product Pack and report blueprint 1.2.2 make a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. The platform owner completed exhaustive queue 3.0.0 with 183 comparable decisions, one not-comparable decision, and one intentionally flagged housing-unknown case. Immutable release de5fc82e-27e9-40c4-a284-ffea2989f261 now drives the live governed Egg replay with automatic fallback disabled and exact 185-case coverage reconciliation.",
             ],
             [
               "2026-08-18",

@@ -163,6 +163,11 @@ queue contains zero shell-color conflicts and 97 organic-unknown cases. Active-p
 finds exactly one blocked case because housing remains unresolved. No prior certification crossed
 the policy revision, no AI task started, and temporary staging objects were deleted after import.
 
+The platform owner completed queue `3.0.0` with 183 comparable decisions, one not-comparable
+decision, and one explicitly flagged case. The flagged Walmart `654756038` versus Kroger
+`0001111087023` relationship remains excluded because Walmart housing evidence is unknown while
+the Kroger item is known cage-free. No approved relationship has an active certification blocker.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run
@@ -193,6 +198,28 @@ per-retailer reconciliation. These are governed provenance fields, not optional 
 - The obsolete pre-governance Egg Matching v2 result
   `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-0dd6df6d` was archived only
   after the governed replacement passed CI, deployed, and completed the browser validation.
+
+### Product Pack 1.2.2 certified replay
+
+- Gold-set release `de5fc82e-27e9-40c4-a284-ffea2989f261`, checksum
+  `970b02be6e171c5649b3c9c6e66be138fdcbf01d2fce7b80f6f62fc21e9fbc35`, contains 184
+  certified labels: 183 comparable and one not comparable. Exactly one of 185 exhaustive queue
+  cases remains flagged and excluded; automatic fallback is disabled.
+- Analysis `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e`
+  completed on its first attempt and published with Product Pack/report blueprint `1.2.2`.
+- Live provenance reconciles the immutable release ID and checksum, all 185 selected/source
+  candidates, 100% selection coverage, 183 comparable labels, one not-comparable label, one
+  unresolved exclusion, and every retailer-level certification count.
+- Browser validation confirmed that the comparison-basis control changes the scorecard evidence.
+  Compatible-spec reporting now produces price observations for 11 retailers, including 1,961
+  ALDI observations across 1,327 ZIP markets and nine Meijer observations across nine ZIP markets.
+  Sam's Club and Trader Joe's have certified product relationships but zero admissible co-observed
+  store/ZIP price comparisons in the historical Search data; the UI reports zero evidence instead
+  of manufacturing a price result. Strict exact-spec remains a separate, intentionally narrower
+  basis.
+- The report remains `Review Required` because one certification case is deliberately unresolved;
+  retailer/profile scorecards independently report Ready or Limited Evidence from their own
+  deterministic observation and geography thresholds.
 
 ## PDP and vision evidence remediation
 
