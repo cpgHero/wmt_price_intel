@@ -1331,9 +1331,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-18",
-              "Deployed and production-verified; certification pending",
+              "Deployed, certified, and production-verified",
               "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
               "Product Pack and report blueprint 1.2.2 make a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. The platform owner completed exhaustive queue 3.0.0 with 183 comparable decisions, one not-comparable decision, and one intentionally flagged housing-unknown case. Immutable release de5fc82e-27e9-40c4-a284-ffea2989f261 now drives the live governed Egg replay with automatic fallback disabled and exact 185-case coverage reconciliation.",
+            ],
+            [
+              "2026-08-18",
+              "Production-verified",
+              "The Competitive Intelligence library was reset to the certified Egg release candidate.",
+              "Six obsolete publications were recoverably archived after resolving their exact IDs. The sole active report is fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e; raw Search/PDP data, artifacts, certification decisions, immutable releases, and audit history remain intact. Browser verification shows one of one reports and opens Egg with the Compatible-spec basis when reviewing broad retailer coverage.",
             ],
             [
               "2026-08-18",

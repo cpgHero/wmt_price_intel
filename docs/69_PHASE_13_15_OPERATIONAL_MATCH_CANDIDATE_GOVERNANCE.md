@@ -220,6 +220,12 @@ per-retailer reconciliation. These are governed provenance fields, not optional 
 - The report remains `Review Required` because one certification case is deliberately unresolved;
   retailer/profile scorecards independently report Ready or Limited Evidence from their own
   deterministic observation and geography thresholds.
+- After the release passed provenance and scorecard validation, six older active publications were
+  recoverably archived. The Competitive Intelligence library now exposes only this certified Egg
+  release candidate. Source Search/PDP data, generated artifacts, analysis runs, match decisions,
+  immutable releases, and audit history were retained. Browser verification reports one of one
+  active publications and confirms that the direct `?lens=compatible` view shows the broad
+  retailer comparison basis rather than the intentionally narrower strict exact-spec default.
 
 ## PDP and vision evidence remediation
 
