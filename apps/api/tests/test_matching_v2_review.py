@@ -31,6 +31,7 @@ from rci_api.matching_v2_review import (
     _bulk_preview_document,
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
+    _matching_v2_certification_coverage,
     get_matching_v2_review_service,
 )
 from rci_contracts import validate_instance
@@ -297,6 +298,53 @@ def test_release_gold_set_accepts_one_final_human_reviewer() -> None:
         },
         label="single-review release gold set",
     )
+
+
+def test_certification_coverage_preserves_each_retailer_funnel() -> None:
+    coverage = _matching_v2_certification_coverage(
+        [
+            {"case_id": "aldi-comparable", "expected_comparable": True},
+            {"case_id": "aldi-rejected", "expected_comparable": False},
+            {"case_id": "target-comparable", "expected_comparable": True},
+        ],
+        [
+            {"case_id": "aldi-comparable", "competitor_retailer_id": "aldi_us"},
+            {"case_id": "aldi-rejected", "competitor_retailer_id": "aldi_us"},
+            {"case_id": "aldi-unresolved", "competitor_retailer_id": "aldi_us"},
+            {"case_id": "target-comparable", "competitor_retailer_id": "target_us"},
+        ],
+    )
+
+    assert coverage["queue_case_count"] == 4
+    assert coverage["certified_label_count"] == 3
+    assert coverage["certified_comparable_count"] == 2
+    assert coverage["unresolved_excluded_count"] == 1
+    assert coverage["retailers"] == [
+        {
+            "competitor_retailer_id": "aldi_us",
+            "candidate_count": 3,
+            "certified_count": 2,
+            "certified_comparable_count": 1,
+            "certified_not_comparable_count": 1,
+            "unresolved_count": 1,
+        },
+        {
+            "competitor_retailer_id": "target_us",
+            "candidate_count": 1,
+            "certified_count": 1,
+            "certified_comparable_count": 1,
+            "certified_not_comparable_count": 0,
+            "unresolved_count": 0,
+        },
+    ]
+
+
+def test_certification_coverage_rejects_labels_outside_the_queue() -> None:
+    with pytest.raises(ValueError, match="absent from its queue"):
+        _matching_v2_certification_coverage(
+            [{"case_id": "unknown", "expected_comparable": True}],
+            [{"case_id": "known", "competitor_retailer_id": "aldi_us"}],
+        )
 
 
 class ReviewRepository:

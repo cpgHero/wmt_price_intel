@@ -111,6 +111,8 @@ def certify_competitive_product_leadership(
         relationship_id = str(row.get("relationship_id") or "")
         gap = row.get("competitor_minus_benchmark")
         reduction = row.get("comparison_value_reduction_to_lead")
+        ladder_raw = row.get("price_ladder")
+        ladder = dict(ladder_raw) if isinstance(ladder_raw, dict) else None
 
         check(status in _STATUSES, f"{label}: unsupported status {status!r}")
         check(
@@ -130,6 +132,48 @@ def certify_competitive_product_leadership(
             str(benchmark.get("product_id")),
         )
         product_identities[benchmark_identity] = benchmark
+
+        check(ladder is not None, f"{label}: price ladder is unavailable")
+        if ladder is not None:
+            rungs = _rows(ladder.get("rungs"))
+            rung_prices = [
+                float(dict(rung.get("location") or {}).get("comparison_value") or 0)
+                for rung in rungs
+            ]
+            benchmark_rungs = [rung for rung in rungs if rung.get("is_benchmark") is True]
+            check(bool(rungs), f"{label}: price ladder has no rungs")
+            check(
+                rung_prices == sorted(rung_prices),
+                f"{label}: price ladder is not ordered from lowest to highest",
+            )
+            check(
+                len(benchmark_rungs) == 1,
+                f"{label}: price ladder must contain exactly one benchmark rung",
+            )
+            check(
+                int(ladder.get("rung_count") or 0) == len(rungs),
+                f"{label}: price ladder rung count does not reconcile",
+            )
+            if benchmark_rungs:
+                benchmark_rung = benchmark_rungs[0]
+                check(
+                    str(dict(benchmark_rung.get("location") or {}).get("scope_key") or "")
+                    == str(benchmark.get("scope_key") or ""),
+                    f"{label}: price ladder benchmark location differs from the outcome",
+                )
+                check(
+                    int(ladder.get("benchmark_rank") or 0)
+                    == int(benchmark_rung.get("price_rank") or 0),
+                    f"{label}: price ladder benchmark rank does not reconcile",
+                )
+            if rung_prices:
+                check(
+                    _close(
+                        ladder.get("gap_to_leader"),
+                        float(benchmark.get("comparison_value") or 0) - rung_prices[0],
+                    ),
+                    f"{label}: price ladder gap to leader does not reconcile",
+                )
 
         if status == "unscored":
             check(competitor is None, f"{label}: unscored row has competitor evidence")

@@ -18,6 +18,7 @@ type ViewName =
   | "overview"
   | "footprint"
   | "match_group"
+  | "ladders"
   | "stores"
   | "markets"
   | "exceptions"
@@ -71,6 +72,7 @@ const WORKSPACES: { id: ViewName; label: string }[] = [
   { id: "overview", label: "Leadership Overview" },
   { id: "footprint", label: "Competitive Footprint" },
   { id: "match_group", label: "Match Group Analysis" },
+  { id: "ladders", label: "Price Ladders" },
   { id: "stores", label: "Store Comparisons" },
   { id: "markets", label: "Market Performance" },
   { id: "exceptions", label: "Competitive Exceptions" },
@@ -1397,6 +1399,160 @@ function StoreComparisons({
   );
 }
 
+function PriceLadders({
+  view,
+  selected,
+  onSelect,
+}: Readonly<{
+  view: CompetitiveProductLeadership;
+  selected: Outcome | null;
+  onSelect: (row: Outcome) => void;
+}>) {
+  const current = selected ?? view.outcomes[0] ?? null;
+  const ladder = current?.price_ladder;
+  if (!current || !ladder) {
+    return (
+      <section className={styles.card}>
+        <header>
+          <div>
+            <h3>Price ladders unavailable</h3>
+            <p>
+              This publication predates the location-level price-ladder
+              contract.
+            </p>
+          </div>
+        </header>
+      </section>
+    );
+  }
+  return (
+    <>
+      <div className={styles.kpiStrip}>
+        <KpiCard
+          label="Walmart ladder rank"
+          value={`${count(ladder.benchmark_rank)} of ${count(ladder.rung_count)}`}
+          note="Dense price rank; equal prices share a rank"
+          tone={ladder.benchmark_rank === 1 ? "good" : "danger"}
+        />
+        <KpiCard
+          label="Gap to opening price"
+          value={money(ladder.gap_to_leader)}
+          note="Walmart price minus the lowest valid local rung"
+          tone={ladder.gap_to_leader > 0 ? "danger" : "good"}
+        />
+        <KpiCard
+          label="Lower-priced alternatives"
+          value={count(ladder.lower_priced_alternatives)}
+          note="Governed matched products below Walmart"
+          tone={ladder.lower_priced_alternatives ? "warning" : "good"}
+        />
+        <KpiCard
+          label="Next lower rung"
+          value={money(ladder.gap_to_next_lower)}
+          note="Distance from Walmart to the nearest lower price"
+        />
+        <KpiCard
+          label="Next higher rung"
+          value={money(ladder.gap_to_next_higher)}
+          note="Price cushion to the nearest higher product"
+        />
+      </div>
+      <section className={styles.card}>
+        <header>
+          <div>
+            <h3>Local governed price ladder</h3>
+            <p>{ladder.definition}</p>
+          </div>
+          <label className={styles.ladderSelect}>
+            <span>Walmart store</span>
+            <select
+              value={current.id}
+              onChange={(event) => {
+                const outcome = view.outcomes.find(
+                  (row) => row.id === event.target.value,
+                );
+                if (outcome) onSelect(outcome);
+              }}
+            >
+              {view.outcomes.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.benchmark.city ||
+                    row.benchmark.zipcode ||
+                    "Unknown market"}
+                  {row.benchmark.state ? `, ${row.benchmark.state}` : ""} ·
+                  store {row.benchmark.store_number || "service area"} ·{" "}
+                  {row.status}
+                </option>
+              ))}
+            </select>
+          </label>
+        </header>
+        <div className={styles.tableWrap}>
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Product and local offer</th>
+                <th>Price</th>
+                <th>Gap to prior rung</th>
+                <th>Versus Walmart</th>
+                <th>Premium vs. opening</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ladder.rungs.map((rung) => (
+                <tr
+                  key={`${rung.position}:${rung.location.scope_key}:${rung.location.product_id}`}
+                >
+                  <td>
+                    <strong>#{count(rung.price_rank)}</strong>
+                  </td>
+                  <th>
+                    <span className={styles.productCell}>
+                      <span className={styles.productThumb}>
+                        {rung.location.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={rung.location.image_url} alt="" />
+                        ) : (
+                          rung.location.product_name.slice(0, 1)
+                        )}
+                      </span>
+                      <span>
+                        <b>
+                          {rung.is_benchmark
+                            ? `${rung.location.retailer_name} · benchmark`
+                            : rung.location.retailer_name}
+                        </b>
+                        <small>
+                          {rung.location.product_name} ·{" "}
+                          {brandType(rung.location.brand_type)} · store{" "}
+                          {rung.location.store_number || rung.location.zipcode}
+                        </small>
+                      </span>
+                    </span>
+                  </th>
+                  <td>{money(rung.location.comparison_value)}</td>
+                  <td>{money(rung.gap_to_previous)}</td>
+                  <td>{signedMoney(rung.gap_to_benchmark)}</td>
+                  <td>{rate(rung.premium_vs_opening_rate)}</td>
+                  <td>
+                    {rung.is_benchmark
+                      ? "Anchor"
+                      : rung.distance_miles === null
+                        ? "Same ZIP"
+                        : `${rung.distance_miles.toFixed(2)} mi`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function ProductLeadershipWorkspace({
   analysisId,
   competitorId,
@@ -1619,6 +1775,9 @@ export function ProductLeadershipWorkspace({
         />
       ) : null}
       {viewName === "match_group" ? <MatchGroupAnalysis view={view} /> : null}
+      {viewName === "ladders" ? (
+        <PriceLadders view={view} selected={selected} onSelect={setSelected} />
+      ) : null}
       {viewName === "stores" ? <StoreComparisons view={view} /> : null}
       {viewName === "markets" ? (
         <MarketPerformanceWorkspace

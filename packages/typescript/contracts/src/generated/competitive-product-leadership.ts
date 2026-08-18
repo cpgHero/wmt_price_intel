@@ -113,6 +113,7 @@ export interface Outcome {
   distance_miles: number | null;
   competitor_minus_benchmark: number | null;
   comparison_value_reduction_to_lead: number | null;
+  price_ladder?: PriceLadder;
 }
 export interface Location {
   retailer_id: string;
@@ -143,4 +144,28 @@ export interface Location {
   offer_id: string | null;
   comparison_value: number;
   observed_at: string | null;
+}
+export interface PriceLadder {
+  definition: string;
+  rung_count: number;
+  benchmark_rank: number;
+  lower_priced_alternatives: number;
+  gap_to_leader: number;
+  gap_to_next_lower: number | null;
+  gap_to_next_higher: number | null;
+  /**
+   * @minItems 1
+   */
+  rungs: [PriceLadderRung, ...PriceLadderRung[]];
+}
+export interface PriceLadderRung {
+  position: number;
+  price_rank: number;
+  is_benchmark: boolean;
+  relationship_id: string | null;
+  distance_miles: number | null;
+  location: Location;
+  gap_to_previous: number | null;
+  gap_to_benchmark: number;
+  premium_vs_opening_rate: number | null;
 }

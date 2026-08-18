@@ -124,6 +124,62 @@ def test_store_leadership_uses_radius_scope_and_mutually_exclusive_statuses() ->
     }
     losing = next(row for row in result["outcomes"] if row["status"] == "losing")
     assert losing["comparison_value_reduction_to_lead"] == 0.26
+    assert losing["price_ladder"]["benchmark_rank"] == 2
+    assert losing["price_ladder"]["gap_to_leader"] == 0.25
+    assert [rung["location"]["comparison_value"] for rung in losing["price_ladder"]["rungs"]] == [
+        3.75,
+        4.0,
+    ]
+
+
+def test_price_ladder_keeps_the_lowest_local_offer_per_governed_product() -> None:
+    benchmark = [_observation("walmart_us", "w1", "w-1", -94.21, 4.00)]
+    competitors = [
+        _observation("aldi_us", "a1", "a-1", -94.205, 3.75),
+        _observation("aldi_us", "a1", "a-2", -94.204, 3.95),
+        _observation("aldi_us", "a2", "a-3", -94.203, 4.50),
+    ]
+    relationships = [
+        ProductLeadershipRelationship(
+            relationship_id=f"relationship-{product}",
+            competitor_id="aldi_us",
+            competitor_name="ALDI",
+            benchmark_product_id="w1",
+            competitor_product_id=product,
+            profile_id="strict",
+            profile_label="Strict each-to-each",
+            comparison_metric="package_price",
+            comparison_unit="USD/package",
+        )
+        for product in ("a1", "a2")
+    ]
+
+    result = CompetitiveProductLeadershipProjector().build(
+        analysis_id="analysis-ladder",
+        generated_at="2026-08-07T06:00:00Z",
+        benchmark_retailer={"id": "walmart_us", "name": "Walmart (US)"},
+        benchmark_product={"id": "w1", "name": "Product w1", "image_url": None},
+        benchmark_observations=benchmark,
+        competitor_observations=competitors,
+        relationships=relationships,
+        competitor_options=[{"id": "aldi_us", "name": "ALDI"}],
+        product_options=[{"id": "w1", "name": "Product w1", "image_url": None}],
+        profile_options=[{"id": "strict", "name": "Strict each-to-each"}],
+        selected_competitor="all",
+        selected_profile="strict",
+        radius_miles=1,
+    )
+
+    ladder = result["outcomes"][0]["price_ladder"]
+    assert ladder["rung_count"] == 3
+    assert ladder["benchmark_rank"] == 2
+    assert ladder["lower_priced_alternatives"] == 1
+    assert [rung["location"]["product_id"] for rung in ladder["rungs"]] == [
+        "a1",
+        "w1",
+        "a2",
+    ]
+    assert certify_competitive_product_leadership(result).ready
 
 
 def test_distribution_scoped_relationship_only_scores_admitted_benchmark_store() -> None:

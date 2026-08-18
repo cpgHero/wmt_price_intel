@@ -125,10 +125,15 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
             {"id": "amazon_us_same_day", "name": "Amazon Same Day (US)"},
         ],
     }
-    assert [row["competitor_id"] for row in view["retailer_scorecards"]] == [
-        "aldi_us",
-        "amazon_us_same_day",
-    ]
+    assert {(row["competitor_id"], row["profile_id"]) for row in view["retailer_scorecards"]} == {
+        (competitor, profile)
+        for competitor in ("aldi_us", "amazon_us_same_day")
+        for profile in (
+            "strict_exact_package",
+            "normalized_price_per_lb",
+            "strict_within_10mi",
+        )
+    }
     assert view["schema_version"] == "1.1.0"
     assert view["comparison_bases"][0]["profile_id"] == "strict_exact_package"
     assert view["comparison_bases"][0]["population_basis"] == "relationship_resolved_products"
@@ -144,7 +149,13 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
     assert view["report_readiness"]["status"] == "limited"
     assert view["retailer_scorecards"][0]["matches"] == 9049
     assert view["retailer_scorecards"][0]["competitor_lower_rate"] == pytest.approx(0.8414189413)
-    assert view["retailer_scorecards"][1]["benchmark_lower_rate"] == pytest.approx(0.9363920751)
+    amazon_strict = next(
+        row
+        for row in view["retailer_scorecards"]
+        if row["competitor_id"] == "amazon_us_same_day"
+        and row["profile_id"] == "strict_exact_package"
+    )
+    assert amazon_strict["benchmark_lower_rate"] == pytest.approx(0.9363920751)
     product_section = next(
         section for section in view["sections"] if section["kind"] == "product_table"
     )
@@ -462,19 +473,147 @@ def test_retailer_scorecard_contract_scales_to_thirteen_competitors() -> None:
 
     scorecards = ReportProjector().retailer_scorecards(result, product_pack)
 
-    assert len(scorecards) == 13
-    assert [row["competitor_id"] for row in scorecards] == competitors
-    assert all(row["benchmark_lower_rate"] == 0.6 for row in scorecards)
-    assert all(row["competitor_lower_rate"] == 0.4 for row in scorecards)
-    assert all(row["parity_rate"] == pytest.approx(0.0) for row in scorecards)
+    assert len(scorecards) == 39
+    strict_scorecards = [row for row in scorecards if row["profile_id"] == "strict_exact_package"]
+    assert [row["competitor_id"] for row in strict_scorecards] == competitors
+    assert all(row["benchmark_lower_rate"] == 0.6 for row in strict_scorecards)
+    assert all(row["competitor_lower_rate"] == 0.4 for row in strict_scorecards)
+    assert all(row["parity_rate"] == pytest.approx(0.0) for row in strict_scorecards)
     assert all(row["status"] == "limited_evidence" for row in scorecards)
-    assert all("required geographies" in row["readiness_reason"] for row in scorecards)
+    assert all("required geographies" in row["readiness_reason"] for row in strict_scorecards)
+
+
+def test_retailer_scorecards_project_every_available_comparison_basis() -> None:
+    result = _result()
+    result["comparison_modes"].append(
+        {
+            "profile_id": "compatible",
+            "label": "Compatible specification",
+            "geography": "exact_zip",
+            "comparison_metric": "package_price",
+            "dimensions": [],
+        }
+    )
+    result["metrics"].extend(
+        [
+            {"metric_id": "aldi-compatible.matches", "value": 100, "unit": "matches"},
+            {
+                "metric_id": "aldi-compatible.unique_geographies",
+                "value": 80,
+                "unit": "locations",
+            },
+            {
+                "metric_id": "aldi-compatible.benchmark_lower_rate",
+                "value": 0.4,
+                "unit": "rate",
+            },
+            {
+                "metric_id": "aldi-compatible.competitor_lower_rate",
+                "value": 0.5,
+                "unit": "rate",
+            },
+            {"metric_id": "aldi-compatible.parity_rate", "value": 0.1, "unit": "rate"},
+        ]
+    )
+    result["comparisons"].append(
+        {
+            "comparison_id": "aldi-compatible-all",
+            "competitor_id": "aldi_us",
+            "profile_id": "compatible",
+            "segment_id": "all",
+            "metric_refs": [
+                "aldi-compatible.matches",
+                "aldi-compatible.unique_geographies",
+                "aldi-compatible.benchmark_lower_rate",
+                "aldi-compatible.competitor_lower_rate",
+                "aldi-compatible.parity_rate",
+            ],
+            "evidence_refs": [],
+        }
+    )
+    product_pack = json.loads(
+        (REPOSITORY_ROOT / "product-packs/fresh_ground_beef.json").read_text()
+    )
+
+    scorecards = ReportProjector().retailer_scorecards(result, product_pack)
+
+    aldi_profiles = {
+        row["profile_id"]: row for row in scorecards if row["competitor_id"] == "aldi_us"
+    }
+    assert set(aldi_profiles) == {
+        "strict_exact_package",
+        "normalized_price_per_lb",
+        "strict_within_10mi",
+        "compatible",
+    }
+    assert aldi_profiles["compatible"]["matches"] == 100
+    assert aldi_profiles["compatible"]["evidence_state"] == "reported"
+
+
+def test_retailer_scorecards_keep_missing_basis_as_an_explicit_zero_state() -> None:
+    result = _result()
+    result["comparison_modes"].append(
+        {
+            "profile_id": "compatible",
+            "label": "Compatible specification",
+            "geography": "exact_zip",
+            "comparison_metric": "package_price",
+            "dimensions": [],
+        }
+    )
+    product_pack = json.loads(
+        (REPOSITORY_ROOT / "product-packs/fresh_ground_beef.json").read_text()
+    )
+
+    scorecards = ReportProjector().retailer_scorecards(result, product_pack)
+    profiles = {row["profile_id"]: row for row in scorecards if row["competitor_id"] == "aldi_us"}
+
+    assert set(profiles) == {
+        "strict_exact_package",
+        "normalized_price_per_lb",
+        "strict_within_10mi",
+        "compatible",
+    }
+    assert profiles["compatible"]["matches"] is None
+    assert profiles["compatible"]["evidence_state"] == "no_governed_relationships"
+    assert profiles["compatible"]["status"] == "limited_evidence"
+
+
+def test_matching_v2_incomplete_certification_blocks_report_readiness() -> None:
+    result = _result()
+    result["source"]["matching_v2_certification_coverage"] = {
+        "authority": "matching_v2_certified_gold_set",
+        "queue_case_count": 100,
+        "certified_label_count": 60,
+        "certified_comparable_count": 20,
+        "certified_not_comparable_count": 40,
+        "unresolved_excluded_count": 40,
+        "automatic_fallback_enabled": False,
+    }
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert view["certification_coverage"]["unresolved_excluded_count"] == 40
+    assert view["report_readiness"]["status"] == "review_required"
+    assert any(
+        reason["code"] == "matching_v2_certification_incomplete"
+        for reason in view["report_readiness"]["blocking_reasons"]
+    )
 
 
 def test_zero_scorecard_reconciles_to_governed_product_evidence() -> None:
     result = _result()
     result["competitors"] = ["safeway_us"]
     result["comparisons"] = []
+    result["comparison_modes"] = [
+        {
+            "profile_id": "strict",
+            "label": "Governed product relationships",
+            "geography": "exact_zip",
+            "comparison_metric": "price_per_dozen",
+            "dimensions": [],
+        }
+    ]
     view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
         result,
         presentation_context={

@@ -331,6 +331,62 @@
         "distance_miles": { "type": ["number", "null"], "minimum": 0 },
         "competitor_minus_benchmark": { "type": ["number", "null"] },
         "comparison_value_reduction_to_lead": { "type": ["number", "null"], "minimum": 0 }
+        ,
+        "price_ladder": { "$ref": "#/$defs/priceLadder" }
+      }
+    },
+    "priceLadder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "rung_count",
+        "benchmark_rank",
+        "lower_priced_alternatives",
+        "gap_to_leader",
+        "gap_to_next_lower",
+        "gap_to_next_higher",
+        "rungs"
+      ],
+      "properties": {
+        "definition": { "type": "string", "minLength": 1 },
+        "rung_count": { "type": "integer", "minimum": 1 },
+        "benchmark_rank": { "type": "integer", "minimum": 1 },
+        "lower_priced_alternatives": { "type": "integer", "minimum": 0 },
+        "gap_to_leader": { "type": "number", "minimum": 0 },
+        "gap_to_next_lower": { "type": ["number", "null"], "minimum": 0 },
+        "gap_to_next_higher": { "type": ["number", "null"], "minimum": 0 },
+        "rungs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/priceLadderRung" }
+        }
+      }
+    },
+    "priceLadderRung": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "price_rank",
+        "is_benchmark",
+        "relationship_id",
+        "distance_miles",
+        "location",
+        "gap_to_previous",
+        "gap_to_benchmark",
+        "premium_vs_opening_rate"
+      ],
+      "properties": {
+        "position": { "type": "integer", "minimum": 1 },
+        "price_rank": { "type": "integer", "minimum": 1 },
+        "is_benchmark": { "type": "boolean" },
+        "relationship_id": { "type": ["string", "null"] },
+        "distance_miles": { "type": ["number", "null"], "minimum": 0 },
+        "location": { "$ref": "#/$defs/location" },
+        "gap_to_previous": { "type": ["number", "null"], "minimum": 0 },
+        "gap_to_benchmark": { "type": "number" },
+        "premium_vs_opening_rate": { "type": ["number", "null"], "minimum": 0 }
       }
     },
     "relationship": {

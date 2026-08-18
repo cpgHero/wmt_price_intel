@@ -168,6 +168,122 @@ def _geography_summary(rows: list[JsonObject], *, level: str, label: str) -> Jso
     }
 
 
+def _price_ladder(
+    benchmark: ProductPriceObservation,
+    candidates: list[
+        tuple[
+            float,
+            float,
+            str,
+            ProductLeadershipRelationship,
+            ProductPriceObservation,
+        ]
+    ],
+) -> JsonObject:
+    """Order one benchmark product and the best local offer for each matched product."""
+
+    best_by_product: dict[
+        tuple[str, str],
+        tuple[
+            float,
+            float,
+            str,
+            ProductLeadershipRelationship,
+            ProductPriceObservation,
+        ],
+    ] = {}
+    for candidate in candidates:
+        observation = candidate[4]
+        key = (observation.retailer_id, observation.product_id)
+        current = best_by_product.get(key)
+        if current is None or candidate[:3] < current[:3]:
+            best_by_product[key] = candidate
+
+    raw_rungs: list[JsonObject] = [
+        {
+            "is_benchmark": True,
+            "relationship_id": None,
+            "distance_miles": None,
+            "location": _location(benchmark),
+        }
+    ]
+    raw_rungs.extend(
+        {
+            "is_benchmark": False,
+            "relationship_id": relationship.relationship_id,
+            "distance_miles": (
+                None if observation.location_kind == "service_area" else _round(distance, 2)
+            ),
+            "location": _location(observation),
+        }
+        for _value, distance, _scope, relationship, observation in best_by_product.values()
+    )
+    raw_rungs.sort(
+        key=lambda row: (
+            float(row["location"]["comparison_value"]),
+            not bool(row["is_benchmark"]),
+            str(row["location"]["retailer_id"]),
+            str(row["location"]["product_id"]),
+        )
+    )
+    opening_price = float(raw_rungs[0]["location"]["comparison_value"])
+    benchmark_price = float(benchmark.comparison_value)
+    previous_price: float | None = None
+    dense_rank = 0
+    previous_rank_price: float | None = None
+    rungs: list[JsonObject] = []
+    benchmark_rank: int | None = None
+    for position, row in enumerate(raw_rungs, start=1):
+        price = float(row["location"]["comparison_value"])
+        if previous_rank_price is None or abs(price - previous_rank_price) > 0.0001:
+            dense_rank += 1
+            previous_rank_price = price
+        rung = {
+            **row,
+            "position": position,
+            "price_rank": dense_rank,
+            "gap_to_previous": _round(price - previous_price)
+            if previous_price is not None
+            else None,
+            "gap_to_benchmark": _round(price - benchmark_price),
+            "premium_vs_opening_rate": (
+                _round((price - opening_price) / opening_price) if opening_price > 0 else None
+            ),
+        }
+        if row["is_benchmark"]:
+            benchmark_rank = dense_rank
+        rungs.append(rung)
+        previous_price = price
+    if benchmark_rank is None:
+        raise ValueError("price ladder omitted its benchmark product")
+
+    lower_prices = sorted(
+        float(row["location"]["comparison_value"])
+        for row in raw_rungs
+        if float(row["location"]["comparison_value"]) < benchmark_price - 0.0001
+    )
+    higher_prices = sorted(
+        float(row["location"]["comparison_value"])
+        for row in raw_rungs
+        if float(row["location"]["comparison_value"]) > benchmark_price + 0.0001
+    )
+    return {
+        "definition": (
+            "Ordered positive Search prices for the benchmark product and the lowest local "
+            "offer for each governed matched competitor product."
+        ),
+        "rung_count": len(rungs),
+        "benchmark_rank": benchmark_rank,
+        "lower_priced_alternatives": len(lower_prices),
+        "gap_to_leader": _round(benchmark_price - opening_price),
+        "gap_to_next_lower": (_round(benchmark_price - lower_prices[-1]) if lower_prices else None),
+        "gap_to_next_higher": (
+            _round(higher_prices[0] - benchmark_price) if higher_prices else None
+        ),
+        "rungs": rungs,
+    }
+
+
 class CompetitiveProductLeadershipProjector:
     """Score one benchmark product at benchmark-store grain.
 
@@ -355,6 +471,7 @@ class CompetitiveProductLeadershipProjector:
                     "distance_miles": _round(distance_miles, 2),
                     "competitor_minus_benchmark": _round(gap),
                     "comparison_value_reduction_to_lead": _round(reduction),
+                    "price_ladder": _price_ladder(benchmark, candidates),
                 }
             )
 

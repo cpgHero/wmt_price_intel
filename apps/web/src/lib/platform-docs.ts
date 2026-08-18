@@ -740,6 +740,10 @@ export const platformDocumentation: PlatformDocumentation = {
             "Keep package price and normalized unit price as distinct comparison bases; use a unit price only when package evidence supports it.",
             "Assign every unscored local context a reason such as no eligible match, no overlap, product not observed, stale/missing price, collection failure, incomplete attributes, or review required.",
             "Preserve retailer, Product Pack, relationship, geography, period, policy, evidence checksum, and freshness context with each result.",
+            "Apply the selected competitor and comparison basis to every scorecard and supporting product view. A context selector must never be presentation-only.",
+            "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
+            "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
+            "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
           ],
         },
         {
@@ -773,7 +777,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current reporting limitations",
-          text: "Product History remains unavailable until comparable snapshots are certified. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main tabs and workflows are finalized.",
+          text: "Product History remains unavailable until comparable snapshots are certified. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main tabs and workflows are finalized. The August 17 Egg release certified 530 of 1,305 candidates and excluded 775 unresolved cases, so it must remain Review required rather than being represented as a complete category view.",
         },
       ],
     },
@@ -827,7 +831,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Validate the decision surface",
               detail:
-                "Drill from scorecards, products, cohorts, assortment, and geography to the underlying relationship and store evidence. Totals must reconcile before the result is promoted or shared.",
+                "Drill from scorecards, products, cohorts, assortment, geography, local price ladders, and the retailer certification funnel to the underlying relationship and store evidence. Change competitor, comparison basis, and 1/3/5-mile radius and verify that the evidence changes with the context. Totals must reconcile before the result is promoted or shared.",
             },
           ],
         },
@@ -1324,6 +1328,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented and test-verified; production replay pending",
+              "Competitive Intelligence gained retailer certification funnels, authoritative comparison-basis filtering, explicit zero states, stricter readiness, and store-level price ladders.",
+              "Every configured basis now has a scorecard state; changing the basis selects only that evidence. Matching v2 releases persist candidate, comparable, not-comparable, and unresolved counts per retailer under coverage contract 1.0.0. Incomplete certification and non-ready AnalysisResults block decision readiness. Product Leadership uses the existing governed 1/3/5-mile geography engine to rank Walmart and the lowest local Search offer per matched product, with rung gaps and drillable product/location identity. API, analytics, report-contract, TypeScript, and web tests pass locally; no paid calls or live decisions were made.",
+            ],
             [
               "2026-08-17",
               "Deployed and production-verified",

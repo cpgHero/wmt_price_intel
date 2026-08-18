@@ -15,6 +15,7 @@
   ],
   "properties": {
     "schema_version": { "const": "2.0.0" },
+    "coverage_contract_version": { "type": "string", "minLength": 1 },
     "gold_set_id": { "type": "string", "minLength": 1 },
     "version": { "type": "string", "minLength": 1 },
     "purpose": { "enum": ["contract_fixture", "release_certification"] },

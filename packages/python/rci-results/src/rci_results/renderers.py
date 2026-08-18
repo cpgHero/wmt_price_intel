@@ -2059,6 +2059,7 @@ class ArtifactRenderer:
             product_decisions=_rows(view, "product_decisions"),
             product_evidence=_mapping(view, "product_evidence"),
             benchmark_name=_display(view.get("benchmark_retailer") or "Reference retailer"),
+            match_relationships=_rows(view, "match_relationships"),
         )
         self._apply_report_integrity(view, result)
         view["result_checksum"] = _result_checksum(result)
@@ -2090,6 +2091,57 @@ class ArtifactRenderer:
         }
         blocking_reasons: list[JsonObject] = []
         warnings: list[JsonObject] = []
+        certification = _mapping(source, "matching_v2_certification_coverage")
+        if certification:
+            queue_cases = int(certification.get("queue_case_count") or 0)
+            certified_labels = int(certification.get("certified_label_count") or 0)
+            certified_comparable = int(certification.get("certified_comparable_count") or 0)
+            unresolved = int(certification.get("unresolved_excluded_count") or 0)
+            if unresolved > 0:
+                blocking_reasons.append(
+                    {
+                        "code": "matching_v2_certification_incomplete",
+                        "message": (
+                            f"{unresolved:,} of {queue_cases:,} candidate relationships remain "
+                            "unresolved and are excluded from this report."
+                        ),
+                    }
+                )
+            if certified_labels + unresolved != queue_cases:
+                blocking_reasons.append(
+                    {
+                        "code": "matching_v2_certification_does_not_reconcile",
+                        "message": (
+                            "Certified and unresolved Matching v2 case counts do not reconcile "
+                            "to the review queue."
+                        ),
+                    }
+                )
+            missing_observations = max(0, certified_comparable - len(relationships))
+            if missing_observations:
+                warnings.append(
+                    {
+                        "code": "certified_relationships_without_price_observations",
+                        "message": (
+                            f"{missing_observations:,} certified comparable relationships did "
+                            "not produce an admissible price observation under the configured "
+                            "geography and comparison profiles."
+                        ),
+                    }
+                )
+        validation = _mapping(result, "validation")
+        validation_status = str(validation.get("status") or "")
+        if validation_status and validation_status != "ready_to_share":
+            blocking_reasons.append(
+                {
+                    "code": "analysis_validation_not_ready",
+                    "message": (
+                        "The underlying AnalysisResult is marked "
+                        f"{validation_status.replace('_', ' ')} and is not ready for "
+                        "decision use."
+                    ),
+                }
+            )
         if ambiguous_groups:
             blocking_reasons.append(
                 {
@@ -2164,8 +2216,29 @@ class ArtifactRenderer:
                 }
             )
         has_ready_scorecard = any(row.get("status") == "ready" for row in scorecards)
+        competitor_ids = {str(value) for value in result.get("competitors", [])}
+        reported_competitors = {
+            str(row.get("competitor_id"))
+            for row in scorecards
+            if row.get("evidence_state") == "reported"
+        }
+        missing_competitors = sorted(competitor_ids - reported_competitors)
+        if missing_competitors:
+            warnings.append(
+                {
+                    "code": "competitors_without_reported_price_evidence",
+                    "message": (
+                        f"{len(missing_competitors):,} configured competitor retailers have no "
+                        "reported price evidence under any governed comparison basis."
+                    ),
+                }
+            )
         status = (
-            "review_required" if blocking_reasons else "ready" if has_ready_scorecard else "limited"
+            "review_required"
+            if blocking_reasons
+            else "ready"
+            if has_ready_scorecard and not missing_competitors
+            else "limited"
         )
         view["report_readiness"] = {
             "status": status,

@@ -456,6 +456,36 @@
 .productCell > span:last-child {
   min-width: 0;
 }
+.productCell small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.52rem;
+  font-weight: 550;
+  line-height: 1.35;
+  margin-top: 0.12rem;
+}
+.ladderSelect {
+  display: grid;
+  gap: 0.2rem;
+  min-width: min(380px, 100%);
+}
+.ladderSelect span {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ladderSelect select {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 0.48rem 0.55rem;
+}
 .productThumb {
   align-items: center;
   background: var(--surface-alt);

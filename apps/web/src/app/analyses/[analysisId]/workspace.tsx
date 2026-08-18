@@ -444,11 +444,11 @@ function BlueprintAnalysisWorkspace({
       .flatMap((section) => section.records) ?? [];
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
-  const selectedScorecards = selectedRetailer
-    ? reportView.retailer_scorecards.filter(
-        (scorecard) => scorecard.competitor_id === selectedRetailer.id,
-      )
-    : reportView.retailer_scorecards;
+  const selectedScorecards = reportView.retailer_scorecards.filter(
+    (scorecard) =>
+      (!selectedRetailer || scorecard.competitor_id === selectedRetailer.id) &&
+      (!selectedLens || scorecard.profile_id === selectedLens),
+  );
   const selectedBasis =
     reportView.comparison_bases.find(
       (basis) => basis.profile_id === selectedLens,
@@ -511,6 +511,13 @@ function BlueprintAnalysisWorkspace({
         ? "limited_evidence"
         : (publication?.status ?? analysis.status);
   const readiness = reportView.report_readiness;
+  const certificationCoverage = reportView.certification_coverage ?? null;
+  const selectedCertificationCoverage =
+    selectedCompetitor === "all"
+      ? null
+      : (certificationCoverage?.retailers?.find(
+          (retailer) => retailer.competitor_retailer_id === selectedCompetitor,
+        ) ?? null);
   const contextDefinition = useMemo<ApplicationContextDefinition>(() => {
     const selectedRetailerName =
       competitorOptions.find(
@@ -673,9 +680,46 @@ function BlueprintAnalysisWorkspace({
           tone: readiness.status === "ready" ? "ready" : "attention",
           facts: [
             {
-              label: "Confirmed matches",
+              label: "Reported relationships",
               value: reportView.match_governance.confirmed.toLocaleString(),
             },
+            ...(selectedCertificationCoverage
+              ? [
+                  {
+                    label: "Retailer candidates",
+                    value:
+                      selectedCertificationCoverage.candidate_count.toLocaleString(),
+                  },
+                  {
+                    label: "Certified comparable",
+                    value:
+                      selectedCertificationCoverage.certified_comparable_count.toLocaleString(),
+                  },
+                  {
+                    label: "Certified not comparable",
+                    value:
+                      selectedCertificationCoverage.certified_not_comparable_count.toLocaleString(),
+                  },
+                  {
+                    label: "Unresolved candidates",
+                    value:
+                      selectedCertificationCoverage.unresolved_count.toLocaleString(),
+                  },
+                ]
+              : certificationCoverage
+                ? [
+                    {
+                      label: "Certified decisions",
+                      value:
+                        certificationCoverage.certified_label_count.toLocaleString(),
+                    },
+                    {
+                      label: "Unresolved candidates",
+                      value:
+                        certificationCoverage.unresolved_excluded_count.toLocaleString(),
+                    },
+                  ]
+                : []),
             {
               label: "Suggested matches",
               value: reportView.match_governance.suggested.toLocaleString(),
@@ -720,6 +764,8 @@ function BlueprintAnalysisWorkspace({
     readiness,
     reportView.comparison_bases,
     reportView.match_governance,
+    certificationCoverage,
+    selectedCertificationCoverage,
     reportView.retailer_scope.benchmark.name,
     preferredBasis,
     selectedBasis,
@@ -1527,7 +1573,10 @@ function RetailerScorecardPanel({
                 `${row.competitor_id}::${row.profile_id}`,
               ) ?? [];
             return (
-              <div className="retailer-scorecard-row" key={row.competitor_id}>
+              <div
+                className="retailer-scorecard-row"
+                key={`${row.competitor_id}::${row.profile_id}`}
+              >
                 <button
                   type="button"
                   onClick={() => onSelect(row.competitor_id)}
@@ -1542,7 +1591,13 @@ function RetailerScorecardPanel({
                 </button>
                 <div className="retailer-scorecard-evidence">
                   <strong>{(row.matches ?? 0).toLocaleString()}</strong>
-                  <span>matched observations</span>
+                  <span>
+                    {row.evidence_state === "no_governed_relationships"
+                      ? "governed relationships"
+                      : row.evidence_state === "no_admissible_observations"
+                        ? "admissible observations"
+                        : "matched observations"}
+                  </span>
                   <small>
                     {row.matched_geographies === null
                       ? "Matched ZIP count unavailable"

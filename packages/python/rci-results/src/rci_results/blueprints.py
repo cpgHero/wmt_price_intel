@@ -374,6 +374,8 @@ class ReportProjector:
             }
             for group_id, label, kinds in _REPORT_GROUPS
         ]
+        source = result.get("source") if isinstance(result.get("source"), dict) else {}
+        certification_coverage = source.get("matching_v2_certification_coverage")
         return {
             "schema_version": "1.1.0",
             "analysis_id": result["analysis_id"],
@@ -400,6 +402,9 @@ class ReportProjector:
             "comparison_bases": self.comparison_bases(result, product_pack),
             "match_governance": self._base_match_governance(result),
             "report_readiness": self._base_report_readiness(result),
+            "certification_coverage": (
+                certification_coverage if isinstance(certification_coverage, dict) else None
+            ),
             "product_pack": {
                 "id": product_pack["id"],
                 "name": product_pack["name"],
@@ -852,7 +857,15 @@ class ReportProjector:
         product_decisions: list[JsonObject] | None = None,
         product_evidence: JsonObject | None = None,
     ) -> list[JsonObject]:
-        """Project one governed comparison scorecard per competitor."""
+        """Project one governed scorecard per competitor and available basis.
+
+        The report context selector is authoritative.  Returning only one
+        pre-selected profile per retailer made the UI selector cosmetic and
+        allowed strict and compatible evidence to appear in the same portfolio
+        view. Every configured basis is projected here, including an explicit
+        unavailable state when no overall comparison exists; clients select
+        exactly one profile without recalculating any metric.
+        """
 
         metric_index = {
             str(metric["metric_id"]): metric for metric in self._rows(result.get("metrics"))
@@ -870,7 +883,9 @@ class ReportProjector:
         minimum_observations = max(1, int(decision_rules.get("minimum_observations", 1)))
         minimum_geographies = max(1, int(decision_rules.get("minimum_geographies", 1)))
         preferred_profile = str(decision_rules.get("preferred_scorecard_profile_id", ""))
-        preferred_profile_available = preferred_profile in modes
+        effective_preferred_profile = (
+            preferred_profile if preferred_profile in modes else next(iter(modes), "")
+        )
         configured_priority = {
             str(value): index
             for index, value in enumerate(decision_rules.get("profile_priority", []))
@@ -888,130 +903,173 @@ class ReportProjector:
                     configured_priority=configured_priority,
                 )
             )
-            comparison = candidates[0] if candidates else {}
-            values = self._comparison_metric_values(
-                comparison,
-                metric_index,
-                benchmark_id=benchmark_id,
+            selected_by_profile: dict[str, JsonObject] = {}
+            for candidate in candidates:
+                profile_id = str(candidate.get("profile_id", ""))
+                if profile_id and profile_id not in selected_by_profile:
+                    selected_by_profile[profile_id] = candidate
+            configured_profiles = list(modes)
+            selected_comparisons = (
+                [
+                    selected_by_profile.get(profile_id, {"profile_id": profile_id})
+                    for profile_id in configured_profiles
+                ]
+                or list(selected_by_profile.values())
+                or [{}]
             )
-            mode = modes.get(str(comparison.get("profile_id")), {})
-            benchmark_rate = self._numeric_metric(values.get("benchmark_lower_rate"))
-            competitor_rate = self._numeric_metric(values.get("competitor_lower_rate"))
-            parity_rate = self._numeric_metric(values.get("parity_rate"))
-            if parity_rate is None and benchmark_rate is not None and competitor_rate is not None:
-                parity_rate = max(0.0, 1.0 - benchmark_rate - competitor_rate)
-            outcome_rates = (benchmark_rate, competitor_rate, parity_rate)
-            rates_available = all(value is not None for value in outcome_rates)
-            rates_reconcile = (
-                rates_available
-                and abs(sum(float(value) for value in outcome_rates if value is not None) - 1.0)
-                <= 0.001
-            )
-            matches = self._numeric_metric(values.get("matches"))
-            matched_geographies = self._numeric_metric(values.get("unique_geographies"))
-            coverage_geographies = self._coverage_value(
-                coverage_by_retailer.get(competitor_id, {}), metric_index
-            )
-            median_gap = self._numeric_metric(values.get("median_gap"))
-            profile: JsonObject = next(
-                (
-                    row
-                    for row in product_pack.get("matching_profiles", [])
-                    if str(row.get("id")) == str(comparison.get("profile_id", ""))
-                ),
-                {},
-            )
-            comparison_metric = str(mode.get("comparison_metric", "package_price"))
-            evidence_ready = (
-                matches is not None
-                and matches >= minimum_observations
-                and matched_geographies is not None
-                and matched_geographies >= minimum_geographies
-                and rates_reconcile
-            )
-            if evidence_ready:
-                readiness_reason = (
-                    f"Meets the Product Pack minimum of {minimum_observations:,} "
-                    f"observations across {minimum_geographies:,} geographies"
+            for comparison in selected_comparisons:
+                scorecards.append(
+                    self._retailer_scorecard(
+                        comparison,
+                        competitor_id=competitor_id,
+                        benchmark_id=benchmark_id,
+                        benchmark_name=benchmark_name,
+                        metric_index=metric_index,
+                        modes=modes,
+                        coverage_by_retailer=coverage_by_retailer,
+                        product_pack=product_pack,
+                        preferred_profile=effective_preferred_profile,
+                        minimum_observations=minimum_observations,
+                        minimum_geographies=minimum_geographies,
+                    )
                 )
-            else:
-                shortfalls: list[str] = []
-                if matches is None or matches < minimum_observations:
-                    shortfalls.append(
-                        f"{self._whole_number(matches) or 0:,} of "
-                        f"{minimum_observations:,} required observations"
-                    )
-                if matched_geographies is None or matched_geographies < minimum_geographies:
-                    shortfalls.append(
-                        f"{self._whole_number(matched_geographies) or 0:,} of "
-                        f"{minimum_geographies:,} required geographies"
-                    )
-                if not rates_available:
-                    shortfalls.append(
-                        "complete benchmark, competitor, and parity shares unavailable"
-                    )
-                elif not rates_reconcile:
-                    rate_total = sum(float(value) for value in outcome_rates if value is not None)
-                    shortfalls.append(f"outcome shares total {rate_total:.1%}; expected 100.0%")
-                readiness_reason = "Limited evidence: " + "; ".join(shortfalls)
-            scorecards.append(
-                {
-                    "competitor_id": competitor_id,
-                    "competitor": self._retailer_name(competitor_id),
-                    "benchmark_retailer_id": benchmark_id,
-                    "benchmark_retailer": benchmark_name,
-                    "profile_id": str(comparison.get("profile_id", "")),
-                    "comparison_lens": _merchant_text(
-                        mode.get("label", comparison.get("profile_id", "Comparison")),
-                        self._retailer_names,
-                        product_pack,
-                    ),
-                    "comparison_metric": comparison_metric,
-                    "price_unit": self._price_unit(comparison_metric),
-                    "package_basis": self._package_basis(comparison_metric, profile),
-                    "geography": str(mode.get("geography", "unknown")),
-                    "basis_status": (
-                        "preferred"
-                        if str(comparison.get("profile_id", "")) == preferred_profile
-                        or (comparison and not preferred_profile_available)
-                        else "fallback"
-                        if comparison
-                        else "unavailable"
-                    ),
-                    "matches": self._whole_number(matches),
-                    "matched_geographies": self._whole_number(matched_geographies),
-                    "qualifying_geographies": self._whole_number(coverage_geographies),
-                    "benchmark_lower_rate": benchmark_rate,
-                    "competitor_lower_rate": competitor_rate,
-                    "parity_rate": parity_rate,
-                    "benchmark_median": self._numeric_metric(values.get("benchmark_median")),
-                    "competitor_median": self._numeric_metric(values.get("competitor_median")),
-                    "median_gap": median_gap,
-                    "benchmark_median_statistic": "marginal_median",
-                    "competitor_median_statistic": "marginal_median",
-                    "median_gap_statistic": "paired_median_gap",
-                    "minimum_observations": minimum_observations,
-                    "minimum_geographies": minimum_geographies,
-                    "readiness_reason": readiness_reason,
-                    "dominant_outcome": self._dominant_outcome(
-                        benchmark_rate,
-                        competitor_rate,
-                        parity_rate,
-                    ),
-                    "price_position": self._price_position(
-                        benchmark_name,
-                        self._retailer_name(competitor_id),
-                        median_gap,
-                    ),
-                    "status": "ready" if evidence_ready else "limited_evidence",
-                }
-            )
         return self.reconcile_scorecards_with_product_evidence(
             scorecards,
             product_decisions=product_decisions or [],
             product_evidence=product_evidence or {},
             benchmark_name=benchmark_name,
         )
+
+    def _retailer_scorecard(
+        self,
+        comparison: JsonObject,
+        *,
+        competitor_id: str,
+        benchmark_id: str,
+        benchmark_name: str,
+        metric_index: Mapping[str, JsonObject],
+        modes: Mapping[str, JsonObject],
+        coverage_by_retailer: Mapping[str, JsonObject],
+        product_pack: JsonObject,
+        preferred_profile: str,
+        minimum_observations: int,
+        minimum_geographies: int,
+    ) -> JsonObject:
+        values = self._comparison_metric_values(
+            comparison,
+            metric_index,
+            benchmark_id=benchmark_id,
+        )
+        profile_id = str(comparison.get("profile_id", ""))
+        mode = modes.get(profile_id, {})
+        benchmark_rate = self._numeric_metric(values.get("benchmark_lower_rate"))
+        competitor_rate = self._numeric_metric(values.get("competitor_lower_rate"))
+        parity_rate = self._numeric_metric(values.get("parity_rate"))
+        if parity_rate is None and benchmark_rate is not None and competitor_rate is not None:
+            parity_rate = max(0.0, 1.0 - benchmark_rate - competitor_rate)
+        outcome_rates = (benchmark_rate, competitor_rate, parity_rate)
+        rates_available = all(value is not None for value in outcome_rates)
+        rates_reconcile = (
+            rates_available
+            and abs(sum(float(value) for value in outcome_rates if value is not None) - 1.0)
+            <= 0.001
+        )
+        matches = self._numeric_metric(values.get("matches"))
+        matched_geographies = self._numeric_metric(values.get("unique_geographies"))
+        coverage_geographies = self._coverage_value(
+            coverage_by_retailer.get(competitor_id, {}), metric_index
+        )
+        median_gap = self._numeric_metric(values.get("median_gap"))
+        profile: JsonObject = next(
+            (
+                row
+                for row in product_pack.get("matching_profiles", [])
+                if str(row.get("id")) == profile_id
+            ),
+            {},
+        )
+        comparison_metric = str(mode.get("comparison_metric", "package_price"))
+        evidence_ready = (
+            matches is not None
+            and matches >= minimum_observations
+            and matched_geographies is not None
+            and matched_geographies >= minimum_geographies
+            and rates_reconcile
+        )
+        if evidence_ready:
+            readiness_reason = (
+                f"Meets the Product Pack minimum of {minimum_observations:,} "
+                f"observations across {minimum_geographies:,} geographies"
+            )
+        else:
+            shortfalls: list[str] = []
+            if matches is None or matches < minimum_observations:
+                shortfalls.append(
+                    f"{self._whole_number(matches) or 0:,} of "
+                    f"{minimum_observations:,} required observations"
+                )
+            if matched_geographies is None or matched_geographies < minimum_geographies:
+                shortfalls.append(
+                    f"{self._whole_number(matched_geographies) or 0:,} of "
+                    f"{minimum_geographies:,} required geographies"
+                )
+            if not rates_available:
+                shortfalls.append("complete benchmark, competitor, and parity shares unavailable")
+            elif not rates_reconcile:
+                rate_total = sum(float(value) for value in outcome_rates if value is not None)
+                shortfalls.append(f"outcome shares total {rate_total:.1%}; expected 100.0%")
+            readiness_reason = "Limited evidence: " + "; ".join(shortfalls)
+        has_comparison = bool(comparison.get("comparison_id"))
+        return {
+            "competitor_id": competitor_id,
+            "competitor": self._retailer_name(competitor_id),
+            "benchmark_retailer_id": benchmark_id,
+            "benchmark_retailer": benchmark_name,
+            "profile_id": profile_id,
+            "comparison_lens": _merchant_text(
+                mode.get("label", comparison.get("profile_id", "Comparison")),
+                self._retailer_names,
+                product_pack,
+            ),
+            "comparison_metric": comparison_metric,
+            "price_unit": self._price_unit(comparison_metric),
+            "package_basis": self._package_basis(comparison_metric, profile),
+            "geography": str(mode.get("geography", "unknown")),
+            "basis_status": (
+                "unavailable"
+                if not has_comparison
+                else "preferred"
+                if profile_id == preferred_profile
+                else "fallback"
+            ),
+            "matches": self._whole_number(matches),
+            "matched_geographies": self._whole_number(matched_geographies),
+            "qualifying_geographies": self._whole_number(coverage_geographies),
+            "benchmark_lower_rate": benchmark_rate,
+            "competitor_lower_rate": competitor_rate,
+            "parity_rate": parity_rate,
+            "benchmark_median": self._numeric_metric(values.get("benchmark_median")),
+            "competitor_median": self._numeric_metric(values.get("competitor_median")),
+            "median_gap": median_gap,
+            "benchmark_median_statistic": "marginal_median",
+            "competitor_median_statistic": "marginal_median",
+            "median_gap_statistic": "paired_median_gap",
+            "minimum_observations": minimum_observations,
+            "minimum_geographies": minimum_geographies,
+            "readiness_reason": readiness_reason,
+            "evidence_state": "reported" if (matches or 0) > 0 else "no_matched_observations",
+            "dominant_outcome": self._dominant_outcome(
+                benchmark_rate,
+                competitor_rate,
+                parity_rate,
+            ),
+            "price_position": self._price_position(
+                benchmark_name,
+                self._retailer_name(competitor_id),
+                median_gap,
+            ),
+            "status": "ready" if evidence_ready else "limited_evidence",
+        }
 
     def reconcile_scorecards_with_product_evidence(
         self,
@@ -1020,21 +1078,76 @@ class ReportProjector:
         product_decisions: list[JsonObject],
         product_evidence: JsonObject,
         benchmark_name: str,
+        match_relationships: list[JsonObject] | None = None,
     ) -> list[JsonObject]:
         """Fill zero aggregate scorecards from governed relationship evidence."""
 
-        decisions_by_competitor: dict[str, list[JsonObject]] = defaultdict(list)
+        decisions_by_scope: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
         for decision in product_decisions:
             competitor = str(decision.get("competitor") or "")
             if competitor and decision.get("qa_status", "ready") == "ready":
-                decisions_by_competitor[competitor].append(decision)
+                decisions_by_scope[(competitor, str(decision.get("profile_id") or ""))].append(
+                    decision
+                )
+        relationships_by_scope: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
+        for relationship in match_relationships or []:
+            competitor = str(relationship.get("competitor_id") or "")
+            eligible = relationship.get("eligible_profile_ids") or relationship.get("profile_ids")
+            profile_ids = (
+                [str(value) for value in eligible]
+                if isinstance(eligible, list)
+                else [str(relationship.get("profile_id") or "")]
+            )
+            for profile_id in profile_ids:
+                if competitor and profile_id:
+                    relationships_by_scope[(competitor, profile_id)].append(relationship)
         for scorecard in scorecards:
             competitor_id = str(scorecard.get("competitor_id") or "")
-            decisions = decisions_by_competitor.get(competitor_id, [])
-            if not decisions or float(scorecard.get("matches") or 0) > 0:
+            profile_id = str(scorecard.get("profile_id") or "")
+            decisions = (
+                decisions_by_scope.get((competitor_id, profile_id), [])
+                if profile_id
+                else [
+                    row
+                    for (retailer_id, _profile_id), rows in decisions_by_scope.items()
+                    if retailer_id == competitor_id
+                    for row in rows
+                ]
+            )
+            relationships = (
+                relationships_by_scope.get((competitor_id, profile_id), [])
+                if profile_id
+                else [
+                    row
+                    for (retailer_id, _profile_id), rows in relationships_by_scope.items()
+                    if retailer_id == competitor_id
+                    for row in rows
+                ]
+            )
+            if float(scorecard.get("matches") or 0) > 0:
+                scorecard["evidence_state"] = "reported"
+                continue
+            if not decisions:
+                if relationships:
+                    scorecard["evidence_state"] = "no_admissible_observations"
+                    scorecard["readiness_reason"] = (
+                        "Governed comparable products exist, but no price observations met "
+                        "the selected geography and comparison-basis requirements."
+                    )
+                else:
+                    scorecard["evidence_state"] = "no_governed_relationships"
+                    scorecard["readiness_reason"] = (
+                        "No governed comparable product relationships were included for "
+                        "this retailer and comparison basis."
+                    )
                 continue
             matches = sum(int(row.get("matches") or 0) for row in decisions)
             if matches <= 0:
+                scorecard["evidence_state"] = "no_admissible_observations"
+                scorecard["readiness_reason"] = (
+                    "Governed comparable products exist, but no positive-price observations "
+                    "met the selected geography and comparison-basis requirements."
+                )
                 continue
             evidence_rows = [
                 evidence_row
@@ -1132,6 +1245,7 @@ class ReportProjector:
                         else "Price position varies by governed product; open product detail"
                     ),
                     "status": "ready" if evidence_ready else "limited_evidence",
+                    "evidence_state": "reported",
                 }
             )
         return scorecards

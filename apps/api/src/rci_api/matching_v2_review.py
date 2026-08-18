@@ -43,6 +43,74 @@ def _checksum(value: Any) -> str:
     return hashlib.sha256(_canonical(value).encode()).hexdigest()
 
 
+def _matching_v2_certification_coverage(
+    labels: Sequence[Mapping[str, Any]],
+    cases: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Reconcile the certified gold set against every retailer's review queue.
+
+    A zero in reporting is not interpretable without this funnel. It can mean no candidate was
+    certified, every candidate was rejected, or certified relationships produced no admissible
+    store-level observations. The release persists the first two distinctions; the report
+    projection adds the observation outcome later.
+    """
+
+    retailer_by_case: dict[str, str] = {}
+    retailer_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: {
+            "candidate_count": 0,
+            "certified_count": 0,
+            "certified_comparable_count": 0,
+            "certified_not_comparable_count": 0,
+            "unresolved_count": 0,
+        }
+    )
+    for case in cases:
+        case_id = str(case.get("case_id") or case.get("external_case_id") or "").strip()
+        retailer_id = str(case.get("competitor_retailer_id") or "").strip()
+        if not case_id or not retailer_id:
+            raise ValueError("matching v2 coverage requires a case id and competitor retailer")
+        if case_id in retailer_by_case:
+            raise ValueError(f"matching v2 coverage contains duplicate case {case_id!r}")
+        retailer_by_case[case_id] = retailer_id
+        retailer_counts[retailer_id]["candidate_count"] += 1
+
+    certified_case_ids: set[str] = set()
+    comparable_count = 0
+    for label in labels:
+        case_id = str(label.get("case_id") or "").strip()
+        if case_id in certified_case_ids:
+            raise ValueError(f"matching v2 gold set contains duplicate case {case_id!r}")
+        retailer_id = retailer_by_case.get(case_id)
+        if retailer_id is None:
+            raise ValueError(f"matching v2 gold-set case {case_id!r} is absent from its queue")
+        certified_case_ids.add(case_id)
+        counts = retailer_counts[retailer_id]
+        counts["certified_count"] += 1
+        if bool(label.get("expected_comparable")):
+            comparable_count += 1
+            counts["certified_comparable_count"] += 1
+        else:
+            counts["certified_not_comparable_count"] += 1
+
+    retailers: list[dict[str, Any]] = []
+    for retailer_id in sorted(retailer_counts):
+        counts = retailer_counts[retailer_id]
+        counts["unresolved_count"] = counts["candidate_count"] - counts["certified_count"]
+        retailers.append({"competitor_retailer_id": retailer_id, **counts})
+
+    return {
+        "authority": "matching_v2_certified_gold_set",
+        "queue_case_count": len(retailer_by_case),
+        "certified_label_count": len(certified_case_ids),
+        "certified_comparable_count": comparable_count,
+        "certified_not_comparable_count": len(certified_case_ids) - comparable_count,
+        "unresolved_excluded_count": len(retailer_by_case) - len(certified_case_ids),
+        "automatic_fallback_enabled": False,
+        "retailers": retailers,
+    }
+
+
 def _is_ai_retry_integrity_failure(message: object) -> bool:
     """Keep governed input/prompt mismatches out of the paid retry boundary."""
 
@@ -2937,7 +3005,6 @@ class PostgresMatchingV2ReviewRepository:
         source_analysis_id: str,
     ) -> dict[str, Any]:
         labels = list(gold_set.get("labels", []))
-        comparable = sum(bool(label.get("expected_comparable")) for label in labels)
         async with self._engine.begin() as connection:
             queue = (
                 (
@@ -2963,6 +3030,25 @@ class PostgresMatchingV2ReviewRepository:
             )
             if queue is None:
                 raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
+            queue_cases = list(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT external_case_id AS case_id, competitor_retailer_id
+                            FROM matching_v2_review_case
+                            WHERE review_queue_id = CAST(:review_queue_id AS uuid)
+                            ORDER BY competitor_retailer_id, external_case_id
+                            """
+                        ),
+                        {"review_queue_id": queue["id"]},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if len(queue_cases) != int(queue["queue_case_count"]):
+                raise ValueError("matching v2 queue counts changed while creating its release")
             source = (
                 (
                     await connection.execute(
@@ -2992,15 +3078,7 @@ class PostgresMatchingV2ReviewRepository:
                     "source analysis category does not match the certified review queue: "
                     f"{source['product_pack_id']!r} != {queue['product_pack_id']!r}"
                 )
-            coverage = {
-                "authority": "matching_v2_certified_gold_set",
-                "queue_case_count": int(queue["queue_case_count"]),
-                "certified_label_count": len(labels),
-                "certified_comparable_count": comparable,
-                "certified_not_comparable_count": len(labels) - comparable,
-                "unresolved_excluded_count": int(queue["queue_case_count"]) - len(labels),
-                "automatic_fallback_enabled": False,
-            }
+            coverage = _matching_v2_certification_coverage(labels, queue_cases)
             release = (
                 (
                     await connection.execute(
@@ -3452,6 +3530,7 @@ class MatchingV2ReviewService:
             )
         document = {
             "schema_version": "2.0.0",
+            "coverage_contract_version": "1.0.0",
             "gold_set_id": f"{external_queue_id}-gold-set",
             "version": view["queue"]["version"],
             "purpose": "release_certification",

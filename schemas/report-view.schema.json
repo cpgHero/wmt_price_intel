@@ -81,6 +81,55 @@
     },
     "match_governance": { "$ref": "#/$defs/matchGovernance" },
     "report_readiness": { "$ref": "#/$defs/reportReadiness" },
+    "certification_coverage": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "queue_case_count",
+            "certified_label_count",
+            "certified_comparable_count",
+            "certified_not_comparable_count",
+            "unresolved_excluded_count",
+            "automatic_fallback_enabled"
+          ],
+          "properties": {
+            "authority": { "type": "string" },
+            "queue_case_count": { "type": "integer", "minimum": 0 },
+            "certified_label_count": { "type": "integer", "minimum": 0 },
+            "certified_comparable_count": { "type": "integer", "minimum": 0 },
+            "certified_not_comparable_count": { "type": "integer", "minimum": 0 },
+            "unresolved_excluded_count": { "type": "integer", "minimum": 0 },
+            "automatic_fallback_enabled": { "type": "boolean" },
+            "retailers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "competitor_retailer_id",
+                  "candidate_count",
+                  "certified_count",
+                  "certified_comparable_count",
+                  "certified_not_comparable_count",
+                  "unresolved_count"
+                ],
+                "properties": {
+                  "competitor_retailer_id": { "type": "string", "minLength": 1 },
+                  "candidate_count": { "type": "integer", "minimum": 0 },
+                  "certified_count": { "type": "integer", "minimum": 0 },
+                  "certified_comparable_count": { "type": "integer", "minimum": 0 },
+                  "certified_not_comparable_count": { "type": "integer", "minimum": 0 },
+                  "unresolved_count": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "groups": {
       "type": "array",
       "items": { "$ref": "#/$defs/group" }
@@ -269,6 +318,7 @@
         "minimum_observations",
         "minimum_geographies",
         "readiness_reason",
+        "evidence_state",
         "dominant_outcome",
         "price_position",
         "status"
@@ -302,6 +352,14 @@
         "minimum_observations": { "type": "integer", "minimum": 1 },
         "minimum_geographies": { "type": "integer", "minimum": 1 },
         "readiness_reason": { "type": "string", "minLength": 1 },
+        "evidence_state": {
+          "enum": [
+            "reported",
+            "no_matched_observations",
+            "no_governed_relationships",
+            "no_admissible_observations"
+          ]
+        },
         "dominant_outcome": {
           "enum": ["benchmark_lower", "competitor_lower", "parity", "unavailable"]
         },

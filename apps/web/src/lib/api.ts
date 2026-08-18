@@ -75,6 +75,23 @@ export interface AnalysisReportView extends Omit<
     competitors: RetailerOption[];
   };
   retailer_scorecards: RetailerScorecard[];
+  certification_coverage?: {
+    authority?: string;
+    queue_case_count: number;
+    certified_label_count: number;
+    certified_comparable_count: number;
+    certified_not_comparable_count: number;
+    unresolved_excluded_count: number;
+    automatic_fallback_enabled: boolean;
+    retailers?: {
+      competitor_retailer_id: string;
+      candidate_count: number;
+      certified_count: number;
+      certified_comparable_count: number;
+      certified_not_comparable_count: number;
+      unresolved_count: number;
+    }[];
+  } | null;
   product_pack: {
     id: string;
     name: string;
@@ -240,6 +257,11 @@ export interface RetailerScorecard {
   minimum_observations: number;
   minimum_geographies: number;
   readiness_reason: string;
+  evidence_state:
+    | "reported"
+    | "no_matched_observations"
+    | "no_governed_relationships"
+    | "no_admissible_observations";
   dominant_outcome:
     "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
   price_position: string;
