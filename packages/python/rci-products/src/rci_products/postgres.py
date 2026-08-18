@@ -1308,23 +1308,20 @@ class PostgresProductDetailRepository:
                               count(*) FILTER (
                                 WHERE jsonb_typeof(
                                   n.document #> '{normalized,identifiers}'
-                                ) = 'object' AND jsonb_object_length(
-                                    n.document #> '{normalized,identifiers}'
-                                  ) > 0
+                                ) = 'object' AND n.document #> '{normalized,identifiers}'
+                                  <> '{}'::jsonb
                               )::integer AS identifier_count,
                               count(*) FILTER (
                                 WHERE jsonb_typeof(
                                   n.document #> '{normalized,specification}'
-                                ) = 'object' AND jsonb_object_length(
-                                  n.document #> '{normalized,specification}'
-                                ) > 0
+                                ) = 'object' AND n.document #> '{normalized,specification}'
+                                  <> '{}'::jsonb
                               )::integer AS specification_count,
                               count(*) FILTER (
                                 WHERE jsonb_typeof(
                                   n.document #> '{normalized,physical_properties}'
-                                ) = 'object' AND jsonb_object_length(
-                                  n.document #> '{normalized,physical_properties}'
-                                ) > 0
+                                ) = 'object' AND n.document #> '{normalized,physical_properties}'
+                                  <> '{}'::jsonb
                               )::integer AS physical_properties_count,
                               count(*) FILTER (
                                 WHERE NULLIF(BTRIM(
