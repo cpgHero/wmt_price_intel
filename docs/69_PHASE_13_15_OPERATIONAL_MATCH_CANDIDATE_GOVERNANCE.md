@@ -110,3 +110,22 @@ source-result/release constraint makes retrying the same release idempotent.
 The AnalysisResult source contract carries the complete release-coverage envelope: source and
 selected candidate counts, selection completeness/rate, certified and unresolved totals, and
 per-retailer reconciliation. These are governed provenance fields, not optional UI calculations.
+
+## Governed Egg reporting release — 2026-08-18
+
+- Gold-set release `8374b3c8-379c-4b19-b400-773f36a9a1e4` contains the platform owner's 94
+  certified decisions: 90 comparable and 4 not comparable.
+- Analysis `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-8374b3c8`
+  completed from that immutable release with no legacy or automatic match fallback.
+- Sixty certified relationships produced admissible store/ZIP price evidence. Thirty certified
+  comparable relationships produced no admissible co-observed price evidence under the configured
+  geography and comparison profiles and are disclosed, not silently counted.
+- The remaining 132 unresolved candidates are excluded. The report is therefore published as
+  `Review Required`, while each retailer/profile scorecard can independently be ready when its
+  evidence threshold is satisfied.
+- Live UI validation reconciled retailer, comparison-basis, included-product, observation, ZIP,
+  and reported-relationship counts. Decision Readiness is scoped to the selected retailer and
+  comparison basis.
+- The obsolete pre-governance Egg Matching v2 result
+  `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-0dd6df6d` was archived only
+  after the governed replacement passed CI, deployed, and completed the browser validation.
