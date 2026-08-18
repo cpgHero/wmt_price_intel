@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -404,6 +404,14 @@ class ImportReviewQueueRequest(BaseModel):
     imported_by: str = Field(min_length=1, max_length=200)
     queue: dict[str, Any] | None = None
     queue_json: str | None = Field(default=None, min_length=2)
+    successor_of_version: str | None = Field(default=None, min_length=1, max_length=50)
+    carry_forward_certified: bool = False
+
+    @model_validator(mode="after")
+    def validate_successor_options(self) -> ImportReviewQueueRequest:
+        if self.carry_forward_certified and self.successor_of_version is None:
+            raise ValueError("carry_forward_certified requires an explicit successor_of_version")
+        return self
 
 
 class ReviewSubmissionRequest(BaseModel):
@@ -832,6 +840,8 @@ class MatchingV2ReviewRepository(Protocol):
         queue: Mapping[str, Any],
         *,
         imported_by: str,
+        successor_of_version: str | None = None,
+        carry_forward_certified: bool = False,
     ) -> dict[str, Any]: ...
 
     async def queue_view(
@@ -984,6 +994,8 @@ class PostgresMatchingV2ReviewRepository:
         queue: Mapping[str, Any],
         *,
         imported_by: str,
+        successor_of_version: str | None = None,
+        carry_forward_certified: bool = False,
     ) -> dict[str, Any]:
         async with self._engine.begin() as connection:
             existing = (
@@ -1056,8 +1068,23 @@ class PostgresMatchingV2ReviewRepository:
                 .one()
             )
             review_queue_id = str(row["id"])
+            successor_cases: dict[str, tuple[str, Mapping[str, Any]]] = {}
             for case in queue["cases"]:
-                await self._insert_case(connection, review_queue_id, case)
+                case_id = await self._insert_case(connection, review_queue_id, case)
+                successor_cases[str(case["case_id"])] = (case_id, case)
+            carried_forward_count = 0
+            if carry_forward_certified:
+                if successor_of_version is None:
+                    raise ValueError(
+                        "carry_forward_certified requires an explicit predecessor version"
+                    )
+                carried_forward_count = await self._carry_forward_certified_submissions(
+                    connection,
+                    organization_id=organization_id,
+                    queue=queue,
+                    predecessor_version=successor_of_version,
+                    successor_cases=successor_cases,
+                )
         return {
             "id": review_queue_id,
             "queue_id": queue["queue_id"],
@@ -1065,6 +1092,9 @@ class PostgresMatchingV2ReviewRepository:
             "checksum": queue["checksum"],
             "imported": True,
             "case_count": len(queue["cases"]),
+            "carried_forward_count": carried_forward_count,
+            "pending_case_count": len(queue["cases"]) - carried_forward_count,
+            "successor_of_version": successor_of_version,
         }
 
     @staticmethod
@@ -1072,10 +1102,12 @@ class PostgresMatchingV2ReviewRepository:
         connection: AsyncConnection,
         review_queue_id: str,
         case: Mapping[str, Any],
-    ) -> None:
-        await connection.execute(
-            text(
-                """
+    ) -> str:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        """
                 INSERT INTO matching_v2_review_case (
                   review_queue_id, external_case_id, benchmark_listing_id,
                   competitor_listing_id, competitor_retailer_id, stratum,
@@ -1085,20 +1117,218 @@ class PostgresMatchingV2ReviewRepository:
                   :competitor_listing_id, :competitor_retailer_id, :stratum,
                   :critical, CAST(:case_document AS jsonb), :case_checksum
                 )
+                RETURNING id::text
                 """
-            ),
-            {
-                "review_queue_id": review_queue_id,
-                "external_case_id": case["case_id"],
-                "benchmark_listing_id": case["benchmark_listing_id"],
-                "competitor_listing_id": case["competitor_listing_id"],
-                "competitor_retailer_id": case["competitor_retailer_id"],
-                "stratum": case["stratum"],
-                "critical": case["critical"],
-                "case_document": _canonical(case),
-                "case_checksum": _checksum(case),
-            },
+                    ),
+                    {
+                        "review_queue_id": review_queue_id,
+                        "external_case_id": case["case_id"],
+                        "benchmark_listing_id": case["benchmark_listing_id"],
+                        "competitor_listing_id": case["competitor_listing_id"],
+                        "competitor_retailer_id": case["competitor_retailer_id"],
+                        "stratum": case["stratum"],
+                        "critical": case["critical"],
+                        "case_document": _canonical(case),
+                        "case_checksum": _checksum(case),
+                    },
+                )
+            )
+            .mappings()
+            .one()
         )
+        return str(row["id"])
+
+    @staticmethod
+    def _without_additive_image_evidence(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                str(key): PostgresMatchingV2ReviewRepository._without_additive_image_evidence(child)
+                for key, child in value.items()
+                if str(key) not in {"image_url", "image_urls"}
+            }
+        if isinstance(value, list):
+            return [
+                PostgresMatchingV2ReviewRepository._without_additive_image_evidence(child)
+                for child in value
+            ]
+        return value
+
+    @staticmethod
+    def _collect_image_evidence(value: Any) -> set[str]:
+        images: set[str] = set()
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                if str(key) == "image_url" and child:
+                    images.add(str(child))
+                elif str(key) == "image_urls" and isinstance(child, list):
+                    images.update(str(item) for item in child if item)
+                else:
+                    images.update(PostgresMatchingV2ReviewRepository._collect_image_evidence(child))
+        elif isinstance(value, list):
+            for child in value:
+                images.update(PostgresMatchingV2ReviewRepository._collect_image_evidence(child))
+        return images
+
+    @staticmethod
+    def _image_evidence_is_additive(
+        predecessor: Mapping[str, Any], successor: Mapping[str, Any]
+    ) -> bool:
+        for side in ("benchmark_listing", "competitor_listing"):
+            old_listing = predecessor.get(side)
+            new_listing = successor.get(side)
+            if not isinstance(old_listing, Mapping) or not isinstance(new_listing, Mapping):
+                return False
+            old_images = PostgresMatchingV2ReviewRepository._collect_image_evidence(old_listing)
+            new_images = PostgresMatchingV2ReviewRepository._collect_image_evidence(new_listing)
+            if not old_images.issubset(new_images):
+                return False
+        return True
+
+    @classmethod
+    async def _carry_forward_certified_submissions(
+        cls,
+        connection: AsyncConnection,
+        *,
+        organization_id: str,
+        queue: Mapping[str, Any],
+        predecessor_version: str,
+        successor_cases: Mapping[str, tuple[str, Mapping[str, Any]]],
+    ) -> int:
+        predecessor = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT id::text, product_pack_id, product_pack_version,
+                               policy_checksum
+                        FROM matching_v2_review_queue
+                        WHERE organization_id = CAST(:organization_id AS uuid)
+                          AND external_queue_id = :queue_id
+                          AND version = :version
+                        """
+                    ),
+                    {
+                        "organization_id": organization_id,
+                        "queue_id": queue["queue_id"],
+                        "version": predecessor_version,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if predecessor is None:
+            raise ValueError("the declared predecessor review queue was not found")
+        if (
+            str(predecessor["product_pack_id"]) != str(queue["product_pack"]["id"])
+            or str(predecessor["product_pack_version"]) != str(queue["product_pack"]["version"])
+            or str(predecessor["policy_checksum"]) != str(queue["policy_checksum"])
+        ):
+            raise ValueError("certified decisions cannot cross Product Pack or policy revisions")
+        adjudication_count = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM matching_v2_adjudication a
+                    JOIN matching_v2_review_case c ON c.id = a.review_case_id
+                    WHERE c.review_queue_id = CAST(:queue_id AS uuid)
+                    """
+                ),
+                {"queue_id": predecessor["id"]},
+            )
+        ).scalar_one()
+        if int(adjudication_count) > 0:
+            raise ValueError(
+                "evidence-only succession requires explicit handling for adjudicated decisions"
+            )
+        rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (c.id)
+                           c.external_case_id, c.case_document,
+                           s.id::text AS submission_id, s.reviewer_id, s.verdict,
+                           s.allowed_tiers, s.rationale, s.evidence_refs
+                    FROM matching_v2_review_case c
+                    JOIN matching_v2_review_submission s ON s.review_case_id = c.id
+                    WHERE c.review_queue_id = CAST(:queue_id AS uuid)
+                    ORDER BY c.id, s.created_at DESC, s.id DESC
+                    """
+                ),
+                {"queue_id": predecessor["id"]},
+            )
+        ).mappings()
+        carried = 0
+        for row in rows:
+            if str(row["verdict"]) not in {"comparable", "not_comparable"}:
+                continue
+            external_case_id = str(row["external_case_id"])
+            successor = successor_cases.get(external_case_id)
+            if successor is None:
+                raise ValueError(
+                    "a certified predecessor case is absent from the successor queue: "
+                    f"{external_case_id}"
+                )
+            successor_case_id, successor_document = successor
+            predecessor_document = dict(row["case_document"])
+            if not cls._image_evidence_is_additive(
+                predecessor_document, successor_document
+            ) or cls._without_additive_image_evidence(
+                predecessor_document
+            ) != cls._without_additive_image_evidence(successor_document):
+                raise ValueError(
+                    "a certified decision can only carry across additive image evidence: "
+                    f"{external_case_id}"
+                )
+            predecessor_submission_id = str(row["submission_id"])
+            provenance_ref = f"matching-v2-review-submission:{predecessor_submission_id}"
+            evidence_refs = [str(value) for value in (row["evidence_refs"] or [])]
+            if provenance_ref not in evidence_refs:
+                evidence_refs.append(provenance_ref)
+            carry_note = (
+                f"\n\nCarried forward from immutable queue version {predecessor_version}; "
+                "the pair, governed attributes, policy, proposal, and source evidence are "
+                "unchanged, with only additive PDP image references in this successor."
+            )
+            rationale = str(row["rationale"])
+            rationale = f"{rationale[: max(0, 10_000 - len(carry_note))]}{carry_note}"
+            submission_document = {
+                "review_case_id": successor_case_id,
+                "reviewer_id": str(row["reviewer_id"]),
+                "verdict": str(row["verdict"]),
+                "allowed_tiers": list(row["allowed_tiers"] or []),
+                "rationale": rationale,
+                "evidence_refs": evidence_refs,
+                "supersedes_submission_id": predecessor_submission_id,
+            }
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO matching_v2_review_submission (
+                      review_case_id, reviewer_id, verdict, allowed_tiers,
+                      rationale, evidence_refs, submission_checksum,
+                      supersedes_submission_id
+                    ) VALUES (
+                      CAST(:case_id AS uuid), :reviewer_id, :verdict, :allowed_tiers,
+                      :rationale, CAST(:evidence_refs AS jsonb), :submission_checksum,
+                      CAST(:supersedes_submission_id AS uuid)
+                    )
+                    """
+                ),
+                {
+                    "case_id": successor_case_id,
+                    "reviewer_id": submission_document["reviewer_id"],
+                    "verdict": submission_document["verdict"],
+                    "allowed_tiers": submission_document["allowed_tiers"],
+                    "rationale": rationale,
+                    "evidence_refs": _canonical(evidence_refs),
+                    "submission_checksum": _checksum(submission_document),
+                    "supersedes_submission_id": predecessor_submission_id,
+                },
+            )
+            carried += 1
+        return carried
 
     async def queue_view(
         self,
@@ -3321,6 +3551,8 @@ class MatchingV2ReviewService:
             request.organization_id,
             queue,
             imported_by=request.imported_by,
+            successor_of_version=request.successor_of_version,
+            carry_forward_certified=request.carry_forward_certified,
         )
 
     async def queue_view(self, external_queue_id: str, **filters: Any) -> dict[str, Any]:

@@ -387,11 +387,15 @@ class ReviewRepository:
         queue: Mapping[str, Any],
         *,
         imported_by: str,
+        successor_of_version: str | None = None,
+        carry_forward_certified: bool = False,
     ) -> dict[str, Any]:
         self.imported = {
             "organization_id": organization_id,
             "queue": dict(queue),
             "imported_by": imported_by,
+            "successor_of_version": successor_of_version,
+            "carry_forward_certified": carry_forward_certified,
         }
         return {"queue_id": queue["queue_id"], "imported": True, "case_count": 1}
 
@@ -623,6 +627,67 @@ async def test_review_service_validates_queue_checksum_before_import() -> None:
     invalid.queue["checksum"] = "0" * 64
     with pytest.raises(ValueError, match="checksum"):
         await service.import_queue(invalid)
+
+
+async def test_review_service_passes_governed_successor_options() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+
+    await service.import_queue(
+        ImportReviewQueueRequest(
+            organization_id="00000000-0000-0000-0000-000000000001",
+            imported_by="review-admin",
+            queue=_queue(),
+            successor_of_version="1.0.0",
+            carry_forward_certified=True,
+        )
+    )
+
+    assert repository.imported is not None
+    assert repository.imported["successor_of_version"] == "1.0.0"
+    assert repository.imported["carry_forward_certified"] is True
+
+
+def test_review_queue_successor_requires_explicit_predecessor() -> None:
+    with pytest.raises(ValueError, match="successor_of_version"):
+        ImportReviewQueueRequest(
+            organization_id="00000000-0000-0000-0000-000000000001",
+            imported_by="review-admin",
+            queue=_queue(),
+            carry_forward_certified=True,
+        )
+
+
+def test_successor_compatibility_ignores_only_additive_image_arrays() -> None:
+    predecessor = {
+        "case_id": "case-1",
+        "benchmark_listing": {"title": "Milk", "image_url": "primary.jpg"},
+        "competitor_listing": {"title": "Competitor milk", "image_url": "other.jpg"},
+        "edge": {"proposal": "review"},
+    }
+    successor = {
+        **predecessor,
+        "benchmark_listing": {
+            **predecessor["benchmark_listing"],
+            "image_url": "nutrition.jpg",
+            "image_urls": ["primary.jpg", "nutrition.jpg"],
+        },
+    }
+
+    sanitize = PostgresMatchingV2ReviewRepository._without_additive_image_evidence
+
+    assert sanitize(predecessor) == sanitize(successor)
+    assert PostgresMatchingV2ReviewRepository._image_evidence_is_additive(predecessor, successor)
+    changed = {**successor, "edge": {"proposal": "comparable"}}
+    assert sanitize(predecessor) != sanitize(changed)
+    replaced = {
+        **successor,
+        "benchmark_listing": {
+            **successor["benchmark_listing"],
+            "image_urls": ["nutrition.jpg"],
+        },
+    }
+    assert not PostgresMatchingV2ReviewRepository._image_evidence_is_additive(predecessor, replaced)
 
 
 async def test_review_service_rejects_known_third_party_seller_queue() -> None:

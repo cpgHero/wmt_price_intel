@@ -1331,6 +1331,12 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-18",
+              "Implemented and locally test-verified; production successor import pending",
+              "Matching v2 review queues gained governed evidence-only succession with certified-decision carry-forward.",
+              "An administrator must name the exact predecessor version. Product Pack version and policy checksum must remain identical, every certified case must remain present, every prior primary image must remain in the successor image set, and case documents must be byte-equivalent after removing only image-reference fields. Eligible comparable and not-comparable submissions are copied into the successor with an immutable supersession link and evidence reference; replaced evidence or other changed fields fail the entire transaction. No paid AI call is triggered by import.",
+            ],
+            [
+              "2026-08-18",
               "Implemented and test-verified; production remediation replay pending",
               "Matching v2 PDP evidence now retains secondary product images and audits field-level completeness.",
               "Only incomplete or conflicting cases receive vision evidence. The request uses up to six deduplicated PDP images per product, balances both retailer sides, requires exact image citations, and preserves structured-only fallback. PDP normalization audits now distinguish seller, brand, description, identifiers, specifications, physical properties, primary imagery, and multi-image coverage from unmapped-field schema drift. No paid AI or PDP calls run automatically.",

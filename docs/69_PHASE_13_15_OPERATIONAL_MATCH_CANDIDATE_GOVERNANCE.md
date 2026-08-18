@@ -99,6 +99,25 @@ was deleted locally and was never imported into production.
   decisions: 90 comparable relationships and 4 governed not-comparable decisions. The remaining
   132 insufficient-evidence cases remain explicitly uncertified and cannot enter price reporting.
 
+## Evidence-only queue succession — 2026-08-18
+
+PDP evidence remediation creates a new immutable review-queue version; it never edits the
+original case documents. A successor import may carry finalized `comparable` and
+`not_comparable` submissions only when all of the following fail-closed checks pass inside the
+same database transaction:
+
+- the predecessor belongs to the same organization and external queue;
+- the Product Pack ID/version and certification-policy checksum are unchanged;
+- every certified predecessor case exists in the successor;
+- every prior primary image remains present in the successor image set;
+- each certified case is identical after removing only `image_url` and `image_urls` fields.
+
+Each carried submission preserves the reviewer, verdict, allowed tiers, rationale, and evidence
+references, adds an explicit reference to the predecessor submission, and records that submission
+in `supersedes_submission_id`. Any changed governed attribute, pair identity, proposal, source
+reference, or missing certified case aborts the complete import. The remaining successor cases stay
+pending for bounded AI or human remediation. Queue import itself never starts a paid AI call.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run
