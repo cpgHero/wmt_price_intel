@@ -201,12 +201,24 @@ export interface Source {
   matching_v2_gold_set_checksum?: string | null;
   matching_v2_certification_coverage?: {
     authority: "matching_v2_certified_gold_set";
+    source_candidate_count?: number;
+    selected_candidate_count?: number;
+    selection_complete?: boolean;
+    selection_coverage_rate?: number;
     queue_case_count: number;
     certified_label_count: number;
     certified_comparable_count: number;
     certified_not_comparable_count: number;
     unresolved_excluded_count: number;
     automatic_fallback_enabled: false;
+    retailers?: {
+      competitor_retailer_id: string;
+      candidate_count: number;
+      certified_count: number;
+      certified_comparable_count: number;
+      certified_not_comparable_count: number;
+      unresolved_count: number;
+    }[];
   } | null;
   brand_revision_id?: string | null;
   source_analysis_id?: string | null;

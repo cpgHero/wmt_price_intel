@@ -547,12 +547,36 @@
           ],
           "properties": {
             "authority": {"const": "matching_v2_certified_gold_set"},
+            "source_candidate_count": {"type": "integer", "minimum": 0},
+            "selected_candidate_count": {"type": "integer", "minimum": 0},
+            "selection_complete": {"type": "boolean"},
+            "selection_coverage_rate": {"type": "number", "minimum": 0, "maximum": 1},
             "queue_case_count": {"type": "integer", "minimum": 0},
             "certified_label_count": {"type": "integer", "minimum": 0},
             "certified_comparable_count": {"type": "integer", "minimum": 0},
             "certified_not_comparable_count": {"type": "integer", "minimum": 0},
             "unresolved_excluded_count": {"type": "integer", "minimum": 0},
-            "automatic_fallback_enabled": {"const": false}
+            "automatic_fallback_enabled": {"const": false},
+            "retailers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "competitor_retailer_id", "candidate_count", "certified_count",
+                  "certified_comparable_count", "certified_not_comparable_count",
+                  "unresolved_count"
+                ],
+                "properties": {
+                  "competitor_retailer_id": {"type": "string", "minLength": 1},
+                  "candidate_count": {"type": "integer", "minimum": 0},
+                  "certified_count": {"type": "integer", "minimum": 0},
+                  "certified_comparable_count": {"type": "integer", "minimum": 0},
+                  "certified_not_comparable_count": {"type": "integer", "minimum": 0},
+                  "unresolved_count": {"type": "integer", "minimum": 0}
+                }
+              }
+            }
           }
         },
         "brand_revision_id": {

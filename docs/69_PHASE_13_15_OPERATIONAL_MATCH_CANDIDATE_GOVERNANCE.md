@@ -106,3 +106,7 @@ identity therefore includes `matching_v2_gold_set_release_id` in addition to the
 Product Pack, legacy match revision, and brand revision. This preserves legacy idempotency while
 allowing a distinct, auditable analysis run for each certified Matching v2 release. A separate
 source-result/release constraint makes retrying the same release idempotent.
+
+The AnalysisResult source contract carries the complete release-coverage envelope: source and
+selected candidate counts, selection completeness/rate, certified and unresolved totals, and
+per-retailer reconciliation. These are governed provenance fields, not optional UI calculations.
