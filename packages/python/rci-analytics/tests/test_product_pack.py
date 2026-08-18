@@ -67,6 +67,17 @@ def test_primary_exact_profile_honors_active_modes_without_requiring_package_pri
     assert ComparisonEngine(pack).comparison_metric(str(profile["id"])) == "price_per_dozen"
 
 
+def test_egg_matching_policy_blocks_known_color_conflicts_not_unknown_organic() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    roles = pack.matching_v2["attribute_roles"]
+
+    assert pack.version == "1.2.2"
+    assert roles["shell_color"]["role"] == "hard_blocker"
+    assert roles["shell_color"].get("unknown_is_blocking", True) is True
+    assert roles["organic"]["role"] == "hard_blocker"
+    assert roles["organic"]["unknown_is_blocking"] is False
+
+
 def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
     narrative_benchmarks = json.loads(
         (REPOSITORY_ROOT / "fixtures/golden/narrative-benchmarks.json").read_text()

@@ -1011,6 +1011,53 @@ def test_current_milk_policy_upgrades_legacy_volume_evidence_to_hard_blocker() -
     )
 
 
+def test_current_egg_policy_tolerates_unknown_organic_but_blocks_color_conflict() -> None:
+    case = _queue()["cases"][0]
+    case["edge"]["attribute_evidence"] = [
+        {
+            "attribute": "size",
+            "role": "hard_blocker",
+            "benchmark_value": {"value": 12, "unit": "count"},
+            "competitor_value": {"value": 12, "unit": "count"},
+            "outcome": "match",
+        },
+        {
+            "attribute": "housing",
+            "role": "hard_blocker",
+            "benchmark_value": "cage_free",
+            "competitor_value": "cage_free",
+            "outcome": "match",
+        },
+        {
+            "attribute": "organic",
+            "role": "hard_blocker",
+            "benchmark_value": None,
+            "competitor_value": None,
+            "outcome": "unknown",
+        },
+        {
+            "attribute": "shell_color",
+            "role": "soft_comparator",
+            "benchmark_value": "White",
+            "competitor_value": "Brown",
+            "outcome": "conflict",
+        },
+    ]
+
+    policy = _active_certification_policy("fresh_shell_eggs")
+    governed = _apply_active_certification_policy(case, policy)
+
+    assert policy["product_pack_version"] == "1.2.2"
+    assert policy["hard_blocker_unknown_is_blocking"]["organic"] is False
+    assert governed["certification_unknown_nonblocking_attributes"] == ["organic"]
+    assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["shell_color"]
+    shell_color = next(
+        row for row in governed["edge"]["attribute_evidence"] if row["attribute"] == "shell_color"
+    )
+    assert shell_color["queue_role"] == "soft_comparator"
+    assert shell_color["role"] == "hard_blocker"
+
+
 def _bulk_eligible_case() -> dict[str, Any]:
     case = _queue()["cases"][0]
     case["review_status"] = "pending"

@@ -714,6 +714,7 @@ def test_policy_compiler_is_category_neutral(pack_id: str) -> None:
     [
         ("fresh_fluid_milk", "all_brand", "volume_oz"),
         ("fresh_shell_eggs", "strict", "size"),
+        ("fresh_shell_eggs", "strict", "shell_color"),
     ],
 )
 def test_spec_first_packs_do_not_fail_on_brand_alone(

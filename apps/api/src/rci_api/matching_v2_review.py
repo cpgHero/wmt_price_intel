@@ -291,6 +291,11 @@ def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
     hard_blockers = sorted(
         attribute for attribute, role in attribute_roles.items() if role == "hard_blocker"
     )
+    unknown_is_blocking = {
+        str(attribute): bool(rule.get("unknown_is_blocking", True))
+        for attribute, rule in configured_roles.items()
+        if isinstance(rule, Mapping) and str(rule.get("role") or "") == "hard_blocker"
+    }
     if not hard_blockers:
         raise ValueError(
             f"active Product Pack {product_pack_id!r} defines no certification hard blockers"
@@ -300,6 +305,7 @@ def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
         "product_pack_version": pack.version,
         "attribute_roles": attribute_roles,
         "hard_blocker_attributes": hard_blockers,
+        "hard_blocker_unknown_is_blocking": unknown_is_blocking,
         "policy_checksum": pack.checksum,
         "queue_evidence_is_immutable": True,
         "stricter_active_policy_wins": True,
@@ -309,6 +315,7 @@ def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
 def _hard_blocker_issues(
     case: Mapping[str, Any],
     hard_blocker_attributes: Sequence[str],
+    unknown_nonblocking_attributes: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     edge = case.get("edge")
     edge = edge if isinstance(edge, Mapping) else {}
@@ -320,10 +327,13 @@ def _hard_blocker_issues(
         if isinstance(row, Mapping) and row.get("attribute")
     }
     issues: list[dict[str, Any]] = []
+    unknown_nonblocking = set(unknown_nonblocking_attributes)
     for attribute in hard_blocker_attributes:
         evidence = evidence_by_attribute.get(attribute)
         outcome = str(evidence.get("outcome") or "missing") if evidence else "missing"
         if outcome in {"match", "within_tolerance"}:
+            continue
+        if outcome in {"missing", "unknown"} and attribute in unknown_nonblocking:
             continue
         issues.append(
             {
@@ -332,8 +342,12 @@ def _hard_blocker_issues(
                 "benchmark_value": evidence.get("benchmark_value") if evidence else None,
                 "competitor_value": evidence.get("competitor_value") if evidence else None,
                 "reason": (
-                    "The active Product Pack requires this attribute to be known and compatible "
-                    "before a comparable decision can be certified."
+                    "The active Product Pack prohibits a known conflict on this attribute"
+                    + (
+                        "."
+                        if attribute in unknown_nonblocking
+                        else " and requires it to be known before certification."
+                    )
                 ),
             }
         )
@@ -390,9 +404,17 @@ def _apply_active_certification_policy(
             ),
         }
     )
+    unknown_is_blocking = policy.get("hard_blocker_unknown_is_blocking")
+    unknown_is_blocking = unknown_is_blocking if isinstance(unknown_is_blocking, Mapping) else {}
+    document["certification_unknown_nonblocking_attributes"] = sorted(
+        attribute
+        for attribute in document["certification_hard_blocker_attributes"]
+        if unknown_is_blocking.get(attribute) is False
+    )
     document["certification_blockers"] = _hard_blocker_issues(
         document,
         document["certification_hard_blocker_attributes"],
+        document["certification_unknown_nonblocking_attributes"],
     )
     return document
 
@@ -543,7 +565,7 @@ _AI_BULK_REASON_LABELS = {
     "critical_evidence_incomplete": "Critical deterministic evidence is incomplete.",
     "ai_conflict_present": "The AI draft identifies one or more unresolved conflicts.",
     "hard_blocker_conflict": (
-        "A current Product Pack hard-blocker attribute conflicts or is unresolved."
+        "A current Product Pack hard-blocker attribute conflicts or has blocking unknown evidence."
     ),
     "low_confidence_ai_attribute": "An AI-proposed attribute is below the bulk confidence floor.",
     "known_third_party_seller": (
@@ -662,7 +684,13 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
             and str(evidence.get("role") or "") == "hard_blocker"
             and evidence.get("attribute")
         ]
-    hard_blocker_issues = _hard_blocker_issues(case, hard_blocker_attributes)
+    unknown_nonblocking_attributes = case.get("certification_unknown_nonblocking_attributes")
+    unknown_nonblocking_attributes = (
+        unknown_nonblocking_attributes if isinstance(unknown_nonblocking_attributes, list) else []
+    )
+    hard_blocker_issues = _hard_blocker_issues(
+        case, hard_blocker_attributes, unknown_nonblocking_attributes
+    )
     if verdict == "comparable" and hard_blocker_issues:
         reason_codes.append("hard_blocker_conflict")
 

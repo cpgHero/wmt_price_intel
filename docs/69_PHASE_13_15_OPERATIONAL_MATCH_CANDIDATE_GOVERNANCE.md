@@ -131,6 +131,28 @@ one case used the recorded structured-only fallback because its retailer image h
 unavailable. This outcome is evidence about the current hard-blocker policy and source coverage,
 not permission to relax either automatically.
 
+## Egg policy calibration — 2026-08-18
+
+Product Pack `fresh_shell_eggs` version `1.2.2` corrects the certification semantics exposed by
+the evidence-remediation replay:
+
+- a known shell-color difference is a hard conflict and the pair is not comparable;
+- unknown organic evidence does not independently block a decision;
+- a known organic-versus-non-organic conflict remains a hard conflict;
+- other hard-blocker attributes continue to treat missing or unknown evidence as blocking unless
+  their Product Pack policy explicitly opts out.
+
+The implementation is generic. Matching-v2 attribute roles may declare
+`unknown_is_blocking: false`; no Egg-specific branch was added to the engine or certification
+service. The active policy decorates each case with its exact unknown-tolerant attributes and the
+AI prompt must obey that case-bound list. Deterministic known conflicts remain authoritative.
+
+This Product Pack revision changes the certification-policy checksum. Existing queue `2.1.0`, its
+94 carried decisions, and all prior AI tasks remain immutable audit history and cannot be silently
+carried into a new policy queue. Production adoption therefore requires a newly versioned,
+exhaustive operational queue, explicit certification, a checksum-bound gold-set release, and a
+governed reporting replay. Building or importing that queue starts no paid AI or PDP calls.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run

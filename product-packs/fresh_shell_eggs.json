@@ -1,7 +1,7 @@
 {
   "id": "fresh_shell_eggs",
   "name": "Fresh Shell Eggs",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "category_family": "dairy_eggs",
   "scope": {
     "target_terms": [
@@ -282,9 +282,14 @@
     "attribute_roles": {
       "count": {"role": "soft_comparator", "critical": true, "weight": 5, "numeric_tolerance": 0},
       "size": {"role": "hard_blocker", "critical": true, "weight": 6},
-      "shell_color": {"role": "soft_comparator", "critical": true, "weight": 2},
+      "shell_color": {"role": "hard_blocker", "critical": true, "weight": 5},
       "grade": {"role": "soft_comparator", "critical": true, "weight": 3},
-      "organic": {"role": "hard_blocker", "critical": true, "weight": 5},
+      "organic": {
+        "role": "hard_blocker",
+        "critical": true,
+        "weight": 5,
+        "unknown_is_blocking": false
+      },
       "housing": {"role": "hard_blocker", "critical": true, "weight": 5},
       "brand": {"role": "descriptive", "critical": false, "weight": 0}
     },

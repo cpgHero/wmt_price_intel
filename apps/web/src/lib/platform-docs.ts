@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 17, 2026";
+const lastVerified = "August 18, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.7",
+  version: "1.3.8",
   lastVerified,
   baseline:
-    "Production implementation through Egg PDP 404 remediation Phase 13.13.3",
+    "Production implementation through Egg PDP remediation, with Egg matching-policy 1.2.2 locally verified and awaiting governed replay",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -178,6 +178,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Primary navigation",
           columns: ["Area", "Use it for", "Important boundary"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production policy replay pending",
+              "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
+              "Product Pack 1.2.2 makes a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Existing immutable queue decisions are not silently migrated across the changed policy checksum; a new governed queue and replay are required. No paid calls run automatically.",
+            ],
             [
               "Home",
               "Recent analyses, collection activity, and operating health.",

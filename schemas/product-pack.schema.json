@@ -450,7 +450,8 @@
               },
               "critical": { "type": "boolean" },
               "weight": { "type": "number", "minimum": 0 },
-              "numeric_tolerance": { "type": "number", "minimum": 0 }
+              "numeric_tolerance": { "type": "number", "minimum": 0 },
+              "unknown_is_blocking": { "type": "boolean" }
             }
           }
         },
