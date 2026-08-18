@@ -352,6 +352,42 @@ def test_review_queue_is_deterministic_and_keeps_every_automatic_approval() -> N
     )
 
 
+def test_operational_review_queue_keeps_every_governed_candidate() -> None:
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "private_label",
+        policy=_policy(),
+    )
+    result = evaluator.evaluate_listings(
+        tuple(_listing("walmart_us", f"w{index}") for index in range(1, 5)),
+        (_listing("aldi_us", "a1"),),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    queue = build_matching_v2_review_queue(
+        (result,),
+        queue_id="milk-operational-certification",
+        queue_version="1.0.0",
+        benchmark_source_reference="artifact://search/milk/walmart#sha256=def",
+        source_references={"aldi_us": "artifact://search/milk/aldi#sha256=abc"},
+        sampling=MatchingV2ReviewSampling(per_stratum_limit=1),
+        selection_mode="operational_exhaustive",
+    )
+
+    assert queue["purpose"] == "operational_match_certification"
+    assert queue["sampling"]["method"] == "exhaustive_governed_candidates"
+    assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
+    assert len(queue["cases"]) == result.evaluated_pairs + len(result.blocked_review_edges)
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-review-queue.schema.json",
+        queue,
+        label="matching v2 exhaustive operational queue",
+    )
+
+
 def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Path) -> None:
     walmart = tmp_path / "walmart.csv"
     aldi = tmp_path / "aldi.csv"
@@ -442,6 +478,8 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     assert profile["release_use"]["eligible"] is False
     assert queue["authoritative"] is False
     assert queue["version"] == "1.1.0"
+    assert queue["purpose"] == "operational_match_certification"
+    assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
     assert queue["cases"]
     assert queue["cases"][0]["benchmark_listing"]["image_url"] == ("https://example.com/wm1.png")
     assert queue["cases"][0]["benchmark_listing"]["seller_governance"]["status"] == (

@@ -316,6 +316,10 @@ def test_certification_coverage_preserves_each_retailer_funnel() -> None:
     )
 
     assert coverage["queue_case_count"] == 4
+    assert coverage["source_candidate_count"] == 4
+    assert coverage["selected_candidate_count"] == 4
+    assert coverage["selection_complete"] is True
+    assert coverage["selection_coverage_rate"] == 1.0
     assert coverage["certified_label_count"] == 3
     assert coverage["certified_comparable_count"] == 2
     assert coverage["unresolved_excluded_count"] == 1
@@ -345,6 +349,22 @@ def test_certification_coverage_rejects_labels_outside_the_queue() -> None:
             [{"case_id": "unknown", "expected_comparable": True}],
             [{"case_id": "known", "competitor_retailer_id": "aldi_us"}],
         )
+
+
+def test_certification_coverage_exposes_sampled_queue_as_incomplete() -> None:
+    coverage = _matching_v2_certification_coverage(
+        [{"case_id": "selected", "expected_comparable": True}],
+        [{"case_id": "selected", "competitor_retailer_id": "aldi_us"}],
+        sampling={
+            "available_counts": {"aldi_us:candidate": 10},
+            "selected_counts": {"aldi_us:candidate": 1},
+        },
+    )
+
+    assert coverage["source_candidate_count"] == 10
+    assert coverage["selected_candidate_count"] == 1
+    assert coverage["selection_complete"] is False
+    assert coverage["selection_coverage_rate"] == 0.1
 
 
 class ReviewRepository:

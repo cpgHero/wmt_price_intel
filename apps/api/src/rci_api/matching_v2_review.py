@@ -46,6 +46,8 @@ def _checksum(value: Any) -> str:
 def _matching_v2_certification_coverage(
     labels: Sequence[Mapping[str, Any]],
     cases: Sequence[Mapping[str, Any]],
+    *,
+    sampling: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reconcile the certified gold set against every retailer's review queue.
 
@@ -99,8 +101,43 @@ def _matching_v2_certification_coverage(
         counts["unresolved_count"] = counts["candidate_count"] - counts["certified_count"]
         retailers.append({"competitor_retailer_id": retailer_id, **counts})
 
+    available_counts = sampling.get("available_counts") if isinstance(sampling, Mapping) else None
+    selected_counts = sampling.get("selected_counts") if isinstance(sampling, Mapping) else None
+    source_candidate_count = (
+        sum(
+            max(0, int(value))
+            for value in available_counts.values()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        )
+        if isinstance(available_counts, Mapping)
+        else len(retailer_by_case)
+    )
+    selected_candidate_count = (
+        sum(
+            max(0, int(value))
+            for value in selected_counts.values()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        )
+        if isinstance(selected_counts, Mapping)
+        else len(retailer_by_case)
+    )
+    if selected_candidate_count != len(retailer_by_case):
+        raise ValueError(
+            "matching v2 queue sampling counts do not reconcile to its persisted cases"
+        )
+    selection_complete = source_candidate_count == selected_candidate_count
+    selection_coverage_rate = (
+        round(selected_candidate_count / source_candidate_count, 6)
+        if source_candidate_count
+        else 1.0
+    )
+
     return {
         "authority": "matching_v2_certified_gold_set",
+        "source_candidate_count": source_candidate_count,
+        "selected_candidate_count": selected_candidate_count,
+        "selection_complete": selection_complete,
+        "selection_coverage_rate": selection_coverage_rate,
         "queue_case_count": len(retailer_by_case),
         "certified_label_count": len(certified_case_ids),
         "certified_comparable_count": comparable_count,
@@ -3013,6 +3050,7 @@ class PostgresMatchingV2ReviewRepository:
                             """
                         SELECT q.id::text, q.organization_id::text, q.version,
                                q.product_pack_id, q.product_pack_version,
+                               q.sampling, q.document->>'purpose' AS queue_purpose,
                                count(c.id)::integer AS queue_case_count
                         FROM matching_v2_review_queue q
                         JOIN matching_v2_review_case c ON c.review_queue_id = q.id
@@ -3079,7 +3117,29 @@ class PostgresMatchingV2ReviewRepository:
                     "source analysis category does not match the certified review queue: "
                     f"{source['product_pack_id']!r} != {queue['product_pack_id']!r}"
                 )
-            coverage = _matching_v2_certification_coverage(labels, queue_cases)
+            sampling = queue.get("sampling")
+            coverage = _matching_v2_certification_coverage(
+                labels,
+                queue_cases,
+                sampling=sampling if isinstance(sampling, Mapping) else None,
+            )
+            if not coverage["selection_complete"]:
+                raise ValueError(
+                    "a sampled Matching v2 validation queue cannot drive an operational "
+                    "report release; regenerate an exhaustive operational certification queue"
+                )
+            if str(queue["queue_purpose"] or "") != "operational_match_certification":
+                raise ValueError(
+                    "only an operational Matching v2 certification queue can drive a report "
+                    "release; validation gold sets remain model-quality evidence"
+                )
+            if not isinstance(sampling, Mapping) or str(sampling.get("method") or "") != (
+                "exhaustive_governed_candidates"
+            ):
+                raise ValueError(
+                    "operational Matching v2 reporting requires an exhaustive governed-candidate "
+                    "queue"
+                )
             release = (
                 (
                     await connection.execute(

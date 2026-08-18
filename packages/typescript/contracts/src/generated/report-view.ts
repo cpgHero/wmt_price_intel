@@ -28,6 +28,10 @@ export interface RetailCompetitiveIntelligenceReportView {
   report_readiness: ReportReadiness;
   certification_coverage?: null | {
     authority?: string;
+    source_candidate_count?: number;
+    selected_candidate_count?: number;
+    selection_complete?: boolean;
+    selection_coverage_rate?: number;
     queue_case_count: number;
     certified_label_count: number;
     certified_comparable_count: number;

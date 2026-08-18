@@ -3942,6 +3942,66 @@ tbody tr:last-child td {
   justify-content: center;
   white-space: nowrap;
 }
+.cert-replay {
+  align-items: end;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(300px, 1.3fr) minmax(280px, 1fr) auto;
+  padding: 1rem;
+}
+.cert-replay h3,
+.cert-replay p,
+.cert-replay dl,
+.cert-replay dd {
+  margin: 0;
+}
+.cert-replay h3 {
+  font-size: 0.94rem;
+  margin-top: 0.1rem;
+}
+.cert-replay p,
+.cert-replay small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+.cert-replay label {
+  display: grid;
+  gap: 0.35rem;
+}
+.cert-replay label > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cert-replay-result {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.8rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(100px, 0.5fr));
+  padding-top: 0.85rem;
+}
+.cert-replay-result div {
+  min-width: 0;
+}
+.cert-replay-result dt {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cert-replay-result dd {
+  font-size: 0.76rem;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
 .cert-ai-batch {
   align-items: center;
   background: color-mix(in srgb, var(--green-soft) 42%, var(--card));
@@ -4666,6 +4726,13 @@ tbody tr:last-child td {
   .cert-gold-link {
     justify-self: start;
   }
+  .cert-replay {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cert-replay > div:first-child,
+  .cert-replay-result {
+    grid-column: 1 / -1;
+  }
   .cert-review-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4687,6 +4754,7 @@ tbody tr:last-child td {
     position: static;
   }
   .cert-summary,
+  .cert-replay,
   .cert-review-form,
   .cert-review-history {
     grid-template-columns: 1fr;
@@ -4696,6 +4764,9 @@ tbody tr:last-child td {
   }
   .cert-gold-link {
     justify-self: stretch;
+  }
+  .cert-replay-result {
+    grid-template-columns: 1fr;
   }
   .cert-product-pair {
     grid-template-columns: 1fr;

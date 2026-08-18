@@ -283,6 +283,20 @@ interface QueueView {
   cases: ReviewCase[];
 }
 
+interface GoldSetReplayResult {
+  gold_set_release_id: string;
+  gold_set_checksum: string;
+  analysis_run_id: string;
+  analysis_status: string;
+  coverage: {
+    candidate_count: number;
+    certified_count: number;
+    certified_comparable_count: number;
+    certified_not_comparable_count: number;
+    unresolved_count: number;
+  };
+}
+
 interface ReviewDraft {
   verdict: "" | "comparable" | "not_comparable" | "insufficient_evidence";
   tier: string;
@@ -501,6 +515,9 @@ export function MatchingV2ReviewAdmin() {
   const [queueRefresh, setQueueRefresh] = useState(0);
   const [view, setView] = useState<QueueView | null>(null);
   const [reviewerId, setReviewerId] = useState("");
+  const [replaySourceAnalysisId, setReplaySourceAnalysisId] = useState("");
+  const [replayResult, setReplayResult] =
+    useState<GoldSetReplayResult | null>(null);
   const [competitorFilter, setCompetitorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [offset, setOffset] = useState(0);
@@ -768,6 +785,45 @@ export function MatchingV2ReviewAdmin() {
       await loadQueues();
       setSelectedQueueId(response.queue_id);
       setQueueRefresh((current) => current + 1);
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createGovernedReplay(event: FormEvent) {
+    event.preventDefault();
+    if (!view) return;
+    const sourceAnalysisId = replaySourceAnalysisId.trim();
+    const releasedBy = reviewerId.trim();
+    if (!sourceAnalysisId) {
+      setError("Enter the source analysis ID that supplied this review queue.");
+      return;
+    }
+    if (!releasedBy) {
+      setError("Enter the current administrator identity before releasing a replay.");
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await jsonRequest<GoldSetReplayResult>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(view.queue.queue_id)}/gold-set/replays`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            source_analysis_id: sourceAnalysisId,
+            released_by: releasedBy,
+          }),
+        },
+      );
+      setReplayResult(result);
+      setNotice(
+        `Governed replay ${result.analysis_run_id} is ${label(result.analysis_status).toLowerCase()}. The immutable release contains ${result.coverage.certified_count.toLocaleString()} certified cases and leaves ${result.coverage.unresolved_count.toLocaleString()} unresolved.`,
+      );
     } catch (cause) {
       handleError(cause);
     } finally {
@@ -1348,6 +1404,56 @@ export function MatchingV2ReviewAdmin() {
               Open certified gold set
             </a>
           </section>
+
+          <form className="cert-replay" onSubmit={createGovernedReplay}>
+            <div>
+              <small>Immutable reporting release</small>
+              <h3>Create governed replay</h3>
+              <p>
+                Bind the current certified gold set to its source analysis and
+                queue a new report. The existing publication remains unchanged
+                for audit, unresolved cases stay excluded, and this action does
+                not collect data or call AI.
+              </p>
+            </div>
+            <label>
+              <span>Source analysis ID</span>
+              <input
+                value={replaySourceAnalysisId}
+                onChange={(event) => {
+                  setReplaySourceAnalysisId(event.target.value);
+                  setReplayResult(null);
+                  if (event.target.value.trim()) setError(null);
+                }}
+                placeholder="source-analysis-id"
+                autoComplete="off"
+              />
+              <small>Use the analysis ID before any -match-v2 suffix.</small>
+            </label>
+            <button
+              className="button primary"
+              type="submit"
+              disabled={busy || !replaySourceAnalysisId.trim()}
+            >
+              {busy ? "Creating replay…" : "Create governed replay"}
+            </button>
+            {replayResult ? (
+              <dl className="cert-replay-result">
+                <div>
+                  <dt>Analysis run</dt>
+                  <dd>{replayResult.analysis_run_id}</dd>
+                </div>
+                <div>
+                  <dt>Certified</dt>
+                  <dd>{replayResult.coverage.certified_count.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>Unresolved</dt>
+                  <dd>{replayResult.coverage.unresolved_count.toLocaleString()}</dd>
+                </div>
+              </dl>
+            ) : null}
+          </form>
 
           <section
             className="cert-ai-batch"

@@ -12,7 +12,7 @@ import json
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from rci_analytics.matching_v2 import ListingEvidence, TieredMatchDecisionV2
 from rci_analytics.matching_v2_shadow import MatchingShadowResultV2
@@ -134,12 +134,13 @@ def build_matching_v2_review_queue(
     benchmark_source_reference: str,
     source_references: Mapping[str, str],
     sampling: MatchingV2ReviewSampling | None = None,
+    selection_mode: Literal["validation_sample", "operational_exhaustive"] = "validation_sample",
 ) -> JsonObject:
-    """Build a deterministic, stratified queue without creating gold labels.
+    """Build a deterministic review queue without creating gold labels.
 
-    All automatic approvals are included because release certification forbids
-    unlabeled automatic approvals. Other strata are bounded to keep human
-    review practical while preserving deterministic reproducibility.
+    Validation queues retain every automatic approval and a bounded sample of
+    the remaining strata. Operational queues retain every governed candidate;
+    only those exhaustive queues are eligible to drive a report release.
     """
 
     if not results:
@@ -151,6 +152,8 @@ def build_matching_v2_review_queue(
     if len(policy_checksums) != 1 or len(pack_versions) != 1:
         raise ValueError("review queue cannot mix Product Pack versions or policy checksums")
     config = sampling or MatchingV2ReviewSampling()
+    if selection_mode not in {"validation_sample", "operational_exhaustive"}:
+        raise ValueError(f"unsupported review queue selection mode {selection_mode!r}")
     all_decisions = tuple(
         decision for result in results for decision in (*result.edges, *result.blocked_review_edges)
     )
@@ -183,7 +186,9 @@ def build_matching_v2_review_queue(
             ),
         )
         available_counts[stratum] = len(rows)
-        if config.include_all_automatic_approvals:
+        if selection_mode == "operational_exhaustive":
+            chosen = rows
+        elif config.include_all_automatic_approvals:
             automatic = [row for row in rows if row[0].status == "auto_approved"]
             automatic_ids = {row[0].edge_id for row in automatic}
             sampled = [row for row in rows if row[0].edge_id not in automatic_ids][
@@ -209,13 +214,21 @@ def build_matching_v2_review_queue(
         "schema_version": "2.0.0",
         "queue_id": queue_id,
         "version": queue_version,
-        "purpose": "human_gold_set_adjudication",
+        "purpose": (
+            "operational_match_certification"
+            if selection_mode == "operational_exhaustive"
+            else "human_gold_set_adjudication"
+        ),
         "authoritative": False,
         "product_pack": {"id": pack_id, "version": pack_version},
         "policy_checksum": next(iter(policy_checksums)),
         "source_evidence": sorted({benchmark_source_reference, *source_references.values()}),
         "sampling": {
-            "method": "deterministic_stratified_sha256",
+            "method": (
+                "exhaustive_governed_candidates"
+                if selection_mode == "operational_exhaustive"
+                else "deterministic_stratified_sha256"
+            ),
             "per_stratum_limit": config.per_stratum_limit,
             "include_all_automatic_approvals": config.include_all_automatic_approvals,
             "available_counts": available_counts,

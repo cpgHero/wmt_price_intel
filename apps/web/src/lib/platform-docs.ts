@@ -158,7 +158,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Certification decisions never silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -1328,6 +1328,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-17",
+              "Implemented and test-verified; operational Egg reset pending",
+              "Matching v2 now separates sampled model-validation queues from exhaustive operational match certification and fails closed when a sampled queue is used for reporting.",
+              "The prior 1,305-case Egg queue is recognized as a partial validation sample and will not be replayed as a complete match graph. New evidence profiles emit every governed candidate into an operational certification queue; raw Search, PDP, location, Product Pack, and audit evidence remain immutable. Match Certification also has a protected governed-replay control. No paid calls or live match decisions were made.",
+            ],
             [
               "2026-08-17",
               "Implemented and test-verified; production replay pending",

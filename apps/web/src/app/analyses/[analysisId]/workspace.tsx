@@ -708,6 +708,21 @@ function BlueprintAnalysisWorkspace({
                 ]
               : certificationCoverage
                 ? [
+                    ...(certificationCoverage.source_candidate_count !== undefined
+                      ? [
+                          {
+                            label: "Source candidates",
+                            value:
+                              certificationCoverage.source_candidate_count.toLocaleString(),
+                          },
+                          {
+                            label: "Candidates selected",
+                            value:
+                              certificationCoverage.selected_candidate_count?.toLocaleString() ??
+                              certificationCoverage.queue_case_count.toLocaleString(),
+                          },
+                        ]
+                      : []),
                     {
                       label: "Certified decisions",
                       value:

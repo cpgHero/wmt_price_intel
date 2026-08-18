@@ -97,6 +97,10 @@
           ],
           "properties": {
             "authority": { "type": "string" },
+            "source_candidate_count": { "type": "integer", "minimum": 0 },
+            "selected_candidate_count": { "type": "integer", "minimum": 0 },
+            "selection_complete": { "type": "boolean" },
+            "selection_coverage_rate": { "type": "number", "minimum": 0, "maximum": 1 },
             "queue_case_count": { "type": "integer", "minimum": 0 },
             "certified_label_count": { "type": "integer", "minimum": 0 },
             "certified_comparable_count": { "type": "integer", "minimum": 0 },

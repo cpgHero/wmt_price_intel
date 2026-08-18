@@ -2093,10 +2093,31 @@ class ArtifactRenderer:
         warnings: list[JsonObject] = []
         certification = _mapping(source, "matching_v2_certification_coverage")
         if certification:
+            source_candidates = int(
+                certification.get("source_candidate_count")
+                or certification.get("queue_case_count")
+                or 0
+            )
+            selected_candidates = int(
+                certification.get("selected_candidate_count")
+                or certification.get("queue_case_count")
+                or 0
+            )
             queue_cases = int(certification.get("queue_case_count") or 0)
             certified_labels = int(certification.get("certified_label_count") or 0)
             certified_comparable = int(certification.get("certified_comparable_count") or 0)
             unresolved = int(certification.get("unresolved_excluded_count") or 0)
+            if certification.get("selection_complete") is False:
+                blocking_reasons.append(
+                    {
+                        "code": "matching_v2_candidate_selection_incomplete",
+                        "message": (
+                            f"The certification queue contains {selected_candidates:,} of "
+                            f"{source_candidates:,} source candidates. A sampled validation "
+                            "queue cannot support complete operational reporting."
+                        ),
+                    }
+                )
             if unresolved > 0:
                 blocking_reasons.append(
                     {

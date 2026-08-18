@@ -446,11 +446,12 @@ def build_matching_v2_evidence_profile(
     }
     queue = build_matching_v2_review_queue(
         results,
-        queue_id=f"{product_pack_id}-matching-v2-release-review",
+        queue_id=f"{product_pack_id}-matching-v2-operational-certification",
         queue_version=review_queue_version,
         benchmark_source_reference=benchmark_reference,
         source_references=competitor_references,
         sampling=MatchingV2ReviewSampling(per_stratum_limit=per_stratum_limit),
+        selection_mode="operational_exhaustive",
     )
     findings = _quality_findings(
         total_rows,
