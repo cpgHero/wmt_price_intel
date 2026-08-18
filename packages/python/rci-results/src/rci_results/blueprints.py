@@ -374,7 +374,8 @@ class ReportProjector:
             }
             for group_id, label, kinds in _REPORT_GROUPS
         ]
-        source = result.get("source") if isinstance(result.get("source"), dict) else {}
+        source_value = result.get("source")
+        source: JsonObject = dict(source_value) if isinstance(source_value, dict) else {}
         certification_coverage = source.get("matching_v2_certification_coverage")
         return {
             "schema_version": "1.1.0",
@@ -1196,14 +1197,14 @@ class ReportProjector:
             if not rates_ready:
                 shortfalls.append("complete price outcomes unavailable")
             comparison_metrics = {str(row.get("comparison_metric")) for row in decisions}
-            profile_ids = {str(row.get("profile_id")) for row in decisions}
+            decision_profile_ids = {str(row.get("profile_id")) for row in decisions}
             comparison_metric = (
                 next(iter(comparison_metrics)) if len(comparison_metrics) == 1 else "package_price"
             )
             scorecard.update(
                 {
-                    "profile_id": next(iter(profile_ids))
-                    if len(profile_ids) == 1
+                    "profile_id": next(iter(decision_profile_ids))
+                    if len(decision_profile_ids) == 1
                     else "governed_products",
                     "comparison_lens": "Governed product relationships",
                     "comparison_metric": comparison_metric,

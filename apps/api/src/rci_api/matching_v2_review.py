@@ -81,11 +81,11 @@ def _matching_v2_certification_coverage(
         case_id = str(label.get("case_id") or "").strip()
         if case_id in certified_case_ids:
             raise ValueError(f"matching v2 gold set contains duplicate case {case_id!r}")
-        retailer_id = retailer_by_case.get(case_id)
-        if retailer_id is None:
+        certified_retailer_id = retailer_by_case.get(case_id)
+        if certified_retailer_id is None:
             raise ValueError(f"matching v2 gold-set case {case_id!r} is absent from its queue")
         certified_case_ids.add(case_id)
-        counts = retailer_counts[retailer_id]
+        counts = retailer_counts[certified_retailer_id]
         counts["certified_count"] += 1
         if bool(label.get("expected_comparable")):
             comparable_count += 1
@@ -3030,8 +3030,9 @@ class PostgresMatchingV2ReviewRepository:
             )
             if queue is None:
                 raise KeyError(f"matching v2 review queue {external_queue_id!r} was not found")
-            queue_cases = list(
-                (
+            queue_cases = [
+                dict(row)
+                for row in (
                     await connection.execute(
                         text(
                             """
@@ -3046,7 +3047,7 @@ class PostgresMatchingV2ReviewRepository:
                 )
                 .mappings()
                 .all()
-            )
+            ]
             if len(queue_cases) != int(queue["queue_case_count"]):
                 raise ValueError("matching v2 queue counts changed while creating its release")
             source = (
