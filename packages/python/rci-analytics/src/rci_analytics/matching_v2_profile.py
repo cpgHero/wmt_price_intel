@@ -8,7 +8,7 @@ import hashlib
 import json
 import zipfile
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,10 +23,10 @@ from rci_analytics.matching_v2_shadow import (
     ListingEvidenceAccumulatorV2,
     MatchingShadowEvaluatorV2,
 )
-from rci_analytics.models import JsonObject
+from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp
-from rci_analytics.product_pack import ProductPackLoader
+from rci_analytics.product_pack import ProductPack, ProductPackLoader
 from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 
@@ -72,6 +72,59 @@ def _location_key(retailer_id: str, store_number: str | None, zipcode: str | Non
     if zipcode:
         return f"{retailer_id}|zip|{zipcode}"
     return None
+
+
+def _classification_raw_sources(pack: ProductPack) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                str(source)[4:]
+                for definition in pack.attributes
+                for rule in definition.get("extraction_rules", [])
+                for source in rule.get("sources", ["text"])
+                if str(source).startswith("raw.")
+            }
+        )
+    )
+
+
+def _classification_signature(
+    offer: NormalizedOffer,
+    raw_sources: tuple[str, ...],
+) -> tuple[Any, ...]:
+    """Identify product-level inputs that can change scope or matching attributes.
+
+    Location, price, position, sponsorship, and collection timestamps must not
+    alter product identity. Declared ``raw.*`` extraction sources remain in the
+    signature so a provider-side product attribute conflict is never hidden by
+    the cache.
+    """
+
+    normalized_raw = (
+        {
+            "".join(character for character in str(key).casefold() if character.isalnum()): value
+            for key, value in offer.raw.items()
+        }
+        if raw_sources
+        else {}
+    )
+    raw_values = tuple(
+        (
+            source,
+            normalized_raw.get(
+                "".join(character for character in source.casefold() if character.isalnum())
+            ),
+        )
+        for source in sorted(raw_sources)
+    )
+    return (
+        offer.retailer_id,
+        offer.retailer_product_id,
+        offer.title,
+        offer.brand,
+        offer.product_url,
+        raw_values,
+    )
 
 
 def _source_reference(path: Path, checksum: str) -> str:
@@ -309,6 +362,8 @@ def build_matching_v2_evidence_profile(
     seen_offer_ids: set[str] = set()
     expected_retailer_mismatches = 0
     total_rows = 0
+    classification_cache: dict[tuple[Any, ...], ClassifiedOffer] = {}
+    classification_raw_sources = _classification_raw_sources(pack)
 
     previous_limit = csv.field_size_limit()
     csv.field_size_limit(100 * 1024 * 1024)
@@ -354,13 +409,21 @@ def build_matching_v2_evidence_profile(
                         profile.location_keys.add(location_key)
                     if offer.price is not None and offer.price > 0:
                         profile.positive_price_rows += 1
-                    classified = complete_attributes_from_pdp(
-                        classifier.classify(offer),
-                        pdp_context.get(f"{offer.retailer_id}:{offer.retailer_product_id}"),
-                        classifier=classifier,
-                        pack=pack,
-                        seller_resolver=seller_resolver,
-                    )
+                    signature = _classification_signature(offer, classification_raw_sources)
+                    classified_template = classification_cache.get(signature)
+                    if classified_template is None:
+                        classified_template = complete_attributes_from_pdp(
+                            classifier.classify(offer),
+                            pdp_context.get(f"{offer.retailer_id}:{offer.retailer_product_id}"),
+                            classifier=classifier,
+                            pack=pack,
+                            seller_resolver=seller_resolver,
+                        )
+                        classification_cache[signature] = classified_template
+                    # This profiler consumes only scope, attributes, seller/brand
+                    # governance, and product-location placement. Price-derived
+                    # metrics are intentionally not carried across locations.
+                    classified = replace(classified_template, offer=offer, metrics={})
                     if classified.in_scope:
                         profile.in_scope_rows += 1
                         profile.in_scope_product_ids.add(offer.retailer_product_id)

@@ -155,7 +155,13 @@ def build_matching_v2_review_queue(
     if selection_mode not in {"validation_sample", "operational_exhaustive"}:
         raise ValueError(f"unsupported review queue selection mode {selection_mode!r}")
     all_decisions = tuple(
-        decision for result in results for decision in (*result.edges, *result.blocked_review_edges)
+        decision
+        for result in results
+        for decision in (
+            tuple(edge for edge in result.edges if edge.tier is not None)
+            if selection_mode == "operational_exhaustive"
+            else (*result.edges, *result.blocked_review_edges)
+        )
     )
     competitor_frequency = Counter(
         decision.competitor.listing_id
@@ -169,7 +175,12 @@ def build_matching_v2_review_queue(
             raise ValueError(
                 f"missing immutable source reference for {result.competitor_retailer_id!r}"
             )
-        for decision in (*result.edges, *result.blocked_review_edges):
+        decisions = (
+            tuple(edge for edge in result.edges if edge.tier is not None)
+            if selection_mode == "operational_exhaustive"
+            else (*result.edges, *result.blocked_review_edges)
+        )
+        for decision in decisions:
             stratum = (
                 f"{decision.competitor.retailer_id}:{_stratum(decision, competitor_frequency)}"
             )
@@ -178,6 +189,17 @@ def build_matching_v2_review_queue(
     selected: list[JsonObject] = []
     available_counts: dict[str, int] = {}
     selected_counts: dict[str, int] = {}
+    excluded_counts: dict[str, int] = {}
+    if selection_mode == "operational_exhaustive":
+        for result in results:
+            retailer_id = result.competitor_retailer_id
+            excluded_counts[f"{retailer_id}:unresolved_without_governed_tier"] = sum(
+                edge.tier is None for edge in result.edges
+            )
+            excluded_counts[f"{retailer_id}:hard_blocked_pairs"] = result.blocked_pairs
+            excluded_counts[f"{retailer_id}:hard_blocked_audit_sample"] = len(
+                result.blocked_review_edges
+            )
     for stratum in sorted(by_stratum):
         rows = sorted(
             by_stratum[stratum],
@@ -233,6 +255,7 @@ def build_matching_v2_review_queue(
             "include_all_automatic_approvals": config.include_all_automatic_approvals,
             "available_counts": available_counts,
             "selected_counts": selected_counts,
+            "excluded_counts": excluded_counts,
         },
         "cases": selected,
     }

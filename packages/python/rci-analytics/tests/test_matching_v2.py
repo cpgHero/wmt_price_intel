@@ -360,7 +360,18 @@ def test_operational_review_queue_keeps_every_governed_candidate() -> None:
     )
     result = evaluator.evaluate_listings(
         tuple(_listing("walmart_us", f"w{index}") for index in range(1, 5)),
-        (_listing("aldi_us", "a1"),),
+        (
+            _listing("aldi_us", "a1"),
+            _listing(
+                "aldi_us",
+                "a-unresolved",
+                fat=None,
+                volume=None,
+                organic=None,
+                form=None,
+                container=None,
+            ),
+        ),
         benchmark_retailer_id="walmart_us",
         competitor_retailer_id="aldi_us",
         decided_at=DECIDED_AT,
@@ -379,7 +390,12 @@ def test_operational_review_queue_keeps_every_governed_candidate() -> None:
     assert queue["purpose"] == "operational_match_certification"
     assert queue["sampling"]["method"] == "exhaustive_governed_candidates"
     assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
-    assert len(queue["cases"]) == result.evaluated_pairs + len(result.blocked_review_edges)
+    assert len(queue["cases"]) == sum(edge.tier is not None for edge in result.edges)
+    assert queue["sampling"]["excluded_counts"] == {
+        "aldi_us:hard_blocked_audit_sample": len(result.blocked_review_edges),
+        "aldi_us:hard_blocked_pairs": result.blocked_pairs,
+        "aldi_us:unresolved_without_governed_tier": sum(edge.tier is None for edge in result.edges),
+    }
     validate_instance(
         REPOSITORY_ROOT,
         "matching-v2-review-queue.schema.json",
@@ -480,13 +496,8 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     assert queue["version"] == "1.1.0"
     assert queue["purpose"] == "operational_match_certification"
     assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
-    assert queue["cases"]
-    assert queue["cases"][0]["benchmark_listing"]["image_url"] == ("https://example.com/wm1.png")
-    assert queue["cases"][0]["benchmark_listing"]["seller_governance"]["status"] == (
-        "verified_first_party"
-    )
-    assert queue["cases"][0]["benchmark_listing"]["observed_location_count"] == 1
-    assert queue["cases"][0]["competitor_listing"]["observed_location_count"] == 1
+    assert queue["cases"] == []
+    assert queue["sampling"]["excluded_counts"]["aldi_us:unresolved_without_governed_tier"] == 1
     validate_instance(
         REPOSITORY_ROOT,
         "matching-v2-evidence-profile.schema.json",

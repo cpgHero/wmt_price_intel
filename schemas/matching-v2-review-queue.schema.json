@@ -58,12 +58,13 @@
         "per_stratum_limit": { "type": "integer", "minimum": 1 },
         "include_all_automatic_approvals": { "const": true },
         "available_counts": { "$ref": "#/$defs/counts" },
-        "selected_counts": { "$ref": "#/$defs/counts" }
+        "selected_counts": { "$ref": "#/$defs/counts" },
+        "excluded_counts": { "$ref": "#/$defs/counts" }
       }
     },
     "cases": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "items": { "$ref": "#/$defs/case" }
     },
     "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
