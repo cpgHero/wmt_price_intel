@@ -11,7 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -243,48 +243,72 @@ class OpenAIMatchingReviewProvider:
                     f"AI matching review maximum cost ${maximum_cost:.4f} exceeds "
                     f"${self._max_request_cost_usd:.4f} policy"
                 )
-        content: list[JsonObject] = [
-            {
-                "type": "input_text",
-                "text": _canonical(
-                    {
-                        "authoritative": False,
-                        "human_review_required": True,
-                        "image_evidence_policy": {
-                            "images_provided": bool(image_urls),
-                            "allowed_source_image_urls": image_urls,
-                            "image_proposals_require_exact_source_url": True,
-                            "image_proposals_require_visible_text": True,
-                            "structured_proposals_require_null_image_fields": True,
-                        },
-                        "case": case_document,
-                    }
-                ),
-            }
-        ]
-        content.extend(
-            {"type": "input_image", "image_url": image_url, "detail": "high"}
-            for image_url in image_urls
-        )
+
+        def request_content(urls: list[str]) -> list[JsonObject]:
+            content: list[JsonObject] = [
+                {
+                    "type": "input_text",
+                    "text": _canonical(
+                        {
+                            "authoritative": False,
+                            "human_review_required": True,
+                            "image_evidence_policy": {
+                                "images_provided": bool(urls),
+                                "allowed_source_image_urls": urls,
+                                "image_proposals_require_exact_source_url": True,
+                                "image_proposals_require_visible_text": True,
+                                "structured_proposals_require_null_image_fields": True,
+                            },
+                            "case": case_document,
+                        }
+                    ),
+                }
+            ]
+            content.extend(
+                {"type": "input_image", "image_url": image_url, "detail": "high"}
+                for image_url in urls
+            )
+            return content
+
+        async def request(urls: list[str]) -> Any:
+            return await client.responses.create(
+                model=model_id,
+                instructions=prompt.instructions,
+                input=[{"role": "user", "content": request_content(urls)}],
+                max_output_tokens=self._max_output_tokens,
+                store=False,
+                reasoning={"effort": self._reasoning_effort},
+                text={
+                    "verbosity": "medium",
+                    "format": {
+                        "type": "json_schema",
+                        "name": "rci_matching_review_draft",
+                        "strict": True,
+                        "schema": _result_schema(urls),
+                    },
+                },
+            )
+
         started_at = perf_counter()
         client: Any = self._client
-        response = await client.responses.create(
-            model=model_id,
-            instructions=prompt.instructions,
-            input=[{"role": "user", "content": content}],
-            max_output_tokens=self._max_output_tokens,
-            store=False,
-            reasoning={"effort": self._reasoning_effort},
-            text={
-                "verbosity": "medium",
-                "format": {
-                    "type": "json_schema",
-                    "name": "rci_matching_review_draft",
-                    "strict": True,
-                    "schema": _result_schema(image_urls),
+        warnings: tuple[str, ...] = ()
+        try:
+            response = await request(image_urls)
+        except BadRequestError as exc:
+            message = str(exc)
+            if not image_urls or "Error while downloading file" not in message:
+                raise
+            warnings = ("vision_image_download_unavailable",)
+            logger.warning(
+                "AI matching review image retrieval unavailable; retrying with structured evidence",
+                extra={
+                    "event": "matching_review_vision_fallback",
+                    "image_count": len(image_urls),
+                    "error_type": type(exc).__name__,
                 },
-            },
-        )
+            )
+            image_urls = []
+            response = await request(image_urls)
         result = json.loads(str(response.output_text))
         _validate_matching_review_result(result, image_urls=image_urls)
         usage = getattr(response, "usage", None)
@@ -300,6 +324,7 @@ class OpenAIMatchingReviewProvider:
                 if pricing is not None
                 else None
             ),
+            warnings=warnings,
         )
 
 
@@ -574,6 +599,7 @@ class MatchingReviewAIWorker:
                 "output_tokens": response.output_tokens,
                 "latency_ms": response.latency_ms,
                 "estimated_cost_usd": response.estimated_cost_usd,
+                "warnings": list(response.warnings),
             }
             await self._repository.succeed(
                 task.task_id,

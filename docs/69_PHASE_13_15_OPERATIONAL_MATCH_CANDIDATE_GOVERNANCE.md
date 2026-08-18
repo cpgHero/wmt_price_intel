@@ -80,3 +80,18 @@ was deleted locally and was never imported into production.
 - The corrected operational queue is imported only after CI and Railway deployment succeed.
 - The prior Egg report is archived only after the replacement governed replay validates.
 
+## Production AI review recovery — 2026-08-18
+
+- Operational queue `fresh_shell_eggs-matching-v2-operational-certification` version `2.0.0`
+  was imported with 226 cases and checksum
+  `de53067c6fbf3e08d8b0550921b8a7330851985df121d8017b691acec152d261`.
+- The first batch stopped at the OpenAI project's enforced spend limit without recorded model
+  usage. After the platform owner raised the limit, all 226 cases were retried through linked,
+  history-preserving tasks.
+- 223 cases completed successfully for an estimated total of $6.041795.
+- Three cases failed because retailer image hosts returned HTTP 403 when OpenAI attempted to fetch
+  optional vision evidence.
+- The matching-review provider now retries that specific failure once without images, constrains
+  the response schema to structured evidence, and persists
+  `vision_image_download_unavailable` in usage warnings. Other bad requests continue to fail
+  closed.

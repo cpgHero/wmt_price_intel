@@ -45,3 +45,4 @@ class ProviderResponse:
     output_tokens: int = 0
     latency_ms: int = 0
     estimated_cost_usd: float | None = None
+    warnings: tuple[str, ...] = ()

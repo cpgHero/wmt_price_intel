@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from openai import BadRequestError
 from rci_agents import (
     MatchingReviewAIWorker,
     OpenAIMatchingReviewProvider,
@@ -29,6 +30,27 @@ class FakeResponsesEndpoint:
         return SimpleNamespace(
             output_text=json.dumps(self.result),
             usage=SimpleNamespace(input_tokens=200, output_tokens=80),
+        )
+
+
+class ImageDownloadFallbackEndpoint:
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+        self.calls: list[dict[str, Any]] = []
+
+    async def create(self, **kwargs: Any) -> object:
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            request = SimpleNamespace(method="POST", url="https://api.openai.com/v1/responses")
+            response = SimpleNamespace(status_code=400, request=request, headers={})
+            raise BadRequestError(
+                "Error while downloading file. Upstream status code: 403.",
+                response=response,  # type: ignore[arg-type]
+                body={"error": {"code": "invalid_value"}},
+            )
+        return SimpleNamespace(
+            output_text=json.dumps(self.result),
+            usage=SimpleNamespace(input_tokens=180, output_tokens=60),
         )
 
 
@@ -181,6 +203,44 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
     assert proposal["properties"]["evidence_source"]["enum"] == ["structured"]
     assert proposal["properties"]["visible_text"] == {"type": "null"}
     assert proposal["properties"]["source_image_url"] == {"type": "null"}
+
+
+async def test_matching_review_falls_back_when_retailer_image_download_is_blocked() -> None:
+    endpoint = ImageDownloadFallbackEndpoint(
+        {
+            "verdict_proposal": "insufficient_evidence",
+            "tier_proposal": None,
+            "rationale": "Structured evidence is not sufficient for an automatic proposal.",
+            "attribute_proposals": [],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+
+    response = await provider.generate(
+        load_matching_review_prompt(REPOSITORY_ROOT),
+        _case(),
+        model_id="gpt-5.6-terra",
+    )
+
+    assert response.warnings == ("vision_image_download_unavailable",)
+    assert len(endpoint.calls) == 2
+    assert [item["type"] for item in endpoint.calls[0]["input"][0]["content"]] == [
+        "input_text",
+        "input_image",
+        "input_image",
+    ]
+    assert [item["type"] for item in endpoint.calls[1]["input"][0]["content"]] == ["input_text"]
+    assert endpoint.calls[1]["text"]["format"]["schema"]["properties"]["attribute_proposals"][
+        "items"
+    ]["properties"]["evidence_source"]["enum"] == ["structured"]
 
 
 async def test_matching_review_rejects_uncited_image_claim() -> None:
