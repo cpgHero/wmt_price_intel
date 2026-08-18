@@ -179,12 +179,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Area", "Use it for", "Important boundary"],
           rows: [
             [
-              "2026-08-18",
-              "Implemented and test-verified; production policy replay pending",
-              "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
-              "Product Pack 1.2.2 makes a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Existing immutable queue decisions are not silently migrated across the changed policy checksum; a new governed queue and replay are required. No paid calls run automatically.",
-            ],
-            [
               "Home",
               "Recent analyses, collection activity, and operating health.",
               "A launch point, not an alternate analytics engine.",
@@ -1335,6 +1329,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production policy replay pending",
+              "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
+              "Product Pack 1.2.2 makes a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Existing immutable queue decisions are not silently migrated across the changed policy checksum; a new governed queue and replay are required. No paid calls run automatically.",
+            ],
             [
               "2026-08-18",
               "Deployed and production-verified",
