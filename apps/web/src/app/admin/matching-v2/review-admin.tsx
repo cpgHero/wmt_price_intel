@@ -516,8 +516,9 @@ export function MatchingV2ReviewAdmin() {
   const [view, setView] = useState<QueueView | null>(null);
   const [reviewerId, setReviewerId] = useState("");
   const [replaySourceAnalysisId, setReplaySourceAnalysisId] = useState("");
-  const [replayResult, setReplayResult] =
-    useState<GoldSetReplayResult | null>(null);
+  const [replayResult, setReplayResult] = useState<GoldSetReplayResult | null>(
+    null,
+  );
   const [competitorFilter, setCompetitorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [offset, setOffset] = useState(0);
@@ -802,7 +803,9 @@ export function MatchingV2ReviewAdmin() {
       return;
     }
     if (!releasedBy) {
-      setError("Enter the current administrator identity before releasing a replay.");
+      setError(
+        "Enter the current administrator identity before releasing a replay.",
+      );
       reviewerInputRef.current?.focus();
       return;
     }
@@ -1445,11 +1448,15 @@ export function MatchingV2ReviewAdmin() {
                 </div>
                 <div>
                   <dt>Certified</dt>
-                  <dd>{replayResult.coverage.certified_count.toLocaleString()}</dd>
+                  <dd>
+                    {replayResult.coverage.certified_count.toLocaleString()}
+                  </dd>
                 </div>
                 <div>
                   <dt>Unresolved</dt>
-                  <dd>{replayResult.coverage.unresolved_count.toLocaleString()}</dd>
+                  <dd>
+                    {replayResult.coverage.unresolved_count.toLocaleString()}
+                  </dd>
                 </div>
               </dl>
             ) : null}

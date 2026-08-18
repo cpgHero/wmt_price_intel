@@ -708,7 +708,8 @@ function BlueprintAnalysisWorkspace({
                 ]
               : certificationCoverage
                 ? [
-                    ...(certificationCoverage.source_candidate_count !== undefined
+                    ...(certificationCoverage.source_candidate_count !==
+                    undefined
                       ? [
                           {
                             label: "Source candidates",
