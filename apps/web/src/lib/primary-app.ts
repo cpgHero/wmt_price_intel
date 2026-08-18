@@ -106,12 +106,20 @@ function issueSeverity(key: string): QualityIssueSummary["severity"] {
 function issueCounts(quality: JsonObject): Array<[string, number]> {
   const nested = asObject(quality.issue_counts);
   const source = Object.keys(nested).length > 0 ? nested : quality;
+  const informationalCounts = new Set([
+    "matching_v2_certified_comparable",
+    "matching_v2_certified_not_comparable",
+  ]);
   return Object.entries(source)
     .map(([key, value]) => [key, numericValue(value)] as const)
     .filter(
       (entry): entry is [string, number] => entry[1] !== null && entry[1] > 0,
     )
-    .filter(([key]) => !["metric_reference_coverage", "status"].includes(key));
+    .filter(
+      ([key]) =>
+        !["metric_reference_coverage", "status"].includes(key) &&
+        !informationalCounts.has(key),
+    );
 }
 
 export function summarizeQuality(analysis: AnalysisRecord): QualitySummary {
@@ -261,6 +269,20 @@ export function definitionForRun(
 
 export function isActiveRun(run: RunRecord): boolean {
   return ["queued", "running", "cancelling"].includes(run.status);
+}
+
+export function isOperationalFailure(
+  run: RunRecord,
+  definitions: CollectionDefinitionRecord[],
+): boolean {
+  if (run.status !== "failed") return false;
+  const definition = definitions.find(
+    (candidate) => candidate.version_id === run.definition_version_id,
+  );
+  // Preserve a failure when its definition cannot be resolved. A known,
+  // disabled definition is retained in collection history but should not
+  // occupy the operational decision queue.
+  return definition?.active ?? true;
 }
 
 export function isInternalAcceptanceRecord(value: string): boolean {

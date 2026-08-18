@@ -220,9 +220,22 @@ function BlueprintAnalysisWorkspace({
     () => groupReportSections(reportView.sections, reportView.groups),
     [reportView.groups, reportView.sections],
   );
+  const reportTabs = useMemo(() => {
+    const labels: Record<string, string> = {
+      overview: "Executive Overview",
+      "price-segments": "Price Architecture",
+      assortment: "Assortment & Whitespace",
+      "quality-methodology": "Data Integrity",
+    };
+    return groupedSections
+      .filter((group) => Object.prototype.hasOwnProperty.call(labels, group.id))
+      .map((group) => ({
+        ...group,
+        label: labels[group.id] ?? group.label,
+      }));
+  }, [groupedSections]);
   const firstPopulatedGroup =
-    groupedSections.find((group) => group.sections.length > 0)?.id ??
-    "overview";
+    reportTabs.find((group) => group.sections.length > 0)?.id ?? "overview";
   const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);
   const competitorOptions = reportView.retailer_scope.competitors;
   const [selectedCompetitor, setSelectedCompetitor] = useState("all");
@@ -299,7 +312,7 @@ function BlueprintAnalysisWorkspace({
       setActiveGroup(
         requestedTab &&
           (requestedTab === "product-leadership" ||
-            groupedSections.some((group) => group.id === requestedTab))
+            reportTabs.some((group) => group.id === requestedTab))
           ? requestedTab
           : firstPopulatedGroup,
       );
@@ -313,14 +326,27 @@ function BlueprintAnalysisWorkspace({
           : preferredBasis,
       );
       const requestedProduct = parameters.get("product");
-      setSelectedLeadershipProduct(
+      const nextLeadershipProduct =
         requestedProduct &&
-          leadershipProductOptions.some(
-            (option) => option.id === requestedProduct,
-          )
+        leadershipProductOptions.some(
+          (option) => option.id === requestedProduct,
+        )
           ? requestedProduct
-          : (leadershipProductOptions[0]?.id ?? null),
-      );
+          : (leadershipProductOptions[0]?.id ?? null);
+      setSelectedLeadershipProduct(nextLeadershipProduct);
+      if (
+        requestedTab === "product-leadership" &&
+        requestedProduct !== nextLeadershipProduct
+      ) {
+        if (nextLeadershipProduct)
+          parameters.set("product", nextLeadershipProduct);
+        else parameters.delete("product");
+        parameters.delete("state");
+        parameters.delete("city");
+        const normalizedUrl = new URL(window.location.href);
+        normalizedUrl.search = parameters.toString();
+        window.history.replaceState(window.history.state, "", normalizedUrl);
+      }
       const requestedRadius = Number(parameters.get("radius") ?? 3);
       setLeadershipRadius(
         requestedRadius === 1 || requestedRadius === 5 ? requestedRadius : 3,
@@ -336,7 +362,7 @@ function BlueprintAnalysisWorkspace({
   }, [
     competitorOptions,
     firstPopulatedGroup,
-    groupedSections,
+    reportTabs,
     leadershipProductOptions,
     preferredBasis,
     reportView.comparison_bases,
@@ -448,6 +474,13 @@ function BlueprintAnalysisWorkspace({
     (scorecard) =>
       (!selectedRetailer || scorecard.competitor_id === selectedRetailer.id) &&
       (!selectedLens || scorecard.profile_id === selectedLens),
+  );
+  const reportedScorecards = selectedScorecards.filter(
+    (scorecard) =>
+      scorecard.evidence_state === "reported" && (scorecard.matches ?? 0) > 0,
+  );
+  const readyScorecards = reportedScorecards.filter(
+    (scorecard) => scorecard.status === "ready",
   );
   const selectedBasis =
     reportView.comparison_bases.find(
@@ -836,7 +869,7 @@ function BlueprintAnalysisWorkspace({
         </div>
       </header>
       <div className="tab-list" role="tablist" aria-label="Analysis sections">
-        {groupedSections.map((group) => (
+        {reportTabs.slice(0, 2).map((group) => (
           <button
             type="button"
             role="tab"
@@ -857,6 +890,18 @@ function BlueprintAnalysisWorkspace({
         >
           Product Leadership
         </button>
+        {reportTabs.slice(2).map((group) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeGroup === group.id}
+            className={activeGroup === group.id ? "active" : ""}
+            onClick={() => selectGroup(group.id)}
+            key={group.id}
+          >
+            {group.label}
+          </button>
+        ))}
       </div>
       <section className="workspace-panel" role="tabpanel">
         {activeGroup === "product-leadership" ? (
@@ -880,14 +925,22 @@ function BlueprintAnalysisWorkspace({
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
             {activeGroup === "overview" && selectedScorecards.length ? (
-              <RetailerScorecardPanel
-                benchmark={reportView.retailer_scope.benchmark}
-                rows={selectedScorecards}
-                candidates={reportView.match_candidates ?? []}
-                decisions={reportView.product_decisions ?? []}
-                onSelect={selectCompetitor}
-                onReviewMatch={reviewDecision}
-              />
+              <>
+                <PortfolioLeadershipSummary
+                  benchmark={reportView.retailer_scope.benchmark}
+                  scorecards={selectedScorecards}
+                  reported={reportedScorecards}
+                  ready={readyScorecards}
+                />
+                <RetailerScorecardPanel
+                  benchmark={reportView.retailer_scope.benchmark}
+                  rows={selectedScorecards}
+                  candidates={reportView.match_candidates ?? []}
+                  decisions={reportView.product_decisions ?? []}
+                  onSelect={selectCompetitor}
+                  onReviewMatch={reviewDecision}
+                />
+              </>
             ) : null}
             {activeGroup === "price-segments" ? (
               <ComparableCohortExplorer
@@ -1537,6 +1590,99 @@ function formatScorecardRate(value: number | null) {
     style: "percent",
     maximumFractionDigits: 1,
   });
+}
+
+function PortfolioLeadershipSummary({
+  benchmark,
+  scorecards,
+  reported,
+  ready,
+}: Readonly<{
+  benchmark: RetailerOption;
+  scorecards: RetailerScorecard[];
+  reported: RetailerScorecard[];
+  ready: RetailerScorecard[];
+}>) {
+  const matchedObservations = reported.reduce(
+    (total, scorecard) => total + (scorecard.matches ?? 0),
+    0,
+  );
+  const benchmarkLeads = ready.filter(
+    (scorecard) => scorecard.dominant_outcome === "benchmark_lower",
+  ).length;
+  const competitorLeads = ready.filter(
+    (scorecard) => scorecard.dominant_outcome === "competitor_lower",
+  ).length;
+  const limitedViews = scorecards.length - ready.length;
+  const coverageRate = scorecards.length
+    ? reported.length / scorecards.length
+    : null;
+
+  return (
+    <section className="portfolio-leadership-summary">
+      <header>
+        <div>
+          <p className="eyebrow">Current governed comparison</p>
+          <h2>Portfolio price leadership at a glance</h2>
+          <p>
+            A retailer-level rollup for the selected comparison basis. Counts
+            below summarize governed scorecards; open the retailer table for the
+            products and evidence behind each result.
+          </p>
+        </div>
+        <span className="portfolio-summary-context">
+          {benchmark.name} versus {scorecards.length.toLocaleString()} retailer
+          {scorecards.length === 1 ? "" : " views"}
+        </span>
+      </header>
+      <div className="portfolio-summary-grid">
+        <article>
+          <small>Competitors with evidence</small>
+          <strong>
+            {reported.length.toLocaleString()} of{" "}
+            {scorecards.length.toLocaleString()}
+          </strong>
+          <span>
+            {coverageRate === null
+              ? "No retailer views configured"
+              : `${formatScorecardRate(coverageRate)} of selected views`}
+          </span>
+        </article>
+        <article>
+          <small>Decision-ready retailer views</small>
+          <strong>
+            {ready.length.toLocaleString()} of{" "}
+            {scorecards.length.toLocaleString()}
+          </strong>
+          <span>
+            {limitedViews.toLocaleString()} limited or unscored under current
+            rules
+          </span>
+        </article>
+        <article>
+          <small>Matched price observations</small>
+          <strong>{matchedObservations.toLocaleString()}</strong>
+          <span>Summed across the selected retailer scorecards</span>
+        </article>
+        <article className="portfolio-summary-position">
+          <small>Retailer-view leadership</small>
+          <strong>
+            {benchmarkLeads.toLocaleString()}–{competitorLeads.toLocaleString()}
+          </strong>
+          <span>
+            {benchmark.name} leads – competitor leads; ready views only
+          </span>
+        </article>
+      </div>
+      <footer>
+        <span>
+          Snapshot measure: price position, not sales, margin, elasticity, or
+          customer price perception.
+        </span>
+        <span>Parity and mixed outcomes remain visible in the scorecard.</span>
+      </footer>
+    </section>
+  );
 }
 
 function RetailerScorecardPanel({

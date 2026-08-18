@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import type { AlertDefinitionRecord, AnalysisRecord } from "./api";
+import type {
+  AlertDefinitionRecord,
+  AnalysisRecord,
+  CollectionDefinitionRecord,
+  RunRecord,
+} from "./api";
 import {
   describeAlertCondition,
   isInternalAcceptanceRecord,
+  isOperationalFailure,
   summarizeAnalysis,
   summarizeQuality,
 } from "./primary-app";
@@ -109,6 +115,42 @@ describe("primary application presentation", () => {
     );
     expect(summary.tier).toBe("blocked");
     expect(summary.label).toBe("Blocked");
+  });
+
+  it("does not count certified matching totals as quality issues", () => {
+    const summary = summarizeQuality(
+      analysis({
+        data_quality: {
+          status: "warning",
+          issue_counts: {
+            matching_v2_certified_comparable: 183,
+            matching_v2_certified_not_comparable: 1,
+            matching_v2_unresolved_excluded: 1,
+          },
+        },
+        validation: { status: "needs_review" },
+      }),
+    );
+    expect(summary.totalIssues).toBe(1);
+    expect(summary.issues.map((issue) => issue.key)).toEqual([
+      "matching_v2_unresolved_excluded",
+    ]);
+  });
+
+  it("keeps disabled test failures in history but out of the operational queue", () => {
+    const run = {
+      id: "run-1",
+      definition_version_id: "definition-version-1",
+      status: "failed",
+    } as RunRecord;
+    const definitions = [
+      {
+        version_id: "definition-version-1",
+        active: false,
+      } as CollectionDefinitionRecord,
+    ];
+    expect(isOperationalFailure(run, definitions)).toBe(false);
+    expect(isOperationalFailure(run, [])).toBe(true);
   });
 
   it("turns an alert condition into business language", () => {

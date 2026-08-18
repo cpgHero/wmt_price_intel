@@ -727,7 +727,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Competitive Intelligence",
               definition:
-                "Adds governed product relationships and location correspondence. It reports product leadership, retailer scorecards, price/cohort results, geography, assortment, match detail, and methodology using the same underlying observations.",
+                "Adds governed product relationships and location correspondence. Its primary workspaces are Executive Overview, Price Architecture, Product Leadership, Assortment & Whitespace, and Data Integrity. Product and geography drill-downs live inside those decision workflows rather than as disconnected summary tabs.",
             },
           ],
         },
@@ -745,6 +745,27 @@ export const platformDocumentation: PlatformDocumentation = {
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
+            "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
+            "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
+          ],
+        },
+        {
+          kind: "table",
+          title: "Current analytical capability boundary",
+          columns: ["Available now", "Requires additional governed data"],
+          rows: [
+            [
+              "Certified product relationships; package and supported unit price; win/tie/loss; price gaps; local price ladders and rank",
+              "Historical response, persistence, volatility, stability, and trend",
+            ],
+            [
+              "Retailer/product/store/state/city/radius geography; snapshot dispersion and exceptions",
+              "Basket indexes, KVI weighting, consumer price image, demand elasticity, sales, margin, and ROI",
+            ],
+            [
+              "Brand/type and assortment where evidence exists; Search sponsorship; evidence/readiness coverage",
+              "Promotion dependency unless a governed promotion field and definition are added; sponsorship is not promotion",
+            ],
           ],
         },
         {
@@ -778,7 +799,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current reporting limitations",
-          text: "Product History remains unavailable until comparable snapshots are certified. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main tabs and workflows are finalized. The August 17 Egg release certified 530 of 1,305 candidates and excluded 775 unresolved cases, so it must remain Review required rather than being represented as a complete category view.",
+          text: "The current governed Egg release contains one compatible snapshot, so Product History, price response, persistence, and stability remain unavailable. Basket, KVI, consumer price-image, elasticity, sales, margin, and ROI measures also lack governed source data. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main workspaces are finalized. The release reconciles 185 certification cases: 183 comparable, one not comparable, and one unresolved Kroger housing-evidence case, so that limitation remains visible rather than being represented as complete coverage.",
         },
       ],
     },
@@ -1329,6 +1350,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production deployment pending",
+              "Competitive Intelligence was consolidated into a decision-led five-workspace reporting architecture with explicit analytical capability boundaries.",
+              "Executive Overview now begins with transparent retailer evidence, readiness, matched-observation, and retailer-view leadership summaries. Price Architecture, Product Leadership, Assortment & Whitespace, and Data Integrity retain the strongest governed drill-downs; sparse outer Products and Geography tabs no longer compete with those workflows. Unavailable explicit Product Leadership profiles/products fail closed instead of silently showing stale fallback metrics. Current data supports snapshot price ladders and gaps, but not history/response, basket, KVI, elasticity, margin, ROI, or consumer price-image claims.",
+            ],
             [
               "2026-08-18",
               "Deployed, certified, and production-verified",

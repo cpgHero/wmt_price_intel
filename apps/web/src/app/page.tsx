@@ -10,6 +10,7 @@ import {
 import {
   definitionForRun,
   isActiveRun,
+  isOperationalFailure,
   summarizeAnalysis,
 } from "@/lib/primary-app";
 import { displayDate, displayLabel } from "@/lib/presentation";
@@ -31,7 +32,9 @@ export default async function HomePage() {
   const urgentAnalyses = analyses.filter(({ quality }) =>
     ["blocked", "review_required"].includes(quality.tier),
   );
-  const failedRuns = runs.filter((run) => run.status === "failed");
+  const failedRuns = runs.filter((run) =>
+    isOperationalFailure(run, definitions),
+  );
   const activeRuns = runs.filter(isActiveRun);
   const activeSchedules = schedules.filter((schedule) => schedule.enabled);
   const actualCredits = runs.reduce((sum, run) => sum + run.actual_credits, 0);
@@ -118,8 +121,8 @@ export default async function HomePage() {
                     <strong>{summary.category}</strong>
                     <small>
                       {summary.quality.label} ·{" "}
-                      {summary.quality.totalIssues.toLocaleString()} affected
-                      records
+                      {summary.quality.totalIssues.toLocaleString()} recorded
+                      quality flags
                     </small>
                   </div>
                   <b>Review →</b>

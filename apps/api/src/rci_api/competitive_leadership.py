@@ -116,9 +116,12 @@ class CompetitiveProductLeadershipService:
             ),
             sorted(available_profiles)[0] if available_profiles else "",
         )
-        selected_profile = (
-            profile_id if profile_id and profile_id in available_profiles else preferred_profile
-        )
+        if profile_id and profile_id not in available_profiles:
+            raise LookupError(
+                "the selected comparison basis has no decision-ready product "
+                "relationship for this retailer"
+            )
+        selected_profile = profile_id or preferred_profile
         if not selected_profile:
             raise LookupError("no decision-ready product relationship is available")
         candidates = [row for row in candidates if str(row.get("profile_id")) == selected_profile]
@@ -147,11 +150,12 @@ class CompetitiveProductLeadershipService:
             product_rows.values(),
             key=lambda row: (-product_rank[str(row["id"])], str(row["name"]).casefold()),
         )
-        selected_product_id = (
-            benchmark_product_id
-            if benchmark_product_id and benchmark_product_id in product_rows
-            else str(product_options[0]["id"])
-        )
+        if benchmark_product_id and benchmark_product_id not in product_rows:
+            raise LookupError(
+                "the selected benchmark product is not available for this retailer "
+                "and comparison basis"
+            )
+        selected_product_id = benchmark_product_id or str(product_options[0]["id"])
         selected_candidates = [
             row for row in candidates if str(row.get("benchmark_product_id")) == selected_product_id
         ]

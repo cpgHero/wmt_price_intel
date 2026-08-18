@@ -139,6 +139,31 @@ async def test_competitive_product_leadership_api_forwards_governed_context() ->
     assert response.json() == {"schema_version": "1.0.0", "analysis_id": "analysis-id"}
 
 
+async def test_competitive_product_leadership_api_rejects_unavailable_context() -> None:
+    class LeadershipService:
+        async def view(self, _analysis_id: str, **_filters: object) -> dict[str, object]:
+            raise LookupError(
+                "the selected comparison basis has no decision-ready product relationship"
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_competitive_product_leadership_service] = lambda: (
+        LeadershipService()
+    )
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/analyses/analysis-id/competitive-product-leadership",
+            params={"competitor": "aldi_us", "profile": "unavailable"},
+        )
+
+    assert response.status_code == 404
+    assert "no decision-ready product relationship" in response.json()["detail"]
+
+
 async def test_match_review_api_exposes_decisions_and_zero_provider_reanalysis() -> None:
     class MatchService:
         async def view(self, analysis_id: str) -> dict[str, object]:

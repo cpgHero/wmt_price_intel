@@ -11312,6 +11312,100 @@ tbody tr:last-child td {
   padding: 0 0.8rem;
   width: 100%;
 }
+.portfolio-leadership-summary {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--green) 8%, transparent),
+      transparent 46%
+    ),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 2vw, 1.4rem);
+}
+.portfolio-leadership-summary > header {
+  align-items: start;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+}
+.portfolio-leadership-summary > header > div {
+  display: grid;
+  gap: 0.3rem;
+}
+.portfolio-leadership-summary h2 {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+.portfolio-leadership-summary p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 78ch;
+}
+.portfolio-summary-context {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 750;
+  padding: 0.45rem 0.7rem;
+}
+.portfolio-summary-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.portfolio-summary-grid article {
+  background: color-mix(in srgb, var(--surface-alt) 72%, var(--surface));
+  border: 1px solid var(--soft-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 116px;
+  padding: 0.9rem;
+}
+.portfolio-summary-grid small {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.portfolio-summary-grid strong {
+  font-size: clamp(1.4rem, 2.2vw, 2rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+.portfolio-summary-grid span {
+  align-self: end;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+.portfolio-summary-position {
+  border-color: color-mix(
+    in srgb,
+    var(--green) 28%,
+    var(--soft-line)
+  ) !important;
+}
+.portfolio-leadership-summary > footer {
+  border-top: 1px solid var(--soft-line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.64rem;
+  gap: 0.4rem 1.25rem;
+  padding-top: 0.8rem;
+}
 .retailer-scorecard-table {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -12401,6 +12495,9 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 1000px) {
+  .portfolio-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .map-stage,
   .map-controls {
     grid-template-columns: 1fr;
@@ -12422,6 +12519,15 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 700px) {
+  .portfolio-leadership-summary > header {
+    display: grid;
+  }
+  .portfolio-summary-context {
+    justify-self: start;
+  }
+  .portfolio-summary-grid {
+    grid-template-columns: 1fr;
+  }
   .product-decision-grid {
     grid-template-columns: 1fr;
   }

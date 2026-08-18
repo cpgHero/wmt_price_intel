@@ -1575,12 +1575,17 @@ export function ProductLeadershipWorkspace({
     cities: CompetitiveProductLeadership["filter_options"]["cities"],
   ) => void;
 }>) {
-  const [view, setView] = useState<CompetitiveProductLeadership | null>(null);
+  const [loadedView, setLoadedView] = useState<{
+    query: string;
+    data: CompetitiveProductLeadership;
+  } | null>(null);
+  const [failedView, setFailedView] = useState<{
+    query: string;
+    message: string;
+  } | null>(null);
   const [viewName, setViewName] = useState<ViewName>("overview");
   const [selected, setSelected] = useState<Outcome | null>(null);
   const [focusedMarket, setFocusedMarket] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const query = useMemo(() => {
     const parameters = new URLSearchParams({
       competitor: competitorId,
@@ -1599,8 +1604,12 @@ export function ProductLeadershipWorkspace({
     radiusMiles,
     stateFilter,
   ]);
+  const view = loadedView?.query === query ? loadedView.data : null;
+  const error = failedView?.query === query ? failedView.message : "";
+  const loading = Boolean(productId && !view && !error);
 
   useEffect(() => {
+    if (!productId) return;
     const controller = new AbortController();
     fetch(
       `/api/analyses/${encodeURIComponent(analysisId)}/competitive-product-leadership?${query}`,
@@ -1614,8 +1623,8 @@ export function ProductLeadershipWorkspace({
           throw new Error(
             body.error || `Leadership evidence returned ${response.status}`,
           );
-        setError("");
-        setView(body);
+        setFailedView(null);
+        setLoadedView({ query, data: body });
         setSelected(
           body.outcomes.find((row) => row.status === "losing") ??
             body.outcomes[0] ??
@@ -1624,17 +1633,16 @@ export function ProductLeadershipWorkspace({
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Leadership evidence is unavailable.",
-          );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+          setFailedView({
+            query,
+            message:
+              cause instanceof Error
+                ? cause.message
+                : "Leadership evidence is unavailable.",
+          });
       });
     return () => controller.abort();
-  }, [analysisId, query]);
+  }, [analysisId, productId, query]);
 
   useEffect(() => {
     const applyLocation = () => {
@@ -1660,6 +1668,16 @@ export function ProductLeadershipWorkspace({
     );
   }, [onGeographyOptions, stateFilter, view]);
 
+  if (!productId)
+    return (
+      <div className={styles.state}>
+        <strong>No benchmark product is available for this context</strong>
+        <span>
+          Choose a retailer and comparison basis with at least one governed
+          product relationship.
+        </span>
+      </div>
+    );
   if (loading && !view)
     return (
       <div className={styles.state}>
