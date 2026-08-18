@@ -753,12 +753,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Stage", "Owner", "Responsibility"],
           rows: [
             [
-              "2026-08-18",
-              "Implemented and test-verified; production remediation replay pending",
-              "Matching v2 PDP evidence now retains secondary product images and audits field-level completeness.",
-              "Only incomplete or conflicting cases receive vision evidence. The request uses up to six deduplicated PDP images per product, balances both retailer sides, requires exact image citations, and preserves structured-only fallback. PDP normalization audits now distinguish seller, brand, description, identifiers, specifications, physical properties, primary imagery, and multi-image coverage from unmapped-field schema drift. No paid AI or PDP calls run automatically.",
-            ],
-            [
               "Facts and semantic brief",
               "Deterministic engine",
               "Produces authoritative metrics, evidence references, definitions, caveats, and ranked decision facts.",
@@ -1335,6 +1329,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production remediation replay pending",
+              "Matching v2 PDP evidence now retains secondary product images and audits field-level completeness.",
+              "Only incomplete or conflicting cases receive vision evidence. The request uses up to six deduplicated PDP images per product, balances both retailer sides, requires exact image citations, and preserves structured-only fallback. PDP normalization audits now distinguish seller, brand, description, identifiers, specifications, physical properties, primary imagery, and multi-image coverage from unmapped-field schema drift. No paid AI or PDP calls run automatically.",
+            ],
             [
               "2026-08-17",
               "Implemented and test-verified; operational Egg reset pending",
