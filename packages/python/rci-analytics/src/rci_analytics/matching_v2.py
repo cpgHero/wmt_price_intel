@@ -114,6 +114,7 @@ class ListingEvidence:
     identifiers: tuple[IdentifierEvidence, ...] = ()
     title: str | None = None
     image_url: str | None = None
+    image_urls: tuple[str, ...] = ()
     product_url: str | None = None
     brand: str | None = None
     brand_type: BrandType = "unclassified"

@@ -196,6 +196,20 @@ def _pdp_context_from_archives(
                     "variant_configuration": payload.get("variant_configuration", {}),
                     "item_condition": payload.get("item_condition"),
                     "image_url": payload.get("image_primary"),
+                    "image_urls": list(
+                        dict.fromkeys(
+                            str(value).strip()
+                            for value in (
+                                [payload.get("image_primary")]
+                                + (
+                                    payload.get("images", [])
+                                    if isinstance(payload.get("images"), list)
+                                    else []
+                                )
+                            )
+                            if value not in (None, "") and str(value).strip()
+                        )
+                    ),
                     "url": payload.get("url"),
                 }
                 observed_at[key] = timestamp

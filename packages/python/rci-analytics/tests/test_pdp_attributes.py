@@ -64,6 +64,11 @@ def test_pdp_completes_only_unresolved_attributes_and_preserves_search_price() -
             "name": "All Natural 80% Lean / 20% Fat Ground Beef, 2.25 lb Tray",
             "description": "Fresh family-size tray",
             "physical_properties": {"weight": "2.25 lb"},
+            "image_url": "https://example.com/front.jpg",
+            "image_urls": [
+                "https://example.com/front.jpg",
+                "https://example.com/label.jpg",
+            ],
         },
         classifier=classifier,
         pack=pack,
@@ -75,6 +80,10 @@ def test_pdp_completes_only_unresolved_attributes_and_preserves_search_price() -
     assert enriched.attributes["fat_pct"] == 20
     assert enriched.attributes["weight_lb"] == 2.25
     assert enriched.attributes["_attribute_provenance"]["lean_pct"] == "pdp"
+    assert enriched.attributes["_pdp_evidence"]["image_urls"] == [
+        "https://example.com/front.jpg",
+        "https://example.com/label.jpg",
+    ]
 
 
 def test_missing_claims_remain_unknown_and_pdp_can_resolve_them() -> None:

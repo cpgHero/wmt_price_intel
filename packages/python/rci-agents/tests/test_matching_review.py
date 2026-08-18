@@ -60,10 +60,18 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
         "benchmark_listing": {
             "retailer_id": "walmart_us",
             "image_url": "https://example.com/walmart.jpg",
+            "image_urls": [
+                "https://example.com/walmart.jpg",
+                "https://example.com/walmart-label.jpg",
+            ],
         },
         "competitor_listing": {
             "retailer_id": "aldi_us",
             "image_url": "https://example.com/aldi.jpg",
+            "image_urls": [
+                "https://example.com/aldi.jpg",
+                "https://example.com/aldi-label.jpg",
+            ],
         },
         "engine_proposal": {"evidence_coverage": {"critical_coverage": coverage}},
         "edge": {
@@ -139,6 +147,8 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         "input_text",
         "input_image",
         "input_image",
+        "input_image",
+        "input_image",
     ]
     request_document = json.loads(content[0]["text"])
     assert request_document["image_evidence_policy"] == {
@@ -146,6 +156,8 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         "allowed_source_image_urls": [
             "https://example.com/walmart.jpg",
             "https://example.com/aldi.jpg",
+            "https://example.com/walmart-label.jpg",
+            "https://example.com/aldi-label.jpg",
         ],
         "image_proposals_require_exact_source_url": True,
         "image_proposals_require_visible_text": True,
@@ -155,6 +167,8 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
     assert proposal_variants[1]["properties"]["source_image_url"]["enum"] == [
         "https://example.com/walmart.jpg",
         "https://example.com/aldi.jpg",
+        "https://example.com/walmart-label.jpg",
+        "https://example.com/aldi-label.jpg",
     ]
 
 
@@ -234,6 +248,8 @@ async def test_matching_review_falls_back_when_retailer_image_download_is_blocke
     assert len(endpoint.calls) == 2
     assert [item["type"] for item in endpoint.calls[0]["input"][0]["content"]] == [
         "input_text",
+        "input_image",
+        "input_image",
         "input_image",
         "input_image",
     ]

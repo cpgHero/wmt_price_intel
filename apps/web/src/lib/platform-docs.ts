@@ -511,6 +511,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
             "Validate retailer-specific parameters from the versioned endpoint catalog. Pickup and ShopRite shopping defaults are configuration, not category code.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
+            "Audit PDP completeness separately from schema coverage. Zero unmapped fields means the provider payload was mapped; it does not mean every product supplied brand, identifiers, package specifications, descriptions, or multiple usable images.",
           ],
         },
         {
@@ -671,7 +672,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied; images are used only when critical structured evidence is missing or conflicting. Every draft remains advisory and requires a human decision.",
+          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied. When critical attributes are missing or conflicting, the evidence packet adds the primary and available secondary PDP images, interleaved across both products and bounded to six per product. Image proposals must cite visible text and the exact supplied image URL. A blocked retailer image host causes a recorded structured-only fallback, never an invented visual claim. Every draft remains advisory and requires a human decision.",
         },
         {
           kind: "callout",
@@ -751,6 +752,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Narrative pipeline",
           columns: ["Stage", "Owner", "Responsibility"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production remediation replay pending",
+              "Matching v2 PDP evidence now retains secondary product images and audits field-level completeness.",
+              "Only incomplete or conflicting cases receive vision evidence. The request uses up to six deduplicated PDP images per product, balances both retailer sides, requires exact image citations, and preserves structured-only fallback. PDP normalization audits now distinguish seller, brand, description, identifiers, specifications, physical properties, primary imagery, and multi-image coverage from unmapped-field schema drift. No paid AI or PDP calls run automatically.",
+            ],
             [
               "Facts and semantic brief",
               "Deterministic engine",

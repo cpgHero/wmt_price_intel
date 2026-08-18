@@ -348,15 +348,29 @@ def _vision_image_urls(case_document: JsonObject) -> list[str]:
         )
     if not incomplete:
         return []
-    urls: list[str] = []
+    # Secondary PDP images commonly contain the package side/back label and are
+    # often more useful than the hero image for governed package attributes.
+    # Bound the request while preserving both sides of the proposed relationship.
+    per_listing_urls: list[list[str]] = []
     for side in ("benchmark_listing", "competitor_listing"):
         listing = case_document.get(side)
         if not isinstance(listing, dict):
             continue
-        value = str(listing.get("image_url") or "").strip()
-        if value.startswith(("https://", "http://")) and value not in urls:
-            urls.append(value)
-    return urls[:2]
+        candidates = listing.get("image_urls")
+        values = list(candidates) if isinstance(candidates, list) else []
+        values.insert(0, listing.get("image_url"))
+        listing_urls: list[str] = []
+        for candidate in values:
+            value = str(candidate or "").strip()
+            if value.startswith(("https://", "http://")) and value not in listing_urls:
+                listing_urls.append(value)
+        per_listing_urls.append(listing_urls[:6])
+    urls: list[str] = []
+    for index in range(6):
+        for listing_urls in per_listing_urls:
+            if index < len(listing_urls) and listing_urls[index] not in urls:
+                urls.append(listing_urls[index])
+    return urls[:12]
 
 
 def _validate_matching_review_result(result: object, *, image_urls: list[str]) -> None:

@@ -193,6 +193,11 @@
         "pdp_evidence": { "type": "object" },
         "observed_location_count": { "type": "integer", "minimum": 0 },
         "image_url": { "type": ["string", "null"] },
+        "image_urls": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "uri" }
+        },
         "product_url": { "type": ["string", "null"] },
         "identifiers": {
           "type": "array",

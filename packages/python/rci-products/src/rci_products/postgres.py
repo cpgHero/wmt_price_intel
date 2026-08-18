@@ -1293,7 +1293,51 @@ class PostgresProductDetailRepository:
                               count(*) FILTER (
                                 WHERE NULLIF(BTRIM(n.document #>> '{normalized,seller}'), '')
                                   IS NOT NULL
-                              )::integer AS seller_count
+                              )::integer AS seller_count,
+                              count(*) FILTER (
+                                WHERE NULLIF(BTRIM(n.document #>> '{normalized,brand}'), '')
+                                  IS NOT NULL
+                              )::integer AS brand_count,
+                              count(*) FILTER (
+                                WHERE NULLIF(BTRIM(
+                                  n.document #>> '{normalized,description_full}'
+                                ), '') IS NOT NULL OR NULLIF(BTRIM(
+                                    n.document #>> '{normalized,description_short}'
+                                  ), '') IS NOT NULL
+                              )::integer AS description_count,
+                              count(*) FILTER (
+                                WHERE jsonb_typeof(
+                                  n.document #> '{normalized,identifiers}'
+                                ) = 'object' AND jsonb_object_length(
+                                    n.document #> '{normalized,identifiers}'
+                                  ) > 0
+                              )::integer AS identifier_count,
+                              count(*) FILTER (
+                                WHERE jsonb_typeof(
+                                  n.document #> '{normalized,specification}'
+                                ) = 'object' AND jsonb_object_length(
+                                  n.document #> '{normalized,specification}'
+                                ) > 0
+                              )::integer AS specification_count,
+                              count(*) FILTER (
+                                WHERE jsonb_typeof(
+                                  n.document #> '{normalized,physical_properties}'
+                                ) = 'object' AND jsonb_object_length(
+                                  n.document #> '{normalized,physical_properties}'
+                                ) > 0
+                              )::integer AS physical_properties_count,
+                              count(*) FILTER (
+                                WHERE NULLIF(BTRIM(
+                                  n.document #>> '{normalized,media,image_primary}'
+                                ), '') IS NOT NULL
+                              )::integer AS primary_image_count,
+                              count(*) FILTER (
+                                WHERE jsonb_typeof(
+                                  n.document #> '{normalized,media,images}'
+                                ) = 'array' AND jsonb_array_length(
+                                  n.document #> '{normalized,media,images}'
+                                ) > 1
+                              )::integer AS multi_image_count
                             FROM product_detail_normalization n
                             JOIN product_detail_snapshot s
                               ON s.id = n.product_detail_snapshot_id

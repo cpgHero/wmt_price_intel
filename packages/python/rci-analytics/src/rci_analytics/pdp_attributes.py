@@ -156,6 +156,7 @@ def _pdp_evidence(context: JsonObject) -> JsonObject:
         "variant_configuration",
         "item_condition",
         "image_url",
+        "image_urls",
         "url",
         "pdp_source_field_inventory",
         "pdp_unmapped_source_fields",

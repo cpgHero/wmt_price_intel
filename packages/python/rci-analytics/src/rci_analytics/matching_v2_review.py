@@ -104,6 +104,7 @@ def _listing_summary(listing: ListingEvidence) -> JsonObject:
         "pdp_evidence": dict(listing.pdp_evidence),
         "observed_location_count": listing.observed_location_count,
         "image_url": listing.image_url,
+        "image_urls": list(listing.image_urls),
         "product_url": listing.product_url,
         "identifiers": [
             {

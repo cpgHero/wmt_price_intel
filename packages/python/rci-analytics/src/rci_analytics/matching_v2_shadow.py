@@ -152,6 +152,12 @@ class ListingEvidenceAccumulatorV2:
                 state.pdp_titles[str(pdp_evidence["name"])] += 1
             if pdp_evidence.get("image_url"):
                 state.image_urls[str(pdp_evidence["image_url"])] += 1
+            pdp_image_urls = pdp_evidence.get("image_urls")
+            if isinstance(pdp_image_urls, list):
+                for image_url in pdp_image_urls:
+                    value = str(image_url or "").strip()
+                    if value:
+                        state.image_urls[value] += 1
             if pdp_evidence.get("url"):
                 state.product_urls[str(pdp_evidence["url"])] += 1
         brand_governance = item.attributes.get("_brand_governance")
@@ -215,6 +221,12 @@ class ListingEvidenceAccumulatorV2:
                     title=_representative_text(state.pdp_titles)
                     or _representative_text(state.titles),
                     image_url=_representative_text(state.image_urls),
+                    image_urls=tuple(
+                        value
+                        for value, _count in sorted(
+                            state.image_urls.items(), key=lambda row: (-row[1], row[0])
+                        )
+                    ),
                     product_url=_representative_text(state.product_urls),
                     brand=brand,
                     brand_type=brand_type,  # type: ignore[arg-type]

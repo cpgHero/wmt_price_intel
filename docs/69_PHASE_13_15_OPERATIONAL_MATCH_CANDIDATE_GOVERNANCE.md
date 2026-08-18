@@ -129,3 +129,23 @@ per-retailer reconciliation. These are governed provenance fields, not optional 
 - The obsolete pre-governance Egg Matching v2 result
   `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-0dd6df6d` was archived only
   after the governed replacement passed CI, deployed, and completed the browser validation.
+
+## PDP and vision evidence remediation
+
+The normalized PDP contract already retains descriptions, identifiers, specification, physical
+properties, variant configuration, seller, brand, category, primary/all images, media metadata,
+fulfillment, reviews, demand, relationships, source-field inventory, and unmapped-field inventory.
+Search remains authoritative for store price, presence, sponsorship, and time.
+
+Matching evidence now carries the deduplicated PDP image set rather than only one representative
+hero image. Vision remains conditional: it is invoked only when critical structured attributes are
+missing or conflicting. A request interleaves Walmart and competitor images and is bounded to six
+images per product (twelve per pair). Any image-derived attribute must cite visible text and the
+exact supplied URL. If a retailer host blocks image download, the governed structured-only fallback
+is recorded; the model cannot claim image evidence.
+
+The normalization audit reports field-level availability for seller, brand, description,
+identifiers, specifications, physical properties, primary imagery, and multiple imagery. This
+separates two different questions: whether every provider field was mapped, and whether the source
+actually supplied enough decision-useful evidence for a product. Regenerating a candidate graph or
+starting paid AI review remains an explicit administrator action after deployment and audit.
