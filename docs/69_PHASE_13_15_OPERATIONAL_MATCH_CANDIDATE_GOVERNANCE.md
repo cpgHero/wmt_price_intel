@@ -95,3 +95,14 @@ was deleted locally and was never imported into production.
   the response schema to structured evidence, and persists
   `vision_image_download_unavailable` in usage warnings. Other bad requests continue to fail
   closed.
+- All 226 cases completed successfully after recovery. The platform owner certified 94 final
+  decisions: 90 comparable relationships and 4 governed not-comparable decisions. The remaining
+  132 insufficient-evidence cases remain explicitly uncertified and cannot enter price reporting.
+
+## Governed replay identity
+
+Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run
+identity therefore includes `matching_v2_gold_set_release_id` in addition to the collection,
+Product Pack, legacy match revision, and brand revision. This preserves legacy idempotency while
+allowing a distinct, auditable analysis run for each certified Matching v2 release. A separate
+source-result/release constraint makes retrying the same release idempotent.
