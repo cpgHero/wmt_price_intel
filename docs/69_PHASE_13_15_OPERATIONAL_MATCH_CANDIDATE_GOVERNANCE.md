@@ -153,6 +153,16 @@ carried into a new policy queue. Production adoption therefore requires a newly 
 exhaustive operational queue, explicit certification, a checksum-bound gold-set release, and a
 governed reporting replay. Building or importing that queue starts no paid AI or PDP calls.
 
+Production Product Pack and report blueprint `1.2.2` passed CI run `32166745063` and deployed
+after the immutable catalog correctly rejected an initial attempt to change blueprint `1.2.1` in
+place. Exhaustive operational queue `3.0.0` (checksum
+`ebf7d453b0d0b99b0e1220e009ec0b01f93cd9f405413aef2c29d82c7afc298e`) contains 185 pending
+cases. Relative to queue `2.1.0`, 41 candidates were removed by known shell-color conflicts: 25
+white-versus-brown, 12 brown-versus-white, and four brown-versus-specialty/mixed. The retained
+queue contains zero shell-color conflicts and 97 organic-unknown cases. Active-policy verification
+finds exactly one blocked case because housing remains unresolved. No prior certification crossed
+the policy revision, no AI task started, and temporary staging objects were deleted after import.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run

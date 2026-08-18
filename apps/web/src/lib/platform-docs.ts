@@ -86,7 +86,7 @@ export const platformDocumentation: PlatformDocumentation = {
   version: "1.3.8",
   lastVerified,
   baseline:
-    "Production implementation through Egg PDP remediation, with Egg matching-policy 1.2.2 locally verified and awaiting governed replay",
+    "Production implementation through Egg matching-policy 1.2.2 and operational certification queue 3.0.0",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1331,9 +1331,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-18",
-              "Implemented and test-verified; production policy replay pending",
+              "Deployed and production-verified; certification pending",
               "Fresh Shell Eggs matching distinguishes known specification conflicts from explicitly tolerated unknown evidence.",
-              "Product Pack 1.2.2 makes a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Existing immutable queue decisions are not silently migrated across the changed policy checksum; a new governed queue and replay are required. No paid calls run automatically.",
+              "Product Pack and report blueprint 1.2.2 make a known shell-color mismatch a hard non-comparable conflict. Unknown organic evidence no longer independently blocks certification, while a known organic-versus-non-organic conflict still blocks. The capability is generic Product Pack policy, not an Egg branch. Production queue 3.0.0 contains 185 pending cases, zero shell-color conflicts, 97 organic-unknown cases that remain reviewable, and one case blocked by unresolved housing. No prior decisions crossed the policy revision and no paid AI call started.",
             ],
             [
               "2026-08-18",
