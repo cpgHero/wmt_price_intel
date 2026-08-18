@@ -518,6 +518,18 @@ function BlueprintAnalysisWorkspace({
       : (certificationCoverage?.retailers?.find(
           (retailer) => retailer.competitor_retailer_id === selectedCompetitor,
         ) ?? null);
+  const reportedRelationshipCount = (
+    reportView.match_relationships ?? []
+  ).filter((relationship) => {
+    const competitorId = relationship.competitor_id;
+    const eligibleProfiles = relationship.eligible_profile_ids;
+    return (
+      (selectedCompetitor === "all" || competitorId === selectedCompetitor) &&
+      (!selectedLens ||
+        (Array.isArray(eligibleProfiles) &&
+          eligibleProfiles.includes(selectedLens)))
+    );
+  }).length;
   const contextDefinition = useMemo<ApplicationContextDefinition>(() => {
     const selectedRetailerName =
       competitorOptions.find(
@@ -681,7 +693,7 @@ function BlueprintAnalysisWorkspace({
           facts: [
             {
               label: "Reported relationships",
-              value: reportView.match_governance.confirmed.toLocaleString(),
+              value: reportedRelationshipCount.toLocaleString(),
             },
             ...(selectedCertificationCoverage
               ? [
@@ -782,6 +794,7 @@ function BlueprintAnalysisWorkspace({
     reportView.match_governance,
     certificationCoverage,
     selectedCertificationCoverage,
+    reportedRelationshipCount,
     reportView.retailer_scope.benchmark.name,
     preferredBasis,
     selectedBasis,
