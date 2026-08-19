@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.12",
+  version: "1.3.13",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -722,7 +722,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Competitive Intelligence",
               definition:
-                "Adds governed product relationships and location correspondence. Its primary workspaces are Executive Overview, Price Architecture, Product Leadership, Assortment & Whitespace, and Data Integrity. Product and geography drill-downs live inside those decision workflows rather than as disconnected summary tabs.",
+                "Adds governed product relationships and location correspondence. Its first-class report tabs are Executive Overview, Price Architecture, Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, Competitive History, Assortment & Whitespace, and Data Integrity. Leadership tabs share one retailer, comparison basis, benchmark product, radius, and benchmark-geography context; there is no nested Product Leadership tab rail.",
             },
           ],
         },
@@ -743,7 +743,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
-            "Keep every admitted benchmark product visible in Product Leadership. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
+            "Keep every admitted benchmark product visible across the leadership tabs. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
             "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
           ],
         },
@@ -1351,6 +1351,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-19",
+              "Implemented and test verification pending",
+              "Competitive Product Leadership was flattened into eight first-class report tabs while retaining one shared analytical context.",
+              "The nested Product Leadership tab and internal workspace rail are removed. Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, and Competitive History now sit beside Executive Overview, Price Architecture, Assortment & Whitespace, and Data Integrity. Legacy bookmarked Product Leadership URLs are translated to the corresponding first-class tab. The change does not alter metric formulas, store grain, match governance, or Search/PDP authority.",
+            ],
             [
               "2026-08-19",
               "Deployed and production-verified",

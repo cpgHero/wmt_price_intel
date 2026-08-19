@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CompetitiveProductLeadership } from "@/lib/api";
+import type { ProductLeadershipViewName } from "@/lib/competitive-report-tabs";
 import {
   freshestObservation,
   leadershipExceptions,
@@ -14,15 +15,6 @@ import {
 
 import styles from "./product-leadership-workspace.module.css";
 
-type ViewName =
-  | "overview"
-  | "footprint"
-  | "match_group"
-  | "ladders"
-  | "stores"
-  | "markets"
-  | "exceptions"
-  | "history";
 type Outcome = CompetitiveProductLeadership["outcomes"][number];
 type Summary = CompetitiveProductLeadership["summary"];
 
@@ -68,16 +60,6 @@ const MAPLIBRE_STYLES = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const SOURCE_ID = "competitive-product-leadership-outcomes";
 const POINT_LAYER = "competitive-product-leadership-points";
-const WORKSPACES: { id: ViewName; label: string }[] = [
-  { id: "overview", label: "Leadership Overview" },
-  { id: "footprint", label: "Competitive Footprint" },
-  { id: "match_group", label: "Match Group Analysis" },
-  { id: "ladders", label: "Price Ladders" },
-  { id: "stores", label: "Store Comparisons" },
-  { id: "markets", label: "Market Performance" },
-  { id: "exceptions", label: "Competitive Exceptions" },
-  { id: "history", label: "Competitive History" },
-];
 let mapLibraryPromise: Promise<MapLibrary> | null = null;
 
 function loadMapLibrary() {
@@ -1545,6 +1527,8 @@ export function ProductLeadershipWorkspace({
   radiusMiles,
   stateFilter,
   cityFilter,
+  viewName,
+  onNavigate,
   onGeographyOptions,
 }: Readonly<{
   analysisId: string;
@@ -1555,6 +1539,8 @@ export function ProductLeadershipWorkspace({
   radiusMiles: 1 | 3 | 5;
   stateFilter: string | null;
   cityFilter: string | null;
+  viewName: ProductLeadershipViewName;
+  onNavigate: (view: ProductLeadershipViewName) => void;
   onGeographyOptions: (
     states: CompetitiveProductLeadership["filter_options"]["states"],
     cities: CompetitiveProductLeadership["filter_options"]["cities"],
@@ -1568,7 +1554,6 @@ export function ProductLeadershipWorkspace({
     query: string;
     message: string;
   } | null>(null);
-  const [viewName, setViewName] = useState<ViewName>("overview");
   const [selected, setSelected] = useState<Outcome | null>(null);
   const [focusedMarket, setFocusedMarket] = useState<string | null>(null);
   const query = useMemo(() => {
@@ -1630,22 +1615,6 @@ export function ProductLeadershipWorkspace({
   }, [analysisId, productId, query]);
 
   useEffect(() => {
-    const applyLocation = () => {
-      const requested = new URL(window.location.href).searchParams.get(
-        "leadership",
-      );
-      setViewName(
-        WORKSPACES.some((workspace) => workspace.id === requested)
-          ? (requested as ViewName)
-          : "overview",
-      );
-    };
-    applyLocation();
-    window.addEventListener("popstate", applyLocation);
-    return () => window.removeEventListener("popstate", applyLocation);
-  }, []);
-
-  useEffect(() => {
     if (!view) return;
     onGeographyOptions(
       stateFilter ? [] : view.filter_options.states,
@@ -1681,13 +1650,6 @@ export function ProductLeadershipWorkspace({
       </div>
     );
   if (!view) return null;
-  const selectWorkspace = (workspace: ViewName) => {
-    setViewName(workspace);
-    const url = new URL(window.location.href);
-    if (workspace === "overview") url.searchParams.delete("leadership");
-    else url.searchParams.set("leadership", workspace);
-    window.history.replaceState(window.history.state, "", url);
-  };
   const drillState = (state: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("state", state);
@@ -1725,21 +1687,6 @@ export function ProductLeadershipWorkspace({
           <small>Search price · PDP identity · location-master geography</small>
         </div>
       </header>
-      <nav
-        className={styles.viewNav}
-        aria-label="Product leadership workspaces"
-      >
-        {WORKSPACES.map((workspace) => (
-          <button
-            className={viewName === workspace.id ? styles.active : ""}
-            key={workspace.id}
-            onClick={() => selectWorkspace(workspace.id)}
-            type="button"
-          >
-            {workspace.label}
-          </button>
-        ))}
-      </nav>
       <div className={styles.definitionStrip}>
         <span>
           <b>Scored denominator</b>
@@ -1766,7 +1713,7 @@ export function ProductLeadershipWorkspace({
           view={view}
           selected={selected}
           onSelect={setSelected}
-          onOpenFootprint={() => selectWorkspace("footprint")}
+          onOpenFootprint={() => onNavigate("footprint")}
         />
       ) : null}
       {viewName === "footprint" ? (

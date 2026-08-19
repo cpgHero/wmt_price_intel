@@ -59,6 +59,12 @@ import {
   scorecardProductSummaries,
   type ScorecardProductSummary,
 } from "@/lib/report-presentation";
+import {
+  leadershipTab,
+  leadershipTabs,
+  legacyLeadershipTab,
+  type ProductLeadershipViewName,
+} from "@/lib/competitive-report-tabs";
 
 const tabs = [
   "Executive Summary",
@@ -357,13 +363,24 @@ function BlueprintAnalysisWorkspace({
           : "all",
       );
       const requestedTab = parameters.get("tab");
+      const normalizedTab =
+        requestedTab === "product-leadership"
+          ? legacyLeadershipTab(parameters.get("leadership")).id
+          : requestedTab;
       setActiveGroup(
-        requestedTab &&
-          (requestedTab === "product-leadership" ||
-            reportTabs.some((group) => group.id === requestedTab))
-          ? requestedTab
+        normalizedTab &&
+          (leadershipTab(normalizedTab) ||
+            reportTabs.some((group) => group.id === normalizedTab))
+          ? normalizedTab
           : firstPopulatedGroup,
       );
+      if (requestedTab === "product-leadership") {
+        parameters.set(
+          "tab",
+          legacyLeadershipTab(parameters.get("leadership")).id,
+        );
+        parameters.delete("leadership");
+      }
       const requestedLens = parameters.get("lens");
       setSelectedLens(
         requestedLens &&
@@ -383,7 +400,8 @@ function BlueprintAnalysisWorkspace({
           : (leadershipProductOptions[0]?.id ?? null);
       setSelectedLeadershipProduct(nextLeadershipProduct);
       if (
-        requestedTab === "product-leadership" &&
+        normalizedTab &&
+        leadershipTab(normalizedTab) &&
         requestedProduct !== nextLeadershipProduct
       ) {
         if (nextLeadershipProduct)
@@ -391,6 +409,10 @@ function BlueprintAnalysisWorkspace({
         else parameters.delete("product");
         parameters.delete("state");
         parameters.delete("city");
+        const normalizedUrl = new URL(window.location.href);
+        normalizedUrl.search = parameters.toString();
+        window.history.replaceState(window.history.state, "", normalizedUrl);
+      } else if (requestedTab === "product-leadership") {
         const normalizedUrl = new URL(window.location.href);
         normalizedUrl.search = parameters.toString();
         window.history.replaceState(window.history.state, "", normalizedUrl);
@@ -438,7 +460,12 @@ function BlueprintAnalysisWorkspace({
     updateRoute({
       tab: groupId === firstPopulatedGroup ? null : groupId,
       pair: null,
+      leadership: null,
     });
+  };
+  const selectLeadershipView = (view: ProductLeadershipViewName) => {
+    const tab = leadershipTabs.find((candidate) => candidate.view === view);
+    if (tab) selectGroup(tab.id);
   };
   const selectLens = (profileId: string) => {
     const valid = reportView.comparison_bases.some(
@@ -687,7 +714,7 @@ function BlueprintAnalysisWorkspace({
           defaultValue: preferredBasis,
           selectedValue: selectedLens,
         },
-        ...(activeGroup === "product-leadership"
+        ...(leadershipTab(activeGroup)
           ? [
               {
                 id: "benchmark-product",
@@ -734,7 +761,7 @@ function BlueprintAnalysisWorkspace({
                 label: "Benchmark Geography",
                 title: `Choose the ${reportView.retailer_scope.benchmark.name} store geography`,
                 description:
-                  "Scope every product-leadership workspace to all observed benchmark stores or one state. Select a state to unlock city drill-down.",
+                  "Scope every product-leadership tab to all observed benchmark stores or one state. Select a state to unlock city drill-down.",
                 value: leadershipState ?? "All benchmark stores",
                 options: [
                   {
@@ -761,7 +788,7 @@ function BlueprintAnalysisWorkspace({
                       label: "Benchmark City",
                       title: `Choose a city in ${leadershipState}`,
                       description:
-                        "Optionally narrow the product-leadership workspaces to one benchmark-store city.",
+                        "Optionally narrow the product-leadership tabs to one benchmark-store city.",
                       value: leadershipCity ?? `All ${leadershipState} cities`,
                       options: [
                         {
@@ -949,15 +976,18 @@ function BlueprintAnalysisWorkspace({
             {group.label}
           </button>
         ))}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeGroup === "product-leadership"}
-          className={activeGroup === "product-leadership" ? "active" : ""}
-          onClick={() => selectGroup("product-leadership")}
-        >
-          Product Leadership
-        </button>
+        {leadershipTabs.map((tab) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeGroup === tab.id}
+            className={activeGroup === tab.id ? "active" : ""}
+            onClick={() => selectGroup(tab.id)}
+            key={tab.id}
+          >
+            {tab.label}
+          </button>
+        ))}
         {reportTabs.slice(2).map((group) => (
           <button
             type="button"
@@ -972,7 +1002,7 @@ function BlueprintAnalysisWorkspace({
         ))}
       </div>
       <section className="workspace-panel" role="tabpanel">
-        {activeGroup === "product-leadership" ? (
+        {leadershipTab(activeGroup) ? (
           <ProductLeadershipWorkspace
             analysisId={analysis.analysis_id}
             productPackId={reportView.product_pack.id}
@@ -982,6 +1012,8 @@ function BlueprintAnalysisWorkspace({
             radiusMiles={leadershipRadius}
             stateFilter={leadershipState}
             cityFilter={leadershipCity}
+            viewName={leadershipTab(activeGroup)?.view ?? "overview"}
+            onNavigate={selectLeadershipView}
             onGeographyOptions={receiveLeadershipGeography}
           />
         ) : activeGroup === "assortment" && reportView.assortment_analysis ? (
@@ -1798,7 +1830,7 @@ function RetailerScorecardPanel({
             ? `${rows[0].competitor} scorecard`
             : "Retailer scorecard"
         }
-        note={`Each row names its persisted Product Pack comparison basis. These publication scorecards retain their legacy exact-ZIP geography; use Product Leadership for current 1-, 3-, or 5-mile physical-store analysis and same-ZIP service-area analysis. Open a row's relationship-pair view to inspect its governed product identities.`}
+        note={`Each row names its persisted Product Pack comparison basis. These publication scorecards retain their legacy exact-ZIP geography; use Leadership Overview and its companion tabs for current 1-, 3-, or 5-mile physical-store analysis and same-ZIP service-area analysis. Open a row's relationship-pair view to inspect its governed product identities.`}
       >
         <div className="retailer-scorecard-table">
           <div className="retailer-scorecard-head">
