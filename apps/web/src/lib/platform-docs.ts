@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.18",
+  version: "1.3.19",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -1355,9 +1355,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-19",
-              "Implemented and test-verified; deployment pending",
+              "Deployed and production-verified",
               "Price Intelligence gained a cross-retailer Price Architecture Matrix independent of product matching.",
-              "Walmart's distinct product-level median positive Search shelf prices define the primary rungs, with true midpoint boundaries; fixed $0.50 and $1.00 bands support stable longitudinal comparison. Every eligible SKU is assigned exactly once by price alone. Cells toggle among product evidence, SKU count, assortment share, distinct-union store coverage, average price, and finite-band price density, and open a product evidence drawer. Brand and geography filters apply to the canonical first-party product-location population. Empty cells remain explicitly inconclusive rather than asserting assortment absence. Four deterministic projector tests and the API regression suite pass locally.",
+              "Walmart's distinct product-level median positive Search shelf prices define the primary rungs, with true midpoint boundaries; fixed $0.50 and $1.00 bands support stable longitudinal comparison. Every eligible SKU is assigned exactly once by price alone. Cells toggle among product evidence, SKU count, assortment share, distinct-union store coverage, average price, and finite-band price density, and open a product evidence drawer. Brand and geography filters apply to the canonical first-party product-location population. Empty cells remain explicitly inconclusive rather than asserting assortment absence. Fixed grids use Walmart-bounded open edge bands so competitor outliers stay visible without generating empty rows. The Egg production view exposes 83 anchored rungs or 23 fixed $0.50 bands across 14 retailers; metric switching, private-label filtering, and the evidence drawer were verified live. Revision-aware API caching retains the complete retailer set, and the web proxy cannot serve stale matrices. GitHub Actions runs 32304567351 and 32305117053 passed Python, contracts, migrations, TypeScript, 13 browser tests, builds, and all four service containers.",
             ],
             [
               "2026-08-19",

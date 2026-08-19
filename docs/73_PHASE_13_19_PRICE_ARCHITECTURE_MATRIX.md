@@ -1,6 +1,6 @@
 # Phase 13.19 — Cross-Retailer Price Architecture Matrix
 
-Status: implemented and test-verified; deployment pending
+Status: deployed and production-verified
 
 ## Outcome
 
@@ -90,5 +90,11 @@ Sales/units are capability-bounded until governed performance data exists.
 - Deterministic analytics tests cover midpoint math, duplicate anchors, unique SKU assignment,
   boundary behavior, union-based coverage, fixed bands, and schema validation.
 - API tests cover the complete filter and rung-method request path.
-- Full TypeScript, contract-generation, browser, container, and production validation remain the
-  deployment gate.
+- GitHub Actions runs `32304567351` and `32305117053` passed the full Python, contract,
+  migration, TypeScript, 13-browser-test, build, and four-container gates.
+- The governed Egg analysis was verified in Railway production across all 14 retailers: the
+  Walmart-anchored view exposes 83 distinct price points; the fixed $0.50 view exposes 23 useful
+  bands from under $1.00 through $11.50+, while retaining competitor outliers in the top band.
+- Cell metric switching, private-label filtering, and the product-evidence drawer were exercised
+  in the live application. Revision-aware API caching retains the complete retailer set and the
+  web proxy does not cache obsolete analytical responses.
