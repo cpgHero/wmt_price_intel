@@ -311,6 +311,45 @@ async def test_price_monitoring_api_rejects_unknown_brand_filter() -> None:
     assert response.status_code == 422
 
 
+async def test_price_architecture_api_passes_governed_scope_and_rung_method() -> None:
+    class PriceService:
+        async def architecture_matrix(
+            self, analysis_id: str, **filters: object
+        ) -> dict[str, object]:
+            assert analysis_id == "analysis-1"
+            assert filters == {
+                "mode": "fixed_range",
+                "fixed_increment": 1.0,
+                "brand_type": "private_label",
+                "state": "AR",
+                "city": "Bentonville",
+                "zipcode": "72712",
+            }
+            return {"analysis_id": analysis_id, "mode": filters["mode"]}
+
+    app = create_app()
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/analyses/analysis-1/price-architecture-matrix",
+            params={
+                "mode": "fixed_range",
+                "fixed_increment": "1",
+                "brand_type": "private_label",
+                "state": "AR",
+                "city": "Bentonville",
+                "zipcode": "72712",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"analysis_id": "analysis-1", "mode": "fixed_range"}
+
+
 async def test_price_monitoring_map_passes_exact_product_and_detail_scope() -> None:
     class PriceService:
         async def map_view(

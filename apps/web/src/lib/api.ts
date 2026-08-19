@@ -8,6 +8,7 @@ import type {
   RetailCompetitiveIntelligenceCompetitiveProductLeadership,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
+  RetailCompetitiveIntelligencePriceArchitectureMatrix,
   RetailCompetitiveIntelligencePriceMonitoringMap,
   RetailCompetitiveIntelligencePriceMonitoringView,
   RetailCompetitiveIntelligenceReportView,
@@ -20,6 +21,8 @@ export type PriceMonitoringView =
   RetailCompetitiveIntelligencePriceMonitoringView;
 export type PriceMonitoringMap =
   RetailCompetitiveIntelligencePriceMonitoringMap;
+export type PriceArchitectureMatrix =
+  RetailCompetitiveIntelligencePriceArchitectureMatrix;
 export type CompetitiveProductLeadership =
   RetailCompetitiveIntelligenceCompetitiveProductLeadership;
 

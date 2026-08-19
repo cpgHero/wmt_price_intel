@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_analytics import (
     CatalogProductPackLoader,
+    PriceArchitectureMatrixProjector,
+    PriceArchitectureRetailerInput,
     PriceMonitoringFilters,
     PriceMonitoringProjector,
     ProductPriceObservation,
@@ -40,6 +42,7 @@ from rci_retailer_packs import (
 
 router = APIRouter(prefix="/api/v1", tags=["price-monitoring"])
 BrandFilter = Literal["all", "private_label", "regional", "national", "unclassified"]
+PriceArchitectureMode = Literal["benchmark_anchored", "fixed_range"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -674,6 +677,7 @@ class PriceMonitoringService:
         self._projector_locks: dict[str, asyncio.Lock] = {}
         self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._map_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._architecture_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._product_observation_cache: dict[
             tuple[str, ...], dict[str, tuple[ProductPriceObservation, ...]]
         ] = {}
@@ -915,6 +919,190 @@ class PriceMonitoringService:
             self._view_cache.pop(next(iter(self._view_cache)))
         self._view_cache[cache_key] = view
         return view
+
+    @staticmethod
+    def _architecture_retailer_input(
+        prepared: PreparedPriceMonitoringData,
+        *,
+        brand_type: BrandFilter,
+        state: str | None,
+        city: str | None,
+        zipcode: str | None,
+        retailer_name: str,
+    ) -> PriceArchitectureRetailerInput:
+        population = prepared.population
+        if population is None:
+            raise RuntimeError("canonical product-location population is unavailable")
+
+        def location_matches(scope_key: str) -> bool:
+            location = population.source_locations.get(scope_key)
+            return bool(
+                location is not None
+                and (state is None or location.state == state)
+                and (city is None or location.city == city)
+                and (zipcode is None or location.zipcode == zipcode)
+            )
+
+        observations = tuple(
+            row
+            for row in population.observations
+            if (brand_type == "all" or row.brand_type == brand_type)
+            and location_matches(row.location.scope_key)
+        )
+        eligible_scope_keys = frozenset(
+            scope_key for scope_key in population.eligible_scope_keys if location_matches(scope_key)
+        )
+        location_dimension: Literal["store", "service_area"] = (
+            "service_area"
+            if observations and all(row.location.kind == "service_area" for row in observations)
+            else "service_area"
+            if population.retailer_id == "amazon_us_same_day"
+            else "store"
+        )
+        return PriceArchitectureRetailerInput(
+            retailer_id=population.retailer_id,
+            retailer_name=retailer_name,
+            location_dimension=location_dimension,
+            eligible_scope_keys=eligible_scope_keys,
+            observations=observations,
+            population_checksum=population.checksum,
+        )
+
+    async def architecture_matrix(
+        self,
+        analysis_id: str,
+        *,
+        mode: PriceArchitectureMode = "benchmark_anchored",
+        fixed_increment: float = 0.5,
+        brand_type: BrandFilter = "all",
+        state: str | None = None,
+        city: str | None = None,
+        zipcode: str | None = None,
+    ) -> dict[str, Any]:
+        """Build unmatched assortment architecture across every analysis retailer."""
+
+        if city is not None and state is None:
+            raise ValueError("a city filter requires its state")
+        if mode == "fixed_range" and fixed_increment not in {0.5, 1.0}:
+            raise ValueError("fixed price-rung increment must be 0.50 or 1.00")
+        analysis = await self._analyses.get(analysis_id)
+        benchmark = str(analysis.result["benchmark_retailer"])
+        retailer_ids = tuple(
+            dict.fromkeys(
+                (
+                    benchmark,
+                    *(str(value) for value in analysis.result.get("competitors", [])),
+                )
+            )
+        )
+        semaphore = asyncio.Semaphore(4)
+
+        async def prepare(retailer_id: str) -> PreparedPriceMonitoringData:
+            async with semaphore:
+                return await self._prepare(analysis_id, retailer_id)
+
+        outcomes = await asyncio.gather(
+            *(prepare(retailer_id) for retailer_id in retailer_ids),
+            return_exceptions=True,
+        )
+        prepared_rows: list[PreparedPriceMonitoringData] = []
+        unavailable: list[dict[str, Any]] = []
+        for retailer_id, outcome in zip(retailer_ids, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
+                if retailer_id == benchmark:
+                    raise RuntimeError(
+                        "benchmark Search evidence is unavailable; price rungs cannot be defined"
+                    ) from outcome
+                unavailable.append(
+                    {
+                        "id": retailer_id,
+                        "name": self._retailer_names.get(
+                            retailer_id, retailer_id.replace("_", " ").title()
+                        ),
+                        "status": "unavailable",
+                        "location_dimension": (
+                            "service_area" if retailer_id == "amazon_us_same_day" else "store"
+                        ),
+                        "sku_count": 0,
+                        "eligible_locations": 0,
+                        "observed_locations": 0,
+                        "population_checksum": None,
+                        "reason": (
+                            "Governed Search evidence is unavailable for this retailer "
+                            "in the analysis."
+                        ),
+                    }
+                )
+                continue
+            prepared_rows.append(outcome)
+
+        revisions = tuple(
+            sorted(
+                (
+                    f"{row.population.checksum if row.population else ''}:"
+                    f"{row.product_context_revision}"
+                )
+                for row in prepared_rows
+            )
+        )
+        cache_key = (
+            analysis_id,
+            mode,
+            f"{fixed_increment:.2f}",
+            brand_type,
+            state or "",
+            city or "",
+            zipcode or "",
+            *revisions,
+        )
+        cached = self._architecture_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        pack = await self._packs.load(
+            analysis.product_pack_id,
+            analysis.product_pack_version,
+        )
+        inputs = [
+            self._architecture_retailer_input(
+                prepared,
+                brand_type=brand_type,
+                state=state,
+                city=city,
+                zipcode=zipcode,
+                retailer_name=self._retailer_names.get(
+                    prepared.population.retailer_id if prepared.population else "",
+                    prepared.population.retailer_id.replace("_", " ").title()
+                    if prepared.population
+                    else "Unknown retailer",
+                ),
+            )
+            for prepared in prepared_rows
+        ]
+        matrix = PriceArchitectureMatrixProjector().build(
+            analysis_id=analysis_id,
+            generated_at=analysis.created_at.isoformat(),
+            product_pack={"id": pack.id, "name": pack.name, "version": pack.version},
+            anchor_retailer_id=benchmark,
+            retailers=inputs,
+            mode=mode,
+            fixed_increment=fixed_increment,
+            brand_type=brand_type,
+            state=state,
+            city=city,
+            zipcode=zipcode,
+            unavailable_retailers=unavailable,
+        )
+        validate_instance(
+            self._root,
+            "price-architecture-matrix.schema.json",
+            matrix,
+            label=f"price-architecture-matrix:{analysis_id}",
+        )
+        if len(self._architecture_cache) >= 24:
+            self._architecture_cache.pop(next(iter(self._architecture_cache)))
+        self._architecture_cache[cache_key] = matrix
+        return matrix
 
     async def product_observations(
         self,
@@ -1270,6 +1458,43 @@ async def price_monitoring_view(
                 zipcode=zipcode,
                 product_id=product_id,
             ),
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/analyses/{analysis_id}/price-architecture-matrix")
+async def price_architecture_matrix(
+    analysis_id: str,
+    service: ServiceDependency,
+    mode: PriceArchitectureMode = "benchmark_anchored",
+    fixed_increment: float = Query(default=0.5, alias="fixed_increment"),
+    brand_type: BrandFilter = "all",
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+    zipcode: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return await service.architecture_matrix(
+            analysis_id,
+            mode=mode,
+            fixed_increment=fixed_increment,
+            brand_type=brand_type,
+            state=state_filter,
+            city=city,
+            zipcode=zipcode,
         )
     except AnalysisNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

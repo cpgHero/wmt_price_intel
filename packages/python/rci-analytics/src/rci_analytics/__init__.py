@@ -72,6 +72,10 @@ from rci_analytics.presentation import (
     merge_product_decision_context,
     merge_product_evidence_summary,
 )
+from rci_analytics.price_architecture import (
+    PriceArchitectureMatrixProjector,
+    PriceArchitectureRetailerInput,
+)
 from rci_analytics.price_monitoring import (
     PriceMonitoringFilters,
     PriceMonitoringProjector,
@@ -132,6 +136,8 @@ __all__ = [
     "OfferClassifier",
     "ParquetDatasetWriter",
     "PostgresAnalysisInputRepository",
+    "PriceArchitectureMatrixProjector",
+    "PriceArchitectureRetailerInput",
     "PriceLocation",
     "PriceMonitoringFilters",
     "PriceMonitoringProjector",

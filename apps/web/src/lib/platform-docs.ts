@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.17",
+  version: "1.3.18",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -717,7 +717,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Price Intelligence",
               definition:
-                "Aggregates the canonical product-location observations within one retailer. Home selects a product; Product Overview combines identity, presence, price, sponsorship, and map evidence; Price Architecture explains the price distribution; Store Review focuses unusual prices and non-observations.",
+                "Aggregates the canonical product-location observations without requiring product matches. Home selects an exact retailer product. The cross-retailer Price Architecture Matrix places every eligible SKU into Walmart-defined or fixed package-price bands. Product Overview combines identity, presence, price, sponsorship, and map evidence; product Price Architecture explains one SKU's store-price distribution; Store Review focuses unusual prices and non-observations.",
             },
             {
               term: "Competitive Intelligence",
@@ -743,6 +743,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
+            "Keep the Price Architecture Matrix independent from matching. Assign each retailer SKU exactly once from its median positive Search package price across observed locations. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
+            "Calculate matrix store coverage as the distinct union of eligible retailer locations reached by any product in a cell. Never sum individual product coverage. An empty cell means no eligible SKU was observed in that price band; it is not proof of retailer assortment absence.",
             "Keep every admitted benchmark product visible across the leadership tabs. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
             "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
           ],
@@ -1351,6 +1353,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-19",
+              "Implemented and test-verified; deployment pending",
+              "Price Intelligence gained a cross-retailer Price Architecture Matrix independent of product matching.",
+              "Walmart's distinct product-level median positive Search shelf prices define the primary rungs, with true midpoint boundaries; fixed $0.50 and $1.00 bands support stable longitudinal comparison. Every eligible SKU is assigned exactly once by price alone. Cells toggle among product evidence, SKU count, assortment share, distinct-union store coverage, average price, and finite-band price density, and open a product evidence drawer. Brand and geography filters apply to the canonical first-party product-location population. Empty cells remain explicitly inconclusive rather than asserting assortment absence. Four deterministic projector tests and the API regression suite pass locally.",
+            ],
             [
               "2026-08-19",
               "Deployed and production-verified",

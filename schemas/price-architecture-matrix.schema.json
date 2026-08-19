@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/price-architecture-matrix.schema.json",
+  "title": "RetailCompetitiveIntelligencePriceArchitectureMatrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis_id", "generated_at", "product_pack", "source", "filters", "summary", "retailers", "rungs"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "product_pack": { "$ref": "#/$defs/idNameVersion" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "price_grain", "assignment_rule", "anchor_rule"],
+      "properties": {
+        "authority": { "const": "Search" },
+        "price_grain": { "const": "retailer product x median positive shelf price across observed locations" },
+        "assignment_rule": { "const": "price only; no product-match relationship is used" },
+        "anchor_rule": { "type": "string", "minLength": 1 }
+      }
+    },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_retailer_id", "mode", "fixed_increment", "brand_type", "state", "city", "zipcode"],
+      "properties": {
+        "anchor_retailer_id": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["benchmark_anchored", "fixed_range"] },
+        "fixed_increment": { "enum": [0.5, 1.0] },
+        "brand_type": { "enum": ["all", "private_label", "regional", "national", "unclassified"] },
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "zipcode": { "type": ["string", "null"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchor_price_points", "rung_count", "anchor_skus", "competitor_skus", "most_crowded_rung_id", "whitespace_rung_count"],
+      "properties": {
+        "anchor_price_points": { "type": "integer", "minimum": 1 },
+        "rung_count": { "type": "integer", "minimum": 1 },
+        "anchor_skus": { "type": "integer", "minimum": 1 },
+        "competitor_skus": { "type": "integer", "minimum": 0 },
+        "most_crowded_rung_id": { "type": "string", "minLength": 1 },
+        "whitespace_rung_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "retailers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/retailer" } },
+    "rungs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rung" } }
+  },
+  "$defs": {
+    "idNameVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "status", "location_dimension", "sku_count", "eligible_locations", "observed_locations", "population_checksum", "reason"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["available", "unavailable"] },
+        "location_dimension": { "enum": ["store", "service_area"] },
+        "sku_count": { "type": "integer", "minimum": 0 },
+        "eligible_locations": { "type": "integer", "minimum": 0 },
+        "observed_locations": { "type": "integer", "minimum": 0 },
+        "population_checksum": { "type": ["string", "null"] },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "name", "brand", "brand_type", "image_url", "url", "median_price", "minimum_price", "maximum_price", "observed_locations"],
+      "properties": {
+        "product_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "image_url": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "median_price": { "type": "number", "exclusiveMinimum": 0 },
+        "minimum_price": { "type": "number", "exclusiveMinimum": 0 },
+        "maximum_price": { "type": "number", "exclusiveMinimum": 0 },
+        "observed_locations": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_id", "sku_count", "assortment_share", "store_coverage", "average_price", "price_density", "products"],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "sku_count": { "type": "integer", "minimum": 0 },
+        "assortment_share": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "store_coverage": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "average_price": { "type": ["number", "null"], "minimum": 0 },
+        "price_density": { "type": ["number", "null"], "minimum": 0 },
+        "products": { "type": "array", "items": { "$ref": "#/$defs/product" } }
+      }
+    },
+    "rung": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rank", "label", "anchor_price", "lower_bound", "upper_bound", "anchor_products", "competitor_sku_count", "cells"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "rank": { "type": "integer", "minimum": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "anchor_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "lower_bound": { "type": ["number", "null"], "minimum": 0 },
+        "upper_bound": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "anchor_products": { "type": "array", "items": { "$ref": "#/$defs/product" } },
+        "competitor_sku_count": { "type": "integer", "minimum": 0 },
+        "cells": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/cell" } }
+      }
+    }
+  }
+}

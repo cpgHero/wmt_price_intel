@@ -13,6 +13,7 @@ import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
 import { displayDate } from "@/lib/presentation";
 
 import { EvidenceRetailMap as InteractiveEvidenceRetailMap } from "./evidence-retail-map";
+import { PriceArchitectureMatrixWorkspace } from "./price-architecture-matrix";
 
 type Product = PriceMonitoringView["products"][number];
 type Location = PriceMonitoringView["locations"][number];
@@ -24,12 +25,18 @@ type StateFeature = {
   geometry: { type: string; coordinates: unknown };
 };
 type TabId =
-  "home" | "overview" | "price-architecture" | "store-review" | "history";
+  | "home"
+  | "price-architecture-matrix"
+  | "overview"
+  | "price-architecture"
+  | "store-review"
+  | "history";
 type ArchitectureView = "heatmap" | "map";
 type StoreReviewMode = "price" | "not_observed";
 
 const tabIds: readonly TabId[] = [
   "home",
+  "price-architecture-matrix",
   "overview",
   "price-architecture",
   "store-review",
@@ -2002,7 +2009,11 @@ export function PriceMonitoringWorkspace({
   initialTab,
 }: Readonly<{ initialView: PriceMonitoringView; initialTab?: string }>) {
   const [view, setView] = useState(initialView);
-  const [tab, setTab] = useState<TabId>(normalizeTab(initialTab));
+  const [tab, setTab] = useState<TabId>(
+    normalizeTab(
+      initialTab ?? (initialView.filters.product_id ? undefined : "home"),
+    ),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openLocation, setOpenLocation] = useState<Location | null>(null);
@@ -2130,42 +2141,77 @@ export function PriceMonitoringWorkspace({
     () => ({
       label: "Price intelligence context",
       controls: [
-        {
-          id: "retailer-view",
-          label: "Retailer",
-          title: "Choose the retailer to monitor",
-          description:
-            "This module examines one retailer product across its observed location footprint.",
-          value: view.retailer.name,
-          selectedValue: view.filters.retailer_id,
-          defaultValue: "",
-          queryParameter: "retailer",
-          resetQueryParameters: ["state", "city", "zipcode", "product_id"],
-          options: view.filter_options.retailers.map((row) => ({
-            value: row.id,
-            label: row.name,
-            description: "Open this retailer's governed Search evidence.",
-          })),
-        },
-        {
-          id: "product-view",
-          label: "Product",
-          title: "Choose one retailer product",
-          description:
-            "Prices are compared only across locations carrying this exact retailer product ID.",
-          value:
-            view.filter_options.products.find(
-              (row) => row.value === view.filters.product_id,
-            )?.label ?? "Select a product",
-          selectedValue: view.filters.product_id ?? "",
-          defaultValue: "",
-          queryParameter: "product_id",
-          options: view.filter_options.products.map((row) => ({
-            value: row.value,
-            label: row.label,
-            description: `${row.brand ?? "Brand unresolved"} · ${count(row.count)} observed locations`,
-          })),
-        },
+        ...(tab === "price-architecture-matrix"
+          ? [
+              {
+                id: "architecture-retailers",
+                label: "Retailer scope",
+                title: "Cross-retailer assortment scope",
+                description:
+                  "The matrix uses the benchmark retailer plus every competitor with governed Search evidence in this analysis.",
+                value: `${view.filter_options.retailers.length} configured retailers`,
+                facts: [
+                  {
+                    label: "Anchor retailer",
+                    value:
+                      view.filter_options.retailers.find(
+                        (retailer) => retailer.id === "walmart_us",
+                      )?.name ?? "Walmart (US)",
+                  },
+                  {
+                    label: "Assignment",
+                    value: "Median package price only",
+                  },
+                ],
+                messages: [
+                  "Products in the same price rung are not automatically matches or substitutes.",
+                  "Known third-party marketplace products remain excluded upstream.",
+                ],
+              },
+            ]
+          : [
+              {
+                id: "retailer-view",
+                label: "Retailer",
+                title: "Choose the retailer to monitor",
+                description:
+                  "This module examines one retailer product across its observed location footprint.",
+                value: view.retailer.name,
+                selectedValue: view.filters.retailer_id,
+                defaultValue: "",
+                queryParameter: "retailer",
+                resetQueryParameters: [
+                  "state",
+                  "city",
+                  "zipcode",
+                  "product_id",
+                ],
+                options: view.filter_options.retailers.map((row) => ({
+                  value: row.id,
+                  label: row.name,
+                  description: "Open this retailer's governed Search evidence.",
+                })),
+              },
+              {
+                id: "product-view",
+                label: "Product",
+                title: "Choose one retailer product",
+                description:
+                  "Prices are compared only across locations carrying this exact retailer product ID.",
+                value:
+                  view.filter_options.products.find(
+                    (row) => row.value === view.filters.product_id,
+                  )?.label ?? "Select a product",
+                selectedValue: view.filters.product_id ?? "",
+                defaultValue: "",
+                queryParameter: "product_id",
+                options: view.filter_options.products.map((row) => ({
+                  value: row.value,
+                  label: row.label,
+                  description: `${row.brand ?? "Brand unresolved"} · ${count(row.count)} observed locations`,
+                })),
+              },
+            ]),
         {
           id: "geography-view",
           label: "Geography",
@@ -2194,52 +2240,75 @@ export function PriceMonitoringWorkspace({
             })),
           ],
         },
-        {
-          id: "status-notifications",
-          label: "Status & notifications",
-          title: "Current assessment and evidence readiness",
-          description:
-            "Unsupported measures remain unavailable rather than being inferred.",
-          value: view.exceptions.length
-            ? `${count(view.exceptions.length)} price reviews`
-            : view.quality.status === "ready"
-              ? "Ready"
-              : "Review caveats",
-          tone:
-            view.quality.status === "ready" && !view.exceptions.length
-              ? "ready"
-              : "attention",
-          facts: [
-            {
-              label: "Usable price rows",
-              value: percent(view.summary.usable_price_rate),
-            },
-            {
-              label: "Observed presence",
-              value: percent(view.presence.observed_presence_rate),
-            },
-            {
-              label: "Immutable artifacts",
-              value: count(view.source.artifact_checksums.length),
-            },
-            {
-              label: "Observed through",
-              value: view.source.observed_end
-                ? displayDate(view.source.observed_end)
-                : "—",
-            },
-          ],
-          messages: [
-            view.exceptions.length
-              ? `${count(view.exceptions.length)} store prices meet the deterministic review rule. Open Store Review for exact evidence.`
-              : "No store prices meet the current deterministic exception rule.",
-            view.presence.definition,
-            "PDP identity enrichment never overrides Search price or location.",
-          ],
-        },
+        ...(tab === "price-architecture-matrix"
+          ? [
+              {
+                id: "architecture-method",
+                label: "Method & readiness",
+                title: "Price architecture authority",
+                description:
+                  "The page computes retailer-level assortment architecture without reading product matches.",
+                value: "Price-only · Search authoritative",
+                tone: "ready" as const,
+                facts: [
+                  { label: "Price source", value: "Search" },
+                  { label: "Product grain", value: "One median per SKU" },
+                  { label: "Location source", value: "Retailer master" },
+                ],
+                messages: [
+                  "PDP enriches identity but never replaces Search price.",
+                  "Empty cells are observations, not confirmed assortment gaps.",
+                ],
+              },
+            ]
+          : [
+              {
+                id: "status-notifications",
+                label: "Status & notifications",
+                title: "Current assessment and evidence readiness",
+                description:
+                  "Unsupported measures remain unavailable rather than being inferred.",
+                value: view.exceptions.length
+                  ? `${count(view.exceptions.length)} price reviews`
+                  : view.quality.status === "ready"
+                    ? "Ready"
+                    : "Review caveats",
+                tone:
+                  view.quality.status === "ready" && !view.exceptions.length
+                    ? ("ready" as const)
+                    : ("attention" as const),
+                facts: [
+                  {
+                    label: "Usable price rows",
+                    value: percent(view.summary.usable_price_rate),
+                  },
+                  {
+                    label: "Observed presence",
+                    value: percent(view.presence.observed_presence_rate),
+                  },
+                  {
+                    label: "Immutable artifacts",
+                    value: count(view.source.artifact_checksums.length),
+                  },
+                  {
+                    label: "Observed through",
+                    value: view.source.observed_end
+                      ? displayDate(view.source.observed_end)
+                      : "—",
+                  },
+                ],
+                messages: [
+                  view.exceptions.length
+                    ? `${count(view.exceptions.length)} store prices meet the deterministic review rule. Open Store Review for exact evidence.`
+                    : "No store prices meet the current deterministic exception rule.",
+                  view.presence.definition,
+                  "PDP identity enrichment never overrides Search price or location.",
+                ],
+              },
+            ]),
       ],
     }),
-    [view],
+    [tab, view],
   );
   useApplicationContextDefinition(contextDefinition);
 
@@ -2248,6 +2317,7 @@ export function PriceMonitoringWorkspace({
     : null;
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: "home", label: "Home" },
+    { id: "price-architecture-matrix", label: "Price Architecture Matrix" },
     { id: "overview", label: "Product Overview" },
     { id: "price-architecture", label: "Price Architecture" },
     { id: "store-review", label: "Store Review" },
@@ -2262,8 +2332,9 @@ export function PriceMonitoringWorkspace({
             <p className="eyebrow">Price Intelligence · {view.retailer.name}</p>
             <h1>{view.product_pack.name}</h1>
             <p>
-              Select one retailer product to examine its store-level price
-              footprint.
+              {tab === "price-architecture-matrix"
+                ? "See how each retailer constructs its assortment across Walmart-defined price points."
+                : "Select one retailer product to examine its store-level price footprint."}
             </p>
           </div>
         </header>
@@ -2271,8 +2342,30 @@ export function PriceMonitoringWorkspace({
           className="pm-tabs pi-tabs"
           aria-label="Price intelligence workspaces"
         >
-          <button aria-current="page" type="button">
+          <button
+            aria-current={tab === "home" ? "page" : undefined}
+            onClick={() => {
+              updateQuery({ product_id: null, tab: "home" });
+              setTab("home");
+            }}
+            type="button"
+          >
             Home
+          </button>
+          <button
+            aria-current={
+              tab === "price-architecture-matrix" ? "page" : undefined
+            }
+            onClick={() => {
+              updateQuery({
+                product_id: null,
+                tab: "price-architecture-matrix",
+              });
+              setTab("price-architecture-matrix");
+            }}
+            type="button"
+          >
+            Price Architecture Matrix
           </button>
         </nav>
         {loading || error ? (
@@ -2280,11 +2373,21 @@ export function PriceMonitoringWorkspace({
             {loading ? "Refreshing evidence…" : error}
           </p>
         ) : null}
-        <ProductCatalog
-          loading={loading}
-          onOpenProduct={openCatalogProduct}
-          view={view}
-        />
+        {tab === "price-architecture-matrix" ? (
+          <PriceArchitectureMatrixWorkspace
+            analysisId={view.analysis_id}
+            city={view.filters.city}
+            initialBrandType={view.filters.brand_type}
+            state={view.filters.state}
+            zipcode={view.filters.zipcode}
+          />
+        ) : (
+          <ProductCatalog
+            loading={loading}
+            onOpenProduct={openCatalogProduct}
+            view={view}
+          />
+        )}
         {loading ? (
           <div className="pi-route-loading" role="status" aria-live="polite">
             <span aria-hidden="true" />
@@ -2372,8 +2475,11 @@ export function PriceMonitoringWorkspace({
             aria-current={tab === item.id ? "page" : undefined}
             key={item.id}
             onClick={() => {
-              if (item.id === "home") {
-                updateQuery({ product_id: null, tab: "home" });
+              if (
+                item.id === "home" ||
+                item.id === "price-architecture-matrix"
+              ) {
+                updateQuery({ product_id: null, tab: item.id });
               } else {
                 updateTab(item.id);
               }
@@ -2396,6 +2502,16 @@ export function PriceMonitoringWorkspace({
           loading={loading}
           onOpenProduct={openCatalogProduct}
           view={view}
+        />
+      ) : null}
+
+      {tab === "price-architecture-matrix" ? (
+        <PriceArchitectureMatrixWorkspace
+          analysisId={view.analysis_id}
+          city={view.filters.city}
+          initialBrandType={view.filters.brand_type}
+          state={view.filters.state}
+          zipcode={view.filters.zipcode}
         />
       ) : null}
 
