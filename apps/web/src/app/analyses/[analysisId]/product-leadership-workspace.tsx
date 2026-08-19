@@ -1598,7 +1598,7 @@ export function ProductLeadershipWorkspace({
     const controller = new AbortController();
     fetch(
       `/api/analyses/${encodeURIComponent(analysisId)}/competitive-product-leadership?${query}`,
-      { signal: controller.signal },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
         const body = (await response.json()) as CompetitiveProductLeadership & {

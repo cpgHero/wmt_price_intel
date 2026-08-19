@@ -100,3 +100,6 @@ receive that fallback and continue to require membership in their governed key l
 7. Production validation must include at least one compact observed-footprint relationship with
    mapped competitor stores; an approved relationship cannot silently become a zero-store scope
    merely because audit-only location keys were removed from the interactive payload.
+8. Product Leadership browser and proxy requests use `no-store`; the API's certified query cache
+   is the only response cache. A corrected or restarted analytical service therefore cannot be
+   masked by a stale zero-store browser response.
