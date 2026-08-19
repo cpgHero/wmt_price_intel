@@ -83,10 +83,10 @@ const lastVerified = "August 18, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.9",
+  version: "1.3.10",
   lastVerified,
   baseline:
-    "Production implementation through Egg matching-policy 1.2.2; trust-recovery release test-verified and deployment pending",
+    "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1355,13 +1355,13 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-18",
-              "Implemented and test-verified; production deployment pending",
+              "Deployed and production-verified",
               "Trust Recovery binds Price and Competitive Intelligence to one published artifact generation and restores the complete admitted benchmark assortment.",
-              "The Price read path now reconciles classified Parquet artifacts to the AnalysisResult evidence row count and manifest checksum, with explicit analysis-run generation lineage for future replays and fail-closed handling of ambiguity. Canonical product-location projection rechecks Retailer Pack first-party seller policy, so known marketplace sellers cannot leak from historical artifacts. Interactive report payloads omit audit-only scope arrays while immutable evidence remains intact. Product Leadership sources its selector from the governed benchmark assortment, preserving unmatched products as explicit unscored states. Sixty targeted Python tests pass; deployment and production Egg reconciliation are pending.",
+              "The Price read path now reconciles classified Parquet artifacts to the AnalysisResult evidence row count and manifest checksum, with explicit analysis-run generation lineage for future replays and fail-closed handling of ambiguity. Canonical product-location projection rechecks Retailer Pack first-party seller policy, so known marketplace sellers cannot leak from historical artifacts. Interactive report payloads omit audit-only scope arrays while immutable evidence remains intact. Production Egg reconciliation returns 119,172 classified rows, 108,701 eligible observations, 172 Walmart products, 166 Walmart.com sellers, six policy-permitted blank sellers, and zero known third-party sellers. Product Leadership lists all 172 products and renders unmatched items as explicit unscored states. The complete Python suite passes with 558 tests and 13 environment-gated skips; GitHub Actions run 32216053425 passed Python, TypeScript, 13 browser tests, migrations, contracts, and all four container builds.",
             ],
             [
               "2026-08-18",
-              "Implemented and test-verified; production deployment pending",
+              "Deployed and production-verified",
               "Competitive Intelligence was consolidated into a decision-led five-workspace reporting architecture with explicit analytical capability boundaries.",
               "Executive Overview now begins with transparent retailer evidence, readiness, matched-observation, and retailer-view leadership summaries. Price Architecture, Product Leadership, Assortment & Whitespace, and Data Integrity retain the strongest governed drill-downs; sparse outer Products and Geography tabs no longer compete with those workflows. Unavailable explicit Product Leadership profiles/products fail closed instead of silently showing stale fallback metrics. Current data supports snapshot price ladders and gaps, but not history/response, basket, KVI, elasticity, margin, ROI, or consumer price-image claims.",
             ],
