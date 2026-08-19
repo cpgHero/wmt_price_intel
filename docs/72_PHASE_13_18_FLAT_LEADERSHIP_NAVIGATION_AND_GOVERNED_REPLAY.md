@@ -1,6 +1,6 @@
 # Phase 13.18 — Flat Leadership Navigation and Governed Replay
 
-Status: implementation in progress
+Status: navigation and replay-generation implementation test-verified; current-code Egg replay pending
 
 ## Outcome
 
@@ -55,6 +55,9 @@ The ordinary replay operation remains idempotent. A current-code rebuild of the 
 source result and gold-set release must set `force_rebuild`, include a non-empty audit reason, and
 allocate the next serialized `replay_generation`. Generation 2 and later append `-rN` to the
 analysis ID. Source, release, checksum, certification coverage, and decisions remain unchanged.
+Only a forced, reason-bearing rebuild may resolve an archived immutable source result; ordinary
+replays continue to require an active source. This supports recoverable report-library cleanup
+without unarchiving or copying the source and without weakening the audit trail.
 
 The radius-based Product Leadership API remains authoritative for physical-store 1/3/5-mile
 reporting and same-ZIP service-area reporting. Legacy exact-ZIP scorecards may be retired only when

@@ -3388,13 +3388,16 @@ class PostgresMatchingV2ReviewRepository:
                                run.product_pack_version, run.code_version, run.max_attempts
                         FROM analysis_result result
                         JOIN analysis_run run ON run.id = result.analysis_run_id
-                        WHERE result.archived_at IS NULL
-                          AND result.result->>'analysis_id' = :analysis_id
+                        WHERE result.result->>'analysis_id' = :analysis_id
+                          AND (result.archived_at IS NULL OR :include_archived_source)
                         ORDER BY result.created_at DESC
                         LIMIT 1
                         """
                         ),
-                        {"analysis_id": source_analysis_id},
+                        {
+                            "analysis_id": source_analysis_id,
+                            "include_archived_source": force_rebuild,
+                        },
                     )
                 )
                 .mappings()
