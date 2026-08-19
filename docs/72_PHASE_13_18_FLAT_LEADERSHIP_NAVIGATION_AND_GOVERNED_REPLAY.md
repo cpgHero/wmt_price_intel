@@ -27,6 +27,11 @@ The leadership tabs retain one shared context: competitor retailer, comparison b
 product, 1/3/5-mile radius, benchmark state, and benchmark city. Switching a leadership tab does
 not reset that context.
 
+After the report settles, it prewarms the current immutable leadership response. The visible
+leadership tabs reuse that same in-flight or completed response so moving between them does not
+repeat the expensive artifact reconstruction. API trust certification and immutable analysis
+identity remain authoritative.
+
 ## Compatibility
 
 Legacy links using `tab=product-leadership` and an optional `leadership` value are translated to

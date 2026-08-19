@@ -65,6 +65,7 @@ import {
   legacyLeadershipTab,
   type ProductLeadershipViewName,
 } from "@/lib/competitive-report-tabs";
+import { prewarmCompetitiveProductLeadership } from "@/lib/competitive-product-leadership-client";
 
 const tabs = [
   "Executive Summary",
@@ -486,6 +487,29 @@ function BlueprintAnalysisWorkspace({
     },
     [],
   );
+  useEffect(() => {
+    if (!selectedLeadershipProduct || !selectedLens) return;
+    const timer = window.setTimeout(() => {
+      prewarmCompetitiveProductLeadership({
+        analysisId: analysis.analysis_id,
+        competitorId: selectedCompetitor,
+        profileId: selectedLens,
+        productId: selectedLeadershipProduct,
+        radiusMiles: leadershipRadius,
+        stateFilter: leadershipState,
+        cityFilter: leadershipCity,
+      });
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [
+    analysis.analysis_id,
+    leadershipCity,
+    leadershipRadius,
+    leadershipState,
+    selectedCompetitor,
+    selectedLeadershipProduct,
+    selectedLens,
+  ]);
   const reviewDecision = (
     decision: ProductDecision | ScorecardProductSummary,
   ) => {

@@ -1355,7 +1355,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-19",
               "Implemented and test verification pending",
               "Competitive Product Leadership was flattened into eight first-class report tabs while retaining one shared analytical context.",
-              "The nested Product Leadership tab and internal workspace rail are removed. Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, and Competitive History now sit beside Executive Overview, Price Architecture, Assortment & Whitespace, and Data Integrity. Legacy bookmarked Product Leadership URLs are translated to the corresponding first-class tab. The change does not alter metric formulas, store grain, match governance, or Search/PDP authority.",
+              "The nested Product Leadership tab and internal workspace rail are removed. Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, and Competitive History now sit beside Executive Overview, Price Architecture, Assortment & Whitespace, and Data Integrity. Legacy bookmarked Product Leadership URLs are translated to the corresponding first-class tab. An idle prewarm and shared immutable response cache remove repeated cold requests when moving among leadership tabs. The change does not alter metric formulas, store grain, match governance, or Search/PDP authority.",
             ],
             [
               "2026-08-19",

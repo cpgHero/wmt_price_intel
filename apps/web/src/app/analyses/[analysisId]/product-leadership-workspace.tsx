@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CompetitiveProductLeadership } from "@/lib/api";
+import { loadCompetitiveProductLeadership } from "@/lib/competitive-product-leadership-client";
 import type { ProductLeadershipViewName } from "@/lib/competitive-report-tabs";
 import {
   freshestObservation,
@@ -1580,19 +1581,18 @@ export function ProductLeadershipWorkspace({
 
   useEffect(() => {
     if (!productId) return;
-    const controller = new AbortController();
-    fetch(
-      `/api/analyses/${encodeURIComponent(analysisId)}/competitive-product-leadership?${query}`,
-      { cache: "no-store", signal: controller.signal },
-    )
-      .then(async (response) => {
-        const body = (await response.json()) as CompetitiveProductLeadership & {
-          error?: string;
-        };
-        if (!response.ok)
-          throw new Error(
-            body.error || `Leadership evidence returned ${response.status}`,
-          );
+    let active = true;
+    loadCompetitiveProductLeadership({
+      analysisId,
+      competitorId,
+      profileId,
+      productId,
+      radiusMiles,
+      stateFilter,
+      cityFilter,
+    })
+      .then((body) => {
+        if (!active) return;
         setFailedView(null);
         setLoadedView({ query, data: body });
         setSelected(
@@ -1602,7 +1602,7 @@ export function ProductLeadershipWorkspace({
         );
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
+        if (active)
           setFailedView({
             query,
             message:
@@ -1611,8 +1611,19 @@ export function ProductLeadershipWorkspace({
                 : "Leadership evidence is unavailable.",
           });
       });
-    return () => controller.abort();
-  }, [analysisId, productId, query]);
+    return () => {
+      active = false;
+    };
+  }, [
+    analysisId,
+    cityFilter,
+    competitorId,
+    productId,
+    profileId,
+    query,
+    radiusMiles,
+    stateFilter,
+  ]);
 
   useEffect(() => {
     if (!view) return;
