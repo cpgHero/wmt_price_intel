@@ -957,6 +957,7 @@ function BlueprintAnalysisWorkspace({
                   rows={selectedScorecards}
                   candidates={reportView.match_candidates ?? []}
                   decisions={reportView.product_decisions ?? []}
+                  relationships={reportView.match_relationships ?? []}
                   onSelect={selectCompetitor}
                   onReviewMatch={reviewDecision}
                 />
@@ -1710,6 +1711,7 @@ function RetailerScorecardPanel({
   rows,
   candidates,
   decisions,
+  relationships,
   onSelect,
   onReviewMatch,
 }: Readonly<{
@@ -1717,6 +1719,7 @@ function RetailerScorecardPanel({
   rows: RetailerScorecard[];
   candidates: ProductMatchCandidate[];
   decisions: ProductDecision[];
+  relationships: JsonObject[];
   onSelect: (retailerId: string) => void;
   onReviewMatch: (product: ScorecardProductSummary) => void;
 }>) {
@@ -1734,10 +1737,10 @@ function RetailerScorecardPanel({
       new Map(
         ranked.map((row) => [
           `${row.competitor_id}::${row.profile_id}`,
-          scorecardProductSummaries(row, candidates, decisions),
+          scorecardProductSummaries(row, candidates, decisions, relationships),
         ]),
       ),
-    [candidates, decisions, ranked],
+    [candidates, decisions, ranked, relationships],
   );
   const selectedProducts = selectedScorecard
     ? (productsByScorecard.get(

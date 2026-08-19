@@ -313,6 +313,48 @@ describe("report presentation", () => {
     ]);
   });
 
+  it("uses the governed relationship ledger when a decision omits duplicate status fields", () => {
+    const scorecard = {
+      competitor_id: "shoprite_us",
+      competitor: "ShopRite",
+      profile_id: "compatible",
+    } as RetailerScorecard;
+    const decision = {
+      id: "decision-1",
+      relationship_id: "relationship-1",
+      profile_id: "compatible",
+      benchmark_product_id: "w1",
+      benchmark_product_name: "Walmart eggs",
+      competitor: "shoprite_us",
+      competitor_product_id: "s1",
+      competitor_product_name: "ShopRite eggs",
+      matches: 94,
+      geographies: 54,
+      benchmark_lower: 50,
+      competitor_lower: 44,
+      parity: 0,
+      benchmark_lower_share: 50 / 94,
+      competitor_lower_share: 44 / 94,
+      median_benchmark_price: 3.49,
+      median_competitor_price: 3.54,
+      median_gap: 0.05,
+    } as ProductDecision;
+
+    expect(
+      scorecardProductSummaries(scorecard, [], [decision], [
+        {
+          relationship_id: "relationship-1",
+          competitor_id: "shoprite_us",
+          eligible_profile_ids: ["compatible"],
+          status: "confirmed",
+          qa_status: "ready",
+        },
+      ]),
+    ).toMatchObject([
+      { relationship_id: "relationship-1", matches: 94, stance: "protect" },
+    ]);
+  });
+
   it("resolves only the governed product relationships inside a Product Pack cohort", () => {
     const base = {
       id: "candidate-1",

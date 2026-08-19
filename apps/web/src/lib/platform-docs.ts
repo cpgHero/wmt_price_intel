@@ -83,7 +83,7 @@ const lastVerified = "August 18, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.10",
+  version: "1.3.11",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -1357,7 +1357,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-18",
               "Deployed and production-verified",
               "Trust Recovery binds Price and Competitive Intelligence to one published artifact generation and restores the complete admitted benchmark assortment.",
-              "The Price read path now reconciles classified Parquet artifacts to the AnalysisResult evidence row count and manifest checksum, with explicit analysis-run generation lineage for future replays and fail-closed handling of ambiguity. Canonical product-location projection rechecks Retailer Pack first-party seller policy, so known marketplace sellers cannot leak from historical artifacts. Interactive report payloads omit audit-only scope arrays while immutable evidence remains intact. Production Egg reconciliation returns 119,172 classified rows, 108,701 eligible observations, 172 Walmart products, 166 Walmart.com sellers, six policy-permitted blank sellers, and zero known third-party sellers. Product Leadership lists all 172 products and renders unmatched items as explicit unscored states. The complete Python suite passes with 558 tests and 13 environment-gated skips; GitHub Actions run 32216053425 passed Python, TypeScript, 13 browser tests, migrations, contracts, and all four container builds.",
+              "The Price read path now reconciles classified Parquet artifacts to the AnalysisResult evidence row count and manifest checksum, with explicit analysis-run generation lineage for future replays and fail-closed handling of ambiguity. Canonical product-location projection rechecks Retailer Pack first-party seller policy, so known marketplace sellers cannot leak from historical artifacts. Interactive report payloads omit audit-only scope arrays while immutable evidence remains intact. Scorecard product drawers bind contributing decision rows to the authoritative relationship ledger, so a missing duplicate status field cannot hide admitted product evidence. Production Egg reconciliation returns 119,172 classified rows, 108,701 eligible observations, 172 Walmart products, 166 Walmart.com sellers, six policy-permitted blank sellers, and zero known third-party sellers. Product Leadership lists all 172 products and renders unmatched items as explicit unscored states. The complete Python suite passes with 558 tests and 13 environment-gated skips; GitHub Actions run 32216053425 passed Python, TypeScript, 13 browser tests, migrations, contracts, and all four container builds.",
             ],
             [
               "2026-08-18",

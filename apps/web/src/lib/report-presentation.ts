@@ -191,12 +191,14 @@ function scopedProductSummaries(
   decisions: ProductDecision[],
   governedFallback = false,
   includeAnalysisCandidates = false,
+  admittedRelationshipIds: ReadonlySet<string> = new Set(),
 ): ScorecardProductSummary[] {
   const competitorTokens = new Set([
     retailerIdentityToken(scope.competitor_id),
     retailerIdentityToken(scope.competitor),
   ]);
   const admitted = (row: {
+    relationship_id?: string | null;
     competitor: string;
     relationship_status?: ProductMatchCandidate["relationship_status"];
     qa_status?: ProductMatchCandidate["qa_status"];
@@ -204,7 +206,9 @@ function scopedProductSummaries(
     matches?: number;
   }) =>
     competitorTokens.has(retailerIdentityToken(row.competitor)) &&
-    (row.relationship_status === "suggested" ||
+    ((Boolean(row.relationship_id) &&
+      admittedRelationshipIds.has(String(row.relationship_id))) ||
+      row.relationship_status === "suggested" ||
       row.relationship_status === "confirmed") &&
     (row.qa_status ?? "ready") === "ready" &&
     (row.matches ?? 0) > 0;
@@ -312,12 +316,41 @@ export function scorecardProductSummaries(
   scorecard: RetailerScorecard,
   candidates: ProductMatchCandidate[],
   decisions: ProductDecision[],
+  relationships: JsonObject[] = [],
 ): ScorecardProductSummary[] {
+  const competitorTokens = new Set([
+    retailerIdentityToken(scorecard.competitor_id),
+    retailerIdentityToken(scorecard.competitor),
+  ]);
+  const admittedRelationshipIds = new Set(
+    relationships
+      .filter((relationship) => {
+        const eligibleProfiles = Array.isArray(
+          relationship.eligible_profile_ids,
+        )
+          ? relationship.eligible_profile_ids.map(String)
+          : [];
+        return (
+          competitorTokens.has(
+            retailerIdentityToken(relationship.competitor_id),
+          ) &&
+          (relationship.status === "suggested" ||
+            relationship.status === "confirmed") &&
+          (relationship.qa_status ?? "ready") === "ready" &&
+          (scorecard.profile_id === "governed_products" ||
+            eligibleProfiles.includes(scorecard.profile_id))
+        );
+      })
+      .map((relationship) => String(relationship.relationship_id ?? ""))
+      .filter(Boolean),
+  );
   return scopedProductSummaries(
     scorecard,
     candidates,
     decisions,
     scorecard.profile_id === "governed_products",
+    false,
+    admittedRelationshipIds,
   );
 }
 
