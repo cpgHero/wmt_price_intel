@@ -69,6 +69,11 @@ Relationship cards now distinguish:
 - **used as lowest eligible offer** — stores where this relationship controlled the displayed
   outcome. A zero in the third measure does not mean the relationship is unapproved.
 
+An observed-product-footprint relationship may omit its redundant materialized location-key
+list from the compact browser read model. Product Leadership interprets that compact form as the
+complete observed footprint of the selected benchmark product. Explicit-location scopes never
+receive that fallback and continue to require membership in their governed key list.
+
 ## Assortment and cohort presentation
 
 - Assortment & Whitespace presents one benchmark-versus-competitor tab at a time.
@@ -92,3 +97,6 @@ Relationship cards now distinguish:
 5. No legacy exact-ZIP result is relabeled as a radius result.
 6. Empty or failed requests remain explicit; the client does not merge partial payloads into a
    previously loaded view.
+7. Production validation must include at least one compact observed-footprint relationship with
+   mapped competitor stores; an approved relationship cannot silently become a zero-store scope
+   merely because audit-only location keys were removed from the interactive payload.

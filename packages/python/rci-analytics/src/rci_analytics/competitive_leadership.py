@@ -31,9 +31,18 @@ class ProductLeadershipRelationship:
     benchmark_location_scope_keys: tuple[str, ...] = ()
 
     def admits(self, benchmark_scope_key: str) -> bool:
-        return self.scope_mode == "global" or (
-            benchmark_scope_key in self.benchmark_location_scope_keys
-        )
+        # Observed-footprint scopes mean every location where this exact
+        # benchmark product was observed. Interactive report views deliberately
+        # compact that redundant key list, while explicit-location scopes retain
+        # their materialized keys.
+        if self.scope_mode == "global":
+            return True
+        if (
+            self.scope_mode == "observed_benchmark_product_footprint"
+            and not self.benchmark_location_scope_keys
+        ):
+            return True
+        return benchmark_scope_key in self.benchmark_location_scope_keys
 
 
 def _relationship_scope_key(observation: ProductPriceObservation) -> str:
@@ -704,7 +713,12 @@ class CompetitiveProductLeadershipProjector:
                 "comparison_metric": row.comparison_metric,
                 "comparison_unit": row.comparison_unit,
                 "scope_mode": row.scope_mode,
-                "scoped_benchmark_locations": len(row.benchmark_location_scope_keys),
+                "scoped_benchmark_locations": (
+                    len(benchmark_observations)
+                    if row.scope_mode == "observed_benchmark_product_footprint"
+                    and not row.benchmark_location_scope_keys
+                    else len(row.benchmark_location_scope_keys)
+                ),
             }
 
         return {

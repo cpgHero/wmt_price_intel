@@ -262,6 +262,46 @@ def test_distribution_scoped_relationship_only_scores_admitted_benchmark_store()
     assert result["summary"]["unscored_stores"] == 1
 
 
+def test_compacted_observed_footprint_scope_admits_all_observed_benchmark_stores() -> None:
+    benchmark = [
+        _observation("walmart_us", "w1", "w-1", -94.21, 4.00),
+        _observation("walmart_us", "w1", "w-2", -94.20, 4.00),
+    ]
+    competitor = [_observation("aldi_us", "a1", "a-1", -94.205, 3.50)]
+    relationship = ProductLeadershipRelationship(
+        relationship_id="footprint-relationship",
+        competitor_id="aldi_us",
+        competitor_name="ALDI",
+        benchmark_product_id="w1",
+        competitor_product_id="a1",
+        profile_id="strict",
+        profile_label="Strict",
+        comparison_metric="package_price",
+        comparison_unit="USD/package",
+        scope_mode="observed_benchmark_product_footprint",
+    )
+
+    result = CompetitiveProductLeadershipProjector().build(
+        analysis_id="analysis-1",
+        generated_at="2026-08-07T06:00:00Z",
+        benchmark_retailer={"id": "walmart_us", "name": "Walmart (US)"},
+        benchmark_product={"id": "w1", "name": "Product w1", "image_url": None},
+        benchmark_observations=benchmark,
+        competitor_observations=competitor,
+        relationships=[relationship],
+        competitor_options=[{"id": "aldi_us", "name": "ALDI"}],
+        product_options=[{"id": "w1", "name": "Product w1", "image_url": None}],
+        profile_options=[{"id": "strict", "name": "Strict"}],
+        selected_competitor="aldi_us",
+        selected_profile="strict",
+        radius_miles=1,
+    )
+
+    assert result["summary"]["scored_stores"] == 2
+    assert result["summary"]["unscored_stores"] == 0
+    assert result["relationships"][0]["scoped_benchmark_locations"] == 2
+
+
 def test_distribution_scope_translates_canonical_product_location_key() -> None:
     benchmark = [
         replace(
