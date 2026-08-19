@@ -1,5 +1,6 @@
 import type {
   AnalysisReportView,
+  JsonObject,
   ProductDecision,
   ProductMatchCandidate,
   ReportSectionView,
