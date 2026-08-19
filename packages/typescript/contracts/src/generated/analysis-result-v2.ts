@@ -222,6 +222,8 @@ export interface Source {
   } | null;
   brand_revision_id?: string | null;
   source_analysis_id?: string | null;
+  replay_generation?: number;
+  replay_reason?: string | null;
   observed_start?: string | null;
   observed_end?: string | null;
   sampling: boolean;
