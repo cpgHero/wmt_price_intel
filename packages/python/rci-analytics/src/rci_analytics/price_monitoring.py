@@ -624,8 +624,7 @@ class PriceMonitoringProjector:
         quality_status = (
             "warning"
             if any(
-                row["count"] and row["severity"] in {"warning", "blocker"}
-                for row in quality_checks
+                row["count"] and row["severity"] in {"warning", "blocker"} for row in quality_checks
             )
             else "ready"
         )

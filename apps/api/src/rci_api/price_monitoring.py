@@ -113,11 +113,7 @@ def select_evidence_artifacts(
     candidates: list[list[ClassifiedArtifact]] = []
 
     generation_ids = sorted(
-        {
-            artifact.generation_id
-            for artifact in artifacts
-            if artifact.generation_id is not None
-        }
+        {artifact.generation_id for artifact in artifacts if artifact.generation_id is not None}
     )
     for generation_id in generation_ids:
         candidates.append(
@@ -130,9 +126,7 @@ def select_evidence_artifacts(
     legacy_depth = max(len(rows) for rows in partitions.values())
     for ordinal in range(legacy_depth):
         if all(len(rows) > ordinal for rows in partitions.values()):
-            candidates.append(
-                [rows[ordinal] for _partition, rows in sorted(partitions.items())]
-            )
+            candidates.append([rows[ordinal] for _partition, rows in sorted(partitions.items())])
 
     matches: dict[tuple[str, ...], list[ClassifiedArtifact]] = {}
     for candidate in candidates:
