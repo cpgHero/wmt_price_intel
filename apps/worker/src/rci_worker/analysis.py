@@ -152,6 +152,8 @@ class AnalysisJob:
     brand_revision_id: str | None = None
     matching_v2_gold_set_release_id: str | None = None
     source_analysis_id: str | None = None
+    replay_generation: int = 1
+    replay_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,6 +308,7 @@ class PostgresAnalysisQueue:
                               ar.match_revision_id::text,
                               ar.brand_revision_id::text,
                               ar.matching_v2_gold_set_release_id::text,
+                              ar.replay_generation, ar.replay_reason,
                               (
                                 SELECT source_result.analysis_id
                                 FROM analysis_result source_result
@@ -354,6 +357,10 @@ class PostgresAnalysisQueue:
                         str(row["source_analysis_id"])
                         if row["source_analysis_id"] is not None
                         else None
+                    ),
+                    replay_generation=int(row["replay_generation"]),
+                    replay_reason=(
+                        str(row["replay_reason"]) if row["replay_reason"] is not None else None
                     ),
                 )
                 for row in rows
@@ -1231,6 +1238,8 @@ class AnalysisProcessor:
             analysis_id = f"{analysis_id}-match-{job.match_revision_id[:8]}"
         if job.matching_v2_gold_set_release_id is not None:
             analysis_id = f"{analysis_id}-match-v2-{job.matching_v2_gold_set_release_id[:8]}"
+            if job.replay_generation > 1:
+                analysis_id = f"{analysis_id}-r{job.replay_generation}"
         if job.brand_revision_id is not None:
             analysis_id = f"{analysis_id}-brand-{job.brand_revision_id[:8]}"
         if not source_evidence_artifacts:
@@ -1267,6 +1276,8 @@ class AnalysisProcessor:
                 ),
                 "brand_revision_id": job.brand_revision_id,
                 "source_analysis_id": job.source_analysis_id,
+                "replay_generation": job.replay_generation,
+                "replay_reason": job.replay_reason,
                 "observed_start": min(observed_values) if observed_values else None,
                 "observed_end": max(observed_values) if observed_values else None,
                 "sampling": bool(

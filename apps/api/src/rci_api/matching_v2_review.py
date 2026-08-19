@@ -504,6 +504,16 @@ class GoldSetReplayRequest(BaseModel):
 
     source_analysis_id: str = Field(min_length=1, max_length=300)
     released_by: str = Field(min_length=1, max_length=200)
+    force_rebuild: bool = False
+    rebuild_reason: str | None = Field(default=None, min_length=1, max_length=1_000)
+
+    @model_validator(mode="after")
+    def require_rebuild_reason(self) -> GoldSetReplayRequest:
+        if self.force_rebuild and not self.rebuild_reason:
+            raise ValueError("a forced governed rebuild requires a rebuild reason")
+        if not self.force_rebuild and self.rebuild_reason:
+            raise ValueError("a rebuild reason is valid only for a forced governed rebuild")
+        return self
 
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
@@ -965,6 +975,8 @@ class MatchingV2ReviewRepository(Protocol):
         document_checksum: str,
         released_by: str,
         source_analysis_id: str,
+        force_rebuild: bool,
+        rebuild_reason: str | None,
     ) -> dict[str, Any]: ...
 
 
@@ -3316,6 +3328,8 @@ class PostgresMatchingV2ReviewRepository:
         document_checksum: str,
         released_by: str,
         source_analysis_id: str,
+        force_rebuild: bool,
+        rebuild_reason: str | None,
     ) -> dict[str, Any]:
         labels = list(gold_set.get("labels", []))
         async with self._engine.begin() as connection:
@@ -3453,6 +3467,32 @@ class PostgresMatchingV2ReviewRepository:
                 .mappings()
                 .one()
             )
+            replay_identity = f"{source['result_id']}:{release['id']}"
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
+                {"identity": replay_identity},
+            )
+            replay_generation = 1
+            if force_rebuild:
+                replay_generation = int(
+                    (
+                        await connection.scalar(
+                            text(
+                                """
+                                SELECT coalesce(max(replay_generation), 0) + 1
+                                FROM analysis_run
+                                WHERE source_analysis_result_id = CAST(:source_result_id AS uuid)
+                                  AND matching_v2_gold_set_release_id = CAST(:release_id AS uuid)
+                                """
+                            ),
+                            {
+                                "source_result_id": source["result_id"],
+                                "release_id": release["id"],
+                            },
+                        )
+                    )
+                    or 1
+                )
             run = (
                 (
                     await connection.execute(
@@ -3461,12 +3501,13 @@ class PostgresMatchingV2ReviewRepository:
                             INSERT INTO analysis_run (
                               collection_run_id, input_set_id, product_pack_id,
                               product_pack_version, status, code_version, max_attempts,
-                              source_analysis_result_id, matching_v2_gold_set_release_id
+                              source_analysis_result_id, matching_v2_gold_set_release_id,
+                              replay_generation, replay_reason
                             ) VALUES (
                               CAST(:collection_run_id AS uuid), CAST(:input_set_id AS uuid),
                               :product_pack_id, :product_pack_version, 'queued', :code_version,
                               :max_attempts, CAST(:source_result_id AS uuid),
-                              CAST(:release_id AS uuid)
+                              CAST(:release_id AS uuid), :replay_generation, :replay_reason
                             )
                             ON CONFLICT ON CONSTRAINT analysis_run_source_matching_v2_release_uq
                             DO NOTHING
@@ -3479,6 +3520,8 @@ class PostgresMatchingV2ReviewRepository:
                             "product_pack_version": queue["product_pack_version"],
                             "source_result_id": source["result_id"],
                             "release_id": release["id"],
+                            "replay_generation": replay_generation,
+                            "replay_reason": rebuild_reason,
                         },
                     )
                 )
@@ -3494,9 +3537,14 @@ class PostgresMatchingV2ReviewRepository:
                             SELECT id::text, status FROM analysis_run
                             WHERE source_analysis_result_id = CAST(:source_result_id AS uuid)
                               AND matching_v2_gold_set_release_id = CAST(:release_id AS uuid)
+                              AND replay_generation = :replay_generation
                             """
                             ),
-                            {"source_result_id": source["result_id"], "release_id": release["id"]},
+                            {
+                                "source_result_id": source["result_id"],
+                                "release_id": release["id"],
+                                "replay_generation": replay_generation,
+                            },
                         )
                     )
                     .mappings()
@@ -3507,6 +3555,8 @@ class PostgresMatchingV2ReviewRepository:
             "gold_set_checksum": document_checksum,
             "analysis_run_id": str(run["id"]),
             "analysis_status": str(run["status"]),
+            "replay_generation": replay_generation,
+            "rebuild_reason": rebuild_reason,
             "coverage": coverage,
         }
 
@@ -3904,6 +3954,8 @@ class MatchingV2ReviewService:
             document_checksum=_checksum(gold_set),
             released_by=request.released_by,
             source_analysis_id=request.source_analysis_id,
+            force_rebuild=request.force_rebuild,
+            rebuild_reason=request.rebuild_reason,
         )
 
     @staticmethod

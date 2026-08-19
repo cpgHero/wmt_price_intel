@@ -608,6 +608,29 @@ async def test_gold_set_replay_binds_exact_certified_snapshot(monkeypatch: Any) 
         repository.replays[0]["document_checksum"]
         == hashlib.sha256(_canonical(gold_set).encode()).hexdigest()
     )
+    assert repository.replays[0]["force_rebuild"] is False
+    assert repository.replays[0]["rebuild_reason"] is None
+
+    await service.create_gold_set_replay(
+        "egg-queue",
+        GoldSetReplayRequest(
+            source_analysis_id="egg-analysis",
+            released_by="owner",
+            force_rebuild=True,
+            rebuild_reason="Regenerate current reporting projections after governed code change",
+        ),
+    )
+    assert repository.replays[1]["force_rebuild"] is True
+    assert repository.replays[1]["rebuild_reason"].startswith("Regenerate")
+
+
+def test_forced_gold_set_replay_requires_an_audit_reason() -> None:
+    with pytest.raises(ValueError, match="requires a rebuild reason"):
+        GoldSetReplayRequest(
+            source_analysis_id="egg-analysis",
+            released_by="owner",
+            force_rebuild=True,
+        )
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:

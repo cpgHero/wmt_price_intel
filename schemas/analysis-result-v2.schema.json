@@ -586,6 +586,14 @@
         "source_analysis_id": {
           "type": ["string", "null"]
         },
+        "replay_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "replay_reason": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
         "observed_start": {
           "type": ["string", "null"],
           "format": "date-time"

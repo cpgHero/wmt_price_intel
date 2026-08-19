@@ -51,6 +51,11 @@ be replayed from its immutable source analysis. The replay must:
 - regenerate retailer/cohort product evidence with current brand governance; and
 - publish new immutable analysis and report identifiers instead of mutating the prior report.
 
+The ordinary replay operation remains idempotent. A current-code rebuild of the same immutable
+source result and gold-set release must set `force_rebuild`, include a non-empty audit reason, and
+allocate the next serialized `replay_generation`. Generation 2 and later append `-rN` to the
+analysis ID. Source, release, checksum, certification coverage, and decisions remain unchanged.
+
 The radius-based Product Leadership API remains authoritative for physical-store 1/3/5-mile
 reporting and same-ZIP service-area reporting. Legacy exact-ZIP scorecards may be retired only when
 their replacement portfolio/cohort read models have equivalent certification and reconciliation

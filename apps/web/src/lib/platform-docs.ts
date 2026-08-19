@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.13",
+  version: "1.3.14",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -158,7 +158,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Certification decisions never silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -1351,6 +1351,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-19",
+              "Implemented and local test-verified; deployment pending",
+              "Governed Matching v2 releases support explicit immutable current-code rebuild generations.",
+              "A normal source-analysis plus gold-set replay remains idempotent. A forced rebuild now requires a non-empty audit reason, serializes concurrent generation allocation, increments replay_generation, and produces a new analysis ID with an -rN suffix while retaining the exact source result, Product Pack, gold-set release, checksum, coverage, certified labels, and automatic-fallback prohibition. The prior analysis and publication remain immutable. Migration downgrade fails closed if rebuilt generations exist.",
+            ],
             [
               "2026-08-19",
               "Implemented and test verification pending",
