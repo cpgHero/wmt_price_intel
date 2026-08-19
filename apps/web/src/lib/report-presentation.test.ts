@@ -341,15 +341,20 @@ describe("report presentation", () => {
     } as ProductDecision;
 
     expect(
-      scorecardProductSummaries(scorecard, [], [decision], [
-        {
-          relationship_id: "relationship-1",
-          competitor_id: "shoprite_us",
-          eligible_profile_ids: ["compatible"],
-          status: "confirmed",
-          qa_status: "ready",
-        },
-      ]),
+      scorecardProductSummaries(
+        scorecard,
+        [],
+        [decision],
+        [
+          {
+            relationship_id: "relationship-1",
+            competitor_id: "shoprite_us",
+            eligible_profile_ids: ["compatible"],
+            status: "confirmed",
+            qa_status: "ready",
+          },
+        ],
+      ),
     ).toMatchObject([
       { relationship_id: "relationship-1", matches: 94, stance: "protect" },
     ]);
