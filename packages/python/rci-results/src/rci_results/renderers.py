@@ -20,7 +20,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.15.0"
+RENDERER_VERSION = "2.15.1"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -67,6 +67,66 @@ def _result_checksum(result: JsonObject) -> str:
     if isinstance(persisted, str) and len(persisted) == 64:
         return persisted
     return hashlib.sha256(canonical_result_bytes(result)).hexdigest()
+
+
+def _compact_interactive_view(view: JsonObject) -> None:
+    """Keep interactive report payloads decision-complete without audit-list bloat.
+
+    Immutable AnalysisResult and publication artifacts retain the complete
+    location scopes and PDP evidence. The browser read model needs only the
+    product identity and aggregate counts; detailed match/location evidence is
+    available through its governed drill-through APIs.
+    """
+
+    candidates = view.get("match_candidates")
+    if isinstance(candidates, list):
+        view["match_candidates"] = [
+            {
+                key: value
+                for key, value in row.items()
+                if key
+                not in {
+                    "benchmark_location_scope_keys",
+                    "excluded_benchmark_location_scope_keys",
+                }
+            }
+            if isinstance(row, dict)
+            else row
+            for row in candidates
+        ]
+
+    assortment = view.get("assortment_analysis")
+    if not isinstance(assortment, dict):
+        return
+    retailers = assortment.get("retailers")
+    if not isinstance(retailers, list):
+        return
+    compact_retailers: list[object] = []
+    allowed_product_fields = {
+        "product_id",
+        "canonical_product_id",
+        "name",
+        "brand",
+        "image_url",
+        "url",
+        "seller",
+        "observed_locations",
+        "observed_zipcodes",
+    }
+    for retailer in retailers:
+        if not isinstance(retailer, dict):
+            compact_retailers.append(retailer)
+            continue
+        compact = dict(retailer)
+        products = retailer.get("products")
+        if isinstance(products, list):
+            compact["products"] = [
+                {key: value for key, value in product.items() if key in allowed_product_fields}
+                for product in products
+                if isinstance(product, dict)
+            ]
+        compact_retailers.append(compact)
+    assortment["retailers"] = compact_retailers
 
 
 def _metric_display(value: object, unit: object) -> str:
@@ -2054,6 +2114,7 @@ class ArtifactRenderer:
         )
         if presentation_context:
             view.update(presentation_context)
+        _compact_interactive_view(view)
         view["retailer_scorecards"] = self._projector.reconcile_scorecards_with_product_evidence(
             _rows(view, "retailer_scorecards"),
             product_decisions=_rows(view, "product_decisions"),

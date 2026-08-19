@@ -83,10 +83,10 @@ const lastVerified = "August 18, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.8",
+  version: "1.3.9",
   lastVerified,
   baseline:
-    "Production implementation through Egg matching-policy 1.2.2 and its certified governed replay",
+    "Production implementation through Egg matching-policy 1.2.2; trust-recovery release test-verified and deployment pending",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -741,11 +741,14 @@ export const platformDocumentation: PlatformDocumentation = {
             "Keep package price and normalized unit price as distinct comparison bases; use a unit price only when package evidence supports it.",
             "Assign every unscored local context a reason such as no eligible match, no overlap, product not observed, stale/missing price, collection failure, incomplete attributes, or review required.",
             "Preserve retailer, Product Pack, relationship, geography, period, policy, evidence checksum, and freshness context with each result.",
+            "Bind every live read model to the exact immutable artifact set cited by the published AnalysisResult evidence checksum. If more than one generation exists and none reconciles exactly, fail closed instead of merging generations.",
+            "Apply Retailer Pack first-party seller policy at both classification and canonical product-location projection. Known third-party marketplace offers never enter price, coverage, assortment, matching, or competitive metrics; permitted blank sellers remain explicitly unverified.",
             "Apply the selected competitor and comparison basis to every scorecard and supporting product view. A context selector must never be presentation-only.",
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
+            "Keep every admitted benchmark product visible in Product Leadership. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
             "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
           ],
         },
@@ -1350,6 +1353,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-18",
+              "Implemented and test-verified; production deployment pending",
+              "Trust Recovery binds Price and Competitive Intelligence to one published artifact generation and restores the complete admitted benchmark assortment.",
+              "The Price read path now reconciles classified Parquet artifacts to the AnalysisResult evidence row count and manifest checksum, with explicit analysis-run generation lineage for future replays and fail-closed handling of ambiguity. Canonical product-location projection rechecks Retailer Pack first-party seller policy, so known marketplace sellers cannot leak from historical artifacts. Interactive report payloads omit audit-only scope arrays while immutable evidence remains intact. Product Leadership sources its selector from the governed benchmark assortment, preserving unmatched products as explicit unscored states. Sixty targeted Python tests pass; deployment and production Egg reconciliation are pending.",
+            ],
             [
               "2026-08-18",
               "Implemented and test-verified; production deployment pending",

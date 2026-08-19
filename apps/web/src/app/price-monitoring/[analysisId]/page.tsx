@@ -65,7 +65,7 @@ export default async function PriceMonitoringDetailPage({
   }
   const viewResponse = await getApi<PriceMonitoringView>(
     `/api/v1/analyses/${encodeURIComponent(analysisId)}/price-monitoring?${request.toString()}`,
-    30_000,
+    120_000,
   );
   if (!viewResponse.data) {
     return (

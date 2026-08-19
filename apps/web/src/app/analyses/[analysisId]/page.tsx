@@ -36,6 +36,7 @@ export default async function AnalysisPage({
     response.data.schema_version === "2.0.0"
       ? await getApi<AnalysisReportView>(
           `/api/v1/analyses/${encodeURIComponent(analysisId)}/report`,
+          120_000,
         )
       : null;
   return (

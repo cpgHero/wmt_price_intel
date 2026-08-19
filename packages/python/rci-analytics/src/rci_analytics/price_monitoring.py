@@ -21,7 +21,7 @@ from rci_analytics.product_location import (
     ProductPriceObservation,
 )
 from rci_analytics.product_pack import ProductPack
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +204,7 @@ class PriceMonitoringProjector:
         brand_resolver: GovernedBrandResolver,
         *,
         retailer_names: dict[str, str] | None = None,
+        seller_resolver: GovernedSellerResolver | None = None,
     ) -> None:
         self._pack = pack
         self._brands = brand_resolver
@@ -212,6 +213,7 @@ class PriceMonitoringProjector:
             pack,
             brand_resolver,
             retailer_names=self._retailer_names,
+            seller_resolver=seller_resolver,
         )
         self._parity_tolerance = Decimal(
             str(pack.document.get("qa_rules", {}).get("parity_tolerance_dollars", 0.01))
@@ -566,6 +568,15 @@ class PriceMonitoringProjector:
         )
         quality_checks = [
             self._quality_check(
+                "known-third-party-seller",
+                "Known third-party seller",
+                excluded["known_third_party_seller"],
+                total_considered,
+                "info",
+                "Known marketplace sellers outside the Retailer Pack first-party policy "
+                "are excluded before any price or coverage metric is calculated.",
+            ),
+            self._quality_check(
                 "missing-or-zero-price",
                 "Missing or zero price",
                 excluded["missing_or_zero_price"],
@@ -610,7 +621,14 @@ class PriceMonitoringProjector:
                 "be incomplete.",
             ),
         ]
-        quality_status = "warning" if any(row["count"] for row in quality_checks) else "ready"
+        quality_status = (
+            "warning"
+            if any(
+                row["count"] and row["severity"] in {"warning", "blocker"}
+                for row in quality_checks
+            )
+            else "ready"
+        )
         observed_location_keys = set(location_groups)
         observed_locations = len(observed_location_keys)
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]

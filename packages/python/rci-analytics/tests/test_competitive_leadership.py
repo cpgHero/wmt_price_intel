@@ -132,6 +132,42 @@ def test_store_leadership_uses_radius_scope_and_mutually_exclusive_statuses() ->
     ]
 
 
+def test_unmatched_governed_product_remains_visible_and_every_store_is_unscored() -> None:
+    benchmark = [
+        _observation("walmart_us", "w-unmatched", "w-1", -94.21, 4.00),
+        _observation("walmart_us", "w-unmatched", "w-2", -94.17, 4.10),
+    ]
+    result = CompetitiveProductLeadershipProjector().build(
+        analysis_id="analysis-unmatched",
+        generated_at="2026-08-07T06:00:00Z",
+        benchmark_retailer={"id": "walmart_us", "name": "Walmart (US)"},
+        benchmark_product={"id": "w-unmatched", "name": "Unmatched", "image_url": None},
+        benchmark_observations=benchmark,
+        competitor_observations=[],
+        relationships=[],
+        competitor_options=[{"id": "aldi_us", "name": "ALDI"}],
+        product_options=[{"id": "w-unmatched", "name": "Unmatched", "image_url": None}],
+        profile_options=[{"id": "strict", "name": "Strict each-to-each"}],
+        selected_competitor="all",
+        selected_profile="strict",
+        radius_miles=1,
+        comparison_metric="package_price",
+        comparison_unit="USD/package",
+    )
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "competitive-product-leadership.schema.json",
+        result,
+        label="unmatched competitive product leadership view",
+    )
+    assert result["summary"]["benchmark_observed_stores"] == 2
+    assert result["summary"]["scored_stores"] == 0
+    assert result["summary"]["unscored_stores"] == 2
+    assert not result["relationships"]
+    assert certify_competitive_product_leadership(result).ready
+
+
 def test_price_ladder_keeps_the_lowest_local_offer_per_governed_product() -> None:
     benchmark = [_observation("walmart_us", "w1", "w-1", -94.21, 4.00)]
     competitors = [

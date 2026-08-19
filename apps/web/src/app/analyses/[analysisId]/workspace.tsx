@@ -250,6 +250,24 @@ function BlueprintAnalysisWorkspace({
     null,
   );
   const leadershipProductOptions = useMemo(() => {
+    const benchmarkRetailerId = reportView.retailer_scope.benchmark.id;
+    const governedProducts =
+      reportView.assortment_analysis?.retailers.find(
+        (row) => row.retailer === benchmarkRetailerId,
+      )?.products ?? [];
+    if (governedProducts.length > 0) {
+      return [...governedProducts]
+        .sort(
+          (left, right) =>
+            right.observed_locations - left.observed_locations ||
+            left.name.localeCompare(right.name),
+        )
+        .map((row) => ({
+          id: row.product_id,
+          name: row.name,
+          imageUrl: row.image_url,
+        }));
+    }
     const options = new Map<
       string,
       { id: string; name: string; imageUrl?: string | null }
@@ -284,6 +302,8 @@ function BlueprintAnalysisWorkspace({
   }, [
     reportView.match_candidates,
     reportView.product_decisions,
+    reportView.assortment_analysis,
+    reportView.retailer_scope.benchmark.id,
     selectedCompetitor,
     selectedLens,
   ]);

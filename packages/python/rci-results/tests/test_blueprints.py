@@ -257,6 +257,54 @@ def test_report_readiness_blocks_ambiguous_relationship_groups() -> None:
     )
 
 
+def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
+        _result(),
+        presentation_context={
+            "match_candidates": [
+                {
+                    "id": "candidate-1",
+                    "benchmark_location_scope_keys": ["walmart_us|72712|1"],
+                    "excluded_benchmark_location_scope_keys": ["walmart_us|72712|2"],
+                }
+            ],
+            "assortment_analysis": {
+                "retailers": [
+                    {
+                        "retailer": "walmart_us",
+                        "products": [
+                            {
+                                "product_id": "100",
+                                "canonical_product_id": "walmart_us:100",
+                                "name": "Product 100",
+                                "image_url": None,
+                                "observed_locations": 2,
+                                "observed_zipcodes": 2,
+                                "location_scope_keys": [
+                                    "walmart_us|72712|1",
+                                    "walmart_us|72712|2",
+                                ],
+                                "pdp_details": {"description_full": "large audit payload"},
+                            }
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+
+    assert "benchmark_location_scope_keys" not in view["match_candidates"][0]
+    product = view["assortment_analysis"]["retailers"][0]["products"][0]
+    assert product == {
+        "product_id": "100",
+        "canonical_product_id": "walmart_us:100",
+        "name": "Product 100",
+        "image_url": None,
+        "observed_locations": 2,
+        "observed_zipcodes": 2,
+    }
+
+
 def test_sparse_suppressed_product_decisions_warn_without_blocking_report() -> None:
     view = ArtifactRenderer(REPOSITORY_ROOT).report_view(
         _result(),

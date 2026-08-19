@@ -19,7 +19,7 @@ from typing import Literal, cast
 
 from rci_analytics.models import ClassifiedOffer, JsonObject
 from rci_analytics.product_pack import ProductPack
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.1.0"
 
@@ -367,10 +367,12 @@ class ProductLocationProjector:
         brand_resolver: GovernedBrandResolver,
         *,
         retailer_names: dict[str, str] | None = None,
+        seller_resolver: GovernedSellerResolver | None = None,
     ) -> None:
         self._pack = pack
         self._brands = brand_resolver
         self._retailer_names = dict(retailer_names or {})
+        self._sellers = seller_resolver
 
     def build(
         self,
@@ -434,6 +436,15 @@ class ProductLocationProjector:
             if not location.scope_key.endswith("|unknown"):
                 source_locations[location.scope_key] = location
             reasons: list[str] = []
+            product_key = f"{offer.retailer_id}:{offer.retailer_product_id}"
+            product = context.get(product_key, {})
+            if self._sellers is not None:
+                seller_resolution = self._sellers.resolve(
+                    offer.retailer_id,
+                    str(product["seller"]) if product.get("seller") is not None else None,
+                )
+                if not seller_resolution.eligible:
+                    reasons.append("known_third_party_seller")
             if not classified.in_scope:
                 reasons.append("out_of_scope")
             if offer.price is None or offer.price <= 0:
@@ -449,8 +460,6 @@ class ProductLocationProjector:
             eligible_input_rows += 1
             assert offer.price is not None
 
-            product_key = f"{offer.retailer_id}:{offer.retailer_product_id}"
-            product = context.get(product_key, {})
             pdp_identity_available = any(
                 product.get(field) for field in ("name", "brand", "image_url", "url")
             )

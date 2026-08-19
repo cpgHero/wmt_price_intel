@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 import polars as pl
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from rci_analytics import PriceMonitoringFilters, ProductPackLoader
@@ -15,7 +17,53 @@ from rci_api.price_monitoring import (
     PriceMonitoringService,
     S3ParquetReader,
     get_price_monitoring_service,
+    select_evidence_artifacts,
 )
+
+
+def _artifact(artifact_id: str, partition: int, rows: int, created_at: str) -> ClassifiedArtifact:
+    return ClassifiedArtifact(
+        id=artifact_id,
+        storage_uri=f"s3://artifacts/{artifact_id}.parquet",
+        checksum=hashlib.sha256(artifact_id.encode()).hexdigest(),
+        row_count=rows,
+        partition=partition,
+        created_at=created_at,
+    )
+
+
+def _evidence(artifacts: list[ClassifiedArtifact]) -> dict[str, object]:
+    manifest = sorted((row.id, row.checksum, row.row_count) for row in artifacts)
+    checksum = hashlib.sha256(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+    return {"checksum_sha256": checksum, "row_count": sum(row.row_count for row in artifacts)}
+
+
+def test_classified_artifacts_are_bound_to_the_published_evidence_generation() -> None:
+    first = [
+        _artifact("first-0", 0, 10, "2026-08-17T00:00:00Z"),
+        _artifact("first-1", 1, 12, "2026-08-17T00:00:00Z"),
+    ]
+    governed = [
+        _artifact("governed-0", 0, 9, "2026-08-18T00:00:00Z"),
+        _artifact("governed-1", 1, 11, "2026-08-18T00:00:00Z"),
+    ]
+
+    selected = select_evidence_artifacts([*first, *governed], _evidence(governed))
+
+    assert [row.id for row in selected] == ["governed-0", "governed-1"]
+
+
+def test_ambiguous_artifact_generations_fail_closed_without_an_evidence_manifest() -> None:
+    with pytest.raises(RuntimeError, match="multiple generations"):
+        select_evidence_artifacts(
+            [
+                _artifact("first", 0, 10, "2026-08-17T00:00:00Z"),
+                _artifact("second", 0, 10, "2026-08-18T00:00:00Z"),
+            ],
+            None,
+        )
 
 
 async def test_parquet_reader_projects_governed_columns_and_inserts_optional_columns() -> None:

@@ -161,6 +161,7 @@ export interface AssortmentProduct {
   brand?: string | null;
   image_url?: string | null;
   url?: string | null;
+  seller?: string | null;
   observed_locations: number;
   observed_zipcodes: number;
 }
@@ -210,6 +211,7 @@ export interface AssortmentAnalysis {
     unbranded_products?: number;
     top_brands?: AssortmentBrand[];
     geographically_concentrated_brands?: AssortmentBrand[];
+    products?: AssortmentProduct[];
   }>;
   comparisons: AssortmentComparison[];
 }

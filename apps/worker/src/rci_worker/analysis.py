@@ -827,12 +827,14 @@ class AnalysisProcessor:
                 run_id=job.collection_run_id,
                 retailer_id=retailer_id,
                 partition=partition,
+                generation_id=job.id,
             )
             classified_artifact = await self._dataset_writer.write_classified(
                 classified_batch,
                 run_id=job.collection_run_id,
                 retailer_id=retailer_id,
                 partition=partition,
+                generation_id=job.id,
             )
             await self._collections.record_artifact(job.collection_run_id, normalized_artifact)
             classified_artifact_id = await self._collections.record_artifact(
@@ -1104,6 +1106,7 @@ class AnalysisProcessor:
                     run_id=job.collection_run_id,
                     retailer_id=competitor,
                     partition=profile_index,
+                    generation_id=job.id,
                 )
                 artifact_id = await self._collections.record_artifact(
                     job.collection_run_id, artifact

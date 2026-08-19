@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -30,7 +31,11 @@ from rci_product_packs import PostgresProductPackCatalog
 from rci_products import PRODUCT_DETAIL_NORMALIZER_VERSION
 from rci_results import AnalysisResultService
 from rci_results.service import AnalysisNotFoundError
-from rci_retailer_packs import BrandDecisionOverride, GovernedBrandResolver
+from rci_retailer_packs import (
+    BrandDecisionOverride,
+    GovernedBrandResolver,
+    GovernedSellerResolver,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["price-monitoring"])
 BrandFilter = Literal["all", "private_label", "regional", "national", "unclassified"]
@@ -41,6 +46,113 @@ class ClassifiedArtifact:
     storage_uri: str
     checksum: str
     row_count: int
+    id: str | None = None
+    partition: int = 0
+    created_at: str = ""
+    generation_id: str | None = None
+
+
+def _manifest_checksum(artifacts: list[ClassifiedArtifact]) -> str:
+    """Return the AnalysisResult evidence-set checksum for an artifact group."""
+
+    if any(not artifact.id for artifact in artifacts):
+        raise ValueError("classified artifact IDs are required for evidence reconciliation")
+    manifest = sorted(
+        (str(artifact.id), artifact.checksum, artifact.row_count) for artifact in artifacts
+    )
+    body = json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def _classified_evidence_set(
+    result: dict[str, Any],
+    retailer_id: str,
+) -> dict[str, Any] | None:
+    evidence_set_id = f"evidence.classified.{retailer_id}"
+    return next(
+        (
+            dict(row)
+            for row in result.get("evidence_sets", [])
+            if isinstance(row, dict) and str(row.get("evidence_set_id")) == evidence_set_id
+        ),
+        None,
+    )
+
+
+def select_evidence_artifacts(
+    artifacts: list[ClassifiedArtifact],
+    evidence_set: dict[str, Any] | None,
+) -> list[ClassifiedArtifact]:
+    """Select exactly the immutable artifact generation cited by AnalysisResult.
+
+    Historical replays may attach more than one derived artifact generation to
+    the same collection run. New artifacts carry ``generation_id``. Legacy
+    generations are reconstructed by their ordinal occurrence per partition,
+    then verified against the AnalysisResult evidence checksum. No ambiguous or
+    approximate fallback is permitted.
+    """
+
+    if not artifacts:
+        return []
+    partitions: dict[int, list[ClassifiedArtifact]] = defaultdict(list)
+    for artifact in artifacts:
+        partitions[artifact.partition].append(artifact)
+    for rows in partitions.values():
+        rows.sort(key=lambda row: (row.created_at, str(row.id or ""), row.checksum))
+
+    if evidence_set is None:
+        if any(len(rows) != 1 for rows in partitions.values()):
+            raise RuntimeError(
+                "classified evidence has multiple generations but AnalysisResult has no "
+                "governing evidence manifest"
+            )
+        return [rows[0] for _partition, rows in sorted(partitions.items())]
+
+    expected_checksum = str(evidence_set.get("checksum_sha256") or "")
+    expected_rows = int(evidence_set.get("row_count") or 0)
+    candidates: list[list[ClassifiedArtifact]] = []
+
+    generation_ids = sorted(
+        {
+            artifact.generation_id
+            for artifact in artifacts
+            if artifact.generation_id is not None
+        }
+    )
+    for generation_id in generation_ids:
+        candidates.append(
+            sorted(
+                [row for row in artifacts if row.generation_id == generation_id],
+                key=lambda row: row.partition,
+            )
+        )
+
+    legacy_depth = max(len(rows) for rows in partitions.values())
+    for ordinal in range(legacy_depth):
+        if all(len(rows) > ordinal for rows in partitions.values()):
+            candidates.append(
+                [rows[ordinal] for _partition, rows in sorted(partitions.items())]
+            )
+
+    matches: dict[tuple[str, ...], list[ClassifiedArtifact]] = {}
+    for candidate in candidates:
+        identity = tuple(sorted(str(row.id or row.checksum) for row in candidate))
+        if identity in matches or sum(row.row_count for row in candidate) != expected_rows:
+            continue
+        try:
+            checksum = _manifest_checksum(candidate)
+        except ValueError:
+            continue
+        if checksum == expected_checksum:
+            matches[identity] = candidate
+
+    if len(matches) != 1:
+        raise RuntimeError(
+            "classified artifact generation does not reconcile to the immutable "
+            f"AnalysisResult evidence set (matches={len(matches)}, "
+            f"expected_rows={expected_rows})"
+        )
+    return next(iter(matches.values()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,7 +327,11 @@ class PostgresPriceMonitoringRepository:
     async def artifacts(self, collection_run_id: str, retailer_id: str) -> list[ClassifiedArtifact]:
         statement = text(
             """
-            SELECT storage_uri, checksum, coalesce(row_count, 0)::integer AS row_count
+            SELECT id::text, storage_uri, checksum,
+                   coalesce(row_count, 0)::integer AS row_count,
+                   coalesce((metadata->>'partition')::integer, 0) AS partition,
+                   created_at::text,
+                   nullif(metadata->>'analysis_run_id', '') AS generation_id
             FROM dataset_artifact
             WHERE collection_run_id::text = :collection_run_id
               AND artifact_type = 'classified_offers'
@@ -603,6 +719,7 @@ class PriceMonitoringService:
                 pack,
                 resolver,
                 retailer_names=self._retailer_names,
+                seller_resolver=GovernedSellerResolver.from_repository(self._root),
             )
             if len(self._projector_cache) >= 16:
                 self._projector_cache.pop(next(iter(self._projector_cache)))
@@ -666,6 +783,10 @@ class PriceMonitoringService:
             )
             if not artifacts:
                 raise LookupError(f"classified Search evidence for {retailer_id!r} is unavailable")
+            artifacts = select_evidence_artifacts(
+                artifacts,
+                _classified_evidence_set(result, retailer_id),
+            )
             records: list[dict[str, Any]] = []
             for artifact in artifacts:
                 records.extend(await self._reader.read(artifact))

@@ -312,17 +312,21 @@ class CompetitiveProductLeadershipProjector:
         city: str | None = None,
         parity_tolerance: float = 0.01,
         at_risk_threshold: float = 0.10,
+        comparison_metric: str | None = None,
+        comparison_unit: str | None = None,
     ) -> JsonObject:
         if radius_miles not in {1, 3, 5}:
             raise ValueError("competitive radius must be 1, 3, or 5 miles")
         if parity_tolerance < 0 or at_risk_threshold <= parity_tolerance:
             raise ValueError("leadership thresholds are invalid")
-        if not relationships:
-            raise ValueError("no governed product relationship matches this context")
         metrics = {row.comparison_metric for row in relationships}
         units = {row.comparison_unit for row in relationships}
-        if len(metrics) != 1 or len(units) != 1:
+        if relationships and (len(metrics) != 1 or len(units) != 1):
             raise ValueError("selected relationships do not share one comparison basis")
+        resolved_metric = next(iter(metrics)) if metrics else str(comparison_metric or "")
+        resolved_unit = next(iter(units)) if units else str(comparison_unit or "")
+        if not resolved_metric or not resolved_unit:
+            raise ValueError("comparison metric and unit are required for an unmatched product")
 
         visible_benchmark = [
             row
@@ -498,8 +502,6 @@ class CompetitiveProductLeadershipProjector:
                 competitor_groups[str(competitor_location["retailer_id"])].append(row)
 
         competitor_name_index = {str(row["id"]): str(row["name"]) for row in competitor_options}
-        comparison_metric = next(iter(metrics))
-        comparison_unit = next(iter(units))
         return {
             "schema_version": "1.1.0",
             "analysis_id": analysis_id,
@@ -548,8 +550,8 @@ class CompetitiveProductLeadershipProjector:
                     "among its governed matched competitor products within the selected radius. "
                     "Service-area retailers are compared within the same ZIP."
                 ),
-                "comparison_metric": comparison_metric,
-                "comparison_unit": comparison_unit,
+                "comparison_metric": resolved_metric,
+                "comparison_unit": resolved_unit,
                 "parity_tolerance": parity_tolerance,
                 "at_risk_threshold": at_risk_threshold,
                 "status_definition": {

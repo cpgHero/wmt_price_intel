@@ -106,6 +106,7 @@ class ParquetDatasetWriter:
         run_id: str,
         retailer_id: str,
         partition: int = 0,
+        generation_id: str | None = None,
     ) -> RawArtifact:
         return await self._write(
             [offer.to_record() for offer in offers],
@@ -113,6 +114,7 @@ class ParquetDatasetWriter:
             stage="normalized_offers",
             retailer_id=retailer_id,
             partition=partition,
+            generation_id=generation_id,
         )
 
     async def write_classified(
@@ -122,6 +124,7 @@ class ParquetDatasetWriter:
         run_id: str,
         retailer_id: str,
         partition: int = 0,
+        generation_id: str | None = None,
     ) -> RawArtifact:
         return await self._write(
             [offer.to_record() for offer in offers],
@@ -129,6 +132,7 @@ class ParquetDatasetWriter:
             stage="classified_offers",
             retailer_id=retailer_id,
             partition=partition,
+            generation_id=generation_id,
         )
 
     async def write_matches(
@@ -138,6 +142,7 @@ class ParquetDatasetWriter:
         run_id: str,
         retailer_id: str,
         partition: int = 0,
+        generation_id: str | None = None,
     ) -> RawArtifact:
         records = [
             {
@@ -182,6 +187,7 @@ class ParquetDatasetWriter:
             stage="match_detail",
             retailer_id=retailer_id,
             partition=partition,
+            generation_id=generation_id,
         )
 
     async def write_matching_v2_shadow(
@@ -236,6 +242,7 @@ class ParquetDatasetWriter:
         stage: str,
         retailer_id: str,
         partition: int,
+        generation_id: str | None = None,
     ) -> RawArtifact:
         for component in (run_id, stage, retailer_id):
             if not _SAFE_COMPONENT.fullmatch(component):
@@ -255,17 +262,20 @@ class ParquetDatasetWriter:
             f"part-{partition:05d}-{checksum[:16]}.parquet"
         )
         uri = await self._store.put_bytes(key, body, content_type="application/vnd.apache.parquet")
+        metadata: dict[str, Any] = {
+            "stage": stage,
+            "retailer_id": retailer_id,
+            "partition": partition,
+            "columns": frame.columns,
+        }
+        if generation_id:
+            metadata["analysis_run_id"] = generation_id
         return RawArtifact(
             storage_uri=uri,
             content_type="application/vnd.apache.parquet",
             byte_size=len(body),
             checksum=checksum,
-            metadata={
-                "stage": stage,
-                "retailer_id": retailer_id,
-                "partition": partition,
-                "columns": frame.columns,
-            },
+            metadata=metadata,
             artifact_type=stage,
             schema_version=self._schema_version,
             row_count=frame.height,

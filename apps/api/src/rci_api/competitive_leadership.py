@@ -104,9 +104,12 @@ class CompetitiveProductLeadershipService:
         candidates = _active_candidate_rows(report)
         if competitor_id != "all":
             candidates = [row for row in candidates if str(row.get("competitor")) == competitor_id]
-        available_profiles = {
-            str(row.get("profile_id")) for row in candidates if row.get("profile_id")
+        basis_index = {
+            str(row["profile_id"]): dict(row)
+            for row in report.get("comparison_bases", [])
+            if isinstance(row, dict) and row.get("profile_id")
         }
+        available_profiles = set(basis_index)
         preferred_profile = next(
             (
                 str(row["profile_id"])
@@ -117,10 +120,7 @@ class CompetitiveProductLeadershipService:
             sorted(available_profiles)[0] if available_profiles else "",
         )
         if profile_id and profile_id not in available_profiles:
-            raise LookupError(
-                "the selected comparison basis has no decision-ready product "
-                "relationship for this retailer"
-            )
+            raise LookupError("the selected comparison basis is not configured for this analysis")
         selected_profile = profile_id or preferred_profile
         if not selected_profile:
             raise LookupError("no decision-ready product relationship is available")
@@ -128,6 +128,30 @@ class CompetitiveProductLeadershipService:
 
         product_rows: dict[str, dict[str, Any]] = {}
         product_rank: dict[str, int] = {}
+        assortment = report.get("assortment_analysis")
+        assortment_retailers = (
+            assortment.get("retailers", []) if isinstance(assortment, dict) else []
+        )
+        benchmark_assortment = next(
+            (
+                row
+                for row in assortment_retailers
+                if isinstance(row, dict) and str(row.get("retailer")) == str(benchmark["id"])
+            ),
+            {},
+        )
+        for row in benchmark_assortment.get("products", []):
+            if not isinstance(row, dict):
+                continue
+            product_id = str(row.get("product_id") or "")
+            if not product_id:
+                continue
+            product_rows[product_id] = {
+                "id": product_id,
+                "name": str(row.get("name") or product_id),
+                "image_url": row.get("image_url"),
+            }
+            product_rank[product_id] = int(row.get("observed_locations") or 0)
         for row in candidates:
             product_id = str(row.get("benchmark_product_id") or "")
             if not product_id:
@@ -159,9 +183,6 @@ class CompetitiveProductLeadershipService:
         selected_candidates = [
             row for row in candidates if str(row.get("benchmark_product_id")) == selected_product_id
         ]
-        if not selected_candidates:
-            raise LookupError("the selected benchmark product has no governed relationships")
-
         relationship_index = {
             (
                 str(row.get("competitor_id")),
@@ -171,7 +192,6 @@ class CompetitiveProductLeadershipService:
             for row in report.get("match_relationships", [])
             if isinstance(row, dict)
         }
-        basis_index = {str(row["profile_id"]): row for row in report.get("comparison_bases", [])}
         selected_basis = basis_index.get(selected_profile, {})
         relationships: list[ProductLeadershipRelationship] = []
         for row in selected_candidates:
@@ -210,9 +230,14 @@ class CompetitiveProductLeadershipService:
                 )
             )
         comparison_metrics = {row.comparison_metric for row in relationships}
-        if len(comparison_metrics) != 1:
+        if len(comparison_metrics) > 1:
             raise ValueError("selected relationships do not share one comparison metric")
-        comparison_metric = next(iter(comparison_metrics))
+        comparison_metric = (
+            next(iter(comparison_metrics))
+            if comparison_metrics
+            else str(selected_basis.get("comparison_metric") or "package_price")
+        )
+        comparison_unit = str(selected_basis.get("price_unit") or _unit(comparison_metric))
 
         competitor_products: dict[str, set[str]] = {}
         for relationship in relationships:
@@ -265,9 +290,10 @@ class CompetitiveProductLeadershipService:
             }
             for value in sorted(available_profiles)
         ]
-        active_competitor_ids = {row.competitor_id for row in relationships}
         visible_competitors = [
-            row for row in configured_competitors if str(row["id"]) in active_competitor_ids
+            row
+            for row in configured_competitors
+            if competitor_id == "all" or str(row["id"]) == competitor_id
         ]
         result = self._projector.build(
             analysis_id=analysis.analysis_id,
@@ -291,6 +317,8 @@ class CompetitiveProductLeadershipService:
             city=city,
             parity_tolerance=parity_tolerance,
             at_risk_threshold=at_risk_threshold,
+            comparison_metric=comparison_metric,
+            comparison_unit=comparison_unit,
         )
         validate_instance(
             self._root,

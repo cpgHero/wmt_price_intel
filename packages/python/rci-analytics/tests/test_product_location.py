@@ -11,7 +11,7 @@ from rci_analytics import (
 )
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
 from rci_contracts import validate_instance
-from rci_retailer_packs import GovernedBrandResolver
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -176,6 +176,43 @@ def test_canonical_population_governs_authority_dedupe_identity_and_contract() -
         product_context=product_context,
     )
     assert replay.checksum == population.checksum
+
+
+def test_canonical_population_excludes_known_third_party_sellers_but_keeps_missing_seller() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    projector = ProductLocationProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+        seller_resolver=GovernedSellerResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offers = [
+        _classified(
+            offer_id="marketplace",
+            product_id="marketplace-product",
+            price="188.58",
+            collected_at="2026-08-07T06:00:00Z",
+            store_number="0017",
+        ),
+        _classified(
+            offer_id="unknown-seller",
+            product_id="unknown-product",
+            price="4.25",
+            collected_at="2026-08-07T06:00:00Z",
+            store_number="0018",
+        ),
+    ]
+
+    population = projector.build(
+        offers,
+        retailer_id="walmart_us",
+        product_context={
+            "walmart_us:marketplace-product": {"seller": "Food Service Direct"},
+            "walmart_us:unknown-product": {"seller": None},
+        },
+    )
+
+    assert [row.product_id for row in population.observations] == ["unknown-product"]
+    assert dict(population.exclusion_counts) == {"known_third_party_seller": 1}
 
 
 def test_unknown_location_is_excluded_from_every_downstream_projection() -> None:
