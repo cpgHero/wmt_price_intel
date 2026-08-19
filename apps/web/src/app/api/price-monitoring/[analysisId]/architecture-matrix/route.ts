@@ -20,7 +20,9 @@ export async function GET(
   }
   return NextResponse.json(response.data, {
     headers: {
-      "Cache-Control": "private, max-age=300, stale-while-revalidate=900",
+      // The API service owns revision-aware matrix caching. Browser/proxy caching
+      // can otherwise retain an obsolete matrix after a deploy or governance edit.
+      "Cache-Control": "private, no-store",
     },
   });
 }
