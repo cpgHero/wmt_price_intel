@@ -958,6 +958,7 @@ function BlueprintAnalysisWorkspace({
                   candidates={reportView.match_candidates ?? []}
                   decisions={reportView.product_decisions ?? []}
                   relationships={reportView.match_relationships ?? []}
+                  assortment={reportView.assortment_analysis ?? null}
                   onSelect={selectCompetitor}
                   onReviewMatch={reviewDecision}
                 />
@@ -1712,6 +1713,7 @@ function RetailerScorecardPanel({
   candidates,
   decisions,
   relationships,
+  assortment,
   onSelect,
   onReviewMatch,
 }: Readonly<{
@@ -1720,6 +1722,7 @@ function RetailerScorecardPanel({
   candidates: ProductMatchCandidate[];
   decisions: ProductDecision[];
   relationships: JsonObject[];
+  assortment: AssortmentAnalysis | null;
   onSelect: (retailerId: string) => void;
   onReviewMatch: (product: ScorecardProductSummary) => void;
 }>) {
@@ -1737,10 +1740,16 @@ function RetailerScorecardPanel({
       new Map(
         ranked.map((row) => [
           `${row.competitor_id}::${row.profile_id}`,
-          scorecardProductSummaries(row, candidates, decisions, relationships),
+          scorecardProductSummaries(
+            row,
+            candidates,
+            decisions,
+            relationships,
+            assortment,
+          ),
         ]),
       ),
-    [candidates, decisions, ranked, relationships],
+    [assortment, candidates, decisions, ranked, relationships],
   );
   const selectedProducts = selectedScorecard
     ? (productsByScorecard.get(
@@ -1770,6 +1779,9 @@ function RetailerScorecardPanel({
               productsByScorecard.get(
                 `${row.competitor_id}::${row.profile_id}`,
               ) ?? [];
+            const hasAggregateOnlyRelationships = includedProducts.some(
+              (product) => !product.evidence_available,
+            );
             return (
               <div
                 className="retailer-scorecard-row"
@@ -1807,7 +1819,9 @@ function RetailerScorecardPanel({
                     onClick={() => setSelectedScorecard(row)}
                   >
                     {includedProducts.length > 0
-                      ? `View ${includedProducts.length.toLocaleString()} included product${includedProducts.length === 1 ? "" : "s"}`
+                      ? hasAggregateOnlyRelationships
+                        ? `View ${includedProducts.length.toLocaleString()} governed relationship${includedProducts.length === 1 ? "" : "s"}`
+                        : `View ${includedProducts.length.toLocaleString()} included product${includedProducts.length === 1 ? "" : "s"}`
                       : "Product summary unavailable"}
                   </button>
                 </div>
@@ -1930,6 +1944,9 @@ function IncludedProductsDrawer({
     : "cohort-products-title";
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(25);
+  const hasAggregateOnlyRelationships = products.some(
+    (product) => !product.evidence_available,
+  );
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -1980,7 +1997,9 @@ function IncludedProductsDrawer({
             </span>
             <h2 id={drawerId}>
               {scorecard
-                ? `Products included in ${competitor} scorecard`
+                ? hasAggregateOnlyRelationships
+                  ? `Governed products behind ${competitor} scorecard`
+                  : `Products included in ${competitor} scorecard`
                 : `Products included in ${cohort?.cohort.segment ?? "this cohort"}`}
             </h2>
             <p>
@@ -1999,7 +2018,11 @@ function IncludedProductsDrawer({
         </header>
         <div className="scorecard-products-summary">
           <div>
-            <span>Included relationships</span>
+            <span>
+              {hasAggregateOnlyRelationships
+                ? "Governed relationships"
+                : "Included relationships"}
+            </span>
             <strong>{products.length.toLocaleString()}</strong>
           </div>
           <div>
@@ -2020,7 +2043,9 @@ function IncludedProductsDrawer({
           <strong>How to read this list</strong>
           <p>
             {scorecard
-              ? "These are the admitted product relationships represented by the scorecard's governed comparison profile."
+              ? hasAggregateOnlyRelationships
+                ? "These relationships are admitted to the scorecard's governed comparison profile. Rows with persisted relationship-level outcomes show their own price evidence; aggregate-only rows show product identity without allocating or inferring a product-level price result."
+                : "These are the admitted product relationships represented by the scorecard's governed comparison profile."
               : "These are the analysis-source product pairs whose Product Pack attributes place them in this immutable cohort result. Their current relationship status is shown on each row; the cohort does not create one-to-many product matches."}{" "}
             Search observations remain authoritative for price and location; PDP
             enrichment supplies identity and imagery where available.
@@ -2093,6 +2118,7 @@ function ScorecardProductRow({
   product: ScorecardProductSummary;
   onReviewMatch: () => void;
 }>) {
+  const hasRelationshipEvidence = product.evidence_available;
   const parityShare = product.matches ? product.parity / product.matches : 0;
   const outcome =
     product.stance === "attention"
@@ -2138,51 +2164,77 @@ function ScorecardProductRow({
       </div>
       <div className="scorecard-product-outcome">
         <span className={`scorecard-product-stance ${product.stance}`}>
-          {product.stance === "attention"
-            ? "Needs attention"
-            : product.stance === "protect"
-              ? "Position to protect"
-              : product.stance === "parity"
-                ? "Price parity"
-                : "Mixed result"}
+          {!hasRelationshipEvidence
+            ? "Governed relationship"
+            : product.stance === "attention"
+              ? "Needs attention"
+              : product.stance === "protect"
+                ? "Position to protect"
+                : product.stance === "parity"
+                  ? "Price parity"
+                  : "Mixed result"}
         </span>
-        <strong>{outcome}</strong>
-        <small>
-          {product.matches.toLocaleString()} matched observations across{" "}
-          {product.geographies.toLocaleString()} ZIP markets
-        </small>
-        <div
-          className="scorecard-product-share"
-          aria-label={`${benchmark.name} lower ${formatScorecardRate(product.benchmark_lower_share)}, ${competitor} lower ${formatScorecardRate(product.competitor_lower_share)}, parity ${formatScorecardRate(parityShare)}`}
-        >
-          <i
-            className="benchmark"
-            style={{ width: `${product.benchmark_lower_share * 100}%` }}
-          />
-          <i
-            className="competitor"
-            style={{ width: `${product.competitor_lower_share * 100}%` }}
-          />
-          <i className="parity" style={{ width: `${parityShare * 100}%` }} />
-        </div>
-        <div className="scorecard-product-prices">
-          <span>
-            {benchmark.name} median price
-            <b>
-              {formatPriceForBasis(product.median_benchmark_price, priceUnit)}
-            </b>
-          </span>
-          <span>
-            {competitor} median price
-            <b>
-              {formatPriceForBasis(product.median_competitor_price, priceUnit)}
-            </b>
-          </span>
-          <span>
-            Paired median gap · competitor minus {benchmark.name}
-            <b>{formatPriceForBasis(product.median_gap, priceUnit)}</b>
-          </span>
-        </div>
+        {hasRelationshipEvidence ? (
+          <>
+            <strong>{outcome}</strong>
+            <small>
+              {product.matches.toLocaleString()} matched observations across{" "}
+              {product.geographies.toLocaleString()} ZIP markets
+            </small>
+            <div
+              className="scorecard-product-share"
+              aria-label={`${benchmark.name} lower ${formatScorecardRate(product.benchmark_lower_share)}, ${competitor} lower ${formatScorecardRate(product.competitor_lower_share)}, parity ${formatScorecardRate(parityShare)}`}
+            >
+              <i
+                className="benchmark"
+                style={{ width: `${product.benchmark_lower_share * 100}%` }}
+              />
+              <i
+                className="competitor"
+                style={{ width: `${product.competitor_lower_share * 100}%` }}
+              />
+              <i
+                className="parity"
+                style={{ width: `${parityShare * 100}%` }}
+              />
+            </div>
+            <div className="scorecard-product-prices">
+              <span>
+                {benchmark.name} median price
+                <b>
+                  {formatPriceForBasis(
+                    product.median_benchmark_price,
+                    priceUnit,
+                  )}
+                </b>
+              </span>
+              <span>
+                {competitor} median price
+                <b>
+                  {formatPriceForBasis(
+                    product.median_competitor_price,
+                    priceUnit,
+                  )}
+                </b>
+              </span>
+              <span>
+                Paired median gap · competitor minus {benchmark.name}
+                <b>{formatPriceForBasis(product.median_gap, priceUnit)}</b>
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <strong>
+              This product pair is governed for the scorecard basis.
+            </strong>
+            <small>
+              The immutable publication retains retailer-level scorecard totals,
+              but does not persist a separate price allocation for this
+              relationship. No per-product price result is inferred here.
+            </small>
+          </>
+        )}
         {product.match_rationale || attributeRows.length ? (
           <div className="scorecard-product-basis">
             {product.match_rationale ? <p>{product.match_rationale}</p> : null}

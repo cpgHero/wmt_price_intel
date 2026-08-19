@@ -356,7 +356,91 @@ describe("report presentation", () => {
         ],
       ),
     ).toMatchObject([
-      { relationship_id: "relationship-1", matches: 94, stance: "protect" },
+      {
+        relationship_id: "relationship-1",
+        matches: 94,
+        stance: "protect",
+        evidence_available: true,
+      },
+    ]);
+  });
+
+  it("lists governed relationship identities when aggregate scorecards omit per-product rows", () => {
+    const scorecard = {
+      benchmark_retailer_id: "walmart_us",
+      competitor_id: "shoprite_us",
+      competitor: "ShopRite",
+      profile_id: "compatible",
+      comparison_metric: "price_per_dozen",
+    } as RetailerScorecard;
+
+    expect(
+      scorecardProductSummaries(
+        scorecard,
+        [],
+        [],
+        [
+          {
+            relationship_id: "relationship-1",
+            benchmark_product_id: "w1",
+            competitor_id: "shoprite_us",
+            competitor_product_id: "s1",
+            eligible_profile_ids: ["compatible"],
+            status: "confirmed",
+            qa_status: "ready",
+          },
+        ],
+        {
+          source: "classified_search_rows",
+          grain: "retailer_product_location",
+          benchmark_retailer: "walmart_us",
+          retailers: [
+            {
+              retailer: "walmart_us",
+              distinct_products: 1,
+              observed_locations: 10,
+              observed_zipcodes: 10,
+              median_products_per_location: 1,
+              products: [
+                {
+                  product_id: "w1",
+                  canonical_product_id: "walmart_us:w1",
+                  name: "Walmart eggs",
+                  image_url: "https://example.com/walmart.jpg",
+                  observed_locations: 10,
+                  observed_zipcodes: 10,
+                },
+              ],
+            },
+            {
+              retailer: "shoprite_us",
+              distinct_products: 1,
+              observed_locations: 5,
+              observed_zipcodes: 5,
+              median_products_per_location: 1,
+              products: [
+                {
+                  product_id: "s1",
+                  canonical_product_id: "shoprite_us:s1",
+                  name: "ShopRite eggs",
+                  image_url: "https://example.com/shoprite.jpg",
+                  observed_locations: 5,
+                  observed_zipcodes: 5,
+                },
+              ],
+            },
+          ],
+          comparisons: [],
+        },
+      ),
+    ).toMatchObject([
+      {
+        relationship_id: "relationship-1",
+        benchmark_product_name: "Walmart eggs",
+        competitor_product_name: "ShopRite eggs",
+        relationship_status: "confirmed",
+        evidence_available: false,
+      },
     ]);
   });
 

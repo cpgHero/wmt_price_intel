@@ -1,5 +1,6 @@
 import type {
   AnalysisReportView,
+  AssortmentAnalysis,
   JsonObject,
   ProductDecision,
   ProductMatchCandidate,
@@ -129,6 +130,7 @@ export interface ScorecardProductSummary {
   median_competitor_price: number | null;
   median_gap: number | null;
   stance: ProductDecisionStance;
+  evidence_available: boolean;
 }
 
 /**
@@ -286,6 +288,7 @@ function scopedProductSummaries(
         competitor_lower_share: competitorShare,
         parity: completeOutcomes ? parity : parityShare * matches,
       }),
+      evidence_available: true,
     } satisfies ScorecardProductSummary;
   });
   const deduplicated = new Map<string, ScorecardProductSummary>();
@@ -318,40 +321,112 @@ export function scorecardProductSummaries(
   candidates: ProductMatchCandidate[],
   decisions: ProductDecision[],
   relationships: JsonObject[] = [],
+  assortment: AssortmentAnalysis | null = null,
 ): ScorecardProductSummary[] {
   const competitorTokens = new Set([
     retailerIdentityToken(scorecard.competitor_id),
     retailerIdentityToken(scorecard.competitor),
   ]);
+  const admittedRelationships = relationships.filter((relationship) => {
+    const eligibleProfiles = Array.isArray(relationship.eligible_profile_ids)
+      ? relationship.eligible_profile_ids.map(String)
+      : [];
+    return (
+      competitorTokens.has(retailerIdentityToken(relationship.competitor_id)) &&
+      (relationship.status === "suggested" ||
+        relationship.status === "confirmed") &&
+      (relationship.qa_status ?? "ready") === "ready" &&
+      (scorecard.profile_id === "governed_products" ||
+        eligibleProfiles.includes(scorecard.profile_id))
+    );
+  });
   const admittedRelationshipIds = new Set(
-    relationships
-      .filter((relationship) => {
-        const eligibleProfiles = Array.isArray(
-          relationship.eligible_profile_ids,
-        )
-          ? relationship.eligible_profile_ids.map(String)
-          : [];
-        return (
-          competitorTokens.has(
-            retailerIdentityToken(relationship.competitor_id),
-          ) &&
-          (relationship.status === "suggested" ||
-            relationship.status === "confirmed") &&
-          (relationship.qa_status ?? "ready") === "ready" &&
-          (scorecard.profile_id === "governed_products" ||
-            eligibleProfiles.includes(scorecard.profile_id))
-        );
-      })
+    admittedRelationships
       .map((relationship) => String(relationship.relationship_id ?? ""))
       .filter(Boolean),
   );
-  return scopedProductSummaries(
+  const summaries = scopedProductSummaries(
     scorecard,
     candidates,
     decisions,
     scorecard.profile_id === "governed_products",
     false,
     admittedRelationshipIds,
+  );
+  const representedRelationshipIds = new Set(
+    summaries
+      .map((summary) => summary.relationship_id)
+      .filter((value): value is string => Boolean(value)),
+  );
+  const productsByRetailerAndId = new Map(
+    (assortment?.retailers ?? []).flatMap((retailer) =>
+      (retailer.products ?? []).map(
+        (product) =>
+          [
+            `${retailerIdentityToken(retailer.retailer)}::${product.product_id}`,
+            product,
+          ] as const,
+      ),
+    ),
+  );
+  const benchmarkToken = retailerIdentityToken(scorecard.benchmark_retailer_id);
+  const competitorToken = retailerIdentityToken(scorecard.competitor_id);
+  const identityOnly = admittedRelationships
+    .filter((relationship) => {
+      const relationshipId = String(relationship.relationship_id ?? "");
+      return relationshipId && !representedRelationshipIds.has(relationshipId);
+    })
+    .map((relationship) => {
+      const relationshipId = String(relationship.relationship_id);
+      const benchmarkProductId = String(
+        relationship.benchmark_product_id ?? "",
+      );
+      const competitorProductId = String(
+        relationship.competitor_product_id ?? "",
+      );
+      const benchmarkProduct = productsByRetailerAndId.get(
+        `${benchmarkToken}::${benchmarkProductId}`,
+      );
+      const competitorProduct = productsByRetailerAndId.get(
+        `${competitorToken}::${competitorProductId}`,
+      );
+      return {
+        id: `relationship-summary-${relationshipId}`,
+        relationship_id: relationshipId,
+        relationship_status: relationship.status as
+          ProductMatchCandidate["relationship_status"] | undefined,
+        profile_id: scorecard.profile_id,
+        comparison_metric: scorecard.comparison_metric,
+        match_rationale: null,
+        match_attributes: {},
+        benchmark_product_id: benchmarkProductId,
+        benchmark_product_name: benchmarkProduct?.name ?? benchmarkProductId,
+        benchmark_image_url: benchmarkProduct?.image_url ?? null,
+        benchmark_product_url: benchmarkProduct?.url ?? null,
+        competitor: scorecard.competitor_id,
+        competitor_product_id: competitorProductId,
+        competitor_product_name: competitorProduct?.name ?? competitorProductId,
+        competitor_image_url: competitorProduct?.image_url ?? null,
+        competitor_product_url: competitorProduct?.url ?? null,
+        matches: 0,
+        geographies: 0,
+        benchmark_lower: 0,
+        competitor_lower: 0,
+        parity: 0,
+        benchmark_lower_share: 0,
+        competitor_lower_share: 0,
+        median_benchmark_price: null,
+        median_competitor_price: null,
+        median_gap: null,
+        stance: "mixed" as const,
+        evidence_available: false,
+      } satisfies ScorecardProductSummary;
+    });
+  return [...summaries, ...identityOnly].sort(
+    (left, right) =>
+      Number(right.evidence_available) - Number(left.evidence_available) ||
+      right.matches - left.matches ||
+      left.benchmark_product_name.localeCompare(right.benchmark_product_name),
   );
 }
 

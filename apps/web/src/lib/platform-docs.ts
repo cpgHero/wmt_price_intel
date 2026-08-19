@@ -79,11 +79,11 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 18, 2026";
+const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.11",
+  version: "1.3.12",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -1353,6 +1353,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-19",
+              "Implemented; production verification pending",
+              "Retailer scorecard product drilldowns distinguish authoritative aggregate metrics from relationship-level evidence availability.",
+              "The drawer first uses persisted per-relationship outcomes when they exist. If an immutable publication contains only a retailer-level aggregate, it resolves the certified relationship IDs to governed assortment product identities and labels them as aggregate-only instead of inventing product-level prices, shares, or locations. This closes the ShopRite empty-drawer defect without weakening scorecard authority or changing any metric.",
+            ],
             [
               "2026-08-18",
               "Deployed and production-verified",
