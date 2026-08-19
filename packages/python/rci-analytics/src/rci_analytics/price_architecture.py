@@ -79,17 +79,27 @@ def _anchor_bands(anchor_products: list[JsonObject]) -> list[JsonObject]:
     return bands
 
 
-def _fixed_bands(products: Iterable[JsonObject], increment: float) -> list[JsonObject]:
-    maximum = max((float(row["median_price"]) for row in products), default=0)
-    top_index = max(0, math.floor(maximum / increment))
+def _fixed_bands(anchor_products: Iterable[JsonObject], increment: float) -> list[JsonObject]:
+    """Build a fixed grid bounded by the benchmark assortment.
+
+    Competitor outliers belong in the open-ended edge bands; they must not expand
+    a useful category matrix into hundreds of empty rows. Interior boundaries stay
+    fixed on the selected increment, so the view remains comparable over time.
+    """
+
+    prices = [float(row["median_price"]) for row in anchor_products]
+    if not prices:
+        return []
+    bottom_index = math.floor(min(prices) / increment)
+    top_index = math.floor(max(prices) / increment)
     return [
         {
-            "id": f"fixed-{index + 1}",
+            "id": f"fixed-{index - bottom_index + 1}",
             "anchor_price": None,
-            "lower_bound": _round(index * increment),
+            "lower_bound": _round(index * increment) if index > bottom_index else None,
             "upper_bound": _round((index + 1) * increment) if index < top_index else None,
         }
-        for index in range(top_index + 1)
+        for index in range(bottom_index, top_index + 1)
     ]
 
 
@@ -145,13 +155,10 @@ class PriceArchitectureMatrixProjector:
         anchor_products = products_by_retailer[anchor_retailer_id]
         if not anchor_products:
             raise ValueError("benchmark retailer has no eligible positive-price products")
-        all_products = [
-            product for products in products_by_retailer.values() for product in products
-        ]
         bands = (
             _anchor_bands(anchor_products)
             if mode == "benchmark_anchored"
-            else _fixed_bands(all_products, fixed_increment)
+            else _fixed_bands(anchor_products, fixed_increment)
         )
         assigned: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
         for retailer_id, products in products_by_retailer.items():

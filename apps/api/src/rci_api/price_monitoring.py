@@ -853,7 +853,10 @@ class PriceMonitoringService:
                     retailer_options=retailer_options,
                 ),
             )
-            if len(self._prepared_cache) >= 8:
+            # A cross-retailer architecture request commonly prepares 14+ sources.
+            # Retaining fewer entries caused every subsequent matrix view to churn
+            # immutable populations back out of object storage.
+            if len(self._prepared_cache) >= 64:
                 self._prepared_cache.pop(next(iter(self._prepared_cache)))
             self._prepared_cache[cache_key] = prepared
             return prepared
@@ -995,7 +998,10 @@ class PriceMonitoringService:
                 )
             )
         )
-        semaphore = asyncio.Semaphore(4)
+        # Population preparation is dominated by independent object-store and
+        # database reads. Eight-way concurrency materially reduces the cold path
+        # while keeping connection pressure bounded.
+        semaphore = asyncio.Semaphore(8)
 
         async def prepare(retailer_id: str) -> PreparedPriceMonitoringData:
             async with semaphore:

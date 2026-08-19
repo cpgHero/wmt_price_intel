@@ -168,11 +168,18 @@ def test_store_coverage_is_union_of_distinct_locations_not_product_sum() -> None
         assert sum(float(value or 0) for value in shares) == pytest.approx(1, abs=0.0001)
 
 
-def test_fixed_rungs_are_stable_and_validate_increment() -> None:
+def test_fixed_rungs_use_stable_intervals_with_benchmark_bounded_edges() -> None:
     matrix = _matrix(mode="fixed_range", increment=1.0)
     assert matrix["source"]["anchor_rule"] == "fixed $1.00 package-price bands"
-    assert matrix["rungs"][-1]["lower_bound"] == 0.0
-    assert matrix["rungs"][-1]["upper_bound"] == 1.0
+    assert len(matrix["rungs"]) == 5
+    assert matrix["rungs"][-1]["lower_bound"] is None
+    assert matrix["rungs"][-1]["upper_bound"] == 3.0
+    assert matrix["rungs"][0]["lower_bound"] == 6.0
+    assert matrix["rungs"][0]["upper_bound"] is None
+    top_aldi = next(
+        cell for cell in matrix["rungs"][0]["cells"] if cell["retailer_id"] == "aldi_us"
+    )
+    assert [product["product_id"] for product in top_aldi["products"]] == ["a3"]
 
     with pytest.raises(ValueError, match=r"0\.50 or 1\.00"):
         _matrix(mode="fixed_range", increment=0.25)

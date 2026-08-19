@@ -34,7 +34,9 @@ positions; it must never imply that products sharing a price band are substitute
 ### Fixed bands
 
 - Support stable $0.50 and $1.00 package-price increments.
-- Start at zero and retain an open-ended top band.
+- Bound the visible grid by Walmart's observed assortment and retain open-ended low and high
+  edge bands. Competitor outliers therefore remain visible without expanding the matrix into
+  hundreds of empty rows.
 - Fixed bands are intended for time-consistent architecture comparisons when Walmart price
   changes would otherwise move midpoint boundaries.
 
