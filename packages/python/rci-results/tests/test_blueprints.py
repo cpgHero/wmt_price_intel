@@ -268,6 +268,16 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
                     "excluded_benchmark_location_scope_keys": ["walmart_us|72712|2"],
                 }
             ],
+            "match_relationships": [
+                {
+                    "relationship_id": "relationship-1",
+                    "competitor_id": "aldi_us",
+                    "status": "confirmed",
+                    "eligible_profile_ids": ["compatible"],
+                    "benchmark_location_scope_keys": ["walmart_us|72712|1"],
+                    "excluded_benchmark_location_scope_keys": ["walmart_us|72712|2"],
+                }
+            ],
             "assortment_analysis": {
                 "retailers": [
                     {
@@ -294,6 +304,14 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
     )
 
     assert "benchmark_location_scope_keys" not in view["match_candidates"][0]
+    assert view["match_relationships"] == [
+        {
+            "relationship_id": "relationship-1",
+            "competitor_id": "aldi_us",
+            "status": "confirmed",
+            "eligible_profile_ids": ["compatible"],
+        }
+    ]
     product = view["assortment_analysis"]["retailers"][0]["products"][0]
     assert product == {
         "product_id": "100",

@@ -95,6 +95,23 @@ def _compact_interactive_view(view: JsonObject) -> None:
             for row in candidates
         ]
 
+    relationships = view.get("match_relationships")
+    if isinstance(relationships, list):
+        view["match_relationships"] = [
+            {
+                key: value
+                for key, value in row.items()
+                if key
+                not in {
+                    "benchmark_location_scope_keys",
+                    "excluded_benchmark_location_scope_keys",
+                }
+            }
+            if isinstance(row, dict)
+            else row
+            for row in relationships
+        ]
+
     assortment = view.get("assortment_analysis")
     if not isinstance(assortment, dict):
         return
@@ -2114,7 +2131,6 @@ class ArtifactRenderer:
         )
         if presentation_context:
             view.update(presentation_context)
-        _compact_interactive_view(view)
         view["retailer_scorecards"] = self._projector.reconcile_scorecards_with_product_evidence(
             _rows(view, "retailer_scorecards"),
             product_decisions=_rows(view, "product_decisions"),
@@ -2123,6 +2139,10 @@ class ArtifactRenderer:
             match_relationships=_rows(view, "match_relationships"),
         )
         self._apply_report_integrity(view, result)
+        # Reconciliation and integrity checks run against the complete immutable
+        # evidence projection. Only the browser-facing copy drops audit-sized
+        # location lists after those server-side decisions are complete.
+        _compact_interactive_view(view)
         view["result_checksum"] = _result_checksum(result)
         view["publication"] = None
         return (
