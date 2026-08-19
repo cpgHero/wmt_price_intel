@@ -8,7 +8,7 @@ export type GeographySummary = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
-  schema_version: "1.1.0";
+  schema_version: "1.2.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -51,6 +51,7 @@ export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
     };
   };
   summary: Summary;
+  price_ladder_summary: FootprintPriceLadder;
   state_summaries: GeographySummary[];
   city_summaries: GeographySummary[];
   competitor_summaries: (Summary & {
@@ -91,12 +92,47 @@ export interface Summary {
   maximum_losing_gap: number | null;
   [k: string]: unknown;
 }
+export interface FootprintPriceLadder {
+  definition: string;
+  benchmark_observed_locations: number;
+  comparable_benchmark_locations: number;
+  benchmark_rank_one_locations: number;
+  benchmark_rank_one_rate: number | null;
+  median_benchmark_rank: number | null;
+  rows: FootprintPriceLadderRow[];
+}
+export interface FootprintPriceLadderRow {
+  position: number;
+  retailer_id: string;
+  retailer_name: string;
+  product_id: string;
+  product_name: string;
+  brand: string | null;
+  brand_type: "private_label" | "regional" | "national" | "unclassified";
+  image_url: string | null;
+  is_benchmark: boolean;
+  comparison_locations: number;
+  footprint_rate: number | null;
+  price_median: number;
+  price_minimum: number;
+  price_maximum: number;
+  median_gap_to_benchmark: number | null;
+  below_benchmark_locations: number;
+  tied_benchmark_locations: number;
+  above_benchmark_locations: number;
+}
 export interface Relationship {
   relationship_id: string;
   competitor_id: string;
   competitor_name: string;
   benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_image_url: string | null;
   competitor_product_id: string;
+  competitor_product_name: string;
+  competitor_brand: string | null;
+  competitor_brand_type: "private_label" | "regional" | "national" | "unclassified";
+  competitor_image_url: string | null;
   profile_id: string;
   profile_label: string;
   comparison_metric: string;
@@ -113,7 +149,6 @@ export interface Outcome {
   distance_miles: number | null;
   competitor_minus_benchmark: number | null;
   comparison_value_reduction_to_lead: number | null;
-  price_ladder?: PriceLadder;
 }
 export interface Location {
   retailer_id: string;
@@ -144,28 +179,4 @@ export interface Location {
   offer_id: string | null;
   comparison_value: number;
   observed_at: string | null;
-}
-export interface PriceLadder {
-  definition: string;
-  rung_count: number;
-  benchmark_rank: number;
-  lower_priced_alternatives: number;
-  gap_to_leader: number;
-  gap_to_next_lower: number | null;
-  gap_to_next_higher: number | null;
-  /**
-   * @minItems 1
-   */
-  rungs: [PriceLadderRung, ...PriceLadderRung[]];
-}
-export interface PriceLadderRung {
-  position: number;
-  price_rank: number;
-  is_benchmark: boolean;
-  relationship_id: string | null;
-  distance_miles: number | null;
-  location: Location;
-  gap_to_previous: number | null;
-  gap_to_benchmark: number;
-  premium_vs_opening_rate: number | null;
 }

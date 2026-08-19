@@ -24,7 +24,6 @@ describe("application navigation", () => {
       "/automation",
       "/data-quality",
       "/admin/docs",
-      "/workspace/matches",
       "/admin/matching-v2",
       "/workspace/brands",
       "/admin/studies",
@@ -43,9 +42,7 @@ describe("application navigation", () => {
     expect(navigationItemIsActive("/analyses/analysis-123", competitive)).toBe(
       true,
     );
-    expect(activeNavigationItem("/workspace/matches")?.label).toBe(
-      "Match Workbench",
-    );
+    expect(activeNavigationItem("/workspace/matches")).toBeNull();
     expect(
       activeNavigationItem("/price-intelligence/analysis-123")?.label,
     ).toBe("Price Intelligence");

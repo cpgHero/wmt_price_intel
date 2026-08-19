@@ -6,8 +6,8 @@ import hashlib
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from statistics import mean
-from typing import Literal
+from statistics import mean, median
+from typing import Any, Literal
 
 from rci_analytics.models import JsonObject
 from rci_analytics.product_location import ProductPriceObservation
@@ -284,6 +284,154 @@ def _price_ladder(
     }
 
 
+def _record_footprint_ladder(
+    accumulator: dict[tuple[str, str], dict[str, Any]],
+    benchmark_ranks: list[int],
+    benchmark: ProductPriceObservation,
+    candidates: list[
+        tuple[
+            float,
+            float,
+            str,
+            ProductLeadershipRelationship,
+            ProductPriceObservation,
+        ]
+    ],
+    *,
+    parity_tolerance: float,
+) -> None:
+    """Aggregate product positioning at the benchmark-store footprint grain."""
+
+    best_by_product: dict[
+        tuple[str, str],
+        tuple[
+            float,
+            float,
+            str,
+            ProductLeadershipRelationship,
+            ProductPriceObservation,
+        ],
+    ] = {}
+    for candidate in candidates:
+        observation = candidate[4]
+        key = (observation.retailer_id, observation.product_id)
+        current = best_by_product.get(key)
+        if current is None or candidate[:3] < current[:3]:
+            best_by_product[key] = candidate
+
+    def state_for(observation: ProductPriceObservation, *, benchmark_row: bool) -> dict[str, Any]:
+        key = (observation.retailer_id, observation.product_id)
+        return accumulator.setdefault(
+            key,
+            {
+                "retailer_id": observation.retailer_id,
+                "retailer_name": observation.retailer_name,
+                "product_id": observation.product_id,
+                "product_name": observation.product_name,
+                "brand": observation.brand,
+                "brand_type": observation.brand_type,
+                "image_url": observation.image_url,
+                "is_benchmark": benchmark_row,
+                "values": [],
+                "gaps": [],
+                "below": 0,
+                "tied": 0,
+                "above": 0,
+            },
+        )
+
+    benchmark_state = state_for(benchmark, benchmark_row=True)
+    benchmark_state["values"].append(float(benchmark.comparison_value))
+
+    if best_by_product:
+        distinct_lower_prices = {
+            round(float(candidate[4].comparison_value), 4)
+            for candidate in best_by_product.values()
+            if float(candidate[4].comparison_value)
+            < float(benchmark.comparison_value) - parity_tolerance
+        }
+        benchmark_ranks.append(1 + len(distinct_lower_prices))
+
+    for candidate in best_by_product.values():
+        observation = candidate[4]
+        state = state_for(observation, benchmark_row=False)
+        value = float(observation.comparison_value)
+        gap = value - float(benchmark.comparison_value)
+        state["values"].append(value)
+        state["gaps"].append(gap)
+        if gap < -parity_tolerance:
+            state["below"] += 1
+        elif gap > parity_tolerance:
+            state["above"] += 1
+        else:
+            state["tied"] += 1
+
+
+def _footprint_price_ladder(
+    accumulator: dict[tuple[str, str], dict[str, Any]],
+    benchmark_ranks: list[int],
+    *,
+    benchmark_observed_locations: int,
+) -> JsonObject:
+    rows: list[JsonObject] = []
+    for state in accumulator.values():
+        values = [float(value) for value in state["values"]]
+        gaps = [float(value) for value in state["gaps"]]
+        rows.append(
+            {
+                "position": 0,
+                "retailer_id": state["retailer_id"],
+                "retailer_name": state["retailer_name"],
+                "product_id": state["product_id"],
+                "product_name": state["product_name"],
+                "brand": state["brand"],
+                "brand_type": state["brand_type"],
+                "image_url": state["image_url"],
+                "is_benchmark": state["is_benchmark"],
+                "comparison_locations": len(values),
+                "footprint_rate": (
+                    _round(len(values) / benchmark_observed_locations)
+                    if benchmark_observed_locations
+                    else None
+                ),
+                "price_median": _round(median(values)),
+                "price_minimum": _round(min(values)),
+                "price_maximum": _round(max(values)),
+                "median_gap_to_benchmark": _round(median(gaps)) if gaps else None,
+                "below_benchmark_locations": int(state["below"]),
+                "tied_benchmark_locations": int(state["tied"]),
+                "above_benchmark_locations": int(state["above"]),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            float(row["price_median"]),
+            not bool(row["is_benchmark"]),
+            str(row["retailer_name"]),
+            str(row["product_name"]),
+        )
+    )
+    for position, row in enumerate(rows, start=1):
+        row["position"] = position
+    rank_one = sum(rank == 1 for rank in benchmark_ranks)
+    return {
+        "definition": (
+            "Footprint-level price architecture for the selected Walmart product and "
+            "governed matched competitor products. Each competitor product is counted at "
+            "most once per Walmart store, using its lowest eligible Search price within "
+            "the selected radius; service-area retailers use the same ZIP."
+        ),
+        "benchmark_observed_locations": benchmark_observed_locations,
+        "comparable_benchmark_locations": len(benchmark_ranks),
+        "benchmark_rank_one_locations": rank_one,
+        "benchmark_rank_one_rate": (
+            _round(rank_one / len(benchmark_ranks)) if benchmark_ranks else None
+        ),
+        "median_benchmark_rank": _round(median(benchmark_ranks), 2) if benchmark_ranks else None,
+        "rows": rows,
+    }
+
+
 class CompetitiveProductLeadershipProjector:
     """Score one benchmark product at benchmark-store grain.
 
@@ -333,6 +481,10 @@ class CompetitiveProductLeadershipProjector:
             for row in benchmark_observations
             if (state is None or row.state == state) and (city is None or row.city == city)
         ]
+        benchmark_identity = {row.product_id: row for row in benchmark_observations}
+        competitor_identity = {
+            (row.retailer_id, row.product_id): row for row in competitor_observations
+        }
         store_candidates: dict[tuple[str, str, int, int], list[ProductPriceObservation]] = (
             defaultdict(list)
         )
@@ -362,6 +514,8 @@ class CompetitiveProductLeadershipProjector:
                 ].append(observation)
 
         outcomes: list[JsonObject] = []
+        ladder_accumulator: dict[tuple[str, str], dict[str, Any]] = {}
+        benchmark_ranks: list[int] = []
         for benchmark in visible_benchmark:
             candidates: list[
                 tuple[
@@ -419,6 +573,14 @@ class CompetitiveProductLeadershipProjector:
                         )
                     )
 
+            _record_footprint_ladder(
+                ladder_accumulator,
+                benchmark_ranks,
+                benchmark,
+                candidates,
+                parity_tolerance=parity_tolerance,
+            )
+
             matched_competitor: ProductPriceObservation | None = None
             selected_relationship: ProductLeadershipRelationship | None = None
             distance_miles: float | None = None
@@ -475,7 +637,6 @@ class CompetitiveProductLeadershipProjector:
                     "distance_miles": _round(distance_miles, 2),
                     "competitor_minus_benchmark": _round(gap),
                     "comparison_value_reduction_to_lead": _round(reduction),
-                    "price_ladder": _price_ladder(benchmark, candidates),
                 }
             )
 
@@ -502,8 +663,52 @@ class CompetitiveProductLeadershipProjector:
                 competitor_groups[str(competitor_location["retailer_id"])].append(row)
 
         competitor_name_index = {str(row["id"]): str(row["name"]) for row in competitor_options}
+
+        def relationship_record(row: ProductLeadershipRelationship) -> JsonObject:
+            benchmark_product = benchmark_identity.get(row.benchmark_product_id)
+            competitor_product = competitor_identity.get(
+                (row.competitor_id, row.competitor_product_id)
+            )
+            return {
+                "relationship_id": row.relationship_id,
+                "competitor_id": row.competitor_id,
+                "competitor_name": row.competitor_name,
+                "benchmark_product_id": row.benchmark_product_id,
+                "benchmark_product_name": (
+                    benchmark_product.product_name
+                    if benchmark_product is not None
+                    else row.benchmark_product_id
+                ),
+                "benchmark_image_url": (
+                    benchmark_product.image_url if benchmark_product is not None else None
+                ),
+                "competitor_product_id": row.competitor_product_id,
+                "competitor_product_name": (
+                    competitor_product.product_name
+                    if competitor_product is not None
+                    else row.competitor_product_id
+                ),
+                "competitor_brand": (
+                    competitor_product.brand if competitor_product is not None else None
+                ),
+                "competitor_brand_type": (
+                    competitor_product.brand_type
+                    if competitor_product is not None
+                    else "unclassified"
+                ),
+                "competitor_image_url": (
+                    competitor_product.image_url if competitor_product is not None else None
+                ),
+                "profile_id": row.profile_id,
+                "profile_label": row.profile_label,
+                "comparison_metric": row.comparison_metric,
+                "comparison_unit": row.comparison_unit,
+                "scope_mode": row.scope_mode,
+                "scoped_benchmark_locations": len(row.benchmark_location_scope_keys),
+            }
+
         return {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "benchmark_retailer": benchmark_retailer,
@@ -563,6 +768,11 @@ class CompetitiveProductLeadershipProjector:
                 },
             },
             "summary": _summary(outcomes),
+            "price_ladder_summary": _footprint_price_ladder(
+                ladder_accumulator,
+                benchmark_ranks,
+                benchmark_observed_locations=len(outcomes),
+            ),
             "state_summaries": [
                 _geography_summary(rows, level="state", label=label)
                 for label, rows in sorted(state_groups.items())
@@ -583,21 +793,6 @@ class CompetitiveProductLeadershipProjector:
                 }
                 for competitor_id, rows in sorted(competitor_groups.items())
             ],
-            "relationships": [
-                {
-                    "relationship_id": row.relationship_id,
-                    "competitor_id": row.competitor_id,
-                    "competitor_name": row.competitor_name,
-                    "benchmark_product_id": row.benchmark_product_id,
-                    "competitor_product_id": row.competitor_product_id,
-                    "profile_id": row.profile_id,
-                    "profile_label": row.profile_label,
-                    "comparison_metric": row.comparison_metric,
-                    "comparison_unit": row.comparison_unit,
-                    "scope_mode": row.scope_mode,
-                    "scoped_benchmark_locations": len(row.benchmark_location_scope_keys),
-                }
-                for row in relationships
-            ],
+            "relationships": [relationship_record(row) for row in relationships],
             "outcomes": outcomes,
         }

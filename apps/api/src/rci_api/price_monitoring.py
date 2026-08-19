@@ -25,6 +25,7 @@ from rci_analytics import (
     ProductPriceObservation,
     classified_offer_from_record,
 )
+from rci_analytics.product_location import ProductLocationPopulation
 from rci_api.analyses import get_analysis_service
 from rci_contracts import validate_instance
 from rci_product_packs import PostgresProductPackCatalog
@@ -162,6 +163,7 @@ class PreparedPriceMonitoringData:
     product_context: dict[str, dict[str, Any]]
     product_context_revision: str
     retailer_options: tuple[str, ...]
+    population: ProductLocationPopulation | None = None
 
 
 class S3ParquetReader:
@@ -531,6 +533,13 @@ class PostgresPriceMonitoringRepository:
                             key: value for key, value in commerce.items() if key != "offers"
                         },
                         "media": {
+                            "images": [
+                                str(value)
+                                for value in media.get("images", [])
+                                if isinstance(value, str) and value.strip()
+                            ][:12]
+                            if isinstance(media.get("images"), list)
+                            else [],
                             "image_count": len(media.get("images", []))
                             if isinstance(media.get("images"), list)
                             else 0,
@@ -757,6 +766,14 @@ class PriceMonitoringService:
                 product_context=product_context,
                 product_context_revision=revision,
                 retailer_options=cached.retailer_options,
+                population=cached.projector.canonical_population(
+                    cached.offers,
+                    retailer_id=retailer_id,
+                    location_index=cached.location_index,
+                    eligible_location_index=cached.eligible_location_index,
+                    product_context=product_context,
+                    retailer_options=cached.retailer_options,
+                ),
             )
             self._prepared_cache[cache_key] = refreshed
             return refreshed
@@ -823,6 +840,14 @@ class PriceMonitoringService:
                 product_context=product_context,
                 product_context_revision=product_context_revision,
                 retailer_options=retailer_options,
+                population=projector.canonical_population(
+                    offers,
+                    retailer_id=retailer_id,
+                    location_index=location_index,
+                    eligible_location_index=eligible_location_index,
+                    product_context=product_context,
+                    retailer_options=retailer_options,
+                ),
             )
             if len(self._prepared_cache) >= 8:
                 self._prepared_cache.pop(next(iter(self._prepared_cache)))
@@ -864,6 +889,7 @@ class PriceMonitoringService:
             retailer_options=prepared.retailer_options,
             location_limit=location_limit,
             product_location_limit=product_location_limit,
+            population=prepared.population,
         )
 
     async def view(self, analysis_id: str, filters: PriceMonitoringFilters) -> dict[str, Any]:

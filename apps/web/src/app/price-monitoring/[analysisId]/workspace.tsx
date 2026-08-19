@@ -384,13 +384,32 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             city: row.key,
           }))
     : [];
+  const projectedMarketPoints = marketPoints.map((row) => ({
+    ...row,
+    point: projectCoordinate(row.longitude, row.latitude),
+  }));
+  const mapViewBox = (() => {
+    if (!view.filters.state || !projectedMarketPoints.length)
+      return "0 0 960 520";
+    const xValues = projectedMarketPoints.map((row) => row.point.x);
+    const yValues = projectedMarketPoints.map((row) => row.point.y);
+    const minimumWidth = view.filters.city ? 70 : 150;
+    const minimumHeight = view.filters.city ? 55 : 100;
+    const rawWidth = Math.max(...xValues) - Math.min(...xValues);
+    const rawHeight = Math.max(...yValues) - Math.min(...yValues);
+    const width = Math.max(minimumWidth, rawWidth * 1.35);
+    const height = Math.max(minimumHeight, rawHeight * 1.45);
+    const centerX = (Math.min(...xValues) + Math.max(...xValues)) / 2;
+    const centerY = (Math.min(...yValues) + Math.max(...yValues)) / 2;
+    return `${centerX - width / 2} ${centerY - height / 2} ${width} ${height}`;
+  })();
   return (
     <div className="pm-map-stage pi-map-stage">
       <svg
         className="pm-map"
         role="img"
         aria-label={`${view.retailer.name} exact-product observed price footprint`}
-        viewBox="0 0 960 520"
+        viewBox={mapViewBox}
       >
         <g className="pm-state-layer">
           {stateFeatures.map((state) => {
@@ -453,8 +472,8 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
           })}
         </g>
         <g className="pm-location-layer">
-          {marketPoints.map((row) => {
-            const point = projectCoordinate(row.longitude, row.latitude);
+          {projectedMarketPoints.map((row) => {
+            const point = row.point;
             return (
               <circle
                 aria-label={`${row.label}: ${count(row.locations)} observed ${row.locations === 1 ? "location" : "locations"}, ${currency(row.price)}`}
@@ -920,6 +939,17 @@ function PdpReferencePanel({ product }: Readonly<{ product: Product }>) {
   const weeklySales = numberValue(demand.weekly_sales_volume);
   const imageCount =
     numberValue(media.image_count) ?? evidenceCount(media.images);
+  const mediaImages = Array.from(
+    new Set(
+      [
+        product.image_url,
+        ...(Array.isArray(media.images) ? media.images : []),
+      ].filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      ),
+    ),
+  ).slice(0, 12);
   const videoCount =
     numberValue(content.video_count) ??
     numberValue(media.video_count) ??
@@ -1018,6 +1048,28 @@ function PdpReferencePanel({ product }: Readonly<{ product: Product }>) {
           <details className="pi-pdp-details">
             <summary>View identifiers and product attributes</summary>
             <div>
+              {mediaImages.length ? (
+                <section className="pi-pdp-media">
+                  <h3>Product images</h3>
+                  <div>
+                    {mediaImages.map((imageUrl, index) => (
+                      <a
+                        href={imageUrl}
+                        key={imageUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          alt={`${product.name} product image ${index + 1}`}
+                          loading="lazy"
+                          src={imageUrl}
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
               <section>
                 <h3>Identifiers</h3>
                 <dl>
@@ -1576,8 +1628,10 @@ function FootprintModal({
 function ProductCatalog({
   view,
   onOpenProduct,
+  loading,
 }: Readonly<{
   view: PriceMonitoringView;
+  loading: boolean;
   onOpenProduct: (
     productId: string,
     tab: TabId,
@@ -1757,7 +1811,6 @@ function ProductCatalog({
           <span role="columnheader">Price range</span>
           <span role="columnheader">Location footprint</span>
           <span role="columnheader">Sponsored</span>
-          <span role="columnheader">Availability evidence</span>
           <span role="columnheader">Workspace</span>
         </div>
         <div className="pi-product-table-body" role="rowgroup">
@@ -1778,6 +1831,7 @@ function ProductCatalog({
               >
                 <div className="pi-product-identity" role="cell">
                   {product.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img loading="lazy" src={product.image_url} alt="" />
                   ) : (
                     <span aria-hidden="true">P</span>
@@ -1896,23 +1950,10 @@ function ProductCatalog({
                     {count(product.sponsorship.known_observations)} classified
                   </span>
                 </button>
-                <button
-                  aria-label={`Open positive-price availability evidence for ${product.name}`}
-                  className="pi-product-metric pi-product-metric-link"
-                  onClick={() =>
-                    onOpenProduct(product.product_id, "overview", "observed")
-                  }
-                  role="cell"
-                  type="button"
-                >
-                  <small>Observed in stock</small>
-                  <strong>
-                    {count(product.availability.in_stock_observations ?? 0)}
-                  </strong>
-                  <span>positive-price locations only</span>
-                </button>
                 <div className="pi-product-actions" role="cell">
                   <button
+                    aria-busy={loading}
+                    disabled={loading}
                     onClick={() =>
                       onOpenProduct(product.product_id, "overview")
                     }
@@ -1921,6 +1962,8 @@ function ProductCatalog({
                     Open report
                   </button>
                   <button
+                    aria-busy={loading}
+                    disabled={loading}
                     onClick={() =>
                       onOpenProduct(product.product_id, "store-review")
                     }
@@ -1945,6 +1988,11 @@ function ProductCatalog({
           ) : null}
         </div>
       </div>
+      <p className="pi-catalog-grain-note">
+        Observed and not-observed counts use distinct retailer store IDs from
+        the location master. ZIP codes are address context, not the counting
+        grain; service-area retailers are identified separately.
+      </p>
     </section>
   );
 }
@@ -2232,7 +2280,17 @@ export function PriceMonitoringWorkspace({
             {loading ? "Refreshing evidence…" : error}
           </p>
         ) : null}
-        <ProductCatalog onOpenProduct={openCatalogProduct} view={view} />
+        <ProductCatalog
+          loading={loading}
+          onOpenProduct={openCatalogProduct}
+          view={view}
+        />
+        {loading ? (
+          <div className="pi-route-loading" role="status" aria-live="polite">
+            <span aria-hidden="true" />
+            <strong>Loading governed product evidence…</strong>
+          </div>
+        ) : null}
       </>
     );
   }
@@ -2271,6 +2329,7 @@ export function PriceMonitoringWorkspace({
       <header className="pm-masthead pi-masthead">
         <div className="pi-product-title">
           {selectedProduct.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={selectedProduct.image_url} alt="" />
           ) : (
             <span aria-hidden="true">P</span>
@@ -2333,7 +2392,11 @@ export function PriceMonitoringWorkspace({
       ) : null}
 
       {tab === "home" ? (
-        <ProductCatalog onOpenProduct={openCatalogProduct} view={view} />
+        <ProductCatalog
+          loading={loading}
+          onOpenProduct={openCatalogProduct}
+          view={view}
+        />
       ) : null}
 
       {tab === "overview" ? (
@@ -2354,6 +2417,10 @@ export function PriceMonitoringWorkspace({
                 {unitPrice.status === "observed"
                   ? `${unitPrice.label}: ${unitCurrency(typicalUnitPrice, unitPrice.unit)}`
                   : "Unit price unavailable"}
+              </small>
+              <small>
+                Observed range {currency(stats.minimum)}–
+                {currency(stats.maximum)}
               </small>
               <small>
                 {count(stats.observation_count)} exact-product observations
@@ -2604,9 +2671,26 @@ export function PriceMonitoringWorkspace({
                     onClick={() => setArchitectureView("map")}
                     type="button"
                   >
-                    US map
+                    {view.filters.city
+                      ? "City map"
+                      : view.filters.state
+                        ? "State map"
+                        : "US map"}
                   </button>
                 </div>
+                {view.filters.state ||
+                view.filters.city ||
+                view.filters.zipcode ? (
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      updateQuery({ state: null, city: null, zipcode: null })
+                    }
+                    type="button"
+                  >
+                    Clear geography
+                  </button>
+                ) : null}
                 <button
                   className="button secondary"
                   onClick={() => setGeographyDrawerOpen(true)}
@@ -2865,6 +2949,12 @@ export function PriceMonitoringWorkspace({
           onModeChange={setOverviewMapMode}
           view={view}
         />
+      ) : null}
+      {loading ? (
+        <div className="pi-route-loading" role="status" aria-live="polite">
+          <span aria-hidden="true" />
+          <strong>Loading governed product evidence…</strong>
+        </div>
       ) : null}
 
       {openLocation ? (

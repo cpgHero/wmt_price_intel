@@ -30,9 +30,9 @@ test("serves the application shell, workflow routes, and health route", async ({
   expect(reports.ok()).toBe(true);
   expect(await reports.text()).toContain("Competitive intelligence library");
 
-  const matchWorkbench = await request.get("/workspace/matches");
-  expect(matchWorkbench.ok()).toBe(true);
-  expect(await matchWorkbench.text()).toContain("Match Workbench");
+  const matchCertification = await request.get("/workspace/matches");
+  expect(matchCertification.ok()).toBe(true);
+  expect(await matchCertification.text()).toContain("Match Certification");
 
   const brandWorkbench = await request.get("/workspace/brands");
   expect(brandWorkbench.ok()).toBe(true);
@@ -68,7 +68,7 @@ test("serves the branded shell and no-flash theme controls", async ({
   expect(html).toContain("Home");
   expect(html).toContain("Analytics");
   expect(html).not.toContain(">Workspace<");
-  expect(html).toContain("Match Workbench");
+  expect(html).toContain("Match Certification");
   expect(html).toContain("Brand Workbench");
   expect(html).toContain("Competitive Intelligence");
   expect(html).toContain("Study Discovery");
@@ -97,7 +97,7 @@ test("supports the responsive application navigation", async ({ page }) => {
   await administrationGroup.click();
   await expect(administrationGroup).toHaveAttribute("aria-expanded", "true");
   await expect(
-    sidebar.getByRole("link", { name: "Match Workbench" }),
+    sidebar.getByRole("link", { name: "Match Certification" }),
   ).toBeVisible();
   await expect(
     sidebar.getByRole("link", { name: "Brand Workbench" }),

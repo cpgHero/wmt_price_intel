@@ -111,8 +111,6 @@ def certify_competitive_product_leadership(
         relationship_id = str(row.get("relationship_id") or "")
         gap = row.get("competitor_minus_benchmark")
         reduction = row.get("comparison_value_reduction_to_lead")
-        ladder_raw = row.get("price_ladder")
-        ladder = dict(ladder_raw) if isinstance(ladder_raw, dict) else None
 
         check(status in _STATUSES, f"{label}: unsupported status {status!r}")
         check(
@@ -132,48 +130,6 @@ def certify_competitive_product_leadership(
             str(benchmark.get("product_id")),
         )
         product_identities[benchmark_identity] = benchmark
-
-        check(ladder is not None, f"{label}: price ladder is unavailable")
-        if ladder is not None:
-            rungs = _rows(ladder.get("rungs"))
-            rung_prices = [
-                float(dict(rung.get("location") or {}).get("comparison_value") or 0)
-                for rung in rungs
-            ]
-            benchmark_rungs = [rung for rung in rungs if rung.get("is_benchmark") is True]
-            check(bool(rungs), f"{label}: price ladder has no rungs")
-            check(
-                rung_prices == sorted(rung_prices),
-                f"{label}: price ladder is not ordered from lowest to highest",
-            )
-            check(
-                len(benchmark_rungs) == 1,
-                f"{label}: price ladder must contain exactly one benchmark rung",
-            )
-            check(
-                int(ladder.get("rung_count") or 0) == len(rungs),
-                f"{label}: price ladder rung count does not reconcile",
-            )
-            if benchmark_rungs:
-                benchmark_rung = benchmark_rungs[0]
-                check(
-                    str(dict(benchmark_rung.get("location") or {}).get("scope_key") or "")
-                    == str(benchmark.get("scope_key") or ""),
-                    f"{label}: price ladder benchmark location differs from the outcome",
-                )
-                check(
-                    int(ladder.get("benchmark_rank") or 0)
-                    == int(benchmark_rung.get("price_rank") or 0),
-                    f"{label}: price ladder benchmark rank does not reconcile",
-                )
-            if rung_prices:
-                check(
-                    _close(
-                        ladder.get("gap_to_leader"),
-                        float(benchmark.get("comparison_value") or 0) - rung_prices[0],
-                    ),
-                    f"{label}: price ladder gap to leader does not reconcile",
-                )
 
         if status == "unscored":
             check(competitor is None, f"{label}: unscored row has competitor evidence")
@@ -244,6 +200,61 @@ def certify_competitive_product_leadership(
             if distance is not None:
                 check(float(distance) <= radius + 0.01, f"{label}: competitor is outside radius")
 
+    ladder = dict(document.get("price_ladder_summary") or {})
+    ladder_rows = _rows(ladder.get("rows"))
+    benchmark_rows = [row for row in ladder_rows if row.get("is_benchmark") is True]
+    check(
+        len(benchmark_rows) == (1 if outcomes else 0),
+        "footprint price ladder benchmark product count does not reconcile",
+    )
+    check(
+        [int(row.get("position") or 0) for row in ladder_rows]
+        == list(range(1, len(ladder_rows) + 1)),
+        "footprint price ladder positions are not contiguous",
+    )
+    check(
+        [float(row.get("price_median") or 0) for row in ladder_rows]
+        == sorted(float(row.get("price_median") or 0) for row in ladder_rows),
+        "footprint price ladder is not ordered by median comparison price",
+    )
+    check(
+        int(ladder.get("benchmark_observed_locations") or 0) == len(outcomes),
+        "footprint price ladder benchmark observation count does not reconcile",
+    )
+    comparable_locations = int(ladder.get("comparable_benchmark_locations") or 0)
+    rank_one_locations = int(ladder.get("benchmark_rank_one_locations") or 0)
+    check(
+        0 <= rank_one_locations <= comparable_locations <= len(outcomes),
+        "footprint price ladder location counts are invalid",
+    )
+    expected_rank_one_rate = (
+        round(rank_one_locations / comparable_locations, 4) if comparable_locations else None
+    )
+    check(
+        _close(ladder.get("benchmark_rank_one_rate"), expected_rank_one_rate),
+        "footprint price ladder rank-one rate does not reconcile",
+    )
+    seen_ladder_products: set[tuple[str, str]] = set()
+    for index, row in enumerate(ladder_rows):
+        label = f"price_ladder_summary.rows[{index}]"
+        identity = (str(row.get("retailer_id") or ""), str(row.get("product_id") or ""))
+        check(identity not in seen_ladder_products, f"{label}: product is duplicated")
+        seen_ladder_products.add(identity)
+        minimum = float(row.get("price_minimum") or 0)
+        median_price = float(row.get("price_median") or 0)
+        maximum = float(row.get("price_maximum") or 0)
+        check(0 < minimum <= median_price <= maximum, f"{label}: price range is invalid")
+        comparisons = int(row.get("comparison_locations") or 0)
+        if row.get("is_benchmark") is not True:
+            classified = sum(
+                int(row.get(field) or 0)
+                for field in (
+                    "below_benchmark_locations",
+                    "tied_benchmark_locations",
+                    "above_benchmark_locations",
+                )
+            )
+            check(classified == comparisons, f"{label}: price position counts do not reconcile")
     expected_summary = _summary(outcomes)
     reported_summary = dict(document.get("summary") or {})
     for field, expected in expected_summary.items():

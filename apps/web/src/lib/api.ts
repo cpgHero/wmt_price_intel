@@ -159,6 +159,7 @@ export interface AssortmentProduct {
   canonical_product_id: string;
   name: string;
   brand?: string | null;
+  brand_type?: "private_label" | "regional" | "national" | "unclassified";
   image_url?: string | null;
   url?: string | null;
   seller?: string | null;

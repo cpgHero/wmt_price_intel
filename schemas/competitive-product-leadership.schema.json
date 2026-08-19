@@ -15,6 +15,7 @@
     "filter_options",
     "policy",
     "summary",
+    "price_ladder_summary",
     "state_summaries",
     "city_summaries",
     "competitor_summaries",
@@ -22,7 +23,7 @@
     "outcomes"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -130,6 +131,7 @@
       }
     },
     "summary": { "$ref": "#/$defs/summary" },
+    "price_ladder_summary": { "$ref": "#/$defs/footprintPriceLadder" },
     "state_summaries": {
       "type": "array",
       "items": { "$ref": "#/$defs/geographySummary" }
@@ -331,8 +333,75 @@
         "distance_miles": { "type": ["number", "null"], "minimum": 0 },
         "competitor_minus_benchmark": { "type": ["number", "null"] },
         "comparison_value_reduction_to_lead": { "type": ["number", "null"], "minimum": 0 }
-        ,
-        "price_ladder": { "$ref": "#/$defs/priceLadder" }
+      }
+    },
+    "footprintPriceLadder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "definition",
+        "benchmark_observed_locations",
+        "comparable_benchmark_locations",
+        "benchmark_rank_one_locations",
+        "benchmark_rank_one_rate",
+        "median_benchmark_rank",
+        "rows"
+      ],
+      "properties": {
+        "definition": { "type": "string", "minLength": 1 },
+        "benchmark_observed_locations": { "type": "integer", "minimum": 0 },
+        "comparable_benchmark_locations": { "type": "integer", "minimum": 0 },
+        "benchmark_rank_one_locations": { "type": "integer", "minimum": 0 },
+        "benchmark_rank_one_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "median_benchmark_rank": { "type": ["number", "null"], "minimum": 1 },
+        "rows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/footprintPriceLadderRow" }
+        }
+      }
+    },
+    "footprintPriceLadderRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "retailer_id",
+        "retailer_name",
+        "product_id",
+        "product_name",
+        "brand",
+        "brand_type",
+        "image_url",
+        "is_benchmark",
+        "comparison_locations",
+        "footprint_rate",
+        "price_median",
+        "price_minimum",
+        "price_maximum",
+        "median_gap_to_benchmark",
+        "below_benchmark_locations",
+        "tied_benchmark_locations",
+        "above_benchmark_locations"
+      ],
+      "properties": {
+        "position": { "type": "integer", "minimum": 1 },
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_name": { "type": "string", "minLength": 1 },
+        "product_id": { "type": "string", "minLength": 1 },
+        "product_name": { "type": "string", "minLength": 1 },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "image_url": { "type": ["string", "null"], "format": "uri" },
+        "is_benchmark": { "type": "boolean" },
+        "comparison_locations": { "type": "integer", "minimum": 0 },
+        "footprint_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "price_median": { "type": "number", "exclusiveMinimum": 0 },
+        "price_minimum": { "type": "number", "exclusiveMinimum": 0 },
+        "price_maximum": { "type": "number", "exclusiveMinimum": 0 },
+        "median_gap_to_benchmark": { "type": ["number", "null"] },
+        "below_benchmark_locations": { "type": "integer", "minimum": 0 },
+        "tied_benchmark_locations": { "type": "integer", "minimum": 0 },
+        "above_benchmark_locations": { "type": "integer", "minimum": 0 }
       }
     },
     "priceLadder": {
@@ -397,7 +466,13 @@
         "competitor_id",
         "competitor_name",
         "benchmark_product_id",
+        "benchmark_product_name",
+        "benchmark_image_url",
         "competitor_product_id",
+        "competitor_product_name",
+        "competitor_brand",
+        "competitor_brand_type",
+        "competitor_image_url",
         "profile_id",
         "profile_label",
         "comparison_metric",
@@ -410,7 +485,13 @@
         "competitor_id": { "type": "string", "minLength": 1 },
         "competitor_name": { "type": "string", "minLength": 1 },
         "benchmark_product_id": { "type": "string", "minLength": 1 },
+        "benchmark_product_name": { "type": "string", "minLength": 1 },
+        "benchmark_image_url": { "type": ["string", "null"], "format": "uri" },
         "competitor_product_id": { "type": "string", "minLength": 1 },
+        "competitor_product_name": { "type": "string", "minLength": 1 },
+        "competitor_brand": { "type": ["string", "null"] },
+        "competitor_brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "competitor_image_url": { "type": ["string", "null"], "format": "uri" },
         "profile_id": { "type": "string", "minLength": 1 },
         "profile_label": { "type": "string", "minLength": 1 },
         "comparison_metric": { "type": "string", "minLength": 1 },

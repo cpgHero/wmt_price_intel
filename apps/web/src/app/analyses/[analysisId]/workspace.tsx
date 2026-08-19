@@ -13,7 +13,11 @@ import {
 } from "@/app/components/application-context";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
-import { comparableCohort, type ComparableCohort } from "@/lib/cohort-model";
+import {
+  comparableCohort,
+  comparableCohorts,
+  type ComparableCohort,
+} from "@/lib/cohort-model";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -68,6 +72,30 @@ const tabs = [
 ] as const;
 
 type Tab = (typeof tabs)[number];
+
+function brandTypeSummary(
+  products: ScorecardProductSummary[],
+  side: "benchmark" | "competitor",
+) {
+  const labels = {
+    private_label: "private label",
+    regional: "regional",
+    national: "national",
+    unclassified: "unclassified",
+  } as const;
+  const counts = new Map<string, number>();
+  for (const product of products) {
+    const brandType =
+      side === "benchmark"
+        ? product.benchmark_brand_type
+        : product.competitor_brand_type;
+    counts.set(brandType, (counts.get(brandType) ?? 0) + 1);
+  }
+  return (["private_label", "regional", "national", "unclassified"] as const)
+    .filter((brandType) => counts.has(brandType))
+    .map((brandType) => `${counts.get(brandType)} ${labels[brandType]}`)
+    .join(" · ");
+}
 
 export function AnalysisWorkspace({
   analysis,
@@ -434,28 +462,22 @@ function BlueprintAnalysisWorkspace({
   const reviewDecision = (
     decision: ProductDecision | ScorecardProductSummary,
   ) => {
-    const pairReference =
-      decision.relationship_id ||
-      `${decision.benchmark_product_id}::${decision.competitor_product_id}`;
     const parameters = new URLSearchParams();
+    parameters.set("pack", reportView.product_pack.id);
     const competitor = competitorOptions.find((option) =>
       matchesRetailer(decision.competitor, option),
     )?.id;
     if (competitor) parameters.set("competitor", competitor);
-    if (decision.profile_id) parameters.set("lens", decision.profile_id);
-    parameters.set("pair", pairReference);
-    router.push(
-      `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}?${parameters.toString()}`,
-    );
+    parameters.set("benchmark_product", decision.benchmark_product_id);
+    parameters.set("competitor_product", decision.competitor_product_id);
+    router.push(`/admin/matching-v2?${parameters.toString()}`);
   };
   const openMatchWorkbench = () => {
     const parameters = new URLSearchParams();
+    parameters.set("pack", reportView.product_pack.id);
     if (selectedCompetitor !== "all")
       parameters.set("competitor", selectedCompetitor);
-    if (selectedLens) parameters.set("lens", selectedLens);
-    router.push(
-      `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}?${parameters.toString()}`,
-    );
+    router.push(`/admin/matching-v2?${parameters.toString()}`);
   };
   const selectedRetailer =
     competitorOptions.find((option) => option.id === selectedCompetitor) ??
@@ -518,9 +540,35 @@ function BlueprintAnalysisWorkspace({
             selectedCohort,
             reportView.match_candidates ?? [],
             reportView.product_decisions ?? [],
+            reportView.assortment_analysis ?? null,
           )
         : [],
-    [reportView.match_candidates, reportView.product_decisions, selectedCohort],
+    [
+      reportView.assortment_analysis,
+      reportView.match_candidates,
+      reportView.product_decisions,
+      selectedCohort,
+    ],
+  );
+  const cohortPairEvidence = Object.fromEntries(
+    comparableCohorts(cohortRecords).map((cohort) => {
+      const products = cohortProductSummaries(
+        cohort,
+        reportView.match_candidates ?? [],
+        reportView.product_decisions ?? [],
+        reportView.assortment_analysis ?? null,
+      );
+      return [
+        cohort.id,
+        {
+          pairCount: products.length,
+          benchmarkBrandTypes:
+            brandTypeSummary(products, "benchmark") || "brand type unresolved",
+          competitorBrandTypes:
+            brandTypeSummary(products, "competitor") || "brand type unresolved",
+        },
+      ];
+    }),
   );
   const openCohortRecord = (record: JsonObject) => {
     const cohort = comparableCohort(record);
@@ -821,11 +869,10 @@ function BlueprintAnalysisWorkspace({
           action: reportView.match_governance.ambiguous
             ? {
                 label: `Review ${reportView.match_governance.ambiguous.toLocaleString()} ambiguous matches`,
-                href: `/workspace/matches/${encodeURIComponent(analysis.analysis_id)}`,
+                href: `/admin/matching-v2?pack=${encodeURIComponent(reportView.product_pack.id)}`,
                 parameters: {
                   competitor:
                     selectedCompetitor === "all" ? null : selectedCompetitor,
-                  lens: selectedLens || null,
                 },
               }
             : undefined,
@@ -845,6 +892,7 @@ function BlueprintAnalysisWorkspace({
     readiness,
     reportView.comparison_bases,
     reportView.match_governance,
+    reportView.product_pack.id,
     certificationCoverage,
     selectedCertificationCoverage,
     reportedRelationshipCount,
@@ -927,6 +975,7 @@ function BlueprintAnalysisWorkspace({
         {activeGroup === "product-leadership" ? (
           <ProductLeadershipWorkspace
             analysisId={analysis.analysis_id}
+            productPackId={reportView.product_pack.id}
             competitorId={selectedCompetitor}
             profileId={selectedLens}
             productId={selectedLeadershipProduct}
@@ -976,8 +1025,8 @@ function BlueprintAnalysisWorkspace({
                 }
                 ambiguousMatches={reportView.match_governance.ambiguous}
                 onReviewMatches={openMatchWorkbench}
-                onOpenAssortment={() => selectGroup("assortment")}
                 onOpenCohort={setSelectedCohort}
+                pairEvidence={cohortPairEvidence}
               />
             ) : null}
             {activeGroup === "price-segments" && selectedCohort ? (
@@ -1232,60 +1281,45 @@ function AssortmentAnalysisPanel({
   competitors: RetailerOption[];
   selected: RetailerOption | null;
 }>) {
-  const comparisons = selected
+  const [requestedCompetitorId, setRequestedCompetitorId] = useState(
+    selected?.id ?? competitors[0]?.id ?? "",
+  );
+  const activeCompetitorId =
+    selected?.id ??
+    (competitors.some((competitor) => competitor.id === requestedCompetitorId)
+      ? requestedCompetitorId
+      : (competitors[0]?.id ?? ""));
+  const activeCompetitor =
+    competitors.find((competitor) => competitor.id === activeCompetitorId) ??
+    competitors[0] ??
+    null;
+  const comparisons = activeCompetitor
     ? data.comparisons.filter((row) =>
-        matchesRetailer(row.competitor, selected),
+        matchesRetailer(row.competitor, activeCompetitor),
       )
-    : data.comparisons;
+    : [];
   const benchmarkSummary = data.retailers.find((row) =>
     matchesRetailer(row.retailer, benchmark),
   );
   return (
     <div className="assortment-analysis">
-      <div className="specialist-context-strip assortment-context-strip">
-        <p>
-          <strong>{benchmark.name} assortment scope</strong>
-          Product counts come from in-scope Search results. Product Pack rules
-          admit relationships across the available comparison lenses; unmatched
-          products are whitespace signals for review, not assumed substitutes.
-        </p>
-        <aside>
-          <small>{benchmark.name} observed assortment</small>
-          <strong>
-            {benchmarkSummary?.distinct_products.toLocaleString() ?? "—"}
-          </strong>
-          <span>
-            products across{" "}
-            {benchmarkSummary?.observed_locations.toLocaleString() ?? "—"}{" "}
-            locations
-          </span>
-        </aside>
-      </div>
-      <div className="assortment-model-guide">
-        <article>
-          <small>Item relationship</small>
-          <strong>One primary product ↔ one competitor product</strong>
-          <span>
-            Governed in Match Review and used for auditable price evidence.
-          </span>
-        </article>
-        <article>
-          <small>Comparable cohort</small>
-          <strong>
-            Multiple one-to-one pairs with the same specifications
-          </strong>
-          <span>
-            Used for category price rollups without changing match cardinality.
-          </span>
-        </article>
-        <article className="active">
-          <small>Assortment rollup</small>
-          <strong>Range, brand breadth, whitespace, and geography</strong>
-          <span>
-            Describes observed choice; it does not declare substitute products.
-          </span>
-        </article>
-      </div>
+      <nav
+        className="assortment-retailer-tabs"
+        aria-label="Competitor assortment"
+      >
+        {competitors.map((competitor) => (
+          <button
+            aria-current={
+              competitor.id === activeCompetitor?.id ? "page" : undefined
+            }
+            key={competitor.id}
+            onClick={() => setRequestedCompetitorId(competitor.id)}
+            type="button"
+          >
+            {benchmark.name} vs. {competitor.name}
+          </button>
+        ))}
+      </nav>
       {comparisons.map((comparison) => {
         const competitor =
           competitors.find((row) =>
@@ -1764,7 +1798,7 @@ function RetailerScorecardPanel({
             ? `${rows[0].competitor} scorecard`
             : "Retailer scorecard"
         }
-        note={`Each row names its governed Product Pack comparison basis. Lower-price shares include ${benchmark.name}, the competitor, and parity; the price-position statement uses the paired median gap. Open the included-products view to see the governed product relationships behind each scorecard.`}
+        note={`Each row names its persisted Product Pack comparison basis. These publication scorecards retain their legacy exact-ZIP geography; use Product Leadership for current 1-, 3-, or 5-mile physical-store analysis and same-ZIP service-area analysis. Open a row's relationship-pair view to inspect its governed product identities.`}
       >
         <div className="retailer-scorecard-table">
           <div className="retailer-scorecard-head">
@@ -1779,9 +1813,6 @@ function RetailerScorecardPanel({
               productsByScorecard.get(
                 `${row.competitor_id}::${row.profile_id}`,
               ) ?? [];
-            const hasAggregateOnlyRelationships = includedProducts.some(
-              (product) => !product.evidence_available,
-            );
             return (
               <div
                 className="retailer-scorecard-row"
@@ -1810,8 +1841,8 @@ function RetailerScorecardPanel({
                   </span>
                   <small>
                     {row.matched_geographies === null
-                      ? "Matched ZIP count unavailable"
-                      : `${row.matched_geographies.toLocaleString()} matched ZIP markets`}
+                      ? "Legacy exact-ZIP count unavailable"
+                      : `${row.matched_geographies.toLocaleString()} legacy exact-ZIP markets`}
                   </small>
                   <button
                     type="button"
@@ -1819,9 +1850,7 @@ function RetailerScorecardPanel({
                     onClick={() => setSelectedScorecard(row)}
                   >
                     {includedProducts.length > 0
-                      ? hasAggregateOnlyRelationships
-                        ? `View ${includedProducts.length.toLocaleString()} governed relationship${includedProducts.length === 1 ? "" : "s"}`
-                        : `View ${includedProducts.length.toLocaleString()} included product${includedProducts.length === 1 ? "" : "s"}`
+                      ? `View ${includedProducts.length.toLocaleString()} relationship pair${includedProducts.length === 1 ? "" : "s"}`
                       : "Product summary unavailable"}
                   </button>
                 </div>
@@ -2030,7 +2059,7 @@ function IncludedProductsDrawer({
             <strong>{matches.toLocaleString()}</strong>
           </div>
           <div>
-            <span>Matched ZIP markets</span>
+            <span>Legacy exact-ZIP markets</span>
             <strong>{geographies?.toLocaleString() ?? "—"}</strong>
           </div>
           <div>
@@ -2262,7 +2291,7 @@ function ScorecardProductRow({
                     : "Analysis-source pair · not yet governed"}
           </span>
           <button type="button" onClick={onReviewMatch}>
-            Open match details →
+            Open in Match Certification →
           </button>
         </footer>
       </div>
@@ -2559,8 +2588,8 @@ function ProductDecisionBoard({
                 <p className="product-decision-statistic">{gapPosition}</p>
                 <p>
                   {evidence?.benchmark_store_observations
-                    ? `${evidence.benchmark_store_observations.toLocaleString()} observed benchmark stores across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} matched ZIP markets.`
-                    : `${row.geographies.toLocaleString()} matched ZIP markets in the analytical comparison.`}
+                    ? `${evidence.benchmark_store_observations.toLocaleString()} observed benchmark stores across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} legacy exact-ZIP markets.`
+                    : `${row.geographies.toLocaleString()} legacy exact-ZIP markets in this publication comparison.`}
                 </p>
                 <span className="product-card-action">
                   View stores and download evidence →
@@ -2812,7 +2841,7 @@ function ProductEvidenceDrawer({
                     </p>
                     <span>
                       <button type="button" onClick={onReviewMatch}>
-                        Open in Match Workbench
+                        Open in Match Certification
                       </button>
                       <a
                         href={`/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence?format=csv`}
@@ -3454,7 +3483,7 @@ function AnalysisMap({
           {coverage.slice(0, 3).map((row) => (
             <div className="map-coverage-row" key={row.competitor}>
               <span>{row.competitor}</span>
-              <b>{row.geographies.toLocaleString()} matched ZIP markets</b>
+              <b>{row.geographies.toLocaleString()} legacy exact-ZIP markets</b>
             </div>
           ))}
         </aside>

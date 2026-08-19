@@ -57,7 +57,8 @@ The report answers questions in this order:
 - Package price and supported normalized unit price, including price per dozen for Eggs.
 - Walmart lower, competitor lower, and parity outcomes with explicit denominators.
 - Absolute and percentage price gaps derived from the same atomic comparison values.
-- Store-level product price ladders, rung gaps, Walmart rank, and opening-price position.
+- Footprint-level product price ladders with local-rank distribution, Walmart rank-one share,
+  product price ranges, and below/tied/above counts. Store Comparisons retains local detail.
 - Retailer, product, store, state, city, and local-radius geographic analysis.
 - Snapshot price dispersion and exception analysis where the current deterministic result
   provides the necessary observations.
@@ -93,8 +94,9 @@ states. They must not be estimated from the current snapshot.
   is not a count of stores or products.
 - **Price gap**: competitor comparison value minus Walmart comparison value at the atomic matched
   observation. A negative value means the competitor is lower.
-- **Price ladder**: ordered valid comparable offers within one match group, geography, time period,
-  and comparison basis. It is not a category-wide sort of unrelated products.
+- **Footprint price ladder**: ordered governed products within one match group, geography, time
+  period, and comparison basis, summarized across the Walmart store footprint. It is not a
+  category-wide sort of unrelated products or a single-store proxy for national position.
 
 A Competitive Price Index may be added only with one prominently documented formula. The preferred
 definition is `Walmart comparison value / competitor comparison value × 100`, where 100 is parity,

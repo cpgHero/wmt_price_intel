@@ -507,7 +507,16 @@ function defaultDraft(reviewCase: ReviewCase): ReviewDraft {
   };
 }
 
-export function MatchingV2ReviewAdmin() {
+interface MatchingReviewInitialContext {
+  productPackId: string | null;
+  competitorRetailerId: string | null;
+  benchmarkProductId: string | null;
+  competitorProductId: string | null;
+}
+
+export function MatchingV2ReviewAdmin({
+  initialContext,
+}: Readonly<{ initialContext?: MatchingReviewInitialContext }>) {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [password, setPassword] = useState("");
   const [queues, setQueues] = useState<QueueSummary[]>([]);
@@ -519,8 +528,12 @@ export function MatchingV2ReviewAdmin() {
   const [replayResult, setReplayResult] = useState<GoldSetReplayResult | null>(
     null,
   );
-  const [competitorFilter, setCompetitorFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("pending");
+  const [competitorFilter, setCompetitorFilter] = useState(
+    initialContext?.competitorRetailerId ?? "all",
+  );
+  const [statusFilter, setStatusFilter] = useState(
+    initialContext?.benchmarkProductId ? "all" : "pending",
+  );
   const [offset, setOffset] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const [error, setError] = useState<string | null>(null);
@@ -543,6 +556,7 @@ export function MatchingV2ReviewAdmin() {
   const [refreshingAI, setRefreshingAI] = useState(false);
   const reviewerInputRef = useRef<HTMLInputElement>(null);
   const queueRequestSequence = useRef(0);
+  const initialEvidenceOpened = useRef(false);
 
   const loadQueues = useCallback(async () => {
     const response = await jsonRequest<{
@@ -556,19 +570,36 @@ export function MatchingV2ReviewAdmin() {
     );
     setQueues(latestQueues);
     setSelectedQueueId(
-      (current) => current ?? latestQueues[0]?.queue_id ?? null,
+      (current) =>
+        current ??
+        latestQueues.find(
+          (queue) => queue.product_pack.id === initialContext?.productPackId,
+        )?.queue_id ??
+        latestQueues[0]?.queue_id ??
+        null,
     );
-  }, []);
+  }, [initialContext?.productPackId]);
 
   const loadQueue = useCallback(async () => {
     if (!selectedQueueId) return;
     const requestSequence = ++queueRequestSequence.current;
     const query = new URLSearchParams({
-      limit: String(PAGE_SIZE),
+      limit: String(
+        initialContext?.benchmarkProductId ||
+          initialContext?.competitorProductId
+          ? BULK_DISCOVERY_PAGE_SIZE
+          : PAGE_SIZE,
+      ),
       offset: String(offset),
     });
     if (competitorFilter !== "all") {
       query.set("competitor_retailer_id", competitorFilter);
+    }
+    if (initialContext?.benchmarkProductId) {
+      query.set("benchmark_product_id", initialContext.benchmarkProductId);
+    }
+    if (initialContext?.competitorProductId) {
+      query.set("competitor_product_id", initialContext.competitorProductId);
     }
     if (statusFilter !== "all") query.set("review_status", statusFilter);
     const response = await jsonRequest<QueueView>(
@@ -576,6 +607,20 @@ export function MatchingV2ReviewAdmin() {
     );
     if (requestSequence !== queueRequestSequence.current) return;
     setView(response);
+    if (!initialEvidenceOpened.current && initialContext?.benchmarkProductId) {
+      const linkedCase = response.cases.find(
+        (reviewCase) =>
+          reviewCase.benchmark_listing.retailer_product_id ===
+            initialContext.benchmarkProductId &&
+          (!initialContext.competitorProductId ||
+            reviewCase.competitor_listing.retailer_product_id ===
+              initialContext.competitorProductId),
+      );
+      if (linkedCase) {
+        initialEvidenceOpened.current = true;
+        setActiveCaseId(linkedCase.case_id);
+      }
+    }
     setActiveCaseId((current) =>
       current &&
       response.cases.some((reviewCase) => reviewCase.case_id === current)
@@ -602,7 +647,14 @@ export function MatchingV2ReviewAdmin() {
         );
       });
     });
-  }, [competitorFilter, offset, selectedQueueId, statusFilter]);
+  }, [
+    competitorFilter,
+    initialContext?.benchmarkProductId,
+    initialContext?.competitorProductId,
+    offset,
+    selectedQueueId,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     void jsonRequest<AdminSession>("/api/admin/session")
@@ -622,6 +674,7 @@ export function MatchingV2ReviewAdmin() {
   useEffect(() => {
     // The state updates occur after the queue fetch resolves; this effect synchronizes
     // the selected server-backed queue whenever its filters change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (session?.authenticated) void loadQueue().catch(handleError);
   }, [loadQueue, queueRefresh, session?.authenticated]);
 

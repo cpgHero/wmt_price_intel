@@ -93,13 +93,6 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
-        label: "Match Workbench",
-        description: "Review and govern product relationships across reports",
-        href: "/workspace/matches",
-        icon: "matches",
-        match: "prefix",
-      },
-      {
         label: "Match Certification",
         description:
           "Single-decision Matching v2 evidence and release gold sets",

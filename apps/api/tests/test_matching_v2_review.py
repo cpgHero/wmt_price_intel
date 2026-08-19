@@ -783,6 +783,8 @@ async def test_review_queue_route_is_authenticated_surface_and_non_authoritative
             "/api/v1/matching-v2/review-queues/milk-release-review-contract-fixture",
             params={
                 "competitor_retailer_id": "aldi_us",
+                "benchmark_product_id": "w-1",
+                "competitor_product_id": "a-1",
                 "review_status": "pending",
                 "limit": 20,
             },
@@ -791,6 +793,8 @@ async def test_review_queue_route_is_authenticated_surface_and_non_authoritative
     assert response.status_code == 200
     assert response.json()["authoritative"] is False
     assert response.json()["filters"]["competitor_retailer_id"] == "aldi_us"
+    assert response.json()["filters"]["benchmark_product_id"] == "w-1"
+    assert response.json()["filters"]["competitor_product_id"] == "a-1"
 
 
 async def test_review_submission_route_is_scoped_to_its_queue() -> None:

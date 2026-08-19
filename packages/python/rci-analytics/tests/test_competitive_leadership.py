@@ -122,14 +122,14 @@ def test_store_leadership_uses_radius_scope_and_mutually_exclusive_statuses() ->
         "at_risk",
         "unscored",
     }
+    assert all("price_ladder" not in row for row in result["outcomes"])
     losing = next(row for row in result["outcomes"] if row["status"] == "losing")
     assert losing["comparison_value_reduction_to_lead"] == 0.26
-    assert losing["price_ladder"]["benchmark_rank"] == 2
-    assert losing["price_ladder"]["gap_to_leader"] == 0.25
-    assert [rung["location"]["comparison_value"] for rung in losing["price_ladder"]["rungs"]] == [
-        3.75,
-        4.0,
-    ]
+    ladder = result["price_ladder_summary"]
+    assert ladder["comparable_benchmark_locations"] == 2
+    assert ladder["benchmark_rank_one_locations"] == 1
+    assert ladder["benchmark_rank_one_rate"] == 0.5
+    assert [row["product_id"] for row in ladder["rows"]] == ["a1", "w1"]
 
 
 def test_unmatched_governed_product_remains_visible_and_every_store_is_unscored() -> None:
@@ -168,7 +168,7 @@ def test_unmatched_governed_product_remains_visible_and_every_store_is_unscored(
     assert certify_competitive_product_leadership(result).ready
 
 
-def test_price_ladder_keeps_the_lowest_local_offer_per_governed_product() -> None:
+def test_footprint_price_ladder_keeps_one_product_position_per_benchmark_store() -> None:
     benchmark = [_observation("walmart_us", "w1", "w-1", -94.21, 4.00)]
     competitors = [
         _observation("aldi_us", "a1", "a-1", -94.205, 3.75),
@@ -206,15 +206,19 @@ def test_price_ladder_keeps_the_lowest_local_offer_per_governed_product() -> Non
         radius_miles=1,
     )
 
-    ladder = result["outcomes"][0]["price_ladder"]
-    assert ladder["rung_count"] == 3
-    assert ladder["benchmark_rank"] == 2
-    assert ladder["lower_priced_alternatives"] == 1
-    assert [rung["location"]["product_id"] for rung in ladder["rungs"]] == [
+    ladder = result["price_ladder_summary"]
+    assert ladder["comparable_benchmark_locations"] == 1
+    assert ladder["median_benchmark_rank"] == 2.0
+    assert ladder["benchmark_rank_one_locations"] == 0
+    assert [row["product_id"] for row in ladder["rows"]] == [
         "a1",
         "w1",
         "a2",
     ]
+    a1 = next(row for row in ladder["rows"] if row["product_id"] == "a1")
+    assert a1["comparison_locations"] == 1
+    assert a1["price_median"] == 3.75
+    assert a1["below_benchmark_locations"] == 1
     assert certify_competitive_product_leadership(result).ready
 
 

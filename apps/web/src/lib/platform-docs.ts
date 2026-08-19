@@ -216,14 +216,9 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Workspace", "Purpose", "Effect"],
           rows: [
             [
-              "Match Workbench",
-              "Inspect and revise currently governed report relationships.",
-              "Creates a revision; reanalysis occurs only when explicitly triggered.",
-            ],
-            [
               "Match Certification",
-              "Approve or reject Matching v2 evidence for release certification.",
-              "One decision is final until flagged; it does not make v2 authoritative by itself.",
+              "Inspect evidence and approve or reject Matching v2 relationships.",
+              "One decision is final until flagged; governed reporting replay remains explicit.",
             ],
             [
               "Brand Workbench",
@@ -325,7 +320,10 @@ export const platformDocumentation: PlatformDocumentation = {
               title: "12. Generate and govern product relationships",
               detail:
                 "High-recall candidates are blocked by known hard conflicts, evaluated against Product Pack tiers, and scoped to local distribution overlap. Price similarity is never a semantic matching signal.",
-              link: { href: "/workspace/matches", label: "Match Workbench" },
+              link: {
+                href: "/admin/matching-v2",
+                label: "Match Certification",
+              },
             },
             {
               title: "13. Materialize local comparisons",
@@ -558,10 +556,7 @@ export const platformDocumentation: PlatformDocumentation = {
       readingTime: "14 min",
       lastVerified,
       status: "Current with limitations",
-      links: [
-        { href: "/workspace/matches", label: "Match Workbench" },
-        { href: "/admin/matching-v2", label: "Match Certification" },
-      ],
+      links: [{ href: "/admin/matching-v2", label: "Match Certification" }],
       blocks: [
         {
           kind: "definitions",
@@ -654,7 +649,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Review current authoritative relationships",
               detail:
-                "Match Workbench is the editing surface for report relationships. Confirm, reject, undo, or manually pair products; changes create revisions and wait for explicit reanalysis.",
+                "Match Certification is the authoritative relationship surface. Inspect product images, PDP and attribute evidence, approve or reject once, and reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
             },
             {
               title: "Independently certify Matching v2",
@@ -841,8 +836,11 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Resolve relationship exceptions",
               detail:
-                "Inspect pair evidence, images, attributes, scope, and alternate lenses. Save revisions, then choose whether they apply only here or to future collections. Trigger reanalysis explicitly when the review set is ready.",
-              link: { href: "/workspace/matches", label: "Match Workbench" },
+                "Inspect pair evidence, images, attributes, scope, and alternate lenses in Match Certification. Approve or reject once, reopen only when explicitly flagged, and trigger governed reporting replay after the review set is ready.",
+              link: {
+                href: "/admin/matching-v2",
+                label: "Match Certification",
+              },
             },
             {
               title: "Certify v2 independently",

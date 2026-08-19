@@ -80,12 +80,14 @@ export function relationshipEvidence(
       benchmarkLocations: evidence.length,
       benchmarkProductName:
         evidence[0]?.benchmark.product_name ??
-        relationship.benchmark_product_id,
+        relationship.benchmark_product_name,
       competitorProductName:
-        sample?.product_name ?? relationship.competitor_product_id,
-      competitorBrand: sample?.brand ?? null,
-      competitorBrandType: sample?.brand_type ?? "unclassified",
-      competitorImageUrl: sample?.image_url ?? null,
+        sample?.product_name ?? relationship.competitor_product_name,
+      competitorBrand: sample?.brand ?? relationship.competitor_brand,
+      competitorBrandType:
+        sample?.brand_type ?? relationship.competitor_brand_type,
+      competitorImageUrl:
+        sample?.image_url ?? relationship.competitor_image_url,
     };
   });
 }

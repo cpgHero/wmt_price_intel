@@ -877,6 +877,8 @@ class MatchingV2ReviewRepository(Protocol):
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        benchmark_product_id: str | None,
+        competitor_product_id: str | None,
         stratum: str | None,
         review_status: str | None,
         offset: int,
@@ -1363,6 +1365,8 @@ class PostgresMatchingV2ReviewRepository:
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        benchmark_product_id: str | None,
+        competitor_product_id: str | None,
         stratum: str | None,
         review_status: str | None,
         offset: int,
@@ -1395,6 +1399,8 @@ class PostgresMatchingV2ReviewRepository:
                 connection,
                 str(queue["id"]),
                 competitor_retailer_id=competitor_retailer_id,
+                benchmark_product_id=benchmark_product_id,
+                competitor_product_id=competitor_product_id,
                 stratum=stratum,
             )
             case_ids = [str(case["id"]) for case in cases]
@@ -1446,6 +1452,8 @@ class PostgresMatchingV2ReviewRepository:
             },
             "filters": {
                 "competitor_retailer_id": competitor_retailer_id,
+                "benchmark_product_id": benchmark_product_id,
+                "competitor_product_id": competitor_product_id,
                 "stratum": stratum,
                 "review_status": review_status,
             },
@@ -1499,6 +1507,8 @@ class PostgresMatchingV2ReviewRepository:
         review_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        benchmark_product_id: str | None,
+        competitor_product_id: str | None,
         stratum: str | None,
     ) -> list[Mapping[str, Any]]:
         rows = (
@@ -1511,6 +1521,12 @@ class PostgresMatchingV2ReviewRepository:
                     WHERE review_queue_id = CAST(:review_queue_id AS uuid)
                       AND (CAST(:competitor_retailer_id AS text) IS NULL
                            OR competitor_retailer_id = CAST(:competitor_retailer_id AS text))
+                      AND (CAST(:benchmark_product_id AS text) IS NULL
+                           OR case_document #>> '{benchmark_listing,retailer_product_id}' =
+                              CAST(:benchmark_product_id AS text))
+                      AND (CAST(:competitor_product_id AS text) IS NULL
+                           OR case_document #>> '{competitor_listing,retailer_product_id}' =
+                              CAST(:competitor_product_id AS text))
                       AND (CAST(:stratum AS text) IS NULL
                            OR stratum = CAST(:stratum AS text))
                     ORDER BY critical DESC, stratum, external_case_id
@@ -1519,6 +1535,8 @@ class PostgresMatchingV2ReviewRepository:
                 {
                     "review_queue_id": review_queue_id,
                     "competitor_retailer_id": competitor_retailer_id,
+                    "benchmark_product_id": benchmark_product_id,
+                    "competitor_product_id": competitor_product_id,
                     "stratum": stratum,
                 },
             )
@@ -3799,6 +3817,8 @@ class MatchingV2ReviewService:
         view = await self.queue_view(
             external_queue_id,
             competitor_retailer_id=None,
+            benchmark_product_id=None,
+            competitor_product_id=None,
             stratum=None,
             review_status=None,
             offset=0,
@@ -4008,6 +4028,8 @@ async def get_matching_v2_review_queue(
     service: MatchingV2ReviewServiceDependency,
     x_rci_admin_token: AdminToken = None,
     competitor_retailer_id: str | None = Query(default=None),
+    benchmark_product_id: str | None = Query(default=None),
+    competitor_product_id: str | None = Query(default=None),
     stratum: str | None = Query(default=None),
     review_status: str | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
@@ -4018,6 +4040,8 @@ async def get_matching_v2_review_queue(
         document = await service.queue_view(
             queue_id,
             competitor_retailer_id=competitor_retailer_id,
+            benchmark_product_id=benchmark_product_id,
+            competitor_product_id=competitor_product_id,
             stratum=stratum,
             review_status=review_status,
             offset=offset,

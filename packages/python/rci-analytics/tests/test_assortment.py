@@ -14,6 +14,7 @@ def _offer(
     store: str,
     *,
     brand: str | None = None,
+    brand_type: str | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
         offer=NormalizedOffer(
@@ -36,7 +37,16 @@ def _offer(
         ),
         in_scope=True,
         scope_reason=None,
-        attributes={},
+        attributes=(
+            {
+                "_brand_governance": {
+                    "status": "resolved",
+                    "role": brand_type,
+                }
+            }
+            if brand_type
+            else {}
+        ),
         metrics={"package_price": Decimal("4.99")},
         review_reasons=(),
     )
@@ -144,6 +154,30 @@ def test_assortment_reports_brand_breadth_and_geographic_concentration() -> None
     assert comparison["ambiguous_competitor_products"] == 1
     assert comparison["benchmark_only_products"] == 5
     assert comparison["competitor_whitespace_products"] == 0
+
+
+def test_assortment_products_retain_governed_brand_type() -> None:
+    accumulator = AssortmentAccumulator()
+    accumulator.add(
+        _offer(
+            "w1",
+            "walmart_us",
+            "w1",
+            "72712",
+            "1",
+            brand="Great Value",
+            brand_type="private_label",
+        )
+    )
+
+    result = accumulator.finalize(
+        benchmark_retailer="walmart_us",
+        competitors=[],
+        profiles=[],
+        matches=[],
+    )
+
+    assert result["retailers"][0]["products"][0]["brand_type"] == "private_label"
 
 
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:

@@ -290,9 +290,10 @@ class PriceMonitoringProjector:
         retailer_options: Iterable[str] = (),
         location_limit: int | None = 1_200,
         product_location_limit: int | None = 200,
+        population: ProductLocationPopulation | None = None,
     ) -> JsonObject:
         context = product_context or {}
-        population = self.canonical_population(
+        population = population or self.canonical_population(
             offers,
             retailer_id=filters.retailer_id,
             location_index=location_index or {},
@@ -300,6 +301,8 @@ class PriceMonitoringProjector:
             product_context=context,
             retailer_options=retailer_options,
         )
+        if population.retailer_id != filters.retailer_id:
+            raise ValueError("prepared product-location population belongs to another retailer")
         admitted = [row.to_price_monitoring_row() for row in population.observations]
         excluded = Counter(dict(population.exclusion_counts))
         conflicting_keys = set(population.conflicting_keys)

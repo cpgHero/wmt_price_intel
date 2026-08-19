@@ -1,7 +1,7 @@
-import { WorkbenchIndex } from "../workbench-index";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default function MatchWorkbenchPage() {
-  return <WorkbenchIndex kind="matches" />;
+  redirect("/admin/matching-v2");
 }

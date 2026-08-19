@@ -64,8 +64,8 @@ export function ComparableCohortExplorer({
   minimumGeographies,
   ambiguousMatches,
   onReviewMatches,
-  onOpenAssortment,
   onOpenCohort,
+  pairEvidence,
 }: Readonly<{
   records: JsonObject[];
   benchmarkName: string;
@@ -73,8 +73,15 @@ export function ComparableCohortExplorer({
   minimumGeographies: number;
   ambiguousMatches: number;
   onReviewMatches: () => void;
-  onOpenAssortment: () => void;
   onOpenCohort: (cohort: ComparableCohort) => void;
+  pairEvidence: Record<
+    string,
+    {
+      pairCount: number;
+      benchmarkBrandTypes: string;
+      competitorBrandTypes: string;
+    }
+  >;
 }>) {
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [sort, setSort] = useState<CohortSort>("evidence");
@@ -115,44 +122,10 @@ export function ComparableCohortExplorer({
         </button>
       </header>
 
-      <div className="comparison-model-guide" aria-label="Comparison hierarchy">
-        <article className="actionable">
-          <button type="button" onClick={onReviewMatches}>
-            <span>1</span>
-            <div>
-              <small>Auditable price evidence</small>
-              <strong>One-to-one item relationships</strong>
-              <p>
-                One primary SKU and one competitor SKU within each eligible
-                comparison basis.
-              </p>
-              <em>Open governed relationships →</em>
-            </div>
-          </button>
-        </article>
-        <article className="active">
-          <span>2</span>
-          <div>
-            <small>Category-level comparison</small>
-            <strong>Comparable Product Pack cohorts</strong>
-            <p>{dimensions}</p>
-            <em>Current view</em>
-          </div>
-        </article>
-        <article className="actionable">
-          <button type="button" onClick={onOpenAssortment}>
-            <span>3</span>
-            <div>
-              <small>Range and whitespace</small>
-              <strong>Assortment rollups</strong>
-              <p>
-                Retailer, brand, and geographic breadth—not assumed substitutes.
-              </p>
-              <em>Open assortment analysis →</em>
-            </div>
-          </button>
-        </article>
-      </div>
+      <p className="cohort-dimension-note">
+        Governed cohort attributes: {dimensions}. Open any row to inspect its
+        included one-to-one product relationships.
+      </p>
 
       <div className="cohort-toolbar">
         <div role="group" aria-label="Cohort outcome">
@@ -196,6 +169,7 @@ export function ComparableCohortExplorer({
       <div className="cohort-list">
         {visible.map((cohort) => {
           const limited = cohort.matchedGeographies < minimumGeographies;
+          const evidence = pairEvidence[cohort.id];
           return (
             <button
               type="button"
@@ -208,9 +182,24 @@ export function ComparableCohortExplorer({
                 <span>{cohort.competitor}</span>
                 <h3>{cohort.segment}</h3>
                 <p>
-                  {cohort.matches.toLocaleString()} matched observations ·{" "}
-                  {cohort.matchedGeographies.toLocaleString()} ZIP markets
+                  {cohort.matches.toLocaleString()} paired location observations
+                  · {cohort.matchedGeographies.toLocaleString()} legacy
+                  exact-ZIP markets
                 </p>
+                <div className="cohort-pair-evidence">
+                  <strong>
+                    {(evidence?.pairCount ?? 0).toLocaleString()} governed
+                    product pairs
+                  </strong>
+                  <span>
+                    {benchmarkName}:{" "}
+                    {evidence?.benchmarkBrandTypes ?? "brand type unresolved"}
+                  </span>
+                  <span>
+                    {cohort.competitor}:{" "}
+                    {evidence?.competitorBrandTypes ?? "brand type unresolved"}
+                  </span>
+                </div>
               </div>
               <div className="cohort-outcome">
                 <span>

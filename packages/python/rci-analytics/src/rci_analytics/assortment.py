@@ -12,6 +12,15 @@ from typing import TypedDict
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord
 
 
+def _brand_type(item: ClassifiedOffer) -> str:
+    governance = item.attributes.get("_brand_governance")
+    if isinstance(governance, dict):
+        value = str(governance.get("role") or governance.get("brand_type") or "")
+        if value in {"private_label", "regional", "national"}:
+            return value
+    return "unclassified"
+
+
 class _BrandWorking(TypedDict):
     brand: str
     product_ids: set[str]
@@ -59,6 +68,7 @@ class AssortmentAccumulator:
                 "canonical_product_id": f"{offer.retailer_id}:{offer.retailer_product_id}",
                 "name": offer.title,
                 "brand": item.attributes.get("brand") or offer.brand,
+                "brand_type": _brand_type(item),
                 "image_url": offer.image_url,
                 "url": offer.product_url,
                 "locations": set(),
@@ -75,6 +85,8 @@ class AssortmentAccumulator:
         product["attribute_variants"][signature] = visible_attributes
         if not product.get("image_url") and offer.image_url:
             product["image_url"] = offer.image_url
+        if product.get("brand_type") == "unclassified":
+            product["brand_type"] = _brand_type(item)
         zipcode = offer.zipcode or "unknown-zip"
         location = f"{zipcode}|{offer.store_number}" if offer.store_number else zipcode
         product["locations"].add(location)

@@ -5927,6 +5927,28 @@ tbody tr:last-child td {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 0.8rem;
 }
+.pi-pdp-media {
+  grid-column: 1 / -1;
+}
+.pi-pdp-media > div {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+}
+.pi-pdp-media a {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  min-height: 96px;
+  padding: 0.4rem;
+  place-items: center;
+}
+.pi-pdp-media img {
+  height: 86px;
+  max-width: 100%;
+  object-fit: contain;
+}
 .pi-pdp-details h3 {
   font-size: 0.66rem;
   margin: 0 0 0.45rem;
@@ -6272,7 +6294,44 @@ tbody tr:last-child td {
   grid-template-columns:
     minmax(250px, 2.35fr) minmax(72px, 0.72fr)
     minmax(100px, 0.95fr) minmax(170px, 1.5fr)
-    minmax(74px, 0.72fr) minmax(74px, 0.72fr) minmax(90px, 0.82fr);
+    minmax(74px, 0.72fr) minmax(90px, 0.82fr);
+}
+.pi-catalog-grain-note {
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.5;
+  padding: 0 0.2rem;
+}
+.pi-route-loading {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  display: flex;
+  gap: 0.65rem;
+  left: 50%;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  top: 78px;
+  transform: translateX(-50%);
+  z-index: 90;
+}
+.pi-route-loading span {
+  animation: pi-route-spin 780ms linear infinite;
+  border: 2px solid color-mix(in srgb, var(--green) 22%, transparent);
+  border-radius: 50%;
+  border-top-color: var(--green);
+  height: 18px;
+  width: 18px;
+}
+.pi-route-loading strong {
+  font-size: 0.63rem;
+}
+@keyframes pi-route-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .pi-product-table-head {
   color: var(--muted);
@@ -9949,6 +10008,16 @@ tbody tr:last-child td {
 .cohort-explorer-header p {
   margin: 0;
 }
+.cohort-dimension-note {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.68rem 0.8rem;
+}
 .cohort-explorer-header h2 {
   font-size: 1.25rem;
   margin-top: 0.2rem;
@@ -10176,6 +10245,27 @@ tbody tr:last-child td {
   color: var(--muted);
   font-size: 0.62rem;
 }
+.cohort-pair-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+}
+.cohort-pair-evidence strong,
+.cohort-pair-evidence span {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  padding: 0.18rem 0.4rem;
+  text-transform: none;
+}
+.cohort-pair-evidence strong {
+  color: var(--ink);
+}
 .cohort-outcome strong {
   font-size: 0.76rem;
   line-height: 1.35;
@@ -10334,6 +10424,31 @@ tbody tr:last-child td {
 .assortment-analysis {
   display: grid;
   gap: 1.2rem;
+}
+.assortment-retailer-tabs {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding: 0.4rem;
+}
+.assortment-retailer-tabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 0.58rem 0.72rem;
+}
+.assortment-retailer-tabs button[aria-current="page"] {
+  background: var(--green-soft);
+  border-color: color-mix(in srgb, var(--green) 35%, var(--line));
+  color: var(--green-dark);
 }
 .assortment-hero {
   align-items: center;

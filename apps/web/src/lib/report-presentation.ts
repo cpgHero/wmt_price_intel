@@ -1,6 +1,7 @@
 import type {
   AnalysisReportView,
   AssortmentAnalysis,
+  AssortmentProduct,
   JsonObject,
   ProductDecision,
   ProductMatchCandidate,
@@ -112,11 +113,15 @@ export interface ScorecardProductSummary {
   match_attributes: Record<string, unknown>;
   benchmark_product_id: string;
   benchmark_product_name: string;
+  benchmark_brand_type:
+    "private_label" | "regional" | "national" | "unclassified";
   benchmark_image_url: string | null;
   benchmark_product_url: string | null;
   competitor: string;
   competitor_product_id: string;
   competitor_product_name: string;
+  competitor_brand_type:
+    "private_label" | "regional" | "national" | "unclassified";
   competitor_image_url: string | null;
   competitor_product_url: string | null;
   matches: number;
@@ -131,6 +136,33 @@ export interface ScorecardProductSummary {
   median_gap: number | null;
   stance: ProductDecisionStance;
   evidence_available: boolean;
+}
+
+type ProductBrandType = ScorecardProductSummary["benchmark_brand_type"];
+
+function assortmentProductIndex(assortment: AssortmentAnalysis | null) {
+  return new Map(
+    (assortment?.retailers ?? []).flatMap((retailer) =>
+      (retailer.products ?? []).map(
+        (product) =>
+          [
+            `${retailerIdentityToken(retailer.retailer)}::${product.product_id}`,
+            product,
+          ] as const,
+      ),
+    ),
+  );
+}
+
+function governedBrandType(
+  products: Map<string, AssortmentProduct>,
+  retailer: string,
+  productId: string,
+): ProductBrandType {
+  return (
+    products.get(`${retailerIdentityToken(retailer)}::${productId}`)
+      ?.brand_type ?? "unclassified"
+  );
 }
 
 /**
@@ -264,12 +296,14 @@ function scopedProductSummaries(
         "match_attributes" in row ? (row.match_attributes ?? {}) : {},
       benchmark_product_id: source.benchmark_product_id,
       benchmark_product_name: source.benchmark_product_name,
+      benchmark_brand_type: "unclassified",
       benchmark_image_url: source.benchmark_image_url ?? null,
       benchmark_product_url: source.benchmark_product_url ?? null,
       competitor: source.competitor,
       competitor_product_id: source.competitor_product_id,
       competitor_product_name:
         source.competitor_product_name ?? source.competitor_product_id,
+      competitor_brand_type: "unclassified",
       competitor_image_url: source.competitor_image_url ?? null,
       competitor_product_url: source.competitor_product_url ?? null,
       matches,
@@ -401,11 +435,13 @@ export function scorecardProductSummaries(
         match_attributes: {},
         benchmark_product_id: benchmarkProductId,
         benchmark_product_name: benchmarkProduct?.name ?? benchmarkProductId,
+        benchmark_brand_type: benchmarkProduct?.brand_type ?? "unclassified",
         benchmark_image_url: benchmarkProduct?.image_url ?? null,
         benchmark_product_url: benchmarkProduct?.url ?? null,
         competitor: scorecard.competitor_id,
         competitor_product_id: competitorProductId,
         competitor_product_name: competitorProduct?.name ?? competitorProductId,
+        competitor_brand_type: competitorProduct?.brand_type ?? "unclassified",
         competitor_image_url: competitorProduct?.image_url ?? null,
         competitor_product_url: competitorProduct?.url ?? null,
         matches: 0,
@@ -422,12 +458,27 @@ export function scorecardProductSummaries(
         evidence_available: false,
       } satisfies ScorecardProductSummary;
     });
-  return [...summaries, ...identityOnly].sort(
-    (left, right) =>
-      Number(right.evidence_available) - Number(left.evidence_available) ||
-      right.matches - left.matches ||
-      left.benchmark_product_name.localeCompare(right.benchmark_product_name),
-  );
+  const brandProducts = assortmentProductIndex(assortment);
+  return [...summaries, ...identityOnly]
+    .map((summary) => ({
+      ...summary,
+      benchmark_brand_type: governedBrandType(
+        brandProducts,
+        scorecard.benchmark_retailer_id,
+        summary.benchmark_product_id,
+      ),
+      competitor_brand_type: governedBrandType(
+        brandProducts,
+        scorecard.competitor_id,
+        summary.competitor_product_id,
+      ),
+    }))
+    .sort(
+      (left, right) =>
+        Number(right.evidence_available) - Number(left.evidence_available) ||
+        right.matches - left.matches ||
+        left.benchmark_product_name.localeCompare(right.benchmark_product_name),
+    );
 }
 
 function comparableAttributeValue(value: unknown): string {
@@ -451,6 +502,7 @@ export function cohortProductSummaries(
   },
   candidates: ProductMatchCandidate[],
   decisions: ProductDecision[],
+  assortment: AssortmentAnalysis | null = null,
 ): ScorecardProductSummary[] {
   const products = scopedProductSummaries(
     {
@@ -463,10 +515,24 @@ export function cohortProductSummaries(
     false,
     true,
   );
-  if (cohort.overall) return products;
+  const productIndex = assortmentProductIndex(assortment);
+  const enrichedProducts = products.map((product) => ({
+    ...product,
+    benchmark_brand_type: governedBrandType(
+      productIndex,
+      assortment?.benchmark_retailer ?? "",
+      product.benchmark_product_id,
+    ),
+    competitor_brand_type: governedBrandType(
+      productIndex,
+      cohort.competitorId,
+      product.competitor_product_id,
+    ),
+  }));
+  if (cohort.overall) return enrichedProducts;
   const cohortAttributes = Object.entries(cohort.attributes);
   if (!cohortAttributes.length) return [];
-  return products.filter((product) =>
+  return enrichedProducts.filter((product) =>
     cohortAttributes.every(
       ([name, value]) =>
         comparableAttributeValue(product.match_attributes[name]) ===
