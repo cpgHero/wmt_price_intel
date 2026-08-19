@@ -1355,9 +1355,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-19",
-              "Implemented; production verification pending",
+              "Deployed and production-verified",
               "Retailer scorecard product drilldowns distinguish authoritative aggregate metrics from relationship-level evidence availability.",
-              "The drawer first uses persisted per-relationship outcomes when they exist. If an immutable publication contains only a retailer-level aggregate, it resolves the certified relationship IDs to governed assortment product identities and labels them as aggregate-only instead of inventing product-level prices, shares, or locations. This closes the ShopRite empty-drawer defect without weakening scorecard authority or changing any metric.",
+              "The drawer first uses persisted per-relationship outcomes when they exist. If an immutable publication contains only a retailer-level aggregate, it resolves the certified relationship IDs to governed assortment product identities and labels them as aggregate-only instead of inventing product-level prices, shares, or locations. This closes the ShopRite empty-drawer defect without weakening scorecard authority or changing any metric. GitHub Actions run 32252437430 passed Python, TypeScript, 13 browser tests, migrations, contracts, and all four container builds. Production now exposes all four ShopRite governed relationships behind the unchanged 167-observation / 55-ZIP scorecard, and the live browser console is clean.",
             ],
             [
               "2026-08-18",
