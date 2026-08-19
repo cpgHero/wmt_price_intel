@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.15",
+  version: "1.3.16",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -1359,9 +1359,9 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "2026-08-19",
-              "Implemented and test-verified; current-code Egg replay pending",
+              "Deployed and production-verified",
               "Competitive Product Leadership was flattened into eight first-class report tabs while retaining one shared analytical context.",
-              "The nested Product Leadership tab and internal workspace rail are removed. Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, and Competitive History now sit beside Executive Overview, Price Architecture, Assortment & Whitespace, and Data Integrity. Legacy bookmarked Product Leadership URLs are translated to the corresponding first-class tab. An idle prewarm and shared immutable response cache remove repeated cold requests when moving among leadership tabs. Current-code rebuilds now allocate immutable replay generations under an advisory lock and require a reason; only that explicit rebuild path may resolve an archived immutable source after recoverable report cleanup. Ordinary replay behavior remains active-source-only and idempotent. The change does not alter metric formulas, store grain, match governance, or Search/PDP authority. GitHub Actions runs 32288372400, 32288974552, and 32289709810 passed the full Python, contract, migration, TypeScript, browser, and container gates for the flat navigation, prewarm cache, and replay-generation foundation.",
+              "The nested Product Leadership tab and internal workspace rail are removed. Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, and Competitive History now sit beside Executive Overview, Price Architecture, Assortment & Whitespace, and Data Integrity. Legacy bookmarked Product Leadership URLs are translated to the corresponding first-class tab. An idle prewarm and shared immutable response cache remove repeated cold requests when moving among leadership tabs. Current-code rebuilds now allocate immutable replay generations under an advisory lock and require a reason; only that explicit rebuild path may resolve an archived immutable source after recoverable report cleanup. Ordinary replay behavior remains active-source-only and idempotent. Egg generation 2 run 7ff16d97-8fb4-4d26-8698-a59339343ac2 succeeded as fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e-r2 with exact 185-case coverage, 183 comparable decisions, one not-comparable decision, one unresolved exclusion, and no automatic fallback. Compatible-spec exposes 11 of 13 retailer views and 11,062 matched observations; strict exact-spec independently exposes three retailer views and 537 observations. A Target check for product 10449724 increases monotonically from 496 scored benchmark stores at one mile to 1,255 at three miles and 1,743 at five miles against the same 3,068-store denominator. All twelve first-class tabs render. GitHub Actions runs 32288372400, 32288974552, 32289709810, and 32290777122 passed the full Python, contract, migration, TypeScript, browser, and container gates.",
             ],
             [
               "2026-08-19",

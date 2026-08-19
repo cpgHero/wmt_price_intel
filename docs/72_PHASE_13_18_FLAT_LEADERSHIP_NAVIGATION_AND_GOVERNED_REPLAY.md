@@ -1,6 +1,6 @@
 # Phase 13.18 — Flat Leadership Navigation and Governed Replay
 
-Status: navigation and replay-generation implementation test-verified; current-code Egg replay pending
+Status: deployed and production-verified
 
 ## Outcome
 
@@ -78,3 +78,22 @@ tests; a replay must not merely relabel old ZIP metrics as radius metrics.
    unchanged relationship and benchmark footprint.
 8. First-load latency and cached-load latency are measured separately; a slow request may not
    yield a partial or stale result.
+
+## Production verification
+
+- CI run `32290777122` passed Python, contracts, migration round trips, TypeScript, unit tests,
+  thirteen browser tests, and the API, web, worker, and scheduler container builds.
+- Generation 2 run `7ff16d97-8fb4-4d26-8698-a59339343ac2` succeeded on its first attempt and
+  produced result `82e98dbb-5c9e-465e-af1a-cd029ae65d45` / analysis
+  `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e-r2`.
+- The result preserves release `de5fc82e-27e9-40c4-a284-ffea2989f261`, checksum
+  `970b02be6e171c5649b3c9c6e66be138fdcbf01d2fce7b80f6f62fc21e9fbc35`, all 185 selected
+  candidates, 183 certified-comparable decisions, one certified-not-comparable decision, and one
+  unresolved exclusion. Automatic fallback is disabled.
+- Compatible-spec renders evidence for 11 of 13 retailers and 11,062 matched observations;
+  strict exact-spec independently renders three of 13 retailers and 537 matched observations.
+- A Target physical-store check for benchmark product `10449724` reconciles monotonically from
+  496 scored stores at one mile to 1,255 at three miles and 1,743 at five miles, against the same
+  3,068 observed benchmark-store denominator.
+- All twelve first-class report tabs render populated or explicit capability-bounded states. No
+  nested Product Leadership rail remains.
