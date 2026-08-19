@@ -192,25 +192,32 @@ export function PriceArchitectureMatrixWorkspace({
   const [metric, setMetric] = useState<CellMetric>("products");
   const [brandType, setBrandType] = useState(initialBrandType);
   const [matrix, setMatrix] = useState<PriceArchitectureMatrix | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [settledRequest, setSettledRequest] = useState("");
+  const [requestError, setRequestError] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
   const [selected, setSelected] = useState<{
     rung: MatrixRung;
     cell: MatrixCell;
     retailerName: string;
   } | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const requestKey = useMemo(() => {
     const query = new URLSearchParams(methodQuery(method));
     query.set("brand_type", brandType);
     if (state) query.set("state", state);
     if (city) query.set("city", city);
     if (zipcode) query.set("zipcode", zipcode);
-    setLoading(true);
-    setError(null);
+    return query.toString();
+  }, [brandType, city, method, state, zipcode]);
+  const loading = settledRequest !== requestKey;
+  const error = requestError?.key === requestKey ? requestError.message : null;
+
+  useEffect(() => {
+    const controller = new AbortController();
     fetch(
-      `/api/price-monitoring/${encodeURIComponent(analysisId)}/architecture-matrix?${query.toString()}`,
+      `/api/price-monitoring/${encodeURIComponent(analysisId)}/architecture-matrix?${requestKey}`,
       { signal: controller.signal },
     )
       .then(async (response) => {
@@ -223,19 +230,23 @@ export function PriceArchitectureMatrixWorkspace({
           );
         }
         setMatrix((await response.json()) as PriceArchitectureMatrix);
+        setRequestError(null);
+        setSettledRequest(requestKey);
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError")
           return;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "The price architecture matrix could not be loaded.",
-        );
-      })
-      .finally(() => setLoading(false));
+        setRequestError({
+          key: requestKey,
+          message:
+            reason instanceof Error
+              ? reason.message
+              : "The price architecture matrix could not be loaded.",
+        });
+        setSettledRequest(requestKey);
+      });
     return () => controller.abort();
-  }, [analysisId, brandType, city, method, state, zipcode]);
+  }, [analysisId, requestKey]);
 
   const availableRetailers = matrix?.retailers.filter(
     (retailer) => retailer.status === "available",
