@@ -97,3 +97,7 @@ tests; a replay must not merely relabel old ZIP metrics as radius metrics.
   3,068 observed benchmark-store denominator.
 - All twelve first-class report tabs render populated or explicit capability-bounded states. No
   nested Product Leadership rail remains.
+- Scorecard zero states reconcile certification separately from price evidence. A retailer with
+  certified comparable products but no positive-price observations under the selected geography
+  and comparison basis is labeled `no_admissible_observations`, never as having no governed
+  relationships.

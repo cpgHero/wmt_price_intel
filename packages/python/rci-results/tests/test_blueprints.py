@@ -653,6 +653,37 @@ def test_retailer_scorecards_keep_missing_basis_as_an_explicit_zero_state() -> N
     assert profiles["compatible"]["status"] == "limited_evidence"
 
 
+def test_certified_relationship_without_price_evidence_is_not_labeled_unmatched() -> None:
+    result = _result()
+    result["comparison_modes"].append(
+        {
+            "profile_id": "compatible",
+            "label": "Compatible specification",
+            "geography": "exact_zip",
+            "comparison_metric": "package_price",
+            "dimensions": [],
+        }
+    )
+    result["source"]["matching_v2_certification_coverage"] = {
+        "retailers": [
+            {
+                "competitor_retailer_id": "aldi_us",
+                "certified_comparable_count": 2,
+            }
+        ]
+    }
+    product_pack = json.loads(
+        (REPOSITORY_ROOT / "product-packs/fresh_ground_beef.json").read_text()
+    )
+
+    scorecards = ReportProjector().retailer_scorecards(result, product_pack)
+    profiles = {row["profile_id"]: row for row in scorecards if row["competitor_id"] == "aldi_us"}
+
+    assert profiles["compatible"]["matches"] is None
+    assert profiles["compatible"]["evidence_state"] == "no_admissible_observations"
+    assert "Certified comparable products exist" in profiles["compatible"]["readiness_reason"]
+
+
 def test_matching_v2_incomplete_certification_blocks_report_readiness() -> None:
     result = _result()
     result["source"]["matching_v2_certification_coverage"] = {

@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
+from typing import Any
 
 from rci_contracts import ContractError, validate_instance
 from rci_results.models import ArtifactType, JsonObject
@@ -939,6 +940,11 @@ class ReportProjector:
             product_decisions=product_decisions or [],
             product_evidence=product_evidence or {},
             benchmark_name=benchmark_name,
+            certification_coverage=(
+                result.get("source", {}).get("matching_v2_certification_coverage")
+                if isinstance(result.get("source"), dict)
+                else None
+            ),
         )
 
     def _retailer_scorecard(
@@ -1080,6 +1086,7 @@ class ReportProjector:
         product_evidence: JsonObject,
         benchmark_name: str,
         match_relationships: list[JsonObject] | None = None,
+        certification_coverage: Mapping[str, Any] | None = None,
     ) -> list[JsonObject]:
         """Fill zero aggregate scorecards from governed relationship evidence."""
 
@@ -1102,6 +1109,17 @@ class ReportProjector:
             for profile_id in profile_ids:
                 if competitor and profile_id:
                     relationships_by_scope[(competitor, profile_id)].append(relationship)
+        certified_comparable_by_retailer = {
+            str(row.get("competitor_retailer_id") or ""): int(
+                row.get("certified_comparable_count") or 0
+            )
+            for row in (
+                certification_coverage.get("retailers", [])
+                if isinstance(certification_coverage, Mapping)
+                else []
+            )
+            if isinstance(row, Mapping)
+        }
         for scorecard in scorecards:
             competitor_id = str(scorecard.get("competitor_id") or "")
             profile_id = str(scorecard.get("profile_id") or "")
@@ -1129,11 +1147,11 @@ class ReportProjector:
                 scorecard["evidence_state"] = "reported"
                 continue
             if not decisions:
-                if relationships:
+                if relationships or certified_comparable_by_retailer.get(competitor_id, 0) > 0:
                     scorecard["evidence_state"] = "no_admissible_observations"
                     scorecard["readiness_reason"] = (
-                        "Governed comparable products exist, but no price observations met "
-                        "the selected geography and comparison-basis requirements."
+                        "Certified comparable products exist, but no positive-price observations "
+                        "met the selected geography and comparison-basis requirements."
                     )
                 else:
                     scorecard["evidence_state"] = "no_governed_relationships"

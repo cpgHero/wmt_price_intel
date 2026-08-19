@@ -2140,6 +2140,7 @@ class ArtifactRenderer:
             product_evidence=_mapping(view, "product_evidence"),
             benchmark_name=_display(view.get("benchmark_retailer") or "Reference retailer"),
             match_relationships=_rows(view, "match_relationships"),
+            certification_coverage=_mapping(view, "certification_coverage"),
         )
         self._apply_report_integrity(view, result)
         # Reconciliation and integrity checks run against the complete immutable

@@ -83,7 +83,7 @@ const lastVerified = "August 19, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.16",
+  version: "1.3.17",
   lastVerified,
   baseline:
     "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
@@ -1353,9 +1353,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-19",
-              "Implemented and local test-verified; deployment pending",
+              "Deployed and production-verified",
               "Governed Matching v2 releases support explicit immutable current-code rebuild generations.",
               "A normal source-analysis plus gold-set replay remains idempotent. A forced rebuild now requires a non-empty audit reason, serializes concurrent generation allocation, increments replay_generation, and produces a new analysis ID with an -rN suffix while retaining the exact source result, Product Pack, gold-set release, checksum, coverage, certified labels, and automatic-fallback prohibition. The prior analysis and publication remain immutable. Migration downgrade fails closed if rebuilt generations exist.",
+            ],
+            [
+              "2026-08-19",
+              "Implemented and test-verified; deployment pending",
+              "Retailer scorecard zero states now reconcile certified relationships independently from admissible store-price observations.",
+              "A retailer with certified comparable products but no positive-price observations under the selected comparison basis and geography is labeled as having no admissible observations. It is never mislabeled as having no governed relationships. This preserves the distinction between match certification and reportable store-price overlap for sparse retailer evidence such as Sam's Club and Trader Joe's.",
             ],
             [
               "2026-08-19",
