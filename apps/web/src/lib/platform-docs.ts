@@ -1360,9 +1360,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implementation in progress",
+              "Deployed and production-verified",
               "Observed Brand Breadth product evidence no longer links to the separate Price Intelligence product-footprint workspace.",
-              "Brand drill-downs retain the complete governed product list, imagery, identities, and observed-location counts while removing the cross-module Open product footprint action. Other assortment evidence paths preserve their existing behavior. No metric, brand membership, Search evidence, PDP evidence, certification decision, or audit lineage changes.",
+              "Brand drill-downs retain the complete governed product list, imagery, identities, and observed-location counts while removing the cross-module Open product footprint action. Live Egg verification opened Walmart Great Value directly from Observed Brand Breadth, reconciled all 43 product records, and found zero footprint links in the drawer. GitHub Actions run 32424338633 passed contracts, formatting, lint, type checking, all Python and web tests, 13 browser tests, reversible migrations, production builds, and all four service containers. Other assortment evidence paths preserve their existing behavior. No metric, brand membership, Search evidence, PDP evidence, certification decision, or audit lineage changes.",
             ],
             [
               "2026-08-20",

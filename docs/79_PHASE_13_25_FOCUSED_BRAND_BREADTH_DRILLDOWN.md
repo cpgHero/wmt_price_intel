@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation in progress on August 20, 2026.
+Deployed and production-verified on August 20, 2026.
 
 ## Change
 
@@ -22,4 +22,11 @@ usage, AI usage, or audit lineage.
 
 ## Verification
 
-Pending focused TypeScript, lint, unit, build, and live-browser verification.
+The release passed TypeScript, lint, all 68 web tests, formatting, and a local
+production Next.js build. GitHub Actions run `32424338633` passed the complete
+release gate, including Python, contracts, reversible migrations, 13 browser
+tests, and all four service-container builds.
+
+Live verification opened Walmart Great Value from Observed Brand Breadth in
+the governed Egg report. The drawer rendered all 43 governed product records
+and contained zero `Open product footprint` links.
