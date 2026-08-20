@@ -86,7 +86,7 @@ export const platformDocumentation: PlatformDocumentation = {
   version: "1.3.22",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3; pre-materialized radius cohort and assortment conversion implemented with production verification pending",
+    "Production implementation through Egg Product Pack 1.2.3 with production-verified pre-materialized radius-native retailer, cohort, and assortment scorecards",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1360,9 +1360,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implemented and test verification in progress; deployment pending",
+              "Deployed and production-verified",
               "Cohort and Assortment Scorecards now consume the radius-native competitive portfolio and gain durable publication-time read models.",
-              "Cohort rates, medians, gaps, denominators, and product contributions are projected by the API from certified product-location outcomes under the selected retailer, basis, geography, and 1/3/5-mile context; the browser no longer presents legacy exact-ZIP cohort metrics. Assortment preserves global product/brand breadth while adding explicit local comparable coverage and clickable evidence cards. Migration 0043_competitive_portfolio_materialization stores one all-retailer document per immutable analysis, profile, and radius; publication builds these documents sequentially with bounded inner concurrency and zero provider or AI calls. State/city variants remain on-demand. No report or source evidence is archived by this change.",
+              "Cohort rates, medians, gaps, denominators, and product contributions are projected by the API from certified product-location outcomes under the selected retailer, basis, geography, and 1/3/5-mile context; the browser no longer presents legacy exact-ZIP cohort metrics. Assortment preserves global product/brand breadth while adding explicit local comparable coverage and clickable evidence cards. Migration 0043_competitive_portfolio_materialization stores one all-retailer document per immutable analysis, profile, and radius; publication builds these documents sequentially with bounded inner concurrency and zero provider or AI calls. The Egg publication materialized six documents in 236.6 seconds. Compatible-spec exposes 104 certified relationships, 41 cohorts, and 7,597 / 13,596 / 16,846 scored product-locations at 1 / 3 / 5 miles; strict exact-spec exposes four relationships, five cohorts, and 508 / 519 / 531 scored product-locations. Every populated scorecard reconciles Walmart-lower, competitor-lower, and parity to 100%, and cached API reads completed in 2–25 ms. GitHub Actions run 32405497085 passed 597 Python tests, 66 web/contract tests, 13 browser tests, reversible migrations, builds, and all four containers. State/city variants remain on-demand. No report or source evidence was archived by this change.",
             ],
             [
               "2026-08-20",

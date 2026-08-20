@@ -1,6 +1,6 @@
 # Phase 13.22 — Pre-materialized Radius Cohort and Assortment Scorecards
 
-Status: implemented; production verification pending
+Status: deployed and production-verified
 
 ## Purpose
 
@@ -60,5 +60,26 @@ combination space is unbounded.
 
 ## Verification
 
-Contract, API aggregation, migration, TypeScript, UI, and production reconciliation evidence will be
-recorded here before the status changes to deployed and production-verified.
+The production Egg publication
+`fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-80afd160` was
+materialized into six documents: strict and compatible comparison profiles at 1, 3, and 5 miles.
+The operation completed in 236.6 seconds with zero provider or AI calls.
+
+Production reconciliation found:
+
+- all six documents use schema `1.1.0` and contain all 13 configured competitor scorecards;
+- compatible-spec retains 104 certified relationships and 41 Product Pack cohorts, with 7,597,
+  13,596, and 16,846 scored product-locations at 1, 3, and 5 miles respectively;
+- strict exact-spec retains four certified relationships and five cohorts, with 508, 519, and 531
+  scored product-locations at 1, 3, and 5 miles respectively;
+- Walmart-lower, competitor-lower, and parity rates reconcile to 100% for every scorecard with a
+  scored denominator;
+- cached in-service API reads completed in 2–25 milliseconds during the six-document verification;
+- the live report shell returned HTTP 200, exposed Retailer, Cohort, and Assortment Scorecards, and
+  contained no legacy `Exact ZIP` or `ZIP markets` wording; and
+- production Postgres is at Alembic revision `0043_comp_portfolio_mat`, while the API and web are
+  running commit `bf806dca12736bab6e7683f24b17a65dd2e6f9b9`.
+
+GitHub Actions run `32405497085` passed 597 Python tests with 13 environment-gated skips, 66 web
+and contract tests, 13 Playwright tests, reversible migrations, schema generation, formatting,
+linting, type checks, production builds, and all four service container builds.
