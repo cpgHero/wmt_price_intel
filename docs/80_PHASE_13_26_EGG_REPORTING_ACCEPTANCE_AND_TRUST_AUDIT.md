@@ -2,8 +2,9 @@
 
 ## Status
 
-Implemented and focused-test verified on August 20, 2026. Full release-gate,
-deployment, governed replay, and production acceptance remain pending.
+Deployed and release-gate verified on August 20, 2026. The governed replay and
+production reporting acceptance remain pending the one final human
+certification decision described below.
 
 ## Purpose
 
@@ -121,6 +122,14 @@ and monotonic radius behavior.
 
 No MetricsCart or OpenAI calls are required by this phase. No source data, PDP
 evidence, certification history, publication, or audit lineage is deleted.
+
+GitHub Actions run `32427778056` passed contracts, formatting, lint, type
+checking, the Postgres migration upgrade/downgrade/re-upgrade cycle, 606 Python
+tests with 13 environment-gated local fixtures, 68 web and contract tests, 13
+browser tests, the production Next.js build, and the web, API, worker, and
+scheduler container builds. Railway API and worker services were verified to
+be running commit `04aab97`, including the new relationship projection and
+semantic release audit.
 
 ## Production acceptance requirements
 
