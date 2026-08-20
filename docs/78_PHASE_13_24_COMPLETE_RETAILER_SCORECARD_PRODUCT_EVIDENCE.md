@@ -1,6 +1,6 @@
 # Phase 13.24 — Complete Retailer Scorecard Product Evidence
 
-Status: implementation and verification in progress
+Status: deployed and production-verified
 
 ## Purpose
 
@@ -58,3 +58,17 @@ basis, denominators, price-position rates, immutable evidence, or audit lineage.
 - Web type, unit, lint, format, build, and browser suites.
 - Production Egg walkthrough proving the action count includes both retailer assortments, paired
   identities render without overflow, and search finds a competitor product.
+
+## Production verification
+
+- GitHub Actions run `32422896275` passed contract generation, formatting, lint, mypy, all Python
+  and TypeScript tests, reversible migrations, the 13-test browser suite, the production build, and
+  all four service-container builds.
+- Railway deployed API and web commit `5a0155e5455a2547452187698ca7ce1f02cbc71f` successfully.
+- All six Egg portfolio documents were refreshed from retained evidence with zero provider calls.
+- The compatible-spec, three-mile Target scorecard exposes 15 distinct products—nine Walmart and
+  six Target—across 12 certified relationship rows. All 12 rows contain both product identities.
+- The live drawer renders 12 Walmart and 12 Target identity blocks, bounds every inspected image to
+  58 by 58 pixels, and has a 980-pixel content width and 980-pixel scroll width (no horizontal
+  overflow). Searching Target product ID `95248045` returns its three certified relationships.
+- The live browser reported no warning or error console entries during the walkthrough.

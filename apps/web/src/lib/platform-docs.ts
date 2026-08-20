@@ -1360,9 +1360,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implementation and verification in progress",
+              "Deployed and production-verified",
               "Retailer Scorecards now expose every Walmart and competitor product included in certified relationships.",
-              "Competitive portfolio schema 1.2.0 adds paired relationship evidence with both product identities, imagery, competitor brand context, comparison basis, and relationship-selected local outcomes. The action count includes distinct products from both retailers, and the drawer renders compact Walmart-versus-competitor rows searchable by either product name, ID, or competitor brand. Stored schema 1.1.0 portfolio materializations rebuild from retained certified evidence instead of serving the prior Walmart-only drill-through. Aggregate scorecard formulas and selection rules are unchanged; no report, source evidence, certification history, or audit lineage is deleted, and no provider or AI call is required.",
+              "Competitive portfolio schema 1.2.0 adds paired relationship evidence with both product identities, imagery, competitor brand context, comparison basis, and relationship-selected local outcomes. The action count includes distinct products from both retailers, and the drawer renders compact Walmart-versus-competitor rows searchable by either product name, ID, or competitor brand. Stored schema 1.1.0 portfolio materializations rebuild from retained certified evidence instead of serving the prior Walmart-only drill-through. All six Egg portfolio documents were refreshed with zero provider calls. Live Target verification found 15 distinct products (nine Walmart and six Target) across 12 complete relationship rows; images render at 58 pixels, the 980-pixel drawer has no horizontal overflow, competitor-ID search works, and the console is clean. GitHub Actions run 32422896275 passed the full release gate. Aggregate scorecard formulas and selection rules are unchanged; no report, source evidence, certification history, or audit lineage is deleted.",
             ],
             [
               "2026-08-20",
