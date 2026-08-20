@@ -168,6 +168,14 @@ decision, and one explicitly flagged case. The flagged Walmart `654756038` versu
 `0001111087023` relationship remains excluded because Walmart housing evidence is unknown while
 the Kroger item is known cage-free. No approved relationship has an active certification blocker.
 
+Product Pack 1.2.3 subsequently introduced additive scope exclusions only. Fail-closed scope-only
+succession proved that all 185 listing pairs and their governed evidence remained semantically
+identical, then carried the 184 finalized decisions into exhaustive queue 4.0.0 while retaining the
+single unresolved case. Gold-set release `80afd160-5d31-45ff-a5bb-ac36bd648a38` and its immutable
+production replay are therefore the current Egg reporting authority. This transition made no paid
+provider or AI calls; see `docs/74_PHASE_13_20_EGG_SCOPE_GOVERNANCE.md` for complete release and
+matrix verification evidence.
+
 ## Governed replay identity
 
 Every Matching v2 reporting replay is bound to an immutable gold-set release. The analysis-run

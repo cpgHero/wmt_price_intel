@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 19, 2026";
+const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.19",
+  version: "1.3.20",
   lastVerified,
   baseline:
-    "Production implementation through Egg matching-policy 1.2.2; trust-recovery release deployed and production-reconciled",
+    "Production implementation through Egg Product Pack 1.2.3; scope-governance release deployed and production-reconciled",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1356,9 +1356,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implemented and locally verified; production activation pending",
+              "Deployed and production-verified",
               "Fresh Shell Eggs Product Pack 1.2.3 removes prepared-food, substitute, appliance, bakery, and personal-care scope noise and adds fail-closed scope-only certification continuity.",
-              "A full 393,110-row source rebuild removes 47 product identities and 5,651 observations while retaining the exact same 185 governed listing pairs across 13 competitors. Scope-only carry-forward requires additive exclusions, an otherwise identical Product Pack and matching policy, pair-level evidence equivalence, retained image evidence, and explicit predecessor provenance. It starts no paid calls and does not trigger reporting automatically. A deliberately broad egg-free rule was rejected because it would also remove legitimate Eggs Free Range titles.",
+              "A full 393,110-row source rebuild removes 47 product identities and 5,651 observations while retaining the exact same 185 governed listing pairs across 13 competitors. Queue 4.0.0 carried all 184 finalized decisions from its exact predecessor and left one unresolved case. Gold-set release 80afd160-5d31-45ff-a5bb-ac36bd648a38 produced immutable replay fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-80afd160 with 183 comparable, one not-comparable, one unresolved, and automatic fallback disabled. Publication pre-materialized all three default matrix methods; live validation found 83 ascending Walmart-anchored rungs, 172 priced Walmart SKUs, 508 competitor SKUs, complete product IDs/location counts, zero known third-party sellers, and zero governed scope-noise titles. Compatible-spec exposes 11,062 matched observations across 11 competitors; strict exposes 537 across three. No paid provider or AI call was made. GitHub Actions run 32336364329 passed every gate.",
             ],
             [
               "2026-08-19",

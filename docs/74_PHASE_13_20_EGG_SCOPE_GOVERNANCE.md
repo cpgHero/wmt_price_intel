@@ -1,6 +1,6 @@
 # Phase 13.20 — Egg Scope Governance and Certified-Decision Continuity
 
-Status: implemented and locally verified; production activation and replay pending
+Status: deployed and production-verified
 
 ## Purpose
 
@@ -72,13 +72,28 @@ analysis automatically.
 - Free Range Egg regression titles remain in scope.
 - Known prepared, substitute, appliance, bakery, and cleanser titles remain out of scope.
 
-## Production sequence
+## Production release — 2026-08-20
 
-1. Deploy and immutably seed Product Pack/report blueprint 1.2.3.
-2. Activate 1.2.3 for new Egg work.
-3. Import exhaustive queue 4.0.0 as a scope-only successor of queue 3.0.0.
-4. Verify 184 finalized decisions carry with provenance and one unresolved case remains pending.
-5. Create a new checksum-bound gold-set release and immutable Egg replay.
-6. Verify Price Intelligence, the Price Architecture Matrix, and Competitive Intelligence against
-   the 1.2.3 scope. Pre-materialize all three default matrix methods during publication.
+The production rollout completed without a paid MetricsCart, PDP, or AI call:
 
+1. Product Pack/report blueprint 1.2.3 was deployed and activated with checksum
+   `c646cf69a7dd2c1270c9d6e3f49aff82a349a4b6b08e0eaad402df428841565f`.
+2. Exhaustive queue 4.0.0 (`a4c19608-3bd3-45ee-a7dd-6797e6e7f19a`) was imported as the
+   scope-only successor of queue 3.0.0. All 184 finalized decisions carried with immutable
+   provenance; the one previously unresolved case remains unresolved.
+3. Gold-set release `80afd160-5d31-45ff-a5bb-ac36bd648a38` reconciles all 185 candidates:
+   183 comparable, one not comparable, and one unresolved. Automatic fallback is disabled.
+4. Immutable replay
+   `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-80afd160` completed and
+   published as version 1 with result checksum
+   `c3aba60922d545cea036281f3bbed0f96df1374c5b262c25ad44150fd4c05b85`.
+5. Publication pre-materialized the Walmart-anchored, fixed $0.50, and fixed $1.00 Price
+   Architecture Matrix documents. The anchored matrix contains 83 ascending rungs, 172 priced
+   Walmart SKUs, and 508 competitor SKUs across all 13 competitor retailers. Every populated
+   product card has a product ID and observed-location count; no known third-party seller or newly
+   excluded scope-noise product appears.
+6. Live browser verification confirmed that Competitive Intelligence changes from 537 strict
+   matched observations across three competitors to 11,062 compatible-spec observations across
+   11 competitors, and that matrix method and brand-type filters use the pre-materialized views.
+7. GitHub Actions run `32336364329` passed 599 Python tests, contract and migration gates,
+   TypeScript checks, 13 Playwright tests, production builds, and all four service-container builds.
