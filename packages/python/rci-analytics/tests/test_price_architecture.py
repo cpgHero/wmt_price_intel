@@ -179,9 +179,7 @@ def test_store_coverage_is_union_of_distinct_locations_not_product_sum() -> None
 def test_products_within_each_rung_are_materialized_by_observed_store_count() -> None:
     matrix = _matrix()
     middle = next(rung for rung in matrix["rungs"] if rung["lower_bound"] == 3.0)
-    target_cell = next(
-        cell for cell in middle["cells"] if cell["retailer_id"] == "target_us"
-    )
+    target_cell = next(cell for cell in middle["cells"] if cell["retailer_id"] == "target_us")
 
     assert [product["product_id"] for product in target_cell["products"]] == ["t2", "t1"]
     assert [product["observed_locations"] for product in target_cell["products"]] == [2, 1]
