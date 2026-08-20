@@ -13,6 +13,11 @@ export function productsForObservedBrand(
 ) {
   const target = brandToken(brand.brand);
   return products.filter(
-    (product) => brandToken(product.observed_brand ?? product.brand) === target,
+    (product) =>
+      brandToken(
+        Object.prototype.hasOwnProperty.call(product, "observed_brand")
+          ? product.observed_brand
+          : product.brand,
+      ) === target,
   );
 }
