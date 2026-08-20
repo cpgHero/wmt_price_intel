@@ -69,6 +69,52 @@ def _metric_display(metric: JsonObject) -> str:
     return f"{float(value):,.2f}"
 
 
+def matching_v2_certification_is_complete(
+    source: JsonObject,
+    competitors: list[str],
+) -> bool:
+    """Return whether an operational Matching v2 snapshot has a final outcome per case.
+
+    Matching identity is independent of legacy exact-ZIP price overlap. A complete exhaustive
+    certification may therefore support radius-native reporting even when one retailer has no
+    legacy comparison row. Older releases without terminal-exclusion accounting remain fail
+    closed rather than being reinterpreted.
+    """
+
+    if not source.get("matching_v2_gold_set_release_id"):
+        return False
+    coverage = source.get("matching_v2_certification_coverage")
+    if not isinstance(coverage, dict):
+        return False
+    pending = coverage.get("pending_unreviewed_count")
+    if pending is None or int(pending) != 0:
+        return False
+    if coverage.get("selection_complete") is not True:
+        return False
+    if coverage.get("automatic_fallback_enabled") is not False:
+        return False
+    queue_cases = int(coverage.get("queue_case_count") or 0)
+    certified = int(coverage.get("certified_label_count") or 0)
+    unresolved = int(coverage.get("unresolved_excluded_count") or 0)
+    reviewed_insufficient = int(coverage.get("reviewed_insufficient_evidence_count") or 0)
+    if queue_cases <= 0 or certified + unresolved != queue_cases:
+        return False
+    if reviewed_insufficient + int(pending) != unresolved:
+        return False
+    retailers = coverage.get("retailers")
+    if not isinstance(retailers, list):
+        return False
+    retailer_ids = {
+        str(row.get("competitor_retailer_id") or "") for row in retailers if isinstance(row, dict)
+    }
+    if retailer_ids != set(competitors):
+        return False
+    return all(
+        isinstance(row, dict) and int(row.get("pending_unreviewed_count") or 0) == 0
+        for row in retailers
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ComparisonFact:
     competitor_id: str
@@ -193,7 +239,13 @@ class AnalysisResultV2Builder:
         matched_competitors = {
             fact.competitor_id for fact in comparison_facts if fact.segment_id == "all"
         }
-        ready_to_share = bool(comparisons) and matched_competitors == set(competitors)
+        matching_v2_certification_ready = matching_v2_certification_is_complete(
+            source,
+            competitors,
+        )
+        ready_to_share = bool(comparisons) and (
+            matched_competitors == set(competitors) or matching_v2_certification_ready
+        )
         result: JsonObject = {
             "schema_version": "2.0.0",
             "analysis_id": analysis_id,
@@ -247,6 +299,19 @@ class AnalysisResultV2Builder:
                             {fact.evidence_ref for fact in comparison_facts} or {source_evidence}
                         ),
                     },
+                    *(
+                        [
+                            {
+                                "id": "matching-v2-certification-complete",
+                                "status": (
+                                    "passed" if matching_v2_certification_ready else "warning"
+                                ),
+                                "evidence_refs": [source_evidence],
+                            }
+                        ]
+                        if source.get("matching_v2_gold_set_release_id")
+                        else []
+                    ),
                 ],
             },
             "insights": insights,

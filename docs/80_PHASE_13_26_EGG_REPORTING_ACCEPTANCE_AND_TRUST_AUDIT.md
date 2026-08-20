@@ -2,11 +2,11 @@
 
 ## Status
 
-Core relationship-preservation and semantic-audit changes were deployed and
-release-gate verified on August 20, 2026. The platform owner has now completed
-all 185 review cases. The governed replay and production reporting acceptance
-remain pending deployment of the terminal insufficient-evidence release
-semantics described below.
+Core relationship-preservation, terminal-exclusion, and semantic-audit changes
+were deployed and release-gate verified on August 20, 2026. The platform owner
+has completed all 185 review cases. A first immutable replay exposed a second
+legacy readiness dependency before publication; the corrected generation-two
+replay and production reporting acceptance remain pending.
 
 ## Purpose
 
@@ -81,6 +81,16 @@ readiness defect rather than a nonblocking warning.
 Publication-time Competitive Intelligence materialization refuses any report
 with a blocking readiness reason.
 
+AnalysisResult validation also treats a complete Matching v2 certification as
+the product-identity authority. It no longer requires every retailer to have a
+legacy exact-ZIP aggregate before radius-native reporting can proceed. This
+exception is deliberately narrow and fail closed: the release must explicitly
+account for every queue case as certified or human-reviewed insufficient
+evidence, contain zero pending cases overall and per retailer, cover the exact
+configured competitor set, declare selection complete, and disable automatic
+fallback. At least one deterministic comparison fact is still required, and
+the downstream six-document semantic audit remains mandatory.
+
 ### Six-document semantic release audit
 
 Every comparison basis must produce one global immutable portfolio document at
@@ -142,6 +152,23 @@ browser tests, the production Next.js build, and the web, API, worker, and
 scheduler container builds. Railway API and worker services were verified to
 be running commit `04aab97`, including the new relationship projection and
 semantic release audit.
+
+The first governed replay used immutable release
+`3c967ecc-17fd-4bad-a749-c223519723d0` and produced analysis
+`fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-3c967ecc`.
+It retained all 183 certified-comparable relationships plus the certified
+not-comparable decision and final insufficient-evidence exclusion, but was not
+promoted: AnalysisResult validation still expected legacy exact-ZIP comparison
+facts for Sam's Club and Trader Joe's. It therefore created no portfolio
+materializations. The failed acceptance artifact remains immutable audit
+evidence and is not treated as an approved report.
+
+The readiness correction has focused regression coverage proving that a
+complete Matching v2 release can supply identity completeness when a retailer
+lacks a legacy exact-ZIP row, while an older or partial release still fails
+closed. Fifty-seven focused analytics, worker, renderer, portfolio API, and
+release-audit tests pass, and full-repository static type checking reports no
+issues.
 
 ## Production acceptance requirements
 

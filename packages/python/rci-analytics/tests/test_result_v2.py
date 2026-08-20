@@ -1,11 +1,159 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from rci_analytics import AnalysisResultV2Builder, ComparisonFact, ProductPackLoader, evidence_set
+from rci_analytics.result_v2 import matching_v2_certification_is_complete
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+
+
+def test_complete_matching_v2_certification_does_not_require_legacy_zip_rows_per_retailer() -> None:
+    coverage: dict[str, Any] = {
+        "selection_complete": True,
+        "queue_case_count": 3,
+        "certified_label_count": 2,
+        "unresolved_excluded_count": 1,
+        "reviewed_insufficient_evidence_count": 1,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+        "retailers": [
+            {
+                "competitor_retailer_id": "sams_club_us",
+                "pending_unreviewed_count": 0,
+            },
+            {
+                "competitor_retailer_id": "target_us",
+                "pending_unreviewed_count": 0,
+            },
+        ],
+    }
+    source = {
+        "matching_v2_gold_set_release_id": "3c967ecc-17fd-4bad-a749-c223519723d0",
+        "matching_v2_certification_coverage": coverage,
+    }
+
+    assert matching_v2_certification_is_complete(
+        source,
+        ["sams_club_us", "target_us"],
+    )
+
+    coverage.pop("pending_unreviewed_count")
+    assert not matching_v2_certification_is_complete(
+        source,
+        ["sams_club_us", "target_us"],
+    )
+
+
+def test_builder_accepts_complete_matching_v2_identity_without_legacy_row_per_retailer() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    source_evidence = evidence_set(
+        "evidence.source",
+        "source_manifest",
+        [("raw-walmart", "a" * 64, 100), ("raw-target", "b" * 64, 100)],
+    )
+    comparison_evidence = evidence_set(
+        "evidence.matches.target.strict",
+        "exact_matches",
+        [("target-match", "c" * 64, 10)],
+    )
+    comparison = ComparisonFact(
+        competitor_id="target_us",
+        profile_id="strict",
+        profile_label="Strict package",
+        geography="exact_zip",
+        comparison_metric="package_price",
+        dimensions=("count", "shell_color"),
+        evidence_ref="evidence.matches.target.strict",
+        values={
+            "matches": 10,
+            "unique_geographies": 10,
+            "benchmark_lower": 6,
+            "competitor_lower": 4,
+            "parity": 0,
+            "benchmark_lower_rate": 0.6,
+            "competitor_lower_rate": 0.4,
+            "parity_rate": 0.0,
+            "median_gap": 0.12,
+        },
+    )
+    coverage_rows = []
+    coverage_evidence = []
+    for index, retailer in enumerate(("walmart_us", "target_us", "sams_club_us"), start=1):
+        evidence = evidence_set(
+            f"evidence.classified.{retailer}",
+            "classified_offers",
+            [(f"classified-{retailer}", f"{index + 3:x}" * 64, 20)],
+        )
+        coverage_evidence.append(evidence)
+        coverage_rows.append(
+            {
+                "retailer_id": retailer,
+                "offers": 20,
+                "in_scope_offers": 20,
+                "in_scope_zips": 10,
+                "in_scope_stores": 10,
+                "evidence_ref": f"evidence.classified.{retailer}",
+            }
+        )
+
+    result = AnalysisResultV2Builder(pack, code_version="test").build(
+        analysis_id="analysis-matching-v2-identity-complete",
+        analysis_run_id="run-matching-v2-identity-complete",
+        generated_at="2026-08-20T12:00:00Z",
+        source={
+            "input_set_id": "input-matching-v2-identity-complete",
+            "kind": "historical_import",
+            "collection_run_id": None,
+            "matching_v2_gold_set_release_id": "3c967ecc-17fd-4bad-a749-c223519723d0",
+            "matching_v2_gold_set_checksum": "f" * 64,
+            "matching_v2_certification_coverage": {
+                "selection_complete": True,
+                "queue_case_count": 3,
+                "certified_label_count": 2,
+                "unresolved_excluded_count": 1,
+                "reviewed_insufficient_evidence_count": 1,
+                "pending_unreviewed_count": 0,
+                "automatic_fallback_enabled": False,
+                "retailers": [
+                    {
+                        "competitor_retailer_id": "target_us",
+                        "pending_unreviewed_count": 0,
+                    },
+                    {
+                        "competitor_retailer_id": "sams_club_us",
+                        "pending_unreviewed_count": 0,
+                    },
+                ],
+            },
+            "observed_start": None,
+            "observed_end": None,
+            "sampling": False,
+            "total_rows": 200,
+            "source_artifact_ids": ["raw-walmart", "raw-target"],
+        },
+        benchmark_retailer="walmart_us",
+        competitors=["target_us", "sams_club_us"],
+        coverage_facts=coverage_rows,
+        comparison_facts=[comparison],
+        data_quality_facts={
+            "normalization_rejections": 0,
+            "review_offers": 0,
+            "zero_or_missing_price_offers": 0,
+        },
+        evidence_sets=[source_evidence, comparison_evidence, *coverage_evidence],
+        raw_source_artifact_ids=["raw-walmart", "raw-target"],
+    )
+
+    assert result["validation"]["status"] == "ready_to_share"
+    certification_check = next(
+        check
+        for check in result["validation"]["checks"]
+        if check["id"] == "matching-v2-certification-complete"
+    )
+    assert certification_check["status"] == "passed"
 
 
 def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
