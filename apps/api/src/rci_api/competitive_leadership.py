@@ -376,7 +376,7 @@ class CompetitiveProductLeadershipService:
                 profile_id=selected_profile,
                 radius_miles=radius_miles,
             )
-            if stored is not None:
+            if stored is not None and stored.get("schema_version") == "1.2.0":
                 if competitor_id != "all":
                     stored["filters"] = {
                         **dict(stored["filters"]),
@@ -496,6 +496,7 @@ class CompetitiveProductLeadershipService:
             }
             outcomes: list[dict[str, Any]] = []
             products: list[dict[str, Any]] = []
+            product_relationships: list[dict[str, Any]] = []
             product_views: dict[str, dict[str, Any]] = {}
             for benchmark_product_id in benchmark_product_ids:
                 view = projected_index.get((retailer_id, benchmark_product_id))
@@ -518,11 +519,77 @@ class CompetitiveProductLeadershipService:
                         **product_summary,
                     }
                 )
+                outcomes_by_relationship: dict[str, list[dict[str, Any]]] = {}
+                for outcome in product_outcomes:
+                    relationship_id = str(outcome.get("relationship_id") or "")
+                    if relationship_id:
+                        outcomes_by_relationship.setdefault(relationship_id, []).append(outcome)
+                for relationship in view.get("relationships", []):
+                    if not isinstance(relationship, dict) or not relationship.get(
+                        "relationship_id"
+                    ):
+                        continue
+                    relationship_id = str(relationship["relationship_id"])
+                    product_relationships.append(
+                        {
+                            "relationship_id": relationship_id,
+                            "competitor_id": str(relationship.get("competitor_id") or retailer_id),
+                            "competitor_name": str(
+                                relationship.get("competitor_name")
+                                or competitor_name_index.get(retailer_id, retailer_id)
+                            ),
+                            "benchmark_product_id": str(
+                                relationship.get("benchmark_product_id") or benchmark_product_id
+                            ),
+                            "benchmark_product_name": str(
+                                relationship.get("benchmark_product_name")
+                                or view.get("benchmark_product", {}).get("name")
+                                or benchmark_product_id
+                            ),
+                            "benchmark_image_url": relationship.get("benchmark_image_url")
+                            or view.get("benchmark_product", {}).get("image_url"),
+                            "competitor_product_id": str(
+                                relationship.get("competitor_product_id") or "Unknown product"
+                            ),
+                            "competitor_product_name": str(
+                                relationship.get("competitor_product_name")
+                                or relationship.get("competitor_product_id")
+                                or "Unknown product"
+                            ),
+                            "competitor_brand": relationship.get("competitor_brand"),
+                            "competitor_brand_type": str(
+                                relationship.get("competitor_brand_type") or "unclassified"
+                            ),
+                            "competitor_image_url": relationship.get("competitor_image_url"),
+                            "profile_id": str(relationship.get("profile_id") or selected_profile),
+                            "profile_label": str(
+                                relationship.get("profile_label") or selected_profile
+                            ),
+                            "comparison_metric": str(
+                                relationship.get("comparison_metric") or "package_price"
+                            ),
+                            "comparison_unit": str(
+                                relationship.get("comparison_unit") or "USD/package"
+                            ),
+                            "scope_mode": str(relationship.get("scope_mode") or "global"),
+                            "scoped_benchmark_locations": int(
+                                relationship.get("scoped_benchmark_locations") or 0
+                            ),
+                            **_portfolio_summary(outcomes_by_relationship.get(relationship_id, [])),
+                        }
+                    )
             products.sort(
                 key=lambda row: (
                     -int(row["scored_product_locations"]),
                     -int(row["benchmark_product_locations"]),
                     str(row["product_name"]).casefold(),
+                )
+            )
+            product_relationships.sort(
+                key=lambda row: (
+                    -int(row["scored_product_locations"]),
+                    str(row["benchmark_product_name"]).casefold(),
+                    str(row["competitor_product_name"]).casefold(),
                 )
             )
             scorecards.append(
@@ -534,6 +601,7 @@ class CompetitiveProductLeadershipService:
                     "relationships": len(relationship_ids),
                     **_portfolio_summary(outcomes),
                     "products": products,
+                    "product_relationships": product_relationships,
                 }
             )
             retailer_segments = [
@@ -603,7 +671,7 @@ class CompetitiveProductLeadershipService:
             )
         )
         result = {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,

@@ -135,7 +135,18 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                         "benchmark_product_id": "w1",
                         "competitor_product_id": "a1",
                         "match_attributes": {"size": "large", "count": 12},
-                    }
+                    },
+                    {
+                        "id": "pair-2",
+                        "relationship_id": "relationship-2",
+                        "relationship_status": "confirmed",
+                        "qa_status": "ready",
+                        "profile_id": "compatible",
+                        "competitor": "aldi_us",
+                        "benchmark_product_id": "w1",
+                        "competitor_product_id": "a2",
+                        "match_attributes": {"size": "large", "count": 12},
+                    },
                 ],
                 "sections": [
                     {
@@ -179,15 +190,56 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                 "name": "Walmart product",
                 "image_url": None,
             },
-            "relationships": [{"relationship_id": "relationship-1"}],
+            "relationships": [
+                {
+                    "relationship_id": "relationship-1",
+                    "competitor_id": "aldi_us",
+                    "competitor_name": "ALDI",
+                    "benchmark_product_id": "w1",
+                    "benchmark_product_name": "Walmart product",
+                    "benchmark_image_url": "https://example.com/w1.png",
+                    "competitor_product_id": "a1",
+                    "competitor_product_name": "ALDI product one",
+                    "competitor_brand": "Friendly Farms",
+                    "competitor_brand_type": "private_label",
+                    "competitor_image_url": "https://example.com/a1.png",
+                    "profile_id": "compatible",
+                    "profile_label": "Compatible package",
+                    "comparison_metric": "package_price",
+                    "comparison_unit": "USD/package",
+                    "scope_mode": "global",
+                    "scoped_benchmark_locations": 2,
+                },
+                {
+                    "relationship_id": "relationship-2",
+                    "competitor_id": "aldi_us",
+                    "competitor_name": "ALDI",
+                    "benchmark_product_id": "w1",
+                    "benchmark_product_name": "Walmart product",
+                    "benchmark_image_url": "https://example.com/w1.png",
+                    "competitor_product_id": "a2",
+                    "competitor_product_name": "ALDI product two",
+                    "competitor_brand": "Friendly Farms",
+                    "competitor_brand_type": "private_label",
+                    "competitor_image_url": "https://example.com/a2.png",
+                    "profile_id": "compatible",
+                    "profile_label": "Compatible package",
+                    "comparison_metric": "package_price",
+                    "comparison_unit": "USD/package",
+                    "scope_mode": "global",
+                    "scoped_benchmark_locations": 2,
+                },
+            ],
             "outcomes": [
                 {
+                    "relationship_id": "relationship-1",
                     "status": "leader",
                     "competitor_minus_benchmark": 0.2,
                     "benchmark": {"comparison_value": 3.0},
                     "competitor": {"comparison_value": 3.2},
                 },
                 {
+                    "relationship_id": "relationship-1",
                     "status": "losing",
                     "competitor_minus_benchmark": -0.1,
                     "benchmark": {"comparison_value": 3.1},
@@ -208,9 +260,17 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
-    assert result["scorecards"][0]["relationships"] == 1
+    assert result["schema_version"] == "1.2.0"
+    assert result["scorecards"][0]["relationships"] == 2
     assert result["scorecards"][0]["products"][0]["product_id"] == "w1"
+    relationships = result["scorecards"][0]["product_relationships"]
+    assert [row["competitor_product_id"] for row in relationships] == ["a1", "a2"]
+    assert relationships[0]["scored_product_locations"] == 2
+    assert relationships[1]["scored_product_locations"] == 0
+    assert relationships[0]["benchmark_product_name"] == "Walmart product"
+    assert relationships[0]["competitor_product_name"] == "ALDI product one"
     assert result["cohorts"][0]["segment"] == "12 each · large"
+    assert result["cohorts"][0]["relationships"] == 2
     assert result["cohorts"][0]["scored_product_locations"] == 2
     assert result["cohorts"][0]["benchmark_median"] == 3.05
     assert result["cohorts"][0]["paired_median_gap"] == 0.05

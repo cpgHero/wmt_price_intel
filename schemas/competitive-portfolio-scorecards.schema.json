@@ -16,7 +16,7 @@
     "assortment_scorecards"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "enum": ["1.1.0", "1.2.0"] },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -114,6 +114,55 @@
         }
       ]
     },
+    "relationshipSummary": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/summary" },
+        {
+          "type": "object",
+          "required": [
+            "relationship_id",
+            "competitor_id",
+            "competitor_name",
+            "benchmark_product_id",
+            "benchmark_product_name",
+            "benchmark_image_url",
+            "competitor_product_id",
+            "competitor_product_name",
+            "competitor_brand",
+            "competitor_brand_type",
+            "competitor_image_url",
+            "profile_id",
+            "profile_label",
+            "comparison_metric",
+            "comparison_unit",
+            "scope_mode",
+            "scoped_benchmark_locations"
+          ],
+          "properties": {
+            "relationship_id": { "type": "string", "minLength": 1 },
+            "competitor_id": { "type": "string", "minLength": 1 },
+            "competitor_name": { "type": "string", "minLength": 1 },
+            "benchmark_product_id": { "type": "string", "minLength": 1 },
+            "benchmark_product_name": { "type": "string", "minLength": 1 },
+            "benchmark_image_url": { "type": ["string", "null"] },
+            "competitor_product_id": { "type": "string", "minLength": 1 },
+            "competitor_product_name": { "type": "string", "minLength": 1 },
+            "competitor_brand": { "type": ["string", "null"] },
+            "competitor_brand_type": {
+              "enum": ["private_label", "regional", "national", "unclassified"]
+            },
+            "competitor_image_url": { "type": ["string", "null"] },
+            "profile_id": { "type": "string", "minLength": 1 },
+            "profile_label": { "type": "string", "minLength": 1 },
+            "comparison_metric": { "type": "string", "minLength": 1 },
+            "comparison_unit": { "type": "string", "minLength": 1 },
+            "scope_mode": { "type": "string", "minLength": 1 },
+            "scoped_benchmark_locations": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
     "scorecard": {
       "unevaluatedProperties": false,
       "allOf": [
@@ -137,6 +186,10 @@
             "products": {
               "type": "array",
               "items": { "$ref": "#/$defs/productSummary" }
+            },
+            "product_relationships": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/relationshipSummary" }
             }
           }
         }

@@ -7,6 +7,7 @@ export type Scorecard = Summary & {
   competitor_products: number;
   relationships: number;
   products: ProductSummary[];
+  product_relationships?: RelationshipSummary[];
   [k: string]: unknown;
 };
 export type ProductSummary = Summary & {
@@ -14,6 +15,26 @@ export type ProductSummary = Summary & {
   product_name: string;
   image_url: string | null;
   relationships: number;
+  [k: string]: unknown;
+};
+export type RelationshipSummary = Summary & {
+  relationship_id: string;
+  competitor_id: string;
+  competitor_name: string;
+  benchmark_product_id: string;
+  benchmark_product_name: string;
+  benchmark_image_url: string | null;
+  competitor_product_id: string;
+  competitor_product_name: string;
+  competitor_brand: string | null;
+  competitor_brand_type: "private_label" | "regional" | "national" | "unclassified";
+  competitor_image_url: string | null;
+  profile_id: string;
+  profile_label: string;
+  comparison_metric: string;
+  comparison_unit: string;
+  scope_mode: string;
+  scoped_benchmark_locations: number;
   [k: string]: unknown;
 };
 export type Cohort = Summary & {
@@ -61,7 +82,7 @@ export type AssortmentScorecard = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
-  schema_version: "1.1.0";
+  schema_version: "1.1.0" | "1.2.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;

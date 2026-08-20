@@ -12398,15 +12398,66 @@ tbody tr:last-child td {
   gap: 0.55rem;
 }
 .radius-scorecard-product-list > article {
-  align-items: center;
+  align-items: start;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 58px minmax(190px, 1fr) minmax(360px, 1.4fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
   min-width: 0;
-  padding: 0.7rem;
+  padding: 0.8rem;
+}
+.radius-scorecard-product-pair {
+  align-items: center;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  min-width: 0;
+}
+.radius-scorecard-product-identity {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 58px minmax(0, 1fr);
+  min-width: 0;
+}
+.radius-scorecard-product-identity > div,
+.radius-scorecard-product-evidence {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.radius-scorecard-product-identity strong {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.radius-scorecard-product-identity span,
+.radius-scorecard-product-identity small,
+.radius-scorecard-product-evidence > small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.35;
+}
+.radius-scorecard-product-identity small {
+  color: var(--green);
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.radius-scorecard-product-versus {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.55rem;
+  font-weight: 850;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
 }
 .radius-scorecard-product-image {
   align-items: center;
@@ -12423,26 +12474,11 @@ tbody tr:last-child td {
   object-fit: contain;
   width: 100%;
 }
-.radius-scorecard-product-list > article > div {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.radius-scorecard-product-list > article > div strong {
-  font-size: 0.75rem;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.radius-scorecard-product-list > article > div span,
-.radius-scorecard-product-list > article > div small {
-  color: var(--muted);
-  font-size: 0.58rem;
-}
 .radius-scorecard-product-list dl {
   display: grid;
   gap: 0.45rem;
-  grid-template-columns: 0.65fr 0.65fr 1.3fr;
-  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.35rem 0 0;
 }
 .radius-scorecard-product-list dl div {
   display: grid;
@@ -12460,6 +12496,18 @@ tbody tr:last-child td {
   font-weight: 800;
   line-height: 1.35;
   margin: 0;
+}
+.radius-scorecard-product-list dl div:last-child {
+  grid-column: 1 / -1;
+}
+.radius-scorecard-product-evidence > p {
+  background: var(--surface-alt);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.45;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
 }
 .cohort-scorecard-workspace {
   display: grid;
@@ -12569,10 +12617,18 @@ tbody tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .radius-scorecard-product-list > article {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
-  .radius-scorecard-product-list dl {
-    grid-column: 1 / -1;
+  .radius-scorecard-product-pair {
+    align-items: start;
+    grid-template-columns: 1fr;
+  }
+  .radius-scorecard-product-versus {
+    height: auto;
+    width: auto;
+  }
+  .radius-scorecard-product-identity {
+    grid-template-columns: 52px minmax(0, 1fr);
   }
   .assortment-brand-drawer-list > button {
     grid-template-columns: 1fr;

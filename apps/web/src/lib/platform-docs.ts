@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.23",
+  version: "1.3.24",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3 with radius-native scorecard presentation reconciliation and governed brand-to-product drill-through",
+    "Production implementation through Egg Product Pack 1.2.3 with complete two-retailer scorecard product evidence and governed brand-to-product drill-through",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implementation and verification in progress",
+              "Retailer Scorecards now expose every Walmart and competitor product included in certified relationships.",
+              "Competitive portfolio schema 1.2.0 adds paired relationship evidence with both product identities, imagery, competitor brand context, comparison basis, and relationship-selected local outcomes. The action count includes distinct products from both retailers, and the drawer renders compact Walmart-versus-competitor rows searchable by either product name, ID, or competitor brand. Stored schema 1.1.0 portfolio materializations rebuild from retained certified evidence instead of serving the prior Walmart-only drill-through. Aggregate scorecard formulas and selection rules are unchanged; no report, source evidence, certification history, or audit lineage is deleted, and no provider or AI call is required.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

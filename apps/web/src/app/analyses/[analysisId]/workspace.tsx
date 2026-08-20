@@ -2103,12 +2103,13 @@ function RadiusRetailerScorecardPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selected]);
-  const filteredProducts = useMemo(() => {
+  const filteredRelationships = useMemo(() => {
     if (!selected) return [];
     const token = query.trim().toLocaleLowerCase("en-US");
-    if (!token) return selected.products;
-    return selected.products.filter((product) =>
-      `${product.product_name} ${product.product_id}`
+    const relationships = selected.product_relationships ?? [];
+    if (!token) return relationships;
+    return relationships.filter((relationship) =>
+      `${relationship.benchmark_product_name} ${relationship.benchmark_product_id} ${relationship.competitor_product_name} ${relationship.competitor_product_id} ${relationship.competitor_brand ?? ""}`
         .toLocaleLowerCase("en-US")
         .includes(token),
     );
@@ -2185,15 +2186,19 @@ function RadiusRetailerScorecardPanel({
                     </small>
                     <button
                       type="button"
-                      disabled={!scorecard.products.length}
+                      disabled={!scorecard.product_relationships?.length}
                       onClick={() => {
                         setQuery("");
                         setVisibleLimit(25);
                         setSelected(scorecard);
                       }}
                     >
-                      View {scorecard.products.length.toLocaleString()} included{" "}
-                      {benchmark.name} products
+                      View{" "}
+                      {(
+                        scorecard.benchmark_products +
+                        scorecard.competitor_products
+                      ).toLocaleString()}{" "}
+                      included products
                     </button>
                   </div>
                   <div className="retailer-share-bars">
@@ -2303,12 +2308,14 @@ function RadiusRetailerScorecardPanel({
                   Radius-native scorecard evidence
                 </span>
                 <h2 id="radius-scorecard-products-title">
-                  {benchmark.name} products included against{" "}
+                  Products included in {benchmark.name} vs.{" "}
                   {selected.competitor}
                 </h2>
                 <p>
-                  Product-level totals reconcile to the retailer scorecard at
-                  the current basis, radius, and benchmark geography.
+                  Every certified relationship behind this scorecard is shown
+                  with both retailer products. Local evidence identifies the
+                  relationship selected as the lowest eligible comparison at
+                  each observed {benchmark.name} product-store.
                 </p>
               </div>
               <button type="button" onClick={() => setSelected(null)}>
@@ -2318,7 +2325,11 @@ function RadiusRetailerScorecardPanel({
             <div className="radius-scorecard-product-summary">
               <span>
                 <small>Included products</small>
-                <strong>{selected.products.length.toLocaleString()}</strong>
+                <strong>
+                  {(
+                    selected.benchmark_products + selected.competitor_products
+                  ).toLocaleString()}
+                </strong>
               </span>
               <span>
                 <small>Certified relationships</small>
@@ -2336,7 +2347,9 @@ function RadiusRetailerScorecardPanel({
               </span>
             </div>
             <label className="radius-scorecard-product-search">
-              <span>Find a product by name or ID</span>
+              <span>
+                Find either retailer&apos;s product by name, ID, or brand
+              </span>
               <input
                 type="search"
                 value={query}
@@ -2344,66 +2357,121 @@ function RadiusRetailerScorecardPanel({
                   setQuery(event.target.value);
                   setVisibleLimit(25);
                 }}
-                placeholder="Search included products"
+                placeholder="Search Walmart or competitor products"
               />
             </label>
             <div className="radius-scorecard-product-list">
-              {filteredProducts.slice(0, visibleLimit).map((product) => (
-                <article key={product.product_id}>
-                  <span className="radius-scorecard-product-image">
-                    {product.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.image_url} alt="" />
-                    ) : (
-                      <b>{product.product_name.slice(0, 1)}</b>
-                    )}
-                  </span>
-                  <div>
-                    <strong>{product.product_name}</strong>
-                    <span>
-                      {benchmark.name} product ID {product.product_id}
-                    </span>
-                    <small>
-                      {product.relationships.toLocaleString()} certified
-                      relationships
-                    </small>
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>Local evidence</dt>
-                      <dd>
-                        {product.scored_product_locations.toLocaleString()} of{" "}
-                        {product.benchmark_product_locations.toLocaleString()}
-                      </dd>
+              {filteredRelationships
+                .slice(0, visibleLimit)
+                .map((relationship) => (
+                  <article key={relationship.relationship_id}>
+                    <div className="radius-scorecard-product-pair">
+                      <div className="radius-scorecard-product-identity">
+                        <span className="radius-scorecard-product-image">
+                          {relationship.benchmark_image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={relationship.benchmark_image_url}
+                              alt=""
+                            />
+                          ) : (
+                            <b>
+                              {relationship.benchmark_product_name.slice(0, 1)}
+                            </b>
+                          )}
+                        </span>
+                        <div>
+                          <small>{benchmark.name}</small>
+                          <strong>{relationship.benchmark_product_name}</strong>
+                          <span>
+                            Product ID {relationship.benchmark_product_id}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="radius-scorecard-product-versus">
+                        vs.
+                      </span>
+                      <div className="radius-scorecard-product-identity">
+                        <span className="radius-scorecard-product-image">
+                          {relationship.competitor_image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={relationship.competitor_image_url}
+                              alt=""
+                            />
+                          ) : (
+                            <b>
+                              {relationship.competitor_product_name.slice(0, 1)}
+                            </b>
+                          )}
+                        </span>
+                        <div>
+                          <small>{relationship.competitor_name}</small>
+                          <strong>
+                            {relationship.competitor_product_name}
+                          </strong>
+                          <span>
+                            Product ID {relationship.competitor_product_id}
+                          </span>
+                          <span>
+                            {relationship.competitor_brand ??
+                              "Brand unclassified"}{" "}
+                            · {displayLabel(relationship.competitor_brand_type)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <dt>{benchmark.name} lower</dt>
-                      <dd>
-                        {formatScorecardRate(product.benchmark_lower_rate)}
-                      </dd>
+                    <div className="radius-scorecard-product-evidence">
+                      <small>
+                        {relationship.profile_label} ·{" "}
+                        {relationship.comparison_unit}
+                      </small>
+                      <dl>
+                        <div>
+                          <dt>Selected local evidence</dt>
+                          <dd>
+                            {relationship.scored_product_locations.toLocaleString()}{" "}
+                            product-locations
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>{benchmark.name} lower</dt>
+                          <dd>
+                            {formatScorecardRate(
+                              relationship.benchmark_lower_rate,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Average local position</dt>
+                          <dd>
+                            {scorecardPositionCopy(
+                              relationship.average_gap,
+                              benchmark.name,
+                              selected.competitor,
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                      {!relationship.scored_product_locations ? (
+                        <p>
+                          Certified relationship; another eligible competitor
+                          product supplied the lowest local comparison in this
+                          scope.
+                        </p>
+                      ) : null}
                     </div>
-                    <div>
-                      <dt>Average local position</dt>
-                      <dd>
-                        {scorecardPositionCopy(
-                          product.average_gap,
-                          benchmark.name,
-                          selected.competitor,
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
+                  </article>
+                ))}
             </div>
-            {visibleLimit < filteredProducts.length ? (
+            {visibleLimit < filteredRelationships.length ? (
               <button
                 className="retailer-show-all"
                 type="button"
                 onClick={() => setVisibleLimit((limit) => limit + 25)}
               >
-                Show more products · {filteredProducts.length - visibleLimit}{" "}
-                remaining
+                Show more relationships ·{" "}
+                {filteredRelationships.length - visibleLimit} remaining
               </button>
             ) : null}
           </aside>
