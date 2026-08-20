@@ -1,6 +1,6 @@
 # Phase 13.23 — Scorecard Presentation and Brand Evidence Reconciliation
 
-Status: implemented; production verification pending
+Status: deployed and production-verified
 
 ## Purpose
 
@@ -73,3 +73,18 @@ links each product to its Price Intelligence footprint.
 - Web unit, type, lint, production-build, contract, and browser suites.
 - Live Egg walkthrough of Retailer Scorecards, both Cohort Scorecard downloads, the complete brand
   list, and at least one brand whose Search and PDP labels differ.
+
+## Production verification
+
+- GitHub Actions run `32420363332` passed the full Python, contract, migration, TypeScript, build,
+  and 13-test browser suite for the final governed-brand membership correction.
+- The live included-products drawer renders 58-by-58-pixel product images with no measured
+  horizontal overflow at a 980-pixel drawer width.
+- The live Cohort Scorecards page exposes both the overall Price Position Table and the diagnostic
+  Segment Drivers and Reversals view, with CSV and Excel controls for each.
+- The live Egg report exposes all 43 Walmart brands in its searchable brand directory. A complete
+  API reconciliation checked 161 retailer-brand rows and found zero count-to-product-membership
+  mismatches.
+- The historical Hillandale Farms edge case now displays one governed Search product in both the
+  brand scorecard and its drawer. The second PDP-branded item remains correctly excluded because
+  its authoritative Search brand was blank.

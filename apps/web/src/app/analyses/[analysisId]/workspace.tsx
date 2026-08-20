@@ -1786,7 +1786,7 @@ function AssortmentAnalysisPanel({
             setBrandList(null);
             setDetail({
               title: `${brandList.retailerName} · ${brand.brand}`,
-              note: `${brand.distinct_products.toLocaleString()} governed Search products across ${brand.observed_locations.toLocaleString()} locations. The ${products.length.toLocaleString()} product records below use the same observed-brand identity as this scorecard.`,
+              note: `${brand.distinct_products.toLocaleString()} governed Search ${brand.distinct_products === 1 ? "product" : "products"} across ${brand.observed_locations.toLocaleString()} ${brand.observed_locations === 1 ? "location" : "locations"}. The ${products.length.toLocaleString()} product ${products.length === 1 ? "record" : "records"} below ${products.length === 1 ? "uses" : "use"} the same observed-brand identity as this scorecard.`,
               products,
               retailerId: brandList.retailerId,
             });
@@ -1937,7 +1937,7 @@ function AssortmentDetailDrawer({
           </button>
         </header>
         <AssortmentProductList
-          title={`${detail.products.length.toLocaleString()} products`}
+          title={`${detail.products.length.toLocaleString()} ${detail.products.length === 1 ? "product" : "products"}`}
           note="Observed-location counts come from governed Search evidence."
           products={detail.products}
           limit={detail.products.length}
