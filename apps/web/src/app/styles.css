@@ -12012,6 +12012,88 @@ tbody tr:last-child td {
   border-radius: 16px;
   overflow-x: auto;
 }
+.radius-scorecard-list {
+  display: grid;
+  gap: 0.7rem;
+}
+.radius-scorecard-list > article {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+.radius-scorecard-list > article > header,
+.radius-scorecard-list > article > footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+.radius-scorecard-list header > button {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0;
+  text-align: left;
+}
+.radius-scorecard-list header > button strong {
+  font-size: 0.9rem;
+}
+.radius-scorecard-list header > button span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+.radius-scorecard-metrics {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.radius-scorecard-metrics > span {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 9px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.6rem;
+}
+.radius-scorecard-metrics small {
+  color: var(--muted);
+  font-size: 0.53rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.radius-scorecard-metrics b {
+  font-size: 0.67rem;
+  line-height: 1.35;
+}
+.radius-scorecard-list footer button,
+.radius-scorecard-list footer a {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.61rem;
+  font-weight: 800;
+  padding: 0.5rem 0.65rem;
+  text-decoration: none;
+}
+@media (max-width: 980px) {
+  .radius-scorecard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .radius-scorecard-metrics {
+    grid-template-columns: 1fr;
+  }
+}
 .retailer-scorecard-head,
 .retailer-scorecard-row {
   align-items: center;

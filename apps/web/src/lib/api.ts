@@ -5,6 +5,7 @@ import type {
   RetailCompetitiveIntelligenceCollectionGeographyRequest,
   RetailCompetitiveIntelligenceCollectionGeographyResolution,
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
+  RetailCompetitiveIntelligenceCompetitivePortfolioScorecards,
   RetailCompetitiveIntelligenceCompetitiveProductLeadership,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
@@ -25,6 +26,8 @@ export type PriceArchitectureMatrix =
   RetailCompetitiveIntelligencePriceArchitectureMatrix;
 export type CompetitiveProductLeadership =
   RetailCompetitiveIntelligenceCompetitiveProductLeadership;
+export type CompetitivePortfolioScorecards =
+  RetailCompetitiveIntelligenceCompetitivePortfolioScorecards;
 
 export interface AnalysisRecord {
   id: string;

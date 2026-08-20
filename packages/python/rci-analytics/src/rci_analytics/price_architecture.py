@@ -60,8 +60,14 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
                 "location_keys": frozenset(row.location.scope_key for row in observations),
             }
         )
+    # Product arrays are presentation-ready materialized evidence. Within any
+    # price rung, lead with the products carrying the broadest observed
+    # location footprint so the UI does not need to sort large cells at read
+    # time. Price remains the stable secondary ordering across the complete
+    # product population.
     products.sort(
         key=lambda row: (
+            -int(row["observed_locations"]),
             float(row["median_price"]),
             str(row["name"]).casefold(),
             str(row["product_id"]),

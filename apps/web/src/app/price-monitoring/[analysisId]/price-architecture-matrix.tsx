@@ -518,6 +518,11 @@ export function PriceArchitectureMatrixWorkspace({
                               ? footprintLabel(product, anchor)
                               : `${count(product.observed_locations)} observed locations`}
                           </small>
+                          <small>
+                            {product.seller
+                              ? `Seller: ${product.seller}`
+                              : sellerLabels[product.seller_status]}
+                          </small>
                         </button>
                       ))
                     ) : (
@@ -575,6 +580,11 @@ export function PriceArchitectureMatrixWorkspace({
                                     </i>
                                     <small>
                                       {footprintLabel(product, retailer)}
+                                    </small>
+                                    <small>
+                                      {product.seller
+                                        ? `Seller: ${product.seller}`
+                                        : sellerLabels[product.seller_status]}
                                     </small>
                                   </span>
                                 ))}

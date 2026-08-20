@@ -83,7 +83,7 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.20",
+  version: "1.3.21",
   lastVerified,
   baseline:
     "Production implementation through Egg Product Pack 1.2.3; scope-governance release deployed and production-reconciled",
@@ -722,7 +722,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Competitive Intelligence",
               definition:
-                "Adds governed product relationships and location correspondence. Its first-class report tabs are Executive Overview, Price Architecture, Leadership Overview, Competitive Footprint, Match Group Analysis, Price Ladders, Store Comparisons, Market Performance, Competitive Exceptions, Competitive History, Assortment & Whitespace, and Data Integrity. Leadership tabs share one retailer, comparison basis, benchmark product, radius, and benchmark-geography context; there is no nested Product Leadership tab rail.",
+                "Adds governed product relationships and location correspondence. Its focused report tabs are Retailer Scorecards, Cohort Scorecards, Competitive Footprint, Matched Price Matrix, Match Summary, Price Ladders, Store Comparisons, Competitive History, and Assortment Scorecards. Market Performance is consolidated into Competitive Footprint; Store Exceptions is a Store Comparisons view; report-level Data Integrity is administered from Operations > Data Quality. Product leadership tabs share one retailer, comparison basis, benchmark product, 1/3/5-mile radius, and benchmark geography.",
             },
           ],
         },
@@ -739,6 +739,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Bind every live read model to the exact immutable artifact set cited by the published AnalysisResult evidence checksum. If more than one generation exists and none reconciles exactly, fail closed instead of merging generations.",
             "Apply Retailer Pack first-party seller policy at both classification and canonical product-location projection. Known third-party marketplace offers never enter price, coverage, assortment, matching, or competitive metrics; permitted blank sellers remain explicitly unverified.",
             "Apply the selected competitor and comparison basis to every scorecard and supporting product view. A context selector must never be presentation-only.",
+            "For physical retailers, radius-native scorecards rebuild certified product relationships at product × observed Walmart store grain and require the competitor store to be within the selected 1, 3, or 5 mile radius. Service-area retailers remain explicitly same-delivery-ZIP because they do not expose a comparable physical store footprint.",
+            "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
@@ -1354,6 +1356,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implemented and full local-suite verified; deployment pending",
+              "Price and Competitive Intelligence reporting navigation, radius scorecards, matrix evidence, maps, exports, and workspace consolidation were aligned to the decision workflow.",
+              "Price Intelligence Home no longer offers a duplicate Store Review action; matrix products are ordered by observed footprint and display PDP seller evidence. Competitive Intelligence renames the executive and cohort workspaces, adds a matched-product matrix, merges market KPIs and the geographic scorecard into Competitive Footprint, moves exceptions into Store Comparisons, removes duplicate Market Performance and report Data Integrity tabs, and adds CSV/Excel evidence exports. The new portfolio scorecard contract computes certified product-location outcomes using the selected physical-store radius or explicitly labeled service-area ZIP rule; Walmart-lower includes clear and narrow leads while clear-leader remains separate. Obsolete publications may be recoverably archived only after their replacements validate; source Search data, PDP evidence, certification decisions, and audit lineage are never deleted.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

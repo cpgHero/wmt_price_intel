@@ -104,7 +104,11 @@ def _matrix(
     )
     target = _retailer(
         "target_us",
-        [_observation("target_us", "t1", 4.5, "1")],
+        [
+            _observation("target_us", "t1", 4.5, "1"),
+            _observation("target_us", "t2", 4.6, "1"),
+            _observation("target_us", "t2", 4.6, "2"),
+        ],
     )
     return PriceArchitectureMatrixProjector().build(
         analysis_id="architecture-test",
@@ -170,6 +174,17 @@ def test_store_coverage_is_union_of_distinct_locations_not_product_sum() -> None
             if cell["retailer_id"] == retailer_id
         ]
         assert sum(float(value or 0) for value in shares) == pytest.approx(1, abs=0.0001)
+
+
+def test_products_within_each_rung_are_materialized_by_observed_store_count() -> None:
+    matrix = _matrix()
+    middle = next(rung for rung in matrix["rungs"] if rung["lower_bound"] == 3.0)
+    target_cell = next(
+        cell for cell in middle["cells"] if cell["retailer_id"] == "target_us"
+    )
+
+    assert [product["product_id"] for product in target_cell["products"]] == ["t2", "t1"]
+    assert [product["observed_locations"] for product in target_cell["products"]] == [2, 1]
 
 
 def test_fixed_rungs_use_stable_intervals_with_benchmark_bounded_edges() -> None:

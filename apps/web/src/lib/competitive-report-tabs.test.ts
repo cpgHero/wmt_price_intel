@@ -8,16 +8,14 @@ import {
 
 describe("competitive report leadership navigation", () => {
   it("exposes every leadership workspace as a unique first-class tab", () => {
-    expect(leadershipTabs).toHaveLength(8);
-    expect(new Set(leadershipTabs.map((tab) => tab.id)).size).toBe(8);
+    expect(leadershipTabs).toHaveLength(6);
+    expect(new Set(leadershipTabs.map((tab) => tab.id)).size).toBe(6);
     expect(leadershipTabs.map((tab) => tab.label)).toEqual([
-      "Leadership Overview",
       "Competitive Footprint",
-      "Match Group Analysis",
+      "Matched Price Matrix",
+      "Match Summary",
       "Price Ladders",
       "Store Comparisons",
-      "Market Performance",
-      "Competitive Exceptions",
       "Competitive History",
     ]);
   });
@@ -29,8 +27,10 @@ describe("competitive report leadership navigation", () => {
   });
 
   it("keeps legacy Product Leadership URLs compatible", () => {
-    expect(legacyLeadershipTab("match_group").id).toBe("match-group-analysis");
-    expect(legacyLeadershipTab("unsupported").id).toBe("leadership-overview");
-    expect(legacyLeadershipTab(null).id).toBe("leadership-overview");
+    expect(legacyLeadershipTab("match_group").id).toBe("match-summary");
+    expect(legacyLeadershipTab("footprint").id).toBe("competitive-footprint");
+    expect(legacyLeadershipTab("exceptions").id).toBe("store-comparisons");
+    expect(legacyLeadershipTab("unsupported").id).toBe("competitive-footprint");
+    expect(legacyLeadershipTab(null).id).toBe("competitive-footprint");
   });
 });

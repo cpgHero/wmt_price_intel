@@ -179,12 +179,9 @@ export default async function DataQualityPage({
                           : "configured competitors"}
                       </p>
                     </div>
-                    <Link
-                      className="button secondary"
-                      href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}?tab=quality-methodology`}
-                    >
-                      Investigate
-                    </Link>
+                    <span className="readiness-pill">
+                      Report {summary.analysis.analysis_id}
+                    </span>
                   </div>
                   <p className="quality-impact-summary">
                     {summary.quality.description}

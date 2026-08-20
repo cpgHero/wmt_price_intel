@@ -29,6 +29,10 @@ const contracts = [
     "competitive-product-leadership.schema.json",
     "competitive-product-leadership.ts",
   ],
+  [
+    "competitive-portfolio-scorecards.schema.json",
+    "competitive-portfolio-scorecards.ts",
+  ],
   ["golden-benchmarks.schema.json", "golden-benchmarks.ts"],
   ["historical-input-manifest.schema.json", "historical-input-manifest.ts"],
   ["normalized-offer.schema.json", "normalized-offer.ts"],

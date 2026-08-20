@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections import Counter
 from pathlib import Path
 from statistics import median
 from typing import Annotated, Any, Literal, cast
@@ -49,6 +50,34 @@ def _active_candidate_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _portfolio_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
+    statuses = Counter(str(row.get("status") or "unscored") for row in outcomes)
+    scored = [row for row in outcomes if row.get("status") != "unscored"]
+    gaps = [
+        float(row["competitor_minus_benchmark"])
+        for row in scored
+        if row.get("competitor_minus_benchmark") is not None
+    ]
+    benchmark_lower = statuses["leader"] + statuses["at_risk"]
+    competitor_lower = statuses["losing"]
+    parity = statuses["tied"]
+    return {
+        "benchmark_product_locations": len(outcomes),
+        "scored_product_locations": len(scored),
+        "coverage_rate": round(len(scored) / len(outcomes), 4) if outcomes else None,
+        "leader_product_locations": statuses["leader"],
+        "tied_product_locations": statuses["tied"],
+        "at_risk_product_locations": statuses["at_risk"],
+        "losing_product_locations": statuses["losing"],
+        "unscored_product_locations": statuses["unscored"],
+        "leader_rate": (round(statuses["leader"] / len(scored), 4) if scored else None),
+        "benchmark_lower_rate": (round(benchmark_lower / len(scored), 4) if scored else None),
+        "competitor_lower_rate": (round(competitor_lower / len(scored), 4) if scored else None),
+        "parity_rate": round(parity / len(scored), 4) if scored else None,
+        "average_gap": round(sum(gaps) / len(gaps), 4) if gaps else None,
+    }
+
+
 class CompetitiveProductLeadershipService:
     def __init__(
         self,
@@ -64,6 +93,215 @@ class CompetitiveProductLeadershipService:
         self._packs = product_packs
         self._projector = CompetitiveProductLeadershipProjector()
         self._cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._portfolio_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    async def portfolio_view(
+        self,
+        analysis_id: str,
+        *,
+        competitor_id: str,
+        profile_id: str | None,
+        radius_miles: Literal[1, 3, 5],
+        state: str | None,
+        city: str | None,
+    ) -> dict[str, Any]:
+        """Aggregate radius-native product-location outcomes by competitor.
+
+        The existing immutable publication scorecards retain their historical
+        exact-ZIP grain. This projection deliberately rebuilds the portfolio
+        from the certified product relationships and the same store-radius
+        engine used by the product workspaces; it never relabels legacy totals.
+        """
+
+        if city is not None and state is None:
+            raise ValueError("a city filter requires its state")
+        cache_key = (
+            analysis_id,
+            competitor_id,
+            profile_id or "",
+            str(radius_miles),
+            state or "",
+            city or "",
+        )
+        cached = self._portfolio_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        report = await self._analyses.report_view(analysis_id)
+        benchmark = dict(report["retailer_scope"]["benchmark"])
+        configured_competitors = [dict(row) for row in report["retailer_scope"]["competitors"]]
+        competitor_name_index = {str(row["id"]): str(row["name"]) for row in configured_competitors}
+        if competitor_id != "all" and competitor_id not in competitor_name_index:
+            raise ValueError(f"competitor {competitor_id!r} is not in this analysis")
+
+        basis_index = {
+            str(row["profile_id"]): dict(row)
+            for row in report.get("comparison_bases", [])
+            if isinstance(row, dict) and row.get("profile_id")
+        }
+        preferred_profile = next(
+            (
+                str(row["profile_id"])
+                for row in report.get("comparison_bases", [])
+                if row.get("scorecard_role") == "preferred"
+                and str(row["profile_id"]) in basis_index
+            ),
+            sorted(basis_index)[0] if basis_index else "",
+        )
+        if profile_id and profile_id not in basis_index:
+            raise LookupError("the selected comparison basis is not configured for this analysis")
+        selected_profile = profile_id or preferred_profile
+        if not selected_profile:
+            raise LookupError("no decision-ready product relationship is available")
+
+        candidates = [
+            row
+            for row in _active_candidate_rows(report)
+            if str(row.get("profile_id")) == selected_profile
+            and (competitor_id == "all" or str(row.get("competitor")) == competitor_id)
+        ]
+        product_groups = sorted(
+            {
+                (str(row.get("competitor")), str(row.get("benchmark_product_id")))
+                for row in candidates
+                if row.get("competitor") and row.get("benchmark_product_id")
+            }
+        )
+        semaphore = asyncio.Semaphore(8)
+
+        async def project(group: tuple[str, str]) -> tuple[tuple[str, str], dict[str, Any] | None]:
+            async with semaphore:
+                try:
+                    result = await self.view(
+                        analysis_id,
+                        competitor_id=group[0],
+                        profile_id=selected_profile,
+                        benchmark_product_id=group[1],
+                        radius_miles=radius_miles,
+                        state=state,
+                        city=city,
+                    )
+                    return group, result
+                except LookupError:
+                    return group, None
+
+        projected = await asyncio.gather(*(project(group) for group in product_groups))
+        visible_competitors = [
+            row
+            for row in configured_competitors
+            if competitor_id == "all" or str(row["id"]) == competitor_id
+        ]
+        grouped_candidates: dict[str, list[dict[str, Any]]] = {
+            str(row["id"]): [] for row in visible_competitors
+        }
+        for row in candidates:
+            grouped_candidates.setdefault(str(row.get("competitor")), []).append(row)
+        projected_index = {group: result for group, result in projected}
+        scorecards: list[dict[str, Any]] = []
+        for competitor in visible_competitors:
+            retailer_id = str(competitor["id"])
+            retailer_candidates = grouped_candidates.get(retailer_id, [])
+            benchmark_product_ids = sorted(
+                {
+                    str(row.get("benchmark_product_id"))
+                    for row in retailer_candidates
+                    if row.get("benchmark_product_id")
+                }
+            )
+            competitor_product_ids = {
+                str(row.get("competitor_product_id"))
+                for row in retailer_candidates
+                if row.get("competitor_product_id")
+            }
+            relationship_ids = {
+                str(
+                    row.get("relationship_id")
+                    or "|".join(
+                        (
+                            str(row.get("competitor")),
+                            str(row.get("benchmark_product_id")),
+                            str(row.get("competitor_product_id")),
+                            str(row.get("profile_id")),
+                        )
+                    )
+                )
+                for row in retailer_candidates
+            }
+            outcomes: list[dict[str, Any]] = []
+            products: list[dict[str, Any]] = []
+            for benchmark_product_id in benchmark_product_ids:
+                view = projected_index.get((retailer_id, benchmark_product_id))
+                if view is None:
+                    continue
+                product_outcomes = [
+                    dict(row) for row in view.get("outcomes", []) if isinstance(row, dict)
+                ]
+                outcomes.extend(product_outcomes)
+                product_summary = _portfolio_summary(product_outcomes)
+                products.append(
+                    {
+                        "product_id": benchmark_product_id,
+                        "product_name": str(
+                            view.get("benchmark_product", {}).get("name") or benchmark_product_id
+                        ),
+                        "image_url": view.get("benchmark_product", {}).get("image_url"),
+                        "relationships": len(view.get("relationships", [])),
+                        **product_summary,
+                    }
+                )
+            products.sort(
+                key=lambda row: (
+                    -int(row["scored_product_locations"]),
+                    -int(row["benchmark_product_locations"]),
+                    str(row["product_name"]).casefold(),
+                )
+            )
+            scorecards.append(
+                {
+                    "competitor_id": retailer_id,
+                    "competitor": competitor_name_index.get(retailer_id, retailer_id),
+                    "benchmark_products": len(benchmark_product_ids),
+                    "competitor_products": len(competitor_product_ids),
+                    "relationships": len(relationship_ids),
+                    **_portfolio_summary(outcomes),
+                    "products": products,
+                }
+            )
+        scorecards.sort(
+            key=lambda row: (
+                -int(row["scored_product_locations"]),
+                str(row["competitor"]).casefold(),
+            )
+        )
+        result = {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "generated_at": str(report["generated_at"]),
+            "benchmark_retailer": benchmark,
+            "filters": {
+                "competitor_id": competitor_id,
+                "profile_id": selected_profile,
+                "radius_miles": radius_miles,
+                "state": state,
+                "city": city,
+            },
+            "policy": {
+                "physical_store_rule": "within selected radius",
+                "service_area_rule": "same delivery ZIP",
+                "grain": "certified product relationship x observed Walmart product-store",
+            },
+            "scorecards": scorecards,
+        }
+        validate_instance(
+            self._root,
+            "competitive-portfolio-scorecards.schema.json",
+            result,
+            label=f"competitive-portfolio-scorecards:{analysis_id}",
+        )
+        if len(self._portfolio_cache) >= 32:
+            self._portfolio_cache.pop(next(iter(self._portfolio_cache)))
+        self._portfolio_cache[cache_key] = result
+        return result
 
     async def view(
         self,
@@ -358,6 +596,37 @@ ServiceDependency = Annotated[
     CompetitiveProductLeadershipService,
     Depends(get_competitive_product_leadership_service),
 ]
+
+
+@router.get("/analyses/{analysis_id}/competitive-portfolio-scorecards")
+async def competitive_portfolio_scorecards_view(
+    analysis_id: str,
+    service: ServiceDependency,
+    competitor: str = "all",
+    profile: str | None = None,
+    radius_miles: int = Query(default=3, ge=1, le=5),
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+) -> dict[str, Any]:
+    try:
+        if radius_miles not in {1, 3, 5}:
+            raise ValueError("competitive radius must be 1, 3, or 5 miles")
+        return await service.portfolio_view(
+            analysis_id,
+            competitor_id=competitor,
+            profile_id=profile,
+            radius_miles=cast(Literal[1, 3, 5], radius_miles),
+            state=state_filter,
+            city=city,
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.get("/analyses/{analysis_id}/competitive-product-leadership")

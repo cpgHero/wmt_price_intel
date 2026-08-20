@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
@@ -25,6 +26,7 @@ import type {
   AssortmentBrand,
   AssortmentBreadthGap,
   AssortmentProduct,
+  CompetitivePortfolioScorecards,
   JsonObject,
   MapPoint,
   ProductDecision,
@@ -56,14 +58,12 @@ import {
   priceUnitLabel,
   primaryComparisonRows,
   productDecisionStance,
-  scorecardProductSummaries,
   type ScorecardProductSummary,
 } from "@/lib/report-presentation";
 import {
   leadershipTab,
   leadershipTabs,
   legacyLeadershipTab,
-  type ProductLeadershipViewName,
 } from "@/lib/competitive-report-tabs";
 import { prewarmCompetitiveProductLeadership } from "@/lib/competitive-product-leadership-client";
 
@@ -257,10 +257,9 @@ function BlueprintAnalysisWorkspace({
   );
   const reportTabs = useMemo(() => {
     const labels: Record<string, string> = {
-      overview: "Executive Overview",
-      "price-segments": "Price Architecture",
-      assortment: "Assortment & Whitespace",
-      "quality-methodology": "Data Integrity",
+      overview: "Retailer Scorecards",
+      "price-segments": "Cohort Scorecards",
+      assortment: "Assortment Scorecards",
     };
     return groupedSections
       .filter((group) => Object.prototype.hasOwnProperty.call(labels, group.id))
@@ -464,10 +463,6 @@ function BlueprintAnalysisWorkspace({
       leadership: null,
     });
   };
-  const selectLeadershipView = (view: ProductLeadershipViewName) => {
-    const tab = leadershipTabs.find((candidate) => candidate.view === view);
-    if (tab) selectGroup(tab.id);
-  };
   const selectLens = (profileId: string) => {
     const valid = reportView.comparison_bases.some(
       (basis) => basis.profile_id === profileId,
@@ -563,18 +558,6 @@ function BlueprintAnalysisWorkspace({
       .flatMap((section) => section.records) ?? [];
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
-  const selectedScorecards = reportView.retailer_scorecards.filter(
-    (scorecard) =>
-      (!selectedRetailer || scorecard.competitor_id === selectedRetailer.id) &&
-      (!selectedLens || scorecard.profile_id === selectedLens),
-  );
-  const reportedScorecards = selectedScorecards.filter(
-    (scorecard) =>
-      scorecard.evidence_state === "reported" && (scorecard.matches ?? 0) > 0,
-  );
-  const readyScorecards = reportedScorecards.filter(
-    (scorecard) => scorecard.status === "ready",
-  );
   const selectedBasis =
     reportView.comparison_bases.find(
       (basis) => basis.profile_id === selectedLens,
@@ -738,6 +721,31 @@ function BlueprintAnalysisWorkspace({
           defaultValue: preferredBasis,
           selectedValue: selectedLens,
         },
+        ...(activeGroup === "overview" || leadershipTab(activeGroup)
+          ? [
+              {
+                id: "store-radius",
+                label: "Store Radius",
+                title: "Choose the local competitor radius",
+                description:
+                  "Physical competitor stores must fall inside this radius of a benchmark store. Service-area retailers use the same delivery ZIP and are labeled separately.",
+                value: `${leadershipRadius} mile${leadershipRadius === 1 ? "" : "s"}`,
+                options: ([1, 3, 5] as const).map((radius) => ({
+                  value: String(radius),
+                  label: `${radius} mile${radius === 1 ? "" : "s"}`,
+                  description:
+                    radius === 1
+                      ? "Immediate local trade area."
+                      : radius === 3
+                        ? "Balanced neighborhood comparison."
+                        : "Broader local trade area.",
+                })),
+                queryParameter: "radius",
+                defaultValue: "3",
+                selectedValue: String(leadershipRadius),
+              },
+            ]
+          : []),
         ...(leadershipTab(activeGroup)
           ? [
               {
@@ -758,27 +766,6 @@ function BlueprintAnalysisWorkspace({
                 queryParameter: "product",
                 selectedValue: selectedLeadershipProduct ?? undefined,
                 resetQueryParameters: ["state", "city"],
-              },
-              {
-                id: "store-radius",
-                label: "Store Radius",
-                title: "Choose the local competitor radius",
-                description:
-                  "A physical competitor store must fall inside this radius of the benchmark store. Service-area retailers use the same ZIP.",
-                value: `${leadershipRadius} mile${leadershipRadius === 1 ? "" : "s"}`,
-                options: ([1, 3, 5] as const).map((radius) => ({
-                  value: String(radius),
-                  label: `${radius} mile${radius === 1 ? "" : "s"}`,
-                  description:
-                    radius === 1
-                      ? "Immediate local trade area."
-                      : radius === 3
-                        ? "Balanced neighborhood comparison."
-                        : "Broader local trade area.",
-                })),
-                queryParameter: "radius",
-                defaultValue: "3",
-                selectedValue: String(leadershipRadius),
               },
               {
                 id: "benchmark-geography",
@@ -932,7 +919,6 @@ function BlueprintAnalysisWorkspace({
     };
   }, [
     competitorOptions,
-    analysis.analysis_id,
     activeGroup,
     leadershipProductOptions,
     leadershipRadius,
@@ -1037,7 +1023,6 @@ function BlueprintAnalysisWorkspace({
             stateFilter={leadershipState}
             cityFilter={leadershipCity}
             viewName={leadershipTab(activeGroup)?.view ?? "overview"}
-            onNavigate={selectLeadershipView}
             onGeographyOptions={receiveLeadershipGeography}
           />
         ) : activeGroup === "assortment" && reportView.assortment_analysis ? (
@@ -1049,25 +1034,17 @@ function BlueprintAnalysisWorkspace({
           />
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
-            {activeGroup === "overview" && selectedScorecards.length ? (
-              <>
-                <PortfolioLeadershipSummary
-                  benchmark={reportView.retailer_scope.benchmark}
-                  scorecards={selectedScorecards}
-                  reported={reportedScorecards}
-                  ready={readyScorecards}
-                />
-                <RetailerScorecardPanel
-                  benchmark={reportView.retailer_scope.benchmark}
-                  rows={selectedScorecards}
-                  candidates={reportView.match_candidates ?? []}
-                  decisions={reportView.product_decisions ?? []}
-                  relationships={reportView.match_relationships ?? []}
-                  assortment={reportView.assortment_analysis ?? null}
-                  onSelect={selectCompetitor}
-                  onReviewMatch={reviewDecision}
-                />
-              </>
+            {activeGroup === "overview" ? (
+              <RadiusRetailerScorecardPanel
+                analysisId={analysis.analysis_id}
+                benchmark={reportView.retailer_scope.benchmark}
+                competitorId={selectedCompetitor}
+                profileId={selectedLens}
+                radiusMiles={leadershipRadius}
+                stateFilter={leadershipState}
+                cityFilter={leadershipCity}
+                onSelect={selectCompetitor}
+              />
             ) : null}
             {activeGroup === "price-segments" ? (
               <ComparableCohortExplorer
@@ -1337,18 +1314,7 @@ function AssortmentAnalysisPanel({
   competitors: RetailerOption[];
   selected: RetailerOption | null;
 }>) {
-  const [requestedCompetitorId, setRequestedCompetitorId] = useState(
-    selected?.id ?? competitors[0]?.id ?? "",
-  );
-  const activeCompetitorId =
-    selected?.id ??
-    (competitors.some((competitor) => competitor.id === requestedCompetitorId)
-      ? requestedCompetitorId
-      : (competitors[0]?.id ?? ""));
-  const activeCompetitor =
-    competitors.find((competitor) => competitor.id === activeCompetitorId) ??
-    competitors[0] ??
-    null;
+  const activeCompetitor = selected;
   const comparisons = activeCompetitor
     ? data.comparisons.filter((row) =>
         matchesRetailer(row.competitor, activeCompetitor),
@@ -1357,25 +1323,19 @@ function AssortmentAnalysisPanel({
   const benchmarkSummary = data.retailers.find((row) =>
     matchesRetailer(row.retailer, benchmark),
   );
+  if (!activeCompetitor) {
+    return (
+      <div className="assortment-analysis">
+        <section className="empty-inline">
+          Choose one competitor in the Competitive View control to open its
+          Assortment Scorecard. Retailers are intentionally separated so
+          product, brand, and whitespace evidence do not run together.
+        </section>
+      </div>
+    );
+  }
   return (
     <div className="assortment-analysis">
-      <nav
-        className="assortment-retailer-tabs"
-        aria-label="Competitor assortment"
-      >
-        {competitors.map((competitor) => (
-          <button
-            aria-current={
-              competitor.id === activeCompetitor?.id ? "page" : undefined
-            }
-            key={competitor.id}
-            onClick={() => setRequestedCompetitorId(competitor.id)}
-            type="button"
-          >
-            {benchmark.name} vs. {competitor.name}
-          </button>
-        ))}
-      </nav>
       {comparisons.map((comparison) => {
         const competitor =
           competitors.find((row) =>
@@ -1400,10 +1360,7 @@ function AssortmentAnalysisPanel({
                 </p>
                 <h3>Product relationship and whitespace scorecard</h3>
               </div>
-              <span>
-                {comparison.geography.shared_zipcodes.toLocaleString()} shared
-                ZIPs
-              </span>
+              <span>Retailer selected in global report context</span>
             </header>
             <div className="assortment-kpis">
               <article>
@@ -1494,35 +1451,6 @@ function AssortmentAnalysisPanel({
                   pair may be eligible in more than one lens.
                 </small>
               </section>
-              <section className="assortment-geography-card">
-                <h4>Store-market breadth</h4>
-                <p>Distinct product counts compared within shared ZIPs.</p>
-                <div>
-                  <span>
-                    <b>
-                      {comparison.geography.benchmark_broader_zipcodes.toLocaleString()}
-                    </b>
-                    {benchmark.name} broader
-                  </span>
-                  <span>
-                    <b>
-                      {comparison.geography.competitor_broader_zipcodes.toLocaleString()}
-                    </b>
-                    {competitor.name} broader
-                  </span>
-                  <span>
-                    <b>
-                      {comparison.geography.parity_zipcodes.toLocaleString()}
-                    </b>
-                    Same breadth
-                  </span>
-                </div>
-                <small>
-                  Median primary-minus-competitor product-count gap:{" "}
-                  {comparison.geography.median_product_count_gap > 0 ? "+" : ""}
-                  {comparison.geography.median_product_count_gap}
-                </small>
-              </section>
               <section className="assortment-key-points">
                 <h4>Key points</h4>
                 <ul>
@@ -1550,23 +1478,6 @@ function AssortmentAnalysisPanel({
                   concentratedBrands={
                     competitorSummary?.geographically_concentrated_brands ?? []
                   }
-                />
-              </div>
-            ) : null}
-            {comparison.geography.top_benchmark_breadth_gaps?.length ||
-            comparison.geography.top_competitor_breadth_gaps?.length ? (
-              <div className="assortment-gap-grid">
-                <AssortmentBreadthGaps
-                  rows={comparison.geography.top_benchmark_breadth_gaps ?? []}
-                  benchmarkName={benchmark.name}
-                  competitorName={competitor.name}
-                  leader="benchmark"
-                />
-                <AssortmentBreadthGaps
-                  rows={comparison.geography.top_competitor_breadth_gaps ?? []}
-                  benchmarkName={benchmark.name}
-                  competitorName={competitor.name}
-                  leader="competitor"
                 />
               </div>
             ) : null}
@@ -1704,283 +1615,260 @@ function formatScorecardRate(value: number | null) {
   });
 }
 
-function PortfolioLeadershipSummary({
-  benchmark,
-  scorecards,
-  reported,
-  ready,
-}: Readonly<{
-  benchmark: RetailerOption;
-  scorecards: RetailerScorecard[];
-  reported: RetailerScorecard[];
-  ready: RetailerScorecard[];
-}>) {
-  const matchedObservations = reported.reduce(
-    (total, scorecard) => total + (scorecard.matches ?? 0),
-    0,
-  );
-  const benchmarkLeads = ready.filter(
-    (scorecard) => scorecard.dominant_outcome === "benchmark_lower",
-  ).length;
-  const competitorLeads = ready.filter(
-    (scorecard) => scorecard.dominant_outcome === "competitor_lower",
-  ).length;
-  const limitedViews = scorecards.length - ready.length;
-  const coverageRate = scorecards.length
-    ? reported.length / scorecards.length
-    : null;
+type RadiusRetailerScorecard =
+  CompetitivePortfolioScorecards["scorecards"][number];
 
-  return (
-    <section className="portfolio-leadership-summary">
-      <header>
-        <div>
-          <p className="eyebrow">Current governed comparison</p>
-          <h2>Portfolio price leadership at a glance</h2>
-          <p>
-            A retailer-level rollup for the selected comparison basis. Counts
-            below summarize governed scorecards; open the retailer table for the
-            products and evidence behind each result.
-          </p>
-        </div>
-        <span className="portfolio-summary-context">
-          {benchmark.name} versus {scorecards.length.toLocaleString()} retailer
-          {scorecards.length === 1 ? "" : " views"}
-        </span>
-      </header>
-      <div className="portfolio-summary-grid">
-        <article>
-          <small>Competitors with evidence</small>
-          <strong>
-            {reported.length.toLocaleString()} of{" "}
-            {scorecards.length.toLocaleString()}
-          </strong>
-          <span>
-            {coverageRate === null
-              ? "No retailer views configured"
-              : `${formatScorecardRate(coverageRate)} of selected views`}
-          </span>
-        </article>
-        <article>
-          <small>Decision-ready retailer views</small>
-          <strong>
-            {ready.length.toLocaleString()} of{" "}
-            {scorecards.length.toLocaleString()}
-          </strong>
-          <span>
-            {limitedViews.toLocaleString()} limited or unscored under current
-            rules
-          </span>
-        </article>
-        <article>
-          <small>Matched price observations</small>
-          <strong>{matchedObservations.toLocaleString()}</strong>
-          <span>Summed across the selected retailer scorecards</span>
-        </article>
-        <article className="portfolio-summary-position">
-          <small>Retailer-view leadership</small>
-          <strong>
-            {benchmarkLeads.toLocaleString()}–{competitorLeads.toLocaleString()}
-          </strong>
-          <span>
-            {benchmark.name} leads – competitor leads; ready views only
-          </span>
-        </article>
-      </div>
-      <footer>
-        <span>
-          Snapshot measure: price position, not sales, margin, elasticity, or
-          customer price perception.
-        </span>
-        <span>Parity and mixed outcomes remain visible in the scorecard.</span>
-      </footer>
-    </section>
-  );
-}
-
-function RetailerScorecardPanel({
+function RadiusRetailerScorecardPanel({
+  analysisId,
   benchmark,
-  rows,
-  candidates,
-  decisions,
-  relationships,
-  assortment,
+  competitorId,
+  profileId,
+  radiusMiles,
+  stateFilter,
+  cityFilter,
   onSelect,
-  onReviewMatch,
 }: Readonly<{
+  analysisId: string;
   benchmark: RetailerOption;
-  rows: RetailerScorecard[];
-  candidates: ProductMatchCandidate[];
-  decisions: ProductDecision[];
-  relationships: JsonObject[];
-  assortment: AssortmentAnalysis | null;
+  competitorId: string;
+  profileId: string;
+  radiusMiles: 1 | 3 | 5;
+  stateFilter: string | null;
+  cityFilter: string | null;
   onSelect: (retailerId: string) => void;
-  onReviewMatch: (product: ScorecardProductSummary) => void;
 }>) {
-  const [selectedScorecard, setSelectedScorecard] =
-    useState<RetailerScorecard | null>(null);
-  const ranked = useMemo(
-    () =>
-      [...rows].sort(
-        (left, right) => (right.matches ?? 0) - (left.matches ?? 0),
-      ),
-    [rows],
+  const [result, setResult] = useState<{
+    query: string;
+    portfolio: CompetitivePortfolioScorecards | null;
+    error: string;
+  }>({ query: "", portfolio: null, error: "" });
+  const [selected, setSelected] = useState<RadiusRetailerScorecard | null>(
+    null,
   );
-  const productsByScorecard = useMemo(
-    () =>
-      new Map(
-        ranked.map((row) => [
-          `${row.competitor_id}::${row.profile_id}`,
-          scorecardProductSummaries(
-            row,
-            candidates,
-            decisions,
-            relationships,
-            assortment,
-          ),
-        ]),
-      ),
-    [assortment, candidates, decisions, ranked, relationships],
-  );
-  const selectedProducts = selectedScorecard
-    ? (productsByScorecard.get(
-        `${selectedScorecard.competitor_id}::${selectedScorecard.profile_id}`,
-      ) ?? [])
-    : [];
+  const query = useMemo(() => {
+    const parameters = new URLSearchParams({
+      competitor: competitorId,
+      profile: profileId,
+      radius_miles: String(radiusMiles),
+    });
+    if (stateFilter) parameters.set("state", stateFilter);
+    if (stateFilter && cityFilter) parameters.set("city", cityFilter);
+    return parameters.toString();
+  }, [cityFilter, competitorId, profileId, radiusMiles, stateFilter]);
+  const requestKey =
+    "/api/analyses/" +
+    encodeURIComponent(analysisId) +
+    "/competitive-portfolio-scorecards?" +
+    query;
+  const portfolio = result.query === requestKey ? result.portfolio : null;
+  const error = result.query === requestKey ? result.error : "";
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(requestKey, { signal: controller.signal })
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as
+          CompetitivePortfolioScorecards | { error?: string };
+        if (!response.ok || !("scorecards" in body)) {
+          throw new Error(
+            "error" in body && body.error
+              ? body.error
+              : "Portfolio scorecards returned " + response.status,
+          );
+        }
+        setResult({ query: requestKey, portfolio: body, error: "" });
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setResult({
+          query: requestKey,
+          portfolio: null,
+          error:
+            cause instanceof Error
+              ? cause.message
+              : "Radius-native scorecards are unavailable.",
+        });
+      });
+    return () => controller.abort();
+  }, [requestKey]);
   return (
     <>
       <Section
         title={
-          rows.length === 1
-            ? `${rows[0].competitor} scorecard`
-            : "Retailer scorecard"
+          competitorId === "all" ? "Retailer scorecards" : "Retailer scorecard"
         }
-        note={`Each row names its persisted Product Pack comparison basis. These publication scorecards retain their legacy exact-ZIP geography; use Leadership Overview and its companion tabs for current 1-, 3-, or 5-mile physical-store analysis and same-ZIP service-area analysis. Open a row's relationship-pair view to inspect its governed product identities.`}
+        note={
+          "Every result starts with a certified product relationship and an observed " +
+          benchmark.name +
+          " product-store. Physical competitors must be within " +
+          radiusMiles +
+          " mile" +
+          (radiusMiles === 1 ? "" : "s") +
+          "; service-area retailers use the same delivery ZIP."
+        }
       >
-        <div className="retailer-scorecard-table">
-          <div className="retailer-scorecard-head">
-            <span>Competitor</span>
-            <span>Matched evidence</span>
-            <span>Lower-price share</span>
-            <span>Paired median price position</span>
-            <span>Status</span>
+        {!portfolio && !error ? (
+          <div className="empty-inline" role="status">
+            Building radius-native retailer scorecards…
           </div>
-          {ranked.map((row) => {
-            const includedProducts =
-              productsByScorecard.get(
-                `${row.competitor_id}::${row.profile_id}`,
-              ) ?? [];
-            return (
-              <div
-                className="retailer-scorecard-row"
-                key={`${row.competitor_id}::${row.profile_id}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelect(row.competitor_id)}
-                >
-                  <strong>{row.competitor}</strong>
-                  <span>{row.comparison_lens}</span>
-                  <small>
-                    {displayLabel(row.comparison_metric)} ·{" "}
-                    {priceUnitLabel(row.price_unit)} ·{" "}
-                    {displayLabel(row.geography)}
-                  </small>
-                </button>
-                <div className="retailer-scorecard-evidence">
-                  <strong>{(row.matches ?? 0).toLocaleString()}</strong>
-                  <span>
-                    {row.evidence_state === "no_governed_relationships"
-                      ? "governed relationships"
-                      : row.evidence_state === "no_admissible_observations"
-                        ? "admissible observations"
-                        : "matched observations"}
-                  </span>
-                  <small>
-                    {row.matched_geographies === null
-                      ? "Legacy exact-ZIP count unavailable"
-                      : `${row.matched_geographies.toLocaleString()} legacy exact-ZIP markets`}
-                  </small>
-                  <button
-                    type="button"
-                    disabled={includedProducts.length === 0}
-                    onClick={() => setSelectedScorecard(row)}
-                  >
-                    {includedProducts.length > 0
-                      ? `View ${includedProducts.length.toLocaleString()} relationship pair${includedProducts.length === 1 ? "" : "s"}`
-                      : "Product summary unavailable"}
-                  </button>
-                </div>
-                <div className="retailer-share-bars">
-                  <span>
-                    {benchmark.name}
-                    <b>{formatScorecardRate(row.benchmark_lower_rate)}</b>
-                  </span>
-                  <i>
-                    <b
-                      className="benchmark"
-                      style={{
-                        width: `${Math.max((row.benchmark_lower_rate ?? 0) * 100, 1)}%`,
-                      }}
-                    />
-                  </i>
-                  <span>
-                    {row.competitor}
-                    <b>{formatScorecardRate(row.competitor_lower_rate)}</b>
-                  </span>
-                  <i>
-                    <b
-                      className="competitor"
-                      style={{
-                        width: `${Math.max((row.competitor_lower_rate ?? 0) * 100, 1)}%`,
-                      }}
-                    />
-                  </i>
-                  <span>
-                    Parity
-                    <b>{formatScorecardRate(row.parity_rate)}</b>
-                  </span>
-                  <i>
-                    <b
-                      className="parity"
-                      style={{
-                        width: `${Math.max((row.parity_rate ?? 0) * 100, 1)}%`,
-                      }}
-                    />
-                  </i>
-                </div>
-                <strong className="retailer-price-position">
-                  {row.price_position}
-                </strong>
-                <span
-                  className={`retailer-score-status ${row.status}`}
-                  title={row.readiness_reason}
-                >
-                  <b>{row.status === "ready" ? "Ready" : "Limited evidence"}</b>
-                  <small>{row.readiness_reason}</small>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        {rows.length === 1 ? (
-          <button
-            className="retailer-show-all"
-            type="button"
-            onClick={() => onSelect("all")}
-          >
-            Return to all competitors
-          </button>
+        ) : null}
+        {error ? (
+          <div className="empty-inline error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {portfolio ? (
+          <div className="radius-scorecard-list">
+            {portfolio.scorecards.map((scorecard) => {
+              return (
+                <article key={scorecard.competitor_id}>
+                  <header>
+                    <button
+                      type="button"
+                      onClick={() => onSelect(scorecard.competitor_id)}
+                    >
+                      <strong>{scorecard.competitor}</strong>
+                      <span>
+                        {scorecard.relationships.toLocaleString()} certified
+                        relationships
+                      </span>
+                    </button>
+                    <span
+                      className={
+                        "readiness-pill " +
+                        (scorecard.scored_product_locations
+                          ? "ready"
+                          : "review_required")
+                      }
+                    >
+                      {scorecard.scored_product_locations
+                        ? "Comparable evidence"
+                        : "No local overlap"}
+                    </span>
+                  </header>
+                  <div className="radius-scorecard-metrics">
+                    <span>
+                      <small>Products included</small>
+                      <b>
+                        {scorecard.benchmark_products.toLocaleString()} Walmart
+                        · {scorecard.competitor_products.toLocaleString()}{" "}
+                        competitor
+                      </b>
+                    </span>
+                    <span>
+                      <small>Comparable evidence</small>
+                      <b>
+                        {scorecard.scored_product_locations.toLocaleString()} of{" "}
+                        {scorecard.benchmark_product_locations.toLocaleString()}{" "}
+                        product-locations
+                      </b>
+                    </span>
+                    <span>
+                      <small>{benchmark.name} lower</small>
+                      <b>
+                        {formatScorecardRate(scorecard.benchmark_lower_rate)}
+                      </b>
+                    </span>
+                    <span>
+                      <small>{scorecard.competitor} lower</small>
+                      <b>
+                        {formatScorecardRate(scorecard.competitor_lower_rate)}
+                      </b>
+                    </span>
+                    <span>
+                      <small>Average competitor minus Walmart</small>
+                      <b>
+                        {scorecard.average_gap === null
+                          ? "—"
+                          : `${scorecard.average_gap >= 0 ? "+" : "−"}${formatCurrency(Math.abs(scorecard.average_gap))}`}
+                      </b>
+                    </span>
+                  </div>
+                  <footer>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(scorecard)}
+                    >
+                      View {scorecard.products.length.toLocaleString()} included
+                      Walmart products
+                    </button>
+                    <Link
+                      href={
+                        "/analyses/" +
+                        encodeURIComponent(analysisId) +
+                        "?tab=match-summary&competitor=" +
+                        encodeURIComponent(scorecard.competitor_id) +
+                        "&lens=" +
+                        encodeURIComponent(profileId) +
+                        "&radius=" +
+                        radiusMiles
+                      }
+                    >
+                      Open Match Summary →
+                    </Link>
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
         ) : null}
       </Section>
-      {selectedScorecard ? (
-        <IncludedProductsDrawer
-          key={`${selectedScorecard.competitor_id}::${selectedScorecard.profile_id}`}
-          benchmark={benchmark}
-          scorecard={selectedScorecard}
-          products={selectedProducts}
-          onClose={() => setSelectedScorecard(null)}
-          onReviewMatch={onReviewMatch}
-        />
+      {selected ? (
+        <div
+          className="evidence-drawer-backdrop scorecard-products-layer"
+          role="presentation"
+          onClick={() => setSelected(null)}
+        >
+          <aside
+            className="evidence-drawer scorecard-products-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="radius-scorecard-products-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">
+                  Radius-native scorecard evidence
+                </span>
+                <h2 id="radius-scorecard-products-title">
+                  Walmart products included against {selected.competitor}
+                </h2>
+                <p>
+                  Product-level totals reconcile to the retailer scorecard at
+                  the current basis, radius, and benchmark geography.
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelected(null)}>
+                ×
+              </button>
+            </header>
+            <div className="scorecard-product-list">
+              {selected.products.map((product) => (
+                <article key={product.product_id}>
+                  {product.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={product.image_url} alt="" />
+                  ) : null}
+                  <div>
+                    <strong>{product.product_name}</strong>
+                    <span>Walmart product ID {product.product_id}</span>
+                    <small>
+                      {product.relationships.toLocaleString()} relationships ·{" "}
+                      {product.scored_product_locations.toLocaleString()} of{" "}
+                      {product.benchmark_product_locations.toLocaleString()}{" "}
+                      observed product-locations scored
+                    </small>
+                  </div>
+                  <b>
+                    {formatScorecardRate(product.benchmark_lower_rate)} Walmart
+                    lower
+                  </b>
+                </article>
+              ))}
+            </div>
+          </aside>
+        </div>
       ) : null}
     </>
   );
@@ -2514,9 +2402,9 @@ function BlueprintSection({
         !comparisonChart ? (
         <DataTable rows={section.records} />
       ) : null}
-      {comparisonChart || (narrativeLeads && supportingRows.length > 0) ? (
+      {comparisonChart && supportingRows.length > 0 ? (
         <details className="evidence-disclosure report-detail">
-          <summary>View supporting detail</summary>
+          <summary>Audit chart data</summary>
           <DataTable rows={supportingRows} />
         </details>
       ) : null}

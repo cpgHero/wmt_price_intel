@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/competitive-portfolio-scorecards.schema.json",
+  "title": "RetailCompetitiveIntelligenceCompetitivePortfolioScorecards",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "generated_at",
+    "benchmark_retailer",
+    "filters",
+    "policy",
+    "scorecards"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "benchmark_retailer": { "$ref": "#/$defs/idName" },
+    "filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["competitor_id", "profile_id", "radius_miles", "state", "city"],
+      "properties": {
+        "competitor_id": { "type": "string", "minLength": 1 },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "radius_miles": { "enum": [1, 3, 5] },
+        "state": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["physical_store_rule", "service_area_rule", "grain"],
+      "properties": {
+        "physical_store_rule": { "const": "within selected radius" },
+        "service_area_rule": { "const": "same delivery ZIP" },
+        "grain": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scorecards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scorecard" }
+    }
+  },
+  "$defs": {
+    "idName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "benchmark_product_locations",
+        "scored_product_locations",
+        "coverage_rate",
+        "leader_product_locations",
+        "tied_product_locations",
+        "at_risk_product_locations",
+        "losing_product_locations",
+        "unscored_product_locations",
+        "leader_rate",
+        "benchmark_lower_rate",
+        "competitor_lower_rate",
+        "parity_rate",
+        "average_gap"
+      ],
+      "properties": {
+        "benchmark_product_locations": { "type": "integer", "minimum": 0 },
+        "scored_product_locations": { "type": "integer", "minimum": 0 },
+        "coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "leader_product_locations": { "type": "integer", "minimum": 0 },
+        "tied_product_locations": { "type": "integer", "minimum": 0 },
+        "at_risk_product_locations": { "type": "integer", "minimum": 0 },
+        "losing_product_locations": { "type": "integer", "minimum": 0 },
+        "unscored_product_locations": { "type": "integer", "minimum": 0 },
+        "leader_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "benchmark_lower_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "competitor_lower_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "parity_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "average_gap": { "type": ["number", "null"] }
+      }
+    },
+    "productSummary": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/summary" },
+        {
+          "type": "object",
+          "required": ["product_id", "product_name", "image_url", "relationships"],
+          "properties": {
+            "product_id": { "type": "string", "minLength": 1 },
+            "product_name": { "type": "string", "minLength": 1 },
+            "image_url": { "type": ["string", "null"] },
+            "relationships": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "scorecard": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/summary" },
+        {
+          "type": "object",
+          "required": [
+            "competitor_id",
+            "competitor",
+            "benchmark_products",
+            "competitor_products",
+            "relationships",
+            "products"
+          ],
+          "properties": {
+            "competitor_id": { "type": "string", "minLength": 1 },
+            "competitor": { "type": "string", "minLength": 1 },
+            "benchmark_products": { "type": "integer", "minimum": 0 },
+            "competitor_products": { "type": "integer", "minimum": 0 },
+            "relationships": { "type": "integer", "minimum": 0 },
+            "products": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/productSummary" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1968,16 +1968,6 @@ function ProductCatalog({
                   >
                     Open report
                   </button>
-                  <button
-                    aria-busy={loading}
-                    disabled={loading}
-                    onClick={() =>
-                      onOpenProduct(product.product_id, "store-review")
-                    }
-                    type="button"
-                  >
-                    Store review
-                  </button>
                 </div>
               </article>
             );

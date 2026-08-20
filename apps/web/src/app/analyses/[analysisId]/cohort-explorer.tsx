@@ -57,6 +57,60 @@ function gapCopy(
     : `${benchmarkName} is ${amount} lower at the paired median`;
 }
 
+function escapeCsv(value: unknown) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function escapeXml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function exportCohorts(
+  rows: Array<Record<string, string | number | null>>,
+  format: "csv" | "excel",
+) {
+  if (!rows.length) return;
+  const columns = Object.keys(rows[0]);
+  const content =
+    format === "csv"
+      ? [
+          columns.map(escapeCsv).join(","),
+          ...rows.map((row) =>
+            columns.map((column) => escapeCsv(row[column])).join(","),
+          ),
+        ].join("\n")
+      : `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Cohort Scorecards"><Table>${[
+          columns,
+          ...rows.map((row) => columns.map((column) => row[column])),
+        ]
+          .map(
+            (row) =>
+              `<Row>${row
+                .map(
+                  (value) =>
+                    `<Cell><Data ss:Type="${typeof value === "number" ? "Number" : "String"}">${escapeXml(value)}</Data></Cell>`,
+                )
+                .join("")}</Row>`,
+          )
+          .join("")}</Table></Worksheet></Workbook>`;
+  const blob = new Blob([content], {
+    type:
+      format === "csv"
+        ? "text/csv;charset=utf-8"
+        : "application/vnd.ms-excel;charset=utf-8",
+  });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `competitive-cohort-scorecards.${format === "csv" ? "csv" : "xls"}`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 export function ComparableCohortExplorer({
   records,
   benchmarkName,
@@ -98,6 +152,26 @@ export function ComparableCohortExplorer({
     [cohorts, outcome, sort],
   );
   const visible = showAll ? filtered : filtered.slice(0, 12);
+  const exportRows = filtered.map((cohort) => {
+    const evidence = pairEvidence[cohort.id];
+    return {
+      Competitor: cohort.competitor,
+      Cohort: cohort.segment,
+      "Governed product pairs": evidence?.pairCount ?? 0,
+      [`${benchmarkName} brand-type mix`]:
+        evidence?.benchmarkBrandTypes ?? "unresolved",
+      "Competitor brand-type mix":
+        evidence?.competitorBrandTypes ?? "unresolved",
+      "Paired observations": cohort.matches,
+      "Published matched markets": cohort.matchedGeographies,
+      [`${benchmarkName} lower rate`]: cohort.benchmarkLowerRate,
+      "Competitor lower rate": cohort.competitorLowerRate,
+      "Parity rate": cohort.parityRate,
+      [`${benchmarkName} median`]: cohort.benchmarkMedian,
+      "Competitor median": cohort.competitorMedian,
+      "Paired median difference": cohort.medianGap,
+    };
+  });
   const dimensions = cohortDimensions.length
     ? cohortDimensions.join(" · ")
     : "Product Pack matching attributes";
@@ -164,6 +238,20 @@ export function ComparableCohortExplorer({
             <option value="gap">Largest paired median difference</option>
           </select>
         </label>
+        <div className="cohort-export-actions">
+          <button
+            type="button"
+            onClick={() => exportCohorts(exportRows, "csv")}
+          >
+            Download CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => exportCohorts(exportRows, "excel")}
+          >
+            Download Excel
+          </button>
+        </div>
       </div>
 
       <div className="cohort-list">
