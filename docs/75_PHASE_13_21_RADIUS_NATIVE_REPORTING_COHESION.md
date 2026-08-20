@@ -1,6 +1,6 @@
 # Phase 13.21 — Radius-Native Reporting Cohesion
 
-Status: implemented and full local-suite verified; deployment and production validation pending
+Status: deployed and production-verified
 
 ## Purpose
 
@@ -103,5 +103,20 @@ Walmart; negative values favor the competitor.
   competitive tab identity, legacy-route compatibility, and product-leadership analytics are
   covered by the passing suites.
 
-Full CI, Railway deployment, live browser validation, replacement publication, and recoverable
-archive actions remain pending. This document must be updated after those gates complete.
+## Production verification — 2026-08-20
+
+- GitHub Actions run `32401469538` passed 599 Python tests, 66 web/contract tests, 13
+  Playwright tests, contract/migration/type/lint/format gates, production builds, and all four
+  service containers.
+- Railway web, API, worker, and scheduler deployments are healthy.
+- The production Egg report exposes all nine intended tabs and none of Market Performance,
+  Competitive Exceptions, or report-level Data Integrity.
+- ALDI radius reconciliation holds 5,377 Walmart product-locations constant. Scored overlap grows
+  monotonically from 1,572 at one mile to 2,825 at three miles and 3,356 at five miles.
+  Walmart-lower, competitor-lower, and parity sum to 100% at every radius.
+- The three current Egg matrices were rematerialized with zero provider calls. The anchored matrix
+  has 83 ascending rungs, 14 retailers, 346 populated cells, and 680 product placements. Every
+  populated cell is ordered by observed-location count; 645 products carry supplied seller names
+  and all 680 carry explicit seller-governance status.
+- No report was archived. Source Search/PDP evidence, certification history, immutable releases,
+  and audit lineage remain unchanged.

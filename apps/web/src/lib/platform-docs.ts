@@ -86,7 +86,7 @@ export const platformDocumentation: PlatformDocumentation = {
   version: "1.3.21",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3; scope-governance release deployed and production-reconciled",
+    "Production implementation through Egg Product Pack 1.2.3; radius-native reporting-cohesion release deployed and production-reconciled",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,9 +1358,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implemented and full local-suite verified; deployment pending",
+              "Deployed and production-verified",
               "Price and Competitive Intelligence reporting navigation, radius scorecards, matrix evidence, maps, exports, and workspace consolidation were aligned to the decision workflow.",
-              "Price Intelligence Home no longer offers a duplicate Store Review action; matrix products are ordered by observed footprint and display PDP seller evidence. Competitive Intelligence renames the executive and cohort workspaces, adds a matched-product matrix, merges market KPIs and the geographic scorecard into Competitive Footprint, moves exceptions into Store Comparisons, removes duplicate Market Performance and report Data Integrity tabs, and adds CSV/Excel evidence exports. The new portfolio scorecard contract computes certified product-location outcomes using the selected physical-store radius or explicitly labeled service-area ZIP rule; Walmart-lower includes clear and narrow leads while clear-leader remains separate. Obsolete publications may be recoverably archived only after their replacements validate; source Search data, PDP evidence, certification decisions, and audit lineage are never deleted.",
+              "Price Intelligence Home no longer offers a duplicate Store Review action; matrix products are ordered by observed footprint and display PDP seller evidence. Competitive Intelligence renames the executive and cohort workspaces, adds a matched-product matrix, merges market KPIs and the geographic scorecard into Competitive Footprint, moves exceptions into Store Comparisons, removes duplicate Market Performance and report Data Integrity tabs, and adds CSV/Excel evidence exports. The new portfolio scorecard contract computes certified product-location outcomes using the selected physical-store radius or explicitly labeled service-area ZIP rule; Walmart-lower includes clear and narrow leads while clear-leader remains separate. Production ALDI reconciliation holds 5,377 Walmart product-locations constant while scored overlap grows monotonically from 1,572 at one mile to 2,825 at three and 3,356 at five; Walmart-lower, competitor-lower, and parity reconcile to 100% at every radius. The current Egg matrix was refreshed with zero provider calls: all 346 populated cells sort products by observed footprint, 645 of 680 products retain supplied PDP seller names, and all 680 retain seller-governance status. GitHub Actions run 32401469538 passed 599 Python tests, 66 web/contract tests, 13 Playwright tests, migrations, type/lint/format/contract gates, production builds, and all four containers. No report was archived in this release. Obsolete publications may be recoverably archived only after their replacements validate; source Search data, PDP evidence, certification decisions, and audit lineage are never deleted.",
             ],
             [
               "2026-08-20",
