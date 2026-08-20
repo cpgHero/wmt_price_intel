@@ -148,13 +148,18 @@ def _compact_interactive_view(view: JsonObject) -> None:
                 compact_product = {
                     key: value for key, value in product.items() if key in allowed_product_fields
                 }
-                observed_brand = product.get("observed_brand")
                 attributes = product.get("attributes")
-                if not isinstance(observed_brand, str) or not observed_brand.strip():
-                    observed_brand = (
-                        attributes.get("brand") if isinstance(attributes, dict) else None
-                    )
-                if not isinstance(observed_brand, str) or not observed_brand.strip():
+                if "observed_brand" in product:
+                    # The Search-derived brand may intentionally be null. PDP
+                    # identity must not silently move an unbranded product into
+                    # a brand scorecard or drawer.
+                    observed_brand = product.get("observed_brand")
+                elif isinstance(attributes, dict) and "brand" in attributes:
+                    # Backward compatibility for publications created before
+                    # observed_brand was persisted explicitly. The governed
+                    # Search attribute is authoritative, including null.
+                    observed_brand = attributes.get("brand")
+                else:
                     variants = product.get("attribute_variants")
                     if isinstance(variants, list):
                         observed_brand = next(
@@ -167,10 +172,12 @@ def _compact_interactive_view(view: JsonObject) -> None:
                             ),
                             None,
                         )
+                    else:
+                        observed_brand = product.get("brand")
                 compact_product["observed_brand"] = (
                     observed_brand.strip()
                     if isinstance(observed_brand, str) and observed_brand.strip()
-                    else product.get("brand")
+                    else None
                 )
                 compact_products.append(compact_product)
             compact["products"] = compact_products

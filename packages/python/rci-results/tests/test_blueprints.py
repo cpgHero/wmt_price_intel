@@ -301,7 +301,26 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
                                     "walmart_us|72712|2",
                                 ],
                                 "pdp_details": {"description_full": "large audit payload"},
-                            }
+                            },
+                            {
+                                "product_id": "101",
+                                "canonical_product_id": "walmart_us:101",
+                                "name": "PDP branded but Search unbranded",
+                                "brand": "PDP Brand",
+                                "observed_brand": None,
+                                "attributes": {"brand": None},
+                                "observed_locations": 1,
+                                "observed_zipcodes": 1,
+                            },
+                            {
+                                "product_id": "102",
+                                "canonical_product_id": "walmart_us:102",
+                                "name": "Legacy Search unbranded",
+                                "brand": "PDP Brand",
+                                "attributes": {"brand": None},
+                                "observed_locations": 1,
+                                "observed_zipcodes": 1,
+                            },
                         ],
                     }
                 ]
@@ -332,6 +351,8 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
         "observed_locations": 2,
         "observed_zipcodes": 2,
     }
+    assert view["assortment_analysis"]["retailers"][0]["products"][1]["observed_brand"] is None
+    assert view["assortment_analysis"]["retailers"][0]["products"][2]["observed_brand"] is None
 
 
 def test_sparse_suppressed_product_decisions_warn_without_blocking_report() -> None:
