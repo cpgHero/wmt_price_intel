@@ -730,6 +730,28 @@ def test_matching_v2_incomplete_certification_blocks_report_readiness() -> None:
     )
 
 
+def test_final_insufficient_evidence_is_an_explicit_nonblocking_exclusion() -> None:
+    result = _result()
+    result["source"]["matching_v2_certification_coverage"] = {
+        "authority": "matching_v2_certified_gold_set",
+        "queue_case_count": 2,
+        "certified_label_count": 1,
+        "certified_comparable_count": 0,
+        "certified_not_comparable_count": 1,
+        "unresolved_excluded_count": 1,
+        "reviewed_insufficient_evidence_count": 1,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+    }
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    blocking_codes = {row["code"] for row in view["report_readiness"]["blocking_reasons"]}
+    warning_codes = {row["code"] for row in view["report_readiness"]["warnings"]}
+    assert "matching_v2_certification_incomplete" not in blocking_codes
+    assert "matching_v2_insufficient_evidence_excluded" in warning_codes
+
+
 def test_matching_v2_publication_blocks_when_certified_relationship_is_lost() -> None:
     result = _result()
     result["source"]["matching_v2_gold_set_release_id"] = "8374b3c8-379c-4b19-b400-773f36a9a1e4"

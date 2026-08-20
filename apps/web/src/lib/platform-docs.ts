@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.26",
+  version: "1.3.27",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3, plus the test-verified Egg reporting acceptance boundary pending governed replay and production acceptance",
+    "Production implementation through Egg Product Pack 1.2.3, plus the test-verified terminal insufficient-evidence release boundary pending governed replay and production acceptance",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -158,7 +158,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes unresolved cases, and disables automatic match fallback. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes certified not-comparable and final insufficient-evidence cases from price metrics, and disables automatic match fallback. Final insufficient-evidence decisions remain in an immutable exclusion ledger with reviewer, rationale, and evidence provenance; cases without any final human outcome block publication. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -744,7 +744,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
-            "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
+            "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
             "Keep the Price Architecture Matrix independent from matching. Assign each retailer SKU exactly once from its median positive Search package price across observed locations. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
@@ -759,6 +759,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Current analytical capability boundary",
           columns: ["Available now", "Requires additional governed data"],
           rows: [
+            [
+              "2026-08-20",
+              "Test-verified; deployment and governed replay pending",
+              "Matching v2 releases distinguish final human insufficient-evidence exclusions from cases that still lack review.",
+              "The final Egg Kroger case is complete with an insufficient-evidence disposition because required housing-method evidence remains unknown. Gold-set 2.0.0 now preserves that outcome in a separate immutable exclusion ledger, changes the release checksum, retains reviewer/rationale/evidence provenance, and reconciles it to the current queue transactionally. Report readiness blocks only candidates without a final human outcome; reviewed exclusions remain outside comparable and not-comparable metrics and appear as explicit warnings. No relationship is inferred, no provider call occurs, and no source data, PDP evidence, certification history, or audit lineage is deleted.",
+            ],
             [
               "Certified product relationships; package and supported unit price; win/tie/loss; price gaps; local price ladders and rank",
               "Historical response, persistence, volatility, stability, and trend",
@@ -1362,7 +1368,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-20",
               "Deployed and release-gate verified; governed replay and production acceptance pending",
               "Matching v2 certified identity is preserved independently of exact-ZIP price overlap, with a fail-closed Egg reporting acceptance audit.",
-              "A governed replay now begins with every certified-comparable gold-set pair and carries eligible relationships into 1/3/5-mile scoring even when the products were never co-observed in one ZIP. Worker and report-readiness reconciliation block missing or invented relationships overall and per retailer; assortment and Product Pack cohorts retain the same certified relationship population. Publication refuses a report with blocking readiness defects, then audits all comparison-basis × 1/3/5-mile materializations for count partitions, rates, product and relationship rollups, retailer scope, denominator stability, and monotonic radius behavior. The correction addresses the prior loss of Sam's Club, ShopRite, and Trader Joe's relationships. GitHub Actions run 32427778056 passed contracts, reversible Postgres migrations, Python and TypeScript gates, 13 browser tests, production builds, and all four service containers; Railway API and worker services expose the new code from commit 04aab97. One Egg Kroger case remains unresolved and must be finalized by an administrator before a decision-ready replay can pass; no automatic decision, paid provider call, source deletion, or history mutation occurs.",
+              "A governed replay now begins with every certified-comparable gold-set pair and carries eligible relationships into 1/3/5-mile scoring even when the products were never co-observed in one ZIP. Worker and report-readiness reconciliation block missing or invented relationships overall and per retailer; assortment and Product Pack cohorts retain the same certified relationship population. Publication refuses a report with blocking readiness defects, then audits all comparison-basis × 1/3/5-mile materializations for count partitions, rates, product and relationship rollups, retailer scope, denominator stability, and monotonic radius behavior. The correction addresses the prior loss of Sam's Club, ShopRite, and Trader Joe's relationships. GitHub Actions run 32427778056 passed contracts, reversible Postgres migrations, Python and TypeScript gates, 13 browser tests, production builds, and all four service containers; Railway API and worker services expose the new code from commit 04aab97. The platform owner subsequently completed the final Egg Kroger case with an explicit insufficient-evidence disposition; no automatic decision, paid provider call, source deletion, or history mutation occurs.",
             ],
             [
               "2026-08-20",

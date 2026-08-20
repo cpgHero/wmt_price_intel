@@ -210,6 +210,8 @@ export interface Source {
     certified_comparable_count: number;
     certified_not_comparable_count: number;
     unresolved_excluded_count: number;
+    reviewed_insufficient_evidence_count?: number;
+    pending_unreviewed_count?: number;
     automatic_fallback_enabled: false;
     retailers?: {
       competitor_retailer_id: string;
@@ -217,6 +219,8 @@ export interface Source {
       certified_count: number;
       certified_comparable_count: number;
       certified_not_comparable_count: number;
+      reviewed_insufficient_evidence_count?: number;
+      pending_unreviewed_count?: number;
       unresolved_count: number;
     }[];
   } | null;

@@ -64,6 +64,8 @@ def _matching_v2_certification_coverage(
             "certified_count": 0,
             "certified_comparable_count": 0,
             "certified_not_comparable_count": 0,
+            "reviewed_insufficient_evidence_count": 0,
+            "pending_unreviewed_count": 0,
             "unresolved_count": 0,
         }
     )
@@ -94,6 +96,26 @@ def _matching_v2_certification_coverage(
             counts["certified_comparable_count"] += 1
         else:
             counts["certified_not_comparable_count"] += 1
+
+    reviewed_insufficient_evidence_count = 0
+    pending_unreviewed_count = 0
+    for case in cases:
+        case_id = str(case.get("case_id") or case.get("external_case_id") or "").strip()
+        if case_id in certified_case_ids:
+            continue
+        retailer_id = retailer_by_case[case_id]
+        final_decision = case.get("final_decision")
+        final_verdict = str(
+            case.get("final_verdict")
+            or (final_decision.get("verdict") if isinstance(final_decision, Mapping) else "")
+            or ""
+        )
+        if final_verdict == "insufficient_evidence":
+            reviewed_insufficient_evidence_count += 1
+            retailer_counts[retailer_id]["reviewed_insufficient_evidence_count"] += 1
+        else:
+            pending_unreviewed_count += 1
+            retailer_counts[retailer_id]["pending_unreviewed_count"] += 1
 
     retailers: list[dict[str, Any]] = []
     for retailer_id in sorted(retailer_counts):
@@ -143,6 +165,8 @@ def _matching_v2_certification_coverage(
         "certified_comparable_count": comparable_count,
         "certified_not_comparable_count": len(certified_case_ids) - comparable_count,
         "unresolved_excluded_count": len(retailer_by_case) - len(certified_case_ids),
+        "reviewed_insufficient_evidence_count": reviewed_insufficient_evidence_count,
+        "pending_unreviewed_count": pending_unreviewed_count,
         "automatic_fallback_enabled": False,
         "retailers": retailers,
     }
@@ -3465,6 +3489,15 @@ class PostgresMatchingV2ReviewRepository:
         rebuild_reason: str | None,
     ) -> dict[str, Any]:
         labels = list(gold_set.get("labels", []))
+        exclusions = list(gold_set.get("exclusions", []))
+        label_case_ids = {str(label.get("case_id") or "") for label in labels}
+        exclusion_case_ids = {str(exclusion.get("case_id") or "") for exclusion in exclusions}
+        if "" in label_case_ids or "" in exclusion_case_ids:
+            raise ValueError("matching v2 release entries require a case id")
+        if len(label_case_ids) != len(labels) or len(exclusion_case_ids) != len(exclusions):
+            raise ValueError("matching v2 release contains duplicate case entries")
+        if label_case_ids & exclusion_case_ids:
+            raise ValueError("a matching v2 case cannot be both certified and excluded")
         async with self._engine.begin() as connection:
             queue = (
                 (
@@ -3497,10 +3530,29 @@ class PostgresMatchingV2ReviewRepository:
                     await connection.execute(
                         text(
                             """
-                            SELECT external_case_id AS case_id, competitor_retailer_id
-                            FROM matching_v2_review_case
-                            WHERE review_queue_id = CAST(:review_queue_id AS uuid)
-                            ORDER BY competitor_retailer_id, external_case_id
+                            SELECT review_case.external_case_id AS case_id,
+                                   review_case.competitor_retailer_id,
+                                   current_decision.verdict AS final_verdict
+                            FROM matching_v2_review_case review_case
+                            LEFT JOIN LATERAL (
+                              SELECT decision.verdict
+                              FROM (
+                                SELECT submission.verdict, submission.created_at,
+                                       submission.id
+                                FROM matching_v2_review_submission submission
+                                WHERE submission.review_case_id = review_case.id
+                                UNION ALL
+                                SELECT adjudication.verdict, adjudication.created_at,
+                                       adjudication.id
+                                FROM matching_v2_adjudication adjudication
+                                WHERE adjudication.review_case_id = review_case.id
+                              ) decision
+                              ORDER BY decision.created_at DESC, decision.id DESC
+                              LIMIT 1
+                            ) current_decision ON true
+                            WHERE review_case.review_queue_id = CAST(:review_queue_id AS uuid)
+                            ORDER BY review_case.competitor_retailer_id,
+                                     review_case.external_case_id
                             """
                         ),
                         {"review_queue_id": queue["id"]},
@@ -3511,6 +3563,15 @@ class PostgresMatchingV2ReviewRepository:
             ]
             if len(queue_cases) != int(queue["queue_case_count"]):
                 raise ValueError("matching v2 queue counts changed while creating its release")
+            current_insufficient_case_ids = {
+                str(case["case_id"])
+                for case in queue_cases
+                if str(case.get("final_verdict") or "") == "insufficient_evidence"
+            }
+            if exclusion_case_ids != current_insufficient_case_ids:
+                raise ValueError(
+                    "matching v2 insufficient-evidence decisions changed while creating its release"
+                )
             source = (
                 (
                     await connection.execute(
@@ -4012,7 +4073,51 @@ class MatchingV2ReviewService:
             limit=1_000_000,
         )
         labels: list[dict[str, Any]] = []
+        exclusions: list[dict[str, Any]] = []
         for case in view["cases"]:
+            decision = case.get("final_decision")
+            if (
+                case["review_status"] == "flagged"
+                and decision is not None
+                and decision.get("verdict") == "insufficient_evidence"
+            ):
+                linked = set(decision.get("submission_ids", []))
+                reviews = (
+                    [review for review in case["review_submissions"] if review["id"] in linked]
+                    if linked
+                    else [decision]
+                )
+                evidence_refs = sorted(
+                    {
+                        *case["evidence_refs"],
+                        *decision["evidence_refs"],
+                        *(reference for review in reviews for reference in review["evidence_refs"]),
+                    }
+                )
+                legacy_adjudication = decision["source"] == "legacy_adjudication"
+                exclusions.append(
+                    {
+                        "case_id": case["case_id"],
+                        "benchmark_listing_id": case["benchmark_listing_id"],
+                        "competitor_listing_id": case["competitor_listing_id"],
+                        "reason": "insufficient_evidence",
+                        "critical": case["critical"],
+                        "stratum": case["stratum"],
+                        "review_status": (
+                            "adjudicated" if legacy_adjudication else "single_reviewed"
+                        ),
+                        "reviewers": sorted(
+                            {
+                                str(review.get("reviewer_id") or review.get("adjudicator_id"))
+                                for review in reviews
+                                if review.get("reviewer_id") or review.get("adjudicator_id")
+                            }
+                        ),
+                        "evidence_refs": evidence_refs,
+                        "rationale": decision["rationale"],
+                    }
+                )
+                continue
             if case["review_status"] not in {"approved", "rejected"}:
                 continue
             if case["review_status"] == "approved" and case.get("certification_blockers"):
@@ -4050,6 +4155,7 @@ class MatchingV2ReviewService:
                         {
                             str(review.get("reviewer_id") or review.get("adjudicator_id"))
                             for review in reviews
+                            if review.get("reviewer_id") or review.get("adjudicator_id")
                         }
                     ),
                     "evidence_refs": evidence_refs,
@@ -4064,9 +4170,14 @@ class MatchingV2ReviewService:
             "purpose": "release_certification",
             "product_pack": view["queue"]["product_pack"],
             "source_evidence": sorted(
-                {reference for label in labels for reference in label["evidence_refs"]}
+                {
+                    reference
+                    for item in [*labels, *exclusions]
+                    for reference in item["evidence_refs"]
+                }
             ),
             "labels": labels,
+            "exclusions": exclusions,
         }
         if labels:
             validate_instance(

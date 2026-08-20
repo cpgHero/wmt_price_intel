@@ -106,6 +106,11 @@
             "certified_comparable_count": { "type": "integer", "minimum": 0 },
             "certified_not_comparable_count": { "type": "integer", "minimum": 0 },
             "unresolved_excluded_count": { "type": "integer", "minimum": 0 },
+            "reviewed_insufficient_evidence_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pending_unreviewed_count": { "type": "integer", "minimum": 0 },
             "automatic_fallback_enabled": { "type": "boolean" },
             "retailers": {
               "type": "array",
@@ -126,6 +131,11 @@
                   "certified_count": { "type": "integer", "minimum": 0 },
                   "certified_comparable_count": { "type": "integer", "minimum": 0 },
                   "certified_not_comparable_count": { "type": "integer", "minimum": 0 },
+                  "reviewed_insufficient_evidence_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "pending_unreviewed_count": { "type": "integer", "minimum": 0 },
                   "unresolved_count": { "type": "integer", "minimum": 0 }
                 }
               }

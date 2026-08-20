@@ -2230,6 +2230,15 @@ class ArtifactRenderer:
             certified_labels = int(certification.get("certified_label_count") or 0)
             certified_comparable = int(certification.get("certified_comparable_count") or 0)
             unresolved = int(certification.get("unresolved_excluded_count") or 0)
+            reviewed_insufficient = int(
+                certification.get("reviewed_insufficient_evidence_count") or 0
+            )
+            pending_unreviewed_value = certification.get("pending_unreviewed_count")
+            pending_unreviewed = (
+                int(pending_unreviewed_value or 0)
+                if pending_unreviewed_value is not None
+                else unresolved
+            )
             if certification.get("selection_complete") is False:
                 blocking_reasons.append(
                     {
@@ -2241,13 +2250,34 @@ class ArtifactRenderer:
                         ),
                     }
                 )
-            if unresolved > 0:
+            if pending_unreviewed > 0:
                 blocking_reasons.append(
                     {
                         "code": "matching_v2_certification_incomplete",
                         "message": (
-                            f"{unresolved:,} of {queue_cases:,} candidate relationships remain "
-                            "unresolved and are excluded from this report."
+                            f"{pending_unreviewed:,} of {queue_cases:,} candidate relationships "
+                            "have no final human review outcome and are excluded from this report."
+                        ),
+                    }
+                )
+            if reviewed_insufficient > 0:
+                warnings.append(
+                    {
+                        "code": "matching_v2_insufficient_evidence_excluded",
+                        "message": (
+                            f"{reviewed_insufficient:,} candidate relationship received a final "
+                            "human insufficient-evidence decision and is transparently excluded "
+                            "from comparable and not-comparable metrics."
+                        ),
+                    }
+                )
+            if reviewed_insufficient + pending_unreviewed != unresolved:
+                blocking_reasons.append(
+                    {
+                        "code": "matching_v2_exclusion_counts_do_not_reconcile",
+                        "message": (
+                            "Final insufficient-evidence and pending case counts do not reconcile "
+                            "to the excluded Matching v2 cases."
                         ),
                     }
                 )

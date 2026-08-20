@@ -2,9 +2,11 @@
 
 ## Status
 
-Deployed and release-gate verified on August 20, 2026. The governed replay and
-production reporting acceptance remain pending the one final human
-certification decision described below.
+Core relationship-preservation and semantic-audit changes were deployed and
+release-gate verified on August 20, 2026. The platform owner has now completed
+all 185 review cases. The governed replay and production reporting acceptance
+remain pending deployment of the terminal insufficient-evidence release
+semantics described below.
 
 ## Purpose
 
@@ -30,7 +32,8 @@ Product identity and local price evidence are now treated as separate facts:
 ## Defect found in the governed Egg release
 
 The operational Egg queue contained 185 cases: 183 certified comparable, one
-certified not comparable, and one unresolved. The published report retained
+certified not comparable, and one case awaiting its final human disposition.
+The published report retained
 only 108 relationship candidates because the worker created presentation
 relationships from exact-ZIP `MatchRecord` rows instead of from the certified
 gold set itself. Sam's Club, ShopRite, and Trader Joe's therefore disappeared
@@ -102,13 +105,22 @@ Semantic errors block the release. Honest evidence limitations, such as a
 certified relationship with no scorable nearby product-location, remain
 explicit warnings.
 
-## Certification boundary
+## Terminal insufficient-evidence boundary
 
-The current Egg queue still contains one unresolved Kroger case at the time of
-implementation verification. The platform owner must certify it as comparable
-or not comparable (or supply sufficient evidence) before a fully decision-ready
-Egg release can pass publication materialization. The implementation does not
-silently infer or approve that decision.
+The platform owner completed the final Kroger case with a deliberate
+`insufficient_evidence` disposition: count, size, organic status, and shell
+color align, but one product lacks the housing-method evidence required by the
+Egg Product Pack. The platform must not invent that attribute, force a match,
+or misstate the case as abandoned work.
+
+The immutable gold-set release therefore preserves final human
+insufficient-evidence dispositions in a separate `exclusions` ledger. They
+remain outside both comparable and not-comparable metrics, change the release
+checksum, retain reviewer/rationale/evidence provenance, and appear as an
+explicit nonblocking report limitation. Only a case with no final human outcome
+blocks publication as pending review. Release creation reconciles the exclusion
+ledger to the current queue in the same database transaction so a decision
+change cannot race the immutable snapshot.
 
 ## Focused verification
 
@@ -138,7 +150,8 @@ This phase is not production-complete until all of the following are true:
 1. The complete release gate and service-container builds pass.
 2. The change is deployed to API, worker, scheduler, and web services as
    applicable.
-3. The single unresolved Egg case is finalized by an administrator.
+3. All Egg cases have a final administrator outcome, including any explicit
+   insufficient-evidence exclusions.
 4. A new immutable governed Egg replay completes with automatic fallback off.
 5. All certified comparable relationships reconcile overall and by retailer,
    including Sam's Club, ShopRite, and Trader Joe's.

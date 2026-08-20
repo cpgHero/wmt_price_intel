@@ -922,8 +922,15 @@ function BlueprintAnalysisWorkspace({
                       selectedCertificationCoverage.certified_not_comparable_count.toLocaleString(),
                   },
                   {
-                    label: "Unresolved candidates",
+                    label: "Insufficient-evidence exclusions",
                     value:
+                      selectedCertificationCoverage.reviewed_insufficient_evidence_count?.toLocaleString() ??
+                      "0",
+                  },
+                  {
+                    label: "Pending review",
+                    value:
+                      selectedCertificationCoverage.pending_unreviewed_count?.toLocaleString() ??
                       selectedCertificationCoverage.unresolved_count.toLocaleString(),
                   },
                 ]
@@ -951,8 +958,15 @@ function BlueprintAnalysisWorkspace({
                         certificationCoverage.certified_label_count.toLocaleString(),
                     },
                     {
-                      label: "Unresolved candidates",
+                      label: "Insufficient-evidence exclusions",
                       value:
+                        certificationCoverage.reviewed_insufficient_evidence_count?.toLocaleString() ??
+                        "0",
+                    },
+                    {
+                      label: "Pending review",
+                      value:
+                        certificationCoverage.pending_unreviewed_count?.toLocaleString() ??
                         certificationCoverage.unresolved_excluded_count.toLocaleString(),
                     },
                   ]

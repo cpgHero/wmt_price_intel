@@ -300,6 +300,51 @@ def test_release_gold_set_accepts_one_final_human_reviewer() -> None:
     )
 
 
+def test_release_gold_set_accepts_reviewed_insufficient_evidence_exclusion() -> None:
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-gold-set.schema.json",
+        {
+            "schema_version": "2.0.0",
+            "gold_set_id": "reviewed-exclusion-release",
+            "version": "1.0.0",
+            "purpose": "release_certification",
+            "product_pack": {"id": "fresh_shell_eggs", "version": "1.2.3"},
+            "source_evidence": ["artifact://egg-evidence"],
+            "labels": [
+                {
+                    "case_id": "case-certified",
+                    "benchmark_listing_id": "walmart_us:one",
+                    "competitor_listing_id": "kroger_us:one",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["equivalent_product"],
+                    "critical": True,
+                    "stratum": "exact_specification",
+                    "review_status": "single_reviewed",
+                    "reviewers": ["reviewer@cpghero.com"],
+                    "evidence_refs": ["artifact://egg-evidence"],
+                    "rationale": "The governed package attributes agree.",
+                }
+            ],
+            "exclusions": [
+                {
+                    "case_id": "case-insufficient",
+                    "benchmark_listing_id": "walmart_us:two",
+                    "competitor_listing_id": "kroger_us:two",
+                    "reason": "insufficient_evidence",
+                    "critical": False,
+                    "stratum": "edge_case",
+                    "review_status": "single_reviewed",
+                    "reviewers": ["reviewer@cpghero.com"],
+                    "evidence_refs": ["artifact://egg-evidence"],
+                    "rationale": "Housing evidence remains unknown for one product.",
+                }
+            ],
+        },
+        label="release gold set with reviewed exclusion",
+    )
+
+
 def test_certification_coverage_preserves_each_retailer_funnel() -> None:
     coverage = _matching_v2_certification_coverage(
         [
@@ -323,6 +368,8 @@ def test_certification_coverage_preserves_each_retailer_funnel() -> None:
     assert coverage["certified_label_count"] == 3
     assert coverage["certified_comparable_count"] == 2
     assert coverage["unresolved_excluded_count"] == 1
+    assert coverage["reviewed_insufficient_evidence_count"] == 0
+    assert coverage["pending_unreviewed_count"] == 1
     assert coverage["retailers"] == [
         {
             "competitor_retailer_id": "aldi_us",
@@ -330,6 +377,8 @@ def test_certification_coverage_preserves_each_retailer_funnel() -> None:
             "certified_count": 2,
             "certified_comparable_count": 1,
             "certified_not_comparable_count": 1,
+            "reviewed_insufficient_evidence_count": 0,
+            "pending_unreviewed_count": 1,
             "unresolved_count": 1,
         },
         {
@@ -338,9 +387,35 @@ def test_certification_coverage_preserves_each_retailer_funnel() -> None:
             "certified_count": 1,
             "certified_comparable_count": 1,
             "certified_not_comparable_count": 0,
+            "reviewed_insufficient_evidence_count": 0,
+            "pending_unreviewed_count": 0,
             "unresolved_count": 0,
         },
     ]
+
+
+def test_certification_coverage_distinguishes_final_insufficient_from_pending() -> None:
+    coverage = _matching_v2_certification_coverage(
+        [{"case_id": "certified", "expected_comparable": True}],
+        [
+            {
+                "case_id": "certified",
+                "competitor_retailer_id": "kroger_us",
+                "final_verdict": "comparable",
+            },
+            {
+                "case_id": "insufficient",
+                "competitor_retailer_id": "kroger_us",
+                "final_verdict": "insufficient_evidence",
+            },
+        ],
+    )
+
+    assert coverage["unresolved_excluded_count"] == 1
+    assert coverage["reviewed_insufficient_evidence_count"] == 1
+    assert coverage["pending_unreviewed_count"] == 0
+    assert coverage["retailers"][0]["reviewed_insufficient_evidence_count"] == 1
+    assert coverage["retailers"][0]["pending_unreviewed_count"] == 0
 
 
 def test_certification_coverage_rejects_labels_outside_the_queue() -> None:
@@ -626,6 +701,97 @@ async def test_gold_set_replay_binds_exact_certified_snapshot(monkeypatch: Any) 
     assert repository.replays[1]["rebuild_reason"].startswith("Regenerate")
 
 
+async def test_gold_set_preserves_final_insufficient_evidence_as_audited_exclusion(
+    monkeypatch: Any,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    certified_decision = {
+        "id": "decision-certified",
+        "source": "review_submission",
+        "reviewer_id": "owner@cpghero.com",
+        "verdict": "comparable",
+        "allowed_tiers": ["equivalent_product"],
+        "rationale": "Count, size, shell color, and housing method agree.",
+        "evidence_refs": ["artifact://certified"],
+        "submission_ids": [],
+    }
+    insufficient_decision = {
+        "id": "decision-insufficient",
+        "source": "review_submission",
+        "reviewer_id": "owner@cpghero.com",
+        "verdict": "insufficient_evidence",
+        "allowed_tiers": [],
+        "rationale": "Housing evidence remains unknown for one product.",
+        "evidence_refs": ["artifact://insufficient"],
+        "submission_ids": [],
+    }
+    view = {
+        "queue": {
+            "version": "4.0.0",
+            "product_pack": {"id": "fresh_shell_eggs", "version": "1.2.3"},
+        },
+        "cases": [
+            {
+                "case_id": "case-certified",
+                "benchmark_listing_id": "walmart_us:one",
+                "competitor_listing_id": "kroger_us:one",
+                "critical": True,
+                "stratum": "exact_specification",
+                "review_status": "approved",
+                "certification_blockers": [],
+                "evidence_refs": ["artifact://certified"],
+                "review_submissions": [],
+                "final_decision": certified_decision,
+            },
+            {
+                "case_id": "case-insufficient",
+                "benchmark_listing_id": "walmart_us:two",
+                "competitor_listing_id": "kroger_us:two",
+                "critical": False,
+                "stratum": "edge_case",
+                "review_status": "flagged",
+                "certification_blockers": [],
+                "evidence_refs": ["artifact://insufficient"],
+                "review_submissions": [],
+                "final_decision": insufficient_decision,
+            },
+        ],
+    }
+
+    async def queue_view(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return view
+
+    monkeypatch.setattr(service, "queue_view", queue_view)
+    gold_set = await service.gold_set("egg-queue")
+
+    assert len(gold_set["labels"]) == 1
+    assert gold_set["exclusions"] == [
+        {
+            "case_id": "case-insufficient",
+            "benchmark_listing_id": "walmart_us:two",
+            "competitor_listing_id": "kroger_us:two",
+            "reason": "insufficient_evidence",
+            "critical": False,
+            "stratum": "edge_case",
+            "review_status": "single_reviewed",
+            "reviewers": ["owner@cpghero.com"],
+            "evidence_refs": ["artifact://insufficient"],
+            "rationale": "Housing evidence remains unknown for one product.",
+        }
+    ]
+    assert gold_set["source_evidence"] == [
+        "artifact://certified",
+        "artifact://insufficient",
+    ]
+
+    without_exclusion = {**gold_set, "exclusions": []}
+    assert (
+        hashlib.sha256(_canonical(gold_set).encode()).hexdigest()
+        != hashlib.sha256(_canonical(without_exclusion).encode()).hexdigest()
+    )
+
+
 def test_forced_gold_set_replay_requires_an_audit_reason() -> None:
     with pytest.raises(ValueError, match="requires a rebuild reason"):
         GoldSetReplayRequest(
@@ -633,6 +799,14 @@ def test_forced_gold_set_replay_requires_an_audit_reason() -> None:
             released_by="owner",
             force_rebuild=True,
         )
+
+
+def test_postgres_replay_reconciles_reviewed_exclusions_to_current_queue() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.create_gold_set_replay)
+
+    assert "label_case_ids & exclusion_case_ids" in source
+    assert "current_insufficient_case_ids" in source
+    assert "exclusion_case_ids != current_insufficient_case_ids" in source
 
 
 async def test_review_service_validates_queue_checksum_before_import() -> None:
