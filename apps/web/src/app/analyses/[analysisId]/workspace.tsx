@@ -24,7 +24,6 @@ import type {
   AnalysisReportView,
   AssortmentAnalysis,
   AssortmentBrand,
-  AssortmentBreadthGap,
   AssortmentProduct,
   CompetitivePortfolioScorecards,
   JsonObject,
@@ -353,6 +352,11 @@ function BlueprintAnalysisWorkspace({
   const [leadershipCityOptions, setLeadershipCityOptions] = useState<
     { value: string; label: string; count: number; state: string }[]
   >([]);
+  const [portfolioResult, setPortfolioResult] = useState<{
+    query: string;
+    portfolio: CompetitivePortfolioScorecards | null;
+    error: string;
+  }>({ query: "", portfolio: null, error: "" });
   useEffect(() => {
     const applyLocation = () => {
       const parameters = new URL(window.location.href).searchParams;
@@ -528,6 +532,69 @@ function BlueprintAnalysisWorkspace({
   const selectedRetailer =
     competitorOptions.find((option) => option.id === selectedCompetitor) ??
     null;
+  const portfolioQuery = useMemo(() => {
+    const parameters = new URLSearchParams({
+      competitor: selectedCompetitor,
+      profile: selectedLens,
+      radius_miles: String(leadershipRadius),
+    });
+    if (leadershipState) parameters.set("state", leadershipState);
+    if (leadershipState && leadershipCity)
+      parameters.set("city", leadershipCity);
+    return parameters.toString();
+  }, [
+    leadershipCity,
+    leadershipRadius,
+    leadershipState,
+    selectedCompetitor,
+    selectedLens,
+  ]);
+  const portfolioRequestKey =
+    "/api/analyses/" +
+    encodeURIComponent(analysis.analysis_id) +
+    "/competitive-portfolio-scorecards?" +
+    portfolioQuery;
+  const radiusPortfolio =
+    portfolioResult.query === portfolioRequestKey
+      ? portfolioResult.portfolio
+      : null;
+  const radiusPortfolioError =
+    portfolioResult.query === portfolioRequestKey ? portfolioResult.error : "";
+  useEffect(() => {
+    if (!["overview", "price-segments", "assortment"].includes(activeGroup))
+      return;
+    const controller = new AbortController();
+    fetch(portfolioRequestKey, { signal: controller.signal })
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as
+          CompetitivePortfolioScorecards | { error?: string };
+        if (!response.ok || !("scorecards" in body)) {
+          throw new Error(
+            "error" in body && body.error
+              ? body.error
+              : "Radius reporting returned " + response.status,
+          );
+        }
+        setPortfolioResult({
+          query: portfolioRequestKey,
+          portfolio: body,
+          error: "",
+        });
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setPortfolioResult({
+          query: portfolioRequestKey,
+          portfolio: null,
+          error:
+            cause instanceof Error
+              ? cause.message
+              : "Radius reporting is unavailable.",
+        });
+      });
+    return () => controller.abort();
+  }, [activeGroup, portfolioRequestKey]);
   const scopedSections = groupedSections.map((group) => ({
     ...group,
     sections: group.sections.map((section) => ({
@@ -721,7 +788,9 @@ function BlueprintAnalysisWorkspace({
           defaultValue: preferredBasis,
           selectedValue: selectedLens,
         },
-        ...(activeGroup === "overview" || leadershipTab(activeGroup)
+        ...(["overview", "price-segments", "assortment"].includes(
+          activeGroup,
+        ) || leadershipTab(activeGroup)
           ? [
               {
                 id: "store-radius",
@@ -1027,28 +1096,30 @@ function BlueprintAnalysisWorkspace({
           />
         ) : activeGroup === "assortment" && reportView.assortment_analysis ? (
           <AssortmentAnalysisPanel
+            analysisId={analysis.analysis_id}
             data={reportView.assortment_analysis}
             benchmark={reportView.retailer_scope.benchmark}
             competitors={competitorOptions}
             selected={selectedRetailer}
+            radiusScorecard={radiusPortfolio?.assortment_scorecards[0] ?? null}
+            radiusMiles={leadershipRadius}
+            loading={!radiusPortfolio && !radiusPortfolioError}
+            error={radiusPortfolioError}
           />
         ) : selectedGroup && selectedGroup.sections.length > 0 ? (
           <>
             {activeGroup === "overview" ? (
               <RadiusRetailerScorecardPanel
-                analysisId={analysis.analysis_id}
                 benchmark={reportView.retailer_scope.benchmark}
                 competitorId={selectedCompetitor}
-                profileId={selectedLens}
                 radiusMiles={leadershipRadius}
-                stateFilter={leadershipState}
-                cityFilter={leadershipCity}
                 onSelect={selectCompetitor}
+                portfolio={radiusPortfolio}
+                error={radiusPortfolioError}
               />
             ) : null}
             {activeGroup === "price-segments" ? (
               <ComparableCohortExplorer
-                records={cohortRecords}
                 benchmarkName={reportView.retailer_scope.benchmark.name}
                 cohortDimensions={
                   reportView.product_pack.cohort_dimensions ?? []
@@ -1060,6 +1131,9 @@ function BlueprintAnalysisWorkspace({
                 onReviewMatches={openMatchWorkbench}
                 onOpenCohort={setSelectedCohort}
                 pairEvidence={cohortPairEvidence}
+                radiusCohorts={radiusPortfolio?.cohorts ?? null}
+                radiusMiles={leadershipRadius}
+                radiusError={radiusPortfolioError}
               />
             ) : null}
             {activeGroup === "price-segments" && selectedCohort ? (
@@ -1152,10 +1226,16 @@ function AssortmentProductList({
   title,
   note,
   products,
+  limit = 8,
+  analysisId,
+  retailerId,
 }: Readonly<{
   title: string;
   note: string;
   products: AssortmentProduct[];
+  limit?: number;
+  analysisId?: string;
+  retailerId?: string;
 }>) {
   return (
     <section className="assortment-product-list">
@@ -1164,7 +1244,7 @@ function AssortmentProductList({
         <p>{note}</p>
       </header>
       <div>
-        {products.slice(0, 8).map((product) => (
+        {products.slice(0, limit).map((product) => (
           <article key={product.canonical_product_id}>
             <span className="assortment-product-image">
               {product.image_url ? (
@@ -1181,6 +1261,13 @@ function AssortmentProductList({
                 Seen at {product.observed_locations.toLocaleString()} locations
                 · {product.observed_zipcodes.toLocaleString()} ZIPs
               </em>
+              {analysisId && retailerId ? (
+                <Link
+                  href={`/price-monitoring/${encodeURIComponent(analysisId)}?retailer=${encodeURIComponent(retailerId)}&tab=overview&product_id=${encodeURIComponent(product.product_id)}`}
+                >
+                  Open product footprint →
+                </Link>
+              ) : null}
             </span>
           </article>
         ))}
@@ -1197,11 +1284,13 @@ function AssortmentBrandPanel({
   distinctBrands,
   topBrands,
   concentratedBrands,
+  onOpenBrand,
 }: Readonly<{
   retailerName: string;
   distinctBrands: number;
   topBrands: AssortmentBrand[];
   concentratedBrands: AssortmentBrand[];
+  onOpenBrand: (brand: AssortmentBrand) => void;
 }>) {
   if (!topBrands.length) return null;
   const maxLocations = Math.max(
@@ -1219,7 +1308,11 @@ function AssortmentBrandPanel({
       </header>
       <div className="assortment-brand-bars">
         {topBrands.slice(0, 6).map((brand) => (
-          <div key={brand.brand}>
+          <button
+            type="button"
+            key={brand.brand}
+            onClick={() => onOpenBrand(brand)}
+          >
             <span>
               <b>{brand.brand}</b>
               <small>
@@ -1234,7 +1327,7 @@ function AssortmentBrandPanel({
                 }}
               />
             </i>
-          </div>
+          </button>
         ))}
       </div>
       {concentratedBrands.length ? (
@@ -1263,57 +1356,34 @@ function AssortmentBrandPanel({
   );
 }
 
-function AssortmentBreadthGaps({
-  rows,
-  benchmarkName,
-  competitorName,
-  leader,
-}: Readonly<{
-  rows: AssortmentBreadthGap[];
-  benchmarkName: string;
-  competitorName: string;
-  leader: "benchmark" | "competitor";
-}>) {
-  if (!rows.length) return null;
-  const leaderName = leader === "benchmark" ? benchmarkName : competitorName;
-  return (
-    <section className="assortment-gap-table">
-      <header>
-        <small>Largest shared-ZIP breadth gaps</small>
-        <h4>{leaderName} carries more observed products</h4>
-      </header>
-      <div>
-        <span>ZIP</span>
-        <span>{benchmarkName}</span>
-        <span>{competitorName}</span>
-        <span>Gap</span>
-      </div>
-      {rows.slice(0, 6).map((row) => (
-        <div key={row.zipcode}>
-          <strong>{row.zipcode}</strong>
-          <span>{row.benchmark_products.toLocaleString()}</span>
-          <span>{row.competitor_products.toLocaleString()}</span>
-          <b>
-            {row.product_count_gap > 0 ? "+" : ""}
-            {row.product_count_gap}
-          </b>
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function AssortmentAnalysisPanel({
+  analysisId,
   data,
   benchmark,
   competitors,
   selected,
+  radiusScorecard,
+  radiusMiles,
+  loading,
+  error,
 }: Readonly<{
+  analysisId: string;
   data: AssortmentAnalysis;
   benchmark: RetailerOption;
   competitors: RetailerOption[];
   selected: RetailerOption | null;
+  radiusScorecard:
+    CompetitivePortfolioScorecards["assortment_scorecards"][number] | null;
+  radiusMiles: 1 | 3 | 5;
+  loading: boolean;
+  error: string;
 }>) {
+  const [detail, setDetail] = useState<{
+    title: string;
+    note: string;
+    products: AssortmentProduct[];
+    retailerId?: string;
+  } | null>(null);
   const activeCompetitor = selected;
   const comparisons = activeCompetitor
     ? data.comparisons.filter((row) =>
@@ -1336,6 +1406,16 @@ function AssortmentAnalysisPanel({
   }
   return (
     <div className="assortment-analysis">
+      {loading ? (
+        <div className="empty-inline" role="status">
+          Loading radius-native assortment evidence…
+        </div>
+      ) : null}
+      {error ? (
+        <div className="empty-inline error" role="alert">
+          {error}
+        </div>
+      ) : null}
       {comparisons.map((comparison) => {
         const competitor =
           competitors.find((row) =>
@@ -1348,6 +1428,16 @@ function AssortmentAnalysisPanel({
         const competitorSummary = data.retailers.find((row) =>
           matchesRetailer(row.retailer, competitor),
         );
+        const local =
+          radiusScorecard?.competitor_id === competitor.id
+            ? radiusScorecard
+            : null;
+        const openDetail = (
+          title: string,
+          note: string,
+          products: AssortmentProduct[],
+          retailerId?: string,
+        ) => setDetail({ title, note, products, retailerId });
         return (
           <section
             className="assortment-competitor"
@@ -1363,41 +1453,102 @@ function AssortmentAnalysisPanel({
               <span>Retailer selected in global report context</span>
             </header>
             <div className="assortment-kpis">
-              <article>
+              <button
+                type="button"
+                className="assortment-kpi-action"
+                onClick={() =>
+                  openDetail(
+                    `${benchmark.name} observed products`,
+                    "Full governed Search assortment for the selected analysis.",
+                    benchmarkSummary?.products ?? [],
+                    benchmark.id,
+                  )
+                }
+              >
                 <small>{benchmark.name} products</small>
                 <strong>
                   {benchmarkSummary?.distinct_products.toLocaleString() ?? "—"}
                 </strong>
                 <span>Distinct in-scope IDs</span>
-              </article>
-              <article>
+              </button>
+              <button
+                type="button"
+                className="assortment-kpi-action"
+                onClick={() =>
+                  openDetail(
+                    `${competitor.name} observed products`,
+                    "Full governed Search assortment for the selected analysis.",
+                    competitorSummary?.products ?? [],
+                    competitor.id,
+                  )
+                }
+              >
                 <small>{competitor.name} products</small>
                 <strong>
                   {competitorSummary?.distinct_products.toLocaleString() ?? "—"}
                 </strong>
                 <span>Distinct in-scope IDs</span>
-              </article>
-              <article>
+              </button>
+              <button
+                type="button"
+                className="assortment-kpi-action"
+                onClick={() =>
+                  openDetail(
+                    "Matched benchmark products",
+                    `Products contributing locally comparable evidence within ${radiusMiles} mile${radiusMiles === 1 ? "" : "s"}.`,
+                    (benchmarkSummary?.products ?? []).filter((product) =>
+                      (local?.products ?? []).some(
+                        (matched) => matched.product_id === product.product_id,
+                      ),
+                    ),
+                    benchmark.id,
+                  )
+                }
+              >
                 <small>1:1 item relationships</small>
                 <strong>
-                  {comparison.product_relationships.toLocaleString()}
+                  {(
+                    local?.relationships ?? comparison.product_relationships
+                  ).toLocaleString()}
                 </strong>
                 <span>Unique admitted pairs across all lenses</span>
-              </article>
-              <article>
+              </button>
+              <button
+                type="button"
+                className="assortment-kpi-action"
+                onClick={() =>
+                  openDetail(
+                    `${benchmark.name} products without an admitted match`,
+                    "Broadest observed products currently outside an admitted relationship.",
+                    comparison.top_benchmark_only,
+                    benchmark.id,
+                  )
+                }
+              >
                 <small>{benchmark.name} unmatched</small>
                 <strong>
                   {comparison.benchmark_only_products.toLocaleString()}
                 </strong>
                 <span>No admitted item relationship</span>
-              </article>
-              <article>
+              </button>
+              <button
+                type="button"
+                className="assortment-kpi-action"
+                onClick={() =>
+                  openDetail(
+                    `${competitor.name} whitespace`,
+                    `Observed products without an admitted ${benchmark.name} relationship.`,
+                    comparison.top_competitor_whitespace,
+                    competitor.id,
+                  )
+                }
+              >
                 <small>{competitor.name} whitespace</small>
                 <strong>
                   {comparison.competitor_whitespace_products.toLocaleString()}
                 </strong>
                 <span>No admitted {benchmark.name} match</span>
-              </article>
+              </button>
               {comparison.ambiguous_candidate_groups ? (
                 <article className="review">
                   <small>Needs match review</small>
@@ -1409,6 +1560,33 @@ function AssortmentAnalysisPanel({
               ) : null}
             </div>
             <div className="assortment-middle">
+              <section className="assortment-coverage-card radius-native">
+                <h4>Local comparable coverage</h4>
+                <p>
+                  Certified product-location evidence with an eligible
+                  competitor offer within {radiusMiles} mile
+                  {radiusMiles === 1 ? "" : "s"}. Service-area retailers use the
+                  same delivery ZIP.
+                </p>
+                <div className="assortment-coverage-row">
+                  <span>Comparable</span>
+                  <b>
+                    <i
+                      style={{
+                        width: `${Math.max(1, (local?.coverage_rate ?? 0) * 100)}%`,
+                      }}
+                    />
+                  </b>
+                  <strong>
+                    {formatScorecardRate(local?.coverage_rate ?? null)}
+                  </strong>
+                </div>
+                <small className="assortment-lens-note">
+                  {(local?.scored_product_locations ?? 0).toLocaleString()} of{" "}
+                  {(local?.benchmark_product_locations ?? 0).toLocaleString()}{" "}
+                  observed benchmark product-locations were scored.
+                </small>
+              </section>
               <section className="assortment-coverage-card">
                 <h4>Item-relationship coverage</h4>
                 <p>
@@ -1470,6 +1648,16 @@ function AssortmentAnalysisPanel({
                   concentratedBrands={
                     benchmarkSummary?.geographically_concentrated_brands ?? []
                   }
+                  onOpenBrand={(brand) =>
+                    openDetail(
+                      `${benchmark.name} · ${brand.brand}`,
+                      `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
+                      (benchmarkSummary?.products ?? []).filter(
+                        (product) => product.brand === brand.brand,
+                      ),
+                      benchmark.id,
+                    )
+                  }
                 />
                 <AssortmentBrandPanel
                   retailerName={competitor.name}
@@ -1477,6 +1665,16 @@ function AssortmentAnalysisPanel({
                   topBrands={competitorSummary?.top_brands ?? []}
                   concentratedBrands={
                     competitorSummary?.geographically_concentrated_brands ?? []
+                  }
+                  onOpenBrand={(brand) =>
+                    openDetail(
+                      `${competitor.name} · ${brand.brand}`,
+                      `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
+                      (competitorSummary?.products ?? []).filter(
+                        (product) => product.brand === brand.brand,
+                      ),
+                      competitor.id,
+                    )
                   }
                 />
               </div>
@@ -1501,6 +1699,60 @@ function AssortmentAnalysisPanel({
         the authority for store presence and price; PDP supplies identity and
         imagery where available.
       </footer>
+      {detail ? (
+        <AssortmentDetailDrawer
+          analysisId={analysisId}
+          detail={detail}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AssortmentDetailDrawer({
+  analysisId,
+  detail,
+  onClose,
+}: Readonly<{
+  analysisId: string;
+  detail: {
+    title: string;
+    note: string;
+    products: AssortmentProduct[];
+    retailerId?: string;
+  };
+  onClose: () => void;
+}>) {
+  return (
+    <div className="evidence-drawer-backdrop scorecard-products-layer">
+      <aside
+        className="evidence-drawer scorecard-products-drawer"
+        aria-modal="true"
+      >
+        <header>
+          <div>
+            <p className="eyebrow">Assortment evidence</p>
+            <h2>{detail.title}</h2>
+            <p>{detail.note}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close assortment evidence"
+          >
+            ×
+          </button>
+        </header>
+        <AssortmentProductList
+          title={`${detail.products.length.toLocaleString()} products`}
+          note="Observed-location counts come from governed Search evidence."
+          products={detail.products}
+          limit={detail.products.length}
+          analysisId={analysisId}
+          retailerId={detail.retailerId}
+        />
+      </aside>
     </div>
   );
 }
@@ -1619,78 +1871,23 @@ type RadiusRetailerScorecard =
   CompetitivePortfolioScorecards["scorecards"][number];
 
 function RadiusRetailerScorecardPanel({
-  analysisId,
   benchmark,
   competitorId,
-  profileId,
   radiusMiles,
-  stateFilter,
-  cityFilter,
   onSelect,
+  portfolio,
+  error,
 }: Readonly<{
-  analysisId: string;
   benchmark: RetailerOption;
   competitorId: string;
-  profileId: string;
   radiusMiles: 1 | 3 | 5;
-  stateFilter: string | null;
-  cityFilter: string | null;
   onSelect: (retailerId: string) => void;
+  portfolio: CompetitivePortfolioScorecards | null;
+  error: string;
 }>) {
-  const [result, setResult] = useState<{
-    query: string;
-    portfolio: CompetitivePortfolioScorecards | null;
-    error: string;
-  }>({ query: "", portfolio: null, error: "" });
   const [selected, setSelected] = useState<RadiusRetailerScorecard | null>(
     null,
   );
-  const query = useMemo(() => {
-    const parameters = new URLSearchParams({
-      competitor: competitorId,
-      profile: profileId,
-      radius_miles: String(radiusMiles),
-    });
-    if (stateFilter) parameters.set("state", stateFilter);
-    if (stateFilter && cityFilter) parameters.set("city", cityFilter);
-    return parameters.toString();
-  }, [cityFilter, competitorId, profileId, radiusMiles, stateFilter]);
-  const requestKey =
-    "/api/analyses/" +
-    encodeURIComponent(analysisId) +
-    "/competitive-portfolio-scorecards?" +
-    query;
-  const portfolio = result.query === requestKey ? result.portfolio : null;
-  const error = result.query === requestKey ? result.error : "";
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(requestKey, { signal: controller.signal })
-      .then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as
-          CompetitivePortfolioScorecards | { error?: string };
-        if (!response.ok || !("scorecards" in body)) {
-          throw new Error(
-            "error" in body && body.error
-              ? body.error
-              : "Portfolio scorecards returned " + response.status,
-          );
-        }
-        setResult({ query: requestKey, portfolio: body, error: "" });
-      })
-      .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === "AbortError")
-          return;
-        setResult({
-          query: requestKey,
-          portfolio: null,
-          error:
-            cause instanceof Error
-              ? cause.message
-              : "Radius-native scorecards are unavailable.",
-        });
-      });
-    return () => controller.abort();
-  }, [requestKey]);
   return (
     <>
       <Section
@@ -1795,11 +1992,11 @@ function RadiusRetailerScorecardPanel({
                     <Link
                       href={
                         "/analyses/" +
-                        encodeURIComponent(analysisId) +
+                        encodeURIComponent(portfolio.analysis_id) +
                         "?tab=match-summary&competitor=" +
                         encodeURIComponent(scorecard.competitor_id) +
                         "&lens=" +
-                        encodeURIComponent(profileId) +
+                        encodeURIComponent(portfolio.filters.profile_id) +
                         "&radius=" +
                         radiusMiles
                       }

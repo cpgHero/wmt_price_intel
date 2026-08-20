@@ -11004,13 +11004,28 @@ tbody tr:last-child td {
   gap: 0.65rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
-.assortment-kpis article {
+.assortment-kpis article,
+.assortment-kpis .assortment-kpi-action {
   background: #f3f7f9;
   border: 1px solid #dce5e9;
   border-radius: 13px;
   display: grid;
   gap: 0.2rem;
   padding: 0.85rem;
+}
+.assortment-kpis .assortment-kpi-action {
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+.assortment-kpis .assortment-kpi-action:hover,
+.assortment-kpis .assortment-kpi-action:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 .assortment-kpis article.review {
   background: color-mix(in srgb, var(--warning-soft) 78%, white);
@@ -11148,11 +11163,23 @@ tbody tr:last-child td {
   gap: 0.5rem;
   margin-top: 0.8rem;
 }
-.assortment-brand-bars > div {
+.assortment-brand-bars > button {
   align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
   display: grid;
+  font: inherit;
   gap: 0.55rem;
   grid-template-columns: minmax(150px, 0.8fr) 1fr;
+  padding: 0.2rem;
+  text-align: left;
+}
+.assortment-brand-bars > button:hover,
+.assortment-brand-bars > button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 8px;
 }
 .assortment-brand-bars span {
   display: grid;
@@ -11169,13 +11196,13 @@ tbody tr:last-child td {
   color: #71818a;
   font-size: 0.58rem;
 }
-.assortment-brand-bars > div > i {
+.assortment-brand-bars > button > i {
   background: #e8eef1;
   border-radius: 999px;
   height: 7px;
   overflow: hidden;
 }
-.assortment-brand-bars > div > i b {
+.assortment-brand-bars > button > i b {
   background: linear-gradient(90deg, #079fc7, #47c8aa);
   border-radius: inherit;
   display: block;
@@ -11313,6 +11340,7 @@ tbody tr:last-child td {
   color: var(--ink);
 }
 :root[data-theme="dark"] .assortment-kpis article,
+:root[data-theme="dark"] .assortment-kpis .assortment-kpi-action,
 :root[data-theme="dark"] .assortment-product-list > header,
 :root[data-theme="dark"] .assortment-source-note {
   background: var(--surface-alt);

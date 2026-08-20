@@ -2,9 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import type { JsonObject } from "@/lib/api";
+import type { CompetitivePortfolioScorecards } from "@/lib/api";
 import {
-  comparableCohorts,
   type ComparableCohort,
   type CohortOutcome,
   type CohortSort,
@@ -112,7 +111,6 @@ function exportCohorts(
 }
 
 export function ComparableCohortExplorer({
-  records,
   benchmarkName,
   cohortDimensions,
   minimumGeographies,
@@ -120,8 +118,10 @@ export function ComparableCohortExplorer({
   onReviewMatches,
   onOpenCohort,
   pairEvidence,
+  radiusCohorts,
+  radiusMiles,
+  radiusError,
 }: Readonly<{
-  records: JsonObject[];
   benchmarkName: string;
   cohortDimensions: string[];
   minimumGeographies: number;
@@ -136,11 +136,36 @@ export function ComparableCohortExplorer({
       competitorBrandTypes: string;
     }
   >;
+  radiusCohorts: CompetitivePortfolioScorecards["cohorts"] | null;
+  radiusMiles: 1 | 3 | 5;
+  radiusError: string;
 }>) {
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
   const [sort, setSort] = useState<CohortSort>("evidence");
   const [showAll, setShowAll] = useState(false);
-  const cohorts = useMemo(() => comparableCohorts(records), [records]);
+  const cohorts = useMemo(
+    () =>
+      (radiusCohorts ?? []).map((row): ComparableCohort => ({
+        id: row.id,
+        competitorId: row.competitor_id,
+        competitor: row.competitor,
+        profileId: row.profile_id,
+        segmentId: row.segment_id,
+        segment: row.segment,
+        attributes: row.attributes,
+        overall: false,
+        matches: row.scored_product_locations,
+        matchedGeographies: row.benchmark_product_locations,
+        benchmarkLowerRate: row.benchmark_lower_rate ?? 0,
+        competitorLowerRate: row.competitor_lower_rate ?? 0,
+        parityRate: row.parity_rate ?? 0,
+        benchmarkMedian: row.benchmark_median,
+        competitorMedian: row.competitor_median,
+        medianGap: row.paired_median_gap,
+        outcome: row.dominant_outcome,
+      })),
+    [radiusCohorts],
+  );
   const filtered = useMemo(
     () =>
       sortComparableCohorts(
@@ -163,7 +188,8 @@ export function ComparableCohortExplorer({
       "Competitor brand-type mix":
         evidence?.competitorBrandTypes ?? "unresolved",
       "Paired observations": cohort.matches,
-      "Published matched markets": cohort.matchedGeographies,
+      "Observed benchmark product-locations": cohort.matchedGeographies,
+      [`Scored product-locations within ${radiusMiles} miles`]: cohort.matches,
       [`${benchmarkName} lower rate`]: cohort.benchmarkLowerRate,
       "Competitor lower rate": cohort.competitorLowerRate,
       "Parity rate": cohort.parityRate,
@@ -176,7 +202,28 @@ export function ComparableCohortExplorer({
     ? cohortDimensions.join(" · ")
     : "Product Pack matching attributes";
 
-  if (!cohorts.length) return null;
+  if (radiusCohorts === null) {
+    return (
+      <section className="cohort-explorer">
+        <div
+          className={`empty-inline${radiusError ? " error" : ""}`}
+          role="status"
+        >
+          {radiusError || "Loading radius-native cohort scorecards…"}
+        </div>
+      </section>
+    );
+  }
+
+  if (!cohorts.length)
+    return (
+      <section className="cohort-explorer">
+        <div className="empty-inline">
+          No certified cohort has local comparison evidence under the selected
+          retailer, basis, geography, and radius.
+        </div>
+      </section>
+    );
 
   return (
     <section className="cohort-explorer">
@@ -185,9 +232,10 @@ export function ComparableCohortExplorer({
           <p className="eyebrow">Comparable cohort explorer</p>
           <h2>Category rollups without weakening item-level match integrity</h2>
           <p>
-            Each row summarizes persisted one-to-one store comparisons inside a
-            Product Pack cohort. Products contribute to a rollup; they do not
-            become one-to-many matches.
+            Each row summarizes certified one-to-one product relationships at
+            observed benchmark product-store grain. Physical competitor evidence
+            must fall within {radiusMiles} mile{radiusMiles === 1 ? "" : "s"};
+            service-area retailers use the same delivery ZIP.
           </p>
         </div>
         <button type="button" onClick={onReviewMatches}>
@@ -256,7 +304,7 @@ export function ComparableCohortExplorer({
 
       <div className="cohort-list">
         {visible.map((cohort) => {
-          const limited = cohort.matchedGeographies < minimumGeographies;
+          const limited = cohort.matches < minimumGeographies;
           const evidence = pairEvidence[cohort.id];
           return (
             <button
@@ -270,9 +318,9 @@ export function ComparableCohortExplorer({
                 <span>{cohort.competitor}</span>
                 <h3>{cohort.segment}</h3>
                 <p>
-                  {cohort.matches.toLocaleString()} paired location observations
-                  · {cohort.matchedGeographies.toLocaleString()} legacy
-                  exact-ZIP markets
+                  {cohort.matches.toLocaleString()} scored product-locations ·{" "}
+                  {cohort.matchedGeographies.toLocaleString()} observed
+                  benchmark product-locations
                 </p>
                 <div className="cohort-pair-evidence">
                   <strong>
@@ -302,8 +350,8 @@ export function ComparableCohortExplorer({
                 </strong>
                 <small className={limited ? "limited" : "ready"}>
                   {limited
-                    ? `Directional · below ${minimumGeographies} market threshold`
-                    : "Decision-grade market breadth"}
+                    ? `Directional · below ${minimumGeographies} observation threshold`
+                    : "Decision-grade local evidence"}
                 </small>
               </div>
               <div className="cohort-share" aria-label="Lower-price share">
@@ -375,9 +423,9 @@ export function ComparableCohortExplorer({
         </button>
       ) : null}
       <footer>
-        Search supplies store-specific price and location. Cohort rates and
-        medians are projected from the immutable AnalysisResult; this view does
-        not recalculate them.
+        Search supplies store-specific price and location. The API projects
+        certified relationships into product-location outcomes before this page
+        receives rates or medians; the browser does not recalculate them.
       </footer>
     </section>
   );

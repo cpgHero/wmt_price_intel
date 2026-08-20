@@ -1441,6 +1441,7 @@ class AnalysisProcessor:
                 },
             )
         await self._pre_materialize_price_architecture(record.analysis_id)
+        await self._pre_materialize_competitive_portfolios(record.analysis_id)
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id
 
@@ -1484,6 +1485,46 @@ class AnalysisProcessor:
                 "price architecture pre-materialization failed",
                 extra={
                     "event": "price_architecture_materialization_failed",
+                    "analysis_id": analysis_id,
+                },
+            )
+
+    async def _pre_materialize_competitive_portfolios(self, analysis_id: str) -> None:
+        """Persist radius-native scorecard, cohort, and assortment read models."""
+
+        api_url = os.getenv("RCI_API_INTERNAL_URL", "").strip().rstrip("/")
+        token = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
+        if not api_url or not token:
+            logger.info(
+                "competitive portfolio pre-materialization skipped",
+                extra={
+                    "event": "competitive_portfolio_materialization_skipped",
+                    "analysis_id": analysis_id,
+                    "reason": "internal_api_not_configured",
+                },
+            )
+            return
+        try:
+            async with httpx.AsyncClient(timeout=900.0) as client:
+                response = await client.post(
+                    f"{api_url}/api/v1/internal/analyses/{analysis_id}/"
+                    "competitive-portfolios/materialize",
+                    headers={"X-RCI-Internal-Token": token},
+                )
+                response.raise_for_status()
+            logger.info(
+                "competitive portfolios pre-materialized",
+                extra={
+                    "event": "competitive_portfolio_materialized",
+                    "analysis_id": analysis_id,
+                    "portfolio_count": response.json().get("portfolio_count"),
+                },
+            )
+        except Exception:
+            logger.exception(
+                "competitive portfolio pre-materialization failed",
+                extra={
+                    "event": "competitive_portfolio_materialization_failed",
                     "analysis_id": analysis_id,
                 },
             )

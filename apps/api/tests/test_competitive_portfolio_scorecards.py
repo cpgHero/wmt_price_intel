@@ -4,14 +4,32 @@ from pathlib import Path
 from types import MethodType
 
 import pytest
+from fastapi import HTTPException
 
 from rci_api.competitive_leadership import (
     CompetitiveProductLeadershipService,
     _portfolio_summary,
+    _require_internal_materialization_token,
 )
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_competitive_materialization_requires_internal_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "expected")
+
+    with pytest.raises(HTTPException) as missing:
+        _require_internal_materialization_token(None)
+    assert getattr(missing.value, "status_code", None) == 401
+
+    with pytest.raises(HTTPException) as wrong:
+        _require_internal_materialization_token("wrong")
+    assert getattr(wrong.value, "status_code", None) == 401
+
+    _require_internal_materialization_token("expected")
 
 
 def test_portfolio_summary_uses_product_location_grain() -> None:
@@ -43,7 +61,7 @@ def test_portfolio_summary_uses_product_location_grain() -> None:
 def test_portfolio_scorecard_contract_accepts_radius_native_projection() -> None:
     summary = _portfolio_summary([{"status": "leader", "competitor_minus_benchmark": 0.2}])
     document = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "analysis_id": "analysis-1",
         "generated_at": "2026-08-20T12:00:00+00:00",
         "benchmark_retailer": {"id": "walmart_us", "name": "Walmart (US)"},
@@ -78,6 +96,8 @@ def test_portfolio_scorecard_contract_accepts_radius_native_projection() -> None
                 ],
             }
         ],
+        "cohorts": [],
+        "assortment_scorecards": [],
     }
 
     validate_instance(
@@ -114,8 +134,35 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                         "competitor": "aldi_us",
                         "benchmark_product_id": "w1",
                         "competitor_product_id": "a1",
+                        "match_attributes": {"size": "large", "count": 12},
                     }
                 ],
+                "sections": [
+                    {
+                        "kind": "segment_analysis",
+                        "records": [
+                            {
+                                "_competitor_id": "aldi_us",
+                                "_profile_id": "compatible",
+                                "_segment_id": "large-12",
+                                "_segment_attributes": {"size": "Large", "count": 12.0},
+                                "competitor": "ALDI",
+                                "segment": "12 each · large",
+                            }
+                        ],
+                    }
+                ],
+                "assortment_analysis": {
+                    "comparisons": [
+                        {
+                            "competitor": "aldi_us",
+                            "benchmark_only_products": 2,
+                            "competitor_whitespace_products": 3,
+                            "benchmark_match_coverage": 0.25,
+                            "competitor_match_coverage": 0.5,
+                        }
+                    ]
+                },
             }
 
     service = CompetitiveProductLeadershipService(
@@ -134,8 +181,18 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
             },
             "relationships": [{"relationship_id": "relationship-1"}],
             "outcomes": [
-                {"status": "leader", "competitor_minus_benchmark": 0.2},
-                {"status": "losing", "competitor_minus_benchmark": -0.1},
+                {
+                    "status": "leader",
+                    "competitor_minus_benchmark": 0.2,
+                    "benchmark": {"comparison_value": 3.0},
+                    "competitor": {"comparison_value": 3.2},
+                },
+                {
+                    "status": "losing",
+                    "competitor_minus_benchmark": -0.1,
+                    "benchmark": {"comparison_value": 3.1},
+                    "competitor": {"comparison_value": 3.0},
+                },
             ],
         }
 
@@ -153,3 +210,9 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert result["scorecards"][0]["scored_product_locations"] == 2
     assert result["scorecards"][0]["relationships"] == 1
     assert result["scorecards"][0]["products"][0]["product_id"] == "w1"
+    assert result["cohorts"][0]["segment"] == "12 each · large"
+    assert result["cohorts"][0]["scored_product_locations"] == 2
+    assert result["cohorts"][0]["benchmark_median"] == 3.05
+    assert result["cohorts"][0]["paired_median_gap"] == 0.05
+    assert result["assortment_scorecards"][0]["benchmark_only_products"] == 2
+    assert result["assortment_scorecards"][0]["coverage_rate"] == 1.0

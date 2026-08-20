@@ -16,9 +16,52 @@ export type ProductSummary = Summary & {
   relationships: number;
   [k: string]: unknown;
 };
+export type Cohort = Summary & {
+  id: string;
+  competitor_id: string;
+  competitor: string;
+  profile_id: string;
+  segment_id: string;
+  segment: string;
+  attributes: {
+    [k: string]: unknown;
+  };
+  relationships: number;
+  benchmark_products: number;
+  competitor_products: number;
+  benchmark_median: number | null;
+  competitor_median: number | null;
+  paired_median_gap: number | null;
+  dominant_outcome: "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
+  products: ProductSummary[];
+  [k: string]: unknown;
+};
+export type AssortmentScorecard = Summary & {
+  competitor_id: string;
+  competitor: string;
+  profile_id: string;
+  relationships: number;
+  matched_benchmark_products: number;
+  matched_competitor_products: number;
+  benchmark_only_products: number;
+  competitor_whitespace_products: number;
+  benchmark_match_coverage: number | null;
+  competitor_match_coverage: number | null;
+  profiles: {
+    [k: string]: unknown;
+  }[];
+  top_benchmark_only: {
+    [k: string]: unknown;
+  }[];
+  top_competitor_whitespace: {
+    [k: string]: unknown;
+  }[];
+  products: ProductSummary[];
+  [k: string]: unknown;
+};
 
 export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -35,6 +78,8 @@ export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
     grain: string;
   };
   scorecards: Scorecard[];
+  cohorts: Cohort[];
+  assortment_scorecards: AssortmentScorecard[];
 }
 export interface IdName {
   id: string;

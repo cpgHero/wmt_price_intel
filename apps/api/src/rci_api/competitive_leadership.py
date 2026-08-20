@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import secrets
 from collections import Counter
 from pathlib import Path
 from statistics import median
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rci_analytics import (
     CatalogProductPackLoader,
@@ -78,6 +82,215 @@ def _portfolio_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _normalized_attribute(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip().casefold()
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _attributes_match(candidate: dict[str, Any], segment: dict[str, Any]) -> bool:
+    return all(
+        _normalized_attribute(candidate.get(key)) == _normalized_attribute(value)
+        for key, value in segment.items()
+    )
+
+
+def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
+    if not isinstance(rows, list):
+        return []
+    return [
+        {
+            "canonical_product_id": str(
+                row.get("canonical_product_id")
+                or f"{row.get('retailer_id', 'retailer')}:{row.get('product_id', '')}"
+            ),
+            "product_id": str(row.get("product_id") or ""),
+            "name": str(row.get("name") or row.get("product_id") or "Unknown product"),
+            "brand": row.get("brand"),
+            "brand_type": str(row.get("brand_type") or "unclassified"),
+            "image_url": row.get("image_url"),
+            "observed_locations": int(row.get("observed_locations") or 0),
+            "observed_zipcodes": int(row.get("observed_zipcodes") or 0),
+        }
+        for row in rows
+        if isinstance(row, dict) and row.get("product_id")
+    ]
+
+
+def _cohort_summary(
+    *,
+    segment_row: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    product_views: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    attributes = dict(segment_row.get("_segment_attributes") or {})
+    included_candidates = [
+        row
+        for row in candidates
+        if _attributes_match(dict(row.get("match_attributes") or {}), attributes)
+    ]
+    benchmark_product_ids = sorted(
+        {str(row["benchmark_product_id"]) for row in included_candidates}
+    )
+    outcomes = [
+        dict(outcome)
+        for product_id in benchmark_product_ids
+        for outcome in product_views.get(product_id, {}).get("outcomes", [])
+        if isinstance(outcome, dict)
+    ]
+    scored = [row for row in outcomes if row.get("status") != "unscored"]
+    benchmark_values = [
+        float(row["benchmark"]["comparison_value"])
+        for row in scored
+        if isinstance(row.get("benchmark"), dict)
+        and row["benchmark"].get("comparison_value") is not None
+    ]
+    competitor_values = [
+        float(row["competitor"]["comparison_value"])
+        for row in scored
+        if isinstance(row.get("competitor"), dict)
+        and row["competitor"].get("comparison_value") is not None
+    ]
+    gaps = [
+        float(row["competitor_minus_benchmark"])
+        for row in scored
+        if row.get("competitor_minus_benchmark") is not None
+    ]
+    product_rows = []
+    for product_id in benchmark_product_ids:
+        view = product_views.get(product_id, {})
+        product_outcomes = [dict(row) for row in view.get("outcomes", []) if isinstance(row, dict)]
+        product_rows.append(
+            {
+                "product_id": product_id,
+                "product_name": str(view.get("benchmark_product", {}).get("name") or product_id),
+                "image_url": view.get("benchmark_product", {}).get("image_url"),
+                "relationships": len(
+                    {
+                        str(row.get("relationship_id") or row.get("id"))
+                        for row in included_candidates
+                        if str(row.get("benchmark_product_id")) == product_id
+                    }
+                ),
+                **_portfolio_summary(product_outcomes),
+            }
+        )
+    product_rows.sort(
+        key=lambda row: (
+            -int(row["scored_product_locations"]),
+            -int(row["benchmark_product_locations"]),
+            str(row["product_name"]).casefold(),
+        )
+    )
+    summary = _portfolio_summary(outcomes)
+    if summary["competitor_lower_rate"] and summary["competitor_lower_rate"] > max(
+        summary["benchmark_lower_rate"] or 0, summary["parity_rate"] or 0
+    ):
+        dominant_outcome = "competitor_lower"
+    elif summary["benchmark_lower_rate"] and summary["benchmark_lower_rate"] > max(
+        summary["competitor_lower_rate"] or 0, summary["parity_rate"] or 0
+    ):
+        dominant_outcome = "benchmark_lower"
+    elif summary["parity_rate"]:
+        dominant_outcome = "parity"
+    else:
+        dominant_outcome = "unavailable"
+    return {
+        "id": (
+            f"{segment_row.get('_competitor_id')}:{segment_row.get('_profile_id')}:"
+            f"{segment_row.get('_segment_id')}"
+        ),
+        "competitor_id": str(segment_row.get("_competitor_id")),
+        "competitor": str(segment_row.get("competitor") or "Competitor"),
+        "profile_id": str(segment_row.get("_profile_id")),
+        "segment_id": str(segment_row.get("_segment_id")),
+        "segment": str(segment_row.get("segment") or "Comparable cohort"),
+        "attributes": attributes,
+        "relationships": len(
+            {str(row.get("relationship_id") or row.get("id")) for row in included_candidates}
+        ),
+        "benchmark_products": len(benchmark_product_ids),
+        "competitor_products": len(
+            {str(row["competitor_product_id"]) for row in included_candidates}
+        ),
+        **summary,
+        "benchmark_median": round(median(benchmark_values), 4) if benchmark_values else None,
+        "competitor_median": round(median(competitor_values), 4) if competitor_values else None,
+        "paired_median_gap": round(median(gaps), 4) if gaps else None,
+        "dominant_outcome": dominant_outcome,
+        "products": product_rows,
+    }
+
+
+class PostgresCompetitiveLeadershipRepository:
+    """Persist publication-scoped radius read models without changing evidence."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
+
+    async def materialization(
+        self, analysis_id: str, *, profile_id: str, radius_miles: int
+    ) -> dict[str, Any] | None:
+        statement = text(
+            """
+            SELECT materialization.document
+            FROM competitive_portfolio_materialization materialization
+            JOIN analysis_result result ON result.id = materialization.analysis_result_id
+            WHERE result.analysis_id = :analysis_id
+              AND materialization.profile_id = :profile_id
+              AND materialization.radius_miles = :radius_miles
+            """
+        )
+        async with self._engine.connect() as connection:
+            document = await connection.scalar(
+                statement,
+                {
+                    "analysis_id": analysis_id,
+                    "profile_id": profile_id,
+                    "radius_miles": radius_miles,
+                },
+            )
+        return dict(document) if isinstance(document, dict) else None
+
+    async def store_materialization(
+        self,
+        analysis_id: str,
+        *,
+        profile_id: str,
+        radius_miles: int,
+        document: dict[str, Any],
+    ) -> None:
+        statement = text(
+            """
+            INSERT INTO competitive_portfolio_materialization (
+              analysis_result_id, profile_id, radius_miles, source_revision, document
+            )
+            SELECT id, :profile_id, :radius_miles, checksum, CAST(:document AS jsonb)
+            FROM analysis_result
+            WHERE analysis_id = :analysis_id
+            ON CONFLICT ON CONSTRAINT competitive_portfolio_materialization_scope_uq
+            DO UPDATE SET source_revision = EXCLUDED.source_revision,
+                          document = EXCLUDED.document,
+                          materialized_at = now()
+            RETURNING id
+            """
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.scalar(
+                statement,
+                {
+                    "analysis_id": analysis_id,
+                    "profile_id": profile_id,
+                    "radius_miles": radius_miles,
+                    "document": json.dumps(document, ensure_ascii=False, separators=(",", ":")),
+                },
+            )
+        if result is None:
+            raise LookupError(f"analysis {analysis_id!r} was not found")
+
+
 class CompetitiveProductLeadershipService:
     def __init__(
         self,
@@ -86,11 +299,13 @@ class CompetitiveProductLeadershipService:
         analyses: AnalysisResultService,
         price_monitoring: PriceMonitoringService,
         product_packs: CatalogProductPackLoader,
+        repository: PostgresCompetitiveLeadershipRepository | None = None,
     ) -> None:
         self._root = repository_root
         self._analyses = analyses
         self._prices = price_monitoring
         self._packs = product_packs
+        self._repository = repository
         self._projector = CompetitiveProductLeadershipProjector()
         self._cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._portfolio_cache: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -104,6 +319,7 @@ class CompetitiveProductLeadershipService:
         radius_miles: Literal[1, 3, 5],
         state: str | None,
         city: str | None,
+        refresh: bool = False,
     ) -> dict[str, Any]:
         """Aggregate radius-native product-location outcomes by competitor.
 
@@ -124,7 +340,7 @@ class CompetitiveProductLeadershipService:
             city or "",
         )
         cached = self._portfolio_cache.get(cache_key)
-        if cached is not None:
+        if cached is not None and not refresh:
             return cached
 
         report = await self._analyses.report_view(analysis_id)
@@ -153,6 +369,42 @@ class CompetitiveProductLeadershipService:
         selected_profile = profile_id or preferred_profile
         if not selected_profile:
             raise LookupError("no decision-ready product relationship is available")
+
+        if not refresh and self._repository is not None and state is None and city is None:
+            stored = await self._repository.materialization(
+                analysis_id,
+                profile_id=selected_profile,
+                radius_miles=radius_miles,
+            )
+            if stored is not None:
+                if competitor_id != "all":
+                    stored["filters"] = {
+                        **dict(stored["filters"]),
+                        "competitor_id": competitor_id,
+                    }
+                    stored["scorecards"] = [
+                        row
+                        for row in stored.get("scorecards", [])
+                        if row.get("competitor_id") == competitor_id
+                    ]
+                    stored["cohorts"] = [
+                        row
+                        for row in stored.get("cohorts", [])
+                        if row.get("competitor_id") == competitor_id
+                    ]
+                    stored["assortment_scorecards"] = [
+                        row
+                        for row in stored.get("assortment_scorecards", [])
+                        if row.get("competitor_id") == competitor_id
+                    ]
+                validate_instance(
+                    self._root,
+                    "competitive-portfolio-scorecards.schema.json",
+                    stored,
+                    label=f"materialized-competitive-portfolio-scorecards:{analysis_id}",
+                )
+                self._portfolio_cache[cache_key] = stored
+                return stored
 
         candidates = [
             row
@@ -198,6 +450,21 @@ class CompetitiveProductLeadershipService:
             grouped_candidates.setdefault(str(row.get("competitor")), []).append(row)
         projected_index = {group: result for group, result in projected}
         scorecards: list[dict[str, Any]] = []
+        cohorts: list[dict[str, Any]] = []
+        assortment_scorecards: list[dict[str, Any]] = []
+        segment_rows = [
+            dict(row)
+            for section in report.get("sections", [])
+            if isinstance(section, dict) and section.get("kind") == "segment_analysis"
+            for row in section.get("records", [])
+            if isinstance(row, dict)
+            and str(row.get("_profile_id")) == selected_profile
+            and str(row.get("_segment_id")) != "all"
+        ]
+        assortment = report.get("assortment_analysis")
+        assortment_comparisons = (
+            assortment.get("comparisons", []) if isinstance(assortment, dict) else []
+        )
         for competitor in visible_competitors:
             retailer_id = str(competitor["id"])
             retailer_candidates = grouped_candidates.get(retailer_id, [])
@@ -229,10 +496,12 @@ class CompetitiveProductLeadershipService:
             }
             outcomes: list[dict[str, Any]] = []
             products: list[dict[str, Any]] = []
+            product_views: dict[str, dict[str, Any]] = {}
             for benchmark_product_id in benchmark_product_ids:
                 view = projected_index.get((retailer_id, benchmark_product_id))
                 if view is None:
                     continue
+                product_views[benchmark_product_id] = view
                 product_outcomes = [
                     dict(row) for row in view.get("outcomes", []) if isinstance(row, dict)
                 ]
@@ -267,14 +536,74 @@ class CompetitiveProductLeadershipService:
                     "products": products,
                 }
             )
+            retailer_segments = [
+                row for row in segment_rows if str(row.get("_competitor_id")) == retailer_id
+            ]
+            cohorts.extend(
+                _cohort_summary(
+                    segment_row=row,
+                    candidates=retailer_candidates,
+                    product_views=product_views,
+                )
+                for row in retailer_segments
+            )
+            legacy_assortment = next(
+                (
+                    dict(row)
+                    for row in assortment_comparisons
+                    if isinstance(row, dict) and str(row.get("competitor")) == retailer_id
+                ),
+                {},
+            )
+            radius_summary = _portfolio_summary(outcomes)
+            assortment_scorecards.append(
+                {
+                    "competitor_id": retailer_id,
+                    "competitor": competitor_name_index.get(retailer_id, retailer_id),
+                    "profile_id": selected_profile,
+                    "relationships": len(relationship_ids),
+                    "matched_benchmark_products": len(benchmark_product_ids),
+                    "matched_competitor_products": len(competitor_product_ids),
+                    "benchmark_only_products": int(
+                        legacy_assortment.get("benchmark_only_products") or 0
+                    ),
+                    "competitor_whitespace_products": int(
+                        legacy_assortment.get("competitor_whitespace_products") or 0
+                    ),
+                    "benchmark_match_coverage": legacy_assortment.get("benchmark_match_coverage"),
+                    "competitor_match_coverage": legacy_assortment.get("competitor_match_coverage"),
+                    "profiles": list(legacy_assortment.get("profiles") or []),
+                    "top_benchmark_only": _compact_assortment_products(
+                        legacy_assortment.get("top_benchmark_only")
+                    ),
+                    "top_competitor_whitespace": _compact_assortment_products(
+                        legacy_assortment.get("top_competitor_whitespace")
+                    ),
+                    "products": products,
+                    **radius_summary,
+                }
+            )
         scorecards.sort(
             key=lambda row: (
                 -int(row["scored_product_locations"]),
                 str(row["competitor"]).casefold(),
             )
         )
+        cohorts.sort(
+            key=lambda row: (
+                -int(row["scored_product_locations"]),
+                str(row["competitor"]).casefold(),
+                str(row["segment"]).casefold(),
+            )
+        )
+        assortment_scorecards.sort(
+            key=lambda row: (
+                -int(row["scored_product_locations"]),
+                str(row["competitor"]).casefold(),
+            )
+        )
         result = {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,
@@ -291,6 +620,8 @@ class CompetitiveProductLeadershipService:
                 "grain": "certified product relationship x observed Walmart product-store",
             },
             "scorecards": scorecards,
+            "cohorts": cohorts,
+            "assortment_scorecards": assortment_scorecards,
         }
         validate_instance(
             self._root,
@@ -298,10 +629,52 @@ class CompetitiveProductLeadershipService:
             result,
             label=f"competitive-portfolio-scorecards:{analysis_id}",
         )
+        if (
+            self._repository is not None
+            and competitor_id == "all"
+            and state is None
+            and city is None
+        ):
+            await self._repository.store_materialization(
+                analysis_id,
+                profile_id=selected_profile,
+                radius_miles=radius_miles,
+                document=result,
+            )
         if len(self._portfolio_cache) >= 32:
             self._portfolio_cache.pop(next(iter(self._portfolio_cache)))
         self._portfolio_cache[cache_key] = result
         return result
+
+    async def pre_materialize_portfolios(
+        self, analysis_id: str, *, refresh: bool = False
+    ) -> list[dict[str, Any]]:
+        report = await self._analyses.report_view(analysis_id)
+        profiles = sorted(
+            {
+                str(row["profile_id"])
+                for row in report.get("comparison_bases", [])
+                if isinstance(row, dict) and row.get("profile_id")
+            }
+        )
+        documents: list[dict[str, Any]] = []
+        # Each portfolio already performs bounded product-level concurrency. Build
+        # profile/radius documents sequentially so publication cannot multiply
+        # object-store and database pressure across every portfolio at once.
+        for profile_id in profiles:
+            for radius in cast(tuple[Literal[1, 3, 5], ...], (1, 3, 5)):
+                documents.append(
+                    await self.portfolio_view(
+                        analysis_id,
+                        competitor_id="all",
+                        profile_id=profile_id,
+                        radius_miles=radius,
+                        state=None,
+                        city=None,
+                        refresh=refresh,
+                    )
+                )
+        return documents
 
     async def view(
         self,
@@ -587,6 +960,7 @@ def get_competitive_product_leadership_service(
         analyses=get_analysis_service(request),
         price_monitoring=get_price_monitoring_service(request),
         product_packs=CatalogProductPackLoader(root, PostgresProductPackCatalog(engine)),
+        repository=PostgresCompetitiveLeadershipRepository(engine),
     )
     request.app.state.competitive_product_leadership_service = service
     return service
@@ -596,6 +970,33 @@ ServiceDependency = Annotated[
     CompetitiveProductLeadershipService,
     Depends(get_competitive_product_leadership_service),
 ]
+
+
+def _require_internal_materialization_token(provided: str | None) -> None:
+    expected = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
+    if not expected or not provided or not secrets.compare_digest(expected, provided):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated internal service access is required.",
+        )
+
+
+@router.post("/internal/analyses/{analysis_id}/competitive-portfolios/materialize")
+async def materialize_competitive_portfolios(
+    analysis_id: str,
+    service: ServiceDependency,
+    x_rci_internal_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_internal_materialization_token(x_rci_internal_token)
+    try:
+        documents = await service.pre_materialize_portfolios(analysis_id, refresh=True)
+        return {
+            "status": "materialized",
+            "portfolio_count": len(documents),
+            "provider_calls_queued": 0,
+        }
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/analyses/{analysis_id}/competitive-portfolio-scorecards")

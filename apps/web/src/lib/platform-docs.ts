@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.21",
+  version: "1.3.22",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3; radius-native reporting-cohesion release deployed and production-reconciled",
+    "Production implementation through Egg Product Pack 1.2.3; pre-materialized radius cohort and assortment conversion implemented with production verification pending",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -740,6 +740,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Apply Retailer Pack first-party seller policy at both classification and canonical product-location projection. Known third-party marketplace offers never enter price, coverage, assortment, matching, or competitive metrics; permitted blank sellers remain explicitly unverified.",
             "Apply the selected competitor and comparison basis to every scorecard and supporting product view. A context selector must never be presentation-only.",
             "For physical retailers, radius-native scorecards rebuild certified product relationships at product × observed Walmart store grain and require the competitor store to be within the selected 1, 3, or 5 mile radius. Service-area retailers remain explicitly same-delivery-ZIP because they do not expose a comparable physical store footprint.",
+            "Cohort Scorecards aggregate those same certified product-location outcomes by Product Pack segment; cohort membership never creates a new match. Assortment Scorecards keep global assortment breadth separate while applying the selected radius to local comparable coverage.",
+            "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified plus unresolved counts reconcile to the queue, no candidate remains unresolved, the AnalysisResult validation is ready, and every configured retailer has reported evidence or an explicit limitation.",
@@ -1356,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implemented and test verification in progress; deployment pending",
+              "Cohort and Assortment Scorecards now consume the radius-native competitive portfolio and gain durable publication-time read models.",
+              "Cohort rates, medians, gaps, denominators, and product contributions are projected by the API from certified product-location outcomes under the selected retailer, basis, geography, and 1/3/5-mile context; the browser no longer presents legacy exact-ZIP cohort metrics. Assortment preserves global product/brand breadth while adding explicit local comparable coverage and clickable evidence cards. Migration 0043_competitive_portfolio_materialization stores one all-retailer document per immutable analysis, profile, and radius; publication builds these documents sequentially with bounded inner concurrency and zero provider or AI calls. State/city variants remain on-demand. No report or source evidence is archived by this change.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

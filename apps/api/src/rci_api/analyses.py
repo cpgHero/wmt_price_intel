@@ -277,13 +277,29 @@ async def publish_analysis(
                 record.analysis_id
             )
         except Exception:
-            # The immutable analysis is authoritative and must remain publishable if
-            # a derivative read model cannot be built. Operators can safely retry the
-            # idempotent materialization without replaying paid collection work.
             logger.exception(
                 "price architecture pre-materialization failed after analysis publication",
                 extra={
                     "event": "price_architecture_pre_materialization_failed",
+                    "analysis_id": record.analysis_id,
+                },
+            )
+        try:
+            from rci_api.competitive_leadership import (
+                get_competitive_product_leadership_service,
+            )
+
+            await get_competitive_product_leadership_service(request).pre_materialize_portfolios(
+                record.analysis_id
+            )
+        except Exception:
+            # The immutable analysis is authoritative and must remain publishable if
+            # a derivative read model cannot be built. Operators can safely retry the
+            # idempotent materialization without replaying paid collection work.
+            logger.exception(
+                "competitive portfolio pre-materialization failed after analysis publication",
+                extra={
+                    "event": "competitive_portfolio_pre_materialization_failed",
                     "analysis_id": record.analysis_id,
                 },
             )
