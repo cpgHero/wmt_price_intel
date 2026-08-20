@@ -1356,9 +1356,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-19",
-              "Implemented and test verification in progress; deployment pending",
+              "Deployed and production-verified",
               "Price Architecture Matrix gained low-to-high price order, exact brand filtering, product-footprint and seller evidence, plus durable pre-materialization.",
-              "Each visible product now carries its retailer product ID and distinct observed-location count. Known third-party marketplace sellers remain excluded while verified-first-party, seller-unverified, and not-governed states remain explicit. Exact brand filters preserve Walmart's reference rungs. Migration 0042_price_arch_matrix stores parameter-scoped matrix documents; both API publication and worker publication pre-materialize the three default matrix methods, while other filter combinations persist after first use. Rebuilding uses existing evidence and consumes no MetricsCart credits.",
+              "Each visible product now carries its retailer product ID and distinct observed-location count. Known third-party marketplace sellers remain excluded while verified-first-party, seller-unverified, and not-governed states remain explicit. Exact brand filters preserve Walmart's reference rungs. Migration 0042_price_arch_matrix stores parameter-scoped matrix documents; both API publication and worker publication pre-materialize the three default matrix methods, while other filter combinations persist after first use. Both retained Egg generations were materialized in Railway with three default matrices apiece and zero paid provider calls. The current generation returns its stored 83-rung, 14-retailer matrix in about 0.6 seconds. GitHub Actions run 32332101868 passed all Python, mypy, contract, migration, TypeScript, browser, build, and container gates.",
             ],
             [
               "2026-08-19",

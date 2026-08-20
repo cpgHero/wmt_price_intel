@@ -1,6 +1,6 @@
 # Phase 13.19 — Cross-Retailer Price Architecture Matrix
 
-Status: refinement implemented; production deployment pending
+Status: refinement deployed and production-verified
 
 ## Outcome
 
@@ -106,11 +106,16 @@ Sales/units are capability-bounded until governed performance data exists.
 - Deterministic analytics tests cover midpoint math, duplicate anchors, unique SKU assignment,
   boundary behavior, union-based coverage, fixed bands, and schema validation.
 - API tests cover the complete filter and rung-method request path.
-- GitHub Actions runs `32304567351` and `32305117053` passed the full Python, contract,
-  migration, TypeScript, 13-browser-test, build, and four-container gates.
+- GitHub Actions run `32332101868` passed the full Python, mypy, contract, migration
+  upgrade/downgrade/upgrade, TypeScript, 13-browser-test, build, and four-container gates.
 - The governed Egg analysis was verified in Railway production across all 14 retailers: the
   Walmart-anchored view exposes 83 distinct price points; the fixed $0.50 view exposes 23 useful
   bands from under $1.00 through $11.50+, while retaining competitor outliers in the top band.
 - Cell metric switching, private-label filtering, and the product-evidence drawer were exercised
   in the live application. Revision-aware API caching retains the complete retailer set and the
   web proxy does not cache obsolete analytical responses.
+- Railway production is at migration `0042_price_arch_matrix`. Both retained governed Egg
+  generations have three default matrices durably materialized. The current `-r2` generation
+  returns its stored Walmart-anchored matrix in approximately 0.6 seconds, with schema `1.1.0`,
+  83 low-to-high rungs, 115 brand options, all 14 retailers, explicit seller-governance counts,
+  and zero paid provider calls queued during materialization.
