@@ -42,6 +42,12 @@ Prefix: `/api/v1`.
 - `GET /analyses/{id}/history?baseline_id=` returns numeric metric changes with current and baseline
   JSON evidence references.
 - `POST /analyses/{id}/evaluate-alerts` idempotently evaluates active alert versions.
+- `GET /analyses/{id}/price-architecture-matrix` returns schema `1.1.0` at product × retailer
+  footprint-median grain. Request dimensions are `mode`, `fixed_increment`, `brand_type`, exact
+  `brand`, `state`, `city`, and `zipcode`. Known third-party sellers are excluded, seller-unknown
+  products remain labeled, and every returned product includes its retailer product ID and distinct
+  observed-location count. Parameter-scoped results are persisted by migration `0042`; default
+  modes are pre-materialized by both API and worker publication paths.
 
 ### Matching Architecture v2 shadow contracts
 

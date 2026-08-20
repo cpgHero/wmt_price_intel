@@ -40,3 +40,7 @@ store observations, deterministic aggregates, and an auditable exception-review 
 `0028_pdp_renormalization` adds a leased, replica-safe, zero-credit queue of append-only
 normalization revisions over immutable PDP raw snapshots. It permits schema upgrades and historical
 seller/attribute recovery without mutating raw or previously published snapshot evidence.
+`0042_price_architecture_materialization` persists parameter-scoped Price Architecture Matrix
+read models beside the immutable AnalysisResult. Default Walmart-anchored, fixed-$0.50, and
+fixed-$1.00 matrices can be built during publication and served without rereading every classified
+Parquet artifact; rebuilding the derivative never queues a paid provider call.

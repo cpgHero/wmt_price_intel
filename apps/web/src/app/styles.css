@@ -3832,7 +3832,7 @@ tbody tr:last-child td {
   border-radius: 13px;
   display: grid;
   gap: 0.65rem;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   padding: 0.75rem;
 }
 .pi-matrix-controls label {
@@ -3984,6 +3984,7 @@ tbody tr:last-child td {
   line-height: 1.35;
 }
 .pi-matrix-table tbody th button span,
+.pi-matrix-table tbody th button small,
 .pi-matrix-table tbody th > small {
   color: var(--muted);
   font-size: 0.55rem;
@@ -4038,11 +4039,19 @@ tbody tr:last-child td {
   gap: 0.35rem;
 }
 .pi-matrix-cell-products span {
+  display: grid;
+  gap: 0.08rem;
   font-size: 0.59rem;
   line-height: 1.35;
 }
 .pi-matrix-cell-products b {
   font-weight: 750;
+}
+.pi-matrix-cell-products i,
+.pi-matrix-cell-products small {
+  color: var(--muted);
+  font-size: 0.52rem;
+  font-style: normal;
 }
 .pi-matrix-cell-products em {
   color: var(--green);
@@ -4247,6 +4256,7 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 900px) {
+  .pi-matrix-controls,
   .pi-matrix-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

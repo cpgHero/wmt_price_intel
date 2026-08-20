@@ -744,6 +744,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Build local price ladders only from governed matched products and positive Search prices. At each benchmark store, retain the lowest local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
             "Keep the Price Architecture Matrix independent from matching. Assign each retailer SKU exactly once from its median positive Search package price across observed locations. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
+            "Read Price Architecture Matrix rungs from the lowest Walmart price position to the highest. Exact canonical-brand filtering changes the displayed assortment but preserves the Walmart-defined rung boundaries; every product card identifies the retailer product ID, observed-location footprint, and seller-governance state.",
             "Calculate matrix store coverage as the distinct union of eligible retailer locations reached by any product in a cell. Never sum individual product coverage. An empty cell means no eligible SKU was observed in that price band; it is not proof of retailer assortment absence.",
             "Keep every admitted benchmark product visible across the leadership tabs. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
             "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
@@ -1353,6 +1354,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-19",
+              "Implemented and test verification in progress; deployment pending",
+              "Price Architecture Matrix gained low-to-high price order, exact brand filtering, product-footprint and seller evidence, plus durable pre-materialization.",
+              "Each visible product now carries its retailer product ID and distinct observed-location count. Known third-party marketplace sellers remain excluded while verified-first-party, seller-unverified, and not-governed states remain explicit. Exact brand filters preserve Walmart's reference rungs. Migration 0042 stores parameter-scoped matrix documents; both API publication and worker publication pre-materialize the three default matrix methods, while other filter combinations persist after first use. Rebuilding uses existing evidence and consumes no MetricsCart credits.",
+            ],
             [
               "2026-08-19",
               "Deployed and production-verified",

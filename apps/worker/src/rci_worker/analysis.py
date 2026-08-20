@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import tempfile
 from collections import Counter, defaultdict
 from collections.abc import AsyncIterator, Iterable
@@ -18,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 from rci_agents import GovernedAnalysisAssistant
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
@@ -1438,8 +1440,53 @@ class AnalysisProcessor:
                     ],
                 },
             )
+        await self._pre_materialize_price_architecture(record.analysis_id)
         await self._generate_deliveries(record.analysis_id, job.definition_config)
         return record.analysis_id
+
+    async def _pre_materialize_price_architecture(self, analysis_id: str) -> None:
+        """Ask the API to persist default matrix read models after publication.
+
+        Publication remains authoritative if the optional read-model step is
+        unavailable. No provider or AI calls are made by this operation.
+        """
+
+        api_url = os.getenv("RCI_API_INTERNAL_URL", "").strip().rstrip("/")
+        token = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
+        if not api_url or not token:
+            logger.info(
+                "price architecture pre-materialization skipped",
+                extra={
+                    "event": "price_architecture_materialization_skipped",
+                    "analysis_id": analysis_id,
+                    "reason": "internal_api_not_configured",
+                },
+            )
+            return
+        try:
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                response = await client.post(
+                    f"{api_url}/api/v1/internal/analyses/{analysis_id}/"
+                    "price-architecture-matrix/materialize",
+                    headers={"X-RCI-Internal-Token": token},
+                )
+                response.raise_for_status()
+            logger.info(
+                "price architecture pre-materialized",
+                extra={
+                    "event": "price_architecture_materialized",
+                    "analysis_id": analysis_id,
+                    "matrix_count": response.json().get("matrix_count"),
+                },
+            )
+        except Exception:
+            logger.exception(
+                "price architecture pre-materialization failed",
+                extra={
+                    "event": "price_architecture_materialization_failed",
+                    "analysis_id": analysis_id,
+                },
+            )
 
     async def _generate_deliveries(
         self, analysis_id: str, definition_config: dict[str, Any]

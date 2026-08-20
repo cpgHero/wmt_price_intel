@@ -321,6 +321,7 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
                 "mode": "fixed_range",
                 "fixed_increment": 1.0,
                 "brand_type": "private_label",
+                "brand": "Great Value",
                 "state": "AR",
                 "city": "Bentonville",
                 "zipcode": "72712",
@@ -340,6 +341,7 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
                 "mode": "fixed_range",
                 "fixed_increment": "1",
                 "brand_type": "private_label",
+                "brand": "Great Value",
                 "state": "AR",
                 "city": "Bentonville",
                 "zipcode": "72712",
@@ -348,6 +350,63 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
 
     assert response.status_code == 200
     assert response.json() == {"analysis_id": "analysis-1", "mode": "fixed_range"}
+
+
+async def test_price_architecture_materialization_requires_internal_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PriceService:
+        async def pre_materialize_architecture_matrices(
+            self, analysis_id: str, *, refresh: bool
+        ) -> list[dict[str, object]]:
+            raise AssertionError("unauthenticated requests must not start materialization")
+
+    monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "test-internal-token")
+    app = create_app()
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            "/api/v1/internal/analyses/analysis-1/price-architecture-matrix/materialize"
+        )
+
+    assert response.status_code == 401
+
+
+async def test_price_architecture_materialization_builds_default_read_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PriceService:
+        async def pre_materialize_architecture_matrices(
+            self, analysis_id: str, *, refresh: bool
+        ) -> list[dict[str, object]]:
+            assert analysis_id == "analysis-1"
+            assert refresh is True
+            return [{"mode": "benchmark_anchored"}, {"increment": 0.5}, {"increment": 1.0}]
+
+    monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "test-internal-token")
+    app = create_app()
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            "/api/v1/internal/analyses/analysis-1/price-architecture-matrix/materialize",
+            headers={"X-RCI-Internal-Token": "test-internal-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "analysis_id": "analysis-1",
+        "status": "materialized",
+        "matrix_count": 3,
+        "provider_calls_queued": 0,
+    }
 
 
 async def test_price_monitoring_map_passes_exact_product_and_detail_scope() -> None:

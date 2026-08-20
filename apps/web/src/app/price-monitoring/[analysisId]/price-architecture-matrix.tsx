@@ -33,6 +33,12 @@ const brandLabels: Record<string, string> = {
   unclassified: "Unclassified",
 };
 
+const sellerLabels: Record<string, string> = {
+  verified_first_party: "Verified first-party seller",
+  seller_unverified: "Seller not supplied",
+  not_governed: "Seller policy not required",
+};
+
 function currency(value: number | null) {
   return value === null
     ? "—"
@@ -55,6 +61,28 @@ function percent(value: number | null) {
 
 function count(value: number) {
   return value.toLocaleString("en-US");
+}
+
+function sellerCoverage(
+  retailer: PriceArchitectureMatrix["retailers"][number],
+) {
+  if (retailer.verified_first_party_skus || retailer.seller_unverified_skus) {
+    return `${count(retailer.verified_first_party_skus)} verified 1P · ${count(retailer.seller_unverified_skus)} seller unknown`;
+  }
+  if (retailer.seller_not_governed_skus) return "Seller policy not required";
+  return "No eligible seller evidence";
+}
+
+function footprintLabel(
+  product: MatrixProduct,
+  retailer: PriceArchitectureMatrix["retailers"][number],
+) {
+  const locationLabel =
+    retailer.location_dimension === "service_area" ? "service areas" : "stores";
+  const coverage = retailer.eligible_locations
+    ? ` · ${percent(product.observed_locations / retailer.eligible_locations)}`
+    : "";
+  return `${count(product.observed_locations)} observed ${locationLabel}${coverage}`;
 }
 
 function methodQuery(method: RungMethod) {
@@ -82,19 +110,19 @@ function metricValue(cell: MatrixCell, metric: CellMetric) {
 
 function ProductDrawer({
   cell,
-  retailerName,
+  retailer,
   rung,
   onClose,
 }: Readonly<{
   cell: MatrixCell;
-  retailerName: string;
+  retailer: PriceArchitectureMatrix["retailers"][number];
   rung: MatrixRung;
   onClose: () => void;
 }>) {
   return (
     <div className="pi-matrix-drawer-backdrop" role="presentation">
       <aside
-        aria-label={`${retailerName} products in ${rung.label}`}
+        aria-label={`${retailer.name} products in ${rung.label}`}
         aria-modal="true"
         className="pi-matrix-drawer"
         role="dialog"
@@ -102,7 +130,7 @@ function ProductDrawer({
         <header>
           <div>
             <p className="section-kicker">Price-rung evidence</p>
-            <h2>{retailerName}</h2>
+            <h2>{retailer.name}</h2>
             <p>
               {rung.label} · {count(cell.sku_count)} observed SKUs ·{" "}
               {percent(cell.store_coverage)} of eligible locations reached by at
@@ -140,6 +168,11 @@ function ProductDrawer({
                 <p>{brandLabels[product.brand_type]}</p>
                 <h3>{product.name}</h3>
                 <span>{product.brand ?? "Brand unresolved"}</span>
+                <span>
+                  {product.seller
+                    ? `Seller: ${product.seller} · ${sellerLabels[product.seller_status]}`
+                    : sellerLabels[product.seller_status]}
+                </span>
                 <dl>
                   <div>
                     <dt>Median price</dt>
@@ -154,7 +187,7 @@ function ProductDrawer({
                   </div>
                   <div>
                     <dt>Observed locations</dt>
-                    <dd>{count(product.observed_locations)}</dd>
+                    <dd>{footprintLabel(product, retailer)}</dd>
                   </div>
                   <div>
                     <dt>Retailer product ID</dt>
@@ -191,6 +224,7 @@ export function PriceArchitectureMatrixWorkspace({
   const [method, setMethod] = useState<RungMethod>("benchmark");
   const [metric, setMetric] = useState<CellMetric>("products");
   const [brandType, setBrandType] = useState(initialBrandType);
+  const [brand, setBrand] = useState("");
   const [matrix, setMatrix] = useState<PriceArchitectureMatrix | null>(null);
   const [settledRequest, setSettledRequest] = useState("");
   const [requestError, setRequestError] = useState<{
@@ -200,17 +234,18 @@ export function PriceArchitectureMatrixWorkspace({
   const [selected, setSelected] = useState<{
     rung: MatrixRung;
     cell: MatrixCell;
-    retailerName: string;
+    retailer: PriceArchitectureMatrix["retailers"][number];
   } | null>(null);
 
   const requestKey = useMemo(() => {
     const query = new URLSearchParams(methodQuery(method));
     query.set("brand_type", brandType);
+    if (brand) query.set("brand", brand);
     if (state) query.set("state", state);
     if (city) query.set("city", city);
     if (zipcode) query.set("zipcode", zipcode);
     return query.toString();
-  }, [brandType, city, method, state, zipcode]);
+  }, [brand, brandType, city, method, state, zipcode]);
   const loading = settledRequest !== requestKey;
   const error = requestError?.key === requestKey ? requestError.message : null;
 
@@ -346,12 +381,29 @@ export function PriceArchitectureMatrixWorkspace({
         <label>
           <span>Brand type</span>
           <select
-            onChange={(event) => setBrandType(event.target.value)}
+            onChange={(event) => {
+              setBrandType(event.target.value);
+              setBrand("");
+            }}
             value={brandType}
           >
             {Object.entries(brandLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Brand</span>
+          <select
+            onChange={(event) => setBrand(event.target.value)}
+            value={brand}
+          >
+            <option value="">All brands</option>
+            {matrix.brand_options.map((option) => (
+              <option key={option.name} value={option.name}>
+                {option.name} ({count(option.product_count)})
               </option>
             ))}
           </select>
@@ -397,8 +449,10 @@ export function PriceArchitectureMatrixWorkspace({
         <span>
           One SKU contributes once, using its location-footprint median package
           price. Store coverage is the distinct union of locations reached by
-          products in the cell. Empty cells mean no eligible SKU was observed in
-          the band—not necessarily that the retailer has no such product.
+          products in the cell. Known third-party marketplace sellers are
+          excluded; products without seller evidence remain visibly unverified.
+          Empty cells mean no eligible SKU was observed in the band—not
+          necessarily that the retailer has no such product.
         </span>
       </div>
 
@@ -406,7 +460,15 @@ export function PriceArchitectureMatrixWorkspace({
         <table className="pi-matrix-table">
           <thead>
             <tr>
-              <th>{anchor?.name ?? "Walmart"} anchor / price rung</th>
+              <th>
+                <strong>{anchor?.name ?? "Walmart"} anchor / price rung</strong>
+                {anchor ? (
+                  <>
+                    <span>{count(anchor.sku_count)} eligible SKUs</span>
+                    <span>{sellerCoverage(anchor)}</span>
+                  </>
+                ) : null}
+              </th>
               {availableRetailers
                 .filter(
                   (retailer) =>
@@ -416,6 +478,7 @@ export function PriceArchitectureMatrixWorkspace({
                   <th key={retailer.id}>
                     <strong>{retailer.name}</strong>
                     <span>{count(retailer.sku_count)} eligible SKUs</span>
+                    <span>{sellerCoverage(retailer)}</span>
                   </th>
                 ))}
             </tr>
@@ -436,16 +499,25 @@ export function PriceArchitectureMatrixWorkspace({
                           key={product.product_id}
                           onClick={() =>
                             anchorCell &&
+                            anchor &&
                             setSelected({
                               rung,
                               cell: anchorCell,
-                              retailerName: anchor?.name ?? "Walmart",
+                              retailer: anchor,
                             })
                           }
                           type="button"
                         >
                           <strong>{product.name}</strong>
-                          <span>{currency(product.median_price)}</span>
+                          <span>
+                            {currency(product.median_price)} · ID{" "}
+                            {product.product_id}
+                          </span>
+                          <small>
+                            {anchor
+                              ? footprintLabel(product, anchor)
+                              : `${count(product.observed_locations)} observed locations`}
+                          </small>
                         </button>
                       ))
                     ) : (
@@ -487,7 +559,7 @@ export function PriceArchitectureMatrixWorkspace({
                               setSelected({
                                 rung,
                                 cell,
-                                retailerName: retailer.name,
+                                retailer,
                               })
                             }
                             type="button"
@@ -496,8 +568,14 @@ export function PriceArchitectureMatrixWorkspace({
                               <div className="pi-matrix-cell-products">
                                 {cell.products.slice(0, 3).map((product) => (
                                   <span key={product.product_id}>
-                                    <b>{product.name}</b>{" "}
-                                    {currency(product.median_price)}
+                                    <b>{product.name}</b>
+                                    <i>
+                                      {currency(product.median_price)} · ID{" "}
+                                      {product.product_id}
+                                    </i>
+                                    <small>
+                                      {footprintLabel(product, retailer)}
+                                    </small>
                                   </span>
                                 ))}
                                 {cell.products.length > 3 ? (
@@ -538,7 +616,7 @@ export function PriceArchitectureMatrixWorkspace({
         <ProductDrawer
           cell={selected.cell}
           onClose={() => setSelected(null)}
-          retailerName={selected.retailerName}
+          retailer={selected.retailer}
           rung={selected.rung}
         />
       ) : null}

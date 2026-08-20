@@ -25,6 +25,7 @@ PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.1.0"
 
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 BrandOrigin = Literal["user", "retailer_pack", "search", "pdp", "unresolved"]
+SellerStatus = Literal["verified_first_party", "seller_unverified", "not_governed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +116,8 @@ class ProductLocationObservation:
     observed_at: str | None
     offer_id: str
     metric_values: tuple[tuple[str, float], ...]
+    seller: str | None = None
+    seller_status: SellerStatus = "not_governed"
 
     def comparison_value(self, metric: str) -> float | None:
         if metric == "package_price":
@@ -335,6 +338,8 @@ def _population_checksum(observations: Iterable[ProductLocationObservation]) -> 
             "brand_origin": row.brand_origin,
             "brand_status": row.brand_status,
             "identity_authority": row.identity_authority,
+            "seller": row.seller,
+            "seller_status": row.seller_status,
             "scope_key": row.location.scope_key,
             "location": row.location.to_contract(),
             "offer_id": row.offer_id,
@@ -438,13 +443,25 @@ class ProductLocationProjector:
             reasons: list[str] = []
             product_key = f"{offer.retailer_id}:{offer.retailer_product_id}"
             product = context.get(product_key, {})
+            observed_seller = (
+                str(product["seller"]).strip() or None
+                if product.get("seller") is not None
+                else None
+            )
+            seller_status: SellerStatus = "not_governed"
             if self._sellers is not None:
                 seller_resolution = self._sellers.resolve(
                     offer.retailer_id,
-                    str(product["seller"]) if product.get("seller") is not None else None,
+                    observed_seller,
                 )
                 if not seller_resolution.eligible:
                     reasons.append("known_third_party_seller")
+                elif seller_resolution.status in {
+                    "verified_first_party",
+                    "seller_unverified",
+                    "not_governed",
+                }:
+                    seller_status = cast(SellerStatus, seller_resolution.status)
             if not classified.in_scope:
                 reasons.append("out_of_scope")
             if offer.price is None or offer.price <= 0:
@@ -546,6 +563,8 @@ class ProductLocationProjector:
                         }.items()
                     )
                 ),
+                seller=observed_seller,
+                seller_status=seller_status,
             )
             key = (observation.product_id, observation.location.scope_key)
             existing = selected.get(key)

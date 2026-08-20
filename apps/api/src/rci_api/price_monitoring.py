@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import os
+import secrets
 from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO, StringIO
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import polars as pl
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -322,6 +323,101 @@ class S3ParquetReader:
 class PostgresPriceMonitoringRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def architecture_materialization(
+        self,
+        analysis_id: str,
+        *,
+        mode: PriceArchitectureMode,
+        fixed_increment: float,
+        brand_type: BrandFilter,
+        brand: str | None,
+        state: str | None,
+        city: str | None,
+        zipcode: str | None,
+    ) -> dict[str, Any] | None:
+        statement = text(
+            """
+            SELECT materialization.document
+            FROM price_architecture_materialization materialization
+            JOIN analysis_result result
+              ON result.id = materialization.analysis_result_id
+            WHERE result.analysis_id = :analysis_id
+              AND materialization.mode = :mode
+              AND materialization.fixed_increment = CAST(:fixed_increment AS numeric)
+              AND materialization.brand_type = :brand_type
+              AND materialization.brand = :brand
+              AND materialization.state = :state
+              AND materialization.city = :city
+              AND materialization.zipcode = :zipcode
+            """
+        )
+        async with self._engine.connect() as connection:
+            document = await connection.scalar(
+                statement,
+                {
+                    "analysis_id": analysis_id,
+                    "mode": mode,
+                    "fixed_increment": fixed_increment,
+                    "brand_type": brand_type,
+                    "brand": brand or "",
+                    "state": state or "",
+                    "city": city or "",
+                    "zipcode": zipcode or "",
+                },
+            )
+        return dict(document) if isinstance(document, dict) else None
+
+    async def store_architecture_materialization(
+        self,
+        analysis_id: str,
+        *,
+        mode: PriceArchitectureMode,
+        fixed_increment: float,
+        brand_type: BrandFilter,
+        brand: str | None,
+        state: str | None,
+        city: str | None,
+        zipcode: str | None,
+        source_revision: str,
+        document: dict[str, Any],
+    ) -> None:
+        statement = text(
+            """
+            INSERT INTO price_architecture_materialization (
+              analysis_result_id, mode, fixed_increment, brand_type, brand,
+              state, city, zipcode, source_revision, document
+            )
+            SELECT id, :mode, CAST(:fixed_increment AS numeric), :brand_type, :brand,
+              :state, :city, :zipcode, :source_revision, CAST(:document AS jsonb)
+            FROM analysis_result
+            WHERE analysis_id = :analysis_id
+            ON CONFLICT ON CONSTRAINT price_architecture_materialization_scope_uq
+            DO UPDATE SET
+              source_revision = EXCLUDED.source_revision,
+              document = EXCLUDED.document,
+              materialized_at = now()
+            RETURNING id
+            """
+        )
+        async with self._engine.begin() as connection:
+            materialization_id = await connection.scalar(
+                statement,
+                {
+                    "analysis_id": analysis_id,
+                    "mode": mode,
+                    "fixed_increment": fixed_increment,
+                    "brand_type": brand_type,
+                    "brand": brand or "",
+                    "state": state or "",
+                    "city": city or "",
+                    "zipcode": zipcode or "",
+                    "source_revision": source_revision,
+                    "document": json.dumps(document, ensure_ascii=False, separators=(",", ":")),
+                },
+            )
+            if materialization_id is None:
+                raise LookupError(f"analysis {analysis_id!r} was not found")
 
     async def artifacts(self, collection_run_id: str, retailer_id: str) -> list[ClassifiedArtifact]:
         statement = text(
@@ -978,9 +1074,11 @@ class PriceMonitoringService:
         mode: PriceArchitectureMode = "benchmark_anchored",
         fixed_increment: float = 0.5,
         brand_type: BrandFilter = "all",
+        brand: str | None = None,
         state: str | None = None,
         city: str | None = None,
         zipcode: str | None = None,
+        refresh: bool = False,
     ) -> dict[str, Any]:
         """Build unmatched assortment architecture across every analysis retailer."""
 
@@ -988,6 +1086,25 @@ class PriceMonitoringService:
             raise ValueError("a city filter requires its state")
         if mode == "fixed_range" and fixed_increment not in {0.5, 1.0}:
             raise ValueError("fixed price-rung increment must be 0.50 or 1.00")
+        if not refresh:
+            stored = await self._repository.architecture_materialization(
+                analysis_id,
+                mode=mode,
+                fixed_increment=fixed_increment,
+                brand_type=brand_type,
+                brand=brand,
+                state=state,
+                city=city,
+                zipcode=zipcode,
+            )
+            if stored is not None:
+                validate_instance(
+                    self._root,
+                    "price-architecture-matrix.schema.json",
+                    stored,
+                    label=f"materialized-price-architecture-matrix:{analysis_id}",
+                )
+                return stored
         analysis = await self._analyses.get(analysis_id)
         benchmark = str(analysis.result["benchmark_retailer"])
         retailer_ids = tuple(
@@ -1032,6 +1149,9 @@ class PriceMonitoringService:
                         "sku_count": 0,
                         "eligible_locations": 0,
                         "observed_locations": 0,
+                        "verified_first_party_skus": 0,
+                        "seller_unverified_skus": 0,
+                        "seller_not_governed_skus": 0,
                         "population_checksum": None,
                         "reason": (
                             "Governed Search evidence is unavailable for this retailer "
@@ -1051,18 +1171,20 @@ class PriceMonitoringService:
                 for row in prepared_rows
             )
         )
+        source_revision = hashlib.sha256("|".join(revisions).encode()).hexdigest()
         cache_key = (
             analysis_id,
             mode,
             f"{fixed_increment:.2f}",
             brand_type,
+            brand or "",
             state or "",
             city or "",
             zipcode or "",
             *revisions,
         )
         cached = self._architecture_cache.get(cache_key)
-        if cached is not None:
+        if cached is not None and not refresh:
             return cached
 
         pack = await self._packs.load(
@@ -1094,6 +1216,7 @@ class PriceMonitoringService:
             mode=mode,
             fixed_increment=fixed_increment,
             brand_type=brand_type,
+            brand=brand,
             state=state,
             city=city,
             zipcode=zipcode,
@@ -1105,10 +1228,53 @@ class PriceMonitoringService:
             matrix,
             label=f"price-architecture-matrix:{analysis_id}",
         )
+        await self._repository.store_architecture_materialization(
+            analysis_id,
+            mode=mode,
+            fixed_increment=fixed_increment,
+            brand_type=brand_type,
+            brand=brand,
+            state=state,
+            city=city,
+            zipcode=zipcode,
+            source_revision=source_revision,
+            document=matrix,
+        )
         if len(self._architecture_cache) >= 24:
             self._architecture_cache.pop(next(iter(self._architecture_cache)))
         self._architecture_cache[cache_key] = matrix
         return matrix
+
+    async def pre_materialize_architecture_matrices(
+        self,
+        analysis_id: str,
+        *,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Persist the three default category-level matrices for immediate reads."""
+
+        return list(
+            await asyncio.gather(
+                self.architecture_matrix(
+                    analysis_id,
+                    mode="benchmark_anchored",
+                    fixed_increment=0.5,
+                    refresh=refresh,
+                ),
+                self.architecture_matrix(
+                    analysis_id,
+                    mode="fixed_range",
+                    fixed_increment=0.5,
+                    refresh=refresh,
+                ),
+                self.architecture_matrix(
+                    analysis_id,
+                    mode="fixed_range",
+                    fixed_increment=1.0,
+                    refresh=refresh,
+                ),
+            )
+        )
 
     async def product_observations(
         self,
@@ -1442,6 +1608,15 @@ def get_price_monitoring_service(request: Request) -> PriceMonitoringService:
 ServiceDependency = Annotated[PriceMonitoringService, Depends(get_price_monitoring_service)]
 
 
+def _require_internal_materialization_token(provided: str | None) -> None:
+    expected = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
+    if not expected or not provided or not secrets.compare_digest(expected, provided):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated internal service access is required.",
+        )
+
+
 @router.get("/analyses/{analysis_id}/price-monitoring")
 async def price_monitoring_view(
     analysis_id: str,
@@ -1488,6 +1663,7 @@ async def price_architecture_matrix(
     mode: PriceArchitectureMode = "benchmark_anchored",
     fixed_increment: float = Query(default=0.5, alias="fixed_increment"),
     brand_type: BrandFilter = "all",
+    brand: str | None = None,
     state_filter: str | None = Query(default=None, alias="state"),
     city: str | None = None,
     zipcode: str | None = None,
@@ -1498,6 +1674,7 @@ async def price_architecture_matrix(
             mode=mode,
             fixed_increment=fixed_increment,
             brand_type=brand_type,
+            brand=brand,
             state=state_filter,
             city=city,
             zipcode=zipcode,
@@ -1507,6 +1684,38 @@ async def price_architecture_matrix(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/internal/analyses/{analysis_id}/price-architecture-matrix/materialize")
+async def materialize_price_architecture_matrix(
+    analysis_id: str,
+    service: ServiceDependency,
+    x_rci_internal_token: Annotated[str | None, Header(alias="X-RCI-Internal-Token")] = None,
+) -> dict[str, Any]:
+    _require_internal_materialization_token(x_rci_internal_token)
+    try:
+        matrices = await service.pre_materialize_architecture_matrices(
+            analysis_id,
+            refresh=True,
+        )
+        return {
+            "analysis_id": analysis_id,
+            "status": "materialized",
+            "matrix_count": len(matrices),
+            "provider_calls_queued": 0,
+        }
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except (LookupError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),

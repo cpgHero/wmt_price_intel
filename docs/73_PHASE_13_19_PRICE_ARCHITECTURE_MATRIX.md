@@ -1,6 +1,6 @@
 # Phase 13.19 — Cross-Retailer Price Architecture Matrix
 
-Status: deployed and production-verified
+Status: refinement implemented; production deployment pending
 
 ## Outcome
 
@@ -11,14 +11,16 @@ positions; it must never imply that products sharing a price band are substitute
 
 ## Authoritative grain
 
-1. Start from the shared canonical first-party product × retailer-location population.
+1. Start from the shared seller-governed canonical product × retailer-location population. Known
+   third-party marketplace sellers are excluded; permitted missing seller values remain explicit.
 2. Retain only positive Search package prices. PDP may enrich identity, brand, imagery, and links,
    but cannot override Search price or location.
 3. Collapse each retailer product to its median package price across distinct observed locations.
    A SKU therefore contributes once regardless of distribution breadth.
 4. Apply optional governed brand-type and location-master state/city/ZIP filters before deriving
    the matrix.
-5. Assign each product to exactly one price rung.
+5. Assign each product to exactly one price rung and display the rungs from the lowest Walmart
+   price position to the highest.
 
 ## Rung methods
 
@@ -43,6 +45,7 @@ positions; it must never imply that products sharing a price band are substitute
 ## Cell metrics
 
 - **Products + prices:** up to three visible product names and medians, with complete drill-down.
+- Product cards also show retailer product ID, distinct observed-location count, and seller status.
 - **SKU count:** number of distinct retailer product IDs assigned to the rung.
 - **Percent of assortment:** cell SKU count divided by that retailer's eligible SKU count.
 - **Store coverage:** distinct union of eligible retailer locations reached by one or more cell
@@ -60,6 +63,11 @@ Sales/units are capability-bounded until governed performance data exists.
   visually erase a smaller assortment.
 - Clicking a populated cell opens product identity, brand type, image, median/range, observed
   locations, retailer product ID, and retailer URL.
+- Brand type and exact canonical brand filters are independent. Brand filtering changes displayed
+  products but preserves Walmart's reference rungs, so a competitor-only brand can still be read
+  against Walmart's complete price architecture.
+- Known third-party marketplace sellers are excluded. Verified first-party, seller-unverified, and
+  non-marketplace/not-governed states remain separate; a blank seller is never called verified.
 - Empty cells say `No observed SKU in band`. They do not assert a confirmed white-space gap.
 - A retailer whose immutable Search evidence is unavailable remains explicitly labeled and cannot
   silently disappear. Missing Walmart evidence blocks the entire matrix because rungs cannot be
@@ -67,12 +75,19 @@ Sales/units are capability-bounded until governed performance data exists.
 
 ## Contracts and services
 
-- Normative contract: `schemas/price-architecture-matrix.schema.json` version `1.0.0`.
+- Normative contract: `schemas/price-architecture-matrix.schema.json` version `1.1.0`.
 - API: `GET /api/v1/analyses/{analysis_id}/price-architecture-matrix`.
 - Web proxy: `GET /api/price-monitoring/{analysis_id}/architecture-matrix`.
-- Rung method, fixed increment, brand type, state, city, and ZIP are explicit request dimensions.
+- Rung method, fixed increment, brand type, exact brand, state, city, and ZIP are explicit request
+  dimensions.
 - The API prepares retailer populations with bounded concurrency and caches by immutable
   population checksum plus PDP context revision and selected filters.
+- Migration `0042_price_architecture_materialization` adds a durable, idempotent JSONB read model.
+  Both publication entry points are covered: API publication builds in-process, while the analysis
+  worker calls an authenticated API-only endpoint over Railway's private network. They
+  pre-materialize the Walmart-anchored, fixed-$0.50, and fixed-$1.00 category matrices; all other
+  parameter combinations persist on first use and survive API restarts and replica changes.
+  Rebuilding this derivative uses existing Search/PDP evidence and makes no paid provider calls.
 
 ## Trust gates
 
@@ -84,6 +99,7 @@ Sales/units are capability-bounded until governed performance data exists.
 6. Unsupported price density on open-ended bands remains null.
 7. Known third-party products remain excluded by the shared Retailer Pack seller boundary.
 8. Matching v2 relationships are not read by this projection.
+9. Low-to-high rung order, exact brand filtering, and persisted-read parity are deterministic gates.
 
 ## Verification
 

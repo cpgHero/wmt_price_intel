@@ -212,6 +212,8 @@ def test_canonical_population_excludes_known_third_party_sellers_but_keeps_missi
     )
 
     assert [row.product_id for row in population.observations] == ["unknown-product"]
+    assert population.observations[0].seller is None
+    assert population.observations[0].seller_status == "seller_unverified"
     assert dict(population.exclusion_counts) == {"known_third_party_seller": 1}
 
 

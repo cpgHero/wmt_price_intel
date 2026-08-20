@@ -80,7 +80,9 @@ def _retailer(
     )
 
 
-def _matrix(*, mode: str = "benchmark_anchored", increment: float = 0.5) -> dict:
+def _matrix(
+    *, mode: str = "benchmark_anchored", increment: float = 0.5, brand: str | None = None
+) -> dict:
     walmart = _retailer(
         "walmart_us",
         [
@@ -112,6 +114,7 @@ def _matrix(*, mode: str = "benchmark_anchored", increment: float = 0.5) -> dict
         retailers=[walmart, aldi, target],
         mode=mode,  # type: ignore[arg-type]
         fixed_increment=increment,
+        brand=brand,
     )
 
 
@@ -126,11 +129,12 @@ def test_benchmark_rungs_use_distinct_product_medians_and_true_midpoints() -> No
     )
     assert matrix["summary"]["anchor_skus"] == 4
     assert matrix["summary"]["anchor_price_points"] == 3
-    assert [(rung["lower_bound"], rung["upper_bound"]) for rung in reversed(matrix["rungs"])] == [
+    assert [(rung["lower_bound"], rung["upper_bound"]) for rung in matrix["rungs"]] == [
         (None, 3.0),
         (3.0, 5.0),
         (5.0, None),
     ]
+    assert [rung["rank"] for rung in matrix["rungs"]] == [1, 2, 3]
 
 
 def test_boundary_price_enters_the_higher_anchor_rung_and_skus_are_unique() -> None:
@@ -172,14 +176,47 @@ def test_fixed_rungs_use_stable_intervals_with_benchmark_bounded_edges() -> None
     matrix = _matrix(mode="fixed_range", increment=1.0)
     assert matrix["source"]["anchor_rule"] == "fixed $1.00 package-price bands"
     assert len(matrix["rungs"]) == 5
-    assert matrix["rungs"][-1]["lower_bound"] is None
-    assert matrix["rungs"][-1]["upper_bound"] == 3.0
-    assert matrix["rungs"][0]["lower_bound"] == 6.0
-    assert matrix["rungs"][0]["upper_bound"] is None
+    assert matrix["rungs"][0]["lower_bound"] is None
+    assert matrix["rungs"][0]["upper_bound"] == 3.0
+    assert matrix["rungs"][-1]["lower_bound"] == 6.0
+    assert matrix["rungs"][-1]["upper_bound"] is None
     top_aldi = next(
-        cell for cell in matrix["rungs"][0]["cells"] if cell["retailer_id"] == "aldi_us"
+        cell for cell in matrix["rungs"][-1]["cells"] if cell["retailer_id"] == "aldi_us"
     )
     assert [product["product_id"] for product in top_aldi["products"]] == ["a3"]
 
     with pytest.raises(ValueError, match=r"0\.50 or 1\.00"):
         _matrix(mode="fixed_range", increment=0.25)
+
+
+def test_brand_filter_preserves_walmart_rungs_and_filters_displayed_products() -> None:
+    matrix = _matrix(brand="Great Value")
+
+    assert len(matrix["rungs"]) == 3
+    assert matrix["summary"]["anchor_price_points"] == 3
+    assert matrix["summary"]["anchor_skus"] == 4
+    assert matrix["summary"]["competitor_skus"] == 0
+    assert matrix["filters"]["brand"] == "Great Value"
+    assert matrix["brand_options"] == [
+        {"name": "Great Value", "retailer_ids": ["walmart_us"], "product_count": 4}
+    ]
+    assert all(
+        cell["sku_count"] == 0
+        for rung in matrix["rungs"]
+        for cell in rung["cells"]
+        if cell["retailer_id"] != "walmart_us"
+    )
+
+
+def test_brand_without_walmart_products_keeps_reference_rungs_contract_valid() -> None:
+    matrix = _matrix(brand="A competitor-only brand")
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-architecture-matrix.schema.json",
+        matrix,
+        label="competitor-only brand price architecture matrix",
+    )
+    assert matrix["summary"]["anchor_price_points"] == 3
+    assert matrix["summary"]["anchor_skus"] == 0
+    assert len(matrix["rungs"]) == 3

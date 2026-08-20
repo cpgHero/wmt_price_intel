@@ -43,6 +43,8 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
                 "name": identity.product_name,
                 "brand": identity.brand,
                 "brand_type": identity.brand_type,
+                "seller": identity.seller,
+                "seller_status": identity.seller_status,
                 "image_url": identity.image_url,
                 "url": identity.product_url,
                 "median_price": _round(median(prices)),
@@ -137,6 +139,7 @@ class PriceArchitectureMatrixProjector:
         mode: PriceArchitectureMode = "benchmark_anchored",
         fixed_increment: float = 0.5,
         brand_type: str = "all",
+        brand: str | None = None,
         state: str | None = None,
         city: str | None = None,
         zipcode: str | None = None,
@@ -151,15 +154,41 @@ class PriceArchitectureMatrixProjector:
         )
         if anchor is None:
             raise ValueError("benchmark retailer evidence is required to define price rungs")
-        products_by_retailer = {row.retailer_id: _product_rows(row) for row in inputs}
-        anchor_products = products_by_retailer[anchor_retailer_id]
-        if not anchor_products:
+        rung_basis_products = {row.retailer_id: _product_rows(row) for row in inputs}
+        anchor_basis_products = rung_basis_products[anchor_retailer_id]
+        if not anchor_basis_products:
             raise ValueError("benchmark retailer has no eligible positive-price products")
         bands = (
-            _anchor_bands(anchor_products)
+            _anchor_bands(anchor_basis_products)
             if mode == "benchmark_anchored"
-            else _fixed_bands(anchor_products, fixed_increment)
+            else _fixed_bands(anchor_basis_products, fixed_increment)
         )
+        normalized_brand = brand.casefold().strip() if brand else None
+        products_by_retailer = {
+            retailer_id: [
+                product
+                for product in products
+                if normalized_brand is None
+                or str(product.get("brand") or "").casefold().strip() == normalized_brand
+            ]
+            for retailer_id, products in rung_basis_products.items()
+        }
+        anchor_products = products_by_retailer[anchor_retailer_id]
+        brand_index: dict[str, dict[str, object]] = {}
+        for retailer_id, products in rung_basis_products.items():
+            for product in products:
+                product_brand = str(product.get("brand") or "").strip()
+                if not product_brand:
+                    continue
+                key = product_brand.casefold()
+                entry = brand_index.setdefault(
+                    key,
+                    {"name": product_brand, "retailer_ids": set(), "product_count": 0},
+                )
+                retailer_ids = entry["retailer_ids"]
+                assert isinstance(retailer_ids, set)
+                retailer_ids.add(retailer_id)
+                entry["product_count"] = int(entry["product_count"]) + 1
         assigned: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
         for retailer_id, products in products_by_retailer.items():
             for product in products:
@@ -169,7 +198,14 @@ class PriceArchitectureMatrixProjector:
         retailer_rows: list[JsonObject] = []
         for retailer in inputs:
             products = products_by_retailer[retailer.retailer_id]
-            observed_locations = len({row.location.scope_key for row in retailer.observations})
+            included_product_ids = {str(product["product_id"]) for product in products}
+            observed_locations = len(
+                {
+                    row.location.scope_key
+                    for row in retailer.observations
+                    if row.product_id in included_product_ids
+                }
+            )
             retailer_rows.append(
                 {
                     "id": retailer.retailer_id,
@@ -179,6 +215,15 @@ class PriceArchitectureMatrixProjector:
                     "sku_count": len(products),
                     "eligible_locations": len(retailer.eligible_scope_keys),
                     "observed_locations": observed_locations,
+                    "verified_first_party_skus": sum(
+                        product["seller_status"] == "verified_first_party" for product in products
+                    ),
+                    "seller_unverified_skus": sum(
+                        product["seller_status"] == "seller_unverified" for product in products
+                    ),
+                    "seller_not_governed_skus": sum(
+                        product["seller_status"] == "not_governed" for product in products
+                    ),
                     "population_checksum": retailer.population_checksum,
                     "reason": None,
                 }
@@ -197,7 +242,7 @@ class PriceArchitectureMatrixProjector:
             for row in retailer_rows
             if row["id"] != anchor_retailer_id and row["status"] == "available"
         }
-        for rank, band in enumerate(reversed(bands), start=1):
+        for rank, band in enumerate(bands, start=1):
             band_id = str(band["id"])
             cells: list[JsonObject] = []
             for retailer in inputs:
@@ -258,7 +303,7 @@ class PriceArchitectureMatrixProjector:
         crowded = max(rung_rows, key=lambda row: int(row["competitor_sku_count"]))
         whitespace = [row for row in rung_rows if int(row["competitor_sku_count"]) == 0]
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": product_pack,
@@ -279,13 +324,14 @@ class PriceArchitectureMatrixProjector:
                 "mode": mode,
                 "fixed_increment": fixed_increment,
                 "brand_type": brand_type,
+                "brand": brand,
                 "state": state,
                 "city": city,
                 "zipcode": zipcode,
             },
             "summary": {
                 "anchor_price_points": len(
-                    {float(product["median_price"]) for product in anchor_products}
+                    {float(product["median_price"]) for product in anchor_basis_products}
                 ),
                 "rung_count": len(bands),
                 "anchor_skus": len(anchor_products),
@@ -297,6 +343,16 @@ class PriceArchitectureMatrixProjector:
                 "most_crowded_rung_id": crowded["id"],
                 "whitespace_rung_count": len(whitespace),
             },
+            "brand_options": [
+                {
+                    "name": str(entry["name"]),
+                    "retailer_ids": sorted(str(value) for value in entry["retailer_ids"]),
+                    "product_count": int(entry["product_count"]),
+                }
+                for _key, entry in sorted(
+                    brand_index.items(), key=lambda item: str(item[1]["name"]).casefold()
+                )
+            ],
             "retailers": retailer_rows,
             "rungs": rung_rows,
         }

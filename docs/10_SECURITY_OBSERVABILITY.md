@@ -6,6 +6,8 @@ MetricsCart, OpenAI, object-storage, session, and SMTP credentials are server-si
 variables only. Never persist plaintext credentials in collection or alert definitions, evidence,
 events, email bodies, or logs. Rate-limit state uses a nonsecret credential-budget hash rather than
 the key itself. SMTP is constructed only in API/scheduler processes and is never exposed to Next.js.
+`RCI_INTERNAL_SERVICE_TOKEN` is shared only by the API and worker and authenticates derivative
+read-model materialization over Railway's private network; it is never exposed to the web service.
 
 ## Access control
 
@@ -43,6 +45,7 @@ generation, and benchmark updates.
 - strict match rate,
 - QA issue counts,
 - artifact generation failures,
+- price-architecture materialization duration/failure and persisted matrix count,
 - worker lease expirations/reclaims.
 - schedule lag/materialization failures,
 - analysis-evaluation lease expirations,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 from datetime import datetime
@@ -56,6 +57,7 @@ from rci_results.storage import ReportObjectStore, UnavailableReportObjectStore
 from rci_retailer_packs import GovernedBrandResolver
 
 router = APIRouter(prefix="/api/v1")
+logger = logging.getLogger(__name__)
 
 
 class AnalysisResponse(BaseModel):
@@ -260,11 +262,32 @@ def _require_evidence_export_access(request: Request, provided_token: str | None
 )
 async def publish_analysis(
     run_id: str,
+    request: Request,
     service: AnalysisServiceDependency,
     document: AnalysisBody,
 ) -> AnalysisRecord:
     try:
-        return await service.publish(document, collection_run_id=run_id)
+        record = await service.publish(document, collection_run_id=run_id)
+        try:
+            # Imported lazily to avoid the analyses/price-monitoring router cycle.
+            # The persisted defaults make the first owner-facing matrix read fast.
+            from rci_api.price_monitoring import get_price_monitoring_service
+
+            await get_price_monitoring_service(request).pre_materialize_architecture_matrices(
+                record.analysis_id
+            )
+        except Exception:
+            # The immutable analysis is authoritative and must remain publishable if
+            # a derivative read model cannot be built. Operators can safely retry the
+            # idempotent materialization without replaying paid collection work.
+            logger.exception(
+                "price architecture pre-materialization failed after analysis publication",
+                extra={
+                    "event": "price_architecture_pre_materialization_failed",
+                    "analysis_id": record.analysis_id,
+                },
+            )
+        return record
     except ContractError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

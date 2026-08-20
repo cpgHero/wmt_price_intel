@@ -1,7 +1,7 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
 export interface RetailCompetitiveIntelligencePriceArchitectureMatrix {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
@@ -16,6 +16,7 @@ export interface RetailCompetitiveIntelligencePriceArchitectureMatrix {
     mode: "benchmark_anchored" | "fixed_range";
     fixed_increment: 0.5 | 1;
     brand_type: "all" | "private_label" | "regional" | "national" | "unclassified";
+    brand: string | null;
     state: string | null;
     city: string | null;
     zipcode: string | null;
@@ -28,6 +29,7 @@ export interface RetailCompetitiveIntelligencePriceArchitectureMatrix {
     most_crowded_rung_id: string;
     whitespace_rung_count: number;
   };
+  brand_options: BrandOption[];
   /**
    * @minItems 1
    */
@@ -42,6 +44,14 @@ export interface IdNameVersion {
   name: string;
   version: string;
 }
+export interface BrandOption {
+  name: string;
+  /**
+   * @minItems 1
+   */
+  retailer_ids: [string, ...string[]];
+  product_count: number;
+}
 export interface Retailer {
   id: string;
   name: string;
@@ -50,6 +60,9 @@ export interface Retailer {
   sku_count: number;
   eligible_locations: number;
   observed_locations: number;
+  verified_first_party_skus: number;
+  seller_unverified_skus: number;
+  seller_not_governed_skus: number;
   population_checksum: string | null;
   reason: string | null;
 }
@@ -72,6 +85,8 @@ export interface Product {
   name: string;
   brand: string | null;
   brand_type: "private_label" | "regional" | "national" | "unclassified";
+  seller: string | null;
+  seller_status: "verified_first_party" | "seller_unverified" | "not_governed";
   image_url: string | null;
   url: string | null;
   median_price: number;
