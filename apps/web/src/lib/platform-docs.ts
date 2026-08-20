@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.24",
+  version: "1.3.25",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3 with complete two-retailer scorecard product evidence and governed brand-to-product drill-through",
+    "Production implementation through Egg Product Pack 1.2.3 with complete two-retailer scorecard product evidence and focused brand-to-product drill-through",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implementation in progress",
+              "Observed Brand Breadth product evidence no longer links to the separate Price Intelligence product-footprint workspace.",
+              "Brand drill-downs retain the complete governed product list, imagery, identities, and observed-location counts while removing the cross-module Open product footprint action. Other assortment evidence paths preserve their existing behavior. No metric, brand membership, Search evidence, PDP evidence, certification decision, or audit lineage changes.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

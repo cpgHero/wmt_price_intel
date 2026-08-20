@@ -1240,6 +1240,7 @@ function AssortmentProductList({
   limit = 8,
   analysisId,
   retailerId,
+  showProductFootprintLink = true,
 }: Readonly<{
   title: string;
   note: string;
@@ -1247,6 +1248,7 @@ function AssortmentProductList({
   limit?: number;
   analysisId?: string;
   retailerId?: string;
+  showProductFootprintLink?: boolean;
 }>) {
   return (
     <section className="assortment-product-list">
@@ -1274,7 +1276,7 @@ function AssortmentProductList({
                 Seen at {product.observed_locations.toLocaleString()} locations
                 · {product.observed_zipcodes.toLocaleString()} ZIPs
               </em>
-              {analysisId && retailerId ? (
+              {showProductFootprintLink && analysisId && retailerId ? (
                 <Link
                   href={`/price-monitoring/${encodeURIComponent(analysisId)}?retailer=${encodeURIComponent(retailerId)}&tab=overview&product_id=${encodeURIComponent(product.product_id)}`}
                 >
@@ -1411,6 +1413,7 @@ function AssortmentAnalysisPanel({
     note: string;
     products: AssortmentProduct[];
     retailerId?: string;
+    showProductFootprintLink?: boolean;
   } | null>(null);
   const [brandList, setBrandList] = useState<{
     retailerName: string;
@@ -1688,15 +1691,16 @@ function AssortmentAnalysisPanel({
                     benchmarkSummary?.geographically_concentrated_brands ?? []
                   }
                   onOpenBrand={(brand) =>
-                    openDetail(
-                      `${benchmark.name} · ${brand.brand}`,
-                      `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
-                      productsForObservedBrand(
+                    setDetail({
+                      title: `${benchmark.name} · ${brand.brand}`,
+                      note: `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations.`,
+                      products: productsForObservedBrand(
                         benchmarkSummary?.products ?? [],
                         brand,
                       ),
-                      benchmark.id,
-                    )
+                      retailerId: benchmark.id,
+                      showProductFootprintLink: false,
+                    })
                   }
                   onOpenAllBrands={() =>
                     setBrandList({
@@ -1723,15 +1727,16 @@ function AssortmentAnalysisPanel({
                     competitorSummary?.geographically_concentrated_brands ?? []
                   }
                   onOpenBrand={(brand) =>
-                    openDetail(
-                      `${competitor.name} · ${brand.brand}`,
-                      `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
-                      productsForObservedBrand(
+                    setDetail({
+                      title: `${competitor.name} · ${brand.brand}`,
+                      note: `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations.`,
+                      products: productsForObservedBrand(
                         competitorSummary?.products ?? [],
                         brand,
                       ),
-                      competitor.id,
-                    )
+                      retailerId: competitor.id,
+                      showProductFootprintLink: false,
+                    })
                   }
                   onOpenAllBrands={() =>
                     setBrandList({
@@ -1789,6 +1794,7 @@ function AssortmentAnalysisPanel({
               note: `${brand.distinct_products.toLocaleString()} governed Search ${brand.distinct_products === 1 ? "product" : "products"} across ${brand.observed_locations.toLocaleString()} ${brand.observed_locations === 1 ? "location" : "locations"}. The ${products.length.toLocaleString()} product ${products.length === 1 ? "record" : "records"} below ${products.length === 1 ? "uses" : "use"} the same observed-brand identity as this scorecard.`,
               products,
               retailerId: brandList.retailerId,
+              showProductFootprintLink: false,
             });
           }}
         />
@@ -1912,6 +1918,7 @@ function AssortmentDetailDrawer({
     note: string;
     products: AssortmentProduct[];
     retailerId?: string;
+    showProductFootprintLink?: boolean;
   };
   onClose: () => void;
 }>) {
@@ -1943,6 +1950,7 @@ function AssortmentDetailDrawer({
           limit={detail.products.length}
           analysisId={analysisId}
           retailerId={detail.retailerId}
+          showProductFootprintLink={detail.showProductFootprintLink}
         />
       </aside>
     </div>
