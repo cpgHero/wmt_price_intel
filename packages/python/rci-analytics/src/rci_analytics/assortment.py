@@ -394,6 +394,10 @@ def merge_assortment_product_context(
     }
 
     def enrich_product(product: JsonObject) -> None:
+        # Preserve the exact Search-derived brand used to calculate the brand
+        # scorecard before PDP is allowed to improve the display identity.
+        # Attribute variants may conflict and cannot reconstruct membership.
+        product.setdefault("observed_brand", product.get("brand"))
         pdp = context.get(str(product.get("canonical_product_id")))
         if not pdp:
             return

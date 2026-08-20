@@ -148,8 +148,12 @@ def _compact_interactive_view(view: JsonObject) -> None:
                 compact_product = {
                     key: value for key, value in product.items() if key in allowed_product_fields
                 }
+                observed_brand = product.get("observed_brand")
                 attributes = product.get("attributes")
-                observed_brand = attributes.get("brand") if isinstance(attributes, dict) else None
+                if not isinstance(observed_brand, str) or not observed_brand.strip():
+                    observed_brand = (
+                        attributes.get("brand") if isinstance(attributes, dict) else None
+                    )
                 if not isinstance(observed_brand, str) or not observed_brand.strip():
                     variants = product.get("attribute_variants")
                     if isinstance(variants, list):

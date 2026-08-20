@@ -189,6 +189,7 @@ def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
                     {
                         "canonical_product_id": "walmart_us:w1",
                         "name": "Search name",
+                        "brand": "Search brand",
                     }
                 ],
                 "top_competitor_whitespace": [],
@@ -201,6 +202,7 @@ def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
             {
                 "canonical_product_id": "walmart_us:w1",
                 "name": "PDP name",
+                "brand": "PDP brand",
                 "seller": "Walmart.com",
                 "image_url": "https://example.test/product.png",
                 "description": "PDP description",
@@ -220,6 +222,8 @@ def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
     assert enriched["comparisons"][0]["top_benchmark_only"][0]["name"] == "PDP name"
     product = enriched["comparisons"][0]["top_benchmark_only"][0]
     assert product["seller"] == "Walmart.com"
+    assert product["brand"] == "PDP brand"
+    assert product["observed_brand"] == "Search brand"
     assert product["description"] == "PDP description"
     assert product["identifiers"] == {"upc": "012345678905"}
     assert product["specification"] == {"size": "1 gal"}
