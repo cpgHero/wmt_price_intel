@@ -7,12 +7,18 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from statistics import mean, median
-from typing import Literal
+from typing import Literal, TypedDict
 
 from rci_analytics.models import JsonObject
 from rci_analytics.product_location import ProductLocationObservation
 
 PriceArchitectureMode = Literal["benchmark_anchored", "fixed_range"]
+
+
+class BrandOptionAccumulator(TypedDict):
+    name: str
+    retailer_ids: set[str]
+    product_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +180,7 @@ class PriceArchitectureMatrixProjector:
             for retailer_id, products in rung_basis_products.items()
         }
         anchor_products = products_by_retailer[anchor_retailer_id]
-        brand_index: dict[str, dict[str, object]] = {}
+        brand_index: dict[str, BrandOptionAccumulator] = {}
         for retailer_id, products in rung_basis_products.items():
             for product in products:
                 product_brand = str(product.get("brand") or "").strip()
@@ -185,10 +191,8 @@ class PriceArchitectureMatrixProjector:
                     key,
                     {"name": product_brand, "retailer_ids": set(), "product_count": 0},
                 )
-                retailer_ids = entry["retailer_ids"]
-                assert isinstance(retailer_ids, set)
-                retailer_ids.add(retailer_id)
-                entry["product_count"] = int(entry["product_count"]) + 1
+                entry["retailer_ids"].add(retailer_id)
+                entry["product_count"] += 1
         assigned: dict[tuple[str, str], list[JsonObject]] = defaultdict(list)
         for retailer_id, products in products_by_retailer.items():
             for product in products:
@@ -346,8 +350,8 @@ class PriceArchitectureMatrixProjector:
             "brand_options": [
                 {
                     "name": str(entry["name"]),
-                    "retailer_ids": sorted(str(value) for value in entry["retailer_ids"]),
-                    "product_count": int(entry["product_count"]),
+                    "retailer_ids": sorted(entry["retailer_ids"]),
+                    "product_count": entry["product_count"],
                 }
                 for _key, entry in sorted(
                     brand_index.items(), key=lambda item: str(item[1]["name"]).casefold()

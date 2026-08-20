@@ -461,7 +461,7 @@ class ProductLocationProjector:
                     "seller_unverified",
                     "not_governed",
                 }:
-                    seller_status = cast(SellerStatus, seller_resolution.status)
+                    seller_status = seller_resolution.status
             if not classified.in_scope:
                 reasons.append("out_of_scope")
             if offer.price is None or offer.price <= 0:
