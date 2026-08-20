@@ -255,6 +255,10 @@
       "properties": {
         "mode": { "enum": ["ungoverned", "governed"] },
         "match_revision_id": { "type": ["string", "null"], "format": "uuid" },
+        "matching_v2_gold_set_release_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
         "applied_policy_revision_id": { "type": ["string", "null"], "format": "uuid" },
         "staged_revision_id": { "type": ["string", "null"], "format": "uuid" },
         "suggested": { "type": "integer", "minimum": 0 },

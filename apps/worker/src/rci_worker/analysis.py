@@ -45,6 +45,7 @@ from rci_analytics import (
     benchmark_product_match_candidates,
     complete_attributes_from_pdp,
     evidence_set,
+    location_scope_key,
     merge_assortment_product_context,
     product_context_index,
     resolve_one_to_one_relationships,
@@ -137,6 +138,231 @@ def matching_v2_gold_set_rules(
             )
         )
     return rules
+
+
+def matching_v2_gold_set_presentation(
+    offers: Iterable[Any],
+    rules: Iterable[ProductMatchRule],
+    *,
+    benchmark_retailer: str,
+    profiles: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Project every certified relationship, including pairs with no exact-ZIP overlap.
+
+    Certification governs product identity. Exact-location price overlap is evidence
+    about a relationship, not a prerequisite for retaining that relationship in a
+    radius-native report. This projection therefore starts from the immutable gold
+    set and only uses Search offers to improve identity, attributes, and footprint.
+    """
+
+    offer_rows = list(offers)
+    profile_index = {
+        str(profile["id"]): dict(profile)
+        for profile in profiles
+        if str(profile.get("geography") or "") == "exact_zip"
+    }
+    offers_by_product: dict[tuple[str, str], list[Any]] = defaultdict(list)
+    benchmark_footprints: dict[str, set[str]] = defaultdict(set)
+    for classified in offer_rows:
+        offer = classified.offer
+        offers_by_product[(offer.retailer_id, offer.retailer_product_id)].append(classified)
+        if (
+            classified.in_scope
+            and offer.retailer_id == benchmark_retailer
+            and offer.price is not None
+            and offer.price > 0
+            and offer.zipcode is not None
+        ):
+            benchmark_footprints[offer.retailer_product_id].add(location_scope_key(offer))
+
+    def representative(retailer_id: str, product_id: str) -> Any | None:
+        rows = offers_by_product.get((retailer_id, product_id), [])
+        if not rows:
+            return None
+        return sorted(
+            rows,
+            key=lambda row: (
+                -sum(
+                    value not in (None, "", [], {})
+                    for name, value in row.attributes.items()
+                    if not str(name).startswith("_")
+                ),
+                -int(bool(row.offer.image_url)),
+                -int(bool(row.offer.product_url)),
+                row.offer.offer_id,
+            ),
+        )[0]
+
+    relationships: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
+    for rule in sorted(
+        (rule for rule in rules if rule.decision == "confirmed"),
+        key=lambda row: (
+            row.competitor_id,
+            row.benchmark_product_id,
+            row.competitor_product_id,
+        ),
+    ):
+        eligible_profiles = tuple(
+            profile_id
+            for profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
+            if profile_id in profile_index
+        )
+        if not eligible_profiles:
+            continue
+        seed = "|".join(
+            (
+                rule.competitor_id,
+                rule.benchmark_product_id,
+                rule.competitor_product_id,
+            )
+        )
+        relationship_id = f"relationship-{hashlib.sha256(seed.encode()).hexdigest()[:20]}"
+        scope_keys = (
+            sorted(benchmark_footprints.get(rule.benchmark_product_id, set()))
+            if rule.scope_mode == "observed_benchmark_product_footprint"
+            else sorted(
+                str(value)
+                for value in (rule.scope_definition or {}).get("benchmark_location_scope_keys", [])
+            )
+        )
+        relationships.append(
+            {
+                "relationship_id": relationship_id,
+                "competitor_id": rule.competitor_id,
+                "benchmark_product_id": rule.benchmark_product_id,
+                "competitor_product_id": rule.competitor_product_id,
+                "status": "confirmed",
+                "eligible_profile_ids": list(eligible_profiles),
+                "qa_status": "ready",
+                "suppression_reasons": [],
+                "scope_mode": rule.scope_mode,
+                "comparison_family_key": rule.comparison_family_key,
+                "benchmark_location_scope_keys": scope_keys,
+            }
+        )
+        benchmark = representative(benchmark_retailer, rule.benchmark_product_id)
+        competitor = representative(rule.competitor_id, rule.competitor_product_id)
+        benchmark_offer = benchmark.offer if benchmark is not None else None
+        competitor_offer = competitor.offer if competitor is not None else None
+        benchmark_attributes = (
+            {
+                str(name): value
+                for name, value in benchmark.attributes.items()
+                if not str(name).startswith("_")
+            }
+            if benchmark is not None
+            else {}
+        )
+        for profile_id in eligible_profiles:
+            profile = profile_index[profile_id]
+            dimensions = tuple(str(value) for value in profile.get("dimensions", []))
+            match_attributes = {
+                name: benchmark_attributes.get(name)
+                for name in dimensions
+                if name in benchmark_attributes
+            }
+            comparison_metric = str(profile.get("comparison_metric") or "package_price")
+            candidate_seed = "|".join((seed, profile_id))
+            candidates.append(
+                {
+                    "id": f"product-{hashlib.sha256(candidate_seed.encode()).hexdigest()[:20]}",
+                    "relationship_id": relationship_id,
+                    "relationship_status": "confirmed",
+                    "qa_status": "ready",
+                    "suppression_reasons": [],
+                    "candidate_group_id": None,
+                    "profile_id": profile_id,
+                    "profile_label": str(profile.get("label") or profile_id),
+                    "comparison_metric": comparison_metric,
+                    "match_basis": (
+                        "exact_package"
+                        if comparison_metric == "package_price"
+                        else "normalized_unit"
+                    ),
+                    "match_rationale": (
+                        "Certified product relationship retained independently of "
+                        "exact-location price overlap"
+                    ),
+                    "benchmark_product_id": rule.benchmark_product_id,
+                    "benchmark_product_name": (
+                        benchmark_offer.title
+                        if benchmark_offer is not None
+                        else rule.benchmark_product_id
+                    ),
+                    "benchmark_image_url": (
+                        benchmark_offer.image_url if benchmark_offer is not None else None
+                    ),
+                    "benchmark_product_url": (
+                        benchmark_offer.product_url if benchmark_offer is not None else None
+                    ),
+                    "competitor": rule.competitor_id,
+                    "competitor_product_id": rule.competitor_product_id,
+                    "competitor_product_name": (
+                        competitor_offer.title
+                        if competitor_offer is not None
+                        else rule.competitor_product_id
+                    ),
+                    "competitor_image_url": (
+                        competitor_offer.image_url if competitor_offer is not None else None
+                    ),
+                    "competitor_product_url": (
+                        competitor_offer.product_url if competitor_offer is not None else None
+                    ),
+                    "geographies": 0,
+                    "matches": 0,
+                    "benchmark_lower": 0,
+                    "competitor_lower": 0,
+                    "parity": 0,
+                    "benchmark_lower_share": 0.0,
+                    "competitor_lower_share": 0.0,
+                    "median_benchmark_price": None,
+                    "median_competitor_price": None,
+                    "median_gap": None,
+                    "plain_insight": (
+                        "Certified relationship; no exact-location price observation. "
+                        "Store-radius reporting may still score nearby evidence."
+                    ),
+                    "match_attributes": match_attributes,
+                    "top_locations": [],
+                    "benchmark_location_scope_keys": scope_keys,
+                }
+            )
+    return relationships, candidates
+
+
+def require_matching_v2_relationship_reconciliation(
+    relationships: Iterable[dict[str, Any]],
+    coverage: dict[str, Any],
+) -> None:
+    """Fail closed if a governed replay drops or invents certified relationships."""
+
+    rows = list(relationships)
+    distinct_ids = {
+        str(row.get("relationship_id") or "")
+        for row in rows
+        if str(row.get("status")) == "confirmed" and row.get("relationship_id")
+    }
+    expected_total = int(coverage.get("certified_comparable_count") or 0)
+    if len(distinct_ids) != expected_total:
+        raise ValueError(
+            "Matching v2 presentation relationship count does not reconcile: "
+            f"{len(distinct_ids)} retained for {expected_total} certified comparable labels"
+        )
+    actual_by_retailer = Counter(
+        str(row.get("competitor_id") or "") for row in rows if str(row.get("status")) == "confirmed"
+    )
+    for retailer in coverage.get("retailers", []):
+        if not isinstance(retailer, dict):
+            continue
+        retailer_id = str(retailer.get("competitor_retailer_id") or "")
+        expected = int(retailer.get("certified_comparable_count") or 0)
+        actual = actual_by_retailer[retailer_id]
+        if actual != expected:
+            raise ValueError(
+                "Matching v2 retailer relationship count does not reconcile: "
+                f"{retailer_id} retained {actual} for {expected} certified comparable labels"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1345,6 +1571,46 @@ class AnalysisProcessor:
             max_rows=2_000,
             max_locations_per_row=1,
         )
+        if matching_v2_release is not None:
+            governed_relationships, governed_candidates = matching_v2_gold_set_presentation(
+                relationship_offers,
+                governed_rules,
+                benchmark_retailer=benchmark,
+                profiles=selected_profiles,
+            )
+            observed_candidate_index = {
+                (
+                    str(row["competitor"]),
+                    str(row["benchmark_product_id"]),
+                    str(row["competitor_product_id"]),
+                    str(row["profile_id"]),
+                ): row
+                for row in match_candidates
+            }
+            match_candidates = [
+                {
+                    **governed_candidate,
+                    **observed_candidate_index.get(
+                        (
+                            str(governed_candidate["competitor"]),
+                            str(governed_candidate["benchmark_product_id"]),
+                            str(governed_candidate["competitor_product_id"]),
+                            str(governed_candidate["profile_id"]),
+                        ),
+                        {},
+                    ),
+                    "relationship_id": governed_candidate["relationship_id"],
+                    "relationship_status": "confirmed",
+                    "qa_status": "ready",
+                    "suppression_reasons": [],
+                }
+                for governed_candidate in governed_candidates
+            ]
+            match_relationships = governed_relationships
+            require_matching_v2_relationship_reconciliation(
+                match_relationships,
+                matching_v2_release["coverage"],
+            )
         relationship_index: dict[tuple[str, str, str], dict[str, Any]] = {
             (
                 str(row["competitor_id"]),
@@ -1395,6 +1661,7 @@ class AnalysisProcessor:
                 matches=review_matches,
                 profiles=selected_profiles,
                 ambiguous_groups=ambiguous_match_groups,
+                relationships=match_relationships,
             ),
             pdp_context.values(),
         )

@@ -1,0 +1,141 @@
+# Phase 13.26 — Egg Reporting Acceptance and Trust Audit
+
+## Status
+
+Implemented and focused-test verified on August 20, 2026. Full release-gate,
+deployment, governed replay, and production acceptance remain pending.
+
+## Purpose
+
+This phase establishes a fail-closed acceptance boundary between Matching v2
+certification and Competitive Intelligence reporting. It corrects a critical
+lineage defect in which a certified product relationship could disappear from
+the report when its two products had no positive-price observation in the same
+ZIP, even though the reporting layer was designed to compare physical stores at
+1, 3, or 5 miles.
+
+Product identity and local price evidence are now treated as separate facts:
+
+- Matching v2 certification determines whether two product identities form a
+  governed relationship and which comparison bases may use it.
+- Search observations determine product price and observed location footprint.
+- The location master determines physical store coordinates and administrative
+  geography.
+- The selected 1, 3, or 5 mile radius determines whether physical-store price
+  evidence is locally comparable.
+- Amazon Same Day retains its explicit same-delivery-ZIP service-area rule; it
+  is never represented as a physical store.
+
+## Defect found in the governed Egg release
+
+The operational Egg queue contained 185 cases: 183 certified comparable, one
+certified not comparable, and one unresolved. The published report retained
+only 108 relationship candidates because the worker created presentation
+relationships from exact-ZIP `MatchRecord` rows instead of from the certified
+gold set itself. Sam's Club, ShopRite, and Trader Joe's therefore disappeared
+entirely despite having certified comparable relationships.
+
+The loss occurred before radius-native scoring. It was not evidence that these
+retailers lacked governed relationships, and it could not be repaired safely in
+the browser.
+
+## Implementation
+
+### Certified relationship projection
+
+For a Matching v2 replay, the worker now starts with every certified-comparable
+gold-set decision and creates one deterministic pair-level relationship. It
+then creates the eligible comparison-basis candidates independently of
+exact-ZIP price overlap. Search data supplies identity, imagery, attributes,
+and the Walmart observed-store footprint where available. Existing exact-ZIP
+price metrics may enrich the presentation row, but their absence cannot remove
+the relationship.
+
+The worker reconciles the retained pair-level total and every retailer subtotal
+to the immutable release coverage contract. A missing or invented relationship
+fails the analysis before publication.
+
+### Assortment and cohort continuity
+
+Assortment coverage now incorporates the certified relationship ledger even
+when no exact-ZIP `MatchRecord` exists. This prevents a certified pair from
+being mislabeled as benchmark-exclusive or competitor whitespace.
+
+Cohort Scorecards can derive governed Product Pack cohort membership from the
+certified candidate attributes when a legacy exact-location price segment row
+does not exist. Only configured Product Pack cohort dimensions participate;
+brand or other incidental attributes are not silently promoted into a cohort
+definition.
+
+### Publication readiness
+
+The report renderer now recognizes a Matching v2 gold-set release as governed
+match authority. Certified relationship totals and retailer subtotals must
+reconcile to the presentation relationship ledger. A mismatch is a blocking
+readiness defect rather than a nonblocking warning.
+
+Publication-time Competitive Intelligence materialization refuses any report
+with a blocking readiness reason.
+
+### Six-document semantic release audit
+
+Every comparison basis must produce one global immutable portfolio document at
+1, 3, and 5 miles. The semantic audit validates more than JSON shape:
+
+- one analysis, benchmark retailer, competitor set, and explicit geography
+  policy across all documents;
+- complete comparison-basis × radius coverage;
+- benchmark denominator = scored + unscored;
+- scored = leader + tied + at-risk + losing;
+- every displayed rate reconciles to its governed numerator and denominator;
+- product and relationship rows add to the parent scorecard and use the
+  decision-evidence ordering shown in the UI;
+- Assortment and price scorecards share the same governed price-evidence
+  summary;
+- product, relationship, and benchmark-denominator scope stays stable when the
+  radius changes;
+- scored evidence cannot decrease, and unscored evidence cannot increase, as a
+  physical-store radius expands from 1 to 3 to 5 miles.
+
+Semantic errors block the release. Honest evidence limitations, such as a
+certified relationship with no scorable nearby product-location, remain
+explicit warnings.
+
+## Certification boundary
+
+The current Egg queue still contains one unresolved Kroger case at the time of
+implementation verification. The platform owner must certify it as comparable
+or not comparable (or supply sufficient evidence) before a fully decision-ready
+Egg release can pass publication materialization. The implementation does not
+silently infer or approve that decision.
+
+## Focused verification
+
+Fifty-seven focused Python tests pass across the worker, analytics, report
+renderer, portfolio API, and semantic release audit. They include regressions
+for a certified Sam's Club-style relationship whose Walmart and competitor
+Search observations occur in different ZIPs, assortment continuity, derived
+cohort membership, publication blocking on relationship loss, complete
+comparison-basis/radius matrices, formula reconciliation, rollups, ordering,
+and monotonic radius behavior.
+
+No MetricsCart or OpenAI calls are required by this phase. No source data, PDP
+evidence, certification history, publication, or audit lineage is deleted.
+
+## Production acceptance requirements
+
+This phase is not production-complete until all of the following are true:
+
+1. The complete release gate and service-container builds pass.
+2. The change is deployed to API, worker, scheduler, and web services as
+   applicable.
+3. The single unresolved Egg case is finalized by an administrator.
+4. A new immutable governed Egg replay completes with automatic fallback off.
+5. All certified comparable relationships reconcile overall and by retailer,
+   including Sam's Club, ShopRite, and Trader Joe's.
+6. The six portfolio materializations pass the semantic release audit.
+7. Every primary report tab, retailer filter, comparison basis, radius, drawer,
+   map, and export is exercised in production with no trust-critical discrepancy
+   or browser error.
+8. The owner/admin documentation is updated from pending to deployed with the
+   exact CI run, replay ID, materialization counts, and live acceptance results.

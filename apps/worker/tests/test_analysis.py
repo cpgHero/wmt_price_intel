@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from rci_analytics import InMemoryDatasetStore, ParquetDatasetWriter, ProductPackLoader
+from rci_analytics.models import ClassifiedOffer, NormalizedOffer
 from rci_collections.models import QueueTask, RawArtifact
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import (
@@ -24,7 +28,9 @@ from rci_worker.analysis import (
     S3HistoricalCSVReader,
     apply_brand_classification_rules,
     historical_source_row,
+    matching_v2_gold_set_presentation,
     matching_v2_gold_set_rules,
+    require_matching_v2_relationship_reconciliation,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -60,6 +66,106 @@ def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None
     assert rules[0].competitor_product_id == "abc:456"
     assert rules[0].scope_mode == "observed_benchmark_product_footprint"
     assert rules[0].eligible_profile_ids
+
+
+def test_gold_set_presentation_retains_certified_pair_without_exact_zip_overlap() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
+    release = {
+        "document": {
+            "labels": [
+                {
+                    "case_id": "case-sams",
+                    "benchmark_listing_id": "walmart_us:w-1",
+                    "competitor_listing_id": "sams_club_us:s-1",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["equivalent_product"],
+                }
+            ]
+        }
+    }
+    rules = matching_v2_gold_set_rules(release, pack)
+
+    def offer(
+        offer_id: str,
+        retailer_id: str,
+        product_id: str,
+        zipcode: str,
+    ) -> ClassifiedOffer:
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=offer_id,
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title=f"{retailer_id} large eggs",
+                brand=None,
+                price=Decimal("3.00"),
+                currency="USD",
+                zipcode=zipcode,
+                store_number="100",
+                latitude=None,
+                longitude=None,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={
+                "count": 12.0,
+                "size": "Large",
+                "shell_color": "White",
+            },
+            metrics={"price_per_dozen": Decimal("3.00")},
+            review_reasons=(),
+        )
+
+    relationships, candidates = matching_v2_gold_set_presentation(
+        [
+            offer("w-offer", "walmart_us", "w-1", "72712"),
+            offer("s-offer", "sams_club_us", "s-1", "10001"),
+        ],
+        rules,
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+    )
+
+    assert len(relationships) == 1
+    assert relationships[0]["status"] == "confirmed"
+    assert relationships[0]["benchmark_location_scope_keys"] == ["walmart_us|72712|100"]
+    assert candidates
+    assert {row["competitor"] for row in candidates} == {"sams_club_us"}
+    assert all(row["relationship_status"] == "confirmed" for row in candidates)
+    assert all(row["matches"] == 0 for row in candidates)
+    require_matching_v2_relationship_reconciliation(
+        relationships,
+        {
+            "certified_comparable_count": 1,
+            "retailers": [
+                {
+                    "competitor_retailer_id": "sams_club_us",
+                    "certified_comparable_count": 1,
+                }
+            ],
+        },
+    )
+
+
+def test_gold_set_presentation_reconciliation_fails_when_relationship_is_lost() -> None:
+    with pytest.raises(ValueError, match="does not reconcile"):
+        require_matching_v2_relationship_reconciliation(
+            [],
+            {
+                "certified_comparable_count": 1,
+                "retailers": [
+                    {
+                        "competitor_retailer_id": "shoprite_us",
+                        "certified_comparable_count": 1,
+                    }
+                ],
+            },
+        )
 
 
 def _task(

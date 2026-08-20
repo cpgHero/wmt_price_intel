@@ -102,12 +102,14 @@ class AssortmentAccumulator:
         matches: Iterable[MatchRecord],
         profiles: Iterable[JsonObject],
         ambiguous_groups: Iterable[JsonObject] = (),
+        relationships: Iterable[JsonObject] = (),
     ) -> JsonObject:
         profile_labels = {
             str(profile["id"]): str(profile.get("label") or profile["id"]) for profile in profiles
         }
         match_rows = list(matches)
         ambiguous_rows = list(ambiguous_groups)
+        relationship_rows = list(relationships)
         retailers = [benchmark_retailer, *[str(value) for value in competitors]]
         return {
             "source": "Search results classified in scope by the Product Pack",
@@ -123,6 +125,7 @@ class AssortmentAccumulator:
                     match_rows,
                     profile_labels,
                     ambiguous_rows,
+                    relationship_rows,
                 )
                 for competitor in retailers
                 if competitor != benchmark_retailer
@@ -231,6 +234,7 @@ class AssortmentAccumulator:
         matches: list[MatchRecord],
         profile_labels: dict[str, str],
         ambiguous_groups: list[JsonObject],
+        relationships: list[JsonObject],
     ) -> JsonObject:
         benchmark_products = self._products.get(benchmark, {})
         competitor_products = self._products.get(competitor, {})
@@ -248,6 +252,22 @@ class AssortmentAccumulator:
                     competitor_offer.offer.retailer_product_id,
                 )
             ].add(match.profile_id)
+        for relationship in relationships:
+            if str(relationship.get("competitor_id")) != competitor or str(
+                relationship.get("status")
+            ) not in {"confirmed", "suggested"}:
+                continue
+            benchmark_product_id = str(relationship.get("benchmark_product_id") or "")
+            competitor_product_id = str(relationship.get("competitor_product_id") or "")
+            if not benchmark_product_id or not competitor_product_id:
+                continue
+            eligible_profiles = relationship.get("eligible_profile_ids")
+            profile_ids = (
+                [str(value) for value in eligible_profiles]
+                if isinstance(eligible_profiles, list)
+                else []
+            )
+            pair_profiles[(benchmark_product_id, competitor_product_id)].update(profile_ids)
         matched_benchmark = {pair[0] for pair in pair_profiles}
         matched_competitor = {pair[1] for pair in pair_profiles}
         ambiguous_benchmark = {

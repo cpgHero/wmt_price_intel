@@ -180,6 +180,42 @@ def test_assortment_products_retain_governed_brand_type() -> None:
     assert result["retailers"][0]["products"][0]["brand_type"] == "private_label"
 
 
+def test_assortment_uses_certified_relationship_without_price_overlap() -> None:
+    accumulator = AssortmentAccumulator()
+    accumulator.add(_offer("w1", "walmart_us", "w1", "72712", "1"))
+    accumulator.add(_offer("s1", "sams_club_us", "s1", "10001", "A"))
+
+    result = accumulator.finalize(
+        benchmark_retailer="walmart_us",
+        competitors=["sams_club_us"],
+        profiles=[
+            {
+                "id": "compatible",
+                "label": "Compatible specification",
+                "geography": "exact_zip",
+            }
+        ],
+        matches=[],
+        relationships=[
+            {
+                "competitor_id": "sams_club_us",
+                "benchmark_product_id": "w1",
+                "competitor_product_id": "s1",
+                "status": "confirmed",
+                "eligible_profile_ids": ["compatible"],
+            }
+        ],
+    )
+
+    comparison = result["comparisons"][0]
+    assert comparison["product_relationships"] == 1
+    assert comparison["matched_benchmark_products"] == 1
+    assert comparison["matched_competitor_products"] == 1
+    assert comparison["benchmark_only_products"] == 0
+    assert comparison["competitor_whitespace_products"] == 0
+    assert comparison["profiles"][0]["relationships"] == 1
+
+
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
     source = {
         "comparisons": [

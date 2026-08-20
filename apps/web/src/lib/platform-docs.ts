@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.25",
+  version: "1.3.26",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3 with complete two-retailer scorecard product evidence and focused brand-to-product drill-through",
+    "Production implementation through Egg Product Pack 1.2.3, plus the test-verified Egg reporting acceptance boundary pending governed replay and production acceptance",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implemented and focused-test verified; release and production acceptance pending",
+              "Matching v2 certified identity is preserved independently of exact-ZIP price overlap, with a fail-closed Egg reporting acceptance audit.",
+              "A governed replay now begins with every certified-comparable gold-set pair and carries eligible relationships into 1/3/5-mile scoring even when the products were never co-observed in one ZIP. Worker and report-readiness reconciliation block missing or invented relationships overall and per retailer; assortment and Product Pack cohorts retain the same certified relationship population. Publication refuses a report with blocking readiness defects, then audits all comparison-basis × 1/3/5-mile materializations for count partitions, rates, product and relationship rollups, retailer scope, denominator stability, and monotonic radius behavior. The correction addresses the prior loss of Sam's Club, ShopRite, and Trader Joe's relationships. Fifty-seven focused tests pass. One Egg Kroger case remains unresolved and must be finalized by an administrator before a decision-ready replay can pass; no automatic decision, paid provider call, source deletion, or history mutation occurs.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

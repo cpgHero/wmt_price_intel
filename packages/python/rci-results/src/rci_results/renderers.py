@@ -2200,9 +2200,11 @@ class ArtifactRenderer:
         statuses = Counter(str(row.get("status")) for row in relationships)
         source = _mapping(result, "source")
         revision_id = source.get("match_revision_id")
+        gold_set_release_id = source.get("matching_v2_gold_set_release_id")
         view["match_governance"] = {
-            "mode": "governed" if revision_id else "ungoverned",
+            "mode": "governed" if revision_id or gold_set_release_id else "ungoverned",
             "match_revision_id": revision_id,
+            "matching_v2_gold_set_release_id": gold_set_release_id,
             "applied_policy_revision_id": None,
             "staged_revision_id": None,
             "suggested": statuses["suggested"],
@@ -2259,18 +2261,45 @@ class ArtifactRenderer:
                         ),
                     }
                 )
-            missing_observations = max(0, certified_comparable - len(relationships))
-            if missing_observations:
-                warnings.append(
+            governed_relationships = {
+                str(row.get("relationship_id") or "")
+                for row in relationships
+                if str(row.get("status")) in {"confirmed", "suggested"}
+                and row.get("relationship_id")
+            }
+            if len(governed_relationships) != certified_comparable:
+                blocking_reasons.append(
                     {
-                        "code": "certified_relationships_without_price_observations",
+                        "code": "certified_relationship_count_mismatch",
                         "message": (
-                            f"{missing_observations:,} certified comparable relationships did "
-                            "not produce an admissible price observation under the configured "
-                            "geography and comparison profiles."
+                            f"The publication retains {len(governed_relationships):,} governed "
+                            f"relationships for {certified_comparable:,} certified comparable "
+                            "decisions. Certified identity cannot be discarded because exact-"
+                            "location price overlap is absent."
                         ),
                     }
                 )
+            relationship_counts = Counter(
+                str(row.get("competitor_id") or "")
+                for row in relationships
+                if str(row.get("status")) in {"confirmed", "suggested"}
+            )
+            for retailer in certification.get("retailers", []):
+                if not isinstance(retailer, dict):
+                    continue
+                retailer_id = str(retailer.get("competitor_retailer_id") or "")
+                expected = int(retailer.get("certified_comparable_count") or 0)
+                actual = relationship_counts[retailer_id]
+                if actual != expected:
+                    blocking_reasons.append(
+                        {
+                            "code": "certified_retailer_relationship_count_mismatch",
+                            "message": (
+                                f"{retailer_id} retains {actual:,} governed relationships for "
+                                f"{expected:,} certified comparable decisions."
+                            ),
+                        }
+                    )
         validation = _mapping(result, "validation")
         validation_status = str(validation.get("status") or "")
         if validation_status and validation_status != "ready_to_share":

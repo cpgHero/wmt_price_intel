@@ -132,6 +132,7 @@ export interface ComparisonBasis {
 export interface MatchGovernance {
   mode: "ungoverned" | "governed";
   match_revision_id: string | null;
+  matching_v2_gold_set_release_id?: string | null;
   applied_policy_revision_id: string | null;
   staged_revision_id: string | null;
   suggested: number;

@@ -8,12 +8,36 @@ from fastapi import HTTPException
 
 from rci_api.competitive_leadership import (
     CompetitiveProductLeadershipService,
+    _candidate_segment_rows,
     _portfolio_summary,
     _require_internal_materialization_token,
 )
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_certified_candidate_creates_cohort_without_legacy_price_segment() -> None:
+    rows = _candidate_segment_rows(
+        {"product_pack": {"cohort_dimensions": ["count", "size"]}},
+        [
+            {
+                "competitor": "sams_club_us",
+                "profile_id": "compatible",
+                "match_attributes": {
+                    "count": 24.0,
+                    "size": "Large",
+                    "brand": "Member's Mark",
+                },
+            }
+        ],
+        [],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["_competitor_id"] == "sams_club_us"
+    assert rows[0]["_segment_attributes"] == {"count": 24.0, "size": "Large"}
+    assert "Brand" not in rows[0]["segment"]
 
 
 def test_competitive_materialization_requires_internal_token(
@@ -30,6 +54,27 @@ def test_competitive_materialization_requires_internal_token(
     assert getattr(wrong.value, "status_code", None) == 401
 
     _require_internal_materialization_token("expected")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_materialization_rejects_non_ready_report() -> None:
+    class Analyses:
+        async def report_view(self, _analysis_id: str) -> dict:
+            return {
+                "report_readiness": {
+                    "blocking_reasons": [{"code": "certified_relationship_count_mismatch"}]
+                }
+            }
+
+    service = CompetitiveProductLeadershipService(
+        repository_root=REPOSITORY_ROOT,
+        analyses=Analyses(),  # type: ignore[arg-type]
+        price_monitoring=None,  # type: ignore[arg-type]
+        product_packs=None,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="certified_relationship_count_mismatch"):
+        await service.pre_materialize_portfolios("analysis-1")
 
 
 def test_portfolio_summary_uses_product_location_grain() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import secrets
@@ -22,6 +23,7 @@ from rci_analytics import (
     certify_competitive_product_leadership,
 )
 from rci_api.analyses import get_analysis_service
+from rci_api.competitive_release_audit import require_competitive_portfolio_set
 from rci_api.price_monitoring import PriceMonitoringService, get_price_monitoring_service
 from rci_contracts import validate_instance
 from rci_product_packs import PostgresProductPackCatalog
@@ -88,6 +90,69 @@ def _normalized_attribute(value: Any) -> Any:
     if isinstance(value, float) and value.is_integer():
         return int(value)
     return value
+
+
+def _candidate_segment_rows(
+    report: dict[str, Any],
+    candidates: list[dict[str, Any]],
+    existing: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Retain certified cohorts even when exact-location price overlap is absent."""
+
+    dimensions = tuple(
+        str(value) for value in report.get("product_pack", {}).get("cohort_dimensions", [])
+    )
+
+    def attributes(row: dict[str, Any], field: str) -> dict[str, Any]:
+        source = row.get(field)
+        if not isinstance(source, dict):
+            return {}
+        return {
+            str(name): value
+            for name, value in source.items()
+            if value is not None
+            and (not dimensions or str(name) in dimensions)
+            and str(value).strip()
+        }
+
+    def signature(values: dict[str, Any]) -> str:
+        normalized = {name: _normalized_attribute(value) for name, value in values.items()}
+        return json.dumps(normalized, sort_keys=True, default=str)
+
+    rows = list(existing)
+    signatures = {
+        (
+            str(row.get("_competitor_id")),
+            str(row.get("_profile_id")),
+            signature(attributes(row, "_segment_attributes")),
+        )
+        for row in rows
+    }
+    for candidate in candidates:
+        values = attributes(candidate, "match_attributes")
+        if not values:
+            continue
+        competitor_id = str(candidate.get("competitor") or "")
+        profile_id = str(candidate.get("profile_id") or "")
+        serialized = signature(values)
+        segment_signature = (competitor_id, profile_id, serialized)
+        if not competitor_id or not profile_id or segment_signature in signatures:
+            continue
+        segment_id = f"segment-{hashlib.sha256(serialized.encode()).hexdigest()[:16]}"
+        rows.append(
+            {
+                "_competitor_id": competitor_id,
+                "_profile_id": profile_id,
+                "_segment_id": segment_id,
+                "_segment_attributes": values,
+                "competitor": competitor_id,
+                "segment": " / ".join(
+                    f"{name.replace('_', ' ').title()}: {value}" for name, value in values.items()
+                ),
+            }
+        )
+        signatures.add(segment_signature)
+    return rows
 
 
 def _attributes_match(candidate: dict[str, Any], segment: dict[str, Any]) -> bool:
@@ -452,15 +517,19 @@ class CompetitiveProductLeadershipService:
         scorecards: list[dict[str, Any]] = []
         cohorts: list[dict[str, Any]] = []
         assortment_scorecards: list[dict[str, Any]] = []
-        segment_rows = [
-            dict(row)
-            for section in report.get("sections", [])
-            if isinstance(section, dict) and section.get("kind") == "segment_analysis"
-            for row in section.get("records", [])
-            if isinstance(row, dict)
-            and str(row.get("_profile_id")) == selected_profile
-            and str(row.get("_segment_id")) != "all"
-        ]
+        segment_rows = _candidate_segment_rows(
+            report,
+            candidates,
+            [
+                dict(row)
+                for section in report.get("sections", [])
+                if isinstance(section, dict) and section.get("kind") == "segment_analysis"
+                for row in section.get("records", [])
+                if isinstance(row, dict)
+                and str(row.get("_profile_id")) == selected_profile
+                and str(row.get("_segment_id")) != "all"
+            ],
+        )
         assortment = report.get("assortment_analysis")
         assortment_comparisons = (
             assortment.get("comparisons", []) if isinstance(assortment, dict) else []
@@ -718,6 +787,22 @@ class CompetitiveProductLeadershipService:
         self, analysis_id: str, *, refresh: bool = False
     ) -> list[dict[str, Any]]:
         report = await self._analyses.report_view(analysis_id)
+        readiness = report.get("report_readiness")
+        blocking_reasons = (
+            readiness.get("blocking_reasons", []) if isinstance(readiness, dict) else []
+        )
+        if blocking_reasons:
+            codes = sorted(
+                {
+                    str(row.get("code") or "report_not_ready")
+                    for row in blocking_reasons
+                    if isinstance(row, dict)
+                }
+            )
+            raise ValueError(
+                "competitive portfolio materialization requires a decision-ready report: "
+                + ", ".join(codes)
+            )
         profiles = sorted(
             {
                 str(row["profile_id"])
@@ -742,6 +827,10 @@ class CompetitiveProductLeadershipService:
                         refresh=refresh,
                     )
                 )
+        require_competitive_portfolio_set(
+            documents,
+            expected_profiles=profiles,
+        )
         return documents
 
     async def view(
