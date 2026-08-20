@@ -65,6 +65,7 @@ import {
   legacyLeadershipTab,
 } from "@/lib/competitive-report-tabs";
 import { prewarmCompetitiveProductLeadership } from "@/lib/competitive-product-leadership-client";
+import { productsForObservedBrand } from "@/lib/assortment-presentation";
 
 const tabs = [
   "Executive Summary",
@@ -1131,6 +1132,7 @@ function BlueprintAnalysisWorkspace({
                 onReviewMatches={openMatchWorkbench}
                 onOpenCohort={setSelectedCohort}
                 pairEvidence={cohortPairEvidence}
+                radiusScorecards={radiusPortfolio?.scorecards ?? null}
                 radiusCohorts={radiusPortfolio?.cohorts ?? null}
                 radiusMiles={leadershipRadius}
                 radiusError={radiusPortfolioError}
@@ -1172,7 +1174,16 @@ function BlueprintAnalysisWorkspace({
               />
             ) : null}
             {selectedGroup.sections
-              .filter((section) => section.kind !== "kpi_strip")
+              .filter(
+                (section) =>
+                  section.kind !== "kpi_strip" &&
+                  !(
+                    activeGroup === "price-segments" &&
+                    ["price_position", "segment_analysis"].includes(
+                      section.kind,
+                    )
+                  ),
+              )
               .map((section) => (
                 <Fragment key={section.id}>
                   <BlueprintSection
@@ -1255,7 +1266,9 @@ function AssortmentProductList({
               )}
             </span>
             <span>
-              <small>{product.brand || product.product_id}</small>
+              <small>
+                {product.observed_brand || product.brand || product.product_id}
+              </small>
               <strong>{product.name}</strong>
               <em>
                 Seen at {product.observed_locations.toLocaleString()} locations
@@ -1282,15 +1295,19 @@ function AssortmentProductList({
 function AssortmentBrandPanel({
   retailerName,
   distinctBrands,
+  allBrands,
   topBrands,
   concentratedBrands,
   onOpenBrand,
+  onOpenAllBrands,
 }: Readonly<{
   retailerName: string;
   distinctBrands: number;
+  allBrands: AssortmentBrand[];
   topBrands: AssortmentBrand[];
   concentratedBrands: AssortmentBrand[];
   onOpenBrand: (brand: AssortmentBrand) => void;
+  onOpenAllBrands: () => void;
 }>) {
   if (!topBrands.length) return null;
   const maxLocations = Math.max(
@@ -1304,7 +1321,14 @@ function AssortmentBrandPanel({
           <small>{retailerName}</small>
           <h4>Observed brand breadth</h4>
         </div>
-        <strong>{distinctBrands.toLocaleString()} brands</strong>
+        <button
+          type="button"
+          className="assortment-view-all-brands"
+          onClick={onOpenAllBrands}
+        >
+          View all {(allBrands.length || distinctBrands).toLocaleString()}{" "}
+          brands →
+        </button>
       </header>
       <div className="assortment-brand-bars">
         {topBrands.slice(0, 6).map((brand) => (
@@ -1340,14 +1364,18 @@ function AssortmentBrandPanel({
           </p>
           <div>
             {concentratedBrands.slice(0, 6).map((brand) => (
-              <span key={brand.brand}>
+              <button
+                type="button"
+                key={brand.brand}
+                onClick={() => onOpenBrand(brand)}
+              >
                 <b>{brand.brand}</b>
                 {new Intl.NumberFormat("en-US", {
                   style: "percent",
                   maximumFractionDigits: 1,
                 }).format(brand.location_share)}{" "}
                 of locations
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -1383,6 +1411,12 @@ function AssortmentAnalysisPanel({
     note: string;
     products: AssortmentProduct[];
     retailerId?: string;
+  } | null>(null);
+  const [brandList, setBrandList] = useState<{
+    retailerName: string;
+    retailerId: string;
+    brands: AssortmentBrand[];
+    products: AssortmentProduct[];
   } | null>(null);
   const activeCompetitor = selected;
   const comparisons = activeCompetitor
@@ -1644,6 +1678,11 @@ function AssortmentAnalysisPanel({
                 <AssortmentBrandPanel
                   retailerName={benchmark.name}
                   distinctBrands={benchmarkSummary?.distinct_brands ?? 0}
+                  allBrands={
+                    benchmarkSummary?.brands ??
+                    benchmarkSummary?.top_brands ??
+                    []
+                  }
                   topBrands={benchmarkSummary?.top_brands ?? []}
                   concentratedBrands={
                     benchmarkSummary?.geographically_concentrated_brands ?? []
@@ -1652,16 +1691,33 @@ function AssortmentAnalysisPanel({
                     openDetail(
                       `${benchmark.name} · ${brand.brand}`,
                       `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
-                      (benchmarkSummary?.products ?? []).filter(
-                        (product) => product.brand === brand.brand,
+                      productsForObservedBrand(
+                        benchmarkSummary?.products ?? [],
+                        brand,
                       ),
                       benchmark.id,
                     )
+                  }
+                  onOpenAllBrands={() =>
+                    setBrandList({
+                      retailerName: benchmark.name,
+                      retailerId: benchmark.id,
+                      brands:
+                        benchmarkSummary?.brands ??
+                        benchmarkSummary?.top_brands ??
+                        [],
+                      products: benchmarkSummary?.products ?? [],
+                    })
                   }
                 />
                 <AssortmentBrandPanel
                   retailerName={competitor.name}
                   distinctBrands={competitorSummary?.distinct_brands ?? 0}
+                  allBrands={
+                    competitorSummary?.brands ??
+                    competitorSummary?.top_brands ??
+                    []
+                  }
                   topBrands={competitorSummary?.top_brands ?? []}
                   concentratedBrands={
                     competitorSummary?.geographically_concentrated_brands ?? []
@@ -1670,11 +1726,23 @@ function AssortmentAnalysisPanel({
                     openDetail(
                       `${competitor.name} · ${brand.brand}`,
                       `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations. Open a product for its governed location map.`,
-                      (competitorSummary?.products ?? []).filter(
-                        (product) => product.brand === brand.brand,
+                      productsForObservedBrand(
+                        competitorSummary?.products ?? [],
+                        brand,
                       ),
                       competitor.id,
                     )
+                  }
+                  onOpenAllBrands={() =>
+                    setBrandList({
+                      retailerName: competitor.name,
+                      retailerId: competitor.id,
+                      brands:
+                        competitorSummary?.brands ??
+                        competitorSummary?.top_brands ??
+                        [],
+                      products: competitorSummary?.products ?? [],
+                    })
                   }
                 />
               </div>
@@ -1706,6 +1774,129 @@ function AssortmentAnalysisPanel({
           onClose={() => setDetail(null)}
         />
       ) : null}
+      {brandList ? (
+        <AssortmentBrandDrawer
+          detail={brandList}
+          onClose={() => setBrandList(null)}
+          onOpenBrand={(brand) => {
+            const products = productsForObservedBrand(
+              brandList.products,
+              brand,
+            );
+            setBrandList(null);
+            setDetail({
+              title: `${brandList.retailerName} · ${brand.brand}`,
+              note: `${brand.distinct_products.toLocaleString()} governed Search products across ${brand.observed_locations.toLocaleString()} locations. The ${products.length.toLocaleString()} product records below use the same observed-brand identity as this scorecard.`,
+              products,
+              retailerId: brandList.retailerId,
+            });
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AssortmentBrandDrawer({
+  detail,
+  onClose,
+  onOpenBrand,
+}: Readonly<{
+  detail: {
+    retailerName: string;
+    brands: AssortmentBrand[];
+    products: AssortmentProduct[];
+  };
+  onClose: () => void;
+  onOpenBrand: (brand: AssortmentBrand) => void;
+}>) {
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  const filtered = detail.brands.filter((brand) =>
+    brand.brand
+      .toLocaleLowerCase("en-US")
+      .includes(query.toLocaleLowerCase("en-US")),
+  );
+  const maxLocations = Math.max(
+    ...detail.brands.map((brand) => brand.observed_locations),
+    1,
+  );
+  return (
+    <div
+      className="evidence-drawer-backdrop scorecard-products-layer"
+      role="presentation"
+      onClick={onClose}
+    >
+      <aside
+        className="evidence-drawer assortment-brand-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="assortment-brand-drawer-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <p className="eyebrow">Observed brand breadth</p>
+            <h2 id="assortment-brand-drawer-title">
+              {detail.retailerName} brand portfolio
+            </h2>
+            <p>
+              Every governed brand observed in Search evidence. Select a brand
+              to inspect every product contributing to its counts.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close brand list">
+            ×
+          </button>
+        </header>
+        <label className="assortment-brand-search">
+          <span>Find a brand</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search the full brand list"
+          />
+        </label>
+        <div className="assortment-brand-drawer-list">
+          {filtered.map((brand) => {
+            const products = productsForObservedBrand(detail.products, brand);
+            return (
+              <button
+                type="button"
+                key={brand.brand}
+                onClick={() => onOpenBrand(brand)}
+              >
+                <span>
+                  <strong>{brand.brand}</strong>
+                  <small>
+                    {brand.distinct_products.toLocaleString()} product
+                    {brand.distinct_products === 1 ? "" : "s"} ·{" "}
+                    {brand.observed_locations.toLocaleString()} locations
+                    {products.length !== brand.distinct_products
+                      ? ` · ${products.length.toLocaleString()} records linked`
+                      : ""}
+                  </small>
+                </span>
+                <i aria-hidden="true">
+                  <b
+                    style={{
+                      width: `${Math.max(2, (brand.observed_locations / maxLocations) * 100)}%`,
+                    }}
+                  />
+                </i>
+                <em>View products →</em>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
     </div>
   );
 }
@@ -1728,6 +1919,7 @@ function AssortmentDetailDrawer({
     <div className="evidence-drawer-backdrop scorecard-products-layer">
       <aside
         className="evidence-drawer scorecard-products-drawer"
+        role="dialog"
         aria-modal="true"
       >
         <header>
@@ -1867,6 +2059,19 @@ function formatScorecardRate(value: number | null) {
   });
 }
 
+function scorecardPositionCopy(
+  gap: number | null,
+  benchmarkName: string,
+  competitorName: string,
+) {
+  if (gap === null) return "Average local price difference unavailable";
+  if (Math.abs(gap) < 0.005) return "Prices are equal on average locally";
+  const amount = formatCurrency(Math.abs(gap));
+  return gap > 0
+    ? `${benchmarkName} is ${amount} lower on average locally`
+    : `${competitorName} is ${amount} lower on average locally`;
+}
+
 type RadiusRetailerScorecard =
   CompetitivePortfolioScorecards["scorecards"][number];
 
@@ -1888,6 +2093,26 @@ function RadiusRetailerScorecardPanel({
   const [selected, setSelected] = useState<RadiusRetailerScorecard | null>(
     null,
   );
+  const [query, setQuery] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(25);
+  useEffect(() => {
+    if (!selected) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected]);
+  const filteredProducts = useMemo(() => {
+    if (!selected) return [];
+    const token = query.trim().toLocaleLowerCase("en-US");
+    if (!token) return selected.products;
+    return selected.products.filter((product) =>
+      `${product.product_name} ${product.product_id}`
+        .toLocaleLowerCase("en-US")
+        .includes(token),
+    );
+  }, [query, selected]);
   return (
     <>
       <Section
@@ -1915,80 +2140,117 @@ function RadiusRetailerScorecardPanel({
           </div>
         ) : null}
         {portfolio ? (
-          <div className="radius-scorecard-list">
+          <div className="retailer-scorecard-table">
+            <div className="retailer-scorecard-head" aria-hidden="true">
+              <span>Competitor and comparison context</span>
+              <span>Comparable evidence</span>
+              <span>Lower-price share</span>
+              <span>Average local price position</span>
+              <span>Status</span>
+            </div>
             {portfolio.scorecards.map((scorecard) => {
               return (
-                <article key={scorecard.competitor_id}>
-                  <header>
+                <article
+                  className="retailer-scorecard-row"
+                  key={scorecard.competitor_id}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelect(scorecard.competitor_id)}
+                  >
+                    <strong>{scorecard.competitor}</strong>
+                    <span>
+                      {displayLabel(portfolio.filters.profile_id)} comparison
+                    </span>
+                    <small>
+                      {radiusMiles} mile{radiusMiles === 1 ? "" : "s"} ·
+                      certified product relationships
+                    </small>
+                  </button>
+                  <div className="retailer-scorecard-evidence">
+                    <strong>
+                      {scorecard.scored_product_locations.toLocaleString()}
+                    </strong>
+                    <span>
+                      of{" "}
+                      {scorecard.benchmark_product_locations.toLocaleString()}{" "}
+                      observed {benchmark.name} product-locations scored
+                    </span>
+                    <small>
+                      {scorecard.relationships.toLocaleString()} relationships ·{" "}
+                      {scorecard.benchmark_products.toLocaleString()}{" "}
+                      {benchmark.name} products ·{" "}
+                      {scorecard.competitor_products.toLocaleString()}{" "}
+                      competitor products
+                    </small>
                     <button
                       type="button"
-                      onClick={() => onSelect(scorecard.competitor_id)}
+                      disabled={!scorecard.products.length}
+                      onClick={() => {
+                        setQuery("");
+                        setVisibleLimit(25);
+                        setSelected(scorecard);
+                      }}
                     >
-                      <strong>{scorecard.competitor}</strong>
-                      <span>
-                        {scorecard.relationships.toLocaleString()} certified
-                        relationships
-                      </span>
+                      View {scorecard.products.length.toLocaleString()} included{" "}
+                      {benchmark.name} products
                     </button>
-                    <span
-                      className={
-                        "readiness-pill " +
-                        (scorecard.scored_product_locations
-                          ? "ready"
-                          : "review_required")
-                      }
-                    >
-                      {scorecard.scored_product_locations
-                        ? "Comparable evidence"
-                        : "No local overlap"}
-                    </span>
-                  </header>
-                  <div className="radius-scorecard-metrics">
+                  </div>
+                  <div className="retailer-share-bars">
                     <span>
-                      <small>Products included</small>
-                      <b>
-                        {scorecard.benchmark_products.toLocaleString()} Walmart
-                        · {scorecard.competitor_products.toLocaleString()}{" "}
-                        competitor
-                      </b>
-                    </span>
-                    <span>
-                      <small>Comparable evidence</small>
-                      <b>
-                        {scorecard.scored_product_locations.toLocaleString()} of{" "}
-                        {scorecard.benchmark_product_locations.toLocaleString()}{" "}
-                        product-locations
-                      </b>
-                    </span>
-                    <span>
-                      <small>{benchmark.name} lower</small>
+                      {benchmark.name}
                       <b>
                         {formatScorecardRate(scorecard.benchmark_lower_rate)}
                       </b>
                     </span>
+                    <i>
+                      <b
+                        className="benchmark"
+                        style={{
+                          width: `${Math.max(1, (scorecard.benchmark_lower_rate ?? 0) * 100)}%`,
+                        }}
+                      />
+                    </i>
                     <span>
-                      <small>{scorecard.competitor} lower</small>
+                      {scorecard.competitor}
                       <b>
                         {formatScorecardRate(scorecard.competitor_lower_rate)}
                       </b>
                     </span>
+                    <i>
+                      <b
+                        className="competitor"
+                        style={{
+                          width: `${Math.max(1, (scorecard.competitor_lower_rate ?? 0) * 100)}%`,
+                        }}
+                      />
+                    </i>
                     <span>
-                      <small>Average competitor minus Walmart</small>
-                      <b>
-                        {scorecard.average_gap === null
-                          ? "—"
-                          : `${scorecard.average_gap >= 0 ? "+" : "−"}${formatCurrency(Math.abs(scorecard.average_gap))}`}
-                      </b>
+                      Parity <b>{formatScorecardRate(scorecard.parity_rate)}</b>
                     </span>
+                    <i>
+                      <b
+                        className="parity"
+                        style={{
+                          width: `${Math.max(1, (scorecard.parity_rate ?? 0) * 100)}%`,
+                        }}
+                      />
+                    </i>
                   </div>
-                  <footer>
-                    <button
-                      type="button"
-                      onClick={() => setSelected(scorecard)}
-                    >
-                      View {scorecard.products.length.toLocaleString()} included
-                      Walmart products
-                    </button>
+                  <div className="retailer-price-position">
+                    <strong>
+                      {scorecardPositionCopy(
+                        scorecard.average_gap,
+                        benchmark.name,
+                        scorecard.competitor,
+                      )}
+                    </strong>
+                    <small>
+                      Average competitor minus {benchmark.name}:{" "}
+                      {scorecard.average_gap === null
+                        ? "—"
+                        : `${scorecard.average_gap >= 0 ? "+" : "−"}${formatCurrency(Math.abs(scorecard.average_gap))}`}
+                    </small>
                     <Link
                       href={
                         "/analyses/" +
@@ -2003,7 +2265,19 @@ function RadiusRetailerScorecardPanel({
                     >
                       Open Match Summary →
                     </Link>
-                  </footer>
+                  </div>
+                  <span
+                    className={`retailer-score-status ${scorecard.scored_product_locations ? "ready" : ""}`}
+                  >
+                    {scorecard.scored_product_locations
+                      ? "Comparable evidence"
+                      : "No local overlap"}
+                    <small>
+                      {scorecard.scored_product_locations
+                        ? `${formatScorecardRate(scorecard.coverage_rate)} local coverage`
+                        : `No scored product-location within ${radiusMiles} miles`}
+                    </small>
+                  </span>
                 </article>
               );
             })}
@@ -2029,7 +2303,8 @@ function RadiusRetailerScorecardPanel({
                   Radius-native scorecard evidence
                 </span>
                 <h2 id="radius-scorecard-products-title">
-                  Walmart products included against {selected.competitor}
+                  {benchmark.name} products included against{" "}
+                  {selected.competitor}
                 </h2>
                 <p>
                   Product-level totals reconcile to the retailer scorecard at
@@ -2040,30 +2315,97 @@ function RadiusRetailerScorecardPanel({
                 ×
               </button>
             </header>
-            <div className="scorecard-product-list">
-              {selected.products.map((product) => (
+            <div className="radius-scorecard-product-summary">
+              <span>
+                <small>Included products</small>
+                <strong>{selected.products.length.toLocaleString()}</strong>
+              </span>
+              <span>
+                <small>Certified relationships</small>
+                <strong>{selected.relationships.toLocaleString()}</strong>
+              </span>
+              <span>
+                <small>Scored product-locations</small>
+                <strong>
+                  {selected.scored_product_locations.toLocaleString()}
+                </strong>
+              </span>
+              <span>
+                <small>Local coverage</small>
+                <strong>{formatScorecardRate(selected.coverage_rate)}</strong>
+              </span>
+            </div>
+            <label className="radius-scorecard-product-search">
+              <span>Find a product by name or ID</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setVisibleLimit(25);
+                }}
+                placeholder="Search included products"
+              />
+            </label>
+            <div className="radius-scorecard-product-list">
+              {filteredProducts.slice(0, visibleLimit).map((product) => (
                 <article key={product.product_id}>
-                  {product.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={product.image_url} alt="" />
-                  ) : null}
+                  <span className="radius-scorecard-product-image">
+                    {product.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={product.image_url} alt="" />
+                    ) : (
+                      <b>{product.product_name.slice(0, 1)}</b>
+                    )}
+                  </span>
                   <div>
                     <strong>{product.product_name}</strong>
-                    <span>Walmart product ID {product.product_id}</span>
+                    <span>
+                      {benchmark.name} product ID {product.product_id}
+                    </span>
                     <small>
-                      {product.relationships.toLocaleString()} relationships ·{" "}
-                      {product.scored_product_locations.toLocaleString()} of{" "}
-                      {product.benchmark_product_locations.toLocaleString()}{" "}
-                      observed product-locations scored
+                      {product.relationships.toLocaleString()} certified
+                      relationships
                     </small>
                   </div>
-                  <b>
-                    {formatScorecardRate(product.benchmark_lower_rate)} Walmart
-                    lower
-                  </b>
+                  <dl>
+                    <div>
+                      <dt>Local evidence</dt>
+                      <dd>
+                        {product.scored_product_locations.toLocaleString()} of{" "}
+                        {product.benchmark_product_locations.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{benchmark.name} lower</dt>
+                      <dd>
+                        {formatScorecardRate(product.benchmark_lower_rate)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Average local position</dt>
+                      <dd>
+                        {scorecardPositionCopy(
+                          product.average_gap,
+                          benchmark.name,
+                          selected.competitor,
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
                 </article>
               ))}
             </div>
+            {visibleLimit < filteredProducts.length ? (
+              <button
+                className="retailer-show-all"
+                type="button"
+                onClick={() => setVisibleLimit((limit) => limit + 25)}
+              >
+                Show more products · {filteredProducts.length - visibleLimit}{" "}
+                remaining
+              </button>
+            ) : null}
           </aside>
         </div>
       ) : null}

@@ -165,6 +165,8 @@ export interface AssortmentProduct {
   canonical_product_id: string;
   name: string;
   brand?: string | null;
+  /** Brand identity used by the governed Search assortment rollup. */
+  observed_brand?: string | null;
   brand_type?: "private_label" | "regional" | "national" | "unclassified";
   image_url?: string | null;
   url?: string | null;
@@ -217,6 +219,7 @@ export interface AssortmentAnalysis {
     distinct_brands?: number;
     unbranded_products?: number;
     top_brands?: AssortmentBrand[];
+    brands?: AssortmentBrand[];
     geographically_concentrated_brands?: AssortmentBrand[];
     products?: AssortmentProduct[];
   }>;

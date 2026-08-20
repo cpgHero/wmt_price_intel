@@ -132,6 +132,7 @@ def _compact_interactive_view(view: JsonObject) -> None:
         "seller",
         "observed_locations",
         "observed_zipcodes",
+        "observed_brand",
     }
     for retailer in retailers:
         if not isinstance(retailer, dict):
@@ -140,11 +141,39 @@ def _compact_interactive_view(view: JsonObject) -> None:
         compact = dict(retailer)
         products = retailer.get("products")
         if isinstance(products, list):
-            compact["products"] = [
-                {key: value for key, value in product.items() if key in allowed_product_fields}
-                for product in products
-                if isinstance(product, dict)
-            ]
+            compact_products: list[JsonObject] = []
+            for product in products:
+                if not isinstance(product, dict):
+                    continue
+                compact_product = {
+                    key: value
+                    for key, value in product.items()
+                    if key in allowed_product_fields
+                }
+                attributes = product.get("attributes")
+                observed_brand = (
+                    attributes.get("brand") if isinstance(attributes, dict) else None
+                )
+                if not isinstance(observed_brand, str) or not observed_brand.strip():
+                    variants = product.get("attribute_variants")
+                    if isinstance(variants, list):
+                        observed_brand = next(
+                            (
+                                variant.get("brand")
+                                for variant in variants
+                                if isinstance(variant, dict)
+                                and isinstance(variant.get("brand"), str)
+                                and str(variant.get("brand")).strip()
+                            ),
+                            None,
+                        )
+                compact_product["observed_brand"] = (
+                    observed_brand.strip()
+                    if isinstance(observed_brand, str) and observed_brand.strip()
+                    else product.get("brand")
+                )
+                compact_products.append(compact_product)
+            compact["products"] = compact_products
         compact_retailers.append(compact)
     assortment["retailers"] = compact_retailers
 

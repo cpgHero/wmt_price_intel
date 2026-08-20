@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.22",
+  version: "1.3.23",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3 with production-verified pre-materialized radius-native retailer, cohort, and assortment scorecards",
+    "Production implementation through Egg Product Pack 1.2.3 with radius-native scorecard presentation reconciliation and governed brand-to-product drill-through",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implemented; production verification pending",
+              "Retailer and Cohort Scorecard presentation was reconciled without changing radius-native metrics, and assortment brand drawers now preserve governed brand membership.",
+              "Retailer Scorecards restore the prior high-density table presentation while continuing to consume pre-materialized certified product-location outcomes. Included-product evidence uses compact bounded imagery, readable wrapping, search, pagination, and reconciling product/location totals. Cohort Scorecards now explicitly separate overall retailer Price Position from Product Pack Segment Drivers and Reversals, suppress the legacy duplicate tables, and export both views to CSV or Excel. Observed Brand Breadth opens the complete retailer brand list; every brand links to all products assigned to that exact governed Search brand identity even when PDP supplies a different display label. This is a presentation and evidence-join correction only: no metric formula, source evidence, certification decision, report archive, provider call, or AI call changes.",
+            ],
             [
               "2026-08-20",
               "Deployed and production-verified",

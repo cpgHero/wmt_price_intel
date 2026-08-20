@@ -11158,6 +11158,21 @@ tbody tr:last-child td {
   color: #17313d;
   font-size: 0.78rem;
 }
+.assortment-view-all-brands {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 850;
+  padding: 0.2rem 0;
+  white-space: nowrap;
+}
+.assortment-view-all-brands:hover,
+.assortment-view-all-brands:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .assortment-brand-bars {
   display: grid;
   gap: 0.5rem;
@@ -11229,16 +11244,93 @@ tbody tr:last-child td {
   flex-wrap: wrap;
   gap: 0.35rem;
 }
-.assortment-regional-signals span {
+.assortment-regional-signals span,
+.assortment-regional-signals button {
   background: #eef7f9;
+  border: 0;
   border-radius: 999px;
   color: #58717b;
+  cursor: pointer;
   font-size: 0.58rem;
   padding: 0.35rem 0.5rem;
 }
-.assortment-regional-signals span b {
+.assortment-regional-signals button:hover,
+.assortment-regional-signals button:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 24%, transparent);
+}
+.assortment-regional-signals span b,
+.assortment-regional-signals button b {
   color: #17313d;
   margin-right: 0.25rem;
+}
+.assortment-brand-drawer {
+  max-width: 760px;
+  width: min(94vw, 760px);
+}
+.assortment-brand-search {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+.assortment-brand-search span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+.assortment-brand-search input {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 0 0.8rem;
+}
+.assortment-brand-drawer-list {
+  display: grid;
+  gap: 0.45rem;
+}
+.assortment-brand-drawer-list > button {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(120px, 1fr) auto;
+  padding: 0.75rem;
+  text-align: left;
+}
+.assortment-brand-drawer-list > button:hover,
+.assortment-brand-drawer-list > button:focus-visible {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--line));
+}
+.assortment-brand-drawer-list span {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+}
+.assortment-brand-drawer-list strong {
+  font-size: 0.75rem;
+}
+.assortment-brand-drawer-list small,
+.assortment-brand-drawer-list em {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-style: normal;
+}
+.assortment-brand-drawer-list i {
+  background: var(--surface-alt);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+.assortment-brand-drawer-list i b {
+  background: linear-gradient(90deg, var(--green), var(--accent));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
 }
 .assortment-gap-table > div {
   align-items: center;
@@ -12263,6 +12355,228 @@ tbody tr:last-child td {
   font-weight: 800;
   margin-top: 1rem;
   padding: 0;
+}
+.radius-scorecard-product-summary {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1rem 0;
+}
+.radius-scorecard-product-summary > span {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+}
+.radius-scorecard-product-summary small,
+.radius-scorecard-product-search > span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.radius-scorecard-product-summary strong {
+  font-size: 1rem;
+}
+.radius-scorecard-product-search {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+}
+.radius-scorecard-product-search input {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 0 0.8rem;
+}
+.radius-scorecard-product-list {
+  display: grid;
+  gap: 0.55rem;
+}
+.radius-scorecard-product-list > article {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 58px minmax(190px, 1fr) minmax(360px, 1.4fr);
+  min-width: 0;
+  padding: 0.7rem;
+}
+.radius-scorecard-product-image {
+  align-items: center;
+  background: var(--surface-alt);
+  border-radius: 9px;
+  display: flex;
+  height: 58px;
+  justify-content: center;
+  overflow: hidden;
+  width: 58px;
+}
+.radius-scorecard-product-image img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+.radius-scorecard-product-list > article > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.radius-scorecard-product-list > article > div strong {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.radius-scorecard-product-list > article > div span,
+.radius-scorecard-product-list > article > div small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+.radius-scorecard-product-list dl {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 0.65fr 0.65fr 1.3fr;
+  margin: 0;
+}
+.radius-scorecard-product-list dl div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.radius-scorecard-product-list dt {
+  color: var(--muted);
+  font-size: 0.54rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.radius-scorecard-product-list dd {
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+}
+.cohort-scorecard-workspace {
+  display: grid;
+  gap: 1rem;
+}
+.cohort-view-guide,
+.radius-price-position-section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.1rem;
+}
+.cohort-view-guide > header h2,
+.radius-price-position-section > header h2 {
+  margin: 0.1rem 0 0.3rem;
+}
+.cohort-view-guide > header p:last-child,
+.radius-price-position-section > header p:last-child,
+.cohort-view-guide > footer {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.cohort-view-guide > div {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.9rem 0;
+}
+.cohort-view-guide article {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 0.8rem;
+}
+.cohort-view-guide article > span {
+  align-items: center;
+  background: var(--green-soft);
+  border-radius: 50%;
+  color: var(--green);
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+}
+.cohort-view-guide h3 {
+  font-size: 0.78rem;
+  margin: 0 0 0.2rem;
+}
+.cohort-view-guide article p {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+  margin: 0;
+}
+.radius-price-position-section > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.radius-price-position-table {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-top: 0.9rem;
+  overflow-x: auto;
+}
+.radius-price-position-head,
+.radius-price-position-table article {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 0.8fr 0.9fr 1fr 1.1fr 1.35fr;
+  min-width: 940px;
+  padding: 0.75rem 0.85rem;
+}
+.radius-price-position-head {
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+.radius-price-position-table article {
+  border-top: 1px solid var(--soft-line);
+}
+.radius-price-position-table article > div {
+  display: grid;
+  gap: 0.15rem;
+}
+.radius-price-position-table strong {
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+.radius-price-position-table small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+@media (max-width: 760px) {
+  .radius-scorecard-product-summary,
+  .cohort-view-guide > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .radius-scorecard-product-list > article {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+  .radius-scorecard-product-list dl {
+    grid-column: 1 / -1;
+  }
+  .assortment-brand-drawer-list > button {
+    grid-template-columns: 1fr;
+  }
 }
 .scorecard-products-layer {
   z-index: 1100;
