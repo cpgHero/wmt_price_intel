@@ -1355,6 +1355,12 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
             [
+              "2026-08-20",
+              "Implemented and locally verified; production activation pending",
+              "Fresh Shell Eggs Product Pack 1.2.3 removes prepared-food, substitute, appliance, bakery, and personal-care scope noise and adds fail-closed scope-only certification continuity.",
+              "A full 393,110-row source rebuild removes 47 product identities and 5,651 observations while retaining the exact same 185 governed listing pairs across 13 competitors. Scope-only carry-forward requires additive exclusions, an otherwise identical Product Pack and matching policy, pair-level evidence equivalence, retained image evidence, and explicit predecessor provenance. It starts no paid calls and does not trigger reporting automatically. A deliberately broad egg-free rule was rejected because it would also remove legitimate Eggs Free Range titles.",
+            ],
+            [
               "2026-08-19",
               "Deployed and production-verified",
               "Price Architecture Matrix gained low-to-high price order, exact brand filtering, product-footprint and seller evidence, plus durable pre-materialization.",

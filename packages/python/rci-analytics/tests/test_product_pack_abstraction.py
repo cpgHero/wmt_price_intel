@@ -214,6 +214,20 @@ def test_scope_exclusions_remain_product_pack_data(
         "Egg Ornament",
         "The Perfect Egg Cookbook, Hardcover",
         "Egg Peptide Face Serum",
+        "Signature Cafe Egg Salad",
+        "Egg Lands Best Omelet Meat Lovers 2pk",
+        "Just Crack an Egg Meat Lovers Scramble Kit",
+        "Just Egg Folded, Plant-Based Egg, 4 Ct",
+        "Wegmans Medium Egg Noodles Pasta",
+        "Meijer Hot Dog Egg Buns, 8 ct",
+        "Fresh Baked Egg Bagel, Single",
+        "Zomick's Bread, Egg Challah",
+        "Bacon, Egg & Cheddar Muffin",
+        "Egg, Bacon, Potato & Cheese Burrito",
+        "Burnbrae Farms Mini Frittatas made with Cage-Free Whole Eggs",
+        "Holika Holika Smooth Egg Skin Cleansing Foam",
+        "Egg Pore Blackhead Steam Balm Facial Cleanser",
+        "Hrd Boiled Egg 2/12",
     ],
 )
 def test_egg_pack_rejects_known_search_noise_before_paid_enrichment(
@@ -235,6 +249,10 @@ def test_egg_pack_rejects_known_search_noise_before_paid_enrichment(
         "Grade A Large White Eggs, 12 Count",
         "Organic Cage-Free Brown Eggs, 18 Count",
         "Pasture-Raised Extra Large Shell Eggs, One Dozen",
+        "Happy Egg Pasture Raised 12ct",
+        "Eggland's Best Large Egg, 12 Count",
+        "Wilcox Farms Free-Range 6 Individually Wrapped Eggs",
+        "Happy Egg Co. Eggs Free Range Large, 12 Count",
     ],
 )
 def test_egg_scope_hardening_preserves_true_shell_eggs(

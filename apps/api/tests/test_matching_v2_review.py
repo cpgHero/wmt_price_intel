@@ -389,6 +389,7 @@ class ReviewRepository:
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]:
         self.imported = {
             "organization_id": organization_id,
@@ -396,6 +397,7 @@ class ReviewRepository:
             "imported_by": imported_by,
             "successor_of_version": successor_of_version,
             "carry_forward_certified": carry_forward_certified,
+            "scope_only_pack_revision": scope_only_pack_revision,
         }
         return {"queue_id": queue["queue_id"], "imported": True, "case_count": 1}
 
@@ -663,12 +665,14 @@ async def test_review_service_passes_governed_successor_options() -> None:
             queue=_queue(),
             successor_of_version="1.0.0",
             carry_forward_certified=True,
+            scope_only_pack_revision=True,
         )
     )
 
     assert repository.imported is not None
     assert repository.imported["successor_of_version"] == "1.0.0"
     assert repository.imported["carry_forward_certified"] is True
+    assert repository.imported["scope_only_pack_revision"] is True
 
 
 def test_review_queue_successor_requires_explicit_predecessor() -> None:
@@ -678,6 +682,17 @@ def test_review_queue_successor_requires_explicit_predecessor() -> None:
             imported_by="review-admin",
             queue=_queue(),
             carry_forward_certified=True,
+        )
+
+
+def test_scope_only_successor_requires_certified_carry_forward() -> None:
+    with pytest.raises(ValueError, match="scope_only_pack_revision"):
+        ImportReviewQueueRequest(
+            organization_id="00000000-0000-0000-0000-000000000001",
+            imported_by="review-admin",
+            queue=_queue(),
+            successor_of_version="1.0.0",
+            scope_only_pack_revision=True,
         )
 
 
@@ -711,6 +726,70 @@ def test_successor_compatibility_ignores_only_additive_image_arrays() -> None:
         },
     }
     assert not PostgresMatchingV2ReviewRepository._image_evidence_is_additive(predecessor, replaced)
+
+
+def test_scope_only_pack_compatibility_requires_strictly_additive_exclusions() -> None:
+    predecessor = {
+        "id": "fresh_shell_eggs",
+        "version": "1.0.0",
+        "scope": {
+            "target_terms": ["egg", "eggs"],
+            "hard_exclusion_patterns": ["liquid egg"],
+        },
+        "matching_v2": {"policy_version": "2.0.0", "attribute_roles": {}},
+        "attributes": [{"name": "count"}],
+        "reporting": {
+            "report_blueprint": {"id": "fresh_shell_eggs_leadership", "version": "1.0.0"}
+        },
+    }
+    successor = json.loads(json.dumps(predecessor))
+    successor["version"] = "1.0.1"
+    successor["scope"]["hard_exclusion_patterns"].append("egg salad")
+    successor["reporting"]["report_blueprint"]["version"] = "1.0.1"
+
+    compatible = PostgresMatchingV2ReviewRepository._scope_only_pack_revision_is_compatible
+
+    assert compatible(predecessor, successor)
+    changed_policy = json.loads(json.dumps(successor))
+    changed_policy["matching_v2"]["policy_version"] = "2.0.1"
+    assert not compatible(predecessor, changed_policy)
+    removed_exclusion = json.loads(json.dumps(successor))
+    removed_exclusion["scope"]["hard_exclusion_patterns"] = ["egg salad"]
+    assert not compatible(predecessor, removed_exclusion)
+
+
+def test_scope_only_case_compatibility_ignores_only_revision_derived_ids() -> None:
+    predecessor = {
+        "case_id": "case-old",
+        "benchmark_listing_id": "walmart_us:1",
+        "competitor_listing_id": "aldi_us:2",
+        "benchmark_listing": {"title": "Large Eggs", "image_url": "one.jpg"},
+        "competitor_listing": {"title": "Large Eggs", "image_url": "two.jpg"},
+        "engine_proposal": {"edge_id": "edge-old", "tier": "equivalent_product"},
+        "evidence_refs": ["source-bundle:aldi#sha256=abc|edge_id=edge-old"],
+        "edge": {
+            "edge_id": "edge-old",
+            "policy": {
+                "checksum": "a" * 64,
+                "product_pack_version": "1.0.0",
+                "policy_version": "2.0.0",
+            },
+            "attribute_evidence": [{"attribute": "count", "status": "matched"}],
+        },
+    }
+    successor = json.loads(json.dumps(predecessor))
+    successor["case_id"] = "case-new"
+    successor["engine_proposal"]["edge_id"] = "edge-new"
+    successor["evidence_refs"] = ["source-bundle:aldi#sha256=abc|edge_id=edge-new"]
+    successor["edge"]["edge_id"] = "edge-new"
+    successor["edge"]["policy"]["checksum"] = "b" * 64
+    successor["edge"]["policy"]["product_pack_version"] = "1.0.1"
+
+    sanitize = PostgresMatchingV2ReviewRepository._without_scope_revision_metadata
+
+    assert sanitize(predecessor) == sanitize(successor)
+    successor["edge"]["attribute_evidence"][0]["status"] = "conflicting"
+    assert sanitize(predecessor) != sanitize(successor)
 
 
 async def test_review_service_rejects_known_third_party_seller_queue() -> None:
@@ -1074,7 +1153,7 @@ def test_current_egg_policy_tolerates_unknown_organic_but_blocks_color_conflict(
     policy = _active_certification_policy("fresh_shell_eggs")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.2.2"
+    assert policy["product_pack_version"] == "1.2.3"
     assert policy["hard_blocker_unknown_is_blocking"]["organic"] is False
     assert governed["certification_unknown_nonblocking_attributes"] == ["organic"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["shell_color"]

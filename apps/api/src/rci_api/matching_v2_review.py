@@ -428,11 +428,14 @@ class ImportReviewQueueRequest(BaseModel):
     queue_json: str | None = Field(default=None, min_length=2)
     successor_of_version: str | None = Field(default=None, min_length=1, max_length=50)
     carry_forward_certified: bool = False
+    scope_only_pack_revision: bool = False
 
     @model_validator(mode="after")
     def validate_successor_options(self) -> ImportReviewQueueRequest:
         if self.carry_forward_certified and self.successor_of_version is None:
             raise ValueError("carry_forward_certified requires an explicit successor_of_version")
+        if self.scope_only_pack_revision and not self.carry_forward_certified:
+            raise ValueError("scope_only_pack_revision requires carry_forward_certified")
         return self
 
 
@@ -880,6 +883,7 @@ class MatchingV2ReviewRepository(Protocol):
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]: ...
 
     async def queue_view(
@@ -1038,6 +1042,7 @@ class PostgresMatchingV2ReviewRepository:
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]:
         async with self._engine.begin() as connection:
             existing = (
@@ -1111,9 +1116,17 @@ class PostgresMatchingV2ReviewRepository:
             )
             review_queue_id = str(row["id"])
             successor_cases: dict[str, tuple[str, Mapping[str, Any]]] = {}
+            successor_pairs: dict[tuple[str, str], tuple[str, Mapping[str, Any]]] = {}
             for case in queue["cases"]:
                 case_id = await self._insert_case(connection, review_queue_id, case)
                 successor_cases[str(case["case_id"])] = (case_id, case)
+                pair = (
+                    str(case["benchmark_listing_id"]),
+                    str(case["competitor_listing_id"]),
+                )
+                if pair in successor_pairs:
+                    raise ValueError(f"successor queue contains duplicate listing pair {pair!r}")
+                successor_pairs[pair] = (case_id, case)
             carried_forward_count = 0
             if carry_forward_certified:
                 if successor_of_version is None:
@@ -1126,6 +1139,8 @@ class PostgresMatchingV2ReviewRepository:
                     queue=queue,
                     predecessor_version=successor_of_version,
                     successor_cases=successor_cases,
+                    successor_pairs=successor_pairs,
+                    scope_only_pack_revision=scope_only_pack_revision,
                 )
         return {
             "id": review_queue_id,
@@ -1137,6 +1152,7 @@ class PostgresMatchingV2ReviewRepository:
             "carried_forward_count": carried_forward_count,
             "pending_case_count": len(queue["cases"]) - carried_forward_count,
             "successor_of_version": successor_of_version,
+            "scope_only_pack_revision": scope_only_pack_revision,
         }
 
     @staticmethod
@@ -1226,6 +1242,69 @@ class PostgresMatchingV2ReviewRepository:
                 return False
         return True
 
+    @staticmethod
+    def _scope_only_pack_revision_is_compatible(
+        predecessor: Mapping[str, Any], successor: Mapping[str, Any]
+    ) -> bool:
+        """Permit only additive scope exclusions and version-reference changes."""
+
+        predecessor_document = json.loads(_canonical(predecessor))
+        successor_document = json.loads(_canonical(successor))
+        if str(predecessor_document.get("id") or "") != str(successor_document.get("id") or ""):
+            return False
+        if str(predecessor_document.get("version") or "") == str(
+            successor_document.get("version") or ""
+        ):
+            return False
+        predecessor_scope = predecessor_document.get("scope")
+        successor_scope = successor_document.get("scope")
+        if not isinstance(predecessor_scope, dict) or not isinstance(successor_scope, dict):
+            return False
+        predecessor_exclusions = {
+            str(value) for value in predecessor_scope.get("hard_exclusion_patterns", [])
+        }
+        successor_exclusions = {
+            str(value) for value in successor_scope.get("hard_exclusion_patterns", [])
+        }
+        if not predecessor_exclusions < successor_exclusions:
+            return False
+        predecessor_document.pop("version", None)
+        successor_document.pop("version", None)
+        predecessor_scope.pop("hard_exclusion_patterns", None)
+        successor_scope.pop("hard_exclusion_patterns", None)
+        for document in (predecessor_document, successor_document):
+            reporting = document.get("reporting")
+            if not isinstance(reporting, dict):
+                return False
+            blueprint = reporting.get("report_blueprint")
+            if not isinstance(blueprint, dict):
+                return False
+            blueprint.pop("version", None)
+        return predecessor_document == successor_document
+
+    @classmethod
+    def _without_scope_revision_metadata(cls, value: Mapping[str, Any]) -> Any:
+        """Remove identifiers derived solely from a compatible Product Pack revision."""
+
+        document = json.loads(_canonical(value))
+        document.pop("case_id", None)
+        edge = document.get("edge")
+        if isinstance(edge, dict):
+            edge.pop("edge_id", None)
+            policy = edge.get("policy")
+            if isinstance(policy, dict):
+                policy.pop("checksum", None)
+                policy.pop("product_pack_version", None)
+        proposal = document.get("engine_proposal")
+        if isinstance(proposal, dict):
+            proposal.pop("edge_id", None)
+        evidence_refs = document.get("evidence_refs")
+        if isinstance(evidence_refs, list):
+            document["evidence_refs"] = [
+                str(reference).partition("|edge_id=")[0] for reference in evidence_refs
+            ]
+        return cls._without_additive_image_evidence(document)
+
     @classmethod
     async def _carry_forward_certified_submissions(
         cls,
@@ -1235,6 +1314,8 @@ class PostgresMatchingV2ReviewRepository:
         queue: Mapping[str, Any],
         predecessor_version: str,
         successor_cases: Mapping[str, tuple[str, Mapping[str, Any]]],
+        successor_pairs: Mapping[tuple[str, str], tuple[str, Mapping[str, Any]]],
+        scope_only_pack_revision: bool,
     ) -> int:
         predecessor = (
             (
@@ -1261,11 +1342,41 @@ class PostgresMatchingV2ReviewRepository:
         )
         if predecessor is None:
             raise ValueError("the declared predecessor review queue was not found")
-        if (
-            str(predecessor["product_pack_id"]) != str(queue["product_pack"]["id"])
-            or str(predecessor["product_pack_version"]) != str(queue["product_pack"]["version"])
-            or str(predecessor["policy_checksum"]) != str(queue["policy_checksum"])
-        ):
+        if str(predecessor["product_pack_id"]) != str(queue["product_pack"]["id"]):
+            raise ValueError("certified decisions cannot cross Product Pack identities")
+        if scope_only_pack_revision:
+            versions = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT version, config
+                        FROM product_pack_version
+                        WHERE product_pack_id = :product_pack_id
+                          AND version IN (:predecessor_version, :successor_version)
+                        """
+                    ),
+                    {
+                        "product_pack_id": queue["product_pack"]["id"],
+                        "predecessor_version": predecessor["product_pack_version"],
+                        "successor_version": queue["product_pack"]["version"],
+                    },
+                )
+            ).mappings()
+            pack_documents = {str(row["version"]): dict(row["config"]) for row in versions}
+            predecessor_pack = pack_documents.get(str(predecessor["product_pack_version"]))
+            successor_pack = pack_documents.get(str(queue["product_pack"]["version"]))
+            if (
+                predecessor_pack is None
+                or successor_pack is None
+                or not cls._scope_only_pack_revision_is_compatible(predecessor_pack, successor_pack)
+            ):
+                raise ValueError(
+                    "scope-only carry-forward requires an additive exclusion-only "
+                    "Product Pack revision"
+                )
+        elif str(predecessor["product_pack_version"]) != str(
+            queue["product_pack"]["version"]
+        ) or str(predecessor["policy_checksum"]) != str(queue["policy_checksum"]):
             raise ValueError("certified decisions cannot cross Product Pack or policy revisions")
         adjudication_count = (
             await connection.execute(
@@ -1306,32 +1417,54 @@ class PostgresMatchingV2ReviewRepository:
             if str(row["verdict"]) not in {"comparable", "not_comparable"}:
                 continue
             external_case_id = str(row["external_case_id"])
-            successor = successor_cases.get(external_case_id)
+            predecessor_document = dict(row["case_document"])
+            if scope_only_pack_revision:
+                pair = (
+                    str(predecessor_document.get("benchmark_listing_id") or ""),
+                    str(predecessor_document.get("competitor_listing_id") or ""),
+                )
+                successor = successor_pairs.get(pair)
+            else:
+                successor = successor_cases.get(external_case_id)
             if successor is None:
                 raise ValueError(
                     "a certified predecessor case is absent from the successor queue: "
                     f"{external_case_id}"
                 )
             successor_case_id, successor_document = successor
-            predecessor_document = dict(row["case_document"])
-            if not cls._image_evidence_is_additive(
-                predecessor_document, successor_document
-            ) or cls._without_additive_image_evidence(
-                predecessor_document
-            ) != cls._without_additive_image_evidence(successor_document):
+            documents_match = (
+                cls._without_scope_revision_metadata(predecessor_document)
+                == cls._without_scope_revision_metadata(successor_document)
+                if scope_only_pack_revision
+                else cls._without_additive_image_evidence(predecessor_document)
+                == cls._without_additive_image_evidence(successor_document)
+            )
+            if (
+                not cls._image_evidence_is_additive(predecessor_document, successor_document)
+                or not documents_match
+            ):
                 raise ValueError(
-                    "a certified decision can only carry across additive image evidence: "
+                    "a certified decision can only carry across compatible immutable evidence: "
                     f"{external_case_id}"
                 )
             predecessor_submission_id = str(row["submission_id"])
             provenance_ref = f"matching-v2-review-submission:{predecessor_submission_id}"
             evidence_refs = [str(value) for value in (row["evidence_refs"] or [])]
+            for reference in successor_document.get("evidence_refs", []):
+                rendered = str(reference)
+                if rendered not in evidence_refs:
+                    evidence_refs.append(rendered)
             if provenance_ref not in evidence_refs:
                 evidence_refs.append(provenance_ref)
             carry_note = (
                 f"\n\nCarried forward from immutable queue version {predecessor_version}; "
-                "the pair, governed attributes, policy, proposal, and source evidence are "
-                "unchanged, with only additive PDP image references in this successor."
+                + (
+                    "the pair, governed attributes, matching policy, proposal, and source "
+                    "evidence are unchanged under an audited additive scope-exclusion revision."
+                    if scope_only_pack_revision
+                    else "the pair, governed attributes, policy, proposal, and source evidence "
+                    "are unchanged, with only additive PDP image references in this successor."
+                )
             )
             rationale = str(row["rationale"])
             rationale = f"{rationale[: max(0, 10_000 - len(carry_note))]}{carry_note}"
@@ -3652,6 +3785,7 @@ class MatchingV2ReviewService:
             imported_by=request.imported_by,
             successor_of_version=request.successor_of_version,
             carry_forward_certified=request.carry_forward_certified,
+            scope_only_pack_revision=request.scope_only_pack_revision,
         )
 
     async def queue_view(self, external_queue_id: str, **filters: Any) -> dict[str, Any]:

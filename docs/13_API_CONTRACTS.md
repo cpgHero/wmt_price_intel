@@ -76,6 +76,16 @@ Protected Matching v2 certification routes are documented in
 `docs/54_PHASE_13_4_HUMAN_MATCH_CERTIFICATION.md`. They require the production feature flag and
 administrator token; every queue response remains `authoritative=false`.
 
+`POST /api/v1/matching-v2/review-queues/import` accepts the optional immutable-successor fields
+`successor_of_version`, `carry_forward_certified`, and `scope_only_pack_revision`. Scope-only mode
+requires both other fields and is deliberately fail-closed: the successor Product Pack must add
+hard scope exclusions without removing any, while every other Product Pack and matching-policy
+field remains identical after version references are ignored. Each finalized predecessor listing
+pair must also retain identical governed evidence, proposal, and attributes; only revision-derived
+IDs and additive PDP image references may differ. Compatible comparable and not-comparable
+decisions retain their reviewer, rationale, evidence, and supersession provenance. Unresolved cases
+remain unresolved. Import never starts AI, PDP, collection, analysis, or publication work.
+
 `GET /api/v1/matching-v2/review-queues/{queue_id}/ai-drafts/eligible-cases` returns only the
 exposure-ranked case IDs and counts needed to prepare a queue-wide paid AI-review confirmation. It
 may be scoped by `competitor_retailer_id`, excludes existing tasks and final decisions, reapplies

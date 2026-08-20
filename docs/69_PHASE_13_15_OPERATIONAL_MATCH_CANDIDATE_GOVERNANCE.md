@@ -246,3 +246,18 @@ identifiers, specifications, physical properties, primary imagery, and multiple 
 separates two different questions: whether every provider field was mapped, and whether the source
 actually supplied enough decision-useful evidence for a product. Regenerating a candidate graph or
 starting paid AI review remains an explicit administrator action after deployment and audit.
+
+## Scope-only Product Pack continuity
+
+Fresh Shell Eggs Product Pack `1.2.3` introduces a narrower admission boundary without changing
+the matching policy. The full 393,110-row source rebuild removes 47 non-shell-Egg product
+identities and 5,651 product-location observations, while its exhaustive candidate graph retains
+the exact same 185 benchmark/competitor listing pairs as queue `3.0.0`.
+
+Queue `4.0.0` therefore uses the explicit scope-only successor protocol documented in
+`docs/74_PHASE_13_20_EGG_SCOPE_GOVERNANCE.md`. The protocol does not equate a new checksum with
+unchanged evidence. It independently proves that exclusions are strictly additive, all other Pack
+and policy content is identical, every finalized listing pair survives, governed case evidence is
+equivalent after revision-derived IDs are removed, and predecessor image evidence remains present.
+Only then may comparable or not-comparable certification be copied with its original reviewer,
+rationale, evidence, and supersession provenance. The one unresolved Egg case remains unresolved.

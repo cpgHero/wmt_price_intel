@@ -71,7 +71,7 @@ def test_egg_matching_policy_blocks_known_color_conflicts_not_unknown_organic() 
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
     roles = pack.matching_v2["attribute_roles"]
 
-    assert pack.version == "1.2.2"
+    assert pack.version == "1.2.3"
     assert roles["shell_color"]["role"] == "hard_blocker"
     assert roles["shell_color"].get("unknown_is_blocking", True) is True
     assert roles["organic"]["role"] == "hard_blocker"

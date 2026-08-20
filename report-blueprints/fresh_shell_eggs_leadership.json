@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "id": "fresh_shell_eggs_leadership",
-  "version": "1.2.2",
-  "product_pack": { "id": "fresh_shell_eggs", "version": "1.2.2" },
+  "version": "1.2.3",
+  "product_pack": { "id": "fresh_shell_eggs", "version": "1.2.3" },
   "brand_profile": {
     "id": "cpghero_rci",
     "version": "1.0.0",
