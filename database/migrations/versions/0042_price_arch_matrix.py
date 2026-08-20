@@ -1,6 +1,6 @@
 """Persist governed Price Architecture Matrix read models.
 
-Revision ID: 0042_price_architecture_materialization
+Revision ID: 0042_price_arch_matrix
 Revises: 0041_governed_replay_generation
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0042_price_architecture_materialization"
+revision: str = "0042_price_arch_matrix"
 down_revision: str | None = "0041_governed_replay_generation"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

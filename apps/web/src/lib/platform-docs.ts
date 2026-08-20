@@ -1358,7 +1358,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-19",
               "Implemented and test verification in progress; deployment pending",
               "Price Architecture Matrix gained low-to-high price order, exact brand filtering, product-footprint and seller evidence, plus durable pre-materialization.",
-              "Each visible product now carries its retailer product ID and distinct observed-location count. Known third-party marketplace sellers remain excluded while verified-first-party, seller-unverified, and not-governed states remain explicit. Exact brand filters preserve Walmart's reference rungs. Migration 0042 stores parameter-scoped matrix documents; both API publication and worker publication pre-materialize the three default matrix methods, while other filter combinations persist after first use. Rebuilding uses existing evidence and consumes no MetricsCart credits.",
+              "Each visible product now carries its retailer product ID and distinct observed-location count. Known third-party marketplace sellers remain excluded while verified-first-party, seller-unverified, and not-governed states remain explicit. Exact brand filters preserve Walmart's reference rungs. Migration 0042_price_arch_matrix stores parameter-scoped matrix documents; both API publication and worker publication pre-materialize the three default matrix methods, while other filter combinations persist after first use. Rebuilding uses existing evidence and consumes no MetricsCart credits.",
             ],
             [
               "2026-08-19",

@@ -82,7 +82,7 @@ Sales/units are capability-bounded until governed performance data exists.
   dimensions.
 - The API prepares retailer populations with bounded concurrency and caches by immutable
   population checksum plus PDP context revision and selected filters.
-- Migration `0042_price_architecture_materialization` adds a durable, idempotent JSONB read model.
+- Migration `0042_price_arch_matrix` adds a durable, idempotent JSONB read model.
   Both publication entry points are covered: API publication builds in-process, while the analysis
   worker calls an authenticated API-only endpoint over Railway's private network. They
   pre-materialize the Walmart-anchored, fixed-$0.50, and fixed-$1.00 category matrices; all other
