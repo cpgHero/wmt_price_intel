@@ -760,12 +760,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Available now", "Requires additional governed data"],
           rows: [
             [
-              "2026-08-20",
-              "Test-verified; deployment and governed replay pending",
-              "Matching v2 releases distinguish final human insufficient-evidence exclusions from cases that still lack review.",
-              "The final Egg Kroger case is complete with an insufficient-evidence disposition because required housing-method evidence remains unknown. Gold-set 2.0.0 now preserves that outcome in a separate immutable exclusion ledger, changes the release checksum, retains reviewer/rationale/evidence provenance, and reconciles it to the current queue transactionally. Report readiness blocks only candidates without a final human outcome; reviewed exclusions remain outside comparable and not-comparable metrics and appear as explicit warnings. No relationship is inferred, no provider call occurs, and no source data, PDP evidence, certification history, or audit lineage is deleted.",
-            ],
-            [
               "Certified product relationships; package and supported unit price; win/tie/loss; price gaps; local price ladders and rank",
               "Historical response, persistence, volatility, stability, and trend",
             ],
@@ -810,7 +804,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current reporting limitations",
-          text: "The current governed Egg release contains one compatible snapshot, so Product History, price response, persistence, and stability remain unavailable. Basket, KVI, consumer price-image, elasticity, sales, margin, and ROI measures also lack governed source data. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main workspaces are finalized. The release reconciles 185 certification cases: 183 comparable, one not comparable, and one unresolved Kroger housing-evidence case, so that limitation remains visible rather than being represented as complete coverage.",
+          text: "The current governed Egg release contains one compatible snapshot, so Product History, price response, persistence, and stability remain unavailable. Basket, KVI, consumer price-image, elasticity, sales, margin, and ROI measures also lack governed source data. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main workspaces are finalized. The completed queue reconciles 185 certification cases: 183 comparable, one not comparable, and one final insufficient-evidence Kroger housing-method case. That final case remains an explicit audited exclusion rather than a match or unfinished review.",
         },
       ],
     },
@@ -1364,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Test-verified; deployment and governed replay pending",
+              "Matching v2 releases distinguish final human insufficient-evidence exclusions from cases that still lack review.",
+              "The final Egg Kroger case is complete with an insufficient-evidence disposition because required housing-method evidence remains unknown. Gold-set 2.0.0 now preserves that outcome in a separate immutable exclusion ledger, changes the release checksum, retains reviewer/rationale/evidence provenance, and reconciles it to the current queue transactionally. Report readiness blocks only candidates without a final human outcome; reviewed exclusions remain outside comparable and not-comparable metrics and appear as explicit warnings. No relationship is inferred, no provider call occurs, and no source data, PDP evidence, certification history, or audit lineage is deleted.",
+            ],
             [
               "2026-08-20",
               "Deployed and release-gate verified; governed replay and production acceptance pending",
