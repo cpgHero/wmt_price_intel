@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ast
 import hashlib
 import json
@@ -592,17 +593,31 @@ class CatalogProductPackLoader:
     def __init__(self, repository_root: Path, catalog: ProductPackCatalog) -> None:
         self._loader = ProductPackLoader(repository_root)
         self._catalog = catalog
+        self._cache: dict[tuple[str, str], ProductPack] = {}
+        self._load_lock = asyncio.Lock()
 
     async def load(self, pack_id: str, version: str) -> ProductPack:
-        record = await self._catalog.get(pack_id, version)
-        pack = self._loader.load_document(
-            record.document,
-            label=f"Product Pack {pack_id}@{version}",
-            report_blueprint=record.report_blueprint,
-        )
-        if pack.checksum != record.checksum:
-            raise ContractError(f"Product Pack {pack_id}@{version} checksum does not match")
-        return pack
+        key = (pack_id, version)
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        # Exact Product Pack versions are immutable. Serialize the first catalog
+        # read so concurrent product projections do not stampede Postgres, then
+        # retain the validated object for the lifetime of this service instance.
+        async with self._load_lock:
+            cached = self._cache.get(key)
+            if cached is not None:
+                return cached
+            record = await self._catalog.get(pack_id, version)
+            pack = self._loader.load_document(
+                record.document,
+                label=f"Product Pack {pack_id}@{version}",
+                report_blueprint=record.report_blueprint,
+            )
+            if pack.checksum != record.checksum:
+                raise ContractError(f"Product Pack {pack_id}@{version} checksum does not match")
+            self._cache[key] = pack
+            return pack
 
 
 class ProductPackRepository(Protocol):

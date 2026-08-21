@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 from dataclasses import replace
@@ -10,13 +11,38 @@ import pytest
 
 from rci_analytics.matching import ComparisonEngine
 from rci_analytics.product_pack import (
+    CatalogProductPackLoader,
     InMemoryProductPackRepository,
     ProductPackLoader,
     primary_exact_profile,
 )
 from rci_contracts import ContractError
+from rci_product_packs import FileProductPackCatalog
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+
+
+@pytest.mark.asyncio
+async def test_catalog_loader_caches_immutable_version_across_concurrent_reads() -> None:
+    catalog = FileProductPackCatalog(REPOSITORY_ROOT)
+    calls = 0
+    original_get = catalog.get
+
+    async def counted_get(pack_id: str, version: str):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0)
+        return await original_get(pack_id, version)
+
+    catalog.get = counted_get  # type: ignore[method-assign]
+    loader = CatalogProductPackLoader(REPOSITORY_ROOT, catalog)
+
+    packs = await asyncio.gather(
+        *(loader.load("fresh_ground_beef", "1.2.0") for _ in range(16))
+    )
+
+    assert calls == 1
+    assert all(pack is packs[0] for pack in packs)
 
 
 def test_product_pack_loads_with_schema_and_semantic_validation() -> None:
