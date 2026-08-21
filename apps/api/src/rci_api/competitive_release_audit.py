@@ -408,7 +408,7 @@ def audit_competitive_portfolio_set(
             cohort_relationships_by_retailer[retailer_id] = cohort_relationships_by_retailer.get(
                 retailer_id, 0
             ) + _integer(cohort.get("relationships"))
-        for retailer_id, scorecard in scorecards_by_retailer.items() if cohorts else []:
+        for retailer_id, scorecard in scorecards_by_retailer.items():
             certified = _integer(scorecard.get("relationships"))
             cohorted = cohort_relationships_by_retailer.get(retailer_id, 0)
             if cohorted > certified:

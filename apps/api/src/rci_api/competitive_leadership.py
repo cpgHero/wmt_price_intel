@@ -92,6 +92,18 @@ def _normalized_attribute(value: Any) -> Any:
     return value
 
 
+def _attribute_key(value: Any) -> str:
+    """Normalize Product Pack display labels to canonical attribute keys."""
+
+    return "_".join(
+        token
+        for token in "".join(
+            character.casefold() if character.isalnum() else " " for character in str(value or "")
+        ).split()
+        if token
+    )
+
+
 def _candidate_segment_rows(
     report: dict[str, Any],
     candidates: list[dict[str, Any]],
@@ -99,9 +111,11 @@ def _candidate_segment_rows(
 ) -> list[dict[str, Any]]:
     """Retain certified cohorts even when exact-location price overlap is absent."""
 
-    dimensions = tuple(
-        str(value) for value in report.get("product_pack", {}).get("cohort_dimensions", [])
-    )
+    dimensions = {
+        _attribute_key(value)
+        for value in report.get("product_pack", {}).get("cohort_dimensions", [])
+        if _attribute_key(value)
+    }
 
     def attributes(row: dict[str, Any], field: str) -> dict[str, Any]:
         source = row.get(field)
@@ -111,7 +125,7 @@ def _candidate_segment_rows(
             str(name): value
             for name, value in source.items()
             if value is not None
-            and (not dimensions or str(name) in dimensions)
+            and (not dimensions or _attribute_key(name) in dimensions)
             and str(value).strip()
         }
 

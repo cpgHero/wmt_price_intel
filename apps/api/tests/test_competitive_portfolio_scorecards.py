@@ -41,6 +41,50 @@ def test_certified_candidate_creates_cohort_without_legacy_price_segment() -> No
     assert "Brand" not in rows[0]["segment"]
 
 
+def test_certified_candidate_matches_display_label_cohort_dimensions() -> None:
+    rows = _candidate_segment_rows(
+        {
+            "product_pack": {
+                "cohort_dimensions": [
+                    "Lean Pct",
+                    "Fat Pct",
+                    "Weight Lb",
+                    "Organic",
+                    "Grass Fed",
+                    "Premium Tier",
+                ]
+            }
+        },
+        [
+            {
+                "competitor": "aldi_us",
+                "profile_id": "strict",
+                "match_attributes": {
+                    "lean_pct": 93,
+                    "fat_pct": 7,
+                    "weight_lb": 1.0,
+                    "organic": True,
+                    "grass_fed": True,
+                    "premium_tier": "standard",
+                    "brand": "Never Any!",
+                },
+            }
+        ],
+        [],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["_segment_attributes"] == {
+        "lean_pct": 93,
+        "fat_pct": 7,
+        "weight_lb": 1.0,
+        "organic": True,
+        "grass_fed": True,
+        "premium_tier": "standard",
+    }
+    assert "brand" not in rows[0]["_segment_attributes"]
+
+
 def test_competitive_materialization_requires_internal_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

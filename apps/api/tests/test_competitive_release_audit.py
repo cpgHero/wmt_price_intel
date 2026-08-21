@@ -128,7 +128,29 @@ def test_competitive_release_audit_reconciles_complete_radius_matrix() -> None:
     assert audit["status"] == "passed"
     assert audit["document_count"] == 6
     assert audit["error_count"] == 0
-    assert audit["warning_count"] == 0
+    assert audit["warning_count"] == 6
+    assert {row["code"] for row in audit["findings"] if row["severity"] == "warning"} == {
+        "cohort_attribute_coverage_gap"
+    }
+
+
+def test_competitive_release_audit_discloses_empty_cohort_layer() -> None:
+    audit = audit_competitive_portfolio_set(
+        [_document("compatible", radius, 1) for radius in (1, 3, 5)],
+        expected_profiles=("compatible",),
+    )
+
+    assert audit["status"] == "passed"
+    assert audit["error_count"] == 0
+    assert audit["warning_count"] == 3
+    assert all(
+        row["code"] == "cohort_attribute_coverage_gap"
+        and row["context"]["retailer_id"] == "aldi_us"
+        and row["context"]["certified"] == 1
+        and row["context"]["cohorted"] == 0
+        and row["context"]["excluded"] == 1
+        for row in audit["findings"]
+    )
 
 
 def test_competitive_release_audit_fails_rates_rollups_and_radius_regression() -> None:
