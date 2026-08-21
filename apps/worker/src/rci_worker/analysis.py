@@ -137,6 +137,81 @@ def matching_v2_gold_set_rules(
     return rules
 
 
+def scope_matching_v2_rules_to_brand_profiles(
+    offers: Iterable[Any],
+    rules: Iterable[ProductMatchRule],
+    *,
+    benchmark_retailer: str,
+    profiles: Iterable[dict[str, Any]],
+    engine: ComparisonEngine,
+) -> list[ProductMatchRule]:
+    """Segment certified relationships into truthful Product Pack brand views.
+
+    Certification remains authoritative for comparability. Confirmed pairs enter
+    only the profiles whose configured brand policy their governed evidence
+    satisfies. A rejected relationship remains rejected across every profile.
+    """
+
+    profile_index = {
+        str(profile["id"]): dict(profile)
+        for profile in profiles
+        if str(profile.get("geography") or "") == "exact_zip"
+    }
+    offers_by_product: dict[tuple[str, str], list[Any]] = defaultdict(list)
+    for classified in offers:
+        offer = classified.offer
+        offers_by_product[(offer.retailer_id, offer.retailer_product_id)].append(classified)
+
+    def representative(retailer_id: str, product_id: str) -> Any | None:
+        rows = offers_by_product.get((retailer_id, product_id), [])
+        if not rows:
+            return None
+        return sorted(
+            rows,
+            key=lambda row: (
+                -int(bool(row.attributes.get("brand") or row.offer.brand)),
+                -int(isinstance(row.attributes.get("_brand_governance"), dict)),
+                row.offer.offer_id,
+            ),
+        )[0]
+
+    scoped: list[ProductMatchRule] = []
+    for rule in rules:
+        current_profiles = tuple(
+            profile_id
+            for profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
+            if profile_id in profile_index
+        )
+        if rule.decision != "confirmed":
+            eligible_profiles = current_profiles
+        else:
+            benchmark = representative(benchmark_retailer, rule.benchmark_product_id)
+            competitor = representative(rule.competitor_id, rule.competitor_product_id)
+            eligible_profiles = tuple(
+                profile_id
+                for profile_id in current_profiles
+                if engine.governed_profile_brand_eligible(
+                    benchmark,
+                    competitor,
+                    profile_id=profile_id,
+                )
+            )
+            if not eligible_profiles:
+                raise ValueError(
+                    "certified comparable relationship is not eligible for any exact-location "
+                    f"Product Pack profile: {benchmark_retailer}:{rule.benchmark_product_id} "
+                    f"vs {rule.competitor_id}:{rule.competitor_product_id}"
+                )
+        scoped.append(
+            replace(
+                rule,
+                profile_id=(eligible_profiles[0] if eligible_profiles else rule.profile_id),
+                eligible_profile_ids=eligible_profiles,
+            )
+        )
+    return scoped
+
+
 def matching_v2_gold_set_presentation(
     offers: Iterable[Any],
     rules: Iterable[ProductMatchRule],
@@ -1207,6 +1282,15 @@ class AnalysisProcessor:
 
         comparison_offers = reducer.offers()
         relationship_offers = relationship_reducer.offers()
+
+        if matching_v2_release is not None:
+            governed_rules = scope_matching_v2_rules_to_brand_profiles(
+                relationship_offers,
+                governed_rules,
+                benchmark_retailer=benchmark,
+                profiles=selected_profiles,
+                engine=engine,
+            )
 
         if matching_v2_accumulator is not None:
             preferred_profile_id = str(

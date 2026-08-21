@@ -10,7 +10,13 @@ from typing import Any
 
 import pytest
 
-from rci_analytics import InMemoryDatasetStore, ParquetDatasetWriter, ProductPackLoader
+from rci_analytics import (
+    ComparisonEngine,
+    InMemoryDatasetStore,
+    ParquetDatasetWriter,
+    ProductMatchRule,
+    ProductPackLoader,
+)
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
 from rci_collections.models import QueueTask, RawArtifact
 from rci_providers import MetricsCartAdapterRegistry
@@ -31,6 +37,7 @@ from rci_worker.analysis import (
     matching_v2_gold_set_presentation,
     matching_v2_gold_set_rules,
     require_matching_v2_relationship_reconciliation,
+    scope_matching_v2_rules_to_brand_profiles,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -98,6 +105,85 @@ def test_matching_v2_certified_rules_use_exact_location_profiles_only(
     rules = matching_v2_gold_set_rules(release, pack)
 
     assert rules[0].eligible_profile_ids == expected_profiles
+
+
+def test_matching_v2_certified_rules_are_segmented_by_governed_brand_policy() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    engine = ComparisonEngine(pack)
+    profile_ids = tuple(str(profile["id"]) for profile in pack.matching_profiles)
+
+    def offer(
+        retailer_id: str,
+        product_id: str,
+        brand: str | None,
+    ) -> ClassifiedOffer:
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"{retailer_id}:{product_id}:offer",
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title=f"{brand or 'Unknown'} milk",
+                brand=brand,
+                price=Decimal("3.00"),
+                currency="USD",
+                zipcode="72712",
+                store_number="100",
+                latitude=None,
+                longitude=None,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={"brand": brand} if brand is not None else {},
+            metrics={"price_per_gallon": Decimal("3.00")},
+            review_reasons=(),
+        )
+
+    rules = [
+        ProductMatchRule(
+            competitor_id="aldi_us",
+            profile_id=profile_ids[0],
+            benchmark_product_id=benchmark_product_id,
+            competitor_product_id=competitor_product_id,
+            decision=decision,
+            eligible_profile_ids=profile_ids,
+        )
+        for benchmark_product_id, competitor_product_id, decision in (
+            ("w-private", "a-private", "confirmed"),
+            ("w-same", "a-same", "confirmed"),
+            ("w-cross", "a-cross", "confirmed"),
+            ("w-unknown", "a-unknown", "confirmed"),
+            ("w-rejected", "a-rejected", "rejected"),
+        )
+    ]
+    offers = [
+        offer("walmart_us", "w-private", "Great Value"),
+        offer("aldi_us", "a-private", "Friendly Farms"),
+        offer("walmart_us", "w-same", "Horizon Organic"),
+        offer("aldi_us", "a-same", "Horizon"),
+        offer("walmart_us", "w-cross", "Hiland"),
+        offer("aldi_us", "a-cross", "Friendly Farms"),
+        offer("walmart_us", "w-unknown", None),
+        offer("aldi_us", "a-unknown", None),
+    ]
+
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        offers,
+        rules,
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("private_label", "all_brand")
+    assert scoped[1].eligible_profile_ids == ("same_brand_exact", "all_brand")
+    assert scoped[2].eligible_profile_ids == ("all_brand",)
+    assert scoped[3].eligible_profile_ids == ("all_brand",)
+    assert scoped[4].eligible_profile_ids == profile_ids
 
 
 def test_gold_set_presentation_retains_certified_pair_without_exact_zip_overlap() -> None:

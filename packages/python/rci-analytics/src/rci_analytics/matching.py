@@ -901,6 +901,31 @@ class ComparisonEngine:
             ),
         )
 
+    def governed_profile_brand_eligible(
+        self,
+        benchmark: ClassifiedOffer | None,
+        competitor: ClassifiedOffer | None,
+        *,
+        profile_id: str,
+    ) -> bool:
+        """Return whether a certified pair belongs in a profile's brand view.
+
+        Human certification governs product comparability. This method only
+        segments that certified relationship into the Product Pack's reporting
+        views. Restrictive brand views fail closed when either side lacks usable
+        governed brand evidence; an ``ignore_brand`` view remains inclusive.
+        """
+
+        profile = self.pack.profile(profile_id)
+        brand_policy = str(profile.get("brand_policy") or "ignore_brand")
+        if brand_policy == "ignore_brand":
+            return True
+        if benchmark is None or competitor is None:
+            return False
+        benchmark_brand = self._brand_component(benchmark, brand_policy)
+        competitor_brand = self._brand_component(competitor, brand_policy)
+        return benchmark_brand is not None and benchmark_brand == competitor_brand
+
     def _rule_scope_keys(
         self,
         offers: list[ClassifiedOffer],
