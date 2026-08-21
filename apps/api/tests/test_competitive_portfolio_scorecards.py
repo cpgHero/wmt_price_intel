@@ -232,6 +232,21 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                         "competitor_product_id": "a2",
                         "match_attributes": {"size": "large", "count": 12},
                     },
+                    {
+                        "id": "pair-3",
+                        "relationship_id": "relationship-3",
+                        "relationship_status": "confirmed",
+                        "qa_status": "ready",
+                        "profile_id": "compatible",
+                        "profile_label": "Compatible package",
+                        "competitor": "aldi_us",
+                        "benchmark_product_id": "w2",
+                        "benchmark_product_name": "Walmart unobserved product",
+                        "competitor_product_id": "a3",
+                        "competitor_product_name": "ALDI product three",
+                        "comparison_metric": "package_price",
+                        "match_attributes": {"size": "large", "count": 12},
+                    },
                 ],
                 "sections": [
                     {
@@ -269,6 +284,8 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     )
 
     async def view(self: CompetitiveProductLeadershipService, *_args: object, **_kwargs: object):
+        if _kwargs.get("benchmark_product_id") == "w2":
+            raise LookupError("positive benchmark Search observations are unavailable")
         return {
             "benchmark_product": {
                 "id": "w1",
@@ -346,16 +363,21 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
     assert result["schema_version"] == "1.2.0"
-    assert result["scorecards"][0]["relationships"] == 2
+    assert result["scorecards"][0]["relationships"] == 3
     assert result["scorecards"][0]["products"][0]["product_id"] == "w1"
+    assert {row["product_id"] for row in result["scorecards"][0]["products"]} == {
+        "w1",
+        "w2",
+    }
     relationships = result["scorecards"][0]["product_relationships"]
-    assert [row["competitor_product_id"] for row in relationships] == ["a1", "a2"]
+    assert [row["competitor_product_id"] for row in relationships] == ["a1", "a2", "a3"]
     assert relationships[0]["scored_product_locations"] == 2
     assert relationships[1]["scored_product_locations"] == 0
+    assert relationships[2]["scored_product_locations"] == 0
     assert relationships[0]["benchmark_product_name"] == "Walmart product"
     assert relationships[0]["competitor_product_name"] == "ALDI product one"
     assert result["cohorts"][0]["segment"] == "12 each · large"
-    assert result["cohorts"][0]["relationships"] == 2
+    assert result["cohorts"][0]["relationships"] == 3
     assert result["cohorts"][0]["scored_product_locations"] == 2
     assert result["cohorts"][0]["benchmark_median"] == 3.05
     assert result["cohorts"][0]["paired_median_gap"] == 0.05

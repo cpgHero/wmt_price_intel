@@ -189,6 +189,23 @@ existing portfolio formula and semantic-audit behavior. The generation-two
 AnalysisResult remains valid and will be rematerialized after this API-only
 performance correction; no new matching replay or paid call is required.
 
+The optimized rematerialization built all six documents in 181.9 seconds, but
+the final semantic audit correctly rejected them. Kroger had one certified
+relationship and Sam's Club had its single certified relationship without a
+positive benchmark Search observation available to the product-location
+projector. The scorecard declared those governed identities while its evidence
+drawer omitted them, causing benchmark-product, competitor-product, and
+relationship-count mismatches at all three compatible radii.
+
+Portfolio projection now retains such certified identities as explicit
+zero-scored product and relationship rows. This does not invent availability,
+price, or location coverage: all product-location measures remain zero and the
+scorecard surfaces the existing no-scored-evidence limitation. It does ensure
+that declared certification counts, included-product drawers, and audit rows
+share one complete identity ledger. Regression coverage includes a certified
+relationship whose benchmark product has no positive Search observation and
+requires identity continuity with zero scored evidence.
+
 ## Production acceptance requirements
 
 This phase is not production-complete until all of the following are true:

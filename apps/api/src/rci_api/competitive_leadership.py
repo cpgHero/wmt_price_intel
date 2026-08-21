@@ -595,6 +595,73 @@ class CompetitiveProductLeadershipService:
             for benchmark_product_id in benchmark_product_ids:
                 view = projected_index.get((retailer_id, benchmark_product_id))
                 if view is None:
+                    # Certification remains authoritative when Search has no
+                    # positive benchmark observation for this product. Retain
+                    # the identity rows with explicit zero scored evidence so
+                    # scorecard counts, included-product drawers, and the
+                    # release audit cannot silently lose the relationship.
+                    fallback_candidates = [
+                        row
+                        for row in retailer_candidates
+                        if str(row.get("benchmark_product_id")) == benchmark_product_id
+                    ]
+                    first = fallback_candidates[0]
+                    products.append(
+                        {
+                            "product_id": benchmark_product_id,
+                            "product_name": str(
+                                first.get("benchmark_product_name") or benchmark_product_id
+                            ),
+                            "image_url": first.get("benchmark_image_url"),
+                            "relationships": len(
+                                {
+                                    str(row.get("relationship_id") or row.get("id"))
+                                    for row in fallback_candidates
+                                }
+                            ),
+                            **_portfolio_summary([]),
+                        }
+                    )
+                    for row in fallback_candidates:
+                        product_relationships.append(
+                            {
+                                "relationship_id": str(row.get("relationship_id") or row.get("id")),
+                                "competitor_id": retailer_id,
+                                "competitor_name": competitor_name_index.get(
+                                    retailer_id, retailer_id
+                                ),
+                                "benchmark_product_id": benchmark_product_id,
+                                "benchmark_product_name": str(
+                                    row.get("benchmark_product_name") or benchmark_product_id
+                                ),
+                                "benchmark_image_url": row.get("benchmark_image_url"),
+                                "competitor_product_id": str(
+                                    row.get("competitor_product_id") or "Unknown product"
+                                ),
+                                "competitor_product_name": str(
+                                    row.get("competitor_product_name")
+                                    or row.get("competitor_product_id")
+                                    or "Unknown product"
+                                ),
+                                "competitor_brand": row.get("competitor_brand"),
+                                "competitor_brand_type": str(
+                                    row.get("competitor_brand_type") or "unclassified"
+                                ),
+                                "competitor_image_url": row.get("competitor_image_url"),
+                                "profile_id": str(row.get("profile_id") or selected_profile),
+                                "profile_label": str(row.get("profile_label") or selected_profile),
+                                "comparison_metric": str(
+                                    row.get("comparison_metric") or "package_price"
+                                ),
+                                "comparison_unit": str(
+                                    basis_index.get(selected_profile, {}).get("price_unit")
+                                    or _unit(str(row.get("comparison_metric") or "package_price"))
+                                ),
+                                "scope_mode": "observed_benchmark_product_footprint",
+                                "scoped_benchmark_locations": 0,
+                                **_portfolio_summary([]),
+                            }
+                        )
                     continue
                 product_views[benchmark_product_id] = view
                 product_outcomes = [
