@@ -122,7 +122,7 @@ def _candidate_segment_rows(
         if not isinstance(source, dict):
             return {}
         return {
-            str(name): value
+            _attribute_key(name): value
             for name, value in source.items()
             if value is not None
             and (not dimensions or _attribute_key(name) in dimensions)
@@ -133,7 +133,18 @@ def _candidate_segment_rows(
         normalized = {name: _normalized_attribute(value) for name, value in values.items()}
         return json.dumps(normalized, sort_keys=True, default=str)
 
-    rows = list(existing)
+    rows = []
+    for row in existing:
+        values = attributes(row, "_segment_attributes")
+        if not values:
+            continue
+        rows.append(
+            {
+                **row,
+                "_segment_attributes": values,
+                "_segment_dimensions": sorted(dimensions),
+            }
+        )
     signatures = {
         (
             str(row.get("_competitor_id")),
@@ -159,6 +170,7 @@ def _candidate_segment_rows(
                 "_profile_id": profile_id,
                 "_segment_id": segment_id,
                 "_segment_attributes": values,
+                "_segment_dimensions": sorted(dimensions),
                 "competitor": competitor_id,
                 "segment": " / ".join(
                     f"{name.replace('_', ' ').title()}: {value}" for name, value in values.items()
@@ -169,11 +181,26 @@ def _candidate_segment_rows(
     return rows
 
 
-def _attributes_match(candidate: dict[str, Any], segment: dict[str, Any]) -> bool:
-    return all(
-        _normalized_attribute(candidate.get(key)) == _normalized_attribute(value)
-        for key, value in segment.items()
-    )
+def _attributes_match(
+    candidate: dict[str, Any],
+    segment: dict[str, Any],
+    dimensions: set[str],
+) -> bool:
+    def projected(values: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: _normalized_attribute(value)
+            for name, value in values.items()
+            if (key := _attribute_key(name))
+            and (not dimensions or key in dimensions)
+            and value is not None
+            and str(value).strip()
+        }
+
+    # Cohorts are a partition, not overlapping filters. A relationship whose
+    # certified evidence contains Organic=True must not also enter the cohort
+    # where organic evidence is absent merely because the other attributes
+    # agree.
+    return projected(candidate) == projected(segment)
 
 
 def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
@@ -227,10 +254,15 @@ def _cohort_summary(
     product_views: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     attributes = dict(segment_row.get("_segment_attributes") or {})
+    dimensions = {_attribute_key(value) for value in segment_row.get("_segment_dimensions", [])}
     included_candidates = [
         row
         for row in candidates
-        if _attributes_match(dict(row.get("match_attributes") or {}), attributes)
+        if _attributes_match(
+            dict(row.get("match_attributes") or {}),
+            attributes,
+            dimensions,
+        )
     ]
     benchmark_product_ids = sorted(
         {str(row["benchmark_product_id"]) for row in included_candidates}
@@ -363,6 +395,27 @@ class PostgresCompetitiveLeadershipRepository:
         radius_miles: int,
         document: dict[str, Any],
     ) -> None:
+        await self.store_materializations(
+            analysis_id,
+            [
+                {
+                    **document,
+                    "filters": {
+                        **dict(document.get("filters") or {}),
+                        "profile_id": profile_id,
+                        "radius_miles": radius_miles,
+                    },
+                }
+            ],
+        )
+
+    async def store_materializations(
+        self,
+        analysis_id: str,
+        documents: list[dict[str, Any]],
+    ) -> None:
+        """Atomically replace a complete, already-certified portfolio set."""
+
         statement = text(
             """
             INSERT INTO competitive_portfolio_materialization (
@@ -379,17 +432,23 @@ class PostgresCompetitiveLeadershipRepository:
             """
         )
         async with self._engine.begin() as connection:
-            result = await connection.scalar(
-                statement,
-                {
-                    "analysis_id": analysis_id,
-                    "profile_id": profile_id,
-                    "radius_miles": radius_miles,
-                    "document": json.dumps(document, ensure_ascii=False, separators=(",", ":")),
-                },
-            )
-        if result is None:
-            raise LookupError(f"analysis {analysis_id!r} was not found")
+            for document in documents:
+                filters = dict(document.get("filters") or {})
+                result = await connection.scalar(
+                    statement,
+                    {
+                        "analysis_id": analysis_id,
+                        "profile_id": str(filters.get("profile_id") or ""),
+                        "radius_miles": int(filters.get("radius_miles") or 0),
+                        "document": json.dumps(
+                            document,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                    },
+                )
+                if result is None:
+                    raise LookupError(f"analysis {analysis_id!r} was not found")
 
 
 class CompetitiveProductLeadershipService:
@@ -446,6 +505,7 @@ class CompetitiveProductLeadershipService:
         state: str | None,
         city: str | None,
         refresh: bool = False,
+        publish: bool = True,
     ) -> dict[str, Any]:
         """Aggregate radius-native product-location outcomes by competitor.
 
@@ -999,6 +1059,7 @@ class CompetitiveProductLeadershipService:
             and competitor_id == "all"
             and state is None
             and city is None
+            and publish
         ):
             await self._repository.store_materialization(
                 analysis_id,
@@ -1006,9 +1067,10 @@ class CompetitiveProductLeadershipService:
                 radius_miles=radius_miles,
                 document=result,
             )
-        if len(self._portfolio_cache) >= 32:
-            self._portfolio_cache.pop(next(iter(self._portfolio_cache)))
-        self._portfolio_cache[cache_key] = result
+        if publish:
+            if len(self._portfolio_cache) >= 32:
+                self._portfolio_cache.pop(next(iter(self._portfolio_cache)))
+            self._portfolio_cache[cache_key] = result
         return result
 
     async def pre_materialize_portfolios(
@@ -1053,12 +1115,17 @@ class CompetitiveProductLeadershipService:
                         state=None,
                         city=None,
                         refresh=refresh,
+                        publish=False,
                     )
                 )
         require_competitive_portfolio_set(
             documents,
             expected_profiles=profiles,
         )
+        if self._repository is not None:
+            await self._repository.store_materializations(analysis_id, documents)
+        for key in [key for key in self._portfolio_cache if key[0] == analysis_id]:
+            self._portfolio_cache.pop(key, None)
         return documents
 
     async def view(

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from rci_api.competitive_leadership import (
     CompetitiveProductLeadershipService,
+    _attributes_match,
     _candidate_segment_rows,
     _portfolio_summary,
     _require_internal_materialization_token,
@@ -85,6 +86,52 @@ def test_certified_candidate_matches_display_label_cohort_dimensions() -> None:
     assert "brand" not in rows[0]["_segment_attributes"]
 
 
+def test_cohort_attributes_form_an_exact_partition_when_evidence_is_missing() -> None:
+    rows = _candidate_segment_rows(
+        {"product_pack": {"cohort_dimensions": ["size", "count", "housing", "organic"]}},
+        [
+            {
+                "competitor": "amazon_us_same_day",
+                "profile_id": "strict",
+                "match_attributes": {
+                    "size": "Large",
+                    "count": 12,
+                    "housing": "Cage-Free",
+                    "organic": True,
+                },
+            },
+            {
+                "competitor": "amazon_us_same_day",
+                "profile_id": "strict",
+                "match_attributes": {
+                    "size": "Large",
+                    "count": 12,
+                    "housing": "Cage-Free",
+                },
+            },
+        ],
+        [],
+    )
+
+    assert len(rows) == 2
+    candidates = [
+        {"size": "Large", "count": 12, "housing": "Cage-Free", "organic": True},
+        {"size": "Large", "count": 12, "housing": "Cage-Free"},
+    ]
+    for candidate in candidates:
+        assert (
+            sum(
+                _attributes_match(
+                    candidate,
+                    row["_segment_attributes"],
+                    set(row["_segment_dimensions"]),
+                )
+                for row in rows
+            )
+            == 1
+        )
+
+
 def test_competitive_materialization_requires_internal_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -123,6 +170,53 @@ async def test_portfolio_materialization_rejects_non_ready_report() -> None:
 
     with pytest.raises(ValueError, match="certified_relationship_count_mismatch"):
         await service.pre_materialize_portfolios("analysis-1")
+
+
+@pytest.mark.asyncio
+async def test_portfolio_materialization_does_not_publish_before_set_audit() -> None:
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            return SimpleNamespace(analysis_id=analysis_id)
+
+        async def report_view(self, analysis_id: str) -> dict:
+            return {
+                "analysis_id": analysis_id,
+                "report_readiness": {"blocking_reasons": []},
+                "comparison_bases": [{"profile_id": "strict"}],
+            }
+
+    class Repository:
+        def __init__(self) -> None:
+            self.store_calls = 0
+
+        async def store_materializations(self, _analysis_id: str, _documents: list[dict]) -> None:
+            self.store_calls += 1
+
+    repository = Repository()
+    service = CompetitiveProductLeadershipService(
+        repository_root=REPOSITORY_ROOT,
+        analyses=Analyses(),  # type: ignore[arg-type]
+        price_monitoring=None,  # type: ignore[arg-type]
+        product_packs=None,  # type: ignore[arg-type]
+        repository=repository,  # type: ignore[arg-type]
+    )
+    publish_values: list[bool] = []
+
+    async def invalid_portfolio(
+        self: CompetitiveProductLeadershipService,
+        *_args: object,
+        **kwargs: object,
+    ) -> dict:
+        publish_values.append(bool(kwargs.get("publish")))
+        return {}
+
+    service.portfolio_view = MethodType(invalid_portfolio, service)  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="competitive portfolio release audit failed"):
+        await service.pre_materialize_portfolios("analysis-1", refresh=True)
+
+    assert publish_values == [False, False, False]
+    assert repository.store_calls == 0
 
 
 @pytest.mark.asyncio
