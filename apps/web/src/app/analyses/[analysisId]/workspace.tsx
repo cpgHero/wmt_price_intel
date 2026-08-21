@@ -49,6 +49,7 @@ import {
   cohortProductSummaries,
   compactMetricName,
   defaultComparisonBasisId,
+  eligibleLeadershipProducts,
   formatMapValueLabel,
   formatPriceForBasis,
   formatMetric,
@@ -288,50 +289,13 @@ function BlueprintAnalysisWorkspace({
       reportView.assortment_analysis?.retailers.find(
         (row) => row.retailer === benchmarkRetailerId,
       )?.products ?? [];
-    if (governedProducts.length > 0) {
-      return [...governedProducts]
-        .sort(
-          (left, right) =>
-            right.observed_locations - left.observed_locations ||
-            left.name.localeCompare(right.name),
-        )
-        .map((row) => ({
-          id: row.product_id,
-          name: row.name,
-          imageUrl: row.image_url,
-        }));
-    }
-    const options = new Map<
-      string,
-      { id: string; name: string; imageUrl?: string | null }
-    >();
-    const activeCandidates = (reportView.match_candidates ?? []).filter(
-      (row) =>
-        (row.relationship_status === "suggested" ||
-          row.relationship_status === "confirmed") &&
-        (row.qa_status ?? "ready") === "ready" &&
-        (selectedCompetitor === "all" ||
-          row.competitor === selectedCompetitor) &&
-        (!selectedLens || row.profile_id === selectedLens),
-    );
-    const rows = activeCandidates.length
-      ? activeCandidates
-      : (reportView.product_decisions ?? []).filter(
-          (row) =>
-            (selectedCompetitor === "all" ||
-              row.competitor === selectedCompetitor) &&
-            (!selectedLens ||
-              !row.profile_id ||
-              row.profile_id === selectedLens),
-        );
-    for (const row of rows) {
-      options.set(row.benchmark_product_id, {
-        id: row.benchmark_product_id,
-        name: row.benchmark_product_name,
-        imageUrl: row.benchmark_image_url,
-      });
-    }
-    return [...options.values()];
+    return eligibleLeadershipProducts({
+      governedProducts,
+      matchCandidates: reportView.match_candidates ?? [],
+      productDecisions: reportView.product_decisions ?? [],
+      competitorId: selectedCompetitor,
+      profileId: selectedLens,
+    });
   }, [
     reportView.match_candidates,
     reportView.product_decisions,
@@ -1119,6 +1083,7 @@ function BlueprintAnalysisWorkspace({
             competitors={competitorOptions}
             selected={selectedRetailer}
             radiusScorecard={radiusPortfolio?.assortment_scorecards[0] ?? null}
+            radiusPriceScorecard={radiusPortfolio?.scorecards[0] ?? null}
             radiusMiles={leadershipRadius}
             loading={!radiusPortfolio && !radiusPortfolioError}
             error={radiusPortfolioError}
@@ -1410,6 +1375,7 @@ function AssortmentAnalysisPanel({
   competitors,
   selected,
   radiusScorecard,
+  radiusPriceScorecard,
   radiusMiles,
   loading,
   error,
@@ -1421,6 +1387,8 @@ function AssortmentAnalysisPanel({
   selected: RetailerOption | null;
   radiusScorecard:
     CompetitivePortfolioScorecards["assortment_scorecards"][number] | null;
+  radiusPriceScorecard:
+    CompetitivePortfolioScorecards["scorecards"][number] | null;
   radiusMiles: 1 | 3 | 5;
   loading: boolean;
   error: string;
@@ -1486,6 +1454,42 @@ function AssortmentAnalysisPanel({
           radiusScorecard?.competitor_id === competitor.id
             ? radiusScorecard
             : null;
+        const localPrice =
+          radiusPriceScorecard?.competitor_id === competitor.id
+            ? radiusPriceScorecard
+            : null;
+        const matchedBenchmarkIds = new Set(
+          (localPrice?.products ?? []).map((product) => product.product_id),
+        );
+        const matchedCompetitorIds = new Set(
+          (localPrice?.product_relationships ?? []).map(
+            (relationship) => relationship.competitor_product_id,
+          ),
+        );
+        const observedBenchmarkProducts = benchmarkSummary?.products ?? [];
+        const observedCompetitorProducts = competitorSummary?.products ?? [];
+        const matchedBenchmarkProducts = observedBenchmarkProducts.filter(
+          (product) => matchedBenchmarkIds.has(product.product_id),
+        );
+        const matchedCompetitorProducts = observedCompetitorProducts.filter(
+          (product) => matchedCompetitorIds.has(product.product_id),
+        );
+        const unmatchedBenchmarkProducts = localPrice
+          ? observedBenchmarkProducts.filter(
+              (product) => !matchedBenchmarkIds.has(product.product_id),
+            )
+          : comparison.top_benchmark_only;
+        const unmatchedCompetitorProducts = localPrice
+          ? observedCompetitorProducts.filter(
+              (product) => !matchedCompetitorIds.has(product.product_id),
+            )
+          : comparison.top_competitor_whitespace;
+        const benchmarkMatchCoverage = observedBenchmarkProducts.length
+          ? matchedBenchmarkProducts.length / observedBenchmarkProducts.length
+          : 0;
+        const competitorMatchCoverage = observedCompetitorProducts.length
+          ? matchedCompetitorProducts.length / observedCompetitorProducts.length
+          : 0;
         const openDetail = (
           title: string,
           note: string,
@@ -1550,11 +1554,7 @@ function AssortmentAnalysisPanel({
                   openDetail(
                     "Matched benchmark products",
                     `Products contributing locally comparable evidence within ${radiusMiles} mile${radiusMiles === 1 ? "" : "s"}.`,
-                    (benchmarkSummary?.products ?? []).filter((product) =>
-                      (local?.products ?? []).some(
-                        (matched) => matched.product_id === product.product_id,
-                      ),
-                    ),
+                    matchedBenchmarkProducts,
                     benchmark.id,
                   )
                 }
@@ -1565,7 +1565,7 @@ function AssortmentAnalysisPanel({
                     local?.relationships ?? comparison.product_relationships
                   ).toLocaleString()}
                 </strong>
-                <span>Unique admitted pairs across all lenses</span>
+                <span>Unique admitted pairs in this comparison basis</span>
               </button>
               <button
                 type="button"
@@ -1573,15 +1573,15 @@ function AssortmentAnalysisPanel({
                 onClick={() =>
                   openDetail(
                     `${benchmark.name} products without an admitted match`,
-                    "Broadest observed products currently outside an admitted relationship.",
-                    comparison.top_benchmark_only,
+                    "All observed products currently outside a certified relationship in the selected comparison basis.",
+                    unmatchedBenchmarkProducts,
                     benchmark.id,
                   )
                 }
               >
                 <small>{benchmark.name} unmatched</small>
                 <strong>
-                  {comparison.benchmark_only_products.toLocaleString()}
+                  {unmatchedBenchmarkProducts.length.toLocaleString()}
                 </strong>
                 <span>No admitted item relationship</span>
               </button>
@@ -1592,14 +1592,14 @@ function AssortmentAnalysisPanel({
                   openDetail(
                     `${competitor.name} whitespace`,
                     `Observed products without an admitted ${benchmark.name} relationship.`,
-                    comparison.top_competitor_whitespace,
+                    unmatchedCompetitorProducts,
                     competitor.id,
                   )
                 }
               >
                 <small>{competitor.name} whitespace</small>
                 <strong>
-                  {comparison.competitor_whitespace_products.toLocaleString()}
+                  {unmatchedCompetitorProducts.length.toLocaleString()}
                 </strong>
                 <span>No admitted {benchmark.name} match</span>
               </button>
@@ -1648,8 +1648,8 @@ function AssortmentAnalysisPanel({
                   admitted pair.
                 </p>
                 {[
-                  [benchmark.name, comparison.benchmark_match_coverage],
-                  [competitor.name, comparison.competitor_match_coverage],
+                  [benchmark.name, benchmarkMatchCoverage],
+                  [competitor.name, competitorMatchCoverage],
                 ].map(([label, rawValue]) => {
                   const value = Number(rawValue);
                   return (
@@ -1686,9 +1686,27 @@ function AssortmentAnalysisPanel({
               <section className="assortment-key-points">
                 <h4>Key points</h4>
                 <ul>
-                  {comparison.key_points.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
+                  <li>
+                    {(localPrice?.relationships ?? 0).toLocaleString()}{" "}
+                    certified pairings connect{" "}
+                    {matchedBenchmarkProducts.length.toLocaleString()} observed{" "}
+                    {benchmark.name} products to{" "}
+                    {matchedCompetitorProducts.length.toLocaleString()} observed{" "}
+                    {competitor.name} products in this comparison basis.
+                  </li>
+                  <li>
+                    {(local?.scored_product_locations ?? 0).toLocaleString()} of{" "}
+                    {(local?.benchmark_product_locations ?? 0).toLocaleString()}{" "}
+                    observed benchmark product-locations have eligible local
+                    evidence under the {radiusMiles}-mile rule.
+                  </li>
+                  <li>
+                    {unmatchedBenchmarkProducts.length.toLocaleString()}{" "}
+                    observed {benchmark.name} products and{" "}
+                    {unmatchedCompetitorProducts.length.toLocaleString()}{" "}
+                    observed {competitor.name} products have no certified
+                    counterpart in this basis.
+                  </li>
                 </ul>
               </section>
             </div>

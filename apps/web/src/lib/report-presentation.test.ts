@@ -10,6 +10,7 @@ import {
   cohortProductSummaries,
   comparisonBasisDescription,
   defaultComparisonBasisId,
+  eligibleLeadershipProducts,
   compactMetricName,
   formatMetric,
   formatMapValueLabel,
@@ -210,6 +211,57 @@ describe("report presentation", () => {
       ]),
     ).toBe("compatible");
     expect(defaultComparisonBasisId(bases, [])).toBe("strict");
+  });
+
+  it("limits product-led views to products eligible in the selected basis", () => {
+    const products = [
+      {
+        product_id: "broad-only",
+        canonical_product_id: "walmart_us:broad-only",
+        name: "Broad-basis milk",
+        observed_locations: 4000,
+        observed_zipcodes: 3500,
+      },
+      {
+        product_id: "same-brand",
+        canonical_product_id: "walmart_us:same-brand",
+        name: "Same-brand milk",
+        observed_locations: 1200,
+        observed_zipcodes: 1100,
+      },
+    ];
+    const candidates = [
+      {
+        id: "broad",
+        relationship_status: "confirmed" as const,
+        qa_status: "ready" as const,
+        profile_id: "all_brand",
+        benchmark_product_id: "broad-only",
+        benchmark_product_name: "Broad-basis milk",
+        competitor: "amazon_us_same_day",
+        competitor_product_id: "a1",
+      },
+      {
+        id: "same-brand",
+        relationship_status: "confirmed" as const,
+        qa_status: "ready" as const,
+        profile_id: "same_brand_exact",
+        benchmark_product_id: "same-brand",
+        benchmark_product_name: "Same-brand milk",
+        competitor: "amazon_us_same_day",
+        competitor_product_id: "a2",
+      },
+    ];
+
+    expect(
+      eligibleLeadershipProducts({
+        governedProducts: products,
+        matchCandidates: candidates,
+        productDecisions: [],
+        competitorId: "all",
+        profileId: "same_brand_exact",
+      }).map((product) => product.id),
+    ).toEqual(["same-brand"]);
   });
 
   it("derives full governed map outcomes from product decisions rather than sampled points", () => {

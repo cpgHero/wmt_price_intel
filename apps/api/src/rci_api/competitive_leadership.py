@@ -184,6 +184,28 @@ def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _retailer_token(value: Any) -> str:
+    return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+
+def _assortment_products(assortment: Any, retailer_id: str) -> list[dict[str, Any]]:
+    if not isinstance(assortment, dict):
+        return []
+    target = _retailer_token(retailer_id)
+    for retailer in assortment.get("retailers", []):
+        if not isinstance(retailer, dict) or _retailer_token(retailer.get("retailer")) != target:
+            continue
+        products = [dict(row) for row in retailer.get("products", []) if isinstance(row, dict)]
+        return sorted(
+            products,
+            key=lambda row: (
+                -int(row.get("observed_locations") or 0),
+                str(row.get("name") or row.get("product_id") or "").casefold(),
+            ),
+        )
+    return []
+
+
 def _cohort_summary(
     *,
     segment_row: dict[str, Any],
@@ -594,6 +616,12 @@ class CompetitiveProductLeadershipService:
         assortment_comparisons = (
             assortment.get("comparisons", []) if isinstance(assortment, dict) else []
         )
+        benchmark_assortment_products = _assortment_products(assortment, str(benchmark["id"]))
+        benchmark_observed_ids = {
+            str(row.get("product_id"))
+            for row in benchmark_assortment_products
+            if row.get("product_id")
+        }
         for competitor in visible_competitors:
             retailer_id = str(competitor["id"])
             retailer_candidates = grouped_candidates.get(retailer_id, [])
@@ -819,6 +847,19 @@ class CompetitiveProductLeadershipService:
                 ),
                 {},
             )
+            competitor_assortment_products = _assortment_products(assortment, retailer_id)
+            competitor_observed_ids = {
+                str(row.get("product_id"))
+                for row in competitor_assortment_products
+                if row.get("product_id")
+            }
+            has_observed_assortment = bool(
+                benchmark_assortment_products or competitor_assortment_products
+            )
+            matched_observed_benchmark_ids = set(benchmark_product_ids) & benchmark_observed_ids
+            matched_observed_competitor_ids = competitor_product_ids & competitor_observed_ids
+            benchmark_only_ids = benchmark_observed_ids - matched_observed_benchmark_ids
+            competitor_whitespace_ids = competitor_observed_ids - matched_observed_competitor_ids
             radius_summary = _portfolio_summary(outcomes)
             assortment_scorecards.append(
                 {
@@ -826,22 +867,68 @@ class CompetitiveProductLeadershipService:
                     "competitor": competitor_name_index.get(retailer_id, retailer_id),
                     "profile_id": selected_profile,
                     "relationships": len(relationship_ids),
-                    "matched_benchmark_products": len(benchmark_product_ids),
-                    "matched_competitor_products": len(competitor_product_ids),
-                    "benchmark_only_products": int(
-                        legacy_assortment.get("benchmark_only_products") or 0
+                    "matched_benchmark_products": (
+                        len(matched_observed_benchmark_ids)
+                        if has_observed_assortment
+                        else len(benchmark_product_ids)
                     ),
-                    "competitor_whitespace_products": int(
-                        legacy_assortment.get("competitor_whitespace_products") or 0
+                    "matched_competitor_products": (
+                        len(matched_observed_competitor_ids)
+                        if has_observed_assortment
+                        else len(competitor_product_ids)
                     ),
-                    "benchmark_match_coverage": legacy_assortment.get("benchmark_match_coverage"),
-                    "competitor_match_coverage": legacy_assortment.get("competitor_match_coverage"),
+                    "benchmark_only_products": (
+                        len(benchmark_only_ids)
+                        if has_observed_assortment
+                        else int(legacy_assortment.get("benchmark_only_products") or 0)
+                    ),
+                    "competitor_whitespace_products": (
+                        len(competitor_whitespace_ids)
+                        if has_observed_assortment
+                        else int(legacy_assortment.get("competitor_whitespace_products") or 0)
+                    ),
+                    "benchmark_match_coverage": (
+                        (
+                            round(
+                                len(matched_observed_benchmark_ids) / len(benchmark_observed_ids),
+                                4,
+                            )
+                            if benchmark_observed_ids
+                            else None
+                        )
+                        if has_observed_assortment
+                        else legacy_assortment.get("benchmark_match_coverage")
+                    ),
+                    "competitor_match_coverage": (
+                        (
+                            round(
+                                len(matched_observed_competitor_ids) / len(competitor_observed_ids),
+                                4,
+                            )
+                            if competitor_observed_ids
+                            else None
+                        )
+                        if has_observed_assortment
+                        else legacy_assortment.get("competitor_match_coverage")
+                    ),
                     "profiles": list(legacy_assortment.get("profiles") or []),
                     "top_benchmark_only": _compact_assortment_products(
-                        legacy_assortment.get("top_benchmark_only")
+                        [
+                            row
+                            for row in benchmark_assortment_products
+                            if str(row.get("product_id")) in benchmark_only_ids
+                        ][:12]
+                        if has_observed_assortment
+                        else legacy_assortment.get("top_benchmark_only")
                     ),
                     "top_competitor_whitespace": _compact_assortment_products(
-                        legacy_assortment.get("top_competitor_whitespace")
+                        [
+                            row
+                            for row in competitor_assortment_products
+                            if str(row.get("product_id")) in competitor_whitespace_ids
+                        ][:12]
+                        if has_observed_assortment
+                        else legacy_assortment.get("top_competitor_whitespace")
                     ),
                     "products": products,
                     **radius_summary,

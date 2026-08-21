@@ -158,6 +158,7 @@ export function ComparableCohortExplorer({
         segment: row.segment,
         attributes: row.attributes,
         overall: false,
+        pairCount: row.relationships,
         matches: row.scored_product_locations,
         matchedGeographies: row.benchmark_product_locations,
         benchmarkLowerRate: row.benchmark_lower_rate ?? 0,
@@ -186,7 +187,7 @@ export function ComparableCohortExplorer({
     return {
       Competitor: cohort.competitor,
       Cohort: cohort.segment,
-      "Governed product pairs": evidence?.pairCount ?? 0,
+      "Governed product pairs": cohort.pairCount,
       [`${benchmarkName} brand-type mix`]:
         evidence?.benchmarkBrandTypes ?? "unresolved",
       "Competitor brand-type mix":
@@ -220,6 +221,17 @@ export function ComparableCohortExplorer({
     "Parity rate": scorecard.parity_rate,
     "Average competitor minus benchmark": scorecard.average_gap,
   }));
+  const cohortCoverage = (radiusScorecards ?? []).map((scorecard) => {
+    const cohorted = (radiusCohorts ?? [])
+      .filter((cohort) => cohort.competitor_id === scorecard.competitor_id)
+      .reduce((total, cohort) => total + cohort.relationships, 0);
+    return {
+      competitor: scorecard.competitor,
+      certified: scorecard.relationships,
+      cohorted,
+      excluded: Math.max(0, scorecard.relationships - cohorted),
+    };
+  });
 
   if (radiusCohorts === null) {
     return (
@@ -419,6 +431,19 @@ export function ComparableCohortExplorer({
           Governed cohort attributes: {dimensions}. Open any row to inspect its
           included one-to-one product relationships.
         </p>
+        {cohortCoverage.some((row) => row.excluded > 0) ? (
+          <div className="empty-inline" role="note">
+            Cohort attribute coverage:{" "}
+            {cohortCoverage
+              .map(
+                (row) =>
+                  `${row.competitor} ${row.cohorted.toLocaleString()} of ${row.certified.toLocaleString()} certified relationships`,
+              )
+              .join(" · ")}
+            . Relationships missing a complete governed cohort signature remain
+            in the retailer total but are not assigned to a cohort row.
+          </div>
+        ) : null}
 
         <div className="cohort-toolbar">
           <div role="group" aria-label="Cohort outcome">
@@ -509,8 +534,7 @@ export function ComparableCohortExplorer({
                   </p>
                   <div className="cohort-pair-evidence">
                     <strong>
-                      {(evidence?.pairCount ?? 0).toLocaleString()} governed
-                      product pairs
+                      {cohort.pairCount.toLocaleString()} governed product pairs
                     </strong>
                     <span>
                       {benchmarkName}:{" "}

@@ -14,6 +14,7 @@ export interface ComparableCohort {
   segment: string;
   attributes: Record<string, unknown>;
   overall: boolean;
+  pairCount: number;
   matches: number;
   matchedGeographies: number;
   benchmarkLowerRate: number;
@@ -89,6 +90,7 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     overall:
       segmentId.toLocaleLowerCase("en-US") === "all" ||
       segment.toLocaleLowerCase("en-US") === "all comparable items",
+    pairCount: numericValue(row, "_relationships", "relationships") ?? 0,
     matches: numericValue(row, "_matches", "matches") ?? 0,
     matchedGeographies:
       numericValue(row, "_matched_geographies", "matched geographies") ?? 0,

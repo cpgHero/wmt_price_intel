@@ -264,6 +264,33 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                     }
                 ],
                 "assortment_analysis": {
+                    "retailers": [
+                        {
+                            "retailer": "walmart_us",
+                            "products": [
+                                {
+                                    "canonical_product_id": "walmart_us:w1",
+                                    "product_id": "w1",
+                                    "name": "Walmart product",
+                                    "observed_locations": 2,
+                                    "observed_zipcodes": 2,
+                                }
+                            ],
+                        },
+                        {
+                            "retailer": "aldi_us",
+                            "products": [
+                                {
+                                    "canonical_product_id": f"aldi_us:{product_id}",
+                                    "product_id": product_id,
+                                    "name": f"ALDI {product_id}",
+                                    "observed_locations": 1,
+                                    "observed_zipcodes": 1,
+                                }
+                                for product_id in ("a1", "a2", "a3")
+                            ],
+                        },
+                    ],
                     "comparisons": [
                         {
                             "competitor": "aldi_us",
@@ -272,7 +299,7 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                             "benchmark_match_coverage": 0.25,
                             "competitor_match_coverage": 0.5,
                         }
-                    ]
+                    ],
                 },
             }
 
@@ -397,7 +424,12 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert result["cohorts"][0]["scored_product_locations"] == 2
     assert result["cohorts"][0]["benchmark_median"] == 3.05
     assert result["cohorts"][0]["paired_median_gap"] == 0.05
-    assert result["assortment_scorecards"][0]["benchmark_only_products"] == 2
+    assortment = result["assortment_scorecards"][0]
+    assert assortment["matched_benchmark_products"] == 1
+    assert assortment["matched_competitor_products"] == 3
+    assert assortment["benchmark_only_products"] == 0
+    assert assortment["competitor_whitespace_products"] == 0
+    assert assortment["benchmark_match_coverage"] == 1.0
     assert result["assortment_scorecards"][0]["coverage_rate"] == 1.0
     assert prices.requests == [
         ("aldi_us", "package_price", ("a1", "a2", "a3")),

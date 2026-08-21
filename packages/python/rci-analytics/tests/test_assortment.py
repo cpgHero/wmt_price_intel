@@ -216,6 +216,37 @@ def test_assortment_uses_certified_relationship_without_price_overlap() -> None:
     assert comparison["profiles"][0]["relationships"] == 1
 
 
+def test_assortment_coverage_excludes_certified_identity_absent_from_search() -> None:
+    accumulator = AssortmentAccumulator()
+    accumulator.add(_offer("w1", "walmart_us", "w1", "72712", "1"))
+    accumulator.add(_offer("a1", "aldi_us", "a1", "72712", "A"))
+
+    result = accumulator.finalize(
+        benchmark_retailer="walmart_us",
+        competitors=["aldi_us"],
+        profiles=[{"id": "compatible", "label": "Compatible", "geography": "exact_zip"}],
+        matches=[],
+        relationships=[
+            {
+                "competitor_id": "aldi_us",
+                "benchmark_product_id": "w-missing",
+                "competitor_product_id": "a1",
+                "status": "confirmed",
+                "eligible_profile_ids": ["compatible"],
+            }
+        ],
+    )
+
+    comparison = result["comparisons"][0]
+    assert comparison["product_relationships"] == 1
+    assert comparison["matched_benchmark_products"] == 0
+    assert comparison["matched_competitor_products"] == 1
+    assert comparison["benchmark_only_products"] == 1
+    assert comparison["competitor_whitespace_products"] == 0
+    assert comparison["benchmark_match_coverage"] == 0.0
+    assert comparison["competitor_match_coverage"] == 1.0
+
+
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:
     source = {
         "comparisons": [

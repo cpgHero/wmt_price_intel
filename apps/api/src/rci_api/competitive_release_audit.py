@@ -47,6 +47,14 @@ def _matches_rate(actual: Any, expected: float | None) -> bool:
     return abs(float(actual) - expected) <= 0.00005
 
 
+def _matches_number(actual: Any, expected: float | None, *, tolerance: float = 0.00015) -> bool:
+    if expected is None:
+        return actual is None
+    if isinstance(actual, bool) or not isinstance(actual, (int, float)):
+        return False
+    return abs(float(actual) - expected) <= tolerance
+
+
 def audit_competitive_portfolio_set(
     documents: Sequence[Mapping[str, Any]],
     *,
@@ -162,6 +170,54 @@ def audit_competitive_portfolio_set(
                     product_total=product_total,
                     parent_total=_integer(parent.get(field)),
                 )
+        audit_weighted_average(products, parent, path, "product")
+
+    def audit_weighted_average(
+        rows: Sequence[Mapping[str, Any]],
+        parent: Mapping[str, Any],
+        path: str,
+        grain: str,
+    ) -> None:
+        scored_rows = [row for row in rows if _integer(row.get("scored_product_locations"))]
+        total_scored = sum(_integer(row.get("scored_product_locations")) for row in scored_rows)
+        missing = [
+            index
+            for index, row in enumerate(scored_rows)
+            if not isinstance(row.get("average_gap"), (int, float))
+            or isinstance(row.get("average_gap"), bool)
+        ]
+        if missing:
+            finding(
+                "error",
+                "average_gap_missing",
+                "Every scored child row must retain its average local price gap.",
+                path=path,
+                grain=grain,
+                missing_indexes=missing,
+            )
+            return
+        expected = (
+            round(
+                sum(
+                    float(row["average_gap"]) * _integer(row.get("scored_product_locations"))
+                    for row in scored_rows
+                )
+                / total_scored,
+                4,
+            )
+            if total_scored
+            else None
+        )
+        if not _matches_number(parent.get("average_gap"), expected):
+            finding(
+                "error",
+                "average_gap_rollup_mismatch",
+                "The displayed average gap must be the scored-evidence-weighted child average.",
+                path=path,
+                grain=grain,
+                actual=parent.get("average_gap"),
+                expected=expected,
+            )
 
     keys: dict[tuple[str, int], Mapping[str, Any]] = {}
     analysis_ids: set[str] = set()
@@ -255,6 +311,28 @@ def audit_competitive_portfolio_set(
                     relationship,
                     f"{scorecard_path}.product_relationships[{relationship_index}]",
                 )
+            for field in (
+                "scored_product_locations",
+                "leader_product_locations",
+                "tied_product_locations",
+                "at_risk_product_locations",
+                "losing_product_locations",
+            ):
+                relationship_total = sum(_integer(row.get(field)) for row in relationships)
+                if relationship_total != _integer(scorecard.get(field)):
+                    finding(
+                        "error",
+                        "relationship_rollup_mismatch",
+                        "Selected relationship evidence must add exactly to the "
+                        "retailer scorecard.",
+                        path=scorecard_path,
+                        field=field,
+                        relationship_total=relationship_total,
+                        parent_total=_integer(scorecard.get(field)),
+                    )
+            audit_weighted_average(
+                relationships, scorecard, scorecard_path, "certified relationship"
+            )
             if len({str(row.get("relationship_id") or "") for row in relationships}) != _integer(
                 scorecard.get("relationships")
             ):
@@ -323,6 +401,38 @@ def audit_competitive_portfolio_set(
                     "cohort_product_count_mismatch",
                     "A cohort benchmark-product count must equal its product summaries.",
                     path=cohort_path,
+                )
+        cohort_relationships_by_retailer: dict[str, int] = {}
+        for cohort in cohorts:
+            retailer_id = str(cohort.get("competitor_id") or "")
+            cohort_relationships_by_retailer[retailer_id] = cohort_relationships_by_retailer.get(
+                retailer_id, 0
+            ) + _integer(cohort.get("relationships"))
+        for retailer_id, scorecard in scorecards_by_retailer.items() if cohorts else []:
+            certified = _integer(scorecard.get("relationships"))
+            cohorted = cohort_relationships_by_retailer.get(retailer_id, 0)
+            if cohorted > certified:
+                finding(
+                    "error",
+                    "cohort_relationship_overcount",
+                    "Comparable cohorts cannot contain more relationships than the "
+                    "certified ledger.",
+                    path=path,
+                    retailer_id=retailer_id,
+                    certified=certified,
+                    cohorted=cohorted,
+                )
+            elif cohorted < certified:
+                finding(
+                    "warning",
+                    "cohort_attribute_coverage_gap",
+                    "Certified relationships without complete cohort attributes are "
+                    "excluded from cohort rows.",
+                    path=path,
+                    retailer_id=retailer_id,
+                    certified=certified,
+                    cohorted=cohorted,
+                    excluded=certified - cohorted,
                 )
 
         assortment = [

@@ -134,6 +134,7 @@ def test_competitive_release_audit_reconciles_complete_radius_matrix() -> None:
 def test_competitive_release_audit_fails_rates_rollups_and_radius_regression() -> None:
     documents = deepcopy(_complete_set())
     documents[1]["scorecards"][0]["coverage_rate"] = 0.25
+    documents[1]["scorecards"][0]["average_gap"] = 99.0
     documents[1]["scorecards"][0]["products"][0]["scored_product_locations"] = 1
     documents[2]["scorecards"][0]["scored_product_locations"] = 0
     documents[2]["scorecards"][0]["unscored_product_locations"] = 2
@@ -153,6 +154,7 @@ def test_competitive_release_audit_fails_rates_rollups_and_radius_regression() -
     codes = {row["code"] for row in audit["findings"] if row["severity"] == "error"}
     assert "rate_mismatch" in codes
     assert "product_rollup_mismatch" in codes
+    assert "average_gap_rollup_mismatch" in codes
     assert "radius_scored_evidence_regression" in codes
     with pytest.raises(ValueError, match="competitive portfolio release audit failed"):
         require_competitive_portfolio_set(

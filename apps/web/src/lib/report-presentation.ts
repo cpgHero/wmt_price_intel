@@ -115,6 +115,93 @@ export function defaultComparisonBasisId(
   );
 }
 
+export interface LeadershipProductOption {
+  id: string;
+  name: string;
+  imageUrl?: string | null;
+}
+
+/**
+ * Keep product-led reporting inside the selected certified relationship scope.
+ *
+ * The assortment index is intentionally broader than any comparison basis. It
+ * must not drive the product selector by itself, otherwise changing from a
+ * broad basis to a narrow one can leave the report on an ineligible product and
+ * display an all-zero page even though eligible products exist.
+ */
+export function eligibleLeadershipProducts({
+  governedProducts,
+  matchCandidates,
+  productDecisions,
+  competitorId,
+  profileId,
+}: {
+  governedProducts: AssortmentProduct[];
+  matchCandidates: ProductMatchCandidate[];
+  productDecisions: ProductDecision[];
+  competitorId: string;
+  profileId: string;
+}): LeadershipProductOption[] {
+  const candidateRows = matchCandidates.filter(
+    (row) =>
+      (row.relationship_status === "suggested" ||
+        row.relationship_status === "confirmed") &&
+      (row.qa_status ?? "ready") === "ready" &&
+      (competitorId === "all" || row.competitor === competitorId) &&
+      (!profileId || row.profile_id === profileId),
+  );
+  const decisionRows = productDecisions.filter(
+    (row) =>
+      (row.qa_status ?? "ready") === "ready" &&
+      (competitorId === "all" || row.competitor === competitorId) &&
+      (!profileId || !row.profile_id || row.profile_id === profileId),
+  );
+  const rows = matchCandidates.length ? candidateRows : decisionRows;
+
+  // Legacy reports that predate relationship evidence may only have the
+  // governed assortment. Preserve that fallback without weakening modern
+  // certified reports.
+  if (!matchCandidates.length && !productDecisions.length) {
+    return [...governedProducts]
+      .sort(
+        (left, right) =>
+          right.observed_locations - left.observed_locations ||
+          left.name.localeCompare(right.name),
+      )
+      .map((row) => ({
+        id: row.product_id,
+        name: row.name,
+        imageUrl: row.image_url,
+      }));
+  }
+
+  const eligible = new Map<string, LeadershipProductOption>();
+  for (const row of rows) {
+    eligible.set(row.benchmark_product_id, {
+      id: row.benchmark_product_id,
+      name: row.benchmark_product_name,
+      imageUrl: row.benchmark_image_url,
+    });
+  }
+  const observed = governedProducts
+    .filter((row) => eligible.has(row.product_id))
+    .sort(
+      (left, right) =>
+        right.observed_locations - left.observed_locations ||
+        left.name.localeCompare(right.name),
+    )
+    .map((row) => ({
+      id: row.product_id,
+      name: row.name,
+      imageUrl: row.image_url,
+    }));
+  const observedIds = new Set(observed.map((row) => row.id));
+  const identityOnly = [...eligible.values()]
+    .filter((row) => !observedIds.has(row.id))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  return [...observed, ...identityOnly];
+}
+
 export function governedOutcomeCounts(
   decisions: ProductDecision[],
   benchmarkProductId = "all",

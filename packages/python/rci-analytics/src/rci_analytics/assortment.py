@@ -270,6 +270,8 @@ class AssortmentAccumulator:
             pair_profiles[(benchmark_product_id, competitor_product_id)].update(profile_ids)
         matched_benchmark = {pair[0] for pair in pair_profiles}
         matched_competitor = {pair[1] for pair in pair_profiles}
+        matched_observed_benchmark = matched_benchmark & set(benchmark_products)
+        matched_observed_competitor = matched_competitor & set(competitor_products)
         ambiguous_benchmark = {
             str(candidate.get("benchmark_product_id"))
             for group in ambiguous_groups
@@ -330,10 +332,14 @@ class AssortmentAccumulator:
             "ambiguous_candidate_groups": sum(
                 str(group.get("competitor_id")) == competitor for group in ambiguous_groups
             ),
-            "matched_benchmark_products": len(matched_benchmark),
-            "matched_competitor_products": len(matched_competitor),
-            "benchmark_match_coverage": _rate(len(matched_benchmark), len(benchmark_products)),
-            "competitor_match_coverage": _rate(len(matched_competitor), len(competitor_products)),
+            "matched_benchmark_products": len(matched_observed_benchmark),
+            "matched_competitor_products": len(matched_observed_competitor),
+            "benchmark_match_coverage": _rate(
+                len(matched_observed_benchmark), len(benchmark_products)
+            ),
+            "competitor_match_coverage": _rate(
+                len(matched_observed_competitor), len(competitor_products)
+            ),
             "ambiguous_benchmark_products": len(ambiguous_benchmark - matched_benchmark),
             "ambiguous_competitor_products": len(ambiguous_competitor - matched_competitor),
             "benchmark_only_products": len(benchmark_only),
@@ -363,7 +369,8 @@ class AssortmentAccumulator:
             "key_points": [
                 (
                     f"{len(pair_profiles):,} distinct Product Pack pairings cover "
-                    f"{_rate(len(matched_benchmark), len(benchmark_products)):.0%} of the "
+                    f"{_rate(len(matched_observed_benchmark), len(benchmark_products)):.0%} "
+                    "of the "
                     "primary retailer's observed products."
                 ),
                 (
