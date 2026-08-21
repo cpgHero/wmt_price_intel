@@ -161,6 +161,13 @@ export interface RetailCompetitiveIntelligenceProductPack {
      */
     fulfillment_types: [string, ...string[]];
     maximum_candidate_pairs?: number;
+    candidate_geography?: {
+      mode: "disabled" | "observed_overlap";
+      physical_radius_miles: number;
+      service_area_retailer_ids: string[];
+      service_area_overlap_policy: "same_zip";
+      missing_location_policy: "fail_closed" | "allow";
+    };
   };
   brand_rules?: {
     aliases?: {

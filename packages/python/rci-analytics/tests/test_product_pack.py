@@ -118,7 +118,7 @@ def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
 def test_milk_uses_generic_distribution_scope_and_brand_portfolios() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
 
-    assert pack.version == "1.5.0"
+    assert pack.version == "1.6.0"
     assert pack.matching_v2 is not None
     assert pack.matching_v2["attribute_roles"]["volume_oz"]["role"] == "hard_blocker"
     assert pack.reporting["decision_rules"]["preferred_scorecard_profile_id"] == "all_brand"

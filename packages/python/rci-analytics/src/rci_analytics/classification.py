@@ -23,6 +23,14 @@ def _normalized_text(value: str) -> str:
     return normalized.replace("decimalpoint", ".")
 
 
+def _normalized_evidence_text(value: str) -> str:
+    """Normalize current title evidence while preserving percentages and decimals."""
+
+    protected = re.sub(r"(?<=\d)\.(?=\d)", "decimalpoint", value.casefold())
+    normalized = " ".join(re.sub(r"[^a-z0-9%]+", " ", protected).split())
+    return normalized.replace("decimalpoint", ".")
+
+
 def _singular(value: str) -> str:
     if value.endswith("ies") and len(value) > 3:
         return f"{value[:-3]}y"
@@ -286,6 +294,91 @@ class OfferClassifier:
                     return None, "unresolved"
                 return self._coerce(rule["default"], definition), "product_pack_default"
         return None, "unresolved"
+
+    def observed_attribute(
+        self,
+        name: str,
+        offer: NormalizedOffer,
+        *,
+        brand: str | None = None,
+    ) -> Any:
+        """Extract explicit current title evidence without consulting static overrides."""
+
+        definition = next(
+            (attribute for attribute in self.pack.attributes if str(attribute["name"]) == name),
+            None,
+        )
+        if definition is None:
+            raise KeyError(f"unknown Product Pack attribute {name!r}")
+        title = _normalized_evidence_text(offer.title)
+        observed_brand = brand or offer.brand
+        if observed_brand:
+            normalized_brand = _normalized_evidence_text(observed_brand)
+            if normalized_brand:
+                title = " ".join(title.replace(normalized_brand, " ").split())
+        title_offer = NormalizedOffer(
+            offer_id=offer.offer_id,
+            retailer_id=offer.retailer_id,
+            retailer_product_id=offer.retailer_product_id,
+            title=title,
+            brand=None,
+            price=offer.price,
+            currency=offer.currency,
+            zipcode=offer.zipcode,
+            store_number=offer.store_number,
+            latitude=offer.latitude,
+            longitude=offer.longitude,
+            in_stock=offer.in_stock,
+            product_url=None,
+            image_url=offer.image_url,
+            collected_at=offer.collected_at,
+            raw=offer.raw,
+            regular_price=offer.regular_price,
+            discounted_price=offer.discounted_price,
+            is_sponsored=offer.is_sponsored,
+        )
+        for rule in definition.get("extraction_rules", []):
+            if str(rule["type"]) == "term_map":
+                matches: list[tuple[int, int, int, Any]] = []
+                for value, terms in rule.get("values", {}).items():
+                    for term in terms:
+                        normalized = _normalized_evidence_text(str(term))
+                        expression = r"\s+".join(re.escape(word) for word in normalized.split())
+                        if re.search(
+                            rf"(?<![a-z0-9]){expression}(?![a-z0-9])",
+                            title,
+                        ):
+                            matches.append(
+                                (
+                                    len(normalized.split()),
+                                    int(any(character.isdigit() for character in normalized)),
+                                    len(normalized),
+                                    value,
+                                )
+                            )
+                if not matches:
+                    value = None
+                else:
+                    matches.sort(key=lambda row: (-row[0], -row[1], -row[2], str(row[3])))
+                    strongest = (matches[0][0], matches[0][1], matches[0][2])
+                    strongest_values = {
+                        row[3] for row in matches if (row[0], row[1], row[2]) == strongest
+                    }
+                    value = (
+                        self._coerce(next(iter(strongest_values)), definition)
+                        if len(strongest_values) == 1
+                        else None
+                    )
+            else:
+                value = self._apply_extraction_rule(rule, definition, title_offer)
+            if value is not None:
+                return value
+            if (
+                rule.get("default") is not None
+                and str(rule.get("absence_policy") or "unknown") == "infer_default"
+            ):
+                return self._coerce(rule["default"], definition)
+        return None
 
     def _apply_extraction_rule(
         self, rule: JsonObject, definition: JsonObject, offer: NormalizedOffer

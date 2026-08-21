@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.30",
+  version: "1.3.31",
   lastVerified,
   baseline:
-    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays with radius-native semantic portfolio audits and recoverable obsolete-report archival",
+    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays, plus the corrected Milk Product Pack 1.6.0 operational certification scope",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -685,7 +685,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Milk package volume is exact",
-          text: "Fresh Fluid Milk Product Pack 1.5.0 treats package volume as a hard compatibility requirement. A gallon, half gallon, quart, and pint are different products for matching; unit-price normalization may support price analysis only after a valid semantic relationship exists. Match Certification applies the current stricter rule as a derived view over immutable older queues, visibly blocks comparable approval when volume conflicts or is unresolved, and preserves the historical queue role for audit. Brand agreement never rescues a volume mismatch.",
+          text: "Fresh Fluid Milk Product Pack 1.6.0 preserves package volume as a hard compatibility requirement and adds observed-footprint eligibility before a pair can enter certification. A gallon, half gallon, quart, and pint are different products for matching; unit-price normalization may support price analysis only after a valid semantic relationship exists. Match Certification visibly blocks comparable approval when volume conflicts or is unresolved, and preserves historical queue roles for audit. Brand agreement never rescues a volume mismatch.",
         },
         {
           kind: "callout",
@@ -1360,9 +1360,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
+              "Implemented and locally validated; production deployment and certification pending",
+              "Milk Matching v2 candidate generation now requires observed footprint evidence and fails closed on essential package-spec uncertainty.",
+              "The rejected 6,396-case queue is not used. Product Pack 1.6.0 and policy 2.1.0-shadow.1 require physical-store overlap within five miles or same-ZIP Amazon Same Day service-area overlap, retain brand-independent regional matching, and separate attribute exclusions from no-geography exclusions. Current title evidence can correct a contradictory static override only inside candidate evidence with explicit provenance; authoritative classification and historical metrics remain unchanged. Numeric indexing treats 64 and 64.0 equally and honors tolerance. The accepted local queue 2.5.0 contains 1,064 unique cases—253 ALDI and 811 Amazon—with zero duplicate pairs, missing essential volume/fat evidence, known seller-ineligible listings, or obvious title/fat contradictions. No Search, PDP, prior queue, decision, report, or audit lineage was deleted, and no paid provider or AI call occurred.",
+            ],
+            [
+              "2026-08-20",
               "Deployed, replayed, semantically audited, and production-verified for three categories; Milk remains fail-closed",
               "Certified multi-category replays now project governed identity only through exact-location Product Pack profiles before radius-native reporting.",
-              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. The active replacements are ready to share, have full metric-reference coverage and zero unsupported numeric claims. Their 27 portfolio documents cover every configured comparison basis at 1, 3, and 5 miles and pass the semantic audit with zero errors; three Banana warnings explicitly identify no-scored-evidence views. A concurrency-safe immutable Product Pack cache prevents large Ground Beef projections from stampeding Postgres. Production Competitive Intelligence and Price Intelligence routes pass. All exact predecessors were already recoverably archived; no Search data, raw object, PDP evidence, certification history, materialization, failed replay, or audit lineage was deleted. Milk remains fail-closed because Product Pack 1.5.0 creates a materially new 6,396-case certification scope. No provider or AI call was made.",
+              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. The active replacements are ready to share, have full metric-reference coverage and zero unsupported numeric claims. Their 27 portfolio documents cover every configured comparison basis at 1, 3, and 5 miles and pass the semantic audit with zero errors; three Banana warnings explicitly identify no-scored-evidence views. A concurrency-safe immutable Product Pack cache prevents large Ground Beef projections from stampeding Postgres. Production Competitive Intelligence and Price Intelligence routes pass. All exact predecessors were already recoverably archived; no Search data, raw object, PDP evidence, certification history, materialization, failed replay, or audit lineage was deleted. At this checkpoint Milk remained fail-closed behind a 6,396-case Product Pack 1.5.0 scope; the following change order rejects and supersedes that queue. No provider or AI call was made.",
             ],
             [
               "2026-08-20",

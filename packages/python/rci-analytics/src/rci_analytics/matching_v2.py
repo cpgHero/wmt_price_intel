@@ -46,6 +46,8 @@ MatchStatus = Literal[
     "not_comparable",
 ]
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
+CandidateGeographyMode = Literal["disabled", "observed_overlap"]
+ServiceAreaOverlapPolicy = Literal["same_zip"]
 CoverageReason = Literal[
     "comparable",
     "no_eligible_match",
@@ -106,6 +108,16 @@ class AttributeValue:
 
 
 @dataclass(frozen=True, slots=True)
+class ListingLocationEvidence:
+    """Observed positive-price placement used only for candidate eligibility."""
+
+    scope_key: str
+    zipcode: str | None
+    latitude: float | None
+    longitude: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class ListingEvidence:
     listing_id: str
     retailer_id: str
@@ -123,10 +135,13 @@ class ListingEvidence:
     seller_governance: Mapping[str, Any] = field(default_factory=dict)
     pdp_evidence: Mapping[str, Any] = field(default_factory=dict)
     observed_location_count: int = 0
+    observed_locations: tuple[ListingLocationEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         if self.observed_location_count < 0:
             raise ValueError("observed location count cannot be negative")
+        if len({row.scope_key for row in self.observed_locations}) != len(self.observed_locations):
+            raise ValueError("observed listing location scope keys must be unique")
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +151,7 @@ class AttributePolicyV2:
     weight: float = 1.0
     numeric_tolerance: float | None = None
     critical: bool = True
+    unknown_is_blocking: bool = False
 
     def __post_init__(self) -> None:
         if self.weight < 0:
@@ -167,6 +183,11 @@ class MatchingPolicyV2:
         "observed_distribution"
     )
     fulfillment_types: tuple[str, ...] = ("pickup",)
+    candidate_geography_mode: CandidateGeographyMode = "disabled"
+    candidate_physical_radius_miles: float = 5.0
+    candidate_service_area_retailer_ids: tuple[str, ...] = ()
+    candidate_service_area_overlap_policy: ServiceAreaOverlapPolicy = "same_zip"
+    candidate_missing_location_policy: Literal["fail_closed", "allow"] = "fail_closed"
 
     def __post_init__(self) -> None:
         if not self.attributes:
@@ -211,6 +232,12 @@ class MatchingPolicyV2:
             raise ValueError("minimum equivalent coverage must be between zero and one")
         if not 0 <= self.equivalent_score_threshold <= 1:
             raise ValueError("equivalent score threshold must be between zero and one")
+        if self.candidate_physical_radius_miles <= 0:
+            raise ValueError("candidate physical radius must be greater than zero")
+        if len(self.candidate_service_area_retailer_ids) != len(
+            set(self.candidate_service_area_retailer_ids)
+        ):
+            raise ValueError("candidate service-area retailer IDs must be unique")
 
     @property
     def checksum(self) -> str:
@@ -227,6 +254,7 @@ class MatchingPolicyV2:
                         "weight": rule.weight,
                         "numeric_tolerance": rule.numeric_tolerance,
                         "critical": rule.critical,
+                        "unknown_is_blocking": rule.unknown_is_blocking,
                     }
                     for rule in self.attributes
                 ],
@@ -240,6 +268,13 @@ class MatchingPolicyV2:
                 "geography_policy": self.geography_policy,
                 "scope_mode": self.scope_mode,
                 "fulfillment_types": self.fulfillment_types,
+                "candidate_geography_mode": self.candidate_geography_mode,
+                "candidate_physical_radius_miles": self.candidate_physical_radius_miles,
+                "candidate_service_area_retailer_ids": (self.candidate_service_area_retailer_ids),
+                "candidate_service_area_overlap_policy": (
+                    self.candidate_service_area_overlap_policy
+                ),
+                "candidate_missing_location_policy": self.candidate_missing_location_policy,
             }
         )
 
@@ -355,6 +390,7 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
                         else None
                     ),
                     critical=bool(configured_rule["critical"]),
+                    unknown_is_blocking=bool(configured_rule.get("unknown_is_blocking", False)),
                 )
             )
         elif name in dimensions:
@@ -391,6 +427,7 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         "same_store_market": "merchant_market",
         "national": "national",
     }.get(geography, geography)
+    candidate_geography = dict(configured.get("candidate_geography") or {})
     return MatchingPolicyV2(
         policy_id=f"{pack.id}:{profile_id}",
         version=str(configured.get("policy_version") or "2.0.0-shadow"),
@@ -433,6 +470,22 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         ),
         fulfillment_types=tuple(
             str(value) for value in configured.get("fulfillment_types", ("pickup",))
+        ),
+        candidate_geography_mode=cast(
+            CandidateGeographyMode,
+            candidate_geography.get("mode") or "disabled",
+        ),
+        candidate_physical_radius_miles=float(candidate_geography.get("physical_radius_miles", 5)),
+        candidate_service_area_retailer_ids=tuple(
+            str(value) for value in candidate_geography.get("service_area_retailer_ids", ())
+        ),
+        candidate_service_area_overlap_policy=cast(
+            ServiceAreaOverlapPolicy,
+            candidate_geography.get("service_area_overlap_policy") or "same_zip",
+        ),
+        candidate_missing_location_policy=cast(
+            Literal["fail_closed", "allow"],
+            candidate_geography.get("missing_location_policy") or "fail_closed",
         ),
     )
 

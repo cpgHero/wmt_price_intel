@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import zipfile
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from rci_analytics.matching_v2 import (
     DeterministicMatchEngineV2,
     IdentifierEvidence,
     ListingEvidence,
+    ListingLocationEvidence,
     LocalComparisonProjectorV2,
     LocalOfferV2,
     MatchingPolicyV2,
@@ -77,6 +79,7 @@ def _listing(
     brand_type: str = "private_label",
     brand_verified: bool = False,
     identifier: IdentifierEvidence | None = None,
+    locations: tuple[ListingLocationEvidence, ...] = (),
 ) -> ListingEvidence:
     def value(item: object, name: str) -> AttributeValue | None:
         return None if item is None else AttributeValue(item, f"pdp:{retailer}:{product}:{name}")
@@ -101,6 +104,24 @@ def _listing(
         brand=brand,
         brand_type=brand_type,  # type: ignore[arg-type]
         brand_verified=brand_verified,
+        observed_location_count=len(locations),
+        observed_locations=locations,
+    )
+
+
+def _location(
+    retailer: str,
+    store: str,
+    *,
+    zipcode: str,
+    latitude: float | None,
+    longitude: float | None,
+) -> ListingLocationEvidence:
+    return ListingLocationEvidence(
+        scope_key=f"{retailer}|{zipcode}|{store}",
+        zipcode=zipcode,
+        latitude=latitude,
+        longitude=longitude,
     )
 
 
@@ -393,7 +414,8 @@ def test_operational_review_queue_keeps_every_governed_candidate() -> None:
     assert len(queue["cases"]) == sum(edge.tier is not None for edge in result.edges)
     assert queue["sampling"]["excluded_counts"] == {
         "aldi_us:hard_blocked_audit_sample": len(result.blocked_review_edges),
-        "aldi_us:hard_blocked_pairs": result.blocked_pairs,
+        "aldi_us:hard_blocked_pairs": result.attribute_blocked_pairs,
+        "aldi_us:no_geographic_overlap_pairs": result.geography_blocked_pairs,
         "aldi_us:unresolved_without_governed_tier": sum(edge.tier is None for edge in result.edges),
     }
     validate_instance(
@@ -497,7 +519,12 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     assert queue["purpose"] == "operational_match_certification"
     assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
     assert queue["cases"] == []
-    assert queue["sampling"]["excluded_counts"]["aldi_us:unresolved_without_governed_tier"] == 1
+    assert queue["sampling"]["excluded_counts"] == {
+        "aldi_us:hard_blocked_audit_sample": 0,
+        "aldi_us:hard_blocked_pairs": 0,
+        "aldi_us:no_geographic_overlap_pairs": 1,
+        "aldi_us:unresolved_without_governed_tier": 0,
+    }
     validate_instance(
         REPOSITORY_ROOT,
         "matching-v2-evidence-profile.schema.json",
@@ -926,7 +953,21 @@ def test_shadow_evaluator_collapses_placements_and_is_reproducible() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     profile_id = "private_label"
     dimensions = pack.profile(profile_id)["dimensions"]
-    values = {str(name): "same" for name in dimensions}
+    governed_values: dict[str, object] = {
+        "volume_oz": 128,
+        "fat_type": "Whole",
+        "flavor": "Plain",
+        "organic": False,
+        "lactose_free": False,
+        "ultrafiltered": False,
+        "a2": False,
+        "grass_fed": False,
+        "omega_3_dha": False,
+        "kids": False,
+        "protein_fortified": False,
+        "brand": "Example",
+    }
+    values = {str(name): governed_values[str(name)] for name in dimensions}
     offers = [
         _classified_offer(values, retailer="walmart_us", product="w1", store="1"),
         _classified_offer(values, retailer="walmart_us", product="w1", store="2"),
@@ -980,6 +1021,235 @@ def test_shadow_candidate_generation_blocks_known_hard_conflicts_without_losing_
     assert len(result.blocked_review_edges) == 1
     assert result.blocked_review_edges[0].competitor.retailer_product_id == "a2"
     assert result.blocked_review_edges[0].status == "not_comparable"
+
+
+def test_candidate_geography_requires_observed_physical_radius_overlap() -> None:
+    policy = replace(
+        _policy(),
+        candidate_geography_mode="observed_overlap",
+        candidate_physical_radius_miles=5,
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+    benchmark = (
+        _listing(
+            "walmart_us",
+            "w-near",
+            locations=(
+                _location(
+                    "walmart_us",
+                    "1",
+                    zipcode="72712",
+                    latitude=36.37,
+                    longitude=-94.21,
+                ),
+            ),
+        ),
+        _listing(
+            "walmart_us",
+            "w-far",
+            locations=(
+                _location(
+                    "walmart_us",
+                    "2",
+                    zipcode="75201",
+                    latitude=32.78,
+                    longitude=-96.80,
+                ),
+            ),
+        ),
+    )
+    competitor = (
+        _listing(
+            "aldi_us",
+            "a1",
+            locations=(
+                _location(
+                    "aldi_us",
+                    "10",
+                    zipcode="72712",
+                    latitude=36.38,
+                    longitude=-94.20,
+                ),
+            ),
+        ),
+    )
+
+    result = evaluator.evaluate_listings(
+        benchmark,
+        competitor,
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.possible_pairs == 2
+    assert result.evaluated_pairs == 1
+    assert result.geography_blocked_pairs == 1
+    assert result.attribute_blocked_pairs == 0
+    assert result.edges[0].benchmark.retailer_product_id == "w-near"
+
+
+def test_candidate_geography_uses_same_zip_for_service_area_retailer() -> None:
+    policy = replace(
+        _policy(),
+        candidate_geography_mode="observed_overlap",
+        candidate_service_area_retailer_ids=("amazon_us_same_day",),
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+    benchmark = (
+        _listing(
+            "walmart_us",
+            "w1",
+            locations=(
+                _location(
+                    "walmart_us",
+                    "1",
+                    zipcode="72712",
+                    latitude=36.37,
+                    longitude=-94.21,
+                ),
+            ),
+        ),
+    )
+    competitor = (
+        _listing(
+            "amazon_us_same_day",
+            "same",
+            locations=(
+                _location(
+                    "amazon_us_same_day",
+                    "zip:72712",
+                    zipcode="72712",
+                    latitude=None,
+                    longitude=None,
+                ),
+            ),
+        ),
+        _listing(
+            "amazon_us_same_day",
+            "different",
+            locations=(
+                _location(
+                    "amazon_us_same_day",
+                    "zip:75201",
+                    zipcode="75201",
+                    latitude=None,
+                    longitude=None,
+                ),
+            ),
+        ),
+    )
+
+    result = evaluator.evaluate_listings(
+        benchmark,
+        competitor,
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="amazon_us_same_day",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 1
+    assert result.geography_blocked_pairs == 1
+    assert result.edges[0].competitor.retailer_product_id == "same"
+
+
+def test_candidate_geography_fails_closed_without_location_evidence() -> None:
+    policy = replace(_policy(), candidate_geography_mode="observed_overlap")
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (_listing("walmart_us", "w1"),),
+        (_listing("aldi_us", "a1"),),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 0
+    assert result.geography_blocked_pairs == 1
+
+
+def test_unknown_blocking_hard_attribute_excludes_candidate() -> None:
+    policy = replace(
+        _policy(),
+        attributes=(
+            replace(_policy().attributes[0], unknown_is_blocking=True),
+            *_policy().attributes[1:],
+        ),
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (_listing("walmart_us", "w1", form=None),),
+        (_listing("aldi_us", "a1"),),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 0
+    assert result.attribute_blocked_pairs == 1
+
+
+def test_listing_evidence_corrects_conflicting_static_override_from_current_title() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values: dict[str, object] = {
+        "volume_oz": 128,
+        "fat_type": "Whole",
+        "flavor": "Plain",
+        "organic": False,
+        "lactose_free": False,
+        "ultrafiltered": False,
+        "a2": False,
+        "grass_fed": False,
+        "omega_3_dha": False,
+        "kids": False,
+        "protein_fortified": False,
+        "brand": "365 by Whole Foods Market",
+    }
+    item = _classified_offer(
+        values,
+        retailer="amazon_us_same_day",
+        product="a1",
+        store="zip:72712",
+    )
+    item = replace(
+        item,
+        offer=replace(
+            item.offer,
+            title="365 by Whole Foods Market Reduced Fat Milk, 128 fl oz",
+            store_number=None,
+        ),
+        attributes={
+            **item.attributes,
+            "_attribute_provenance": {name: "product_pack_override" for name in values},
+        },
+    )
+
+    listing = build_listing_evidence_v2(
+        (item,),
+        pack=pack,
+        retailer_id="amazon_us_same_day",
+    )[0]
+
+    assert listing.attributes["fat_type"].value == "2%"
+    assert listing.attributes["fat_type"].source == "search_override_correction"
 
 
 def test_incremental_listing_accumulator_matches_batch_collapse() -> None:

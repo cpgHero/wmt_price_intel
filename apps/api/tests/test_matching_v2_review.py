@@ -1282,7 +1282,7 @@ def test_current_milk_policy_upgrades_legacy_volume_evidence_to_hard_blocker() -
         row for row in governed["edge"]["attribute_evidence"] if row["attribute"] == "volume_oz"
     )
 
-    assert policy["product_pack_version"] == "1.5.0"
+    assert policy["product_pack_version"] == "1.6.0"
     assert volume["queue_role"] == "soft_comparator"
     assert volume["role"] == "hard_blocker"
     assert any(

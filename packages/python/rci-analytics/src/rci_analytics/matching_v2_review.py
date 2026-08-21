@@ -197,7 +197,10 @@ def build_matching_v2_review_queue(
             excluded_counts[f"{retailer_id}:unresolved_without_governed_tier"] = sum(
                 edge.tier is None for edge in result.edges
             )
-            excluded_counts[f"{retailer_id}:hard_blocked_pairs"] = result.blocked_pairs
+            excluded_counts[f"{retailer_id}:hard_blocked_pairs"] = result.attribute_blocked_pairs
+            excluded_counts[f"{retailer_id}:no_geographic_overlap_pairs"] = (
+                result.geography_blocked_pairs
+            )
             excluded_counts[f"{retailer_id}:hard_blocked_audit_sample"] = len(
                 result.blocked_review_edges
             )

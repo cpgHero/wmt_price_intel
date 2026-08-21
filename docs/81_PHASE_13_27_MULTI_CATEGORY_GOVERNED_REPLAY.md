@@ -5,8 +5,9 @@
 Banana, Strawberry, and Ground Beef implementation, production replay, semantic
 release audit, and live-route verification completed on August 20, 2026. Their
 obsolete predecessors were already recoverably archived on August 18 and remain
-available through audit lineage. Milk remains fail-closed pending current
-Product Pack 1.5.0 certification.
+available through audit lineage. The original 6,396-case Milk queue was rejected;
+Phase 13.28 replaces its generator and produces a Product Pack 1.6.0 queue that
+remains fail-closed pending certification.
 
 ## Purpose
 
@@ -40,10 +41,11 @@ retains two explicit insufficient-evidence exclusions; they are not forced into
 price comparisons.
 
 Milk Product Pack 1.5.0 materially differs from the earlier sampled queue and
-adds exact package-volume governance. Its exhaustive current scope contains
-6,396 candidate product relationships, so prior sampled decisions are not
-eligible for carry-forward. Milk remains blocked from governed replay until a
-current, scalable certification path is completed.
+adds exact package-volume governance. Its first exhaustive rebuild produced
+6,396 candidate relationships because Matching v2 evaluated attribute-compatible
+products without proving their observed footprints intersected. That queue is
+obsolete and prohibited from certification or replay. Phase 13.28 repairs the
+generic generator and publishes a distinct Product Pack 1.6.0 certification scope.
 
 ## Certified profile projection correction
 
@@ -113,5 +115,6 @@ failed replay attempts, and audit lineage are never deleted.
 All exact predecessors for the three completed categories were already marked
 with recoverable `archived_at` timestamps before this phase. The accepted
 replacements remain the only active reports. Milk's predecessor is also
-archived, but no new Milk report is activated until its materially new 6,396
-case scope has a scalable, current certification authority.
+archived, but no new Milk report is activated until its corrected Product Pack
+1.6.0 queue has a current certification authority. The rejected 6,396-case
+artifact remains audit evidence only.

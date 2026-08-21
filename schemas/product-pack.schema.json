@@ -527,6 +527,28 @@
           "type": "integer",
           "minimum": 1,
           "default": 250000
+        },
+        "candidate_geography": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "physical_radius_miles",
+            "service_area_retailer_ids",
+            "service_area_overlap_policy",
+            "missing_location_policy"
+          ],
+          "properties": {
+            "mode": { "enum": ["disabled", "observed_overlap"] },
+            "physical_radius_miles": { "type": "number", "exclusiveMinimum": 0 },
+            "service_area_retailer_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "service_area_overlap_policy": { "enum": ["same_zip"] },
+            "missing_location_policy": { "enum": ["fail_closed", "allow"] }
+          }
         }
       }
     },
