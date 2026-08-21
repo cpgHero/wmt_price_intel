@@ -3664,7 +3664,10 @@ class PostgresMatchingV2ReviewRepository:
                 .mappings()
                 .one()
             )
-            replay_identity = f"{source['result_id']}:{release['id']}"
+            replay_identity = (
+                f"{source['collection_run_id']}:{queue['product_pack_id']}:"
+                f"{queue['product_pack_version']}:{release['id']}"
+            )
             await connection.execute(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, 0))"),
                 {"identity": replay_identity},
@@ -3678,12 +3681,18 @@ class PostgresMatchingV2ReviewRepository:
                                 """
                                 SELECT coalesce(max(replay_generation), 0) + 1
                                 FROM analysis_run
-                                WHERE source_analysis_result_id = CAST(:source_result_id AS uuid)
+                                WHERE collection_run_id = CAST(:collection_run_id AS uuid)
+                                  AND product_pack_id = :product_pack_id
+                                  AND product_pack_version = :product_pack_version
+                                  AND match_revision_id IS NULL
+                                  AND brand_revision_id IS NULL
                                   AND matching_v2_gold_set_release_id = CAST(:release_id AS uuid)
                                 """
                             ),
                             {
-                                "source_result_id": source["result_id"],
+                                "collection_run_id": source["collection_run_id"],
+                                "product_pack_id": queue["product_pack_id"],
+                                "product_pack_version": queue["product_pack_version"],
                                 "release_id": release["id"],
                             },
                         )
@@ -3706,8 +3715,7 @@ class PostgresMatchingV2ReviewRepository:
                               :max_attempts, CAST(:source_result_id AS uuid),
                               CAST(:release_id AS uuid), :replay_generation, :replay_reason
                             )
-                            ON CONFLICT ON CONSTRAINT analysis_run_source_matching_v2_release_uq
-                            DO NOTHING
+                            ON CONFLICT DO NOTHING
                             RETURNING id::text, status
                             """
                         ),
@@ -3732,13 +3740,19 @@ class PostgresMatchingV2ReviewRepository:
                             text(
                                 """
                             SELECT id::text, status FROM analysis_run
-                            WHERE source_analysis_result_id = CAST(:source_result_id AS uuid)
+                            WHERE collection_run_id = CAST(:collection_run_id AS uuid)
+                              AND product_pack_id = :product_pack_id
+                              AND product_pack_version = :product_pack_version
+                              AND match_revision_id IS NULL
+                              AND brand_revision_id IS NULL
                               AND matching_v2_gold_set_release_id = CAST(:release_id AS uuid)
                               AND replay_generation = :replay_generation
                             """
                             ),
                             {
-                                "source_result_id": source["result_id"],
+                                "collection_run_id": source["collection_run_id"],
+                                "product_pack_id": queue["product_pack_id"],
+                                "product_pack_version": queue["product_pack_version"],
                                 "release_id": release["id"],
                                 "replay_generation": replay_generation,
                             },

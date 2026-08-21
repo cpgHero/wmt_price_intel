@@ -809,6 +809,18 @@ def test_postgres_replay_reconciles_reviewed_exclusions_to_current_queue() -> No
     assert "exclusion_case_ids != current_insufficient_case_ids" in source
 
 
+def test_postgres_forced_replay_generation_matches_collection_release_identity() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.create_gold_set_replay)
+
+    assert "coalesce(max(replay_generation), 0) + 1" in source
+    assert "WHERE collection_run_id = CAST(:collection_run_id AS uuid)" in source
+    assert "AND product_pack_id = :product_pack_id" in source
+    assert "AND product_pack_version = :product_pack_version" in source
+    assert "AND match_revision_id IS NULL" in source
+    assert "AND brand_revision_id IS NULL" in source
+    assert "ON CONFLICT DO NOTHING" in source
+
+
 async def test_review_service_validates_queue_checksum_before_import() -> None:
     repository = ReviewRepository()
     service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
