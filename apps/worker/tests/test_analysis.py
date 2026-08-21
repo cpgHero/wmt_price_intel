@@ -79,7 +79,7 @@ def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None
     ("product_pack_id", "allowed_tier", "expected_profiles"),
     [
         ("fresh_strawberries", "exact_specification", ("strict", "unit_price")),
-        ("fresh_ground_beef", "equivalent_product", ("strict", "unit_price")),
+        ("fresh_ground_beef", "equivalent_product", ("unit_price",)),
     ],
 )
 def test_matching_v2_certified_rules_use_exact_location_profiles_only(
@@ -105,6 +105,69 @@ def test_matching_v2_certified_rules_use_exact_location_profiles_only(
     rules = matching_v2_gold_set_rules(release, pack)
 
     assert rules[0].eligible_profile_ids == expected_profiles
+
+
+def test_matching_v2_package_price_rejects_explicit_multipack_mismatch() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    engine = ComparisonEngine(pack)
+
+    def offer(retailer_id: str, product_id: str, title: str) -> ClassifiedOffer:
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"{retailer_id}:{product_id}:offer",
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title=title,
+                brand=None,
+                price=Decimal("6.00"),
+                currency="USD",
+                zipcode="72712",
+                store_number="100",
+                latitude=None,
+                longitude=None,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={
+                "lean_pct": 85,
+                "fat_pct": 15,
+                "weight_lb": 1.0,
+                "organic": True,
+                "grass_fed": True,
+                "premium_tier": "standard",
+            },
+            metrics={"price_per_lb": Decimal("6.00")},
+            review_reasons=(),
+        )
+
+    rules = [
+        ProductMatchRule(
+            competitor_id="aldi_us",
+            profile_id="strict",
+            benchmark_product_id="w-multi",
+            competitor_product_id="a-single",
+            decision="confirmed",
+            eligible_profile_ids=("strict", "unit_price"),
+            scope_definition={"certified_allowed_tiers": ["exact_specification"]},
+        )
+    ]
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [
+            offer("walmart_us", "w-multi", "Organic Ground Beef, 1 lb, 3 Count"),
+            offer("aldi_us", "a-single", "Organic Ground Beef, 1 lb"),
+        ],
+        rules,
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("unit_price",)
 
 
 def test_matching_v2_certified_rules_are_segmented_by_governed_brand_policy() -> None:

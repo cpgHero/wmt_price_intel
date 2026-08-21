@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import statistics
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -19,6 +20,29 @@ from rci_analytics.models import (
 )
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
+
+_LABELED_UNIT_COUNT = re.compile(
+    r"(?:pack\s+of\s+(\d+)|(\d+)\s*(?:count|ct|pack(?:age)?s?))",
+    flags=re.IGNORECASE,
+)
+_WEIGHT_UNIT = re.compile(r"\b(?:lb|lbs|pounds?|oz|ounces?|kg|g)\b", flags=re.IGNORECASE)
+
+
+def labeled_unit_pack_count(title: str) -> int:
+    """Return an explicit multipack count when a title also states unit weight."""
+
+    if _WEIGHT_UNIT.search(title) is None:
+        return 1
+    match = _LABELED_UNIT_COUNT.search(title)
+    if match is None:
+        return 1
+    return int(match.group(1) or match.group(2))
+
+
+def labeled_unit_packs_are_compatible(left: str, right: str) -> bool:
+    """Protect package-price comparisons from unit-versus-multipack distortion."""
+
+    return labeled_unit_pack_count(left) == labeled_unit_pack_count(right)
 
 
 @dataclass(frozen=True, slots=True)
@@ -925,6 +949,94 @@ class ComparisonEngine:
         benchmark_brand = self._brand_component(benchmark, brand_policy)
         competitor_brand = self._brand_component(competitor, brand_policy)
         return benchmark_brand is not None and benchmark_brand == competitor_brand
+
+    def governed_profile_eligible(
+        self,
+        benchmark: ClassifiedOffer | None,
+        competitor: ClassifiedOffer | None,
+        *,
+        profile_id: str,
+        enforce_exact_specification: bool,
+    ) -> bool:
+        """Assign a certified pair only to analytically valid reporting profiles.
+
+        Human review governs whether two products are related. It does not make a
+        single-unit package and an explicit multipack interchangeable at package
+        price, nor can it turn a known hard-attribute conflict into an exact-spec
+        claim. Normalized-unit profiles remain available for approved substitutes.
+        """
+
+        if not self.governed_profile_brand_eligible(
+            benchmark,
+            competitor,
+            profile_id=profile_id,
+        ):
+            return False
+        if benchmark is None or competitor is None:
+            return False
+
+        profile = self.pack.profile(profile_id)
+        metric = self._comparison_metric(profile)
+        if metric == "package_price" and not labeled_unit_packs_are_compatible(
+            benchmark.offer.title,
+            competitor.offer.title,
+        ):
+            return False
+
+        configured = dict(self.pack.matching_v2 or {})
+        configured_roles = dict(configured.get("attribute_roles") or {})
+        price_basis = "exact_package" if metric == "package_price" else "normalized_unit"
+        price_requirements = {
+            str(value)
+            for value in dict(configured.get("price_basis_requirements") or {}).get(
+                price_basis,
+                [],
+            )
+        }
+        dimensions = {str(value) for value in profile.get("dimensions", [])}
+        names = dimensions | price_requirements
+
+        def known(name: str, value: Any) -> bool:
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return False
+            unknowns = {
+                str(candidate).strip().casefold()
+                for candidate in self._unknown_values.get(name, ())
+            }
+            return str(value).strip().casefold() not in unknowns
+
+        def agrees(left: Any, right: Any, tolerance: Any) -> bool:
+            if tolerance is not None and not isinstance(left, bool) and not isinstance(right, bool):
+                try:
+                    return abs(Decimal(str(left)) - Decimal(str(right))) <= Decimal(
+                        str(tolerance)
+                    )
+                except (ArithmeticError, ValueError):
+                    pass
+            if isinstance(left, str) or isinstance(right, str):
+                return str(left).strip().casefold() == str(right).strip().casefold()
+            return left == right
+
+        for name in sorted(names):
+            rule = configured_roles.get(name)
+            rule = dict(rule) if isinstance(rule, Mapping) else {}
+            left = benchmark.attributes.get(name)
+            right = competitor.attributes.get(name)
+            left_known = known(name, left)
+            right_known = known(name, right)
+            required_for_price = name in price_requirements
+            hard_exact = enforce_exact_specification and str(rule.get("role")) == "hard_blocker"
+            if not left_known or not right_known:
+                if required_for_price or (hard_exact and bool(rule.get("unknown_is_blocking"))):
+                    return False
+                continue
+            if (required_for_price or hard_exact) and not agrees(
+                left,
+                right,
+                rule.get("numeric_tolerance"),
+            ):
+                return False
+        return True
 
     def _rule_scope_keys(
         self,

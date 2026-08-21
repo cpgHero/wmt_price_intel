@@ -101,7 +101,7 @@ def matching_v2_gold_set_rules(
     """Translate certified labels into generic, scope-aware comparison rules."""
 
     exact_location_profiles = tuple(
-        str(profile["id"])
+        dict(profile)
         for profile in pack.matching_profiles
         if str(profile.get("geography") or "") == "exact_zip"
     )
@@ -109,6 +109,8 @@ def matching_v2_gold_set_rules(
         raise ValueError(
             f"Product Pack {pack.id!r} has no exact-location profile for certified reporting"
         )
+    engine = ComparisonEngine(pack)
+    exact_tiers = {"exact_item", "exact_specification"}
     rules: list[ProductMatchRule] = []
     for label in release["document"].get("labels", []):
         benchmark_listing = str(label["benchmark_listing_id"])
@@ -117,9 +119,23 @@ def matching_v2_gold_set_rules(
             raise ValueError("certified listing IDs must include retailer and product ID")
         _, benchmark_product_id = benchmark_listing.split(":", 1)
         competitor_id, competitor_product_id = competitor_listing.split(":", 1)
-        eligible_profiles = exact_location_profiles
+        allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
+        eligible_profiles = tuple(
+            str(profile["id"])
+            for profile in exact_location_profiles
+            if not label["expected_comparable"]
+            or engine.comparison_metric(str(profile["id"])) != "package_price"
+            or bool(allowed_tiers & exact_tiers)
+        )
+        if label["expected_comparable"] and not eligible_profiles:
+            raise ValueError(
+                "certified comparable relationship is not eligible for any configured price "
+                f"basis: {benchmark_listing} vs {competitor_listing}"
+            )
         profile_id = eligible_profiles[0]
-        scope_definition: dict[str, Any] = {}
+        scope_definition: dict[str, Any] = {
+            "certified_allowed_tiers": sorted(allowed_tiers),
+        }
         rules.append(
             ProductMatchRule(
                 competitor_id=competitor_id,
@@ -145,11 +161,12 @@ def scope_matching_v2_rules_to_brand_profiles(
     profiles: Iterable[dict[str, Any]],
     engine: ComparisonEngine,
 ) -> list[ProductMatchRule]:
-    """Segment certified relationships into truthful Product Pack brand views.
+    """Segment certified relationships into truthful Product Pack reporting views.
 
     Certification remains authoritative for comparability. Confirmed pairs enter
-    only the profiles whose configured brand policy their governed evidence
-    satisfies. A rejected relationship remains rejected across every profile.
+    only profiles whose brand policy, price basis, package count, and exact-tier
+    hard attributes their governed evidence satisfies. A rejected relationship
+    remains rejected across every profile.
     """
 
     profile_index = {
@@ -187,13 +204,25 @@ def scope_matching_v2_rules_to_brand_profiles(
         else:
             benchmark = representative(benchmark_retailer, rule.benchmark_product_id)
             competitor = representative(rule.competitor_id, rule.competitor_product_id)
+            allowed_tiers = {
+                str(value)
+                for value in (rule.scope_definition or {}).get(
+                    "certified_allowed_tiers",
+                    [],
+                )
+            }
+            exact_only = bool(allowed_tiers) and allowed_tiers <= {
+                "exact_item",
+                "exact_specification",
+            }
             eligible_profiles = tuple(
                 profile_id
                 for profile_id in current_profiles
-                if engine.governed_profile_brand_eligible(
+                if engine.governed_profile_eligible(
                     benchmark,
                     competitor,
                     profile_id=profile_id,
+                    enforce_exact_specification=exact_only,
                 )
             )
             if not eligible_profiles:
