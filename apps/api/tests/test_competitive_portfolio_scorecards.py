@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
-from types import MethodType
+from types import MethodType, SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -59,6 +60,9 @@ def test_competitive_materialization_requires_internal_token(
 @pytest.mark.asyncio
 async def test_portfolio_materialization_rejects_non_ready_report() -> None:
     class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            return SimpleNamespace(analysis_id=analysis_id)
+
         async def report_view(self, _analysis_id: str) -> dict:
             return {
                 "report_readiness": {
@@ -75,6 +79,39 @@ async def test_portfolio_materialization_rejects_non_ready_report() -> None:
 
     with pytest.raises(ValueError, match="certified_relationship_count_mismatch"):
         await service.pre_materialize_portfolios("analysis-1")
+
+
+@pytest.mark.asyncio
+async def test_analysis_context_is_loaded_once_for_concurrent_product_groups() -> None:
+    class Analyses:
+        def __init__(self) -> None:
+            self.get_calls = 0
+            self.report_calls = 0
+
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            self.get_calls += 1
+            return SimpleNamespace(analysis_id=analysis_id)
+
+        async def report_view(self, analysis_id: str) -> dict:
+            self.report_calls += 1
+            return {"analysis_id": analysis_id}
+
+    analyses = Analyses()
+    service = CompetitiveProductLeadershipService(
+        repository_root=REPOSITORY_ROOT,
+        analyses=analyses,  # type: ignore[arg-type]
+        price_monitoring=None,  # type: ignore[arg-type]
+        product_packs=None,  # type: ignore[arg-type]
+    )
+
+    first, second = await asyncio.gather(
+        service._analysis_context("analysis-1"),
+        service._analysis_context("analysis-1"),
+    )
+
+    assert first is second
+    assert analyses.get_calls == 1
+    assert analyses.report_calls == 1
 
 
 def test_portfolio_summary_uses_product_location_grain() -> None:
@@ -156,6 +193,9 @@ def test_portfolio_scorecard_contract_accepts_radius_native_projection() -> None
 @pytest.mark.asyncio
 async def test_portfolio_view_aggregates_each_certified_product_location_once() -> None:
     class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            return SimpleNamespace(analysis_id=analysis_id)
+
         async def report_view(self, _analysis_id: str) -> dict:
             return {
                 "generated_at": "2026-08-20T12:00:00+00:00",

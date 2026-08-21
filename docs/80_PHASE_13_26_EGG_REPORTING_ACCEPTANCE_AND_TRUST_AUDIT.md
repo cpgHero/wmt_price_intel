@@ -170,6 +170,25 @@ closed. Fifty-seven focused analytics, worker, renderer, portfolio API, and
 release-audit tests pass, and full-repository static type checking reports no
 issues.
 
+Generation two produced immutable analysis
+`fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-3c967ecc-r2`
+with ready-to-share validation, all 183 certified-comparable relationships,
+three Price Architecture matrices, and no fallback. Its first competitive
+portfolio build exposed a scalability defect before promotion: each of 108
+compatible benchmark-product groups independently reloaded and rerendered the
+same multi-megabyte immutable analysis and publication. The all-retailer build
+crossed the 15-minute caller boundary without storing a partial portfolio.
+
+Competitive Product Leadership now has a bounded, concurrency-safe immutable
+analysis/report context cache. Concurrent product groups share one database
+load and one governed report rendering per analysis instead of repeating that
+work hundreds of times. The cache is safe because both AnalysisResult and its
+publication are immutable; it does not cache mutable collection or review
+state. Focused tests verify concurrent request coalescing as well as all
+existing portfolio formula and semantic-audit behavior. The generation-two
+AnalysisResult remains valid and will be rematerialized after this API-only
+performance correction; no new matching replay or paid call is required.
+
 ## Production acceptance requirements
 
 This phase is not production-complete until all of the following are true:

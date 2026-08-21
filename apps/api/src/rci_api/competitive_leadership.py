@@ -374,6 +374,31 @@ class CompetitiveProductLeadershipService:
         self._projector = CompetitiveProductLeadershipProjector()
         self._cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._portfolio_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        # Analysis results and governed publications are immutable. Portfolio
+        # materialization may project hundreds of benchmark-product groups, so
+        # repeatedly loading and rendering the same multi-megabyte publication
+        # is both wasteful and capable of exceeding the publication timeout.
+        self._analysis_context_cache: dict[str, tuple[Any, dict[str, Any]]] = {}
+        self._analysis_context_locks: dict[str, asyncio.Lock] = {}
+
+    async def _analysis_context(self, analysis_id: str) -> tuple[Any, dict[str, Any]]:
+        cached = self._analysis_context_cache.get(analysis_id)
+        if cached is not None:
+            return cached
+        lock = self._analysis_context_locks.setdefault(analysis_id, asyncio.Lock())
+        async with lock:
+            cached = self._analysis_context_cache.get(analysis_id)
+            if cached is not None:
+                return cached
+            analysis, report = await asyncio.gather(
+                self._analyses.get(analysis_id),
+                self._analyses.report_view(analysis_id),
+            )
+            context = (analysis, report)
+            if len(self._analysis_context_cache) >= 16:
+                self._analysis_context_cache.pop(next(iter(self._analysis_context_cache)))
+            self._analysis_context_cache[analysis_id] = context
+            return context
 
     async def portfolio_view(
         self,
@@ -408,7 +433,7 @@ class CompetitiveProductLeadershipService:
         if cached is not None and not refresh:
             return cached
 
-        report = await self._analyses.report_view(analysis_id)
+        _analysis, report = await self._analysis_context(analysis_id)
         benchmark = dict(report["retailer_scope"]["benchmark"])
         configured_competitors = [dict(row) for row in report["retailer_scope"]["competitors"]]
         competitor_name_index = {str(row["id"]): str(row["name"]) for row in configured_competitors}
@@ -786,7 +811,7 @@ class CompetitiveProductLeadershipService:
     async def pre_materialize_portfolios(
         self, analysis_id: str, *, refresh: bool = False
     ) -> list[dict[str, Any]]:
-        report = await self._analyses.report_view(analysis_id)
+        _analysis, report = await self._analysis_context(analysis_id)
         readiness = report.get("report_readiness")
         blocking_reasons = (
             readiness.get("blocking_reasons", []) if isinstance(readiness, dict) else []
@@ -859,10 +884,7 @@ class CompetitiveProductLeadershipService:
         if cached is not None:
             return cached
 
-        analysis, report = await asyncio.gather(
-            self._analyses.get(analysis_id),
-            self._analyses.report_view(analysis_id),
-        )
+        analysis, report = await self._analysis_context(analysis_id)
         benchmark = dict(report["retailer_scope"]["benchmark"])
         configured_competitors = [dict(row) for row in report["retailer_scope"]["competitors"]]
         competitor_name_index = {str(row["id"]): str(row["name"]) for row in configured_competitors}
