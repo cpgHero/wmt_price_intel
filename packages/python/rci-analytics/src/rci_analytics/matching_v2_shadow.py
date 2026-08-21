@@ -578,6 +578,7 @@ class MatchingShadowEvaluatorV2:
                     *(
                         by_zip.get(location.zipcode, set())
                         for location in listing.observed_locations
+                        if location.zipcode is not None
                     )
                 )
                 if listing.observed_locations
