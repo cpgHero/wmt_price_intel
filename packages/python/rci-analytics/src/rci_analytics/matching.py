@@ -1008,9 +1008,7 @@ class ComparisonEngine:
         def agrees(left: Any, right: Any, tolerance: Any) -> bool:
             if tolerance is not None and not isinstance(left, bool) and not isinstance(right, bool):
                 try:
-                    return abs(Decimal(str(left)) - Decimal(str(right))) <= Decimal(
-                        str(tolerance)
-                    )
+                    return abs(Decimal(str(left)) - Decimal(str(right))) <= Decimal(str(tolerance))
                 except (ArithmeticError, ValueError):
                     pass
             if isinstance(left, str) or isinstance(right, str):
