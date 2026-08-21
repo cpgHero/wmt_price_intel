@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-import re
 import statistics
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -18,31 +17,9 @@ from rci_analytics.models import (
     MatchRecord,
     ProductMatchRule,
 )
+from rci_analytics.package_semantics import labeled_unit_packs_are_compatible
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
-
-_LABELED_UNIT_COUNT = re.compile(
-    r"(?:pack\s+of\s+(\d+)|(\d+)\s*(?:count|ct|pack(?:age)?s?))",
-    flags=re.IGNORECASE,
-)
-_WEIGHT_UNIT = re.compile(r"\b(?:lb|lbs|pounds?|oz|ounces?|kg|g)\b", flags=re.IGNORECASE)
-
-
-def labeled_unit_pack_count(title: str) -> int:
-    """Return an explicit multipack count when a title also states unit weight."""
-
-    if _WEIGHT_UNIT.search(title) is None:
-        return 1
-    match = _LABELED_UNIT_COUNT.search(title)
-    if match is None:
-        return 1
-    return int(match.group(1) or match.group(2))
-
-
-def labeled_unit_packs_are_compatible(left: str, right: str) -> bool:
-    """Protect package-price comparisons from unit-versus-multipack distortion."""
-
-    return labeled_unit_pack_count(left) == labeled_unit_pack_count(right)
 
 
 @dataclass(frozen=True, slots=True)

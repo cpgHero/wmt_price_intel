@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
+from rci_analytics.package_semantics import effective_package_measure
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
 
@@ -507,5 +508,12 @@ class OfferClassifier:
         metrics: dict[str, Decimal | None] = {}
         for rule in self.pack.document["normalization"].get("conversion_rules", []):
             output = str(rule["to"])
-            metrics[output] = self._formulas.evaluate(str(rule["formula"]), values)
+            formula_values = dict(values)
+            source_measure = str(rule.get("from") or "")
+            if source_measure and source_measure in formula_values:
+                formula_values[source_measure] = effective_package_measure(
+                    offer.title,
+                    formula_values[source_measure],
+                )
+            metrics[output] = self._formulas.evaluate(str(rule["formula"]), formula_values)
         return metrics

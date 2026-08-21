@@ -8,8 +8,9 @@ from collections.abc import Iterable
 from decimal import Decimal
 from statistics import median
 
-from rci_analytics.matching import labeled_unit_packs_are_compatible, location_scope_key
+from rci_analytics.matching import location_scope_key
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord, NormalizedOffer
+from rci_analytics.package_semantics import labeled_unit_packs_are_compatible
 
 
 def _preferred_text(values: Iterable[str | None], fallback: str) -> str:

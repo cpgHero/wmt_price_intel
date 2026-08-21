@@ -157,6 +157,25 @@ def test_product_packs_load_in_required_expansion_order() -> None:
             "price_per_lb",
             Decimal("4.99"),
         ),
+        (
+            "fresh_ground_beef",
+            _row(
+                "walmart_us",
+                "665894623",
+                "Marketside Ground Beef, 85% Lean/15% Fat, 1 lb, 3 Count",
+                "20.97",
+            ),
+            {
+                "lean_pct": 85,
+                "fat_pct": 15,
+                "weight_lb": 1.0,
+                "organic": True,
+                "grass_fed": True,
+                "premium_tier": "standard",
+            },
+            "price_per_lb",
+            Decimal("6.99"),
+        ),
     ],
 )
 def test_declarative_rules_classify_each_expansion_pack(
