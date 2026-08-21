@@ -12,6 +12,10 @@ import { displayLabel, displayValue } from "./presentation";
 
 export type ComparisonBasis = AnalysisReportView["comparison_bases"][number];
 
+type ProfileEligibleRelationship = {
+  eligible_profile_ids?: string[];
+};
+
 const priceUnitNames: Record<string, { short: string; long: string }> = {
   package: { short: "package", long: "per package" },
   lb: { short: "lb", long: "per pound" },
@@ -61,17 +65,54 @@ export function formatMapValueLabel(
   return `${valueLabel.slice(0, -sourceSuffix.length)}/ ${priceUnitLabel(priceUnit, "short")}`;
 }
 
-export function comparisonBasisDescription(basis?: ComparisonBasis | null) {
+export function comparisonBasisDescription(
+  basis?: ComparisonBasis | null,
+  geographyLabel?: string,
+) {
   if (!basis) return "Configured comparison basis";
   return [
     basis.label,
     displayLabel(basis.comparison_metric),
     priceUnitLabel(basis.price_unit),
-    displayLabel(basis.geography),
+    geographyLabel ?? displayLabel(basis.geography),
     basis.population_basis === "market_floor"
       ? "market-floor assortment view"
       : "resolved product relationships",
   ].join(" · ");
+}
+
+export function defaultComparisonBasisId(
+  bases: ComparisonBasis[],
+  relationships: ProfileEligibleRelationship[],
+) {
+  const governedDefault =
+    bases.find((basis) => basis.scorecard_role === "preferred")?.profile_id ??
+    bases[0]?.profile_id ??
+    "";
+  if (!relationships.length) return governedDefault;
+  const counts = new Map(bases.map((basis) => [basis.profile_id, 0]));
+  for (const relationship of relationships) {
+    for (const profileId of relationship.eligible_profile_ids ?? []) {
+      if (counts.has(profileId))
+        counts.set(profileId, (counts.get(profileId) ?? 0) + 1);
+    }
+  }
+  return (
+    bases.reduce(
+      (selected, basis) => {
+        const selectedCount = counts.get(selected.profile_id) ?? 0;
+        const basisCount = counts.get(basis.profile_id) ?? 0;
+        if (basisCount > selectedCount) return basis;
+        if (
+          basisCount === selectedCount &&
+          basis.profile_id === governedDefault
+        )
+          return basis;
+        return selected;
+      },
+      bases.find((basis) => basis.profile_id === governedDefault) ?? bases[0],
+    )?.profile_id ?? governedDefault
+  );
 }
 
 export function governedOutcomeCounts(

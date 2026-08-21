@@ -48,6 +48,7 @@ import {
   comparisonBasisDescription,
   cohortProductSummaries,
   compactMetricName,
+  defaultComparisonBasisId,
   formatMapValueLabel,
   formatPriceForBasis,
   formatMetric,
@@ -273,12 +274,10 @@ function BlueprintAnalysisWorkspace({
   const [activeGroup, setActiveGroup] = useState<string>(firstPopulatedGroup);
   const competitorOptions = reportView.retailer_scope.competitors;
   const [selectedCompetitor, setSelectedCompetitor] = useState("all");
-  const preferredBasis =
-    reportView.comparison_bases.find(
-      (basis) => basis.scorecard_role === "preferred",
-    )?.profile_id ??
-    reportView.comparison_bases[0]?.profile_id ??
-    "";
+  const preferredBasis = defaultComparisonBasisId(
+    reportView.comparison_bases,
+    reportView.match_relationships ?? [],
+  );
   const [selectedLens, setSelectedLens] = useState(preferredBasis);
   const [selectedCohort, setSelectedCohort] = useState<ComparableCohort | null>(
     null,
@@ -782,8 +781,11 @@ function BlueprintAnalysisWorkspace({
           value: selectedBasis?.label ?? "Configured comparison basis",
           options: reportView.comparison_bases.map((basis) => ({
             value: basis.profile_id,
-            label: `${basis.label}${basis.scorecard_role === "preferred" ? " · preferred" : ""}`,
-            description: comparisonBasisDescription(basis),
+            label: `${basis.label}${basis.profile_id === preferredBasis ? " · default" : ""}`,
+            description: comparisonBasisDescription(
+              basis,
+              `physical stores within ${leadershipRadius} mile${leadershipRadius === 1 ? "" : "s"}; service areas use delivery ZIP`,
+            ),
           })),
           queryParameter: "lens",
           defaultValue: preferredBasis,
@@ -1190,6 +1192,7 @@ function BlueprintAnalysisWorkspace({
             {selectedGroup.sections
               .filter(
                 (section) =>
+                  activeGroup !== "overview" &&
                   section.kind !== "kpi_strip" &&
                   !(
                     activeGroup === "price-segments" &&
@@ -2136,6 +2139,22 @@ function RadiusRetailerScorecardPanel({
         .includes(token),
     );
   }, [query, selected]);
+  const certifiedScorecards =
+    portfolio?.scorecards.filter((scorecard) => scorecard.relationships > 0) ??
+    [];
+  const scoredScorecards = certifiedScorecards.filter(
+    (scorecard) => scorecard.scored_product_locations > 0,
+  );
+  const relationshipCount = certifiedScorecards.reduce(
+    (total, scorecard) => total + scorecard.relationships,
+    0,
+  );
+  const scoredLocationCount = scoredScorecards.reduce(
+    (total, scorecard) => total + scorecard.scored_product_locations,
+    0,
+  );
+  const limitedRetailerCount =
+    certifiedScorecards.length - scoredScorecards.length;
   return (
     <>
       <Section
@@ -2163,152 +2182,213 @@ function RadiusRetailerScorecardPanel({
           </div>
         ) : null}
         {portfolio ? (
-          <div className="retailer-scorecard-table">
-            <div className="retailer-scorecard-head" aria-hidden="true">
-              <span>Competitor and comparison context</span>
-              <span>Comparable evidence</span>
-              <span>Lower-price share</span>
-              <span>Average local price position</span>
-              <span>Status</span>
-            </div>
-            {portfolio.scorecards.map((scorecard) => {
-              return (
-                <article
-                  className="retailer-scorecard-row"
-                  key={scorecard.competitor_id}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSelect(scorecard.competitor_id)}
-                  >
-                    <strong>{scorecard.competitor}</strong>
-                    <span>
-                      {displayLabel(portfolio.filters.profile_id)} comparison
-                    </span>
-                    <small>
-                      {radiusMiles} mile{radiusMiles === 1 ? "" : "s"} ·
-                      certified product relationships
-                    </small>
-                  </button>
-                  <div className="retailer-scorecard-evidence">
-                    <strong>
-                      {scorecard.scored_product_locations.toLocaleString()}
-                    </strong>
-                    <span>
-                      of{" "}
-                      {scorecard.benchmark_product_locations.toLocaleString()}{" "}
-                      observed {benchmark.name} product-locations scored
-                    </span>
-                    <small>
-                      {scorecard.relationships.toLocaleString()} relationships ·{" "}
-                      {scorecard.benchmark_products.toLocaleString()}{" "}
-                      {benchmark.name} products ·{" "}
-                      {scorecard.competitor_products.toLocaleString()}{" "}
-                      competitor products
-                    </small>
-                    <button
-                      type="button"
-                      disabled={!scorecard.product_relationships?.length}
-                      onClick={() => {
-                        setQuery("");
-                        setVisibleLimit(25);
-                        setSelected(scorecard);
-                      }}
-                    >
-                      View{" "}
-                      {(
-                        scorecard.benchmark_products +
-                        scorecard.competitor_products
-                      ).toLocaleString()}{" "}
-                      included products
-                    </button>
-                  </div>
-                  <div className="retailer-share-bars">
-                    <span>
-                      {benchmark.name}
-                      <b>
-                        {formatScorecardRate(scorecard.benchmark_lower_rate)}
-                      </b>
-                    </span>
-                    <i>
-                      <b
-                        className="benchmark"
-                        style={{
-                          width: `${Math.max(1, (scorecard.benchmark_lower_rate ?? 0) * 100)}%`,
-                        }}
-                      />
-                    </i>
-                    <span>
-                      {scorecard.competitor}
-                      <b>
-                        {formatScorecardRate(scorecard.competitor_lower_rate)}
-                      </b>
-                    </span>
-                    <i>
-                      <b
-                        className="competitor"
-                        style={{
-                          width: `${Math.max(1, (scorecard.competitor_lower_rate ?? 0) * 100)}%`,
-                        }}
-                      />
-                    </i>
-                    <span>
-                      Parity <b>{formatScorecardRate(scorecard.parity_rate)}</b>
-                    </span>
-                    <i>
-                      <b
-                        className="parity"
-                        style={{
-                          width: `${Math.max(1, (scorecard.parity_rate ?? 0) * 100)}%`,
-                        }}
-                      />
-                    </i>
-                  </div>
-                  <div className="retailer-price-position">
-                    <strong>
-                      {scorecardPositionCopy(
-                        scorecard.average_gap,
-                        benchmark.name,
-                        scorecard.competitor,
-                      )}
-                    </strong>
-                    <small>
-                      Average competitor minus {benchmark.name}:{" "}
-                      {scorecard.average_gap === null
-                        ? "—"
-                        : `${scorecard.average_gap >= 0 ? "+" : "−"}${formatCurrency(Math.abs(scorecard.average_gap))}`}
-                    </small>
-                    <Link
-                      href={
-                        "/analyses/" +
-                        encodeURIComponent(portfolio.analysis_id) +
-                        "?tab=match-summary&competitor=" +
-                        encodeURIComponent(scorecard.competitor_id) +
-                        "&lens=" +
-                        encodeURIComponent(portfolio.filters.profile_id) +
-                        "&radius=" +
-                        radiusMiles
-                      }
-                    >
-                      Open Match Summary →
-                    </Link>
-                  </div>
-                  <span
-                    className={`retailer-score-status ${scorecard.scored_product_locations ? "ready" : ""}`}
-                  >
-                    {scorecard.scored_product_locations
-                      ? "Comparable evidence"
-                      : "No local overlap"}
-                    <small>
-                      {scorecard.scored_product_locations
-                        ? `${formatScorecardRate(scorecard.coverage_rate)} local coverage`
-                        : `No scored product-location within ${radiusMiles} miles`}
-                    </small>
+          <>
+            <div className="portfolio-leadership-summary radius-native-summary">
+              <header>
+                <div>
+                  <span className="eyebrow">
+                    Radius-native executive summary
+                  </span>
+                  <h2>
+                    {scoredScorecards.length} of {certifiedScorecards.length}{" "}
+                    certified competitor scorecards have local price evidence
+                  </h2>
+                  <p>
+                    This view keeps product certification separate from local
+                    price coverage. It includes all{" "}
+                    {relationshipCount.toLocaleString()} certified
+                    relationships; {limitedRetailerCount.toLocaleString()}{" "}
+                    retailer{limitedRetailerCount === 1 ? " has" : "s have"}{" "}
+                    certified identities but no scorable product-location inside
+                    the selected radius.
+                  </p>
+                </div>
+                <span className="portfolio-summary-context">
+                  {displayLabel(portfolio.filters.profile_id)} · {radiusMiles}{" "}
+                  mile{radiusMiles === 1 ? "" : "s"}
+                </span>
+              </header>
+              <div className="portfolio-summary-grid">
+                <article>
+                  <small>Certified relationships</small>
+                  <strong>{relationshipCount.toLocaleString()}</strong>
+                  <span>Complete governed identity ledger</span>
+                </article>
+                <article>
+                  <small>Retailers represented</small>
+                  <strong>{certifiedScorecards.length.toLocaleString()}</strong>
+                  <span>With at least one certified relationship</span>
+                </article>
+                <article className="portfolio-summary-position">
+                  <small>Scored product-locations</small>
+                  <strong>{scoredLocationCount.toLocaleString()}</strong>
+                  <span>
+                    Observed {benchmark.name} product-stores with eligible local
+                    evidence
                   </span>
                 </article>
-              );
-            })}
-          </div>
+                <article>
+                  <small>Evidence limitations</small>
+                  <strong>{limitedRetailerCount.toLocaleString()}</strong>
+                  <span>
+                    Certified retailers without scorable local overlap
+                  </span>
+                </article>
+              </div>
+              <footer>
+                <span>Physical competitors: within {radiusMiles} miles</span>
+                <span>Service-area retailers: same delivery ZIP</span>
+                <span>Search supplies price; PDP supplies identity</span>
+              </footer>
+            </div>
+            <div className="retailer-scorecard-table">
+              <div className="retailer-scorecard-head" aria-hidden="true">
+                <span>Competitor and comparison context</span>
+                <span>Comparable evidence</span>
+                <span>Lower-price share</span>
+                <span>Average local price position</span>
+                <span>Status</span>
+              </div>
+              {portfolio.scorecards.map((scorecard) => {
+                return (
+                  <article
+                    className="retailer-scorecard-row"
+                    key={scorecard.competitor_id}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onSelect(scorecard.competitor_id)}
+                    >
+                      <strong>{scorecard.competitor}</strong>
+                      <span>
+                        {displayLabel(portfolio.filters.profile_id)} comparison
+                      </span>
+                      <small>
+                        {radiusMiles} mile{radiusMiles === 1 ? "" : "s"} ·
+                        certified product relationships
+                      </small>
+                    </button>
+                    <div className="retailer-scorecard-evidence">
+                      <strong>
+                        {scorecard.scored_product_locations.toLocaleString()}
+                      </strong>
+                      <span>
+                        of{" "}
+                        {scorecard.benchmark_product_locations.toLocaleString()}{" "}
+                        observed {benchmark.name} product-locations scored
+                      </span>
+                      <small>
+                        {scorecard.relationships.toLocaleString()} relationships
+                        · {scorecard.benchmark_products.toLocaleString()}{" "}
+                        {benchmark.name} products ·{" "}
+                        {scorecard.competitor_products.toLocaleString()}{" "}
+                        competitor products
+                      </small>
+                      <button
+                        type="button"
+                        disabled={!scorecard.product_relationships?.length}
+                        onClick={() => {
+                          setQuery("");
+                          setVisibleLimit(25);
+                          setSelected(scorecard);
+                        }}
+                      >
+                        View{" "}
+                        {(
+                          scorecard.benchmark_products +
+                          scorecard.competitor_products
+                        ).toLocaleString()}{" "}
+                        included products
+                      </button>
+                    </div>
+                    <div className="retailer-share-bars">
+                      <span>
+                        {benchmark.name}
+                        <b>
+                          {formatScorecardRate(scorecard.benchmark_lower_rate)}
+                        </b>
+                      </span>
+                      <i>
+                        <b
+                          className="benchmark"
+                          style={{
+                            width: `${Math.max(1, (scorecard.benchmark_lower_rate ?? 0) * 100)}%`,
+                          }}
+                        />
+                      </i>
+                      <span>
+                        {scorecard.competitor}
+                        <b>
+                          {formatScorecardRate(scorecard.competitor_lower_rate)}
+                        </b>
+                      </span>
+                      <i>
+                        <b
+                          className="competitor"
+                          style={{
+                            width: `${Math.max(1, (scorecard.competitor_lower_rate ?? 0) * 100)}%`,
+                          }}
+                        />
+                      </i>
+                      <span>
+                        Parity{" "}
+                        <b>{formatScorecardRate(scorecard.parity_rate)}</b>
+                      </span>
+                      <i>
+                        <b
+                          className="parity"
+                          style={{
+                            width: `${Math.max(1, (scorecard.parity_rate ?? 0) * 100)}%`,
+                          }}
+                        />
+                      </i>
+                    </div>
+                    <div className="retailer-price-position">
+                      <strong>
+                        {scorecardPositionCopy(
+                          scorecard.average_gap,
+                          benchmark.name,
+                          scorecard.competitor,
+                        )}
+                      </strong>
+                      <small>
+                        Average competitor minus {benchmark.name}:{" "}
+                        {scorecard.average_gap === null
+                          ? "—"
+                          : `${scorecard.average_gap >= 0 ? "+" : "−"}${formatCurrency(Math.abs(scorecard.average_gap))}`}
+                      </small>
+                      <Link
+                        href={
+                          "/analyses/" +
+                          encodeURIComponent(portfolio.analysis_id) +
+                          "?tab=match-summary&competitor=" +
+                          encodeURIComponent(scorecard.competitor_id) +
+                          "&lens=" +
+                          encodeURIComponent(portfolio.filters.profile_id) +
+                          "&radius=" +
+                          radiusMiles
+                        }
+                      >
+                        Open Match Summary →
+                      </Link>
+                    </div>
+                    <span
+                      className={`retailer-score-status ${scorecard.scored_product_locations ? "ready" : ""}`}
+                    >
+                      {scorecard.scored_product_locations
+                        ? "Comparable evidence"
+                        : "No local overlap"}
+                      <small>
+                        {scorecard.scored_product_locations
+                          ? `${formatScorecardRate(scorecard.coverage_rate)} local coverage`
+                          : `No scored product-location within ${radiusMiles} miles`}
+                      </small>
+                    </span>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         ) : null}
       </Section>
       {selected ? (

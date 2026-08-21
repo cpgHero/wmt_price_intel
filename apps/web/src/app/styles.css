@@ -12127,6 +12127,9 @@ tbody tr:last-child td {
   gap: 0.4rem 1.25rem;
   padding-top: 0.8rem;
 }
+.radius-native-summary {
+  margin-bottom: 1rem;
+}
 .retailer-scorecard-table {
   border: 1px solid var(--line);
   border-radius: 16px;

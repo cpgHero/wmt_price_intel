@@ -9,6 +9,7 @@ import type {
 import {
   cohortProductSummaries,
   comparisonBasisDescription,
+  defaultComparisonBasisId,
   compactMetricName,
   formatMetric,
   formatMapValueLabel,
@@ -20,6 +21,7 @@ import {
   primaryComparisonRows,
   productDecisionStance,
   scorecardProductSummaries,
+  type ComparisonBasis,
 } from "./report-presentation";
 
 function section(id: string, kind: string): ReportSectionView {
@@ -159,6 +161,55 @@ describe("report presentation", () => {
         population_basis: "relationship_resolved_products",
       }),
     ).toContain("resolved product relationships");
+    expect(
+      comparisonBasisDescription(
+        {
+          profile_id: "milk-gallon",
+          label: "Comparable gallon",
+          geography: "exact_zip",
+          comparison_metric: "price_per_gallon",
+          price_unit: "USD/gallon",
+          package_basis: "normalized_unit",
+          availability_policy: "search_presence",
+          population_basis: "relationship_resolved_products",
+        },
+        "physical stores within 3 miles; service areas use delivery ZIP",
+      ),
+    ).toContain("physical stores within 3 miles");
+  });
+
+  it("defaults portfolio reporting to the basis with the broadest certified coverage", () => {
+    const bases: ComparisonBasis[] = [
+      {
+        profile_id: "strict",
+        label: "Strict",
+        geography: "exact_zip",
+        comparison_metric: "price_per_dozen",
+        price_unit: "USD/dozen",
+        package_basis: "exact_package",
+        availability_policy: "search_presence",
+        population_basis: "relationship_resolved_products",
+        scorecard_role: "preferred",
+      },
+      {
+        profile_id: "compatible",
+        label: "Compatible",
+        geography: "exact_zip",
+        comparison_metric: "price_per_dozen",
+        price_unit: "USD/dozen",
+        package_basis: "normalized_unit",
+        availability_policy: "search_presence",
+        population_basis: "relationship_resolved_products",
+        scorecard_role: "fallback",
+      },
+    ];
+    expect(
+      defaultComparisonBasisId(bases, [
+        { eligible_profile_ids: ["strict", "compatible"] },
+        { eligible_profile_ids: ["compatible"] },
+      ]),
+    ).toBe("compatible");
+    expect(defaultComparisonBasisId(bases, [])).toBe("strict");
   });
 
   it("derives full governed map outcomes from product decisions rather than sampled points", () => {
