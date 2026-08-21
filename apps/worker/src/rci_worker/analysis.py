@@ -215,16 +215,32 @@ def scope_matching_v2_rules_to_brand_profiles(
                 "exact_item",
                 "exact_specification",
             }
-            eligible_profiles = tuple(
-                profile_id
-                for profile_id in current_profiles
-                if engine.governed_profile_eligible(
-                    benchmark,
-                    competitor,
-                    profile_id=profile_id,
-                    enforce_exact_specification=exact_only,
+            if benchmark is None or competitor is None:
+                # Certification governs the relationship even when one listing has no
+                # current Search observation. Retain it only in generic profiles; it
+                # cannot create a scored price fact until both observed offers exist.
+                eligible_profiles = tuple(
+                    profile_id
+                    for profile_id in current_profiles
+                    if not any(
+                        profile_index[profile_id].get(name)
+                        for name in (
+                            "benchmark_attribute_constraints",
+                            "competitor_attribute_constraints",
+                        )
+                    )
                 )
-            )
+            else:
+                eligible_profiles = tuple(
+                    profile_id
+                    for profile_id in current_profiles
+                    if engine.governed_profile_eligible(
+                        benchmark,
+                        competitor,
+                        profile_id=profile_id,
+                        enforce_exact_specification=exact_only,
+                    )
+                )
             if not eligible_profiles:
                 raise ValueError(
                     "certified comparable relationship is not eligible for any exact-location "

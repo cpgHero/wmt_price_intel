@@ -170,6 +170,102 @@ def test_matching_v2_package_price_rejects_explicit_multipack_mismatch() -> None
     assert scoped[0].eligible_profile_ids == ("unit_price",)
 
 
+def test_matching_v2_certified_banana_pair_honors_role_specific_profile_constraints() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas")
+    engine = ComparisonEngine(pack)
+
+    def offer(retailer_id: str, product_id: str) -> ClassifiedOffer:
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"{retailer_id}:{product_id}:offer",
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title="Organic Bananas Bunch, 2.25 lb",
+                brand=None,
+                price=Decimal("3.00"),
+                currency="USD",
+                zipcode="72712",
+                store_number="100",
+                latitude=None,
+                longitude=None,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={
+                "variety": "Standard Yellow",
+                "organic": True,
+                "selling_unit": "bunch",
+                "weight_lb": 2.25,
+                "count_min": None,
+                "count_max": None,
+                "retailer_product_id": product_id,
+            },
+            metrics={"price_per_lb": Decimal("1.3333")},
+            review_reasons=(),
+        )
+
+    rule = ProductMatchRule(
+        competitor_id="amazon_us_same_day",
+        profile_id="weight_normalized",
+        benchmark_product_id="51259338",
+        competitor_product_id="B0FNNCZ18K",
+        decision="confirmed",
+        eligible_profile_ids=(
+            "weight_normalized",
+            "count_compatible",
+            "conventional_bunch_range",
+            "organic_bunch_midpoint",
+        ),
+        scope_definition={"certified_allowed_tiers": ["equivalent_product"]},
+    )
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [
+            offer("walmart_us", "51259338"),
+            offer("amazon_us_same_day", "B0FNNCZ18K"),
+        ],
+        [rule],
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("weight_normalized", "count_compatible")
+
+
+def test_matching_v2_unobserved_certified_pair_keeps_only_generic_profiles() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas")
+    engine = ComparisonEngine(pack)
+    rule = ProductMatchRule(
+        competitor_id="amazon_us_same_day",
+        profile_id="weight_normalized",
+        benchmark_product_id="51259338",
+        competitor_product_id="B0FNNCZ18K",
+        decision="confirmed",
+        eligible_profile_ids=(
+            "weight_normalized",
+            "count_compatible",
+            "conventional_bunch_range",
+            "organic_bunch_midpoint",
+        ),
+        scope_definition={"certified_allowed_tiers": ["equivalent_product"]},
+    )
+
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [],
+        [rule],
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("weight_normalized", "count_compatible")
+
+
 def test_matching_v2_certified_rules_are_segmented_by_governed_brand_policy() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     engine = ComparisonEngine(pack)
@@ -227,7 +323,7 @@ def test_matching_v2_certified_rules_are_segmented_by_governed_brand_policy() ->
         offer("walmart_us", "w-private", "Great Value"),
         offer("aldi_us", "a-private", "Friendly Farms"),
         offer("walmart_us", "w-same", "Horizon Organic"),
-        offer("aldi_us", "a-same", "Horizon"),
+        offer("aldi_us", "a-same", "Horizon Organic"),
         offer("walmart_us", "w-cross", "Hiland"),
         offer("aldi_us", "a-cross", "Friendly Farms"),
         offer("walmart_us", "w-unknown", None),

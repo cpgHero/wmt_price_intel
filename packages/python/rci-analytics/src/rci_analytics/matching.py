@@ -953,6 +953,10 @@ class ComparisonEngine:
             return False
 
         profile = self.pack.profile(profile_id)
+        if not self._satisfies_constraints(benchmark, profile, "benchmark"):
+            return False
+        if not self._satisfies_constraints(competitor, profile, "competitor"):
+            return False
         metric = self._comparison_metric(profile)
         if metric == "package_price" and not labeled_unit_packs_are_compatible(
             benchmark.offer.title,
