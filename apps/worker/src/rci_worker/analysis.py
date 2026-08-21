@@ -100,13 +100,15 @@ def matching_v2_gold_set_rules(
 ) -> list[ProductMatchRule]:
     """Translate certified labels into generic, scope-aware comparison rules."""
 
-    exact_tiers = {"exact_item", "exact_specification"}
-    all_profiles = tuple(str(profile["id"]) for profile in pack.matching_profiles)
-    compatible_profiles = tuple(
+    exact_location_profiles = tuple(
         str(profile["id"])
         for profile in pack.matching_profiles
-        if str(profile.get("unknown_policy", "reject")) != "reject"
+        if str(profile.get("geography") or "") == "exact_zip"
     )
+    if not exact_location_profiles:
+        raise ValueError(
+            f"Product Pack {pack.id!r} has no exact-location profile for certified reporting"
+        )
     rules: list[ProductMatchRule] = []
     for label in release["document"].get("labels", []):
         benchmark_listing = str(label["benchmark_listing_id"])
@@ -115,13 +117,8 @@ def matching_v2_gold_set_rules(
             raise ValueError("certified listing IDs must include retailer and product ID")
         _, benchmark_product_id = benchmark_listing.split(":", 1)
         competitor_id, competitor_product_id = competitor_listing.split(":", 1)
-        allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
-        eligible_profiles = (
-            all_profiles if allowed_tiers and allowed_tiers <= exact_tiers else compatible_profiles
-        )
-        if bool(label["expected_comparable"]) and not eligible_profiles:
-            raise ValueError(f"case {label['case_id']!r} has no eligible profile")
-        profile_id = eligible_profiles[0] if eligible_profiles else all_profiles[0]
+        eligible_profiles = exact_location_profiles
+        profile_id = eligible_profiles[0]
         scope_definition: dict[str, Any] = {}
         rules.append(
             ProductMatchRule(

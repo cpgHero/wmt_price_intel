@@ -68,6 +68,38 @@ def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None
     assert rules[0].eligible_profile_ids
 
 
+@pytest.mark.parametrize(
+    ("product_pack_id", "allowed_tier", "expected_profiles"),
+    [
+        ("fresh_strawberries", "exact_specification", ("strict", "unit_price")),
+        ("fresh_ground_beef", "equivalent_product", ("strict", "unit_price")),
+    ],
+)
+def test_matching_v2_certified_rules_use_exact_location_profiles_only(
+    product_pack_id: str,
+    allowed_tier: str,
+    expected_profiles: tuple[str, ...],
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load(product_pack_id)
+    release = {
+        "document": {
+            "labels": [
+                {
+                    "case_id": "case-current",
+                    "benchmark_listing_id": "walmart_us:w-1",
+                    "competitor_listing_id": "aldi_us:a-1",
+                    "expected_comparable": True,
+                    "allowed_tiers": [allowed_tier],
+                }
+            ]
+        }
+    }
+
+    rules = matching_v2_gold_set_rules(release, pack)
+
+    assert rules[0].eligible_profile_ids == expected_profiles
+
+
 def test_gold_set_presentation_retains_certified_pair_without_exact_zip_overlap() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
     release = {
