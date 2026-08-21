@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.29",
+  version: "1.3.30",
   lastVerified,
   baseline:
-    "Production implementation through the accepted Fresh Shell Eggs generation-two governed replay, semantic portfolio audit, and recoverable obsolete-report archival",
+    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays with radius-native semantic portfolio audits and recoverable obsolete-report archival",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1360,9 +1360,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implemented and focused-test verified; production replay recovery pending",
+              "Deployed, replayed, semantically audited, and production-verified for three categories; Milk remains fail-closed",
               "Certified multi-category replays now project governed identity only through exact-location Product Pack profiles before radius-native reporting.",
-              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. Focused worker and analytics suites pass 44 tests. Milk remains fail-closed because Product Pack 1.5.0 creates a materially new 6,396-case certification scope. No predecessor is archived until its replacement passes the full semantic and live acceptance gates; no provider or AI call was made.",
+              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. The active replacements are ready to share, have full metric-reference coverage and zero unsupported numeric claims. Their 27 portfolio documents cover every configured comparison basis at 1, 3, and 5 miles and pass the semantic audit with zero errors; three Banana warnings explicitly identify no-scored-evidence views. A concurrency-safe immutable Product Pack cache prevents large Ground Beef projections from stampeding Postgres. Production Competitive Intelligence and Price Intelligence routes pass. All exact predecessors were already recoverably archived; no Search data, raw object, PDP evidence, certification history, materialization, failed replay, or audit lineage was deleted. Milk remains fail-closed because Product Pack 1.5.0 creates a materially new 6,396-case certification scope. No provider or AI call was made.",
             ],
             [
               "2026-08-20",
