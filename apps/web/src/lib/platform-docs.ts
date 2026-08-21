@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 20, 2026";
+const lastVerified = "August 21, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.32",
+  version: "1.3.33",
   lastVerified,
   baseline:
-    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays, plus the corrected Milk Product Pack 1.6.0 queue and completed AI-assistance stage",
+    "Production implementation through accepted governed Egg, Banana, Strawberry, Ground Beef, and Milk replays, including profile-specific certified relationship eligibility",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -158,7 +158,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes certified not-comparable and final insufficient-evidence cases from price metrics, and disables automatic match fallback. Final insufficient-evidence decisions remain in an immutable exclusion ledger with reviewer, rationale, and evidence provenance; cases without any final human outcome block publication. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes certified not-comparable and final insufficient-evidence cases from price metrics, and disables automatic match fallback. Human certification governs whether a product pair is comparable; Product Pack brand policies separately govern which reporting views may include that certified pair. Inclusive ignore-brand views retain every certified-comparable pair, while private-label and same-brand views require affirmative governed brand evidence and fail closed when it is missing. Final insufficient-evidence decisions remain in an immutable exclusion ledger with reviewer, rationale, and evidence provenance; cases without any final human outcome block publication. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-21",
+              "Deployed, replayed, semantically audited, and production-verified",
+              "Certified product relationships are segmented into reporting views by each Product Pack's governed brand policy.",
+              "Certification remains the authority on comparability, while reporting eligibility now distinguishes inclusive ignore-brand, strict private-label-equivalent, and normalized same-brand views. The unchanged 1,064-label gold set contains 887 comparable and 177 not-comparable outcomes. Corrected replay generation two (run 45ab5aba-c993-4f47-bcf1-b70e4d1982eb; AnalysisResult d643df96-4686-4e29-8479-374d13b823a2) retains 887 All Brand relationships, 87 Private Label relationships, and 49 Same Brand Exact relationships. All nine basis-by-1/3/5-mile documents materialized and the semantic audit passed with zero errors; three explicit warnings are the expected ALDI same-brand no-relationship states. Metric-reference coverage is 100%, unsupported numeric claims are zero, and automatic fallback is disabled. Live controls change the relationship population and physical-store radius evidence, while Amazon Same Day correctly remains same-ZIP service-area evidence. Exactly one active Milk result remains. The rejected first-generation result was recoverably archived with an audit event; no source, PDP, certification, immutable release, materialization, superseded report, or audit lineage was deleted. Commit ab89783 and GitHub Actions run 32485954699 passed the full release gate; no provider or AI call was made.",
+            ],
             [
               "2026-08-20",
               "Deployed; corrected queue imported and AI-assisted; human certification pending",
