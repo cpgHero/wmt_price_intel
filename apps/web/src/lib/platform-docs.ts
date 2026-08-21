@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.31",
+  version: "1.3.32",
   lastVerified,
   baseline:
-    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays, plus the corrected Milk Product Pack 1.6.0 operational certification scope",
+    "Production implementation through accepted governed Egg, Banana, Strawberry, and Ground Beef replays, plus the corrected Milk Product Pack 1.6.0 queue and completed AI-assistance stage",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1360,9 +1360,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-20",
-              "Implemented and locally validated; production deployment and certification pending",
+              "Deployed; corrected queue imported and AI-assisted; human certification pending",
               "Milk Matching v2 candidate generation now requires observed footprint evidence and fails closed on essential package-spec uncertainty.",
-              "The rejected 6,396-case queue is not used. Product Pack 1.6.0 and policy 2.1.0-shadow.1 require physical-store overlap within five miles or same-ZIP Amazon Same Day service-area overlap, retain brand-independent regional matching, and separate attribute exclusions from no-geography exclusions. Current title evidence can correct a contradictory static override only inside candidate evidence with explicit provenance; authoritative classification and historical metrics remain unchanged. Numeric indexing treats 64 and 64.0 equally and honors tolerance. The accepted local queue 2.5.0 contains 1,064 unique cases—253 ALDI and 811 Amazon—with zero duplicate pairs, missing essential volume/fat evidence, known seller-ineligible listings, or obvious title/fat contradictions. No Search, PDP, prior queue, decision, report, or audit lineage was deleted, and no paid provider or AI call occurred.",
+              "The rejected 6,396-case queue is not used. Product Pack 1.6.0 and policy 2.1.0-shadow.1 require physical-store overlap within five miles or same-ZIP Amazon Same Day service-area overlap, retain brand-independent regional matching, and separate attribute exclusions from no-geography exclusions. Current title evidence can correct a contradictory static override only inside candidate evidence with explicit provenance; authoritative classification and historical metrics remain unchanged. Numeric indexing treats 64 and 64.0 equally and honors tolerance. Production queue 2.5.0 contains 1,064 unique cases—253 ALDI and 811 Amazon—with zero duplicate pairs, missing essential volume/fat evidence, known seller-ineligible listings, or obvious title/fat contradictions. AI batch c1192df2-b766-44a7-b642-84f1c3549eff completed all 1,064 drafts with zero terminal failures at an estimated model cost of $34.4601425. The guarded preview proposes 887 comparable and 177 not-comparable outcomes; every recommendation still requires explicit human confirmation and none automatically changes reporting. No Search, PDP, prior queue, decision, report, or audit lineage was deleted.",
             ],
             [
               "2026-08-20",
