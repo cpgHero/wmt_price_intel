@@ -502,6 +502,41 @@ class CompetitiveProductLeadershipService:
             if str(row.get("profile_id")) == selected_profile
             and (competitor_id == "all" or str(row.get("competitor")) == competitor_id)
         ]
+        selected_basis = basis_index.get(selected_profile, {})
+        observation_requests: dict[tuple[str, str], set[str]] = {}
+        for row in candidates:
+            comparison_metric = str(
+                row.get("comparison_metric")
+                or selected_basis.get("comparison_metric")
+                or "package_price"
+            )
+            benchmark_product_id = str(row.get("benchmark_product_id") or "")
+            competitor_product_id = str(row.get("competitor_product_id") or "")
+            competitor_retailer_id = str(row.get("competitor") or "")
+            if benchmark_product_id:
+                observation_requests.setdefault(
+                    (str(benchmark["id"]), comparison_metric), set()
+                ).add(benchmark_product_id)
+            if competitor_retailer_id and competitor_product_id:
+                observation_requests.setdefault(
+                    (competitor_retailer_id, comparison_metric), set()
+                ).add(competitor_product_id)
+        # Prime one immutable observation set per retailer/metric. Product-level
+        # projections then read subsets from that superset instead of reopening
+        # the same Parquet evidence once per benchmark product and radius.
+        await asyncio.gather(
+            *(
+                self._prices.product_observations_for_products(
+                    analysis_id,
+                    retailer_id=retailer_id,
+                    product_ids=sorted(product_ids),
+                    comparison_metric=comparison_metric,
+                )
+                for (retailer_id, comparison_metric), product_ids in sorted(
+                    observation_requests.items()
+                )
+            )
+        )
         product_groups = sorted(
             {
                 (str(row.get("competitor")), str(row.get("benchmark_product_id")))

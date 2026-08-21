@@ -276,10 +276,26 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                 },
             }
 
+    class Prices:
+        def __init__(self) -> None:
+            self.requests: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def product_observations_for_products(
+            self,
+            _analysis_id: str,
+            *,
+            retailer_id: str,
+            product_ids: list[str],
+            comparison_metric: str,
+        ) -> dict:
+            self.requests.append((retailer_id, comparison_metric, tuple(product_ids)))
+            return {}
+
+    prices = Prices()
     service = CompetitiveProductLeadershipService(
         repository_root=REPOSITORY_ROOT,
         analyses=Analyses(),  # type: ignore[arg-type]
-        price_monitoring=None,  # type: ignore[arg-type]
+        price_monitoring=prices,  # type: ignore[arg-type]
         product_packs=None,  # type: ignore[arg-type]
     )
 
@@ -383,3 +399,7 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert result["cohorts"][0]["paired_median_gap"] == 0.05
     assert result["assortment_scorecards"][0]["benchmark_only_products"] == 2
     assert result["assortment_scorecards"][0]["coverage_rate"] == 1.0
+    assert prices.requests == [
+        ("aldi_us", "package_price", ("a1", "a2", "a3")),
+        ("walmart_us", "package_price", ("w1", "w2")),
+    ]

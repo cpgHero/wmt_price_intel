@@ -1316,11 +1316,33 @@ class PriceMonitoringService:
         cached = self._product_observation_cache.get(cache_key)
         if cached is not None:
             return cached
+        cache_prefix = (analysis_id, retailer_id, comparison_metric)
+        selected_product_id_set = set(selected_product_ids)
+        for candidate_key, candidate_rows in reversed(
+            list(self._product_observation_cache.items())
+        ):
+            if candidate_key[:3] == cache_prefix and selected_product_id_set.issubset(
+                candidate_key[3:]
+            ):
+                return {
+                    product_id: candidate_rows.get(product_id, ())
+                    for product_id in selected_product_ids
+                }
         lock = self._product_observation_locks.setdefault(cache_key, asyncio.Lock())
         async with lock:
             cached = self._product_observation_cache.get(cache_key)
             if cached is not None:
                 return cached
+            for candidate_key, candidate_rows in reversed(
+                list(self._product_observation_cache.items())
+            ):
+                if candidate_key[:3] == cache_prefix and selected_product_id_set.issubset(
+                    candidate_key[3:]
+                ):
+                    return {
+                        product_id: candidate_rows.get(product_id, ())
+                        for product_id in selected_product_ids
+                    }
             prepared = self._prepared_cache.get((analysis_id, retailer_id))
             if prepared is not None:
                 offers = prepared.offers

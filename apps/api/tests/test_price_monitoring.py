@@ -248,12 +248,20 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
         product_ids=["a-1", "a-2"],
         comparison_metric="package_price",
     )
+    subset = await service.product_observations_for_products(
+        "analysis-1",
+        retailer_id="aldi_us",
+        product_ids=["a-1"],
+        comparison_metric="package_price",
+    )
 
     assert {product_id: len(rows) for product_id, rows in first.items()} == {
         "a-1": 1,
         "a-2": 1,
     }
     assert first == second
+    assert list(subset) == ["a-1"]
+    assert subset["a-1"] == first["a-1"]
     assert first["a-1"][0].product_name == "ALDI Product One"
     assert first["a-1"][0].brand == "ALDI"
     assert first["a-1"][0].image_url == "https://example.com/aldi-one.jpg"
