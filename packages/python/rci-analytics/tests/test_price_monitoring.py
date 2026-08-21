@@ -282,6 +282,68 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     ]
 
 
+def test_price_monitoring_unions_observed_stores_into_mastered_denominator() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    projector = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offers = [
+        _classified(
+            offer_id="mastered",
+            product_id="100",
+            store="1",
+            price="5.00",
+            collected_at="2026-08-07T06:00:00Z",
+        ),
+        _classified(
+            offer_id="observed-not-mastered",
+            product_id="100",
+            store="2",
+            price="5.25",
+            collected_at="2026-08-07T06:00:00Z",
+        ),
+    ]
+    locations = {
+        ("walmart_us", "1"): {
+            "store_name": "Mastered store",
+            "zipcode": "72712",
+            "city": "Bentonville",
+            "state": "AR",
+            "country": "USA",
+        },
+        ("walmart_us", "2"): {
+            "store_name": "Observed store",
+            "zipcode": "72756",
+            "city": "Rogers",
+            "state": "AR",
+            "country": "USA",
+        },
+    }
+    view = projector.build(
+        offers,
+        analysis_id="location-union-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us"),
+        location_index=locations,
+        eligible_location_index={("walmart_us", "1"): locations[("walmart_us", "1")]},
+        expected_location_count=1,
+    )
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-monitoring-view.schema.json",
+        view,
+        label="location-union price monitoring view",
+    )
+    assert view["summary"]["observed_locations"] == 2
+    assert view["summary"]["expected_locations"] == 2
+    assert view["summary"]["coverage_rate"] == 1.0
+    assert view["products"][0]["presence"]["eligible_locations"] == 2
+    checks = {row["id"]: row for row in view["quality"]["checks"]}
+    assert checks["observed-location-not-in-master"]["count"] == 1
+
+
 def test_classified_parquet_record_round_trip_preserves_provider_ids() -> None:
     source = _classified(
         offer_id="offer-1",

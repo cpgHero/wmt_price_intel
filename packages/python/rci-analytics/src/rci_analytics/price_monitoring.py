@@ -374,6 +374,20 @@ class PriceMonitoringProjector:
             location_groups[row["location"].scope_key].append(row)
             brand_groups[str(row["brand_type"])].append(row)
 
+        observed_location_keys = set(location_groups)
+        mastered_eligible_location_keys = {
+            location.scope_key for location in scoped_eligible_locations
+        }
+        observed_locations_outside_master = observed_location_keys - mastered_eligible_location_keys
+        effective_expected_location_count = (
+            max(
+                scoped_expected_location_count,
+                len(mastered_eligible_location_keys | observed_location_keys),
+            )
+            if scoped_expected_location_count
+            else 0
+        )
+
         product_medians = [
             median(float(row["price"]) for row in values) for values in product_groups.values()
         ]
@@ -432,7 +446,7 @@ class PriceMonitoringProjector:
             product_identity = context.get(f"{filters.retailer_id}:{product_id}", {})
             observed_product_locations = len({row["location"].scope_key for row in rows})
             eligible_product_locations = max(
-                scoped_expected_location_count,
+                effective_expected_location_count,
                 observed_product_locations,
             )
             not_observed_product_locations = max(
@@ -623,6 +637,16 @@ class PriceMonitoringProjector:
                 "The observation is retained, but country/state/city drill-through may "
                 "be incomplete.",
             ),
+            self._quality_check(
+                "observed-location-not-in-master",
+                "Observed store missing from location master",
+                len(observed_locations_outside_master),
+                max(1, len(observed_location_keys)),
+                "warning",
+                "Search evidence is retained, but an observed retailer store ID is "
+                "outside the mastered eligible-location set. Coverage uses the union "
+                "of mastered and observed store IDs when a mastered denominator exists.",
+            ),
         ]
         quality_status = (
             "warning"
@@ -631,15 +655,14 @@ class PriceMonitoringProjector:
             )
             else "ready"
         )
-        observed_location_keys = set(location_groups)
         observed_locations = len(observed_location_keys)
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]
         presence_rate = (
-            _round(observed_locations / scoped_expected_location_count)
-            if scoped_expected_location_count
+            _round(observed_locations / effective_expected_location_count)
+            if effective_expected_location_count
             else None
         )
-        not_observed_count = max(0, scoped_expected_location_count - observed_locations)
+        not_observed_count = max(0, effective_expected_location_count - observed_locations)
         known_not_observed = [
             location
             for location in scoped_eligible_locations
@@ -766,9 +789,9 @@ class PriceMonitoringProjector:
             },
             "summary": {
                 "observed_locations": observed_locations,
-                "expected_locations": max(0, scoped_expected_location_count),
-                "coverage_rate": _round(observed_locations / scoped_expected_location_count)
-                if scoped_expected_location_count
+                "expected_locations": max(0, effective_expected_location_count),
+                "coverage_rate": _round(observed_locations / effective_expected_location_count)
+                if effective_expected_location_count
                 else None,
                 "observed_products": len(product_groups),
                 "eligible_observations": len(visible),
@@ -782,7 +805,7 @@ class PriceMonitoringProjector:
             "presence": {
                 "status": "observed_only",
                 "observed_locations": observed_locations,
-                "eligible_locations": max(0, scoped_expected_location_count),
+                "eligible_locations": max(0, effective_expected_location_count),
                 "observed_presence_rate": presence_rate,
                 "not_observed_locations": not_observed_count,
                 "confirmed_gap_locations": 0,
