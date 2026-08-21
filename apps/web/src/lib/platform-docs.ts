@@ -179,12 +179,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Area", "Use it for", "Important boundary"],
           rows: [
             [
-              "2026-08-20",
-              "Implemented and focused-test verified; production replay recovery pending",
-              "Certified multi-category replays now project governed identity only through exact-location Product Pack profiles before radius-native reporting.",
-              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. Focused worker and analytics suites pass 44 tests. Milk remains fail-closed because Product Pack 1.5.0 creates a materially new 6,396-case certification scope. No predecessor is archived until its replacement passes the full semantic and live acceptance gates; no provider or AI call was made.",
-            ],
-            [
               "Home",
               "Recent analyses, collection activity, and operating health.",
               "A launch point, not an alternate analytics engine.",
@@ -1364,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Implemented and focused-test verified; production replay recovery pending",
+              "Certified multi-category replays now project governed identity only through exact-location Product Pack profiles before radius-native reporting.",
+              "The exhaustive operational Banana, Strawberry, and Ground Beef queues preserve 70 prior final decisions only after exact Product Pack, policy, pair, and structured-evidence reconciliation; added images and observed-location counts remain additive evidence. The worker no longer sends certified relationships through obsolete radius profiles or mistakes unknown-value policy for tier eligibility. Focused worker and analytics suites pass 44 tests. Milk remains fail-closed because Product Pack 1.5.0 creates a materially new 6,396-case certification scope. No predecessor is archived until its replacement passes the full semantic and live acceptance gates; no provider or AI call was made.",
+            ],
             [
               "2026-08-20",
               "Deployed, semantically audited, and production-verified",
