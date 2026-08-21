@@ -2,11 +2,13 @@
 
 ## Status
 
-Core relationship-preservation, terminal-exclusion, and semantic-audit changes
-were deployed and release-gate verified on August 20, 2026. The platform owner
-has completed all 185 review cases. A first immutable replay exposed a second
-legacy readiness dependency before publication; the corrected generation-two
-replay and production reporting acceptance remain pending.
+Production complete and owner-ready on August 20, 2026. The platform owner
+completed all 185 review cases, the generation-two governed replay retained all
+183 certified-comparable relationships, all six comparison-basis/radius
+documents passed the semantic release audit, and the primary production report
+workflow passed live browser acceptance. Four superseded Egg reports were then
+recoverably archived. Source Search data, PDP evidence, certification history,
+immutable releases, and audit lineage remain preserved.
 
 ## Purpose
 
@@ -206,9 +208,72 @@ share one complete identity ledger. Regression coverage includes a certified
 relationship whose benchmark product has no positive Search observation and
 requires identity continuity with zero scored evidence.
 
-## Production acceptance requirements
+## Production acceptance record
 
-This phase is not production-complete until all of the following are true:
+The accepted generation-two replay is:
+
+- analysis run: `05aa5182-e636-495c-bafb-c8040f44bd34`;
+- analysis: `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-3c967ecc-r2`;
+- AnalysisResult database ID: `bfaf8389-6f5c-4748-b1a8-a0e445ccbe20`;
+- AnalysisResult checksum:
+  `1515aa5d16e3be114e16e66cc99611cf9d8810347e14e823d57e5bb892200e43`;
+- immutable gold-set release: `3c967ecc-17fd-4bad-a749-c223519723d0`; its
+  complete checksum remains preserved in the immutable release and audit
+  records.
+
+The final rebuild generated all six global portfolio documents—Compatible-spec
+and Strict exact-spec at 1, 3, and 5 miles—in 156.288 seconds without a
+MetricsCart or OpenAI call. The semantic portfolio audit passed with zero
+errors. Its 51 warnings are explicit evidence limitations, not reconciliation
+defects: a retailer/basis can have a certified identity relationship but no
+positive-price product-location evidence that is scorable under the selected
+geography policy.
+
+Compatible-spec retains 183 declared relationships and 183 relationship
+evidence rows at every radius. Strict exact-spec retains seven and seven.
+Compatible-spec includes all 13 configured competitors; seven have locally
+scored evidence in this snapshot and six retain their certified product and
+relationship identities with zero-scored evidence rather than disappearing or
+being represented as a price result. At three miles, scored observations include
+Target 5,096, Amazon Same Day 3,255, ALDI 2,826, Albertsons 892, Safeway 844,
+HEB 663, and Kroger 21. Giant Eagle, Meijer, Sam's Club, ShopRite, Trader Joe's,
+and Wegmans have no scorable local price evidence in the accepted snapshot.
+
+Production API acceptance returned HTTP 200 for all six profile/radius
+documents in 24–138 milliseconds. Live browser acceptance exercised all nine
+report tabs, retailer and basis filters, 1/3/5-mile controls, included-product
+drawers, evidence rows, maps, and export controls with a clean browser console.
+The report opens on Compatible-spec by default because that is the broadest
+certified comparison basis; Strict exact-spec remains an explicit selection.
+The Retailer Scorecards landing page uses the radius-native document for its
+summary and no longer mixes in the legacy exact-ZIP executive narrative.
+
+Commit `1b96298` preserves unscored certified identities without inventing
+price or location evidence. GitHub Actions run `32433669906` passed the complete
+release gate. Commit `0939890` aligned the landing context, default basis, and
+executive summary to the radius-native evidence; GitHub Actions run
+`32434666036` passed the complete release gate, including contracts, reversible
+migrations, Python and web tests, 13 browser tests, the production Next.js
+build, and all four service-container builds. Railway web was verified at the
+exact `0939890` revision before final browser acceptance.
+
+After the replacement passed these checks, the following exact obsolete
+AnalysisResults were recoverably archived at
+`2026-08-21 01:04:53.859010+00:00`:
+
+- `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e`;
+- `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-de5fc82e-r2`;
+- `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-80afd160`;
+- `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-3c967ecc`.
+
+Only `analysis_result.archived_at` changed for those resolved IDs. No row was
+deleted, the accepted `-r2` replacement remains active, and source data, raw
+objects, PDP evidence, review decisions, queue history, immutable releases,
+materialized reporting evidence, and audit lineage were not modified.
+
+## Acceptance requirements
+
+All requirements below are satisfied:
 
 1. The complete release gate and service-container builds pass.
 2. The change is deployed to API, worker, scheduler, and web services as

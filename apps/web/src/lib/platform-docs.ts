@@ -83,10 +83,10 @@ const lastVerified = "August 20, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.27",
+  version: "1.3.28",
   lastVerified,
   baseline:
-    "Production implementation through Egg Product Pack 1.2.3, plus the test-verified terminal insufficient-evidence release boundary pending governed replay and production acceptance",
+    "Production implementation through the accepted Fresh Shell Eggs generation-two governed replay, semantic portfolio audit, and recoverable obsolete-report archival",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1358,6 +1358,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-20",
+              "Deployed, semantically audited, and production-verified",
+              "The certified Egg release now drives one accepted radius-native Competitive Intelligence report, and its superseded reports are recoverably archived.",
+              "Generation two retained all 183 certified-comparable relationships and materialized Compatible-spec and Strict exact-spec at 1, 3, and 5 miles. The six-document semantic audit passed with zero errors; 51 explicit warnings describe honest no-scored-evidence limitations. Compatible-spec exposes all 13 competitors, with locally scored price evidence for seven and zero-scored identity continuity for six. Production API, all nine report tabs, retailer/basis/radius controls, included-product evidence, maps, and export controls passed live acceptance with a clean browser console. The no-query landing now defaults to the broadest certified Compatible-spec basis and its executive summary is derived from the same radius-native document instead of legacy exact-ZIP narrative. GitHub Actions runs 32433669906 and 32434666036 passed the complete gates. Only after validation, four exact obsolete Egg AnalysisResults were recoverably archived; no Search data, raw object, PDP evidence, review or certification history, immutable release, materialization, or audit lineage was deleted.",
+            ],
             [
               "2026-08-20",
               "Test-verified; deployment and governed replay pending",
