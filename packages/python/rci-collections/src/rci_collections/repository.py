@@ -1788,8 +1788,7 @@ class PostgresCollectionRepository:
                 """
                 UPDATE collection_run
                 SET availability_gate_status = :gate_status,
-                    error_summary = CASE WHEN :error_summary IS NULL
-                      THEN error_summary ELSE :error_summary END
+                    error_summary = COALESCE(CAST(:error_summary AS text), error_summary)
                 WHERE id::text = :run_id
                 """
             ),
