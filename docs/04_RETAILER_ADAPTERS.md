@@ -97,6 +97,13 @@ HTTP 404. The adapter is therefore retained unchanged. Regional store acceptance
 before the broader collection is replayed; a successful control does not make every historical
 store/ZIP pair currently valid. See `docs/89_PHASE_13_35_ALDI_SEARCH_CONTROL_DIAGNOSTIC.md`.
 
+The Phase 13.37 updated-roster preflight used five different active store/ZIP pairs. Florida store
+`482-033`, ZIP `32548`, returned HTTP 200 with 14 results under contract `1.0.0`; the four other
+regions returned the same billable HTTP 404 unavailable-page body. The adapter remains correct, but
+the refreshed roster is not provider-callability evidence. Broad ALDI rollout remains blocked
+pending provider-supported regional coverage. See
+`docs/91_PHASE_13_37_ALDI_UPDATED_ROSTER_REGIONAL_PREFLIGHT.md`.
+
 ## Catalogued later adapters
 
 Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,

@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.42",
+  version: "1.3.43",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.36 ALDI location-roster refresh, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.37 ALDI updated-roster regional preflight, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1602,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Updated-roster ALDI regional preflight completed; broad rollout remains blocked",
+              "Phase 13.37 tested five different active ALDI store/ZIP pairs from the freshly imported MetricsCart roster under an exact 10-credit owner approval.",
+              "Run c0f76364-3380-45b7-95cc-60b0a908cf31 made five first-page ALDI Strawberry Search calls and no other provider or AI call. Florida store 482-033 / ZIP 32548 returned HTTP 200 with 14 contract-valid results; California 479-001 / 92399, Illinois 464-033 / 60073, Ohio 461-019 / 45013, and Pennsylvania 469-051 / 15301 returned the same nonretryable billable HTTP 404 unavailable-page body. All compressed objects, decompressed bodies, and byte sizes reconcile; the successful page passed contract 1.0.0, the shared 31-field inventory, positive-price availability authority, and is_sponsored authority. The run used exactly 10 credits (approximately $0.02) with zero retries or 429s. This proves the adapter remains valid but the active roster is not a callability catalog. Broad ALDI collection remains blocked pending provider-supported regional coverage.",
+            ],
             [
               "2026-08-22",
               "Current ALDI location roster reconciled and imported; regional Search availability remains unproven",

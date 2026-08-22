@@ -31,6 +31,9 @@ by retailer-specific API fixtures and endpoint contracts.
 - The 2026-08-22 ALDI refresh preserves the same 2,627 store-number/physical-location universe and
   corrects 79 MetricsCart location IDs in leading-zero-ZIP states. It does not change the tested
   ALDI Search store/ZIP pairs and therefore does not, by itself, resolve regional 404s.
+- A five-store preflight selected from the refreshed roster produced one HTTP 200 in Florida and
+  four billable HTTP 404s in California, Illinois, Ohio, and Pennsylvania. Treat active roster
+  membership and current MetricsCart Search callability as separate governed facts.
 - Eleven exact-address/coordinate ALDI collisions contain two active store numbers each in North
   Carolina. They remain an explicit governance exception; do not silently collect both or retire
   either identifier without callability evidence.

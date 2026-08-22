@@ -88,6 +88,14 @@ corrected MetricsCart location ID. Roster membership therefore cannot be treated
 ALDI Search page is callable. Eleven exact physical-location collisions also require governance
 before all-location collection. See `docs/90_PHASE_13_36_ALDI_LOCATION_ROSTER_REFRESH.md`.
 
+The next five-store preflight selected different active store/ZIP pairs from that refreshed roster.
+Only Florida store `482-033`, ZIP `32548`, returned HTTP 200 (14 contract-valid results); California,
+Illinois, Ohio, and Pennsylvania returned the same billable 404 unavailable-page body. All five
+objects and bodies reconcile by checksum, and there were no retries, 429s, schema drift, Walmart,
+Amazon, PDP, or AI calls. The 20% success rate confirms that roster membership is not a callability
+catalog. Do not expand ALDI collection until MetricsCart supplies or validates regional store
+coverage. See `docs/91_PHASE_13_37_ALDI_UPDATED_ROSTER_REGIONAL_PREFLIGHT.md`.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.
