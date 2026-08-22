@@ -66,6 +66,11 @@ from rci_worker.analysis import (
     S3RawPageReader,
 )
 from rci_worker.product_pack_validation import validate_product_pack_draft
+from rci_worker.report_materialization import (
+    PostgresReportMaterializationQueue,
+    ReportMaterializationClient,
+    ReportMaterializationWorker,
+)
 from rci_worker.study_discovery import StudyDiscoveryWorker
 
 
@@ -212,6 +217,7 @@ async def run() -> None:
                 lease_seconds=int(os.getenv("AI_LEASE_SECONDS", "900")),
             )
     analysis_worker: AnalysisWorker | None = None
+    report_materialization_worker: ReportMaterializationWorker | None = None
     study_discovery_worker: StudyDiscoveryWorker | None = None
     if _enabled(os.getenv("ANALYSIS_PIPELINE_ENABLED"), default=True) and os.getenv(
         "OBJECT_STORAGE_BUCKET"
@@ -286,6 +292,21 @@ async def run() -> None:
             claim_limit=int(os.getenv("ANALYSIS_CLAIM_LIMIT", "1")),
             lease_seconds=int(os.getenv("ANALYSIS_LEASE_SECONDS", "600")),
         )
+        internal_api_url = os.getenv("RCI_API_INTERNAL_URL", "").strip()
+        internal_token = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
+        if internal_api_url and internal_token:
+            materialization_worker_id = f"{worker_id}-report-materialization"
+            report_materialization_worker = ReportMaterializationWorker(
+                PostgresReportMaterializationQueue(database.engine),
+                ReportMaterializationClient(
+                    api_url=internal_api_url,
+                    token=internal_token,
+                    worker_id=materialization_worker_id,
+                ),
+                worker_id=materialization_worker_id,
+                claim_limit=int(os.getenv("REPORT_MATERIALIZATION_CLAIM_LIMIT", "1")),
+                lease_seconds=int(os.getenv("REPORT_MATERIALIZATION_LEASE_SECONDS", "1800")),
+            )
     product_detail_client: MetricsCartProductDetailClient | None = None
     product_detail_worker: ProductDetailWorker | None = None
     if _enabled(os.getenv("PRODUCT_DETAIL_ENRICHMENT_ENABLED")):
@@ -356,6 +377,11 @@ async def run() -> None:
         while not stop.is_set():
             claimed = await worker.run_once()
             analyses = await analysis_worker.run_once() if analysis_worker is not None else 0
+            report_materializations = (
+                await report_materialization_worker.run_once()
+                if report_materialization_worker is not None
+                else 0
+            )
             product_details = (
                 await product_detail_worker.run_once() if product_detail_worker is not None else 0
             )
@@ -376,6 +402,7 @@ async def run() -> None:
             if (
                 claimed
                 + analyses
+                + report_materializations
                 + product_details
                 + product_detail_normalizations
                 + product_pack_validations

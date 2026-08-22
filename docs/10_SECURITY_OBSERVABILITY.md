@@ -16,8 +16,10 @@ V1 roles: Admin, Analyst, Viewer.
 - Analyst: create/run collections, review QA, publish analyses.
 - Viewer: read completed analyses/reports.
 
-`/admin/docs` uses the existing eight-hour administrator session and returns its content through a
-private, no-store same-origin route only after authentication. It documents operating controls but
+`/admin/docs` and `/admin/report-publishing` use the existing eight-hour administrator session and
+return protected content through private, no-store same-origin routes only after authentication.
+The publishing page can retry only blocked or waiting jobs; private stage operations also require
+the API/worker service token and a current worker lease. The documentation center records operating controls but
 contains no secret values, raw private object URIs, or credentials. Full individual accounts and
 RBAC remain future work and are called out as an explicit limitation in the owner/admin guide.
 
@@ -46,7 +48,9 @@ generation, and benchmark updates.
 - QA issue counts,
 - artifact generation failures,
 - price-architecture materialization duration/failure and persisted matrix count,
-- worker lease expirations/reclaims.
+- report-publication status, exact stage, progress, attempt count, semantic error/warning counts,
+  activation duration, blocked replacements, and recoverably archived predecessors,
+- worker lease expirations/reclaims,
 - schedule lag/materialization failures,
 - analysis-evaluation lease expirations,
 - alert trigger/suppression count,

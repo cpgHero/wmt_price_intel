@@ -23,6 +23,7 @@ class AnalysisRecord:
     checksum: str
     result: JsonObject
     created_at: datetime
+    reporting_status: str = "ready"
 
 
 @dataclass(frozen=True, slots=True)

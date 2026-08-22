@@ -25,6 +25,7 @@ from rci_api.product_packs import (
 from rci_api.product_packs import (
     synchronize_product_pack_catalog,
 )
+from rci_api.report_publication import router as report_publication_router
 from rci_api.studies import router as study_router
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
@@ -71,6 +72,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(matching_v2_review_router)
     app.include_router(price_monitoring_router)
     app.include_router(product_pack_router)
+    app.include_router(report_publication_router)
     app.include_router(study_router)
 
     @app.get("/health/live", tags=["health"])

@@ -83,10 +83,10 @@ const lastVerified = "August 21, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.34",
+  version: "1.3.35",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.30 five-category reporting trust certification, including profile-specific certified relationship eligibility",
+    "Production implementation through Phase 13.31 durable trust-gated report publication, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -231,6 +231,11 @@ export const platformDocumentation: PlatformDocumentation = {
               "Discovery precedes certification and retains Search/PDP source authority.",
             ],
             [
+              "Report Publishing",
+              "Monitor queued and running report materialization, trust-audit outcomes, retries, and atomic activation.",
+              "A pending or blocked replacement never displaces the current trusted report.",
+            ],
+            [
               "Product Packs",
               "Author, validate, publish, and activate versioned category rules and report blueprints.",
               "Published versions are immutable and require certification evidence.",
@@ -343,7 +348,11 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "16. Gate and publish",
               detail:
-                "Schema, quality, readiness, golden, reconciliation, and presentation checks must pass before a result is served. Raw evidence, derived artifacts, policies, and renderer versions remain traceable and immutable.",
+                "The immutable result enters a pending state and activates a durable Postgres job. A leased worker stages Price Architecture and every configured comparison-basis × 1/3/5-mile portfolio, then runs the semantic trust audit. Only one final transaction marks the replacement ready and recoverably archives its predecessor. A failed replacement remains pending or blocked while the current trusted report stays active.",
+              link: {
+                href: "/admin/report-publishing",
+                label: "Report Publishing",
+              },
             },
             {
               title: "17. Monitor drift and repeat",
@@ -1272,6 +1281,97 @@ export const platformDocumentation: PlatformDocumentation = {
       ],
     },
     {
+      id: "trust-gated-report-publication",
+      group: "operations",
+      title: "Trust-gated report publishing",
+      summary:
+        "How durable background materialization, semantic audits, retries, and atomic activation protect every future report.",
+      audience: "Platform owner · Platform administrator · Engineering",
+      readingTime: "7 min",
+      lastVerified,
+      status: "Current",
+      links: [
+        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+        { href: "/analyses", label: "Open current reports" },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Safe replacement rule",
+          text: "A new AnalysisResult is not an active report merely because deterministic analytics finished. It remains pending until every required read model is staged and the semantic trust audit passes. The currently certified report remains visible throughout.",
+        },
+        {
+          kind: "steps",
+          title: "Durable publication flow",
+          items: [
+            {
+              title: "1. Queue",
+              detail:
+                "Creating the immutable governed publication activates one idempotent Postgres materialization job for the AnalysisResult.",
+            },
+            {
+              title: "2. Claim with a lease",
+              detail:
+                "A worker replica claims the job with FOR UPDATE SKIP LOCKED. Heartbeats extend ownership; an expired lease is reclaimable, and maximum attempts are bounded.",
+            },
+            {
+              title: "3. Stage deterministic read models",
+              detail:
+                "The worker stages the three default Price Architecture matrices and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
+            },
+            {
+              title: "4. Run the semantic trust gate",
+              detail:
+                "The gate reconciles required document coverage, retailer and profile scope, product and relationship rollups, outcome partitions, denominators, rates, weighted gaps, product order, assortment agreement, geography policy, and monotonic 1/3/5-mile evidence behavior. Warnings disclose honest evidence limitations; errors block publication.",
+            },
+            {
+              title: "5. Activate atomically",
+              detail:
+                "One database transaction installs the complete staged read-model set, records the audit, marks the replacement ready, and recoverably archives older ready reports in the same Product Pack lineage. Users cannot see a half-built replacement.",
+            },
+          ],
+        },
+        {
+          kind: "definitions",
+          title: "Administrator status meanings",
+          items: [
+            {
+              term: "Awaiting publication",
+              definition:
+                "The immutable result exists, but its governed presentation context has not activated materialization.",
+            },
+            {
+              term: "Queued / running",
+              definition:
+                "The durable job is waiting for or currently owned by a worker lease. Progress identifies the exact staged scope.",
+            },
+            {
+              term: "Retry wait",
+              definition:
+                "A temporary failure released the lease and scheduled a bounded backoff. Completed staged scopes are retained.",
+            },
+            {
+              term: "Blocked",
+              definition:
+                "Attempts are exhausted or a critical condition prevents activation. The prior trusted report remains current; an administrator may inspect the error and explicitly retry.",
+            },
+            {
+              term: "Succeeded",
+              definition:
+                "All required documents and the semantic audit passed, and the atomic activation transaction completed.",
+            },
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Cost and evidence boundary",
+          text: "Report materialization uses retained normalized Search, location, PDP, certification, Product Pack, and publication evidence. It does not make a MetricsCart or OpenAI call. A retry never recollects paid source data.",
+        },
+      ],
+    },
+    {
       id: "five-category-trust-certification",
       group: "governance",
       title: "Five-category reporting trust certification",
@@ -1501,6 +1601,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-21",
+              "Implemented and release-gated",
+              "Phase 13.31 made semantic trust certification an automatic publication gate and moved report materialization to a durable background job.",
+              "New results remain pending while a leased worker stages Price Architecture and every configured basis-by-1/3/5-mile Competitive Portfolio. Completed scopes resume after transient failure; retries are bounded; administrators see stage, progress, attempts, errors, warnings, and audit counts. One final transaction installs the complete read-model set, marks the replacement ready, and recoverably archives its predecessor. A blocked replacement never displaces the current trusted report. No MetricsCart or OpenAI call is part of this workflow.",
+            ],
             [
               "2026-08-21",
               "Deployed, replayed, semantically audited, production-verified, and certified",

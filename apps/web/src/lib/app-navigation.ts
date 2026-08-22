@@ -115,6 +115,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
+        label: "Report Publishing",
+        description: "Trust-gated background report materialization",
+        href: "/admin/report-publishing",
+        icon: "quality",
+        match: "prefix",
+      },
+      {
         label: "Product Packs",
         description: "Governed category rules and certification",
         href: "/admin/product-packs",

@@ -68,6 +68,7 @@ class AnalysisResponse(BaseModel):
     analysis_id: str
     collection_run_id: str
     status: str
+    reporting_status: str
     product_pack_id: str
     product_pack_version: str
     schema_version: str
@@ -268,41 +269,8 @@ async def publish_analysis(
 ) -> AnalysisRecord:
     try:
         record = await service.publish(document, collection_run_id=run_id)
-        try:
-            # Imported lazily to avoid the analyses/price-monitoring router cycle.
-            # The persisted defaults make the first owner-facing matrix read fast.
-            from rci_api.price_monitoring import get_price_monitoring_service
-
-            await get_price_monitoring_service(request).pre_materialize_architecture_matrices(
-                record.analysis_id
-            )
-        except Exception:
-            logger.exception(
-                "price architecture pre-materialization failed after analysis publication",
-                extra={
-                    "event": "price_architecture_pre_materialization_failed",
-                    "analysis_id": record.analysis_id,
-                },
-            )
-        try:
-            from rci_api.competitive_leadership import (
-                get_competitive_product_leadership_service,
-            )
-
-            await get_competitive_product_leadership_service(request).pre_materialize_portfolios(
-                record.analysis_id
-            )
-        except Exception:
-            # The immutable analysis is authoritative and must remain publishable if
-            # a derivative read model cannot be built. Operators can safely retry the
-            # idempotent materialization without replaying paid collection work.
-            logger.exception(
-                "competitive portfolio pre-materialization failed after analysis publication",
-                extra={
-                    "event": "competitive_portfolio_pre_materialization_failed",
-                    "analysis_id": record.analysis_id,
-                },
-            )
+        if str(document.get("schema_version")) == "2.0.0":
+            await service.publish_publication(record.analysis_id, document)
         return record
     except ContractError as exc:
         raise HTTPException(

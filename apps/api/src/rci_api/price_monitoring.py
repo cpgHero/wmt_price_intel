@@ -1079,6 +1079,7 @@ class PriceMonitoringService:
         city: str | None = None,
         zipcode: str | None = None,
         refresh: bool = False,
+        publish: bool = True,
     ) -> dict[str, Any]:
         """Build unmatched assortment architecture across every analysis retailer."""
 
@@ -1086,7 +1087,7 @@ class PriceMonitoringService:
             raise ValueError("a city filter requires its state")
         if mode == "fixed_range" and fixed_increment not in {0.5, 1.0}:
             raise ValueError("fixed price-rung increment must be 0.50 or 1.00")
-        if not refresh:
+        if publish and not refresh:
             stored = await self._repository.architecture_materialization(
                 analysis_id,
                 mode=mode,
@@ -1184,7 +1185,7 @@ class PriceMonitoringService:
             *revisions,
         )
         cached = self._architecture_cache.get(cache_key)
-        if cached is not None and not refresh:
+        if cached is not None and not refresh and publish:
             return cached
 
         pack = await self._packs.load(
@@ -1228,21 +1229,22 @@ class PriceMonitoringService:
             matrix,
             label=f"price-architecture-matrix:{analysis_id}",
         )
-        await self._repository.store_architecture_materialization(
-            analysis_id,
-            mode=mode,
-            fixed_increment=fixed_increment,
-            brand_type=brand_type,
-            brand=brand,
-            state=state,
-            city=city,
-            zipcode=zipcode,
-            source_revision=source_revision,
-            document=matrix,
-        )
-        if len(self._architecture_cache) >= 24:
-            self._architecture_cache.pop(next(iter(self._architecture_cache)))
-        self._architecture_cache[cache_key] = matrix
+        if publish:
+            await self._repository.store_architecture_materialization(
+                analysis_id,
+                mode=mode,
+                fixed_increment=fixed_increment,
+                brand_type=brand_type,
+                brand=brand,
+                state=state,
+                city=city,
+                zipcode=zipcode,
+                source_revision=source_revision,
+                document=matrix,
+            )
+            if len(self._architecture_cache) >= 24:
+                self._architecture_cache.pop(next(iter(self._architecture_cache)))
+            self._architecture_cache[cache_key] = matrix
         return matrix
 
     async def pre_materialize_architecture_matrices(
@@ -1250,6 +1252,7 @@ class PriceMonitoringService:
         analysis_id: str,
         *,
         refresh: bool = False,
+        publish: bool = True,
     ) -> list[dict[str, Any]]:
         """Persist the three default category-level matrices for immediate reads."""
 
@@ -1260,18 +1263,21 @@ class PriceMonitoringService:
                     mode="benchmark_anchored",
                     fixed_increment=0.5,
                     refresh=refresh,
+                    publish=publish,
                 ),
                 self.architecture_matrix(
                     analysis_id,
                     mode="fixed_range",
                     fixed_increment=0.5,
                     refresh=refresh,
+                    publish=publish,
                 ),
                 self.architecture_matrix(
                     analysis_id,
                     mode="fixed_range",
                     fixed_increment=1.0,
                     refresh=refresh,
+                    publish=publish,
                 ),
             )
         )

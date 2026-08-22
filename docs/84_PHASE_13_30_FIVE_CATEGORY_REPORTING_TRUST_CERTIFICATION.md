@@ -120,6 +120,10 @@ The final production lineage query found exactly five unarchived certified repla
 4. Begin multi-date collection certification only after snapshot identity, geography, and profile continuity tests pass.
 5. Add no-category-branch regression fixtures for the next Product Pack before enabling its production replay.
 
+Phase 13.31 subsequently completed recommendations 2 and 3. See
+`docs/85_PHASE_13_31_DURABLE_TRUST_GATED_PUBLICATION.md` for the implemented automatic gate,
+durable worker, administrator progress surface, and atomic activation behavior.
+
 ## Further questions
 
 - What warning budget should block publication for a new category when missing cohort attributes are material rather than merely disclosed?

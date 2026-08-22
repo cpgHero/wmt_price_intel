@@ -77,6 +77,8 @@ MATCHING_V2_SHADOW_API_ENABLED=false
 ANALYSIS_HISTORICAL_REPLAY_ENABLED=false
 ANALYSIS_CLAIM_LIMIT=1
 ANALYSIS_LEASE_SECONDS=600
+REPORT_MATERIALIZATION_CLAIM_LIMIT=1
+REPORT_MATERIALIZATION_LEASE_SECONDS=1800
 ANALYSIS_MAX_ATTEMPTS=3
 RCI_API_INTERNAL_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}
 RCI_INTERNAL_SERVICE_TOKEN=<same random secret as api>
@@ -129,6 +131,15 @@ At the default, no more than two matching-review calls can be in flight per work
 configured $0.35 per-request ceiling implies at most $0.70 of simultaneous request exposure per
 worker. The UI reads durable batch and task status from Postgres; it does not infer progress from
 the currently visible page.
+
+New reports use the same `RCI_INTERNAL_SERVICE_TOKEN` on `api` and `worker` to perform durable,
+zero-provider-call materialization. The worker claims one `report_materialization_job` by default,
+heartbeats an 1,800-second lease, and stages bounded Price Architecture and basis-by-radius
+Competitive Portfolio documents through authenticated private API operations. Do not raise
+`REPORT_MATERIALIZATION_CLAIM_LIMIT` until database, object-store, and API pressure are measured;
+each portfolio already uses bounded internal concurrency. Administrators monitor and retry jobs at
+`/admin/report-publishing`. A failed job never activates its pending result or archives the prior
+trusted report.
 
 One Match Certification AI-review batch may contain up to 1,500 explicitly selected or
 queue-wide eligible cases. The server ranks queue-wide scope by Search-derived benchmark and

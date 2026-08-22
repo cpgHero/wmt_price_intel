@@ -44,3 +44,9 @@ seller/attribute recovery without mutating raw or previously published snapshot 
 read models beside the immutable AnalysisResult. Default Walmart-anchored, fixed-$0.50, and
 fixed-$1.00 matrices can be built during publication and served without rereading every classified
 Parquet artifact; rebuilding the derivative never queues a paid provider call.
+`0043_comp_portfolio_mat` persists the complete configured comparison-basis × 1/3/5-mile
+Competitive Portfolio set. `0044_report_pub_gate` makes new AnalysisResults pending by default and
+adds a leased `SKIP LOCKED` publication job plus idempotent staging documents. Existing certified
+results are backfilled as ready. A replacement becomes ready only when the complete staged set
+passes the semantic trust audit and one transaction installs every read model while recoverably
+archiving the prior ready report in the same Product Pack lineage.

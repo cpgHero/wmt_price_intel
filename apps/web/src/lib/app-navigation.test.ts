@@ -27,6 +27,7 @@ describe("application navigation", () => {
       "/admin/matching-v2",
       "/workspace/brands",
       "/admin/studies",
+      "/admin/report-publishing",
       "/admin/product-packs",
     ]);
     expect(hrefs).not.toContain("/intelligence/price");

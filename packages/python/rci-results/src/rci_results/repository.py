@@ -33,6 +33,7 @@ def _analysis(row: RowMapping | dict[str, Any]) -> AnalysisRecord:
         analysis_id=str(row["analysis_id"]),
         collection_run_id=str(row["collection_run_id"]),
         status=str(row["status"]),
+        reporting_status=str(row.get("reporting_status") or "ready"),
         product_pack_id=str(row["product_pack_id"]),
         product_pack_version=str(row["product_pack_version"]),
         schema_version=str(row["schema_version"]),
@@ -77,7 +78,7 @@ def _publication(row: RowMapping) -> AnalysisPublicationRecord:
 _ANALYSIS_SELECT = """
 SELECT r.id::text AS id, r.analysis_run_id::text AS analysis_run_id,
        r.analysis_id, ar.collection_run_id::text AS collection_run_id,
-       ar.status, ar.product_pack_id, ar.product_pack_version,
+       ar.status, r.reporting_status, ar.product_pack_id, ar.product_pack_version,
        r.schema_version, r.checksum, r.result, r.created_at
 FROM analysis_result r
 JOIN analysis_run ar ON ar.id = r.analysis_run_id
@@ -271,10 +272,11 @@ class PostgresResultsRepository:
                         text(
                             """
                             INSERT INTO analysis_result (
-                              analysis_run_id, analysis_id, schema_version, result, checksum
+                              analysis_run_id, analysis_id, schema_version, result, checksum,
+                              reporting_status
                             ) VALUES (
                               CAST(:analysis_run_id AS uuid), :analysis_id, :schema_version,
-                              CAST(:result AS jsonb), :checksum
+                              CAST(:result AS jsonb), :checksum, :reporting_status
                             )
                             RETURNING id::text AS id, analysis_run_id::text AS analysis_run_id,
                               analysis_id, schema_version, checksum, result, created_at
@@ -286,6 +288,9 @@ class PostgresResultsRepository:
                             "schema_version": str(result["schema_version"]),
                             "result": _json(result),
                             "checksum": checksum,
+                            "reporting_status": (
+                                "pending" if str(result["schema_version"]) == "2.0.0" else "ready"
+                            ),
                         },
                     )
                 )
@@ -297,6 +302,9 @@ class PostgresResultsRepository:
                 {
                     "collection_run_id": collection_run_id,
                     "status": "succeeded",
+                    "reporting_status": (
+                        "pending" if str(result["schema_version"]) == "2.0.0" else "ready"
+                    ),
                     "product_pack_id": str(product_pack["id"]),
                     "product_pack_version": str(product_pack["version"]),
                 }
@@ -318,6 +326,22 @@ class PostgresResultsRepository:
                     "details": _json({"checksum": checksum}),
                 },
             )
+            if str(result["schema_version"]) == "2.0.0":
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO report_materialization_job (
+                          analysis_result_id, status, stage
+                        ) VALUES (
+                          CAST(:record_id AS uuid),
+                          'awaiting_publication',
+                          'awaiting_publication'
+                        )
+                        ON CONFLICT (analysis_result_id) DO NOTHING
+                        """
+                    ),
+                    {"record_id": str(row["id"])},
+                )
             return _analysis(combined)
 
     async def list_analyses(self, limit: int = 50) -> list[AnalysisRecord]:
@@ -326,6 +350,7 @@ class PostgresResultsRepository:
                 await connection.execute(
                     text(
                         f"{_ANALYSIS_SELECT} WHERE r.archived_at IS NULL "
+                        "AND r.reporting_status = 'ready' "
                         "ORDER BY r.created_at DESC LIMIT :limit"
                     ),
                     {"limit": limit},
@@ -406,6 +431,30 @@ class PostgresResultsRepository:
                 .first()
             )
             if existing is not None:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO report_materialization_job (
+                          analysis_result_id, status, stage
+                        ) VALUES (
+                          CAST(:record_id AS uuid), 'queued', 'queued'
+                        )
+                        ON CONFLICT (analysis_result_id) DO UPDATE
+                        SET status = CASE
+                              WHEN report_materialization_job.status = 'succeeded'
+                                THEN report_materialization_job.status
+                              ELSE 'queued'
+                            END,
+                            stage = CASE
+                              WHEN report_materialization_job.status = 'succeeded'
+                                THEN report_materialization_job.stage
+                              ELSE 'queued'
+                            END,
+                            available_at = now(), updated_at = now()
+                        """
+                    ),
+                    {"record_id": analysis.id},
+                )
                 return _publication(existing)
             version = int(
                 (
@@ -488,6 +537,30 @@ class PostgresResultsRepository:
                         }
                     ),
                 },
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO report_materialization_job (
+                      analysis_result_id, status, stage
+                    ) VALUES (
+                      CAST(:record_id AS uuid), 'queued', 'queued'
+                    )
+                    ON CONFLICT (analysis_result_id) DO UPDATE
+                    SET status = CASE
+                          WHEN report_materialization_job.status = 'succeeded'
+                            THEN report_materialization_job.status
+                          ELSE 'queued'
+                        END,
+                        stage = CASE
+                          WHEN report_materialization_job.status = 'succeeded'
+                            THEN report_materialization_job.stage
+                          ELSE 'queued'
+                        END,
+                        available_at = now(), updated_at = now()
+                    """
+                ),
+                {"record_id": analysis.id},
             )
             return _publication(row)
 
