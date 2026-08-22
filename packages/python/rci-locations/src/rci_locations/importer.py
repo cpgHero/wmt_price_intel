@@ -61,6 +61,12 @@ def transform_row(
     country = normalize_country(row.get("Country"))
     resolved = catalog.resolve(provider, country)
     raw_zipcode = normalize_identifier(row.get("Zip_Code"))
+    status = normalize_identifier(row.get("Status"))
+    collection_eligible, collection_eligibility_reason = catalog.collection_eligibility(
+        resolved,
+        store_number=store_number,
+        status=status,
+    )
     record = LocationRecord(
         retailer_id=resolved.retailer.id,
         provider=provider,
@@ -77,7 +83,9 @@ def transform_row(
         country=country,
         latitude=parse_coordinate(row.get("Latitude")),
         longitude=parse_coordinate(row.get("Longitude")),
-        status=normalize_identifier(row.get("Status")),
+        status=status,
+        collection_eligible=collection_eligible,
+        collection_eligibility_reason=collection_eligibility_reason,
         source_created_at=normalize_identifier(row.get("created_at")),
         source_row_id=normalize_identifier(row.get("id")),
         raw_row=dict(row),

@@ -30,6 +30,12 @@ class ResolvedRetailer:
 
 
 @dataclass(frozen=True, slots=True)
+class LocationCollectionPolicy:
+    eligible_statuses: frozenset[str]
+    store_number_pattern: str
+
+
+@dataclass(frozen=True, slots=True)
 class LocationRecord:
     retailer_id: str
     provider: str
@@ -47,6 +53,8 @@ class LocationRecord:
     latitude: float | None
     longitude: float | None
     status: str | None
+    collection_eligible: bool
+    collection_eligibility_reason: str | None
     source_created_at: str | None
     source_row_id: str | None
     raw_row: dict[str, str]

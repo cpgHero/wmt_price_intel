@@ -96,12 +96,14 @@ class PostgresLocationRepository:
             INSERT INTO retailer_location (
               retailer_id, provider, provider_location_id, store_number, store_name,
               raw_zipcode, zipcode, street, address, city, state, county, country,
-              latitude, longitude, status, source_created_at, source_row_id,
+              latitude, longitude, status, collection_eligible,
+              collection_eligibility_reason, source_created_at, source_row_id,
               last_import_id, raw_row
             ) VALUES (
               :retailer_id, :provider, :provider_location_id, :store_number, :store_name,
               :raw_zipcode, :zipcode, :street, :address, :city, :state, :county, :country,
-              :latitude, :longitude, :status, :source_created_at, :source_row_id,
+              :latitude, :longitude, :status, :collection_eligible,
+              :collection_eligibility_reason, :source_created_at, :source_row_id,
               CAST(:last_import_id AS uuid), CAST(:raw_row AS jsonb)
             )
             ON CONFLICT (retailer_id, provider, store_number, country) DO UPDATE SET
@@ -117,6 +119,8 @@ class PostgresLocationRepository:
               latitude = EXCLUDED.latitude,
               longitude = EXCLUDED.longitude,
               status = EXCLUDED.status,
+              collection_eligible = EXCLUDED.collection_eligible,
+              collection_eligibility_reason = EXCLUDED.collection_eligibility_reason,
               source_created_at = EXCLUDED.source_created_at,
               source_row_id = EXCLUDED.source_row_id,
               last_import_id = EXCLUDED.last_import_id,
@@ -148,6 +152,8 @@ class PostgresLocationRepository:
             "latitude": item.latitude,
             "longitude": item.longitude,
             "status": item.status,
+            "collection_eligible": item.collection_eligible,
+            "collection_eligibility_reason": item.collection_eligibility_reason,
             "source_created_at": item.source_created_at,
             "source_row_id": item.source_row_id,
             "last_import_id": import_id,
@@ -225,7 +231,8 @@ class PostgresLocationRepository:
             SELECT r.id, r.display_name, r.country, r.active, r.catalogued,
                    count(l.id)::integer AS location_count
             FROM retailer r
-            LEFT JOIN retailer_location l ON l.retailer_id = r.id
+            LEFT JOIN retailer_location l
+              ON l.retailer_id = r.id AND l.collection_eligible
             WHERE (:country IS NULL OR r.country = :country)
             GROUP BY r.id, r.display_name, r.country, r.active, r.catalogued
             ORDER BY r.display_name, r.country, r.id
@@ -237,7 +244,8 @@ class PostgresLocationRepository:
 
     async def count_locations(self, retailer_id: str) -> int:
         statement = text(
-            "SELECT count(*)::integer FROM retailer_location WHERE retailer_id = :retailer_id"
+            "SELECT count(*)::integer FROM retailer_location "
+            "WHERE retailer_id = :retailer_id AND collection_eligible"
         )
         async with self._engine.connect() as connection:
             result = await connection.execute(statement, {"retailer_id": retailer_id})
@@ -259,7 +267,8 @@ class PostgresLocationRepository:
                    store_number, store_name, raw_zipcode, zipcode, city, state,
                    country, latitude, longitude
             FROM retailer_location
-            WHERE (:retailer_id IS NULL OR retailer_id = :retailer_id)
+            WHERE collection_eligible
+              AND (:retailer_id IS NULL OR retailer_id = :retailer_id)
               AND (:country IS NULL OR country = :country)
               AND (:zipcode IS NULL OR zipcode = :zipcode)
               AND (

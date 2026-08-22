@@ -86,6 +86,10 @@
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": [
         "zipcode",
         "store",
@@ -118,6 +122,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]{3}-[0-9]{3}$"
+      },
       "required_params": [
         "keyword",
         "zipcode",
@@ -171,6 +179,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],
@@ -190,6 +202,10 @@
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],
@@ -208,6 +224,10 @@
       "method": "GET",
       "credits_per_successful_page": 3,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store", "page"],
       "search_inputs": ["keyword", "url"],
       "supported_params": ["keyword", "url", "zipcode", "store", "page"],
@@ -229,6 +249,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],
@@ -247,6 +271,10 @@
       "method": "GET",
       "credits_per_successful_page": 4,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store", "page"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page", "sort"],
@@ -267,6 +295,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["zipcode", "store"],
       "search_inputs": ["keyword", "url"],
       "supported_params": ["keyword", "url", "zipcode", "store"],
@@ -282,6 +314,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store"],
@@ -297,6 +333,10 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store", "page"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],
@@ -312,6 +352,10 @@
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["zipcode", "store", "shopping_type"],
       "search_inputs": ["keyword", "url"],
       "supported_params": ["keyword", "url", "zipcode", "store", "shopping_type"],
@@ -329,6 +373,10 @@
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store"],
@@ -344,6 +392,10 @@
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],

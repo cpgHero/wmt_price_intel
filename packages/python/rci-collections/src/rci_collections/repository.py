@@ -130,7 +130,8 @@ class PostgresCollectionRepository:
             SELECT id::text AS id, retailer_id, zipcode, store_number, state, country,
                    store_name, city, latitude, longitude
             FROM retailer_location
-            WHERE retailer_id = ANY(CAST(:retailer_ids AS text[])) AND country = :country
+            WHERE collection_eligible
+              AND retailer_id = ANY(CAST(:retailer_ids AS text[])) AND country = :country
             ORDER BY retailer_id, store_number, id
             """
         )
@@ -154,7 +155,8 @@ class PostgresCollectionRepository:
             SELECT upper(state) AS state, nullif(trim(city), '') AS city,
                    count(*)::integer AS location_count
             FROM retailer_location
-            WHERE retailer_id = :retailer_id AND country = :country
+            WHERE collection_eligible
+              AND retailer_id = :retailer_id AND country = :country
               AND state IS NOT NULL AND trim(state) <> ''
               AND (
                 cardinality(CAST(:states AS text[])) = 0

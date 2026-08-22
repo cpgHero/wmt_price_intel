@@ -26,11 +26,15 @@ class CountingRepository(InMemoryLocationRepository):
     def __init__(self) -> None:
         super().__init__()
         self.retailer_counts: Counter[str] = Counter()
+        self.collection_eligible_counts: Counter[str] = Counter()
         self.kroger_store_numbers: list[str] = []
 
     async def upsert_locations(self, import_id: str, locations: Sequence[LocationRecord]) -> None:
         del import_id
         self.retailer_counts.update(location.retailer_id for location in locations)
+        self.collection_eligible_counts.update(
+            location.retailer_id for location in locations if location.collection_eligible
+        )
         self.kroger_store_numbers.extend(
             location.store_number
             for location in locations
@@ -80,6 +84,42 @@ def test_target_australia_is_not_resolved_as_target_us() -> None:
     assert location.retailer_id != "target_us"
     assert location.country == "AUSTRALIA"
     assert location.zipcode == "870"
+    assert not location.collection_eligible
+    assert location.collection_eligibility_reason == "retailer_not_enabled_for_collection"
+
+
+def test_provider_safe_store_identifiers_are_collection_eligible() -> None:
+    catalog = RetailerCatalog.from_path(CATALOG_PATH)
+    walmart, _ = transform_row(_row(), catalog)
+    aldi, _ = transform_row(
+        _row(Provider="ALDI", Store_No="463-048", Zip_Code="44906"),
+        catalog,
+    )
+
+    assert walmart.collection_eligible
+    assert walmart.collection_eligibility_reason is None
+    assert aldi.collection_eligible
+    assert aldi.collection_eligibility_reason is None
+
+
+def test_provider_unsafe_store_identifiers_remain_auditable_but_ineligible() -> None:
+    catalog = RetailerCatalog.from_path(CATALOG_PATH)
+    albertsons, _ = transform_row(
+        _row(Provider="Albertsons", Store_No="460&target=weeklyad"),
+        catalog,
+    )
+    wegmans, _ = transform_row(
+        _row(Provider="Wegmans", Store_No="58-10302"),
+        catalog,
+    )
+    inactive, _ = transform_row(_row(Status="closed"), catalog)
+
+    for location in (albertsons, wegmans):
+        assert not location.collection_eligible
+        assert location.collection_eligibility_reason == "store_number_not_provider_safe"
+        assert location.raw_row["Store_No"] == location.store_number
+    assert not inactive.collection_eligible
+    assert inactive.collection_eligibility_reason == "status_not_collection_eligible"
 
 
 def test_api_aliases_resolve_within_country() -> None:
@@ -144,6 +184,13 @@ async def test_complete_supplied_location_master_is_country_scoped() -> None:
     assert repository.retailer_counts["target_us"] == 2023
     assert repository.retailer_counts["target__au"] == 124
     assert repository.retailer_counts["target__unknown"] == 1
+    assert repository.collection_eligible_counts["walmart_us"] == 4683
+    assert repository.collection_eligible_counts["aldi_us"] == 2627
+    assert repository.collection_eligible_counts["albertsons_us"] == 376
+    assert repository.collection_eligible_counts["wegmans_us"] == 114
+    assert repository.collection_eligible_counts["target_us"] == 2023
+    assert repository.collection_eligible_counts["target__au"] == 0
+    assert repository.collection_eligible_counts["target__unknown"] == 0
     assert "03500995" in repository.kroger_store_numbers
 
 

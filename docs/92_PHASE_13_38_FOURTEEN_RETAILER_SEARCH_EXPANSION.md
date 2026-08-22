@@ -57,11 +57,14 @@ endpoint with `sort=Relevance`.
   per-request-type limit.
 - The full MetricsCart catalog sample for every enabled endpoint passes Search response contract
   `1.0.0`, including recognized `results` arrays and required canonical identity fields.
+- Location collection eligibility is an explicit, versioned catalog policy. Every imported source
+  row remains immutable and queryable, while only active rows whose `Store_No` satisfies the
+  retailer's provider-safe format can enter a new geography resolution or billable task.
 
 ## Location coverage
 
-Production already contains Walmart, Albertsons, ALDI, H-E-B, Kroger, Safeway, and USA Target
-locations. The governed location master also contains the missing active USA rosters:
+Production now contains the complete governed master import: 157,806 rows across 90 resolved
+retailer/country identities, with zero skipped rows. The six rosters added for this expansion were:
 
 | Retailer | Expected rows |
 | --- | ---: |
@@ -72,8 +75,13 @@ locations. The governed location master also contains the missing active USA ros
 | Trader Joe's | 670 |
 | Wegmans | 228 |
 
-These rows must be imported and reconciled after the catalog-driven code is deployed. Existing
-approved geography resolutions remain frozen and do not change automatically.
+The import also exposed source-representation defects that are unsafe at the provider boundary.
+Albertsons contains 377 duplicate/suffixed `Store_No` values containing
+`&target=weeklyad`; Wegmans contains 114 composite or spreadsheet-corrupted values alongside 114
+numeric provider IDs. The unsafe rows are retained with an exclusion reason. The eligible roster
+contains 376 Albertsons and 114 Wegmans stores; all 2,627 ALDI `NNN-NNN` identifiers and all other
+enabled physical-retailer numeric identifiers pass policy. Existing approved geography resolutions
+remain frozen and do not change automatically.
 
 ## Verification completed before deployment
 
@@ -83,15 +91,17 @@ approved geography resolutions remain frozen and do not change automatically.
   parameters.
 - Planner and provider tests fail closed on multiple pages for non-paginated endpoints.
 - Provider, collection, API, and web tests pass; TypeScript type checking and lint pass.
+- Migration `0045_location_eligibility` backfills the production-safe boundary without deleting or
+  rewriting a source row, and new imports calculate the same policy deterministically.
 - No MetricsCart, PDP, or AI call was made during implementation verification.
 
 ## Remaining release gates
 
-1. Deploy the implementation and import/reconcile the six missing location rosters.
-2. Create one immutable dispersed 14-retailer Egg preflight geography.
-3. Produce its exact page, credit, and maximum-dollar estimate.
-4. Obtain explicit owner approval and run only that bounded Search preflight.
+1. Deploy migration `0045`, re-import/reconcile the canonical master, and verify eligible counts.
+2. Create a fresh immutable 14-retailer Egg geography; do not reuse the pre-policy snapshot.
+3. Produce exact page, credit, and maximum-dollar estimates for both the bounded preflight and the
+   requested full run.
+4. Obtain explicit owner approval and run only the selected paid Search scope.
 5. Reconcile raw objects, response contracts, normalized rows, 200/404/nonbillable failures, and
    store/ZIP inputs by retailer.
-6. Only after preflight acceptance, produce a new exact full Egg estimate. A national collection
-   remains a separate paid approval.
+6. A national collection remains a separate paid approval even if the bounded preflight passes.

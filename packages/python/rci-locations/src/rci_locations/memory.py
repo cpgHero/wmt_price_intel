@@ -103,6 +103,8 @@ class InMemoryLocationRepository:
     async def list_retailers(self, country: str | None = None) -> list[RetailerCount]:
         counts: dict[str, int] = {}
         for location in self.locations.values():
+            if not location.collection_eligible:
+                continue
             counts[location.retailer_id] = counts.get(location.retailer_id, 0) + 1
         return [
             RetailerCount(
@@ -118,7 +120,10 @@ class InMemoryLocationRepository:
         ]
 
     async def count_locations(self, retailer_id: str) -> int:
-        return sum(location.retailer_id == retailer_id for location in self.locations.values())
+        return sum(
+            location.retailer_id == retailer_id and location.collection_eligible
+            for location in self.locations.values()
+        )
 
     async def search_locations(
         self,
@@ -133,6 +138,8 @@ class InMemoryLocationRepository:
         normalized_query = query.casefold() if query else None
         matches = []
         for index, location in enumerate(self.locations.values()):
+            if not location.collection_eligible:
+                continue
             if retailer_id is not None and location.retailer_id != retailer_id:
                 continue
             if country is not None and location.country != country:

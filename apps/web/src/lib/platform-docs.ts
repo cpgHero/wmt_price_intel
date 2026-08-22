@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.43",
+  version: "1.3.44",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.37 ALDI updated-roster regional preflight, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.38 fourteen-retailer Search expansion, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1604,9 +1604,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-22",
-              "Implemented and test-verified; deployment and bounded preflight pending",
+              "Fourteen-retailer boundary deployed; provider-safe location gate test-verified; bounded preflight pending",
               "Phase 13.38 expands the catalog-driven MetricsCart Search-by-ZIP boundary to all 14 Fresh Shell Egg retailers.",
-              "The owner-supplied 2026-08-16 catalog now governs unique adapter IDs, exact paths, credits, supported and required parameters, endpoint pagination, defaults, and sample contracts for Walmart, Albertsons, ALDI, Amazon Same Day, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target, Trader Joe's, and Wegmans. ShopRite sends shopping_type=pickup; Amazon retains Same Day URL context; Target uses the USA store + ZIP endpoint; non-paginated endpoints are capped at one page in the UI and fail closed in planning and provider execution. Shared Postgres throttling is partitioned by Search × retailer so worker replicas coordinate each retailer bucket without serializing unrelated retailers. All 14 supplied sample payloads pass Search contract 1.0.0. Existing production locations cover seven store retailers and the governed master supplies 2,315 missing Giant Eagle, Meijer, Sam's Club, ShopRite, Trader Joe's, and Wegmans rows for post-deploy import. No provider, PDP, or AI call was made; paid preflight and national collection each require their own exact approval.",
+              "The owner-supplied 2026-08-16 catalog governs all 14 endpoint paths, credits, parameters, defaults, pagination, and sample contracts. Shared Postgres throttling is partitioned by Search × retailer. Production import fe5e3985-947f-433c-a61c-2fa67f7ebcfa preserved 157,806 source rows with zero skips and supplied all 13 physical-retailer rosters. A provider-safe eligibility policy prevents malformed source identifiers from entering new collection plans without deleting them: 377 Albertsons suffix rows and 114 Wegmans composite/corrupted rows remain auditable but excluded, leaving 376 and 114 eligible stores respectively. All other enabled rosters retain their active provider-safe IDs, including 2,627 ALDI stores. Frozen historical geographies do not change. The release passes 650 Python tests, 72 web tests, mypy, contracts, lint, type checking, and migration-head validation. No provider, PDP, or AI call was made; paid preflight and full collection require separate exact approval.",
             ],
             [
               "2026-08-22",

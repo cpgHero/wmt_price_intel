@@ -50,3 +50,5 @@ adds a leased `SKIP LOCKED` publication job plus idempotent staging documents. E
 results are backfilled as ready. A replacement becomes ready only when the complete staged set
 passes the semantic trust audit and one transaction installs every read model while recoverably
 archiving the prior ready report in the same Product Pack lineage.
+`0045_location_eligibility` preserves every imported location row while allowing collection
+planning to use only active, provider-safe store identifiers.

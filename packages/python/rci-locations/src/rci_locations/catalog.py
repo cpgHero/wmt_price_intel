@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
-from rci_locations.models import ResolvedRetailer, RetailerAlias, RetailerDefinition
+from rci_locations.models import (
+    LocationCollectionPolicy,
+    ResolvedRetailer,
+    RetailerAlias,
+    RetailerDefinition,
+)
 from rci_locations.normalization import (
     country_id_suffix,
     normalize_alias,
@@ -33,10 +39,37 @@ class RetailerCatalog:
         self._known: dict[tuple[str, str], ResolvedRetailer] = {}
         self._static: dict[str, ResolvedRetailer] = {}
         self._dynamic: dict[tuple[str, str], ResolvedRetailer] = {}
+        self._collection_policies: dict[str, LocationCollectionPolicy] = {}
         for group in ("retailers", "normalization_only_retailers"):
             for item in catalog.get(group, []):
                 resolved = self._from_catalog_item(item)
                 self._static[resolved.retailer.id] = resolved
+                policy = item.get("location_collection_policy")
+                if policy is not None:
+                    eligible_statuses = frozenset(
+                        str(value).strip().casefold()
+                        for value in policy.get("eligible_statuses", [])
+                        if str(value).strip()
+                    )
+                    pattern = str(policy.get("store_number_pattern", "")).strip()
+                    if not eligible_statuses or not pattern:
+                        raise ValueError(
+                            f"retailer {resolved.retailer.id} has an incomplete "
+                            "location collection policy"
+                        )
+                    re.compile(pattern)
+                    self._collection_policies[resolved.retailer.id] = LocationCollectionPolicy(
+                        eligible_statuses=eligible_statuses,
+                        store_number_pattern=pattern,
+                    )
+                elif (
+                    item.get("status") == "enabled"
+                    and item.get("location_dimension") == "store_zip"
+                ):
+                    raise ValueError(
+                        f"enabled store retailer {resolved.retailer.id} requires "
+                        "a location collection policy"
+                    )
                 for alias in resolved.aliases:
                     self._known[(alias.alias, resolved.retailer.country)] = resolved
 
@@ -106,3 +139,22 @@ class RetailerCatalog:
 
     def static_retailers(self) -> tuple[ResolvedRetailer, ...]:
         return tuple(self._static[key] for key in sorted(self._static))
+
+    def collection_eligibility(
+        self,
+        resolved: ResolvedRetailer,
+        *,
+        store_number: str,
+        status: str | None,
+    ) -> tuple[bool, str | None]:
+        if not resolved.retailer.active:
+            return False, "retailer_not_enabled_for_collection"
+        policy = self._collection_policies.get(resolved.retailer.id)
+        if policy is None:
+            return False, "retailer_has_no_store_collection_policy"
+        normalized_status = status.strip().casefold() if status else ""
+        if normalized_status not in policy.eligible_statuses:
+            return False, "status_not_collection_eligible"
+        if re.fullmatch(policy.store_number_pattern, store_number) is None:
+            return False, "store_number_not_provider_safe"
+        return True, None
