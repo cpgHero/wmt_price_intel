@@ -466,12 +466,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Fact", "Authoritative source", "Supporting sources"],
           rows: [
             [
-              "2026-08-21",
-              "Implemented; controlled production replay verification in progress",
-              "Phase 13.32 makes MetricsCart Search by ZIP APIs the only mechanism for new collections and pins a fail-closed live response contract before controlled Strawberry and Milk publication acceptance.",
-              "The 2026-08-16 owner-supplied catalog hashes and 14 representative Search endpoint samples govern explicit field aliases and source authority. Positive Search price is observed/in-stock authority; Search is_sponsored is sponsorship authority and may be null. Recognized empty arrays stop pagination, while unknown shapes, non-object rows, missing required identity, nonnumeric price, or incompatible sponsorship types retain the raw billable page and fail as nonretryable schema_drift. Historical CSVs remain reproducible evidence only. Walmart, ALDI, and Amazon Same Day remain the only enabled V1 Search adapters; every additional catalogued retailer requires controlled endpoint, location, billing, and payload preflight. The acceptance replays use retained evidence and make no MetricsCart or OpenAI call.",
-            ],
-            [
               "Store package price",
               "Search at that location",
               "None may overwrite it",
@@ -1607,6 +1601,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-21",
+              "Implemented; controlled production replay verification in progress",
+              "Phase 13.32 makes MetricsCart Search by ZIP APIs the only mechanism for new collections and pins a fail-closed live response contract before controlled Strawberry and Milk publication acceptance.",
+              "The 2026-08-16 owner-supplied catalog hashes and 14 representative Search endpoint samples govern explicit field aliases and source authority. Positive Search price is observed/in-stock authority; Search is_sponsored is sponsorship authority and may be null. Recognized empty arrays stop pagination, while unknown shapes, non-object rows, missing required identity, nonnumeric price, or incompatible sponsorship types retain the raw billable page and fail as nonretryable schema_drift. Historical CSVs remain reproducible evidence only. Walmart, ALDI, and Amazon Same Day remain the only enabled V1 Search adapters; every additional catalogued retailer requires controlled endpoint, location, billing, and payload preflight. The acceptance replays use retained evidence and make no MetricsCart or OpenAI call.",
+            ],
             [
               "2026-08-21",
               "Deployed, migration-verified, and production-verified",
