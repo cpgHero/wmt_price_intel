@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 21, 2026";
+const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.38",
+  version: "1.3.39",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.32 API-only Search collection contracts and controlled durable-publication acceptance, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.33 live Search-by-ZIP acceptance, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -294,7 +294,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "6. Collect and preserve raw evidence",
               detail:
-                "All new collections call MetricsCart Search by ZIP APIs under shared per-retailer/type limits and cooldowns. Raw responses are written once to the private bucket as immutable, checksummed objects. HTTP 200 and 404 calls may be billable; costs remain auditable. Historical CSVs remain replay evidence only and do not define the live API contract.",
+                "All new collections call MetricsCart Search by ZIP APIs under shared per-retailer/type limits and cooldowns. Raw responses are written once to the private bucket as immutable, checksummed objects. HTTP 200 and 404 calls may be billable; costs remain auditable. The August 22 live acceptance collected 75 rows from Walmart, ALDI, and Amazon Same Day for five credits with no retry, 404, or schema drift. Historical CSVs remain replay evidence only and do not define the live API contract.",
             },
             {
               title: "7. Normalize without losing identifiers",
@@ -309,7 +309,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "9. Exclude noise and known marketplace sellers",
               detail:
-                "Product Pack qualification returns include, exclude, or review with reason codes. Retailer seller policy removes known non-first-party marketplace sellers; permitted blank sellers remain explicitly unverified.",
+                "Product Pack qualification returns include, exclude, or review with reason codes. Retailer seller policy removes known non-first-party marketplace sellers. Live Search payloads did not supply seller, so retailer site identity is never treated as first-party proof: PDP seller evidence verifies first party where available, and permitted blank sellers remain explicitly unverified.",
             },
             {
               title: "10. Enrich distinct admitted products",
@@ -1601,6 +1601,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Live-paid acceptance passed; contract, raw evidence, normalization, analysis, and reporting verified",
+              "Phase 13.33 validated the production MetricsCart Search-by-ZIP boundary with a hard-capped three-retailer Strawberry pilot.",
+              "Run 4ac82ffa-7ec6-4175-86ed-6bc0ffbbb928 completed three of three pages on the first attempt: Walmart returned 44 rows for one credit, ALDI 15 for two, and Amazon Same Day 16 for two. All 75 raw, normalized, and classified rows reconciled; compressed and decompressed checksums, byte sizes, task counts, stored audits, contract version 1.0.0, result path, price authority, and sponsorship authority passed with no schema drift. The call cost was approximately $0.01 at the owner-supplied $0.002-per-credit rate. Search did not supply seller and brand was sparse, so retailer site identity remains insufficient for first-party proof and PDP/brand-governance evidence remains required. No adapter repair was necessary. The smoke report may be recoverably archived after acceptance while all collection, raw, analysis, cost, and audit lineage remains preserved.",
+            ],
             [
               "2026-08-21",
               "Deployed, contract-audited, replayed, semantically audited, and production-verified",

@@ -73,6 +73,16 @@ types no longer match the versioned contract fails as nonretryable `schema_drift
 treated as an empty page. The immutable raw page and billable ledger remain available for mapping
 review.
 
+Live production acceptance on 2026-08-22 confirmed the shared 31-field result contract across
+Walmart, ALDI, and Amazon Same Day. Walmart did not populate pickup store/ZIP fields, ALDI populated
+both, and Amazon remained ZIP-only; adapters therefore use the immutable collection task as location
+authority and treat payload location fields as corroborating evidence. Search contained no seller
+field for any of the three retailers and brand was sparse. Retailer site identity is not first-party
+seller proof: marketplace filtering must use PDP seller evidence or retain an explicit seller-unknown
+state. Optional badges, reviews, and demand fields remain in the retained raw source row until a
+governed analytical use case promotes them into the canonical contract. See
+`docs/87_PHASE_13_33_LIVE_SEARCH_API_ACCEPTANCE.md`.
+
 ## Catalogued later adapters
 
 Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,

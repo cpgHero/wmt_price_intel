@@ -59,6 +59,12 @@ hashes. Aliases may absorb explicitly mapped provider renames, but a new shape m
 versioned before collection resumes. The canonical artifact records the contract version, selected
 result path, row count, observed field inventory, and source-authority rules.
 
+The 2026-08-22 production Strawberry acceptance collected one live page from Walmart, ALDI, and
+Amazon Same Day: 75 total rows for five credits, with no retry, 404, or schema drift. Every raw,
+normalized, and classified artifact reconciled by checksum and row count. The provider's `query`
+echo is diagnostic; the immutable collection task remains authoritative for requested retailer,
+store, ZIP, page, and sort context. See `docs/87_PHASE_13_33_LIVE_SEARCH_API_ACCEPTANCE.md`.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.
