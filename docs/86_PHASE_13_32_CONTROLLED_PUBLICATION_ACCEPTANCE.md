@@ -59,3 +59,34 @@ before enablement.
 The controlled replays use retained governed evidence and make no MetricsCart or OpenAI request.
 Future paid Search collections are protected by the same estimate, approval, rate-limit, immutable
 raw-evidence, response-contract, and billable-ledger controls.
+
+## Release verification
+
+The API-only Search contract shipped in commit `b6b2528`; the Platform Docs table correction shipped
+in `e50f538`. GitHub Actions run `32548641460` passed the full Python, TypeScript, browser,
+migration, build, and four-service container gate. Railway deployed the API, worker, scheduler, and
+web services successfully. The provider suite passed 40 tests with one environment-gated Postgres
+limiter test skipped; the complete local Python suite passed 641 tests with 13 explicit fixture or
+Postgres skips. The only local non-application failure was the managed sandbox denying a loopback
+health-test socket; the same test passed in CI.
+
+Production acceptance used no MetricsCart, PDP, or OpenAI call:
+
+- Strawberry replay generation 4 used the six-case exhaustive certified queue. Analysis run
+  `9b18620b-d25f-446d-86a2-caffdb6dc503` succeeded on attempt one. Materialization job
+  `ebaafd6d-334c-4af5-95ef-5064f6afa181` completed 10/10 stages on attempt one, installed three
+  Price Architecture and six competitive documents, and passed with zero errors and zero warnings.
+  Generation 3 remained ready until generation 4 activated, then was recoverably archived.
+- Milk replay generation 5 used all 1,064 certified cases: 887 comparable and 177 not comparable,
+  with zero unresolved cases. Analysis run `dd12bba6-27aa-475e-864e-160550633e65` succeeded on
+  attempt one. Materialization job `33feab16-d305-43ed-ab87-89d26e19996e` completed 13/13 stages on
+  attempt one, installed three Price Architecture and nine competitive documents, and passed with
+  zero semantic errors. Its 21 explicit warnings disclose 18 incomplete cohort-attribute scopes
+  and three ALDI same-brand scopes with no locally scorable evidence. Generation 4 remained ready
+  until generation 5 activated, then was recoverably archived.
+
+Final reconciliation found exactly five active AnalysisResults—Bananas, Milk, Ground Beef, Fresh
+Shell Eggs, and Strawberries—all `ready`. The new Strawberry and Milk application pages and the
+Milk Price Intelligence page returned HTTP 200. No source evidence, raw object, PDP snapshot,
+certification decision, immutable release, archived result, materialized document, or audit lineage
+was deleted.
