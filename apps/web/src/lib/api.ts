@@ -692,6 +692,20 @@ export interface RetailerRunProgress {
   retries: number;
 }
 
+export interface RetailerGateProgress {
+  retailer_id: string;
+  status: "pending" | "passed" | "failed";
+  sample_size: number;
+  completed_samples: number;
+  open_samples: number;
+  successful_samples: number;
+  not_found_samples: number;
+  other_failure_samples: number;
+  maximum_404_rate: number;
+  reason: string | null;
+  resolved_at: string | null;
+}
+
 export interface ProviderRateState {
   provider: string;
   second_count: number;
@@ -705,6 +719,7 @@ export interface RunMonitor {
   run: RunRecord;
   usage: RunUsage;
   retailers: RetailerRunProgress[];
+  retailer_gates: RetailerGateProgress[];
   retry_attempts: number;
   failure_classes: Record<string, number>;
   elapsed_seconds: number;

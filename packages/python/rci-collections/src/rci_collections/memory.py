@@ -17,6 +17,7 @@ from rci_collections.models import (
     LocationUnit,
     QueueTask,
     RawArtifact,
+    RetailerGateProgress,
     RetailerRunProgress,
     RunMonitor,
     RunRecord,
@@ -43,6 +44,7 @@ class InMemoryCollectionRepository:
         self._geography_resolutions: dict[str, GeographyResolution] = {}
         self._geography_checksums: dict[str, str] = {}
         self._scope_estimates: dict[str, ScopeEstimateRecord] = {}
+        self._retailer_gates: dict[tuple[str, str], RetailerGateProgress] = {}
 
     async def list_location_units(
         self, retailer_ids: Sequence[str], country: str
@@ -192,6 +194,28 @@ class InMemoryCollectionRepository:
                 self._scheduled_runs[(schedule_id, scheduled_for)] = run.id
             for seed in plan.initial_tasks:
                 self._insert_task(run.id, seed, now)
+            if plan.availability_gate:
+                maximum = float(plan.availability_gate.get("max_billable_404_rate", 0.5))
+                for retailer_id in sorted(
+                    {seed.retailer_id for seed in plan.initial_tasks if seed.is_preflight}
+                ):
+                    sample_size = sum(
+                        seed.is_preflight and seed.retailer_id == retailer_id
+                        for seed in plan.initial_tasks
+                    )
+                    self._retailer_gates[(run.id, retailer_id)] = RetailerGateProgress(
+                        retailer_id=retailer_id,
+                        status="pending",
+                        sample_size=sample_size,
+                        completed_samples=0,
+                        open_samples=sample_size,
+                        successful_samples=0,
+                        not_found_samples=0,
+                        other_failure_samples=0,
+                        maximum_404_rate=maximum,
+                        reason=None,
+                        resolved_at=None,
+                    )
             if not plan.initial_tasks:
                 run = replace(run, status="succeeded", completed_at=now)
                 self._runs[run.id] = run
@@ -391,11 +415,40 @@ class InMemoryCollectionRepository:
                 run=run,
                 usage=usage,
                 retailers=tuple(retailers),
+                retailer_gates=tuple(
+                    self._gate_with_counts(gate, tasks)
+                    for (gate_run_id, _), gate in sorted(self._retailer_gates.items())
+                    if gate_run_id == run_id
+                ),
                 retry_attempts=sum(max(task.attempt_count - 1, 0) for task in tasks),
                 failure_classes=failure_classes,
                 elapsed_seconds=max((end - start).total_seconds(), 0),
                 provider_state=None,
             )
+
+    @staticmethod
+    def _gate_with_counts(
+        gate: RetailerGateProgress, tasks: list[QueueTask]
+    ) -> RetailerGateProgress:
+        sample = [
+            task for task in tasks if task.is_preflight and task.retailer_id == gate.retailer_id
+        ]
+        return replace(
+            gate,
+            completed_samples=sum(task.status not in {"pending", "running"} for task in sample),
+            open_samples=sum(task.status in {"pending", "running"} for task in sample),
+            successful_samples=sum(task.status == "succeeded" for task in sample),
+            not_found_samples=sum(task.http_status == 404 for task in sample),
+            other_failure_samples=sum(
+                task.status == "failed" and task.http_status != 404 for task in sample
+            ),
+        )
+
+    def _gate_allows(self, task: QueueTask) -> bool:
+        gate = self._retailer_gates.get((task.collection_run_id, task.retailer_id))
+        if gate is None:
+            return True
+        return gate.status == "passed" or (gate.status == "pending" and task.is_preflight)
 
     async def record_artifact(self, run_id: str, artifact: RawArtifact) -> str:
         async with self._lock:
@@ -465,15 +518,26 @@ class InMemoryCollectionRepository:
                     and task.attempt_count < task.max_attempts
                     and run.cancel_requested_at is None
                     and run.status in {"queued", "running"}
-                    and (
-                        run.availability_gate_status in {"skipped", "passed"}
-                        or (run.availability_gate_status == "pending" and task.is_preflight)
-                    )
+                    and self._gate_allows(task)
                 ):
                     eligible.append(task)
             eligible.sort(key=lambda item: (item.priority, item.created_at, item.id))
-            claimed = []
-            for task in eligible[:claim_limit]:
+            claimed: list[QueueTask] = []
+            active_preflight_retailers = {
+                task.retailer_id
+                for task in self._tasks.values()
+                if (
+                    task.is_preflight
+                    and task.status == "running"
+                    and task.lease_expires_at is not None
+                    and task.lease_expires_at > now
+                )
+            }
+            for task in eligible:
+                if len(claimed) >= claim_limit:
+                    break
+                if task.is_preflight and task.retailer_id in active_preflight_retailers:
+                    continue
                 updated = replace(
                     task,
                     status="running",
@@ -483,6 +547,8 @@ class InMemoryCollectionRepository:
                 )
                 self._tasks[task.id] = updated
                 claimed.append(updated)
+                if task.is_preflight:
+                    active_preflight_retailers.add(task.retailer_id)
                 run = self._runs[task.collection_run_id]
                 if run.status == "queued":
                     self._runs[run.id] = replace(run, status="running", started_at=now)
@@ -635,6 +701,7 @@ class InMemoryCollectionRepository:
             if run is None or run.cancel_requested_at is not None:
                 return 0
             retried = 0
+            preflight_retailers: set[str] = set()
             for task_id, task in tuple(self._tasks.items()):
                 if (
                     task.collection_run_id == run_id
@@ -649,12 +716,20 @@ class InMemoryCollectionRepository:
                         locked_by=None,
                         lease_expires_at=None,
                     )
+                    if task.is_preflight:
+                        preflight_retailers.add(task.retailer_id)
                     retried += 1
             if retried:
-                if run.availability_gate_status == "failed":
+                for retailer_id in preflight_retailers:
+                    gate = self._retailer_gates.get((run_id, retailer_id))
+                    if gate is not None:
+                        self._retailer_gates[(run_id, retailer_id)] = replace(
+                            gate, status="pending", reason=None, resolved_at=None
+                        )
                     for task_id, task in tuple(self._tasks.items()):
                         if (
                             task.collection_run_id == run_id
+                            and task.retailer_id == retailer_id
                             and not task.is_preflight
                             and task.status == "cancelled"
                         ):
@@ -664,9 +739,7 @@ class InMemoryCollectionRepository:
                     status="running" if run.started_at else "queued",
                     completed_at=None,
                     availability_gate_status=(
-                        "pending"
-                        if run.availability_gate_status == "failed"
-                        else run.availability_gate_status
+                        "pending" if preflight_retailers else run.availability_gate_status
                     ),
                 )
             return retried
@@ -674,35 +747,49 @@ class InMemoryCollectionRepository:
     def _reconcile_run(self, run_id: str, now: datetime) -> None:
         run = self._runs[run_id]
         tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
-        if run.availability_gate_status == "pending":
-            preflight = [task for task in tasks if task.is_preflight]
-            if preflight and not any(task.status in {"pending", "running"} for task in preflight):
-                maximum = float(run.availability_gate_config.get("max_billable_404_rate", 0.5))
-                retailer_samples: dict[str, list[QueueTask]] = {}
-                for task in preflight:
-                    retailer_samples.setdefault(task.retailer_id, []).append(task)
-                retailer_failed = False
-                for sample in retailer_samples.values():
-                    rate = sum(task.http_status == 404 for task in sample) / len(sample)
-                    unavailable_for_other_reason = any(
-                        task.status == "failed" and task.http_status != 404 for task in sample
-                    )
-                    retailer_failed = (
-                        retailer_failed or rate > maximum or unavailable_for_other_reason
-                    )
-                if retailer_failed:
-                    for task_id, task in tuple(self._tasks.items()):
-                        if (
-                            task.collection_run_id == run_id
-                            and not task.is_preflight
-                            and task.status == "pending"
-                        ):
-                            self._tasks[task_id] = replace(task, status="cancelled")
-                    run = replace(run, availability_gate_status="failed")
-                else:
-                    run = replace(run, availability_gate_status="passed")
-                self._runs[run_id] = run
-                tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
+        for key, gate in tuple(self._retailer_gates.items()):
+            if key[0] != run_id or gate.status != "pending":
+                continue
+            current = self._gate_with_counts(gate, tasks)
+            maximum_not_found = int(current.maximum_404_rate * current.sample_size)
+            reason = None
+            if current.other_failure_samples:
+                reason = f"{current.other_failure_samples} terminal non-404 failure(s)"
+            elif current.not_found_samples > maximum_not_found:
+                rate = current.not_found_samples / current.sample_size
+                reason = f"404 rate {rate:.3f} exceeded {current.maximum_404_rate:.3f}"
+            status = "failed" if reason else ("passed" if current.open_samples == 0 else "pending")
+            if status == "pending":
+                continue
+            self._retailer_gates[key] = replace(
+                current, status=status, reason=reason, resolved_at=now
+            )
+            if status == "failed":
+                for task_id, task in tuple(self._tasks.items()):
+                    if (
+                        task.collection_run_id == run_id
+                        and task.retailer_id == gate.retailer_id
+                        and task.status == "pending"
+                    ):
+                        self._tasks[task_id] = replace(task, status="cancelled")
+        gate_statuses = [
+            gate.status
+            for (gate_run_id, _), gate in self._retailer_gates.items()
+            if gate_run_id == run_id
+        ]
+        if "pending" in gate_statuses:
+            aggregate_gate_status = "pending"
+        elif "failed" in gate_statuses and "passed" in gate_statuses:
+            aggregate_gate_status = "partial"
+        elif "failed" in gate_statuses:
+            aggregate_gate_status = "failed"
+        elif "passed" in gate_statuses:
+            aggregate_gate_status = "passed"
+        else:
+            aggregate_gate_status = "skipped"
+        run = replace(run, availability_gate_status=aggregate_gate_status)
+        self._runs[run_id] = run
+        tasks = [task for task in self._tasks.values() if task.collection_run_id == run_id]
         if any(task.status in {"pending", "running"} for task in tasks):
             return
         if run.cancel_requested_at is not None:
@@ -711,15 +798,21 @@ class InMemoryCollectionRepository:
             status = "failed"
         elif any(task.status == "failed" for task in tasks):
             failures = [task for task in tasks if task.status == "failed"]
+            critical_failures = [task for task in failures if not task.is_preflight]
             only_billable_unavailable = all(
                 task.http_status == 404 and task.failure_class == "invalid_request"
-                for task in failures
+                for task in critical_failures
             )
             status = (
                 "completed_with_warnings"
-                if only_billable_unavailable and any(task.status == "succeeded" for task in tasks)
+                if (
+                    (not critical_failures or only_billable_unavailable)
+                    and any(task.status == "succeeded" for task in tasks)
+                )
                 else "failed"
             )
+        elif any(task.status == "cancelled" for task in tasks):
+            status = "completed_with_warnings"
         else:
             status = "succeeded"
         self._runs[run_id] = replace(run, status=status, completed_at=now)

@@ -222,6 +222,22 @@ class RetailerProgressResponse(BaseModel):
     retries: int
 
 
+class RetailerGateProgressResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    retailer_id: str
+    status: str
+    sample_size: int
+    completed_samples: int
+    open_samples: int
+    successful_samples: int
+    not_found_samples: int
+    other_failure_samples: int
+    maximum_404_rate: float
+    reason: str | None
+    resolved_at: datetime | None
+
+
 class ProviderRateStateResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -237,6 +253,7 @@ class RunMonitorResponse(BaseModel):
     run: RunResponse
     usage: UsageResponse
     retailers: tuple[RetailerProgressResponse, ...]
+    retailer_gates: tuple[RetailerGateProgressResponse, ...]
     retry_attempts: int
     failure_classes: dict[str, int]
     elapsed_seconds: float
@@ -678,6 +695,63 @@ async def usage(run_id: str, service: CollectionServiceDependency) -> RunUsage:
 
 
 @router.get(
+    "/collection-runs/{run_id}/failures.csv",
+    tags=["collections"],
+)
+async def download_collection_failures(
+    run_id: str, service: CollectionServiceDependency
+) -> StreamingResponse:
+    try:
+        tasks = await service.list_tasks(run_id, 100_000, status="failed")
+    except CollectionNotFoundError as exc:
+        raise _not_found(exc) from exc
+    stream = io.StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(
+        [
+            "retailer_id",
+            "adapter_id",
+            "zipcode",
+            "store_number",
+            "location_scope_key",
+            "page_number",
+            "is_preflight",
+            "http_status",
+            "failure_class",
+            "last_error",
+            "attempt_count",
+            "max_attempts",
+            "billable_credits",
+            "request_payload",
+        ]
+    )
+    for task in tasks:
+        writer.writerow(
+            [
+                task.retailer_id,
+                task.adapter_id,
+                task.zipcode,
+                task.store_number,
+                task.location_scope_key,
+                task.page_number,
+                task.is_preflight,
+                task.http_status,
+                task.failure_class,
+                task.last_error,
+                task.attempt_count,
+                task.max_attempts,
+                task.billable_credits,
+                json.dumps(task.request_payload, sort_keys=True),
+            ]
+        )
+    return StreamingResponse(
+        iter([stream.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"content-disposition": f'attachment; filename="collection-{run_id}-failures.csv"'},
+    )
+
+
+@router.get(
     "/collection-runs/{run_id}/monitor",
     response_model=RunMonitorResponse,
     tags=["collections"],
@@ -695,6 +769,9 @@ def _monitor_response(snapshot: RunMonitor) -> RunMonitorResponse:
         run=RunResponse.model_validate(snapshot.run),
         usage=UsageResponse.model_validate(snapshot.usage),
         retailers=tuple(RetailerProgressResponse.model_validate(row) for row in snapshot.retailers),
+        retailer_gates=tuple(
+            RetailerGateProgressResponse.model_validate(row) for row in snapshot.retailer_gates
+        ),
         retry_attempts=snapshot.retry_attempts,
         failure_classes={key: int(value) for key, value in snapshot.failure_classes.items()},
         elapsed_seconds=snapshot.elapsed_seconds,

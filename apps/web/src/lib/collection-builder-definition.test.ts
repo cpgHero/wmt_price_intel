@@ -110,7 +110,7 @@ describe("approved collection definition builder", () => {
     ).toMatchObject({ max_pages_override: 2 });
   });
 
-  it("gates every store-level competitor but not ZIP-only competitors", () => {
+  it("gates the primary and every selected competitor, including ZIP-only retailers", () => {
     const definition = buildApprovedCollectionDefinition(
       values,
       options,
@@ -118,7 +118,7 @@ describe("approved collection definition builder", () => {
     );
 
     expect(definition.availability_gate).toMatchObject({
-      retailer_ids: ["giant_eagle_us"],
+      retailer_ids: ["walmart_us", "giant_eagle_us", "amazon_us_same_day"],
     });
   });
 });

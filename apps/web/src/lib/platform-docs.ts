@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.44",
+  version: "1.3.45",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.38 fourteen-retailer Search expansion, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.39 retailer-isolated collection gates, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1032,7 +1032,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Check budget and availability gates",
               detail:
-                "A hard credit cap, daily/monthly budget, ALDI availability preflight, disabled feature flag, or missing separate PDP/AI approval may intentionally stop work.",
+                "A hard credit cap, daily/monthly budget, retailer-specific availability gate, disabled feature flag, or missing separate PDP/AI approval may intentionally stop work. A failed retailer no longer blocks retailers that passed.",
             },
             {
               title: "Retry through the governed path",
@@ -1602,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Implemented and test-verified; production deployment pending",
+              "Phase 13.39 replaces the run-wide availability gate with durable retailer-isolated decisions.",
+              "Walmart, Amazon Same Day, and every selected competitor now receive independent bounded preflights. One request per retailer may be in flight; healthy retailers release immediately, while a retailer stops as soon as its 404 threshold is unrecoverable or a terminal non-404 error occurs. Mixed outcomes remain auditable as partial, retries reopen only the affected retailer, the monitor shows retailer-specific evidence, and failed inputs download as CSV. No MetricsCart, PDP, or AI call was made.",
+            ],
             [
               "2026-08-22",
               "Fourteen-retailer boundary deployed; provider-safe location gate test-verified; bounded preflight pending",

@@ -24,6 +24,7 @@ from rci_collections.models import (
     QueueTask,
     RawArtifact,
     RetailerEstimate,
+    RetailerGateProgress,
     RetailerRunProgress,
     RunMonitor,
     RunRecord,
@@ -769,6 +770,37 @@ class PostgresCollectionRepository:
                     self._insert_task_statement(),
                     [self._task_parameters(run_id, seed) for seed in plan.initial_tasks],
                 )
+                if plan.availability_gate:
+                    maximum = float(plan.availability_gate.get("max_billable_404_rate", 0.5))
+                    sample_counts: dict[str, int] = {}
+                    for seed in plan.initial_tasks:
+                        if seed.is_preflight:
+                            sample_counts[seed.retailer_id] = (
+                                sample_counts.get(seed.retailer_id, 0) + 1
+                            )
+                    if sample_counts:
+                        await connection.execute(
+                            text(
+                                """
+                                INSERT INTO collection_retailer_gate (
+                                  collection_run_id, retailer_id, status,
+                                  sample_size, maximum_404_rate
+                                ) VALUES (
+                                  CAST(:collection_run_id AS uuid), :retailer_id,
+                                  'pending', :sample_size, :maximum_404_rate
+                                )
+                                """
+                            ),
+                            [
+                                {
+                                    "collection_run_id": run_id,
+                                    "retailer_id": retailer_id,
+                                    "sample_size": sample_size,
+                                    "maximum_404_rate": maximum,
+                                }
+                                for retailer_id, sample_size in sorted(sample_counts.items())
+                            ],
+                        )
             else:
                 row = (
                     (
@@ -1008,6 +1040,43 @@ class PostgresCollectionRepository:
             failure_classes = {
                 str(row["failure_class"]): int(row["failures"]) for row in failure_rows
             }
+            gate_rows = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT g.retailer_id, g.status, g.sample_size,
+                               count(t.id) FILTER (
+                                 WHERE t.status NOT IN ('pending', 'running')
+                               )::integer AS completed_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.status IN ('pending', 'running')
+                               )::integer AS open_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'succeeded'
+                               )::integer AS successful_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.http_status = 404
+                               )::integer AS not_found_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                               )::integer AS other_failure_samples,
+                               g.maximum_404_rate::float AS maximum_404_rate,
+                               g.reason, g.resolved_at
+                        FROM collection_retailer_gate g
+                        LEFT JOIN collection_task t
+                          ON t.collection_run_id = g.collection_run_id
+                         AND t.retailer_id = g.retailer_id
+                         AND t.is_preflight
+                        WHERE g.collection_run_id::text = :run_id
+                        GROUP BY g.collection_run_id, g.retailer_id
+                        ORDER BY g.retailer_id
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+            ).mappings()
+            retailer_gates = tuple(RetailerGateProgress(**dict(row)) for row in gate_rows)
             provider_row = (
                 (
                     await connection.execute(
@@ -1034,6 +1103,7 @@ class PostgresCollectionRepository:
             run=run,
             usage=usage,
             retailers=retailers,
+            retailer_gates=retailer_gates,
             retry_attempts=sum(row.retries for row in retailers),
             failure_classes=failure_classes,
             elapsed_seconds=max((end - start).total_seconds(), 0),
@@ -1057,8 +1127,43 @@ class PostgresCollectionRepository:
                 AND r.cancel_requested_at IS NULL
                 AND t.attempt_count < t.max_attempts
                 AND (
-                  r.availability_gate_status IN ('skipped', 'passed') OR
-                  (r.availability_gate_status = 'pending' AND t.is_preflight)
+                  NOT EXISTS (
+                    SELECT 1 FROM collection_retailer_gate g
+                    WHERE g.collection_run_id = t.collection_run_id
+                      AND g.retailer_id = t.retailer_id
+                  ) OR EXISTS (
+                    SELECT 1 FROM collection_retailer_gate g
+                    WHERE g.collection_run_id = t.collection_run_id
+                      AND g.retailer_id = t.retailer_id
+                      AND (
+                        g.status = 'passed' OR (g.status = 'pending' AND t.is_preflight)
+                      )
+                  )
+                )
+                AND (
+                  NOT t.is_preflight OR (
+                    NOT EXISTS (
+                      SELECT 1 FROM collection_task active_sample
+                      WHERE active_sample.collection_run_id = t.collection_run_id
+                        AND active_sample.retailer_id = t.retailer_id
+                        AND active_sample.is_preflight
+                        AND active_sample.status = 'running'
+                        AND active_sample.lease_expires_at > now()
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1 FROM collection_task earlier_sample
+                      WHERE earlier_sample.collection_run_id = t.collection_run_id
+                        AND earlier_sample.retailer_id = t.retailer_id
+                        AND earlier_sample.is_preflight
+                        AND earlier_sample.status = 'pending'
+                        AND earlier_sample.available_at <= now()
+                        AND (
+                          earlier_sample.priority,
+                          earlier_sample.created_at,
+                          earlier_sample.id
+                        ) < (t.priority, t.created_at, t.id)
+                    )
+                  )
                 )
               ORDER BY t.priority, t.created_at, t.id
               FOR UPDATE OF t SKIP LOCKED
@@ -1453,26 +1558,42 @@ class PostgresCollectionRepository:
                     WHERE r.id = t.collection_run_id AND r.id::text = :run_id
                       AND r.cancel_requested_at IS NULL AND t.status = 'failed'
                       AND t.attempt_count < t.max_attempts
-                    RETURNING t.id
+                    RETURNING t.id, t.retailer_id, t.is_preflight
                     """
                 ),
                 {"run_id": run_id},
             )
-            count = len(result.all())
+            retried_rows = result.mappings().all()
+            count = len(retried_rows)
             if count:
-                await connection.execute(
-                    text(
-                        """
-                        UPDATE collection_task t
-                        SET status = 'pending', available_at = now(), completed_at = NULL
-                        FROM collection_run r
-                        WHERE r.id = t.collection_run_id AND r.id::text = :run_id
-                          AND r.availability_gate_status = 'failed'
-                          AND NOT t.is_preflight AND t.status = 'cancelled'
-                        """
-                    ),
-                    {"run_id": run_id},
+                preflight_retailers = sorted(
+                    {str(row["retailer_id"]) for row in retried_rows if bool(row["is_preflight"])}
                 )
+                if preflight_retailers:
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE collection_retailer_gate
+                            SET status = 'pending', resolved_at = NULL, reason = NULL,
+                                updated_at = now()
+                            WHERE collection_run_id::text = :run_id
+                              AND retailer_id = ANY(CAST(:retailer_ids AS text[]))
+                            """
+                        ),
+                        {"run_id": run_id, "retailer_ids": preflight_retailers},
+                    )
+                    await connection.execute(
+                        text(
+                            """
+                            UPDATE collection_task
+                            SET status = 'pending', available_at = now(), completed_at = NULL
+                            WHERE collection_run_id::text = :run_id
+                              AND retailer_id = ANY(CAST(:retailer_ids AS text[]))
+                              AND NOT is_preflight AND status = 'cancelled'
+                            """
+                        ),
+                        {"run_id": run_id, "retailer_ids": preflight_retailers},
+                    )
                 await connection.execute(
                     text(
                         """
@@ -1480,12 +1601,12 @@ class PostgresCollectionRepository:
                         SET status = CASE WHEN started_at IS NULL THEN 'queued' ELSE 'running' END,
                             completed_at = NULL, error_summary = NULL,
                             availability_gate_status = CASE
-                              WHEN availability_gate_status = 'failed' THEN 'pending'
+                              WHEN :reset_gate THEN 'pending'
                               ELSE availability_gate_status END
                         WHERE id::text = :run_id
                         """
                     ),
-                    {"run_id": run_id},
+                    {"run_id": run_id, "reset_gate": bool(preflight_retailers)},
                 )
             return count
 
@@ -1524,12 +1645,110 @@ class PostgresCollectionRepository:
 
     @staticmethod
     async def _reconcile_run(connection: AsyncConnection, run_id: str) -> None:
-        gate = (
+        await connection.execute(
+            text("SELECT id FROM collection_run WHERE id::text = :run_id FOR UPDATE"),
+            {"run_id": run_id},
+        )
+        await connection.execute(
+            text(
+                "SELECT retailer_id FROM collection_retailer_gate "
+                "WHERE collection_run_id::text = :run_id ORDER BY retailer_id FOR UPDATE"
+            ),
+            {"run_id": run_id},
+        )
+        gate_summaries = (
             (
                 await connection.execute(
                     text(
-                        "SELECT availability_gate_status, availability_gate_config "
-                        "FROM collection_run WHERE id::text = :run_id FOR UPDATE"
+                        """
+                        SELECT g.retailer_id, g.status, g.sample_size,
+                               g.maximum_404_rate::float AS maximum_404_rate,
+                               count(t.id) FILTER (
+                                 WHERE t.status IN ('pending', 'running')
+                               )::integer AS open,
+                               count(t.id) FILTER (WHERE t.http_status = 404)::integer AS not_found,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                               )::integer AS other_failures
+                        FROM collection_retailer_gate g
+                        LEFT JOIN collection_task t
+                          ON t.collection_run_id = g.collection_run_id
+                         AND t.retailer_id = g.retailer_id
+                         AND t.is_preflight
+                        WHERE g.collection_run_id::text = :run_id
+                        GROUP BY g.collection_run_id, g.retailer_id
+                        ORDER BY g.retailer_id
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        for summary in gate_summaries:
+            if summary["status"] != "pending":
+                continue
+            sample_size = int(summary["sample_size"])
+            maximum = float(summary["maximum_404_rate"])
+            not_found = int(summary["not_found"])
+            other_failures = int(summary["other_failures"])
+            open_samples = int(summary["open"])
+            maximum_not_found = int(maximum * sample_size)
+            reason: str | None = None
+            if other_failures:
+                reason = f"{other_failures} terminal non-404 failure(s)"
+            elif not_found > maximum_not_found:
+                rate = not_found / sample_size
+                reason = f"404 rate {rate:.3f} exceeded {maximum:.3f}"
+            status = "failed" if reason else ("passed" if open_samples == 0 else "pending")
+            if status == "pending":
+                continue
+            await connection.execute(
+                text(
+                    """
+                    UPDATE collection_retailer_gate
+                    SET status = :status, resolved_at = now(), reason = :reason,
+                        updated_at = now()
+                    WHERE collection_run_id::text = :run_id
+                      AND retailer_id = :retailer_id AND status = 'pending'
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                    "retailer_id": summary["retailer_id"],
+                    "status": status,
+                    "reason": reason,
+                },
+            )
+            if status == "failed":
+                # Stop spending on this retailer as soon as failure is certain.
+                # A task already in flight is allowed to finish safely; no new
+                # preflight or national tasks for this retailer can be claimed.
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE collection_task
+                        SET status = 'cancelled', completed_at = now()
+                        WHERE collection_run_id::text = :run_id
+                          AND retailer_id = :retailer_id AND status = 'pending'
+                        """
+                    ),
+                    {"run_id": run_id, "retailer_id": summary["retailer_id"]},
+                )
+
+        gate_counts = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT count(*) FILTER (WHERE status = 'pending')::integer AS pending,
+                               count(*) FILTER (WHERE status = 'passed')::integer AS passed,
+                               count(*) FILTER (WHERE status = 'failed')::integer AS failed
+                        FROM collection_retailer_gate
+                        WHERE collection_run_id::text = :run_id
+                        """
                     ),
                     {"run_id": run_id},
                 )
@@ -1537,82 +1756,53 @@ class PostgresCollectionRepository:
             .mappings()
             .one()
         )
-        if gate["availability_gate_status"] == "pending":
-            summaries = (
-                (
-                    await connection.execute(
-                        text(
-                            """
-                            SELECT retailer_id,
-                                   count(*)::integer AS total,
-                                   count(*) FILTER (
-                                     WHERE status IN ('pending', 'running')
-                                   )::integer AS open,
-                                   count(*) FILTER (WHERE http_status = 404)::integer AS not_found,
-                                   count(*) FILTER (
-                                     WHERE status = 'failed' AND http_status IS DISTINCT FROM 404
-                                   )::integer AS other_failures
-                            FROM collection_task
-                            WHERE collection_run_id::text = :run_id AND is_preflight
-                            GROUP BY retailer_id
-                            ORDER BY retailer_id
-                            """
-                        ),
-                        {"run_id": run_id},
-                    )
-                )
-                .mappings()
-                .all()
-            )
-            if summaries and not any(int(summary["open"]) for summary in summaries):
-                config = dict(gate["availability_gate_config"] or {})
-                maximum = float(config.get("max_billable_404_rate", 0.5))
-                failures: list[str] = []
-                for summary in summaries:
-                    rate = int(summary["not_found"]) / int(summary["total"])
-                    if rate > maximum:
-                        failures.append(
-                            f"{summary['retailer_id']} 404 rate {rate:.3f} exceeded {maximum:.3f}"
-                        )
-                    elif int(summary["other_failures"]):
-                        failures.append(
-                            f"{summary['retailer_id']} had "
-                            f"{int(summary['other_failures'])} terminal failure(s)"
-                        )
-                gate_status = "failed" if failures else "passed"
-                error_summary = (
-                    "availability preflight failed by retailer: " + "; ".join(failures)
-                    if failures
-                    else None
-                )
+        if int(gate_counts["pending"]):
+            gate_status = "pending"
+        elif int(gate_counts["failed"]) and int(gate_counts["passed"]):
+            gate_status = "partial"
+        elif int(gate_counts["failed"]):
+            gate_status = "failed"
+        elif int(gate_counts["passed"]):
+            gate_status = "passed"
+        else:
+            gate_status = "skipped"
+        failed_reasons = (
+            (
                 await connection.execute(
                     text(
                         """
-                        UPDATE collection_run
-                        SET availability_gate_status = :gate_status,
-                            error_summary = CASE WHEN :gate_status = 'failed'
-                              THEN :error_summary ELSE error_summary END
-                        WHERE id::text = :run_id
-                        """
+                    SELECT retailer_id || ' ' || COALESCE(reason, 'preflight failed')
+                    FROM collection_retailer_gate
+                    WHERE collection_run_id::text = :run_id AND status = 'failed'
+                    ORDER BY retailer_id
+                    """
                     ),
-                    {
-                        "run_id": run_id,
-                        "gate_status": gate_status,
-                        "error_summary": error_summary,
-                    },
+                    {"run_id": run_id},
                 )
-                if gate_status == "failed":
-                    await connection.execute(
-                        text(
-                            """
-                            UPDATE collection_task
-                            SET status = 'cancelled', completed_at = now()
-                            WHERE collection_run_id::text = :run_id
-                              AND NOT is_preflight AND status = 'pending'
-                            """
-                        ),
-                        {"run_id": run_id},
-                    )
+            )
+            .scalars()
+            .all()
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE collection_run
+                SET availability_gate_status = :gate_status,
+                    error_summary = CASE WHEN :error_summary IS NULL
+                      THEN error_summary ELSE :error_summary END
+                WHERE id::text = :run_id
+                """
+            ),
+            {
+                "run_id": run_id,
+                "gate_status": gate_status,
+                "error_summary": (
+                    "availability preflight failed by retailer: " + "; ".join(failed_reasons)
+                    if failed_reasons
+                    else None
+                ),
+            },
+        )
         await connection.execute(
             text(
                 """
@@ -1623,6 +1813,7 @@ class PostgresCollectionRepository:
                       WHEN EXISTS (
                         SELECT 1 FROM collection_task t
                         WHERE t.collection_run_id = r.id AND t.status = 'failed'
+                          AND NOT t.is_preflight
                           AND NOT (
                             t.http_status = 404 AND t.failure_class = 'invalid_request'
                           )

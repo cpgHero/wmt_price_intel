@@ -163,6 +163,7 @@ async def test_collection_definition_run_and_usage_apis() -> None:
         assert monitor.status_code == 200
         assert monitor.json()["configured_global_rps"] == 2
         assert monitor.json()["retry_attempts"] == 0
+        assert monitor.json()["retailer_gates"] == []
         assert monitor.json()["retailers"] == [
             {
                 "retailer_id": "walmart_us",
@@ -176,6 +177,11 @@ async def test_collection_definition_run_and_usage_apis() -> None:
                 "retries": 0,
             }
         ]
+
+        failures = await client.get(f"/api/v1/collection-runs/{run_id}/failures.csv")
+        assert failures.status_code == 200
+        assert failures.headers["content-type"].startswith("text/csv")
+        assert failures.text.startswith("retailer_id,adapter_id,zipcode,store_number")
 
         cancelled = await client.post(f"/api/v1/collection-runs/{run_id}/cancel")
         assert cancelled.json()["status"] == "cancelled"

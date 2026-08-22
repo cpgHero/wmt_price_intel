@@ -252,14 +252,14 @@ export function CollectionWizard({
           <input
             type="checkbox"
             checked={gateEnabled}
-            disabled={!retailerIds.includes("aldi_us")}
+            disabled={retailerIds.length === 0}
             onChange={(event) => setGateEnabled(event.target.checked)}
           />
           <span>
-            <b>Run the ALDI availability gate first</b>
+            <b>Run retailer availability gates first</b>
             <small>
-              Sample up to five ALDI locations and stop remaining work when more
-              than half return billable 404s.
+              Sample up to five inputs per selected retailer. Each retailer
+              proceeds independently; only an unhealthy retailer is stopped.
             </small>
           </span>
         </label>

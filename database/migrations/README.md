@@ -52,3 +52,6 @@ passes the semantic trust audit and one transaction installs every read model wh
 archiving the prior ready report in the same Product Pack lineage.
 `0045_location_eligibility` preserves every imported location row while allowing collection
 planning to use only active, provider-safe store identifiers.
+`0046_retailer_gates` makes availability decisions durable per retailer, releases healthy retailer
+work independently, stops an unrecoverable retailer sample early, and records mixed run outcomes as
+partial without discarding task or billing evidence.

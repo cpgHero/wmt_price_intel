@@ -256,6 +256,21 @@ class RetailerRunProgress:
 
 
 @dataclass(frozen=True, slots=True)
+class RetailerGateProgress:
+    retailer_id: str
+    status: str
+    sample_size: int
+    completed_samples: int
+    open_samples: int
+    successful_samples: int
+    not_found_samples: int
+    other_failure_samples: int
+    maximum_404_rate: float
+    reason: str | None
+    resolved_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderRateState:
     provider: str
     second_count: int
@@ -270,6 +285,7 @@ class RunMonitor:
     run: RunRecord
     usage: RunUsage
     retailers: tuple[RetailerRunProgress, ...]
+    retailer_gates: tuple[RetailerGateProgress, ...]
     retry_attempts: int
     failure_classes: JsonObject
     elapsed_seconds: float

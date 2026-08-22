@@ -3679,6 +3679,50 @@ tbody tr:last-child td {
   background: var(--warning-soft);
   border-color: color-mix(in srgb, var(--amber) 45%, transparent);
 }
+.retailer-gates {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin: 1rem 0;
+  padding: 1.1rem;
+}
+.retailer-gates > header,
+.retailer-gate-card > div {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.retailer-gates h2,
+.retailer-gates p {
+  margin: 0.2rem 0 0;
+}
+.retailer-gates header p,
+.retailer-gate-card p,
+.retailer-gate-card small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.retailer-gate-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: 1rem;
+}
+.retailer-gate-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+.retailer-gate-card.passed {
+  background: var(--success-soft);
+}
+.retailer-gate-card.failed {
+  background: var(--danger-soft);
+}
+.retailer-gate-card.pending {
+  background: var(--warning-soft);
+}
 
 @media (max-width: 1050px) {
   .hero-panel {

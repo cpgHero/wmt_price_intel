@@ -60,13 +60,10 @@ export function buildApprovedCollectionDefinition(
       request_overrides: {},
     };
   });
-  const gatedRetailers = values.competitorRetailerIds.filter((retailerId) =>
-    options.retailers.some(
-      (retailer) =>
-        retailer.id === retailerId &&
-        retailer.location_dimension === "store_zip",
-    ),
-  );
+  // Every selected retailer gets an isolated preflight. ZIP-only retailers
+  // (notably Amazon Same Day) are just as capable of failing expensively as
+  // store/ZIP retailers, and the primary retailer must never bypass the gate.
+  const gatedRetailers = selectedIds;
   return {
     id: values.definitionId,
     name: values.name.trim(),

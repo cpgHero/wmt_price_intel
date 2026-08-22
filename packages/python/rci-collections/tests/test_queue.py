@@ -312,10 +312,12 @@ async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() 
     repository = _gated_repository()
     run = await _gated_run(repository)
 
-    preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
-    assert len(preflight) == 2
-    assert all(task.is_preflight for task in preflight)
-    for task in preflight:
+    preflight = []
+    for _ in range(2):
+        claimed = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+        assert len(claimed) == 1 and claimed[0].is_preflight
+        task = claimed[0]
+        preflight.append(task)
         assert await repository.complete_failure(
             task.id,
             "gate-worker",
@@ -338,12 +340,12 @@ async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() 
     assert usage.actual_credits == 4
 
     assert await repository.retry_failed(run.id) == 2
-    retried_preflight = await repository.claim_tasks(
-        "retry-worker", claim_limit=10, lease_seconds=30
-    )
-    assert len(retried_preflight) == 2
-    assert all(task.is_preflight for task in retried_preflight)
-    for task in retried_preflight:
+    retried_preflight = []
+    for _ in range(2):
+        claimed = await repository.claim_tasks("retry-worker", claim_limit=10, lease_seconds=30)
+        assert len(claimed) == 1 and claimed[0].is_preflight
+        task = claimed[0]
+        retried_preflight.append(task)
         assert await repository.complete_success(
             task.id,
             "retry-worker",
@@ -355,10 +357,24 @@ async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() 
     assert len(released) == 3
 
 
+async def test_expired_preflight_lease_is_reclaimable_without_parallel_sample() -> None:
+    repository = _gated_repository()
+    await _gated_run(repository)
+    original = (await repository.claim_tasks("gate-worker-a", claim_limit=10, lease_seconds=30))[0]
+    await repository.expire_lease_for_test(original.id)
+
+    reclaimed = await repository.claim_tasks("gate-worker-b", claim_limit=10, lease_seconds=30)
+
+    assert len(reclaimed) == 1
+    assert reclaimed[0].id == original.id
+    assert reclaimed[0].attempt_count == 2
+
+
 async def test_availability_gate_releases_remaining_tasks_at_threshold() -> None:
     repository = _gated_repository()
     run = await _gated_run(repository)
     preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+    assert len(preflight) == 1
     assert await repository.complete_success(
         preflight[0].id,
         "gate-worker",
@@ -367,7 +383,7 @@ async def test_availability_gate_releases_remaining_tasks_at_threshold() -> None
         next_task=None,
     )
     assert await repository.complete_failure(
-        preflight[1].id,
+        (await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30))[0].id,
         "gate-worker",
         failure_class="invalid_request",
         error_message="provider returned 404",
@@ -393,6 +409,54 @@ async def test_availability_gate_releases_remaining_tasks_at_threshold() -> None
     assert final.availability_gate_status == "passed"
     assert final.status == "completed_with_warnings"
     assert final.actual_credits == 10
+
+
+async def test_availability_gate_stops_as_soon_as_passing_is_impossible() -> None:
+    repository = _gated_repository(size=7)
+    config = _config()
+    config["benchmark_retailer"] = "aldi_us"
+    config["retailers"] = [
+        {
+            "retailer_id": "aldi_us",
+            "adapter_id": "metricscart_new_aldi_serp_zipcode",
+            "enabled": True,
+            "request_overrides": {},
+        }
+    ]
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["aldi_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    planner = CollectionPlanner(
+        repository,
+        CollectionRetailerCatalog.from_path(REPOSITORY_ROOT / "config/retailer-catalog.json"),
+    )
+    run = await repository.create_run(definition, await planner.plan(config))
+
+    for _ in range(3):
+        task = (await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30))[0]
+        assert task.is_preflight
+        assert await repository.complete_failure(
+            task.id,
+            "gate-worker",
+            failure_class="invalid_request",
+            error_message="provider returned 404",
+            retryable=False,
+            retry_delay_seconds=0,
+            http_status=404,
+            billable=True,
+        )
+
+    assert not await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+    usage = await repository.usage(run.id)
+    monitor = await repository.monitor(run.id)
+    assert usage is not None and monitor is not None
+    assert usage.failed_tasks == 3
+    assert usage.cancelled_tasks == 4
+    assert monitor.retailer_gates[0].reason == "404 rate 0.600 exceeded 0.500"
 
 
 async def test_availability_gate_evaluates_each_retailer_without_cross_masking() -> None:
@@ -447,41 +511,60 @@ async def test_availability_gate_evaluates_each_retailer_without_cross_masking()
         CollectionRetailerCatalog.from_path(REPOSITORY_ROOT / "config/retailer-catalog.json"),
     )
     run = await repository.create_run(definition, await planner.plan(config))
-    preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
-    assert len(preflight) == 4
+    processed = 0
+    while processed < 4:
+        preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+        assert 1 <= len(preflight) <= 2
+        for task in preflight:
+            processed += 1
+            if task.retailer_id == "aldi_us":
+                assert await repository.complete_success(
+                    task.id,
+                    "gate-worker",
+                    http_status=200,
+                    result_count=1,
+                    next_task=None,
+                )
+            else:
+                assert await repository.complete_failure(
+                    task.id,
+                    "gate-worker",
+                    failure_class="invalid_request",
+                    error_message="provider returned 404",
+                    retryable=False,
+                    retry_delay_seconds=0,
+                    http_status=404,
+                    billable=True,
+                )
 
-    for task in preflight:
-        if task.retailer_id == "aldi_us":
-            assert await repository.complete_success(
-                task.id,
-                "gate-worker",
-                http_status=200,
-                result_count=1,
-                next_task=None,
-            )
-        else:
-            assert await repository.complete_failure(
-                task.id,
-                "gate-worker",
-                failure_class="invalid_request",
-                error_message="provider returned 404",
-                retryable=False,
-                retry_delay_seconds=0,
-                http_status=404,
-                billable=True,
-            )
-
-    # The combined 404 rate is exactly 50%, but Walmart's retailer-specific
-    # rate is 100%, so the gate must fail closed and cancel both remaining tasks.
-    assert not await repository.claim_tasks("collection-worker", claim_limit=10, lease_seconds=30)
+    # Walmart fails independently while ALDI passes and releases its remaining
+    # task; one unhealthy retailer must not strand healthy paid work.
+    released = await repository.claim_tasks("collection-worker", claim_limit=10, lease_seconds=30)
+    assert len(released) == 1
+    assert released[0].retailer_id == "aldi_us"
+    assert await repository.complete_success(
+        released[0].id,
+        "collection-worker",
+        http_status=200,
+        result_count=1,
+        next_task=None,
+    )
     final = await repository.get_run(run.id)
     usage = await repository.usage(run.id)
     assert final is not None and usage is not None
-    assert final.availability_gate_status == "failed"
-    assert usage.cancelled_tasks == 2
+    assert final.availability_gate_status == "partial"
+    assert final.status == "completed_with_warnings"
+    assert usage.cancelled_tasks == 1
+    monitor = await repository.monitor(run.id)
+    assert monitor is not None
+    assert {gate.retailer_id: gate.status for gate in monitor.retailer_gates} == {
+        "aldi_us": "passed",
+        "walmart_us": "failed",
+    }
 
 
 def test_postgres_availability_gate_groups_preflight_by_retailer() -> None:
     source = inspect.getsource(PostgresCollectionRepository._reconcile_run)
-    assert "GROUP BY retailer_id" in source
+    assert "GROUP BY g.collection_run_id, g.retailer_id" in source
     assert "availability preflight failed by retailer" in source
+    assert "retailer_id = :retailer_id AND status = 'pending'" in source

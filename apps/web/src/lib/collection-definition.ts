@@ -120,7 +120,7 @@ export function buildCollectionDefinition(
     availability_gate: gateEnabled
       ? {
           enabled: true,
-          retailer_ids: ["aldi_us"],
+          retailer_ids: values.retailerIds,
           sample_size_per_retailer: 5,
           max_billable_404_rate: 0.5,
         }

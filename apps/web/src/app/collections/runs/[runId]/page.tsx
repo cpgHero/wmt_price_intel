@@ -132,20 +132,50 @@ export default async function RunMonitorPage({
           </span>
         </div>
       )}
-      {run.availability_gate_status !== "skipped" && (
-        <div
-          className={`gate-banner ${run.availability_gate_status}`}
-          data-status={run.availability_gate_status}
+      {monitor.retailer_gates.length > 0 && (
+        <section
+          className="retailer-gates"
+          aria-label="Retailer availability gates"
         >
-          <b>
-            ALDI availability check:{" "}
-            {displayLabel(run.availability_gate_status)}
-          </b>
-          <span>
-            This safeguard checks a small location sample before the remaining
-            billable ALDI work begins.
-          </span>
-        </div>
+          <header>
+            <div>
+              <span className="section-kicker">Paid-work safeguard</span>
+              <h2>Retailer availability gates</h2>
+              <p>
+                Each retailer is checked and released independently. A failed
+                retailer stops without blocking retailers that passed.
+              </p>
+            </div>
+            {monitor.retailer_gates.some((gate) => gate.status === "failed") ? (
+              <a
+                className="button secondary"
+                href={`/api/collections/runs/${encodeURIComponent(run.id)}/failures`}
+              >
+                Download failure details
+              </a>
+            ) : null}
+          </header>
+          <div className="retailer-gate-grid">
+            {monitor.retailer_gates.map((gate) => (
+              <article
+                className={`retailer-gate-card ${gate.status}`}
+                key={gate.retailer_id}
+              >
+                <div>
+                  <strong>{displayLabel(gate.retailer_id)}</strong>
+                  <span className={`status-badge ${gate.status}`}>
+                    {displayLabel(gate.status)}
+                  </span>
+                </div>
+                <p>
+                  {gate.completed_samples} of {gate.sample_size} checks complete
+                  · {gate.not_found_samples} returned 404
+                </p>
+                {gate.reason ? <small>{gate.reason}</small> : null}
+              </article>
+            ))}
+          </div>
+        </section>
       )}
       {terminal &&
         !analysis &&

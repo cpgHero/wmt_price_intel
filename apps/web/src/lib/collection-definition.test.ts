@@ -38,7 +38,7 @@ describe("collection definition builder", () => {
       zipcodes: ["01234", "44906"],
     });
     expect(config.availability_gate).toMatchObject({
-      retailer_ids: ["aldi_us"],
+      retailer_ids: ["walmart_us", "aldi_us", "amazon_us_same_day"],
     });
   });
 
