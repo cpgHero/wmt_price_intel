@@ -678,11 +678,19 @@ class InMemoryCollectionRepository:
             preflight = [task for task in tasks if task.is_preflight]
             if preflight and not any(task.status in {"pending", "running"} for task in preflight):
                 maximum = float(run.availability_gate_config.get("max_billable_404_rate", 0.5))
-                rate = sum(task.http_status == 404 for task in preflight) / len(preflight)
-                unavailable_for_other_reason = any(
-                    task.status == "failed" and task.http_status != 404 for task in preflight
-                )
-                if rate > maximum or unavailable_for_other_reason:
+                retailer_samples: dict[str, list[QueueTask]] = {}
+                for task in preflight:
+                    retailer_samples.setdefault(task.retailer_id, []).append(task)
+                retailer_failed = False
+                for sample in retailer_samples.values():
+                    rate = sum(task.http_status == 404 for task in sample) / len(sample)
+                    unavailable_for_other_reason = any(
+                        task.status == "failed" and task.http_status != 404 for task in sample
+                    )
+                    retailer_failed = (
+                        retailer_failed or rate > maximum or unavailable_for_other_reason
+                    )
+                if retailer_failed:
                     for task_id, task in tuple(self._tasks.items()):
                         if (
                             task.collection_run_id == run_id

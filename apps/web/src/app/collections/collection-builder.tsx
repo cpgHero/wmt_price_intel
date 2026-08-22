@@ -1488,8 +1488,9 @@ export function CollectionBuilder({
                   <span>
                     <b>Run retailer availability gates first</b>
                     <small>
-                      Test up to five selected ALDI stores before releasing the
-                      remaining queue.
+                      Test up to five scopes for each selected store-level
+                      competitor. Every retailer must pass its own gate before
+                      the remaining queue is released.
                     </small>
                   </span>
                 </label>

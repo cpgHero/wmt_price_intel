@@ -393,3 +393,95 @@ async def test_availability_gate_releases_remaining_tasks_at_threshold() -> None
     assert final.availability_gate_status == "passed"
     assert final.status == "completed_with_warnings"
     assert final.actual_credits == 10
+
+
+async def test_availability_gate_evaluates_each_retailer_without_cross_masking() -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id=f"aldi-{index}",
+                retailer_id="aldi_us",
+                zipcode=f"45{index:03d}",
+                store_number=f"046-{index:03d}",
+                state="OH",
+                country="USA",
+            )
+            for index in range(3)
+        ]
+        + [
+            LocationUnit(
+                id=f"walmart-{index}",
+                retailer_id="walmart_us",
+                zipcode=f"46{index:03d}",
+                store_number=str(index),
+                state="OH",
+                country="USA",
+            )
+            for index in range(3)
+        ]
+    )
+    config = _config()
+    config["retailers"] = [
+        {
+            "retailer_id": "aldi_us",
+            "adapter_id": "metricscart_new_aldi_serp_zipcode",
+            "enabled": True,
+            "request_overrides": {},
+        },
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+            "request_overrides": {},
+        },
+    ]
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["aldi_us", "walmart_us"],
+        "sample_size_per_retailer": 2,
+        "max_billable_404_rate": 0.5,
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    planner = CollectionPlanner(
+        repository,
+        CollectionRetailerCatalog.from_path(REPOSITORY_ROOT / "config/retailer-catalog.json"),
+    )
+    run = await repository.create_run(definition, await planner.plan(config))
+    preflight = await repository.claim_tasks("gate-worker", claim_limit=10, lease_seconds=30)
+    assert len(preflight) == 4
+
+    for task in preflight:
+        if task.retailer_id == "aldi_us":
+            assert await repository.complete_success(
+                task.id,
+                "gate-worker",
+                http_status=200,
+                result_count=1,
+                next_task=None,
+            )
+        else:
+            assert await repository.complete_failure(
+                task.id,
+                "gate-worker",
+                failure_class="invalid_request",
+                error_message="provider returned 404",
+                retryable=False,
+                retry_delay_seconds=0,
+                http_status=404,
+                billable=True,
+            )
+
+    # The combined 404 rate is exactly 50%, but Walmart's retailer-specific
+    # rate is 100%, so the gate must fail closed and cancel both remaining tasks.
+    assert not await repository.claim_tasks("collection-worker", claim_limit=10, lease_seconds=30)
+    final = await repository.get_run(run.id)
+    usage = await repository.usage(run.id)
+    assert final is not None and usage is not None
+    assert final.availability_gate_status == "failed"
+    assert usage.cancelled_tasks == 2
+
+
+def test_postgres_availability_gate_groups_preflight_by_retailer() -> None:
+    source = inspect.getsource(PostgresCollectionRepository._reconcile_run)
+    assert "GROUP BY retailer_id" in source
+    assert "availability preflight failed by retailer" in source

@@ -55,6 +55,9 @@ endpoint with `sort=Relevance`.
   same secret-derived budget key. Multiple worker replicas therefore share each retailer bucket,
   while independent retailers can progress concurrently under the owner-supplied per-retailer,
   per-request-type limit.
+- Availability samples are evaluated per retailer. A good retailer can never dilute another
+  retailer's 404 rate below the gate threshold; a failing sample stops the paid remainder before
+  national collection begins.
 - The full MetricsCart catalog sample for every enabled endpoint passes Search response contract
   `1.0.0`, including recognized `results` arrays and required canonical identity fields.
 - Location collection eligibility is an explicit, versioned catalog policy. Every imported source

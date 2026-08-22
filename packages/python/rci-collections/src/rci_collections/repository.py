@@ -1538,12 +1538,13 @@ class PostgresCollectionRepository:
             .one()
         )
         if gate["availability_gate_status"] == "pending":
-            summary = (
+            summaries = (
                 (
                     await connection.execute(
                         text(
                             """
-                            SELECT count(*)::integer AS total,
+                            SELECT retailer_id,
+                                   count(*)::integer AS total,
                                    count(*) FILTER (
                                      WHERE status IN ('pending', 'running')
                                    )::integer AS open,
@@ -1553,26 +1554,36 @@ class PostgresCollectionRepository:
                                    )::integer AS other_failures
                             FROM collection_task
                             WHERE collection_run_id::text = :run_id AND is_preflight
+                            GROUP BY retailer_id
+                            ORDER BY retailer_id
                             """
                         ),
                         {"run_id": run_id},
                     )
                 )
                 .mappings()
-                .one()
+                .all()
             )
-            if int(summary["total"]) and not int(summary["open"]):
+            if summaries and not any(int(summary["open"]) for summary in summaries):
                 config = dict(gate["availability_gate_config"] or {})
-                rate = int(summary["not_found"]) / int(summary["total"])
                 maximum = float(config.get("max_billable_404_rate", 0.5))
-                gate_status = (
-                    "failed" if rate > maximum or int(summary["other_failures"]) else "passed"
-                )
+                failures: list[str] = []
+                for summary in summaries:
+                    rate = int(summary["not_found"]) / int(summary["total"])
+                    if rate > maximum:
+                        failures.append(
+                            f"{summary['retailer_id']} 404 rate {rate:.3f} exceeded {maximum:.3f}"
+                        )
+                    elif int(summary["other_failures"]):
+                        failures.append(
+                            f"{summary['retailer_id']} had "
+                            f"{int(summary['other_failures'])} terminal failure(s)"
+                        )
+                gate_status = "failed" if failures else "passed"
                 error_summary = (
-                    f"availability preflight failed: billable 404 rate {rate:.3f} "
-                    f"exceeded {maximum:.3f}"
-                    if rate > maximum
-                    else "availability preflight failed: provider sample had terminal failures"
+                    "availability preflight failed by retailer: " + "; ".join(failures)
+                    if failures
+                    else None
                 )
                 await connection.execute(
                     text(
