@@ -86,9 +86,22 @@ product-locations in this deliberately tiny geography. Amazon produced no strict
 which is an honest sample limitation rather than a collection failure. The report is marked review
 required and must not be confused with the trusted full-category Strawberry publication.
 
-After acceptance, the smoke AnalysisResult may be recoverably archived so it does not appear in the
-active report list. The collection run, definition, paid-call ledger, raw objects, normalized and
-classified artifacts, analysis lineage, and audit events must remain intact.
+After acceptance, the blocked smoke AnalysisResult
+`19f4d89d-c276-4a23-88f1-d28c0ce43ba2` was recoverably archived at
+`2026-08-22T05:13:09.443789Z` so it does not appear in the active report list. Audit event
+`analysis_result_archived_after_live_search_acceptance` records the exact reason and preserved
+lineage. The collection run, definition, paid-call ledger, raw objects, normalized and classified
+artifacts, analysis lineage, and audit events remain intact. Production reconciliation found exactly
+five unarchived reports, one ready report for each certified release category.
+
+## Release verification
+
+Commit `4593859` records the acceptance contract and evidence. GitHub Actions run `32553613136`
+passed formatting, lint, types, contracts, the complete Python and TypeScript suites, reversible
+migrations, 14 browser tests, production builds, and all four service-container gates. Railway web
+deployed the exact commit; API, worker, and scheduler remained on the latest code-affecting Search
+contract commit because this final release changed documentation only. All Railway services,
+Postgres, and the artifact bucket were online after archival.
 
 ## Next controlled rollout
 
