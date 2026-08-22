@@ -345,6 +345,95 @@ def test_matching_v2_certified_rules_are_segmented_by_governed_brand_policy() ->
     assert scoped[4].eligible_profile_ids == profile_ids
 
 
+def test_matching_v2_profile_gate_uses_current_search_correction_for_static_override() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    engine = ComparisonEngine(pack)
+    dimensions = {
+        "volume_oz": 128,
+        "fat_type": "2%",
+        "flavor": "Plain",
+        "organic": False,
+        "lactose_free": False,
+        "ultrafiltered": False,
+        "a2": False,
+        "grass_fed": False,
+        "omega_3_dha": False,
+        "kids": False,
+        "protein_fortified": False,
+    }
+
+    def offer(
+        retailer_id: str,
+        product_id: str,
+        title: str,
+        brand: str,
+        fat_type: str,
+    ) -> ClassifiedOffer:
+        attributes = {**dimensions, "brand": brand, "fat_type": fat_type}
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"{retailer_id}:{product_id}:offer",
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title=title,
+                brand=brand,
+                price=Decimal("3.00"),
+                currency="USD",
+                zipcode="72712",
+                store_number="100",
+                latitude=None,
+                longitude=None,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={
+                **attributes,
+                "_attribute_provenance": {name: "product_pack_override" for name in attributes},
+            },
+            metrics={"price_per_gallon": Decimal("3.00")},
+            review_reasons=(),
+        )
+
+    rule = ProductMatchRule(
+        competitor_id="amazon_us_same_day",
+        profile_id="same_brand_exact",
+        benchmark_product_id="10450115",
+        competitor_product_id="B07NSWQHB1",
+        decision="confirmed",
+        eligible_profile_ids=("same_brand_exact", "private_label", "all_brand"),
+        scope_definition={"certified_allowed_tiers": ["exact_specification"]},
+    )
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [
+            offer(
+                "walmart_us",
+                "10450115",
+                "Great Value, 2% Reduced Fat Milk, Gallon",
+                "Great Value",
+                "2%",
+            ),
+            offer(
+                "amazon_us_same_day",
+                "B07NSWQHB1",
+                "365 by Whole Foods Market Reduced Fat Milk, 128 OZ",
+                "365 by Whole Foods Market",
+                "Whole",
+            ),
+        ],
+        [rule],
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("private_label", "all_brand")
+
+
 def test_gold_set_presentation_retains_certified_pair_without_exact_zip_overlap() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
     release = {

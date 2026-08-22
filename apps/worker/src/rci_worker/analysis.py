@@ -43,6 +43,7 @@ from rci_analytics import (
     benchmark_product_decisions,
     benchmark_product_map_points,
     benchmark_product_match_candidates,
+    build_listing_evidence_v2,
     complete_attributes_from_pdp,
     evidence_set,
     location_scope_key,
@@ -179,11 +180,13 @@ def scope_matching_v2_rules_to_brand_profiles(
         offer = classified.offer
         offers_by_product[(offer.retailer_id, offer.retailer_product_id)].append(classified)
 
+    profile_evidence_cache: dict[tuple[str, str], Any | None] = {}
+
     def representative(retailer_id: str, product_id: str) -> Any | None:
         rows = offers_by_product.get((retailer_id, product_id), [])
         if not rows:
             return None
-        return sorted(
+        base = sorted(
             rows,
             key=lambda row: (
                 -int(bool(row.attributes.get("brand") or row.offer.brand)),
@@ -191,6 +194,29 @@ def scope_matching_v2_rules_to_brand_profiles(
                 row.offer.offer_id,
             ),
         )[0]
+        cache_key = (retailer_id, product_id)
+        if cache_key not in profile_evidence_cache:
+            listings = build_listing_evidence_v2(
+                rows,
+                pack=engine.pack,
+                retailer_id=retailer_id,
+            )
+            listing = next(
+                (row for row in listings if row.retailer_product_id == product_id),
+                None,
+            )
+            profile_evidence_cache[cache_key] = (
+                None
+                if listing is None
+                else replace(
+                    base,
+                    attributes={
+                        **base.attributes,
+                        **{name: evidence.value for name, evidence in listing.attributes.items()},
+                    },
+                )
+            )
+        return profile_evidence_cache[cache_key]
 
     scoped: list[ProductMatchRule] = []
     for rule in rules:
