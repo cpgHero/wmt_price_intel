@@ -80,4 +80,13 @@ be incorrect to replay the failed stores merely because the roster was reimporte
 - Canonical reconciliation: exact retailer-source parity and zero normalized geography changes.
 - Location tests verify source completeness, string ZIP normalization, refreshed identity
   `460-006` / `2014417`, and preservation of both live diagnostic controls.
+- Production import `7c394c4b-2b55-4505-b3c7-ca9e6dbff317` completed with 2,627 imported rows,
+  zero skipped rows, and the expected source checksum. All 2,627 current ALDI rows point to that
+  import; the current dimension still has 2,627 active unique store numbers, 2,627 unique
+  MetricsCart IDs, and 2,499 normalized ZIPs.
+- Frozen diagnostic geography `0cb7a74f-46ba-45ea-bcc7-f7d552fa2eb1` retains its original
+  checksum `dffe849196a6fba064017dd61fc83725125e195242b0b706f81ed81305586987` and two-location
+  snapshot after the current-dimension refresh.
+- Commit `7cd9995` deployed successfully. GitHub Actions run `32588635469` passed Python, contracts,
+  migration upgrade/downgrade, TypeScript, 14 browser tests, and all four container builds.
 - No Search, PDP, or AI spend occurred in this phase.
