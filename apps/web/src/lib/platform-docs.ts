@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.41",
+  version: "1.3.42",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.35 ALDI Search control diagnosis, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.36 ALDI location-roster refresh, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -146,7 +146,7 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Trust rules that never change",
           items: [
             "Search data owns store-specific price, observed availability, sponsorship, and collection time.",
-            "The location master owns store identity, ZIP, city, state, country, latitude, and longitude.",
+            "The location master owns current store identity, ZIP, city, state, country, latitude, and longitude. A roster's active status does not prove that a retailer Search page is callable.",
             "PDP data may improve identity, package attributes, imagery, seller, and descriptive context; it never overwrites Search price or location.",
             "Product Packs own category qualification, attribute, comparison-basis, and reporting rules. Retailer Packs own retailer-specific identifiers, seller policy, endpoints, and location behavior.",
             "Deterministic code computes every authoritative count, price, median, rate, distance, denominator, match rule, and unit conversion.",
@@ -1602,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Current ALDI location roster reconciled and imported; regional Search availability remains unproven",
+              "Phase 13.36 versioned the owner-supplied MetricsCart ALDI roster and refreshed the canonical location dimension without changing historical geography snapshots.",
+              "The checksummed source contains 2,627 unique active USA store numbers and MetricsCart location IDs across 40 states and 2,499 normalized ZIPs, with no missing required geography. Its store and physical-location universe is identical to the prior master. Seventy-nine raw ZIP representations normalize identically and the same 79 rows receive corrected MetricsCart location IDs in CT, MA, NH, NJ, RI, and VT. Every prior ALDI diagnostic store/ZIP pair is unchanged, and Search uses Store_No plus ZIP rather than mc_location_id, so the refresh does not cure or explain regional billable 404s. Eleven exact-address/coordinate pairs with two active store numbers remain an explicit North Carolina governance exception before all-location collection. No MetricsCart, PDP, or AI call was made.",
+            ],
             [
               "2026-08-22",
               "Live-paid ALDI control diagnostic completed; regional coverage remediation required",

@@ -229,7 +229,10 @@ MetricsCart uses query-parameter authentication.
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
-   ALDI counts and that Target contains only `Country=USA` rows.
+   ALDI counts and that Target contains only `Country=USA` rows. A retailer-only current-roster
+   refresh may use the same importer against a retained source, for example
+   `rci-locations --source fixtures/location_master/retailer_updates/aldi-locations-2026-08-22.csv`.
+   Record the import ID and checksum; do not delete frozen collection geography snapshots.
 7. Run the fake-provider smoke test only in a non-production environment. Production workers fail
    closed when `COLLECTION_PROVIDER=fake`; set `COLLECTION_PROVIDER=metricscart` before deploying a
    production worker.

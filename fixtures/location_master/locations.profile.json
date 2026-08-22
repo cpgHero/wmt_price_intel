@@ -248,7 +248,7 @@
       "provider": "ALDI",
       "rows": 2627,
       "unique_store_numbers": 2627,
-      "raw_unique_zips": 2501,
+      "raw_unique_zips": 2500,
       "normalized_unique_zips": 2499,
       "countries": {
         "USA": 2627

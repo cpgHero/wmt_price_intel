@@ -80,6 +80,14 @@ the same billable HTTP 404 class. The run consumed exactly four approved credits
 regional store coverage/mapping. Do not change the working adapter or blindly replay the failed
 regional sample. See `docs/89_PHASE_13_35_ALDI_SEARCH_CONTROL_DIAGNOSTIC.md`.
 
+The owner-supplied 2026-08-22 MetricsCart ALDI roster was subsequently reconciled and imported.
+It contains the same 2,627 store-number identities and the same normalized geography as the prior
+master, while correcting 79 MetricsCart location IDs. The known Ohio 200 control and every tested
+404 pair remain present, active, and unchanged; Search uses store number plus ZIP rather than the
+corrected MetricsCart location ID. Roster membership therefore cannot be treated as proof that an
+ALDI Search page is callable. Eleven exact physical-location collisions also require governance
+before all-location collection. See `docs/90_PHASE_13_36_ALDI_LOCATION_ROSTER_REFRESH.md`.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.

@@ -5,7 +5,10 @@
 1. MetricsCart API documentation/implementation notes supplied by product owner.
 2. Representative Walmart, ALDI, Amazon Same Day response shapes supplied by product owner.
 3. MetricsCart retailer endpoint credit catalog supplied by product owner.
-4. `locations.csv` - 157,806 active location rows / 83 providers.
+4. `locations.csv` - 157,806 active location rows / 83 providers. Its ALDI subset is refreshed
+   from the owner-supplied 2026-08-22 MetricsCart roster retained at
+   `fixtures/location_master/retailer_updates/aldi-locations-2026-08-22.csv` (2,627 rows; SHA-256
+   `6ee18a8a5679d085697253e280620e0120b2f3a48467b5af501acee82947fee6`).
 5. Human-validated competitive-intelligence analyses for eggs, milk, bananas, and strawberries.
 6. `CCF_Search_Data_08.03.2026_v2.csv` - 386,889 consolidated egg-search export rows from 14
    retailer domains, attached separately for full golden reconciliation.
@@ -25,6 +28,12 @@ by retailer-specific API fixtures and endpoint contracts.
 
 - 4,683 Walmart locations; 4,190 normalized U.S. ZIPs.
 - 2,627 ALDI locations; 2,499 normalized U.S. ZIPs.
+- The 2026-08-22 ALDI refresh preserves the same 2,627 store-number/physical-location universe and
+  corrects 79 MetricsCart location IDs in leading-zero-ZIP states. It does not change the tested
+  ALDI Search store/ZIP pairs and therefore does not, by itself, resolve regional 404s.
+- Eleven exact-address/coordinate ALDI collisions contain two active store numbers each in North
+  Carolina. They remain an explicit governance exception; do not silently collect both or retire
+  either identifier without callability evidence.
 - 2,668 Kroger locations; store identifiers must remain strings.
 - Target provider contains both USA and Australia; country filter is mandatory for Target US.
 - Some USA ZIP values shorter than five digits require leading-zero normalization.

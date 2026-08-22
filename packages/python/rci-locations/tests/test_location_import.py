@@ -13,6 +13,13 @@ from rci_locations.normalization import normalize_zipcode
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CATALOG_PATH = REPOSITORY_ROOT / "config" / "retailer-catalog.json"
 LOCATION_SOURCE = REPOSITORY_ROOT / "fixtures" / "location_master" / "locations.csv"
+ALDI_LOCATION_SOURCE = (
+    REPOSITORY_ROOT
+    / "fixtures"
+    / "location_master"
+    / "retailer_updates"
+    / "aldi-locations-2026-08-22.csv"
+)
 
 
 class CountingRepository(InMemoryLocationRepository):
@@ -147,3 +154,36 @@ def test_source_reader_preserves_raw_identifier_text() -> None:
         if row["Provider"] == "kroger" and row["Store_No"].startswith("0")
     )
     assert kroger_row["Store_No"] == "03500995"
+
+
+def test_current_aldi_roster_is_complete_and_matches_canonical_master() -> None:
+    catalog = RetailerCatalog.from_path(CATALOG_PATH)
+    roster = list(read_rows(ALDI_LOCATION_SOURCE))
+    canonical = {
+        row["Store_No"]: row
+        for row in read_rows(LOCATION_SOURCE)
+        if row["Provider"] == "ALDI" and row["Country"] == "USA"
+    }
+
+    assert len(roster) == len(canonical) == 2627
+    assert len({row["Store_No"] for row in roster}) == 2627
+    assert {row["Status"] for row in roster} == {"active"}
+    assert {row["Country"] for row in roster} == {"USA"}
+    assert all(row["mc_location_id"] for row in roster)
+
+    for row in roster:
+        location, _ = transform_row(row, catalog)
+        assert canonical[row["Store_No"]] == row
+        assert location.retailer_id == "aldi_us"
+        assert location.zipcode is not None and len(location.zipcode) == 5
+
+    refreshed = canonical["460-006"]
+    assert refreshed["Zip_Code"] == "08520"
+    assert refreshed["mc_location_id"] == "2014417"
+
+
+def test_current_aldi_roster_preserves_control_diagnostic_pairs() -> None:
+    roster = {row["Store_No"]: row for row in read_rows(ALDI_LOCATION_SOURCE)}
+
+    assert roster["463-048"]["Zip_Code"] == "44906"
+    assert roster["479-098"]["Zip_Code"] == "93215"
