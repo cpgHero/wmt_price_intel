@@ -19,6 +19,7 @@ export default async function AnalysisPage({
   const { analysisId } = await params;
   const response = await getApi<AnalysisRecord>(
     `/api/v1/analyses/${encodeURIComponent(analysisId)}`,
+    30_000,
   );
   if (response.status === 404) notFound();
   if (!response.data) {
