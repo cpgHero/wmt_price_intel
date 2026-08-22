@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.40",
+  version: "1.3.41",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.34 multi-region Search gate evaluation, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.35 ALDI Search control diagnosis, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1602,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Live-paid ALDI control diagnostic completed; regional coverage remediation required",
+              "Phase 13.35 isolated the current ALDI Search contract with one known-success control and one failed-region store/ZIP pair.",
+              "Run 0eb24781-e930-4532-9ce3-28be75eaf31d used the exact no-trailing-slash /mc/new_aldi/serp/zipcode route and only keyword, ZIP, store, and page. Control store 463-048 / ZIP 44906 returned HTTP 200 with 15 contract-valid results; California store 479-098 / ZIP 93215 returned a nonretryable billable HTTP 404. Both raw gzip and decompressed body checksums reconcile, and the 404 body matches the prior unavailable-page response. The run completed with warnings, passed the two-sample gate at the configured 50% maximum 404 rate, used exactly four of four approved credits (approximately $0.008), and made no retry, Walmart, or Amazon call. This rules out an ALDI-wide endpoint or trailing-slash defect and retains the adapter unchanged. The diagnostic-only scope produced no user-facing report; its generic no-competitor analysis attempts failed the non-empty comparison contract and remain visible in audit history. The failed multi-region scope will not be replayed until current ALDI regional store coverage is refreshed or validated and replacement pairs pass a new bounded preflight.",
+            ],
             [
               "2026-08-22",
               "Live-paid multi-region acceptance blocked safely; diagnostic required",

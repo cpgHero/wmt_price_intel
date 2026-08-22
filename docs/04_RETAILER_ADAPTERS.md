@@ -91,6 +91,12 @@ therefore unchanged pending a two-location controlled diagnostic; do not hide th
 arrays, retry the full sample blindly, or infer that Walmart/Amazon regional acceptance passed.
 See `docs/88_PHASE_13_34_MULTI_REGION_LIVE_SEARCH_ACCEPTANCE.md`.
 
+The Phase 13.35 two-location control used the exact same no-trailing-slash endpoint and required
+parameters. Store `463-048`, ZIP `44906`, returned HTTP 200; store `479-098`, ZIP `93215`, returned
+HTTP 404. The adapter is therefore retained unchanged. Regional store acceptance must be validated
+before the broader collection is replayed; a successful control does not make every historical
+store/ZIP pair currently valid. See `docs/89_PHASE_13_35_ALDI_SEARCH_CONTROL_DIAGNOSTIC.md`.
+
 ## Catalogued later adapters
 
 Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,

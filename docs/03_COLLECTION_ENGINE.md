@@ -73,6 +73,13 @@ canonical location master and August 7 retained Strawberry results, so the resul
 availability failure—not proven schema drift or a proven bad location master. See
 `docs/88_PHASE_13_34_MULTI_REGION_LIVE_SEARCH_ACCEPTANCE.md`.
 
+The bounded follow-up proved that the current ALDI adapter still works: owner-provided control store
+`463-048`, ZIP `44906`, returned HTTP 200 while failed-region store `479-098`, ZIP `93215`, returned
+the same billable HTTP 404 class. The run consumed exactly four approved credits with no retry or
+429. This rules out an ALDI-wide endpoint or trailing-slash defect and narrows remediation to current
+regional store coverage/mapping. Do not change the working adapter or blindly replay the failed
+regional sample. See `docs/89_PHASE_13_35_ALDI_SEARCH_CONTROL_DIAGNOSTIC.md`.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.
