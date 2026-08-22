@@ -83,10 +83,10 @@ const lastVerified = "August 21, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.33",
+  version: "1.3.34",
   lastVerified,
   baseline:
-    "Production implementation through accepted governed Egg, Banana, Strawberry, Ground Beef, and Milk replays, including profile-specific certified relationship eligibility",
+    "Production implementation through Phase 13.30 five-category reporting trust certification, including profile-specific certified relationship eligibility",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1272,6 +1272,149 @@ export const platformDocumentation: PlatformDocumentation = {
       ],
     },
     {
+      id: "five-category-trust-certification",
+      group: "governance",
+      title: "Five-category reporting trust certification",
+      summary:
+        "The Phase 13.30 acceptance baseline for Ground Beef, Strawberries, Bananas, Fresh Shell Eggs, and Fresh Fluid Milk.",
+      audience: "Platform owner · Platform administrator · Engineering",
+      readingTime: "9 min",
+      lastVerified,
+      status: "Current",
+      links: [
+        {
+          href: "/analyses/fresh_ground_beef-b01158a0-6ac5-4d8d-9d57-6978cfd61d17-match-v2-a7fb8453-r4",
+          label: "Open Ground Beef",
+        },
+        {
+          href: "/analyses/fresh_strawberries-81e1dd0d-450d-49bb-a28c-b32de48ea51c-match-v2-4e6bddc0-r3",
+          label: "Open Strawberries",
+        },
+        {
+          href: "/analyses/fresh_bananas-3db3e46c-8a89-4519-9936-5e0c48161a5d-match-v2-00a5061c-r3",
+          label: "Open Bananas",
+        },
+        {
+          href: "/analyses/fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-3c967ecc-r3",
+          label: "Open Fresh Shell Eggs",
+        },
+        {
+          href: "/analyses/fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-28e0850f-r4",
+          label: "Open Fresh Fluid Milk",
+        },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Five replacements are certified and active",
+          text: "Each category has exactly one active certified replacement in its governed lineage. Every replacement passed exhaustive decision reconciliation, fail-closed relationship projection, all configured basis-by-1/3/5-mile materializations, semantic audit, all nine Competitive Intelligence workspaces, and Price Intelligence acceptance. Obsolete predecessors were archived only after those gates passed.",
+        },
+        {
+          kind: "table",
+          title: "Certified reporting baseline",
+          columns: [
+            "Category",
+            "Final decisions",
+            "Published views",
+            "Semantic audit",
+            "Production acceptance",
+          ],
+          rows: [
+            [
+              "Ground Beef",
+              "51 comparable · 2 reviewed insufficient · 0 pending",
+              "Strict and unit price × 1/3/5 miles",
+              "0 errors · 0 warnings",
+              "Competitive and Price Intelligence passed",
+            ],
+            [
+              "Strawberries",
+              "6 comparable · 0 pending",
+              "Strict and unit price × 1/3/5 miles",
+              "0 errors · 0 warnings",
+              "Competitive and Price Intelligence passed",
+            ],
+            [
+              "Bananas",
+              "11 comparable · 0 pending",
+              "Five profiles × 1/3/5 miles",
+              "0 errors · 9 explicit warnings",
+              "Competitive and Price Intelligence passed",
+            ],
+            [
+              "Fresh Shell Eggs",
+              "183 comparable · 1 not comparable · 1 reviewed insufficient · 0 pending",
+              "Compatible and strict × 1/3/5 miles",
+              "0 errors · 48 explicit warnings",
+              "Competitive and Price Intelligence passed",
+            ],
+            [
+              "Fresh Fluid Milk",
+              "887 comparable · 177 not comparable · 0 pending",
+              "All brand, private label, and same brand × 1/3/5 miles",
+              "0 errors · 21 explicit warnings",
+              "Competitive and Price Intelligence passed",
+            ],
+          ],
+        },
+        {
+          kind: "definitions",
+          title: "How to interpret the certification",
+          items: [
+            {
+              term: "Certified relationship",
+              definition:
+                "A final human-governed comparable pair. The selected Product Pack profile separately determines whether that relationship belongs in the current inclusive, strict, private-label, same-brand, or unit-price view.",
+            },
+            {
+              term: "Scored product-location comparison",
+              definition:
+                "A certified eligible relationship with admissible positive Search prices under the selected physical-store radius. Amazon Same Day remains explicitly labeled same-ZIP service-area evidence.",
+            },
+            {
+              term: "Explicit warning",
+              definition:
+                "A truthful non-blocking limitation, such as no local pair within five miles or incomplete cohort attributes. It never becomes a price conclusion or stale fallback metric.",
+            },
+            {
+              term: "Ready to share",
+              definition:
+                "The result has full metric-reference coverage, zero unsupported numeric claims, zero blocking semantic errors, no uncertified relationship leakage, and successful production acceptance.",
+            },
+          ],
+        },
+        {
+          kind: "list",
+          title: "Trust corrections included in this baseline",
+          items: [
+            "Certified match tiers and Product Pack profile constraints are applied independently and fail closed.",
+            "Ground Beef labeled multipacks use the effective measure for unit-price math and cannot leak into strict package-price views.",
+            "Milk profile eligibility uses the same current Search-derived attribute correction as Matching v2 candidate evidence without rewriting authoritative history.",
+            "Large analyses receive a 30-second initial application fetch window instead of failing behind the former five-second timeout.",
+            "Every warning remains visible; automatic fallback is disabled for all certified replacements.",
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Evidence and cost boundary",
+          text: "Phase 13.30 rebuilt the five reports from retained governed evidence and made no MetricsCart or OpenAI call. Search data, raw objects, PDP evidence, certification history, immutable releases, portfolio materializations, archived AnalysisResults, and audit lineage were preserved. Archival is recoverable; deletion was not used.",
+        },
+        {
+          kind: "list",
+          title: "Known limitations retained honestly",
+          items: [
+            "Six Egg competitor retailers have certified identity but no competitor store pair within five miles, so their price scorecards remain explicitly unscored.",
+            "Banana specialized empty views and Egg/Milk cohort-attribute gaps remain visible as warnings rather than hidden fallback values.",
+            "Amazon Same Day is not assigned fictional physical stores or physical-store radii.",
+            "This phase certifies snapshot reporting, not historical price movement.",
+            "Large report materialization should move from its current atomic service operation to a durable leased background task with progress and retries.",
+          ],
+        },
+      ],
+    },
+    {
       id: "limitations",
       group: "reference",
       title: "Current limitations & honest boundaries",
@@ -1358,6 +1501,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-21",
+              "Deployed, replayed, semantically audited, production-verified, and certified",
+              "Phase 13.30 established one trusted active reporting replacement for each of the five original categories.",
+              "Ground Beef, Strawberries, Bananas, Fresh Shell Eggs, and Fresh Fluid Milk passed exhaustive certification reconciliation, fail-closed profile eligibility, every configured basis-by-1/3/5-mile materialization, semantic audits with zero errors, all nine Competitive Intelligence workspaces, and Price Intelligence acceptance. Corrections cover certified-tier leakage, multipack effective measures, role-specific Product Pack profiles, current Search evidence at the Milk profile gate, and large-report initial load tolerance. The final lineage reconciliation found exactly five active certified replacements and no active predecessor in those same lineages. Obsolete predecessors were recoverably archived only after replacement acceptance; source Search data, raw objects, PDP evidence, certification history, immutable releases, materializations, archived results, and audit lineage remain preserved. No MetricsCart or OpenAI call was made during the phase.",
+            ],
             [
               "2026-08-21",
               "Deployed, refreshed, semantically audited, and production-verified",
