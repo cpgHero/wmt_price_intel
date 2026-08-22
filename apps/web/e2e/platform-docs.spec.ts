@@ -39,7 +39,7 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Platform Owner & Administrator Guide" }),
   ).toBeVisible();
-  await expect(page.getByText("15 maintained guides")).toBeVisible();
+  await expect(page.getByText("16 maintained guides")).toBeVisible();
 
   await page
     .getByRole("button", { name: /Data lifecycle: collection to reporting/ })
