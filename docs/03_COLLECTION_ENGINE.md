@@ -65,6 +65,14 @@ normalized, and classified artifact reconciled by checksum and row count. The pr
 echo is diagnostic; the immutable collection task remains authoritative for requested retailer,
 store, ZIP, page, and sort context. See `docs/87_PHASE_13_33_LIVE_SEARCH_API_ACCEPTANCE.md`.
 
+The subsequent five-region acceptance was blocked by the same gate before non-ALDI work began.
+All five ALDI sample pages returned the provider's billable 404 unavailable-page response. Ten of
+27 approved credits were consumed and 17 were prevented; no Walmart or Amazon request, normalized
+row, analysis, or report was created. All sampled ALDI store/ZIP pairs reconcile to both the
+canonical location master and August 7 retained Strawberry results, so the result is a current
+availability failure—not proven schema drift or a proven bad location master. See
+`docs/88_PHASE_13_34_MULTI_REGION_LIVE_SEARCH_ACCEPTANCE.md`.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.

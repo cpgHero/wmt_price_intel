@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.39",
+  version: "1.3.40",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.33 live Search-by-ZIP acceptance, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.34 multi-region Search gate evaluation, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1539,6 +1539,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Population/county/demographic geography selectors await a governed data source and validation contract.",
             "Amazon Same Day remains a ZIP/delivery-market comparison rather than a fabricated physical-store model.",
             "A Search non-observation is inconclusive; it is not proof that a store does not carry a product or is out of stock.",
+            "Five-region live Search acceptance is currently blocked: five sampled ALDI Strawberry pages returned billable HTTP 404 unavailable-page responses on August 22. The gate prevented Walmart, Amazon, and the sixth ALDI call, so regional collection and reporting are not yet certified.",
           ],
         },
       ],
@@ -1601,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Live-paid multi-region acceptance blocked safely; diagnostic required",
+              "Phase 13.34 exercised the production ALDI availability gate across five Strawberry regions before broader live Search rollout.",
+              "Run e9f163bd-024d-4a53-87e6-1141f2975cc9 attempted five of 16 planned pages. All five ALDI samples returned the same billable HTTP 404 unavailable-page body, so the 100% 404 rate exceeded the 50% gate threshold. Ten of 27 approved credits were consumed (approximately $0.02); the gate prevented the remaining 17 credits, including every Walmart and Amazon call and the sixth ALDI call. There were no retries or 429s. All raw gzip and decompressed checksums reconcile. Every sampled store/ZIP pair exists in the location master and produced 13–15 retained Strawberry rows on August 7, while the same endpoint contract passed the prior-day one-ZIP pilot. The evidence therefore does not justify an adapter change or prove bad locations. No normalization, analysis, or report was produced, and full-location rollout remains blocked pending a separately approved two-location ALDI control diagnostic.",
+            ],
             [
               "2026-08-22",
               "Live-paid acceptance passed; contract, raw evidence, normalization, analysis, and reporting verified",

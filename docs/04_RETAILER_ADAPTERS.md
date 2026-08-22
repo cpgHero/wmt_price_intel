@@ -83,6 +83,14 @@ state. Optional badges, reviews, and demand fields remain in the retained raw so
 governed analytical use case promotes them into the canonical contract. See
 `docs/87_PHASE_13_33_LIVE_SEARCH_API_ACCEPTANCE.md`.
 
+The five-region follow-up did not produce any HTTP 200 response to audit. Five regionally distributed
+ALDI first-page requests used the same verified route and parameter names but returned byte-identical
+billable 404 bodies stating that the requested URL or store was unavailable. Every pair existed in
+the location master and produced retained Strawberry results on August 7. The adapter contract is
+therefore unchanged pending a two-location controlled diagnostic; do not hide the 404s as empty
+arrays, retry the full sample blindly, or infer that Walmart/Amazon regional acceptance passed.
+See `docs/88_PHASE_13_34_MULTI_REGION_LIVE_SEARCH_ACCEPTANCE.md`.
+
 ## Catalogued later adapters
 
 Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,
