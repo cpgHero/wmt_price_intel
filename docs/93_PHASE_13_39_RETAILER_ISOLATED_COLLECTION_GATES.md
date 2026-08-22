@@ -59,3 +59,17 @@ failure class, attempts, billable credits, and the exact request payload.
 No live collection is launched by this phase. After production verification, the next proposed Milk
 and Egg collections require fresh exact task, credit, and dollar estimates. The owner approves that
 paid scope separately.
+
+## Release acceptance
+
+Phase 13.39 was deployed and production-verified on August 22, 2026 at commit `34dc2cc`.
+GitHub Actions run `32600392203` passed the real-Postgres migration and queue suite, Python
+formatting/linting/types/contracts/tests, TypeScript formatting/linting/types/unit/build checks, all
+14 browser tests, migration upgrade/downgrade/upgrade, and all four service-container builds.
+
+The production monitor for the prior fourteen-retailer Egg preflight displayed twelve durable
+retailer decisions with the expected eight passes and four failures, accurate per-retailer sample
+counts, 404 evidence, and terminal-failure reasons. The historical run predates Walmart and Amazon
+Same Day preflights, so neither retailer was backfilled with invented evidence. The failed-input CSV
+download started successfully from the live monitor. This acceptance made no MetricsCart Search,
+MetricsCart PDP, or OpenAI call.

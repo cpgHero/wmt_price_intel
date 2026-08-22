@@ -83,7 +83,7 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.45",
+  version: "1.3.46",
   lastVerified,
   baseline:
     "Production implementation through Phase 13.39 retailer-isolated collection gates, built on the Phase 13.30 five-category certified baseline",
@@ -1604,9 +1604,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-22",
-              "Implemented and test-verified; production deployment pending",
+              "Deployed and production-verified",
               "Phase 13.39 replaces the run-wide availability gate with durable retailer-isolated decisions.",
-              "Walmart, Amazon Same Day, and every selected competitor now receive independent bounded preflights. One request per retailer may be in flight; healthy retailers release immediately, while a retailer stops as soon as its 404 threshold is unrecoverable or a terminal non-404 error occurs. Mixed outcomes remain auditable as partial, retries reopen only the affected retailer, the monitor shows retailer-specific evidence, and failed inputs download as CSV. No MetricsCart, PDP, or AI call was made.",
+              "Walmart, Amazon Same Day, and every selected competitor now receive independent bounded preflights. One request per retailer may be in flight; healthy retailers release immediately, while a retailer stops as soon as its 404 threshold is unrecoverable or a terminal non-404 error occurs. Mixed outcomes remain auditable as partial, retries reopen only the affected retailer, the monitor shows retailer-specific evidence, and failed inputs download as CSV. Commit 34dc2cc and GitHub Actions run 32600392203 passed real-Postgres queue tests, migration upgrade/downgrade/upgrade, Python and TypeScript release gates, 14 browser tests, and all four service-container builds. Production displayed the expected eight passed and four failed retailer decisions for the historical Egg preflight; Walmart and Amazon were correctly not assigned invented backfill evidence because that run predates their gates. The live failure CSV download started successfully. No MetricsCart, PDP, or AI call was made.",
             ],
             [
               "2026-08-22",
