@@ -1436,7 +1436,18 @@ export function CollectionBuilder({
                       <input
                         type="number"
                         min={1}
-                        max={10}
+                        max={
+                          options.retailers.find(
+                            (retailer) => retailer.id === retailerId,
+                          )?.supports_pagination
+                            ? 10
+                            : 1
+                        }
+                        disabled={
+                          !options.retailers.find(
+                            (retailer) => retailer.id === retailerId,
+                          )?.supports_pagination
+                        }
                         value={maxPagesByRetailer[retailerId] ?? 1}
                         onChange={(event) =>
                           setMaxPagesByRetailer((current) => ({
@@ -1463,11 +1474,19 @@ export function CollectionBuilder({
                   <input
                     type="checkbox"
                     checked={gateEnabled}
-                    disabled={!competitorRetailerIds.includes("aldi_us")}
+                    disabled={
+                      !competitorRetailerIds.some((retailerId) =>
+                        options.retailers.some(
+                          (retailer) =>
+                            retailer.id === retailerId &&
+                            retailer.location_dimension === "store_zip",
+                        ),
+                      )
+                    }
                     onChange={(event) => setGateEnabled(event.target.checked)}
                   />
                   <span>
-                    <b>Run ALDI availability gate first</b>
+                    <b>Run retailer availability gates first</b>
                     <small>
                       Test up to five selected ALDI stores before releasing the
                       remaining queue.

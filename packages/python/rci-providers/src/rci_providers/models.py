@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 JsonObject = dict[str, Any]
@@ -26,6 +26,9 @@ class RetailerSpec:
     required_params: tuple[str, ...]
     aliases: tuple[str, ...]
     default_sort: str | None
+    supported_params: tuple[str, ...] = ()
+    search_inputs: tuple[str, ...] = ("keyword",)
+    default_request_params: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

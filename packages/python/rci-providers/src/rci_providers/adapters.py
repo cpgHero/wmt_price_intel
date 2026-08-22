@@ -13,11 +13,6 @@ from rci_collections.models import QueueTask
 from rci_providers.extraction import ResultArrayExtraction, inspect_result_array
 from rci_providers.models import JsonObject, ProviderRequest, RetailerSpec
 
-ADAPTER_IDS = {
-    "metricscart_walmart_search_zipcode_v2": "walmart_us",
-    "metricscart_new_aldi_serp_zipcode": "aldi_us",
-    "metricscart_amazon_same_day_zipcode": "amazon_us_same_day",
-}
 PROTECTED_OVERRIDES = {"x-api-key", "page", "zipcode", "store"}
 
 
@@ -52,10 +47,14 @@ class MetricsCartRetailerAdapter:
             )
         payload = task.request_payload
         keyword = str(payload.get("keyword") or "").strip()
-        params: JsonObject = {
-            "zipcode": task.zipcode,
-            "page": task.page_number,
-        }
+        supported = set(self.spec.supported_params)
+        if task.max_pages > 1 and "page" not in supported:
+            raise ValueError(f"{self.retailer_id} does not support Search pagination")
+        params: JsonObject = dict(self.spec.default_request_params)
+        if "zipcode" in supported:
+            params["zipcode"] = task.zipcode
+        if "page" in supported:
+            params["page"] = task.page_number
         if self.retailer_id == "amazon_us_same_day":
             template = payload.get("amazon_same_day_url_template")
             if not isinstance(template, str) or not template.strip():
@@ -65,12 +64,13 @@ class MetricsCartRetailerAdapter:
             if not keyword:
                 raise ValueError(f"{self.retailer_id} requires a keyword")
             params["keyword"] = keyword
-            if task.store_number is None:
+            if "store" in supported and task.store_number is None:
                 raise ValueError(f"{self.retailer_id} requires a store number")
-            params["store"] = task.store_number
+            if "store" in supported:
+                params["store"] = task.store_number
 
         sort = payload.get("sort") or self.spec.default_sort
-        if sort:
+        if sort and "sort" in supported:
             params["sort"] = str(sort)
         overrides = payload.get("request_overrides", {})
         if not isinstance(overrides, dict):
@@ -228,12 +228,16 @@ class MetricsCartAdapterRegistry:
         )
         if not result_array_paths:
             raise ValueError("retailer catalog must configure MetricsCart result-array paths")
-        by_retailer = {str(item["id"]): item for item in document.get("retailers", [])}
         adapters: dict[str, MetricsCartRetailerAdapter] = {}
-        for adapter_id, retailer_id in ADAPTER_IDS.items():
-            item = by_retailer.get(retailer_id)
-            if item is None or item.get("status") != "enabled":
-                raise ValueError(f"enabled retailer {retailer_id!r} missing from catalog")
+        for item in document.get("retailers", []):
+            if item.get("status") != "enabled":
+                continue
+            retailer_id = str(item["id"])
+            adapter_id = str(item.get("adapter_id") or "")
+            if not adapter_id:
+                raise ValueError(f"enabled retailer {retailer_id!r} has no adapter_id")
+            if adapter_id in adapters:
+                raise ValueError(f"duplicate MetricsCart adapter_id {adapter_id!r}")
             spec = RetailerSpec(
                 retailer_id=retailer_id,
                 endpoint=str(item["endpoint"]),
@@ -243,6 +247,11 @@ class MetricsCartAdapterRegistry:
                 required_params=tuple(str(value) for value in item.get("required_params", [])),
                 aliases=tuple(str(value) for value in item.get("api_retailer_aliases", [])),
                 default_sort=(str(item["default_sort"]) if item.get("default_sort") else None),
+                supported_params=tuple(str(value) for value in item.get("supported_params", [])),
+                search_inputs=tuple(str(value) for value in item.get("search_inputs", ["keyword"])),
+                default_request_params={
+                    str(key): value for key, value in item.get("default_request_params", {}).items()
+                },
             )
             adapters[adapter_id] = MetricsCartRetailerAdapter(
                 adapter_id,

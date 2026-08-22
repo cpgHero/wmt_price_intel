@@ -18,6 +18,7 @@ class RetailerCapability:
     location_dimension: str
     credits_per_successful_page: int
     endpoint: str
+    supports_pagination: bool = True
 
 
 @dataclass(frozen=True, slots=True)

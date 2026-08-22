@@ -13,6 +13,7 @@ from rci_providers.extraction import extract_result_array, inspect_result_array
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CATALOG_PATH = REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+METRICSCART_CATALOG_PATH = REPOSITORY_ROOT / "config" / "metricscart-api-catalog-20260816.json"
 
 
 def _task(
@@ -21,6 +22,8 @@ def _task(
     adapter_id: str,
     store_number: str | None,
     payload: dict[str, Any] | None = None,
+    credits_per_success: int | None = None,
+    max_pages: int = 3,
 ) -> QueueTask:
     now = datetime.now(UTC)
     return QueueTask(
@@ -33,10 +36,14 @@ def _task(
         zipcode="00123",
         store_number=store_number,
         page_number=2,
-        max_pages=3,
+        max_pages=max_pages,
         stop_on_empty=True,
         stop_on_short_page=False,
-        credits_per_success=1 if retailer_id == "walmart_us" else 2,
+        credits_per_success=(
+            credits_per_success
+            if credits_per_success is not None
+            else (1 if retailer_id == "walmart_us" else 2)
+        ),
         request_payload=payload
         or {
             "keyword": "fresh strawberries",
@@ -165,6 +172,82 @@ def test_amazon_requires_and_renders_same_day_url_context() -> None:
     )
     with pytest.raises(ValueError, match="requires amazon_same_day_url_template"):
         adapter.build_request(task)
+
+
+def test_all_fourteen_egg_search_adapters_are_catalog_driven() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text())
+    enabled = [item for item in catalog["retailers"] if item.get("status") == "enabled"]
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+
+    assert len(enabled) == 14
+    for item in enabled:
+        adapter = registry.get(str(item["adapter_id"]))
+        request = adapter.build_request(
+            _task(
+                retailer_id=str(item["id"]),
+                adapter_id=str(item["adapter_id"]),
+                store_number=(None if item["id"] == "amazon_us_same_day" else "0007"),
+                credits_per_success=int(item["credits_per_successful_page"]),
+                max_pages=(2 if "page" in item["supported_params"] else 1),
+            )
+        )
+
+        assert request.path == item["endpoint"]
+        assert set(request.params) <= set(item["supported_params"])
+        assert set(item.get("required_params", [])) <= set(request.params)
+        assert request.params.get("store") in {None, "0007"}
+
+
+def test_endpoint_specific_search_parameters_do_not_leak() -> None:
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+    shoprite = registry.get("metricscart_shoprite_serp_zipcode").build_request(
+        _task(
+            retailer_id="shoprite_us",
+            adapter_id="metricscart_shoprite_serp_zipcode",
+            store_number="109",
+            credits_per_success=1,
+            max_pages=1,
+        )
+    )
+    giant_eagle = registry.get("metricscart_giant_eagle_serp_zipcode").build_request(
+        _task(
+            retailer_id="giant_eagle_us",
+            adapter_id="metricscart_giant_eagle_serp_zipcode",
+            store_number="230",
+            credits_per_success=2,
+            max_pages=1,
+        )
+    )
+
+    assert shoprite.params["shopping_type"] == "pickup"
+    assert "page" not in shoprite.params
+    assert "page" not in giant_eagle.params
+
+    with pytest.raises(ValueError, match="does not support Search pagination"):
+        registry.get("metricscart_giant_eagle_serp_zipcode").build_request(
+            _task(
+                retailer_id="giant_eagle_us",
+                adapter_id="metricscart_giant_eagle_serp_zipcode",
+                store_number="230",
+                credits_per_success=2,
+            )
+        )
+
+
+def test_all_fourteen_catalogued_search_samples_advertise_results() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text())
+    provider_catalog = json.loads(METRICSCART_CATALOG_PATH.read_text())
+    by_path = {item["path"]: item for item in provider_catalog["endpoints"]}
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+
+    for item in catalog["retailers"]:
+        if item.get("status") != "enabled":
+            continue
+        endpoint = by_path[item["endpoint"]]
+        registry.get(str(item["adapter_id"]))
+
+        assert endpoint["sample_response"]["present"] is True
+        assert "results" in endpoint["sample_response"]["top_level_fields"]
 
 
 @pytest.mark.parametrize(

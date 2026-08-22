@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 class ProviderLimiter(Protocol):
-    async def acquire(self) -> None: ...
+    async def acquire(self, scope_key: str | None = None) -> None: ...
 
-    async def pause(self, seconds: float) -> None: ...
+    async def pause(self, seconds: float, scope_key: str | None = None) -> None: ...
 
 
 @dataclass(slots=True)
@@ -52,7 +52,8 @@ class InMemoryProviderLimiter:
         self._clock = clock
         self._sleep = sleep
 
-    async def acquire(self) -> None:
+    async def acquire(self, scope_key: str | None = None) -> None:
+        del scope_key
         while True:
             async with self._lock:
                 now = self._clock()
@@ -81,7 +82,8 @@ class InMemoryProviderLimiter:
         state.minute_count += 1
         return 0
 
-    async def pause(self, seconds: float) -> None:
+    async def pause(self, seconds: float, scope_key: str | None = None) -> None:
+        del scope_key
         async with self._lock:
             self._state.paused_until = max(
                 self._state.paused_until, self._clock() + max(seconds, 0)
@@ -111,14 +113,15 @@ class PostgresProviderLimiter:
         self._permit_interval = max(1 / rps, 60 / rpm) * 1.02
         self._sleep = sleep
 
-    async def acquire(self) -> None:
+    async def acquire(self, scope_key: str | None = None) -> None:
+        provider = self._scoped_provider(scope_key)
         while True:
-            wait = await self._try_acquire()
+            wait = await self._try_acquire(provider)
             if wait <= 0:
                 return
             await self._sleep(wait)
 
-    async def _try_acquire(self) -> float:
+    async def _try_acquire(self, provider: str) -> float:
         async with self._engine.begin() as connection:
             await connection.execute(
                 text(
@@ -128,7 +131,7 @@ class PostgresProviderLimiter:
                     ON CONFLICT (provider, budget_key) DO NOTHING
                     """
                 ),
-                {"provider": self.provider, "budget_key": self.budget_key},
+                {"provider": provider, "budget_key": self.budget_key},
             )
             row = (
                 (
@@ -141,7 +144,7 @@ class PostgresProviderLimiter:
                             FOR UPDATE
                             """
                         ),
-                        {"provider": self.provider, "budget_key": self.budget_key},
+                        {"provider": provider, "budget_key": self.budget_key},
                     )
                 )
                 .mappings()
@@ -178,7 +181,7 @@ class PostgresProviderLimiter:
                     """
                 ),
                 {
-                    "provider": self.provider,
+                    "provider": provider,
                     "budget_key": self.budget_key,
                     "second_start": second_start,
                     "second_count": second_count + 1,
@@ -189,10 +192,10 @@ class PostgresProviderLimiter:
             )
             return 0
 
-    async def pause(self, seconds: float) -> None:
-        await self._pause(max(seconds, 0))
+    async def pause(self, seconds: float, scope_key: str | None = None) -> None:
+        await self._pause(max(seconds, 0), self._scoped_provider(scope_key))
 
-    async def _pause(self, seconds: float) -> None:
+    async def _pause(self, seconds: float, provider: str) -> None:
         async with self._engine.begin() as connection:
             await connection.execute(
                 text(
@@ -217,8 +220,12 @@ class PostgresProviderLimiter:
                     """
                 ),
                 {
-                    "provider": self.provider,
+                    "provider": provider,
                     "budget_key": self.budget_key,
                     "seconds": seconds,
                 },
             )
+
+    def _scoped_provider(self, scope_key: str | None) -> str:
+        normalized = str(scope_key or "global").strip().lower().replace(" ", "_")
+        return f"{self.provider}:{normalized}"

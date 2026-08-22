@@ -54,12 +54,18 @@ export function buildApprovedCollectionDefinition(
           : retailer.id === "amazon_us_same_day"
             ? "Featured"
             : null,
-      max_pages_override: values.maxPagesByRetailer[retailer.id] ?? 1,
+      max_pages_override: retailer.supports_pagination
+        ? (values.maxPagesByRetailer[retailer.id] ?? 1)
+        : 1,
       request_overrides: {},
     };
   });
-  const gatedRetailers = values.competitorRetailerIds.filter(
-    (retailerId) => retailerId === "aldi_us",
+  const gatedRetailers = values.competitorRetailerIds.filter((retailerId) =>
+    options.retailers.some(
+      (retailer) =>
+        retailer.id === retailerId &&
+        retailer.location_dimension === "store_zip",
+    ),
   );
   return {
     id: values.definitionId,

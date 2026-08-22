@@ -84,7 +84,8 @@ class MetricsCartClient:
                 "invalid_request", str(exc), retryable=False, retry_delay_seconds=0
             ) from exc
 
-        await self._limiter.acquire()
+        limiter_scope = f"search:{adapter.retailer_id}"
+        await self._limiter.acquire(limiter_scope)
         try:
             response = await self._http.request(
                 request.method,
@@ -103,7 +104,7 @@ class MetricsCartClient:
         # Propagate provider backpressure before object I/O so a bucket incident cannot
         # cause other worker replicas to continue sending requests after a known 429.
         if response.status_code == 429:
-            await self._limiter.pause(self._rate_limit_delay(response, task))
+            await self._limiter.pause(self._rate_limit_delay(response, task), limiter_scope)
 
         try:
             artifact = await self._object_store.put_response(

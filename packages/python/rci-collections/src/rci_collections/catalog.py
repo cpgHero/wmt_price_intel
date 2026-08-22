@@ -20,6 +20,7 @@ class CollectionRetailerCatalog:
                 location_dimension=str(item["location_dimension"]),
                 credits_per_successful_page=int(item["credits_per_successful_page"]),
                 endpoint=str(item["endpoint"]),
+                supports_pagination="page" in item.get("supported_params", []),
             )
             for item in catalog.get("retailers", [])
         }

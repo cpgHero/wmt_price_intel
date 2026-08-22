@@ -328,6 +328,7 @@ async def collection_builder_options(request: Request) -> dict[str, Any]:
                 "adapter_id": item.adapter_id,
                 "location_dimension": item.location_dimension,
                 "credits_per_page": item.credits_per_successful_page,
+                "supports_pagination": item.supports_pagination,
                 "status": item.status,
             }
             for item in _retailer_catalog().enabled()

@@ -16,7 +16,7 @@ from rci_providers.limiter import PostgresProviderLimiter
     not os.getenv("RCI_TEST_DATABASE_URL"),
     reason="set RCI_TEST_DATABASE_URL to run shared Postgres limiter integration",
 )
-async def test_postgres_replicas_enforce_global_per_second_limit_and_cooldown() -> None:
+async def test_postgres_replicas_enforce_scoped_per_second_limit_and_cooldown() -> None:
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
     budget_key = f"limiter-test-{uuid4()}"
     replicas = [
@@ -31,8 +31,15 @@ async def test_postgres_replicas_enforce_global_per_second_limit_and_cooldown() 
     ]
     try:
         started = time.monotonic()
-        await asyncio.gather(*(limiter.acquire() for limiter in replicas))
+        await asyncio.gather(*(limiter.acquire("search:walmart_us") for limiter in replicas))
         assert time.monotonic() - started >= 0.75
+
+        started = time.monotonic()
+        await asyncio.gather(
+            replicas[0].acquire("search:aldi_us"),
+            replicas[1].acquire("search:target_us"),
+        )
+        assert time.monotonic() - started < 0.2
 
         cooldown_key = f"cooldown-test-{uuid4()}"
         first = PostgresProviderLimiter(
@@ -49,16 +56,16 @@ async def test_postgres_replicas_enforce_global_per_second_limit_and_cooldown() 
             rps=100,
             rpm=1000,
         )
-        await first.pause(0.25)
+        await first.pause(0.25, "search:aldi_us")
         started = time.monotonic()
-        await second.acquire()
+        await second.acquire("search:aldi_us")
         assert time.monotonic() - started >= 0.15
     finally:
         async with database.engine.begin() as connection:
             await connection.execute(
                 text(
                     "DELETE FROM provider_rate_limit_state "
-                    "WHERE provider = 'metricscart' AND budget_key LIKE '%-test-%'"
+                    "WHERE provider LIKE 'metricscart:%' AND budget_key LIKE '%-test-%'"
                 )
             )
         await database.dispose()

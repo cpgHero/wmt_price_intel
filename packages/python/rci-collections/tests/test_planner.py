@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from rci_collections import (
     CollectionPlanner,
     CollectionRetailerCatalog,
@@ -99,6 +101,41 @@ async def test_egg_vertical_slice_is_configuration_only_and_capped() -> None:
     assert plan.estimate.estimated_total_credits == 5
     assert {task.request_payload["keyword"] for task in plan.initial_tasks} == {"fresh eggs"}
     assert len([task for task in plan.initial_tasks if task.is_preflight]) == 1
+
+
+async def test_non_paginated_retailer_rejects_multiple_pages_before_launch() -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id="giant-eagle-230",
+                retailer_id="giant_eagle_us",
+                zipcode="44111",
+                store_number="230",
+                state="OH",
+                country="USA",
+            )
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _egg_config()
+    config["benchmark_retailer"] = "giant_eagle_us"
+    config["retailers"] = [
+        {
+            "retailer_id": "giant_eagle_us",
+            "adapter_id": "metricscart_giant_eagle_serp_zipcode",
+            "enabled": True,
+            "max_pages_override": 2,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "giant_eagle_us",
+        "country": "USA",
+    }
+
+    with pytest.raises(ValueError, match="does not support Search pagination"):
+        await planner.plan(config)
 
 
 async def test_definition_publication_is_checksum_idempotent_and_versioned() -> None:

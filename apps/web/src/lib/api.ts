@@ -574,6 +574,7 @@ export interface CollectionBuilderRetailer {
   adapter_id: string;
   location_dimension: "store_zip" | "zipcode";
   credits_per_page: number;
+  supports_pagination: boolean;
   status: "enabled";
 }
 

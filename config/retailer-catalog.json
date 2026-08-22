@@ -95,6 +95,7 @@
         "keyword",
         "url"
       ],
+      "supported_params": ["keyword", "url", "zipcode", "store", "page", "sort"],
       "default_sort": "Best Match",
       "status": "enabled",
       "quirks": [
@@ -123,6 +124,8 @@
         "store",
         "page"
       ],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
       "status": "enabled",
       "quirks": [
         "provider path slug is new_aldi while normalized response may say aldi"
@@ -147,6 +150,8 @@
         "zipcode",
         "page"
       ],
+      "search_inputs": ["keyword", "url"],
+      "supported_params": ["keyword", "url", "zipcode", "page", "sort"],
       "default_sort": "Featured",
       "status": "enabled",
       "quirks": [
@@ -156,6 +161,7 @@
     {
       "id": "albertsons_us",
       "display_name": "Albertsons",
+      "adapter_id": "metricscart_albertsons_serp_zipcode",
       "location_provider": "Albertsons",
       "api_retailer_aliases": [
         "albertsons",
@@ -165,26 +171,34 @@
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
-      "status": "catalogued"
+      "required_params": ["zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
     },
     {
       "id": "heb_us",
       "display_name": "H-E-B",
+      "adapter_id": "metricscart_heb_serp_zipcode",
       "location_provider": "H-E-B",
       "api_retailer_aliases": [
         "h-e-b",
         "heb",
         "heb.com"
       ],
-      "endpoint": "/mc/heb/serp/zipcode",
+      "endpoint": "/mc/heb/serp/zipcode/",
       "method": "GET",
       "credits_per_successful_page": 1,
       "location_dimension": "store_zip",
-      "status": "catalogued"
+      "required_params": ["keyword", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
     },
     {
       "id": "kroger_us",
       "display_name": "Kroger",
+      "adapter_id": "metricscart_kroger_search_zipcode",
       "location_provider": "kroger",
       "api_retailer_aliases": [
         "kroger",
@@ -194,7 +208,10 @@
       "method": "GET",
       "credits_per_successful_page": 3,
       "location_dimension": "store_zip",
-      "status": "catalogued",
+      "required_params": ["keyword", "zipcode", "store", "page"],
+      "search_inputs": ["keyword", "url"],
+      "supported_params": ["keyword", "url", "zipcode", "store", "page"],
+      "status": "enabled",
       "quirks": [
         "store IDs may contain leading zeros; always strings"
       ]
@@ -202,30 +219,39 @@
     {
       "id": "safeway_us",
       "display_name": "Safeway",
+      "adapter_id": "metricscart_safeway_serp_zipcode",
       "location_provider": "Safeway",
       "api_retailer_aliases": [
         "safeway",
         "safeway.com"
       ],
-      "endpoint": "/mc/safeway/serp/zipcode",
+      "endpoint": "/mc/safeway/serp/zipcode/",
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
-      "status": "catalogued"
+      "required_params": ["keyword", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
     },
     {
       "id": "target_us",
       "display_name": "Target",
+      "adapter_id": "metricscart_target_search_zipcode",
       "location_provider": "Target",
       "api_retailer_aliases": [
         "target",
         "target.com"
       ],
-      "endpoint": "/mc/target/search/zipcode",
+      "endpoint": "/mc/target/search/zipcode/",
       "method": "GET",
       "credits_per_successful_page": 4,
-      "location_dimension": "zipcode_or_store_pending_verification",
-      "status": "needs_verification",
+      "location_dimension": "store_zip",
+      "required_params": ["keyword", "zipcode", "store", "page"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page", "sort"],
+      "default_sort": "Relevance",
+      "status": "enabled",
       "quirks": [
         "new catalog lists ZIP endpoint; older snapshot showed non-ZIP /target/search",
         "filter location master to Country=USA because provider also contains Australia"
@@ -234,6 +260,7 @@
     {
       "id": "giant_eagle_us",
       "display_name": "Giant Eagle",
+      "adapter_id": "metricscart_giant_eagle_serp_zipcode",
       "location_provider": "Giant Eagle",
       "api_retailer_aliases": ["giant eagle", "gianteagle.com"],
       "endpoint": "/mc/gianteagle/serp/zipcode/",
@@ -242,11 +269,13 @@
       "location_dimension": "store_zip",
       "required_params": ["zipcode", "store"],
       "search_inputs": ["keyword", "url"],
-      "status": "catalogued"
+      "supported_params": ["keyword", "url", "zipcode", "store"],
+      "status": "enabled"
     },
     {
       "id": "meijer_us",
       "display_name": "Meijer",
+      "adapter_id": "metricscart_meijer_serp_zipcode",
       "location_provider": "Meijer",
       "api_retailer_aliases": ["meijer", "meijer.com"],
       "endpoint": "/mc/meijer/serp/zipcode",
@@ -255,24 +284,28 @@
       "location_dimension": "store_zip",
       "required_params": ["zipcode", "store"],
       "search_inputs": ["keyword"],
-      "status": "catalogued"
+      "supported_params": ["keyword", "zipcode", "store"],
+      "status": "enabled"
     },
     {
       "id": "sams_club_us",
       "display_name": "Sam's Club",
       "location_provider": "Sam's Club",
-      "api_retailer_aliases": ["sam's club", "sams club", "samsclub.com"],
+      "adapter_id": "metricscart_sams_club_serp_zipcode",
+      "api_retailer_aliases": ["sam's club", "sams club", "SamsClub", "samsclub.com"],
       "endpoint": "/mc/samsclub/serp/zipcode",
       "method": "GET",
       "credits_per_successful_page": 2,
       "location_dimension": "store_zip",
       "required_params": ["keyword", "zipcode", "store", "page"],
       "search_inputs": ["keyword"],
-      "status": "catalogued"
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
     },
     {
       "id": "shoprite_us",
       "display_name": "ShopRite",
+      "adapter_id": "metricscart_shoprite_serp_zipcode",
       "location_provider": "ShopRite",
       "api_retailer_aliases": ["shoprite", "shoprite.com"],
       "endpoint": "/mc/shoprite/serp/zipcode",
@@ -281,13 +314,16 @@
       "location_dimension": "store_zip",
       "required_params": ["zipcode", "store", "shopping_type"],
       "search_inputs": ["keyword", "url"],
-      "status": "catalogued",
+      "supported_params": ["keyword", "url", "zipcode", "store", "shopping_type"],
+      "default_request_params": {"shopping_type": "pickup"},
+      "status": "enabled",
       "quirks": ["shopping_type defaults to pickup in the provider catalog"]
     },
     {
       "id": "trader_joes_us",
       "display_name": "Trader Joe's",
       "location_provider": "Trader Joe's",
+      "adapter_id": "metricscart_trader_joes_serp_zipcode",
       "api_retailer_aliases": ["trader joe's", "trader joes", "traderjoes.com"],
       "endpoint": "/mc/traderjoes/serp/zipcode/",
       "method": "GET",
@@ -295,11 +331,13 @@
       "location_dimension": "store_zip",
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
-      "status": "catalogued"
+      "supported_params": ["keyword", "zipcode", "store"],
+      "status": "enabled"
     },
     {
       "id": "wegmans_us",
       "display_name": "Wegmans",
+      "adapter_id": "metricscart_wegmans_serp_store",
       "location_provider": "Wegmans",
       "api_retailer_aliases": ["wegmans", "wegmans.com"],
       "endpoint": "/mc/wegmans/serp/store/",
@@ -308,7 +346,8 @@
       "location_dimension": "store_zip",
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
-      "status": "catalogued"
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
     },
     {
       "id": "walmart_mx",

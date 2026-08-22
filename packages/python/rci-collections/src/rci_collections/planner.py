@@ -154,6 +154,11 @@ class CollectionPlanner:
             max_pages = int(retailer.get("max_pages_override") or default_pages)
             if not 1 <= max_pages <= 10:
                 raise ValueError("max pages must be between 1 and 10")
+            if max_pages > 1 and not capability.supports_pagination:
+                raise ValueError(
+                    f"retailer {retailer_id} does not support Search pagination; "
+                    "max pages must be 1"
+                )
 
             if capability.location_dimension == "store_zip":
                 location_units = self._select_store_units(
