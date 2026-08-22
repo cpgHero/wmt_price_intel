@@ -98,3 +98,25 @@ normalized evidence. Retrying report publication cannot spend provider or model 
 - Successful finalization is atomic and records recoverably archived predecessor IDs.
 - Platform Docs, navigation, API, worker, web tests, browser tests, builds, and service containers
   pass before deployment.
+
+## Release verification
+
+Phase 13.31 is deployed and production-verified at commit `59b2187`. GitHub Actions run
+`32545856295` passed:
+
+- Ruff formatting and linting;
+- Mypy across 151 Python source files;
+- the complete Python test suite and contract validation;
+- Alembic upgrade, downgrade-to-base, and re-upgrade against PostgreSQL;
+- TypeScript formatting, linting, type checking, unit tests, production build, and browser tests;
+- API, worker, scheduler, and web container builds.
+
+Railway deployed the same commit to all application services. The API pre-deploy step installed
+`0044_report_pub_gate`, the administrator progress page returned HTTP 200, and the live worker
+successfully imported the report-materialization module.
+
+A read-only production reconciliation after deployment found exactly five active AnalysisResults:
+Ground Beef, Strawberries, Bananas, Fresh Shell Eggs, and Fresh Fluid Milk. All five remained
+`ready`; no active result was `pending` or `blocked`; and the new materialization queue was empty.
+The migration therefore preserved the certified Phase 13.30 baseline without creating a replay,
+provider call, AI call, or accidental archival.

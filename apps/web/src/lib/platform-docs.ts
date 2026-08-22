@@ -83,7 +83,7 @@ const lastVerified = "August 21, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.35",
+  version: "1.3.36",
   lastVerified,
   baseline:
     "Production implementation through Phase 13.31 durable trust-gated report publication, built on the Phase 13.30 five-category certified baseline",
@@ -1509,7 +1509,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Banana specialized empty views and Egg/Milk cohort-attribute gaps remain visible as warnings rather than hidden fallback values.",
             "Amazon Same Day is not assigned fictional physical stores or physical-store radii.",
             "This phase certifies snapshot reporting, not historical price movement.",
-            "Large report materialization should move from its current atomic service operation to a durable leased background task with progress and retries.",
+            "Phase 13.31 now materializes large reports through a durable leased background task with resumable progress, bounded retries, a fail-closed semantic gate, and atomic activation.",
           ],
         },
       ],
@@ -1603,9 +1603,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-21",
-              "Implemented and release-gated",
+              "Deployed, migration-verified, and production-verified",
               "Phase 13.31 made semantic trust certification an automatic publication gate and moved report materialization to a durable background job.",
-              "New results remain pending while a leased worker stages Price Architecture and every configured basis-by-1/3/5-mile Competitive Portfolio. Completed scopes resume after transient failure; retries are bounded; administrators see stage, progress, attempts, errors, warnings, and audit counts. One final transaction installs the complete read-model set, marks the replacement ready, and recoverably archives its predecessor. A blocked replacement never displaces the current trusted report. No MetricsCart or OpenAI call is part of this workflow.",
+              "New results remain pending while a leased worker stages Price Architecture and every configured basis-by-1/3/5-mile Competitive Portfolio. Completed scopes resume after transient failure; retries are bounded; administrators see stage, progress, attempts, errors, warnings, and audit counts. One final transaction installs the complete read-model set, marks the replacement ready, and recoverably archives its predecessor. A blocked replacement never displaces the current trusted report. Commit 59b2187 and GitHub Actions run 32545856295 passed Python, TypeScript, browser, migration upgrade/downgrade, and all four service-container gates. Railway deployed the commit and ran migration 0044_report_pub_gate. Production reconciliation found exactly five active results, all ready, no pending or blocked active result, and no unintended materialization job. The worker module and administrator progress page both passed live checks. No MetricsCart or OpenAI call was made.",
             ],
             [
               "2026-08-21",
