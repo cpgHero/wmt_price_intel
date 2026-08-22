@@ -5,6 +5,10 @@
 Provider client handles auth, HTTP, global rate-limit permits, retries, request logging, and raw response persistence.
 Retailer adapter handles endpoint path, required parameters, location mapping, retailer aliases, request construction, response quirks, and conversion to canonical offers.
 
+All new collection evidence comes from MetricsCart Search by ZIP APIs. The older sample CSVs are
+historical replay inputs only: their included, excluded, or renamed columns must never be used to
+infer the live API contract.
+
 ## Required adapter methods
 
 ```python
@@ -55,6 +59,20 @@ Generic normalizer checks in order:
 `results`, `items`, `products`, `result.results`, `result.items`, `data.results`, `data.items`, `data`.
 The adapter may override only if a retailer actually differs.
 
+The live Search contract was audited against 14 representative endpoint samples in the
+owner-supplied 2026-08-16 MetricsCart catalog. Those samples use a top-level `results` array and a
+common 31-field result inventory. The versioned catalog mapping supports explicit aliases for
+provider field renames while requiring product name, retailer product identity, price-field
+presence, sponsorship-field presence, and retailer identity. `is_sponsored` may be null when the
+provider sends the field without a determination.
+
+Search presence with a numeric price greater than zero is the governed observed/in-stock rule.
+The provider's `stock_availability` value remains raw diagnostic evidence and cannot override that
+rule. `is_sponsored` is the sponsorship authority. A successful page whose shape or required field
+types no longer match the versioned contract fails as nonretryable `schema_drift`; it is never
+treated as an empty page. The immutable raw page and billable ledger remain available for mapping
+review.
+
 ## Catalogued later adapters
 
 Albertsons, Giant Eagle, H-E-B, Kroger, Meijer, Safeway, Sam's Club, ShopRite, Target,
@@ -63,6 +81,11 @@ Catalogued means that endpoint metadata, credit cost, aliases, location grain, a
 exist; it does not mean that Search collection is enabled. Target remains `needs_verification`
 because the newer catalog and older endpoint snapshot conflict. Whole Foods Market remains a
 normalization-only identity.
+
+Before a catalogued adapter is enabled, its direct Search payload, required parameters,
+store/ZIP-location behavior, credit rate, empty-page response, and canonical field mapping must pass
+a controlled preflight. Catalog evidence does not by itself authorize a paid provider call or make
+an adapter production-ready.
 
 ## Optional product-detail enrichment
 

@@ -13,6 +13,7 @@ export interface NormalizedProviderError {
     | "network"
     | "timeout"
     | "parse_error"
+    | "schema_drift"
     | "unknown";
   http_status?: number | null;
   should_retry: boolean;

@@ -30,6 +30,7 @@
         "network",
         "timeout",
         "parse_error",
+        "schema_drift",
         "unknown"
       ]
     },

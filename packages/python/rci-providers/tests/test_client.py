@@ -139,6 +139,11 @@ async def test_mocked_retailer_requests_persist_raw_pages_before_success(
     assert page.raw_artifact.storage_uri.startswith(
         "s3://test-raw/raw/provider=metricscart/run_id="
     )
+    response_audit = page.raw_artifact.metadata["search_response_audit"]
+    assert response_audit["contract_version"] == "1.0.0"
+    assert response_audit["result_path"] == "results"
+    assert response_audit["result_count"] == 1
+    assert response_audit["availability_authority"] == "positive_search_price"
 
 
 @pytest.mark.parametrize(
@@ -226,3 +231,53 @@ async def test_parse_error_is_retried_once_after_preserving_body() -> None:
     assert captured.value.retryable
     assert captured.value.billable
     assert gzip.decompress(next(iter(object_store.objects.values()))) == b"not-json"
+
+
+@respx.mock
+async def test_unknown_billable_response_shape_fails_closed_as_schema_drift() -> None:
+    payload = {"query": {"keyword": "strawberries"}, "unexpected_products": []}
+    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    object_store = InMemoryRawObjectStore()
+    client = _client(object_store)
+
+    with pytest.raises(ProviderFailure) as captured:
+        await client.fetch(
+            _task("metricscart_walmart_search_zipcode_v2", "walmart_us", store="2464")
+        )
+    await client.close()
+
+    assert captured.value.failure_class == "schema_drift"
+    assert captured.value.retryable is False
+    assert captured.value.billable is True
+    assert captured.value.raw_artifact is not None
+    assert json.loads(gzip.decompress(next(iter(object_store.objects.values())))) == payload
+
+
+@respx.mock
+async def test_missing_core_field_fails_closed_without_silent_row_loss() -> None:
+    payload = {
+        "query": {"keyword": "strawberries"},
+        "results": [
+            {
+                "retailer_product_id": "123",
+                "price": 3.48,
+                "is_sponsored": False,
+                "retailer": "walmart.com",
+            }
+        ],
+    }
+    respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    client = _client(InMemoryRawObjectStore())
+
+    with pytest.raises(ProviderFailure) as captured:
+        await client.fetch(
+            _task("metricscart_walmart_search_zipcode_v2", "walmart_us", store="2464")
+        )
+    await client.close()
+
+    assert captured.value.failure_class == "schema_drift"
+    assert "name missing in 1" in str(captured.value)

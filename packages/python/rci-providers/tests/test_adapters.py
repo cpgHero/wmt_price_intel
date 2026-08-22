@@ -9,7 +9,7 @@ import pytest
 
 from rci_collections.models import QueueTask
 from rci_providers.adapters import MetricsCartAdapterRegistry
-from rci_providers.extraction import extract_result_array
+from rci_providers.extraction import extract_result_array, inspect_result_array
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 CATALOG_PATH = REPOSITORY_ROOT / "config" / "retailer-catalog.json"
@@ -75,6 +75,38 @@ def _task(
 )
 def test_extracts_every_supported_result_array_path(payload: object, expected: int) -> None:
     assert len(extract_result_array(payload)) == expected
+
+
+def test_result_array_inspection_distinguishes_empty_page_from_unknown_shape() -> None:
+    empty = inspect_result_array({"results": []})
+    unknown = inspect_result_array({"unexpected": []})
+
+    assert empty.recognized is True
+    assert empty.path == ("results",)
+    assert empty.results == []
+    assert unknown.recognized is False
+
+
+def test_search_response_audit_rejects_non_object_result_entries() -> None:
+    adapter = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH).get(
+        "metricscart_walmart_search_zipcode_v2"
+    )
+
+    with pytest.raises(ValueError, match="non-object entries"):
+        adapter.audit_response(
+            {
+                "results": [
+                    {
+                        "name": "Milk",
+                        "price": 3.98,
+                        "retailer_product_id": "123",
+                        "retailer": "walmart.com",
+                        "is_sponsored": None,
+                    },
+                    None,
+                ]
+            }
+        )
 
 
 def test_walmart_and_aldi_requests_preserve_string_store_ids() -> None:
@@ -181,6 +213,31 @@ def test_fixture_results_normalize_to_canonical_retailers(
     assert normalized["price"] is not None
     assert normalized["is_sponsored"] is False
     assert normalized["in_stock"] is True
+
+
+def test_search_price_is_authoritative_for_api_availability() -> None:
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+    adapter = registry.get("metricscart_walmart_search_zipcode_v2")
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+        "stock_availability": False,
+    }
+
+    normalized = adapter.normalize_result(
+        result,
+        _task(
+            retailer_id="walmart_us",
+            adapter_id="metricscart_walmart_search_zipcode_v2",
+            store_number="0007",
+        ),
+    )
+
+    assert normalized["in_stock"] is True
+    assert normalized["raw"]["stock_availability"] is False
 
 
 def test_request_overrides_cannot_replace_auth_or_location_identity() -> None:

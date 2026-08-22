@@ -83,10 +83,10 @@ const lastVerified = "August 21, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.36",
+  version: "1.3.37",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.31 durable trust-gated report publication, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.32 API-only Search collection contracts and controlled durable-publication acceptance, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -294,12 +294,12 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "6. Collect and preserve raw evidence",
               detail:
-                "Retailer adapters call MetricsCart under shared per-retailer/type limits and cooldowns. Raw responses are written once to the private bucket as immutable, checksummed objects. HTTP 200 and 404 calls may be billable; costs remain auditable.",
+                "All new collections call MetricsCart Search by ZIP APIs under shared per-retailer/type limits and cooldowns. Raw responses are written once to the private bucket as immutable, checksummed objects. HTTP 200 and 404 calls may be billable; costs remain auditable. Historical CSVs remain replay evidence only and do not define the live API contract.",
             },
             {
               title: "7. Normalize without losing identifiers",
               detail:
-                "Adapters map retailer payloads into shared contracts. Store IDs, retailer product IDs, ASINs, provider IDs, and leading-zero ZIPs stay strings. Errors become provider-error records rather than disappearing.",
+                "Adapters first audit each successful Search payload against a versioned catalog-driven response contract, then map it into shared offers. Store IDs, retailer product IDs, ASINs, provider IDs, and leading-zero ZIPs stay strings. A provider shape or required-field change fails closed as schema_drift after raw persistence; it cannot masquerade as an empty result page.",
             },
             {
               title: "8. Build the canonical product-location population",
@@ -465,6 +465,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Source authority",
           columns: ["Fact", "Authoritative source", "Supporting sources"],
           rows: [
+            [
+              "2026-08-21",
+              "Implemented; controlled production replay verification in progress",
+              "Phase 13.32 makes MetricsCart Search by ZIP APIs the only mechanism for new collections and pins a fail-closed live response contract before controlled Strawberry and Milk publication acceptance.",
+              "The 2026-08-16 owner-supplied catalog hashes and 14 representative Search endpoint samples govern explicit field aliases and source authority. Positive Search price is observed/in-stock authority; Search is_sponsored is sponsorship authority and may be null. Recognized empty arrays stop pagination, while unknown shapes, non-object rows, missing required identity, nonnumeric price, or incompatible sponsorship types retain the raw billable page and fail as nonretryable schema_drift. Historical CSVs remain reproducible evidence only. Walmart, ALDI, and Amazon Same Day remain the only enabled V1 Search adapters; every additional catalogued retailer requires controlled endpoint, location, billing, and payload preflight. The acceptance replays use retained evidence and make no MetricsCart or OpenAI call.",
+            ],
             [
               "Store package price",
               "Search at that location",

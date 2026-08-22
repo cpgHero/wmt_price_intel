@@ -10,6 +10,9 @@
 - Conservative application defaults: 2 RPS / 108 RPM globally per credential.
 - Catalog credits are charged on every 2xx or 404 response page. A 404 remains a failed/unavailable
   retailer page for task status and result counts, but its configured retailer credits are recorded.
+- MetricsCart Search by ZIP API responses are the only source for all new collections. Historical
+  CSV imports remain reproducible retained evidence, but they are not an API-response contract and
+  do not define future field mappings.
 
 ## Cost estimate
 
@@ -45,6 +48,17 @@ task without issuing provider requests; already incurred 2xx/404 credits remain 
 4. Otherwise queue next page until retailer/definition `max_pages`.
 5. Do not infer a short-page stop unless the adapter knows the provider page-size contract.
 
+Every successful response page is audited before pagination continues. A recognized empty result
+array is a valid terminal page. An unknown result-array path, a non-object array member, a missing
+required canonical field, or an incompatible field type is `schema_drift`, not an empty result.
+The raw billable response remains immutable evidence and the task fails closed so a payload change
+cannot silently truncate a collection.
+
+The response contract is catalog-driven and pins the owner-supplied MetricsCart endpoint-catalog
+hashes. Aliases may absorb explicitly mapped provider renames, but a new shape must be audited and
+versioned before collection resumes. The canonical artifact records the contract version, selected
+result path, row count, observed field inventory, and source-authority rules.
+
 ## Failure taxonomy
 
 - `rate_limit`: retry; shared cooldown.
@@ -53,6 +67,8 @@ task without issuing provider requests; already incurred 2xx/404 credits remain 
 - `authentication`: fail run and surface configuration error.
 - `invalid_request`: fail task; usually nonretryable.
 - `parse_error`: retain raw page/excerpt; retry once if safe, otherwise QA issue.
+- `schema_drift`: retain raw page and billable accounting; fail closed without retry until an
+  administrator audits and versions the mapping.
 
 ## Run cancellation
 
@@ -71,6 +87,8 @@ collection queue and has no product-category branches.
 ## Historical replay
 
 Historical source files bypass provider collection but do not bypass provenance or orchestration.
+A historical import is supported only to reproduce or audit retained studies; it is not an allowed
+mechanism for a new production collection.
 A portable manifest pins every original CSV by source filename, retailer, source format, exact row
 count, and SHA-256. Validation completes before any object or database record is written.
 

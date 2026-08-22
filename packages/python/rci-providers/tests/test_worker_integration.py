@@ -71,7 +71,19 @@ async def test_mocked_provider_paginates_until_empty_or_configured_maximum(
 ) -> None:
     def response(request: httpx.Request) -> httpx.Response:
         page = int(request.url.params["page"])
-        results = [] if empty_page is not None and page >= empty_page else [{"id": page}]
+        results = (
+            []
+            if empty_page is not None and page >= empty_page
+            else [
+                {
+                    "name": f"Test product page {page}",
+                    "price": 3.98,
+                    "retailer_product_id": str(page),
+                    "retailer": "walmart.com",
+                    "is_sponsored": None,
+                }
+            ]
+        )
         return httpx.Response(200, json={"data": {"items": results}})
 
     route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(side_effect=response)

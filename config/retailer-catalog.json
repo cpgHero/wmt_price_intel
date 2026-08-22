@@ -33,6 +33,44 @@
     "data.items",
     "data"
   ],
+  "search_response_contract": {
+    "schema_version": "1.0.0",
+    "source_catalog_date": "2026-08-16",
+    "source_archive_sha256": "19cce83776b0d8af8d6b0846a0ab68908b726a0d74a7b15baa7ba86b95a6bf54",
+    "source_endpoint_export_sha256": "ed3d9b8809cae52ce444208e2421b786b9dffd504e0e3c32fa573d55cb751183",
+    "sampled_endpoint_count": 14,
+    "availability_authority": "positive_search_price",
+    "sponsorship_authority": "is_sponsored",
+    "required_canonical_fields": [
+      "name",
+      "retailer_product_id",
+      "price",
+      "is_sponsored",
+      "retailer"
+    ],
+    "non_null_canonical_fields": [
+      "name",
+      "retailer_product_id",
+      "retailer"
+    ],
+    "field_aliases": {
+      "result_position": ["result_position", "rank", "position"],
+      "name": ["name", "title", "product_name"],
+      "brand": ["brand", "brand_name"],
+      "price": ["price", "current_price", "sale_price"],
+      "price_regular": ["price_regular", "regular_price", "list_price"],
+      "price_discounted": ["price_discounted", "discounted_price", "sale_price"],
+      "rating": ["rating", "average_rating"],
+      "rating_count": ["rating_count", "reviews_count", "review_count"],
+      "is_sponsored": ["is_sponsored", "sponsored"],
+      "retailer_product_id": ["retailer_product_id", "product_id", "item_id", "asin", "id"],
+      "product_identifiers": ["product_identifiers", "identifiers"],
+      "url": ["url", "product_url"],
+      "image_primary": ["image_primary", "image_url", "primary_image"],
+      "stock_availability": ["stock_availability", "in_stock", "available"],
+      "retailer": ["retailer", "source_retailer"]
+    }
+  },
   "retailers": [
     {
       "id": "walmart_us",

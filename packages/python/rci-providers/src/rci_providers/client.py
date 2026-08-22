@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import httpx
 
@@ -143,6 +143,22 @@ class MetricsCartClient:
                     raw_artifact=artifact,
                     billable=True,
                 ) from exc
+        try:
+            response_audit = adapter.audit_response(payload)
+        except ValueError as exc:
+            raise ProviderFailure(
+                "schema_drift",
+                f"MetricsCart Search response contract failed: {exc}",
+                retryable=False,
+                retry_delay_seconds=0,
+                http_status=response.status_code,
+                raw_artifact=artifact,
+                billable=True,
+            ) from exc
+        artifact = replace(
+            artifact,
+            metadata={**artifact.metadata, "search_response_audit": response_audit},
+        )
         results = adapter.extract_result_array(payload)
         return ProviderPage(
             http_status=response.status_code,
