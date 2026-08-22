@@ -64,6 +64,12 @@ acceptance verdict.
   authority.
 - No schema drift, retry, rate limit, or provider 5xx response occurred.
 
+This was intentionally an ALDI-only provider diagnostic, not a competitive analysis. After Search
+completion, the generic downstream analysis job exhausted its three bounded attempts because an
+`AnalysisResult` requires non-empty competitors, comparison modes, and comparisons. It produced no
+user-facing report and remains in audit history rather than being misrepresented as an analytical
+failure or deleted.
+
 ## Decision
 
 - Keep the ALDI Search adapter and request shape unchanged; the Florida 200 proves the deployed
@@ -76,4 +82,3 @@ acceptance verdict.
 - Escalate the preserved 404 request/response evidence and store list to MetricsCart, or obtain a
   provider-supported callability mapping, before spending on another broad ALDI sample.
 - Any additional paid diagnostic requires a new exact scope and approval.
-
