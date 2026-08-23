@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.46",
+  version: "1.3.47",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.39 retailer-isolated collection gates, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.40 ALDI identifier and keyword diagnostics, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1602,6 +1602,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Live-paid diagnostic completed and production-verified",
+              "Phase 13.40 isolates ALDI Search keyword, Store_No, and alternate location-ID behavior with five exact provider attempts.",
+              "The production /mc/new_aldi/serp/zipcode adapter returned HTTP 200 for Beef and Milk at the 44432 / 36873 playground control and for Milk at 44906 / 463-048. Beef at 06418 / 473-054 returned the same billable HTTP 404 seen for Milk, proving that failure is location-specific rather than keyword-specific. Replacing Store_No with mc_location_id 2013023 returned a non-billable HTTP 500, so Store_No plus normalized ZIP remains authoritative. Exactly five attempts ran with max_attempts=1, no retries, and eight actual credits (approximately $0.016) under the approved 10-credit ceiling. Every response is preserved with an immutable checksum. The terminal alternate-ID failure correctly stopped the first Beef gate; its uncalled control was completed in a separate immutable one-page recovery run instead of rewriting history. No Walmart, Amazon, PDP, AI, normalization, or report work ran.",
+            ],
             [
               "2026-08-22",
               "Deployed and production-verified",
