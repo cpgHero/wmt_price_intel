@@ -3,6 +3,9 @@ albertsons_us,albertsons,albertsons.com,11,GET,/mc/albertsons/pdp/zipcode,3,url|
 aldi_us,new_aldi,aldi.us,14,GET,/mc/new_aldi/pdp/zipcode/,1,zipcode|store|fulfillment_type,url|product_id|zipcode|store|fulfillment_type,52c00fb78ba34b458cceb8c1c7c759b0a5c379ebfe4bdb716c60ef5c12921a9d
 aldi_instacart_us,shop_aldi,shop.aldi.us,16,GET,/mc/shop_aldi/pdp/zipcode,3,zipcode|store,url|product_id|zipcode|store,e10525a28b2b52ea6146bfcd05ec30c4091216d35c3ce63fbb26bb49e69db68b
 amazon_us_same_day,amazon,amazon.com,41,GET,/mc/amazon/pdp/zipcode,2,,product_id|url|zipcode,789ed9e9c5f6222536ee2a8db6d481e8c160fd51660c3d493a800ae62672962d
+bjs_us,bjs,bjs.com,52,GET,/mc/bjs/pdp/zipcode/,2,zipcode|store,url|product_id|zipcode|store,eb1d89557ea14d12ec4239f44f38c5f7d16718b0e73e6511d3c7d0545eb80129
+costco_us,costco,costco.com,61,GET,/mc/costco/pdp/zipcode,4,zipcode|store|fulfillment_type,url|product_id|zipcode|store|fulfillment_type,6b06a05973641917d263bd68feeea74cdf261506dd6fd39a9f20279224c305e4
+cvs_us,cvs,cvs.com,66,GET,/mc/cvs/pdp/zipcode,3,zipcode|store|fulfillment_type,url|zipcode|store|fulfillment_type,47bc51a28d02995a29169b3ade92dda9d50ab742c9af531a73b0133a90835f83
 giant_eagle_us,gianteagle,gianteagle.com,88,GET,/mc/gianteagle/pdp/zipcode/,2,zipcode|store,url|product_id|zipcode|store,05c5d2534bb49cbbe1c330119d22a155d2ab1f7db8da9e12cd59311d77699fde
 heb_us,heb,heb.com,93,GET,/mc/heb/pdp/zipcode/,1,zipcode|store,url|product_id|zipcode|store,8a4d036be88d445295951faac8ddf6e6fc09f44f8622631bc3b0fde40c30a772
 kroger_us,kroger,kroger.com,105,GET,/kroger/pdp/zipcode/,1,fulfillment_type,url|product_id|zipcode|store|fulfillment_type,2867603b41d0142fb060e6ff579a19ebf0ef0ab84ca14e2f9686b3ecaa1ea8b1
@@ -12,6 +15,7 @@ sams_club_us,samsclub,samsclub.com,155,GET,/mc/samsclub/pdp/zipcode,2,zipcode|st
 shoprite_us,shoprite,shoprite.com,162,GET,/mc/shoprite/pdp/zipcode/,1,zipcode|store|shopping_type,url|product_id|zipcode|store|shopping_type,a774dfa4c53ba47da04024f43fec4ae315b092f8dc2266dccde0668eac7db3f7
 target_us,target,target.com,172,GET,/mc/target/pdp/zipcode,3,zipcode|store|fulfillment_type,product_id|url|zipcode|store|fulfillment_type,c2fa1bab2a65df3a7cada88c9436c72c828503a77a27f3cfed2b7757c4123a0c
 trader_joes_us,traderjoes,traderjoes.com,178,GET,/mc/traderjoes/pdp/zipcode/,1,zipcode|store,url|product_id|zipcode|store,f6622d48f04402f2754ca9d3f32c0458da4f4c57b5fdf39e1e07928fcb9ff38d
+walgreens_us,walgreens,walgreens.com,184,GET,/mc/walgreens/pdp/zipcode,2,zipcode|store|fulfillment_type,url|product_id|zipcode|store|fulfillment_type,0919e443ef8c6bb66ec571ad0cfab7fec6cc03578fea6ba269f4b1d8369f3b9b
 walmart_us,walmart,walmart.com,3,GET,/mc/walmart/product/zipcode/,2,zipcode|store|fulfillment_type,url|product_id|zipcode|store|fulfillment_type,01d79ebf8d73246d0ca6f89a670b3d1376445deaa79f2cd214bf887550c42ce9
 walmart_mx,walmart_mx,walmart.com.mx,189,GET,/mc/walmart_mx/product/zipcode/,1,zipcode,url|product_id|zipcode,a2573e091bf9396eda6a5254478013ab0c6691ae0551e02fb23d267b4a30ee4f
 wegmans_us,wegmans,wegmans.com,194,GET,/mc/wegmans/pdp/zipcode,1,zipcode|store,url|product_id|zipcode|store,49745b10fa10a8998463acec081a446d19a77def0c3be0e2efad889945c6a68d

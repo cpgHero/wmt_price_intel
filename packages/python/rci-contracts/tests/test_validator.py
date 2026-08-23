@@ -55,7 +55,7 @@ def test_product_detail_catalog_reconciles_to_supplied_endpoint_source() -> None
     with (REPOSITORY_ROOT / catalog["source"]).open(newline="", encoding="utf-8-sig") as handle:
         supplied = list(csv.DictReader(handle))
 
-    assert len(supplied) == len(configured) == 16
+    assert len(supplied) == len(configured) == 20
     for row in supplied:
         key = (row["retailer_id"], row["endpoint_id"])
         endpoint = configured[key]
