@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from rci_products import (
+    DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS,
     InMemoryProductDetailRepository,
     ProductDetailBudgetExceeded,
     ProductDetailCatalog,
@@ -18,6 +19,10 @@ from rci_products import (
 from rci_products.adapters import MetricsCartProductDetailAdapter
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+
+
+def test_default_product_detail_cache_ttl_is_thirty_days() -> None:
+    assert DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS == 30 * 24 * 60 * 60
 
 
 class FixtureFetcher:

@@ -34,13 +34,17 @@ from rci_products.planning import ProductDetailCandidate, plan_product_detail_ca
 from rci_products.postgres import PostgresProductDetailRepository
 from rci_products.renormalization import ProductDetailRenormalizationWorker
 from rci_products.repository import ProductDetailBudgetExceeded, ProductDetailRepository
-from rci_products.service import ProductDetailWorker
+from rci_products.service import (
+    DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS,
+    ProductDetailWorker,
+)
 from rci_products.storage import (
     InMemoryProductDetailRawObjectStore,
     S3ProductDetailRawObjectStore,
 )
 
 __all__ = [
+    "DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS",
     "PRODUCT_DETAIL_NORMALIZER_VERSION",
     "CanonicalProductRecord",
     "EnqueueProductDetailResult",

@@ -83,10 +83,10 @@ const lastVerified = "August 22, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.47",
+  version: "1.3.48",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.40 ALDI identifier and keyword diagnostics, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.41 monthly PDP freshness governance, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -513,6 +513,7 @@ export const platformDocumentation: PlatformDocumentation = {
           items: [
             "Exclude Search noise before enrichment; do not spend PDP credits on unrelated products.",
             "Enrich each distinct admitted retailer product once per freshness policy, not once per store.",
+            "The current default freshness window is 30 days. New or unenriched products remain eligible immediately; a separately estimated owner-approved identity refresh may override the cadence.",
             "Use a representative location where Search observed the product with a positive price.",
             "Add a targeted location sample only for contradictory identity evidence or a separately governed diagnostic; a price difference alone never changes Search price authority.",
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
@@ -1602,6 +1603,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-22",
+              "Implemented and test-verified; Railway configuration and cache transition pending",
+              "Phase 13.41 changes the governed Product Details freshness default from seven days to 30 days.",
+              "Search remains collection-cadence and store-authoritative for price, availability, and sponsorship. PDP planning continues after scope filtering and selects one representative observed context per distinct admitted retailer product. A fresh normalized HTTP 200 snapshot is reused at zero credits; only new, missing, unsuccessful, explicitly refreshed, or at-least-30-day-old identity evidence is eligible for a paid PDP call. The worker, immutable-raw recovery path, environment template, and Railway deployment guide now share the 2,592,000-second default. Production rollout will also extend successful snapshots created under the former seven-day policy to observed_at plus 30 days so they are not repurchased early. No Search, PDP, or AI call was made by this code change.",
+            ],
             [
               "2026-08-22",
               "Live-paid diagnostic completed and production-verified",

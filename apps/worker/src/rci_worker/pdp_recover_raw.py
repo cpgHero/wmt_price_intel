@@ -23,6 +23,7 @@ from sqlalchemy import bindparam, text
 from rci_core import AppSettings
 from rci_db import DatabaseProbe
 from rci_products import (
+    DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS,
     MetricsCartProductDetailAdapter,
     PostgresProductDetailRepository,
     ProductDetailCatalog,
@@ -443,7 +444,12 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                     should_retry=item.classification.should_retry,
                     retry_delay_seconds=item.classification.retry_delay_seconds,
                 ),
-                cache_ttl_seconds=int(os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")),
+                cache_ttl_seconds=int(
+                    os.getenv(
+                        "PRODUCT_DETAIL_CACHE_TTL_SECONDS",
+                        str(DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS),
+                    )
+                ),
             )
             recovered += 1
             recovered_credits += credits

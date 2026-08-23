@@ -32,6 +32,7 @@ from rci_product_packs import (
     ProductPackValidationWorker,
 )
 from rci_products import (
+    DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS,
     MetricsCartProductDetailClient,
     PostgresProductDetailLimiterRegistry,
     PostgresProductDetailRepository,
@@ -337,7 +338,12 @@ async def run() -> None:
             worker_id=f"{worker_id}-pdp",
             claim_limit=int(os.getenv("PRODUCT_DETAIL_CLAIM_LIMIT", "1")),
             lease_seconds=int(os.getenv("PRODUCT_DETAIL_LEASE_SECONDS", "300")),
-            cache_ttl_seconds=int(os.getenv("PRODUCT_DETAIL_CACHE_TTL_SECONDS", "604800")),
+            cache_ttl_seconds=int(
+                os.getenv(
+                    "PRODUCT_DETAIL_CACHE_TTL_SECONDS",
+                    str(DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS),
+                )
+            ),
         )
     product_detail_renormalization_worker: ProductDetailRenormalizationWorker | None = None
     if _enabled(os.getenv("PRODUCT_DETAIL_RENORMALIZATION_ENABLED")):

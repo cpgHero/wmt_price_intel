@@ -12,6 +12,8 @@ from rci_products.repository import ProductDetailRepository
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS = 2_592_000
+
 
 class ProductDetailFetcher(Protocol):
     async def fetch(self, job: ProductDetailJob) -> ProductDetailFetchResult: ...
@@ -26,7 +28,7 @@ class ProductDetailWorker:
         worker_id: str,
         claim_limit: int = 1,
         lease_seconds: int = 300,
-        cache_ttl_seconds: int = 604_800,
+        cache_ttl_seconds: int = DEFAULT_PRODUCT_DETAIL_CACHE_TTL_SECONDS,
     ) -> None:
         self._repository = repository
         self._fetcher = fetcher
