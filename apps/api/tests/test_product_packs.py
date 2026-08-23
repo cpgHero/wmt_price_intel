@@ -48,7 +48,7 @@ def test_deployable_product_pack_catalog_contains_valid_immutable_versions() -> 
         "vitamins_supplements",
     }
     assert {pack.version for pack in versions} == {
-        "1.0.0",
+        "1.0.1",
         "1.1.0",
         "1.2.0",
         "1.2.3",
