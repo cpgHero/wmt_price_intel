@@ -20,8 +20,11 @@ from typing import Any
 from botocore.config import Config
 from sqlalchemy import text
 
-from rci_analytics import MatchingV2SourceInput, build_matching_v2_evidence_profile
-from rci_collections import QueueTask
+from rci_analytics.matching_v2_profile import (
+    MatchingV2SourceInput,
+    build_matching_v2_evidence_profile,
+)
+from rci_collections.models import QueueTask
 from rci_core import AppSettings
 from rci_db import DatabaseProbe
 from rci_providers import MetricsCartAdapterRegistry
@@ -176,7 +179,7 @@ async def _pdp_rows(database: DatabaseProbe, run_ids: list[str]) -> list[dict[st
                         JOIN canonical_product cp ON cp.id = context.canonical_product_id
                         JOIN product_detail_snapshot s ON s.canonical_product_id = cp.id
                         JOIN product_detail_job j ON j.id = s.product_detail_job_id
-                        WHERE context.organization_id::text = :organization_id
+                        WHERE cp.organization_id::text = :organization_id
                           AND context.context->'collection_run_ids' ?| CAST(:run_ids AS text[])
                           AND s.http_status = 200 AND s.normalized
                         ORDER BY cp.retailer_id, cp.retailer_product_id,
@@ -292,8 +295,17 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 rows_by_retailer[task.retailer_id].append(normalized)
             task_counts[task.retailer_id] += 1
 
+        selected_retailers = {args.benchmark, *args.competitor}
+        missing_retailers = selected_retailers - set(rows_by_retailer)
+        if missing_retailers:
+            raise ValueError(
+                f"selected retailers are absent from successful Search evidence: "
+                f"{sorted(missing_retailers)}"
+            )
         source_inputs: list[MatchingV2SourceInput] = []
         for retailer_id, rows in sorted(rows_by_retailer.items()):
+            if retailer_id not in selected_retailers:
+                continue
             source_path = output / f"search-{_safe(retailer_id)}.csv"
             _write_csv(source_path, rows)
             source_inputs.append(MatchingV2SourceInput(source_path, retailer_id))
@@ -329,6 +341,11 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         queue_path = output / f"{args.product_pack}.review-queue.json"
         profile_path.write_text(json.dumps(profile, indent=2) + "\n", encoding="utf-8")
         queue_path.write_text(json.dumps(queue, indent=2) + "\n", encoding="utf-8")
+        if args.import_review_queue and not queue["cases"]:
+            raise ValueError(
+                "refusing to import an empty Matching v2 queue; candidate generation must be "
+                "diagnosed first"
+            )
         imported = (
             await _import_queue(root, database, queue, args.imported_by)
             if args.import_review_queue

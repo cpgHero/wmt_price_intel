@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -239,13 +239,13 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.0.0-shadow.1",
+    "policy_version": "1.0.0-shadow.2",
     "certification_state": "shadow",
     "attribute_roles": {
-      "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 8},
-      "strength": {"role": "hard_blocker", "critical": true, "weight": 8, "numeric_tolerance": 0},
-      "strength_unit": {"role": "hard_blocker", "critical": true, "weight": 8},
-      "dosage_form": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "active_ingredient": {"role": "soft_comparator", "critical": true, "weight": 10},
+      "strength": {"role": "hard_blocker", "critical": true, "weight": 8, "numeric_tolerance": 0, "unknown_is_blocking": false},
+      "strength_unit": {"role": "hard_blocker", "critical": true, "weight": 8, "unknown_is_blocking": false},
+      "dosage_form": {"role": "hard_blocker", "critical": true, "weight": 6, "unknown_is_blocking": false},
       "package_count": {"role": "soft_comparator", "critical": true, "weight": 4, "numeric_tolerance": 0},
       "servings_per_container": {"role": "soft_comparator", "critical": false, "weight": 3, "numeric_tolerance": 0},
       "release_profile": {"role": "hard_blocker", "critical": false, "weight": 4, "unknown_is_blocking": false},
@@ -655,7 +655,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.2"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.3"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

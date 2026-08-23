@@ -159,7 +159,7 @@ def build_matching_v2_review_queue(
         decision
         for result in results
         for decision in (
-            tuple(edge for edge in result.edges if edge.tier is not None)
+            result.edges
             if selection_mode == "operational_exhaustive"
             else (*result.edges, *result.blocked_review_edges)
         )
@@ -177,7 +177,7 @@ def build_matching_v2_review_queue(
                 f"missing immutable source reference for {result.competitor_retailer_id!r}"
             )
         decisions = (
-            tuple(edge for edge in result.edges if edge.tier is not None)
+            result.edges
             if selection_mode == "operational_exhaustive"
             else (*result.edges, *result.blocked_review_edges)
         )
@@ -194,9 +194,6 @@ def build_matching_v2_review_queue(
     if selection_mode == "operational_exhaustive":
         for result in results:
             retailer_id = result.competitor_retailer_id
-            excluded_counts[f"{retailer_id}:unresolved_without_governed_tier"] = sum(
-                edge.tier is None for edge in result.edges
-            )
             excluded_counts[f"{retailer_id}:hard_blocked_pairs"] = result.attribute_blocked_pairs
             excluded_counts[f"{retailer_id}:no_geographic_overlap_pairs"] = (
                 result.geography_blocked_pairs

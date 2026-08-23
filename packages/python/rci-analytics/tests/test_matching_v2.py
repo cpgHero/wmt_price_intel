@@ -411,12 +411,12 @@ def test_operational_review_queue_keeps_every_governed_candidate() -> None:
     assert queue["purpose"] == "operational_match_certification"
     assert queue["sampling"]["method"] == "exhaustive_governed_candidates"
     assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
-    assert len(queue["cases"]) == sum(edge.tier is not None for edge in result.edges)
+    assert len(queue["cases"]) == len(result.edges)
+    assert any(case["engine_proposal"]["tier"] is None for case in queue["cases"])
     assert queue["sampling"]["excluded_counts"] == {
         "aldi_us:hard_blocked_audit_sample": len(result.blocked_review_edges),
         "aldi_us:hard_blocked_pairs": result.attribute_blocked_pairs,
         "aldi_us:no_geographic_overlap_pairs": result.geography_blocked_pairs,
-        "aldi_us:unresolved_without_governed_tier": sum(edge.tier is None for edge in result.edges),
     }
     validate_instance(
         REPOSITORY_ROOT,
@@ -523,7 +523,6 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
         "aldi_us:hard_blocked_audit_sample": 0,
         "aldi_us:hard_blocked_pairs": 0,
         "aldi_us:no_geographic_overlap_pairs": 1,
-        "aldi_us:unresolved_without_governed_tier": 0,
     }
     validate_instance(
         REPOSITORY_ROOT,

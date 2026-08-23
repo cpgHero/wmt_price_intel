@@ -8,6 +8,7 @@ import pytest
 
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.matching import ComparisonEngine
+from rci_analytics.matching_v2 import compile_matching_policy_v2
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPackLoader
 
@@ -115,6 +116,17 @@ def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
     )
 
     assert offers[0].in_scope is True
+
+
+def test_vitamin_pack_keeps_incomplete_evidence_in_the_certification_funnel() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "exact_spec")
+    roles = {attribute.name: attribute for attribute in policy.attributes}
+
+    assert roles["active_ingredient"].role == "soft_comparator"
+    for name in ("strength", "strength_unit", "dosage_form"):
+        assert roles[name].role == "hard_blocker"
+        assert roles[name].unknown_is_blocking is False
 
 
 @pytest.mark.parametrize(
