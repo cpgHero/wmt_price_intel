@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "enabled": true,
   "benchmark_retailer": "walmart_us",
-  "product_pack": {"id": "vitamins_supplements", "version": "1.0.0"},
+  "product_pack": {"id": "vitamins_supplements", "version": "1.0.1"},
   "query": {
     "keyword": "amino vitamins",
     "keywords": ["amino vitamins", "vitamin c"],
