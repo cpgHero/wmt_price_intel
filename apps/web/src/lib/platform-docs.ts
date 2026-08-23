@@ -1606,9 +1606,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-23",
-              "Implemented and test-verified; owner-approved Spring Valley launch pending",
+              "Deployed, owner-approved, and actively processing",
               "Live Search PDP qualification gained an explicit USD-denominated hard ceiling and cross-run duplicate-work guard.",
-              "The owner-approved dollar amount is converted at the governed $0.002-per-credit rate without rounding up. Raw-checksum, Product Pack scope, endpoint eligibility, exact-context 30-day cache, and total-credit gates must all pass before a durable run is created. Exact request checksums already queued or running in another active run block a duplicate launch. Canonical product contexts record the immutable live Search run IDs, Pack version, observed location, Search price, and selection reason; Search remains price and availability authority. This workflow creates no AI work.",
+              "The owner approved $15.00, which converts to a 7,500-credit ceiling at the governed $0.002-per-credit rate without rounding up. The final production gate found 2,431 admitted distinct products, 2,431 valid retailer requests, zero endpoint-ineligible products, zero raw-checksum failures, zero fresh exact-context cache hits, and a 5,336-credit / $10.67 maximum plan. Durable run 9e03fc83-8e2f-4700-9464-d951021ebac7 contains all 2,431 jobs. Exact request checksums already queued or running in another active run block a duplicate launch. Canonical contexts record both immutable live Search run IDs, Pack 1.0.2, observed location, Search price, and selection reason; Search remains price and availability authority. No AI work is created.",
             ],
             [
               "2026-08-23",
