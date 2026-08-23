@@ -1,0 +1,637 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Spring Valley Search Readiness Audit",
+    "description": "Decision-ready quality and enrichment-cost audit for the Spring Valley vitamin Search collection.",
+    "generatedAt": "2026-08-23T19:34:20.130749+00:00",
+    "sources": [
+      {
+        "id": "spring_valley_search_audit",
+        "label": "Spring Valley Search audit, Product Pack 1.0.2",
+        "query": {
+          "engine": "PostgreSQL",
+          "id": "spring-valley-search-audit-v102",
+          "description": "Checksum-verified Search audit, canonical normalization, Product Pack classification, retailer-product deduplication, exact-context PDP cache lookup, and catalog-driven credit planning.",
+          "executed_at": "2026-08-23T19:34:20.130749+00:00",
+          "language": "sql",
+          "sql": "SELECT t.*, da.storage_uri, da.checksum, da.created_at AS artifact_created_at, l.latitude, l.longitude FROM collection_task t LEFT JOIN dataset_artifact da ON da.id = t.raw_artifact_id LEFT JOIN retailer_location l ON l.id = t.retailer_location_id WHERE t.collection_run_id::text = ANY(CAST(:run_ids AS text[])) ORDER BY t.retailer_id, t.location_scope_key, t.page_number, t.id",
+          "tables_used": [
+            "collection_task",
+            "dataset_artifact",
+            "retailer_location",
+            "canonical_product",
+            "product_detail_snapshot",
+            "product_detail_normalization"
+          ],
+          "filters": [
+            "Collection runs e962ced9-9e83-4cf3-b5f2-2cf514009ae3 and 3093b480-d633-4f61-af47-ba499a355bb9",
+            "Product Pack vitamins_supplements version 1.0.2",
+            "Only successful 2xx Search artifacts contribute result rows",
+            "Products deduplicated by retailer ID and retailer product ID",
+            "PDP cache requires an unexpired normalized HTTP 200 snapshot for the exact request checksum"
+          ],
+          "metric_definitions": [
+            "Task success rate = successful collection tasks / all collection tasks.",
+            "Search-admitted products = distinct retailer + retailer product ID pairs passing positive-price and Product Pack scope governance.",
+            "PDP credits required = sum of endpoint credits for admitted products without an exact-context fresh cache hit.",
+            "Estimated cost = PDP credits required multiplied by $0.002 per credit."
+          ]
+        }
+      }
+    ],
+    "cards": [
+      {
+        "id": "task_success",
+        "dataset": "summary",
+        "sourceId": "spring_valley_search_audit",
+        "description": "Collection tasks ending in succeeded status across both audited runs.",
+        "metrics": [
+          {
+            "label": "Task success rate",
+            "field": "task_success_rate",
+            "format": "percent"
+          },
+          {
+            "label": "Successful tasks",
+            "field": "successful_tasks",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "admitted_products",
+        "dataset": "summary",
+        "sourceId": "spring_valley_search_audit",
+        "description": "Distinct retailer-product identities that passed governed Search scope and positive-price requirements.",
+        "metrics": [
+          {
+            "label": "Admitted products",
+            "field": "search_admitted_products",
+            "format": "number"
+          },
+          {
+            "label": "Raw identities",
+            "field": "unique_raw_products",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "endpoint_eligibility",
+        "dataset": "summary",
+        "sourceId": "spring_valley_search_audit",
+        "description": "Admitted products with a validated catalog-driven PDP request contract.",
+        "metrics": [
+          {
+            "label": "PDP contract eligibility",
+            "field": "endpoint_eligibility_rate",
+            "format": "percent"
+          },
+          {
+            "label": "Eligible products",
+            "field": "endpoint_eligible_products",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "projected_cost",
+        "dataset": "summary",
+        "sourceId": "spring_valley_search_audit",
+        "description": "Worst-case uncached PDP spend at $0.002 per credit; execution must recheck the 30-day cache.",
+        "metrics": [
+          {
+            "label": "Projected PDP cost",
+            "field": "estimated_cost_usd",
+            "format": "currency"
+          },
+          {
+            "label": "Credits",
+            "field": "pdp_credits_required",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "admitted_by_retailer",
+        "title": "Admitted products by retailer",
+        "subtitle": "Distinct retailer-product identities passing Product Pack 1.0.2; Walmart is constrained to the Spring Valley allowlist.",
+        "showDescription": true,
+        "intent": "comparison",
+        "question": "Where is the enrichment workload concentrated?",
+        "rationale": "A sorted horizontal bar makes the ten retailer workloads easy to compare while preserving long retailer labels.",
+        "comparisonContext": {
+          "denominator": "Distinct raw retailer-product identities",
+          "grain": "Retailer",
+          "unit": "products"
+        },
+        "type": "horizontalBar",
+        "dataset": "retailers",
+        "sourceId": "spring_valley_search_audit",
+        "encodings": {
+        "x": {
+          "field": "retailer_name",
+          "type": "nominal",
+          "label": "Retailer"
+        },
+        "y": {
+          "field": "search_admitted_products",
+          "type": "quantitative",
+          "format": "number",
+          "label": "Admitted products"
+          },
+          "tooltip": [
+            {
+              "field": "task_success_rate",
+              "type": "quantitative",
+              "format": "percent",
+              "label": "Task success rate"
+            },
+            {
+              "field": "pdp_credits_required",
+              "type": "quantitative",
+              "format": "number",
+              "label": "PDP credits"
+            }
+          ]
+        },
+      "xAxisTitle": "Retailer",
+      "yAxisTitle": "Admitted products",
+        "valueFormat": "number",
+        "layout": "full",
+        "maxRows": 10,
+        "surface": {
+          "surface": "explorer",
+          "showControls": true,
+          "viewMode": "both"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "retailer_evidence",
+        "title": "Retailer evidence and projected PDP workload",
+        "subtitle": "Exact Search task, product, and uncached PDP estimates by retailer across the two audited runs.",
+        "showDescription": true,
+        "dataset": "retailers",
+        "defaultSort": {
+          "field": "search_admitted_products",
+          "direction": "desc"
+        },
+        "density": "dense",
+        "sourceId": "spring_valley_search_audit",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "retailer_name",
+            "label": "Retailer",
+            "type": "text"
+          },
+          {
+            "field": "task_success_rate",
+            "label": "Task success",
+            "format": "percent"
+          },
+          {
+            "field": "tasks_failed",
+            "label": "Failed tasks",
+            "format": "number"
+          },
+          {
+            "field": "raw_search_rows",
+            "label": "Search rows",
+            "format": "number"
+          },
+          {
+            "field": "unique_raw_products",
+            "label": "Raw products",
+            "format": "number"
+          },
+          {
+            "field": "search_admitted_products",
+            "label": "Admitted products",
+            "format": "number"
+          },
+          {
+            "field": "pdp_calls_required",
+            "label": "PDP calls",
+            "format": "number"
+          },
+          {
+            "field": "pdp_credits_required",
+            "label": "Credits",
+            "format": "number"
+          },
+          {
+            "field": "estimated_cost_usd",
+            "label": "Estimated cost",
+            "format": "currency"
+          }
+        ]
+      },
+      {
+        "id": "field_quality",
+        "title": "Search field coverage by retailer",
+        "subtitle": "Brand and sponsorship coverage varies; seller evidence is absent from every Search response and must come from PDP.",
+        "showDescription": true,
+        "dataset": "field_quality",
+        "defaultSort": {
+          "field": "retailer_name",
+          "direction": "asc"
+        },
+        "density": "dense",
+        "sourceId": "spring_valley_search_audit",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "retailer_name",
+            "label": "Retailer",
+            "type": "text"
+          },
+          {
+            "field": "search_brand_coverage",
+            "label": "Brand coverage",
+            "format": "percent"
+          },
+          {
+            "field": "search_sponsorship_coverage",
+            "label": "Sponsorship coverage",
+            "format": "percent"
+          },
+          {
+            "field": "search_seller_coverage",
+            "label": "Seller coverage",
+            "format": "percent"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "layout": "full",
+        "body": "# Spring Valley Search Readiness Audit"
+      },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "spring_valley_search_audit",
+        "body": "## Executive Summary\n\n- **The Search evidence is ready for a governed PDP enrichment step.** 803 of 850 tasks succeeded (94.5%), all successful raw artifacts passed checksum validation, and 2,431 unique products survived scope and deduplication.\n- **Every admitted product now has a valid PDP contract.** The four missing retailer routes were reconciled to the supplied MetricsCart catalog, reducing endpoint-ineligible products from 672 to zero.\n- **A fully uncached enrichment would cost about $10.67.** The exact plan is 5,336 credits at $0.002 per credit; no paid PDP or AI calls were launched during this audit.\n- **Seller governance must wait for PDP.** Seller is absent from every Search row, so first-party eligibility cannot be certified from Search alone."
+      },
+      {
+        "id": "metrics",
+        "type": "metric-strip",
+        "layout": "full",
+        "cardIds": [
+          "task_success",
+          "admitted_products",
+          "endpoint_eligibility",
+          "projected_cost"
+        ]
+      },
+      {
+        "id": "coverage_takeaway",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "spring_valley_search_audit",
+        "body": "## Search coverage is strong overall, with one material exception\n\n**Nine retailers are effectively complete, but Meijer is partial.** Amazon Same Day and Walgreens each completed 84 of 85 tasks; seven retailers completed all 85. Meijer completed only 40 of 85, so any Meijer assortment or comparison result must carry a coverage warning until the 45 failed tasks are recovered or explicitly accepted.\n\nThe audit grain is one distinct retailer + retailer product ID after governed scope. Repeated keyword and store observations inform availability but do not create additional PDP requests."
+      },
+      {
+        "id": "admitted_chart",
+        "type": "chart",
+        "layout": "full",
+        "chartId": "admitted_by_retailer"
+      },
+      {
+        "id": "seller_takeaway",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "spring_valley_search_audit",
+        "body": "## First-party status is the remaining admission gate\n\n**Search provides price and location evidence, not seller proof.** Product IDs, URLs, images, and price fields were mapped for every returned row, but seller was missing for all ten retailers. Brand was entirely absent for Amazon Same Day, BJ's, Meijer, Sam's Club, and Walmart; sponsorship was entirely absent for BJ's, Costco, Meijer, and Walgreens.\n\nPDP normalization should therefore run before matching. Walmart, Target, and Amazon marketplace offers should be excluded when PDP seller evidence proves the offer is not first-party; blank seller values may remain provisionally eligible under the retailer policy but must stay visible as unresolved evidence."
+      },
+      {
+        "id": "field_table",
+        "type": "table",
+        "layout": "full",
+        "tableId": "field_quality"
+      },
+      {
+        "id": "workload_takeaway",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "spring_valley_search_audit",
+        "body": "## Enrichment spend is concentrated in three retailers\n\n**Amazon Same Day, Target, and Walgreens account for most of the projected credits.** Together they require 3,601 of 5,336 credits (67.5%). The exact retailer table below is the approval basis; production must recheck the 30-day exact-context cache immediately before enqueueing because a later cache hit should reduce both calls and cost."
+      },
+      {
+        "id": "retailer_table",
+        "type": "table",
+        "layout": "full",
+        "tableId": "retailer_evidence"
+      },
+      {
+        "id": "governance_change",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## What changed before this audit passed\n\n**Product Pack 1.0.2 narrows proven Search noise without category-wide overreach.** It rejects specific pet, topical, beverage, and tea patterns found in the raw payloads while retaining legitimate oral supplement language such as hair, skin, and nails.\n\n**The PDP catalog is now complete for this retailer set.** BJ's, Costco, CVS, and Walgreens were added from the supplied MetricsCart endpoint catalog with their required identity, store, ZIP, fulfillment, and credit contracts. Regression tests require the runtime catalog to reconcile exactly to that source."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## Recommended Next Steps\n\n1. Approve a PDP budget and execution scope separately; the current worst-case amount is **$10.67**.\n2. At enqueue time, recheck the 30-day exact-context cache and call only products still missing valid enrichment.\n3. Normalize full PDP payloads, classify first-party seller status, and remove proven marketplace offers before candidate matching.\n4. Route only PDP-enriched, governed products into exact-spec and compatible-spec matching. Do not spend AI tokens on products removed by scope or seller governance.\n5. Carry a visible Meijer coverage warning, or recover its 45 failed Search tasks before treating Meijer results as complete."
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "layout": "full",
+        "body": "## Further Questions\n\n- Should the first enrichment run include all 2,431 admitted products, or should it begin with Walmart plus a bounded competitor tranche to validate payload normalization and first-party seller rules?\n- Should Meijer recovery occur before enrichment, or should Meijer be enriched now with an explicit partial-coverage status?\n- Which blank-seller states should be permitted for Target and Amazon if PDP returns no seller after a successful response?"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "layout": "full",
+        "sourceId": "spring_valley_search_audit",
+        "body": "## Caveats and Assumptions\n\n- This is a snapshot of two production collection runs, not a time trend.\n- The $10.67 estimate assumes every currently planned request misses the cache and receives a billable 200 or 404 response; actual spend can be lower after the mandatory cache recheck.\n- Search availability means a positive Search price at an observed store context. It does not prove chainwide distribution.\n- Search-admitted products are candidates for enrichment, not certified matches. PDP normalization, seller governance, attribute extraction, and matching certification still remain.\n- Meijer has incomplete Search coverage (40 of 85 tasks succeeded); retailer comparisons using that evidence are not yet complete."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-23T19:34:20.130749+00:00",
+    "status": "ready",
+    "datasets": {
+      "summary": [
+        {
+          "task_success_rate": 0.9447058823529412,
+          "successful_tasks": 803,
+          "total_tasks": 850,
+          "raw_search_rows": 20314,
+          "unique_raw_products": 8430,
+          "search_admitted_products": 2431,
+          "endpoint_eligible_products": 2431,
+          "endpoint_eligibility_rate": 1,
+          "pdp_credits_required": 5336,
+          "estimated_cost_usd": 10.672,
+          "exact_context_fresh_cache": 0,
+          "checksum_failures": 0
+        }
+      ],
+      "retailers": [
+        {
+          "retailer_name": "Amazon Same Day",
+          "retailer_id": "amazon_us_same_day",
+          "tasks_succeeded": 84,
+          "tasks_failed": 1,
+          "task_success_rate": 0.9882352941176471,
+          "raw_search_rows": 1344,
+          "unique_raw_products": 1245,
+          "search_admitted_products": 783,
+          "admission_rate": 0.6289156626506024,
+          "pdp_calls_required": 783,
+          "pdp_credits_required": 1566,
+          "estimated_cost_usd": 3.132
+        },
+        {
+          "retailer_name": "Target",
+          "retailer_id": "target_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 2370,
+          "unique_raw_products": 1038,
+          "search_admitted_products": 431,
+          "admission_rate": 0.41522157996146436,
+          "pdp_calls_required": 431,
+          "pdp_credits_required": 1293,
+          "estimated_cost_usd": 2.586
+        },
+        {
+          "retailer_name": "Walgreens",
+          "retailer_id": "walgreens_us",
+          "tasks_succeeded": 84,
+          "tasks_failed": 1,
+          "task_success_rate": 0.9882352941176471,
+          "raw_search_rows": 5991,
+          "unique_raw_products": 1234,
+          "search_admitted_products": 371,
+          "admission_rate": 0.3006482982171799,
+          "pdp_calls_required": 371,
+          "pdp_credits_required": 742,
+          "estimated_cost_usd": 1.484
+        },
+        {
+          "retailer_name": "Kroger",
+          "retailer_id": "kroger_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 2298,
+          "unique_raw_products": 923,
+          "search_admitted_products": 215,
+          "admission_rate": 0.23293607800650054,
+          "pdp_calls_required": 215,
+          "pdp_credits_required": 215,
+          "estimated_cost_usd": 0.43
+        },
+        {
+          "retailer_name": "Meijer",
+          "retailer_id": "meijer_us",
+          "tasks_succeeded": 40,
+          "tasks_failed": 45,
+          "task_success_rate": 0.47058823529411764,
+          "raw_search_rows": 1062,
+          "unique_raw_products": 831,
+          "search_admitted_products": 181,
+          "admission_rate": 0.21780986762936222,
+          "pdp_calls_required": 181,
+          "pdp_credits_required": 362,
+          "estimated_cost_usd": 0.724
+        },
+        {
+          "retailer_name": "CVS",
+          "retailer_id": "cvs_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 1658,
+          "unique_raw_products": 822,
+          "search_admitted_products": 178,
+          "admission_rate": 0.21654501216545013,
+          "pdp_calls_required": 178,
+          "pdp_credits_required": 534,
+          "estimated_cost_usd": 1.068
+        },
+        {
+          "retailer_name": "Walmart",
+          "retailer_id": "walmart_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 1630,
+          "unique_raw_products": 1337,
+          "search_admitted_products": 123,
+          "admission_rate": 0.09199700822737472,
+          "pdp_calls_required": 123,
+          "pdp_credits_required": 246,
+          "estimated_cost_usd": 0.492
+        },
+        {
+          "retailer_name": "BJ's",
+          "retailer_id": "bjs_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 1811,
+          "unique_raw_products": 303,
+          "search_admitted_products": 56,
+          "admission_rate": 0.1848184818481848,
+          "pdp_calls_required": 56,
+          "pdp_credits_required": 112,
+          "estimated_cost_usd": 0.224
+        },
+        {
+          "retailer_name": "Sam's Club",
+          "retailer_id": "sams_club_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 862,
+          "unique_raw_products": 254,
+          "search_admitted_products": 53,
+          "admission_rate": 0.20866141732283464,
+          "pdp_calls_required": 53,
+          "pdp_credits_required": 106,
+          "estimated_cost_usd": 0.212
+        },
+        {
+          "retailer_name": "Costco",
+          "retailer_id": "costco_us",
+          "tasks_succeeded": 85,
+          "tasks_failed": 0,
+          "task_success_rate": 1,
+          "raw_search_rows": 1288,
+          "unique_raw_products": 443,
+          "search_admitted_products": 40,
+          "admission_rate": 0.09029345372460497,
+          "pdp_calls_required": 40,
+          "pdp_credits_required": 160,
+          "estimated_cost_usd": 0.32
+        }
+      ],
+      "field_quality": [
+        {
+          "retailer_name": "Amazon Same Day",
+          "retailer_id": "amazon_us_same_day",
+          "search_brand_coverage": 0,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "BJ's",
+          "retailer_id": "bjs_us",
+          "search_brand_coverage": 0,
+          "search_sponsorship_coverage": 0,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Costco",
+          "retailer_id": "costco_us",
+          "search_brand_coverage": 0.8727,
+          "search_sponsorship_coverage": 0,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "CVS",
+          "retailer_id": "cvs_us",
+          "search_brand_coverage": 1,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Kroger",
+          "retailer_id": "kroger_us",
+          "search_brand_coverage": 0.9756,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Meijer",
+          "retailer_id": "meijer_us",
+          "search_brand_coverage": 0,
+          "search_sponsorship_coverage": 0,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Sam's Club",
+          "retailer_id": "sams_club_us",
+          "search_brand_coverage": 0,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Target",
+          "retailer_id": "target_us",
+          "search_brand_coverage": 1,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Walgreens",
+          "retailer_id": "walgreens_us",
+          "search_brand_coverage": 1,
+          "search_sponsorship_coverage": 0,
+          "search_seller_coverage": 0
+        },
+        {
+          "retailer_name": "Walmart",
+          "retailer_id": "walmart_us",
+          "search_brand_coverage": 0,
+          "search_sponsorship_coverage": 1,
+          "search_seller_coverage": 0
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "spring_valley_search_audit",
+      "label": "Spring Valley Search audit, Product Pack 1.0.2",
+      "query": {
+        "engine": "PostgreSQL",
+        "id": "spring-valley-search-audit-v102",
+        "description": "Checksum-verified Search audit, canonical normalization, Product Pack classification, retailer-product deduplication, exact-context PDP cache lookup, and catalog-driven credit planning.",
+        "executed_at": "2026-08-23T19:34:20.130749+00:00",
+        "language": "sql",
+        "sql": "SELECT t.*, da.storage_uri, da.checksum, da.created_at AS artifact_created_at, l.latitude, l.longitude FROM collection_task t LEFT JOIN dataset_artifact da ON da.id = t.raw_artifact_id LEFT JOIN retailer_location l ON l.id = t.retailer_location_id WHERE t.collection_run_id::text = ANY(CAST(:run_ids AS text[])) ORDER BY t.retailer_id, t.location_scope_key, t.page_number, t.id",
+        "tables_used": [
+          "collection_task",
+          "dataset_artifact",
+          "retailer_location",
+          "canonical_product",
+          "product_detail_snapshot",
+          "product_detail_normalization"
+        ],
+        "filters": [
+          "Collection runs e962ced9-9e83-4cf3-b5f2-2cf514009ae3 and 3093b480-d633-4f61-af47-ba499a355bb9",
+          "Product Pack vitamins_supplements version 1.0.2",
+          "Only successful 2xx Search artifacts contribute result rows",
+          "Products deduplicated by retailer ID and retailer product ID",
+          "PDP cache requires an unexpired normalized HTTP 200 snapshot for the exact request checksum"
+        ],
+        "metric_definitions": [
+          "Task success rate = successful collection tasks / all collection tasks.",
+          "Search-admitted products = distinct retailer + retailer product ID pairs passing positive-price and Product Pack scope governance.",
+          "PDP credits required = sum of endpoint credits for admitted products without an exact-context fresh cache hit.",
+          "Estimated cost = PDP credits required multiplied by $0.002 per credit."
+        ]
+      }
+    }
+  ]
+}

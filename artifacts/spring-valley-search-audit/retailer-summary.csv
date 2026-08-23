@@ -1,0 +1,12 @@
+retailer_id,tasks_succeeded,tasks_failed,raw_search_rows,normalized_rows,positive_price_rows,sponsored_rows,unique_raw_products,search_admitted_products,duplicate_keyword_hits_removed,fresh_pdp_requests,pdp_calls_required,pdp_credits_required,pdp_ineligible_requests
+amazon_us_same_day,84,1,1344,1344,1343,0,1245,783,99,0,783,1566,0
+bjs_us,85,0,1811,1811,1800,0,303,56,1508,0,56,112,0
+costco_us,85,0,1288,1288,1115,0,443,40,845,0,40,160,0
+cvs_us,85,0,1658,1658,1495,0,822,178,836,0,178,534,0
+kroger_us,85,0,2298,2298,2237,424,923,215,1375,0,215,215,0
+meijer_us,40,45,1062,1062,1013,0,831,181,231,0,181,362,0
+sams_club_us,85,0,862,862,750,291,254,53,608,0,53,106,0
+target_us,85,0,2370,2370,1960,330,1038,431,1332,0,431,1293,0
+walgreens_us,84,1,5991,5991,5986,0,1234,371,4757,0,371,742,0
+walmart_us,85,0,1630,1630,1620,703,1337,123,293,0,123,246,0
+
