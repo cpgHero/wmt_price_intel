@@ -201,8 +201,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         unique_raw_products: dict[str, set[str]] = defaultdict(set)
         unique_scope_products: dict[str, set[str]] = defaultdict(set)
         keywords_by_product: dict[tuple[str, str], set[str]] = defaultdict(set)
-        observations: list[dict[str, Any]] = []
-        admitted_offer_ids: set[str] = set()
+        observations_by_product: dict[tuple[str, str], dict[str, Any]] = {}
         admitted_products: dict[tuple[str, str], dict[str, Any]] = {}
         checksum_failures: list[str] = []
 
@@ -266,13 +265,17 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 if not classified.in_scope:
                     continue
                 unique_scope_products[retailer_id].add(offer.retailer_product_id)
-                admitted_offer_ids.add(offer.offer_id)
                 observation = {
                     **offer.to_record(),
                     "fulfillment_type": _fulfillment(retailer_id, result),
                 }
-                observations.append(observation)
                 key = (retailer_id, offer.retailer_product_id)
+                # PDP enrichment is product-level, not observation-level. Retaining every
+                # repeated store/keyword hit is wasteful and can exceed a small Railway
+                # service's memory limit. The query order is deterministic and every
+                # admitted row has a positive Search price, so the first observed context
+                # is a valid, reproducible PDP request location for this product.
+                observations_by_product.setdefault(key, observation)
                 existing = admitted_products.get(key)
                 candidate_record = {
                     "retailer_id": retailer_id,
@@ -289,8 +292,10 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 if existing is None or candidate_record["title"] < existing["title"]:
                     admitted_products[key] = candidate_record
 
+        observations = list(observations_by_product.values())
         candidates = plan_product_detail_candidates(
-            observations, analysis_offer_ids=admitted_offer_ids
+            observations,
+            analysis_offer_ids={str(observation["offer_id"]) for observation in observations},
         )
         pdp_catalog = ProductDetailCatalog.from_path(root)
         valid_candidates: list[tuple[Any, Any]] = []
@@ -474,9 +479,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 "fresh_pdp_requests": sum(row["fresh_pdp_requests"] for row in retailer_rows),
                 "pdp_calls_required": sum(row["pdp_calls_required"] for row in retailer_rows),
-                "pdp_credits_required": sum(
-                    row["pdp_credits_required"] for row in retailer_rows
-                ),
+                "pdp_credits_required": sum(row["pdp_credits_required"] for row in retailer_rows),
                 "pdp_ineligible_requests": sum(
                     row["pdp_ineligible_requests"] for row in retailer_rows
                 ),
