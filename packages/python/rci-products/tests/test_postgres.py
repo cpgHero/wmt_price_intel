@@ -222,7 +222,7 @@ async def test_postgres_queue_claims_one_job_per_retailer_before_second_jobs() -
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
     repository = PostgresProductDetailRepository(database.engine, REPOSITORY_ROOT)
     unique = uuid4().hex
-    run = await repository.create_run(max_credits=10)
+    run = await repository.create_run(max_credits=20)
     products = []
     try:
         for retailer_id in ("walmart_us", "kroger_us", "target_us"):
