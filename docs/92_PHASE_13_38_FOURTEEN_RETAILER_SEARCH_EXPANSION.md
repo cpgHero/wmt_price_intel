@@ -25,7 +25,7 @@ and credit authority. Its 14 relevant active Search endpoints are:
 | Amazon Same Day | `/mc/amazon/search/zipcode/` | 2 | ZIP service area | yes |
 | Giant Eagle | `/mc/gianteagle/serp/zipcode/` | 2 | store + ZIP | no |
 | H-E-B | `/mc/heb/serp/zipcode/` | 1 | store + ZIP | yes |
-| Kroger | `/mc/kroger/search/zipcode` | 3 | store + ZIP | yes |
+| Kroger | `/mc/kroger/search/zipcode/` | 3 | store + ZIP | yes |
 | Meijer | `/mc/meijer/serp/zipcode` | 2 | store + ZIP | no |
 | Safeway | `/mc/safeway/serp/zipcode/` | 2 | store + ZIP | yes |
 | Sam's Club | `/mc/samsclub/serp/zipcode` | 2 | store + ZIP | yes |

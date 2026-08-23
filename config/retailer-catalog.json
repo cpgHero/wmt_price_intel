@@ -220,7 +220,7 @@
         "kroger",
         "kroger.com"
       ],
-      "endpoint": "/mc/kroger/search/zipcode",
+      "endpoint": "/mc/kroger/search/zipcode/",
       "method": "GET",
       "credits_per_successful_page": 3,
       "location_dimension": "store_zip",

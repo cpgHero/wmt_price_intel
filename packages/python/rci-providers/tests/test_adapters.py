@@ -180,6 +180,9 @@ def test_all_enabled_search_adapters_are_catalog_driven() -> None:
     registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
 
     assert len(enabled) == 18
+    assert registry.get("metricscart_kroger_search_zipcode").spec.endpoint == (
+        "/mc/kroger/search/zipcode/"
+    )
     for item in enabled:
         adapter = registry.get(str(item["adapter_id"]))
         request = adapter.build_request(
@@ -245,6 +248,7 @@ def test_catalogued_search_samples_advertise_results() -> None:
             continue
         source_path = {
             "cvs_us": "/cvs/search/",
+            "kroger_us": "/mc/kroger/search/zipcode",
             "walgreens_us": "/mc/bjs/serp/",
         }.get(str(item["id"]), item["endpoint"])
         endpoint = by_path[source_path]
