@@ -1605,9 +1605,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-22",
-              "Implemented and test-verified; Railway configuration and cache transition pending",
+              "Deployed and production-verified",
               "Phase 13.41 changes the governed Product Details freshness default from seven days to 30 days.",
-              "Search remains collection-cadence and store-authoritative for price, availability, and sponsorship. PDP planning continues after scope filtering and selects one representative observed context per distinct admitted retailer product. A fresh normalized HTTP 200 snapshot is reused at zero credits; only new, missing, unsuccessful, explicitly refreshed, or at-least-30-day-old identity evidence is eligible for a paid PDP call. The worker, immutable-raw recovery path, environment template, and Railway deployment guide now share the 2,592,000-second default. Production rollout will also extend successful snapshots created under the former seven-day policy to observed_at plus 30 days so they are not repurchased early. No Search, PDP, or AI call was made by this code change.",
+              "Search remains collection-cadence and store-authoritative for price, availability, and sponsorship. PDP planning continues after scope filtering and selects one representative observed context per distinct admitted retailer product. A fresh normalized HTTP 200 snapshot is reused at zero credits; only new, missing, unsuccessful, explicitly refreshed, or at-least-30-day-old identity evidence is eligible for a paid PDP call. The worker, immutable-raw recovery path, environment template, and Railway deployment guide share the 2,592,000-second default. Commit c100b66 is live and the production worker reports 2,592,000 seconds. A bounded operational transition extended 2,768 successful normalized HTTP 200 snapshots to observed_at plus 30 days; the post-check found zero eligible snapshots remaining on the former expiration. Raw payloads, observed timestamps, failures, audit lineage, Search data, and prices were untouched. GitHub Actions run 32615296706 passed every Python, TypeScript, contract, reversible-migration, browser, build, and service-container gate. No Search, PDP, or AI call was made.",
             ],
             [
               "2026-08-22",

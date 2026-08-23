@@ -30,8 +30,8 @@ configuration and documenting the effective date; no code branch by product cate
 At deployment, successful normalized HTTP 200 snapshots observed within the preceding 30 days are
 eligible to have `cache_expires_at` extended to `observed_at + 30 days`. This prevents snapshots
 created under the former seven-day default from being purchased again merely because the policy
-changed. Raw payloads, historical expiration values in audit evidence, and failed snapshots are not
-rewritten or deleted.
+changed. `cache_expires_at` is operational freshness metadata; raw payloads, observed timestamps,
+normalized documents, failed snapshots, and audit lineage are not rewritten or deleted.
 
 ## Verification
 
@@ -41,3 +41,12 @@ rewritten or deleted.
 - Deployment examples and the environment template use `2592000`.
 - Existing cache-hit tests continue to prove that a fresh PDP snapshot creates no job and consumes
   zero credits.
+
+## Production verification
+
+GitHub Actions run `32615296706` passed Python, TypeScript, contracts, formatting, linting, type
+checking, reversible migrations, 14 browser tests, production builds, and all four service-container
+builds. Railway deployed commit `c100b66`; the live worker reported the default as `2592000` seconds.
+The bounded transition extended 2,768 successful normalized HTTP 200 snapshots observed during the
+preceding 30 days, and a post-update reconciliation returned zero remaining eligible snapshots on
+the former expiration. No Search, PDP, or AI call was made.
