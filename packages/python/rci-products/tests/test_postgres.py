@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -51,13 +52,16 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
             fulfillment_type="pickup",
         ),
     )
-    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    endpoint = replace(
+        ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us"),
+        fixed_params=(("fulfillment_type", "pickup"),),
+    )
     contexts = [
         ProductDetailRequestContext(
             product_id=retailer_product_id,
             zipcode=zipcode,
             store=store,
-            fulfillment_type="pickup",
+            fulfillment_type="SFS",
         )
         for zipcode, store in (("00501", "2464"), ("90020", "2465"))
     ]
@@ -80,6 +84,14 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
         claimed = [job for jobs in claim_sets for job in jobs]
         assert len(claimed) == 2
         assert len({job.id for job in claimed}) == 2
+        assert all(job.endpoint.fixed() == {"fulfillment_type": "pickup"} for job in claimed)
+        assert all(
+            MetricsCartProductDetailAdapter(job.endpoint)
+            .build_request(job.context)
+            .params["fulfillment_type"]
+            == "pickup"
+            for job in claimed
+        )
 
         for job in claimed:
             normalized = MetricsCartProductDetailAdapter(job.endpoint).normalize(

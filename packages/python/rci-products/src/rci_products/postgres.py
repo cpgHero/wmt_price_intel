@@ -84,6 +84,7 @@ def _endpoint_document(endpoint: ProductDetailEndpoint) -> JsonObject:
         "supported_params": list(endpoint.supported_params),
         "contract_version": endpoint.contract_version,
         "default_params": endpoint.defaults(),
+        "fixed_params": endpoint.fixed(),
         "identity_param": endpoint.identity_param,
         "product_id_left_pad_width": endpoint.product_id_left_pad_width,
     }
@@ -108,6 +109,14 @@ def _endpoint(value: object) -> ProductDetailEndpoint:
                 (str(name), str(parameter_value))
                 for name, parameter_value in cast(
                     JsonObject, document.get("default_params", {})
+                ).items()
+            )
+        ),
+        fixed_params=tuple(
+            sorted(
+                (str(name), str(parameter_value))
+                for name, parameter_value in cast(
+                    JsonObject, document.get("fixed_params", {})
                 ).items()
             )
         ),
