@@ -12,6 +12,7 @@ import json
 import os
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from rci_db import DatabaseProbe
 from rci_product_packs import PostgresProductPackCatalog
 from rci_products import (
     MetricsCartProductDetailAdapter,
+    PostgresProductDetailRepository,
     ProductDetailCatalog,
     plan_product_detail_candidates,
 )
@@ -45,6 +47,7 @@ CANONICAL_FIELDS = (
     "product_identifiers",
 )
 SELLER_FIELDS = ("seller", "seller_name", "sold_by", "merchant", "merchant_name")
+USD_PER_METRICSCART_CREDIT = Decimal("0.002")
 
 
 def _arguments() -> argparse.Namespace:
@@ -55,7 +58,28 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--repository-root", type=Path, default=Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd()))
     )
+    parser.add_argument(
+        "--max-spend-usd",
+        type=Decimal,
+        help=(
+            "Hard paid-call ceiling in USD. MetricsCart credits are converted at $0.002 "
+            "per credit; this is required with --confirm-paid-calls."
+        ),
+    )
+    parser.add_argument(
+        "--confirm-paid-calls",
+        action="store_true",
+        help="Create a durable cache-aware PDP run after all audit gates pass.",
+    )
     return parser.parse_args()
+
+
+def _credit_ceiling(max_spend_usd: Decimal | None) -> int | None:
+    if max_spend_usd is None:
+        return None
+    if not max_spend_usd.is_finite() or max_spend_usd <= 0:
+        raise ValueError("PDP spend ceiling must be a positive finite USD amount")
+    return int((max_spend_usd / USD_PER_METRICSCART_CREDIT).to_integral_value(ROUND_FLOOR))
 
 
 def _enabled(value: str | None, *, default: bool = False) -> bool:
@@ -131,6 +155,9 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 async def _run(args: argparse.Namespace) -> dict[str, Any]:
+    credit_ceiling = _credit_ceiling(args.max_spend_usd)
+    if args.confirm_paid_calls and credit_ceiling is None:
+        raise ValueError("--max-spend-usd is required with --confirm-paid-calls")
     root = args.repository_root.resolve(strict=True)
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -500,6 +527,116 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "ai_calls_launched": False,
             },
         }
+        required_credits = int(summary["checks"]["pdp_credits_required"])
+        summary["pdp_budget"] = {
+            "usd_per_credit": str(USD_PER_METRICSCART_CREDIT),
+            "approved_spend_usd": (
+                str(args.max_spend_usd) if args.max_spend_usd is not None else None
+            ),
+            "credit_ceiling": credit_ceiling,
+            "required_credits": required_credits,
+            "maximum_uncached_cost_usd": str(
+                (Decimal(required_credits) * USD_PER_METRICSCART_CREDIT).quantize(Decimal("0.01"))
+            ),
+        }
+        if args.confirm_paid_calls:
+            if checksum_failures:
+                raise ValueError("raw artifact checksum failures block paid PDP enrichment")
+            if invalid_candidates:
+                raise ValueError("PDP-ineligible admitted products block paid PDP enrichment")
+            assert credit_ceiling is not None
+            if required_credits > credit_ceiling:
+                raise ValueError(
+                    f"planned PDP cost {required_credits} credits exceeds "
+                    f"the {credit_ceiling}-credit ceiling"
+                )
+            payable_checksums = [
+                candidate.context.checksum(endpoint)
+                for candidate, endpoint in valid_candidates
+                if candidate.context.checksum(endpoint) not in fresh_cache
+            ]
+            active_jobs: list[dict[str, Any]] = []
+            if payable_checksums:
+                async with database.engine.connect() as connection:
+                    active_jobs = [
+                        dict(row)
+                        for row in (
+                            (
+                                await connection.execute(
+                                    text(
+                                        """
+                                        SELECT DISTINCT r.id::text AS run_id, r.status,
+                                          count(*) OVER (PARTITION BY r.id) AS matching_jobs
+                                        FROM product_detail_job j
+                                        JOIN product_detail_enrichment_run r
+                                          ON r.id = j.enrichment_run_id
+                                        WHERE j.request_checksum = ANY(CAST(:checksums AS text[]))
+                                          AND j.status IN ('queued', 'running')
+                                          AND r.status IN ('planning', 'active')
+                                        ORDER BY r.id::text
+                                        """
+                                    ),
+                                    {"checksums": payable_checksums},
+                                )
+                            )
+                            .mappings()
+                            .all()
+                        )
+                    ]
+            if active_jobs:
+                summary["enrichment_run"] = {
+                    "status": "existing_active_work",
+                    "active_runs": active_jobs,
+                    "jobs_created": 0,
+                    "cache_hits": len(fresh_cache),
+                }
+            else:
+                repository = PostgresProductDetailRepository(database.engine, root)
+                run = await repository.create_run(max_credits=credit_ceiling)
+                jobs_created = 0
+                enqueue_cache_hits = 0
+                for candidate, endpoint in valid_candidates:
+                    observation = observations_by_product[
+                        (candidate.retailer_id, candidate.retailer_product_id)
+                    ]
+                    product = await repository.upsert_serp_product(
+                        retailer_id=candidate.retailer_id,
+                        retailer_product_id=candidate.retailer_product_id,
+                        name=str(observation.get("title") or candidate.retailer_product_id),
+                        brand=(str(observation["brand"]) if observation.get("brand") else None),
+                        url=str(candidate.context.url or ""),
+                        image_primary=(
+                            str(observation["image_url"]) if observation.get("image_url") else None
+                        ),
+                        identifiers={"product_id": candidate.retailer_product_id},
+                        context={
+                            "source": "live_search_collection",
+                            "collection_run_ids": list(args.run_ids),
+                            "product_pack_id": pack.id,
+                            "product_pack_version": pack.version,
+                            "source_offer_id": candidate.source_offer_id,
+                            "zipcode": candidate.context.zipcode,
+                            "store_number": candidate.context.store,
+                            "fulfillment_type": candidate.context.fulfillment_type,
+                            "observed_price": (
+                                float(candidate.observed_price)
+                                if candidate.observed_price is not None
+                                else None
+                            ),
+                            "selection_reason": candidate.reason,
+                        },
+                    )
+                    enqueue = await repository.enqueue(run.id, product, endpoint, candidate.context)
+                    jobs_created += int(enqueue.created)
+                    enqueue_cache_hits += int(enqueue.cached)
+                summary["enrichment_run"] = {
+                    "status": "queued" if jobs_created else "cache_satisfied",
+                    "run_id": run.id,
+                    "jobs_created": jobs_created,
+                    "cache_hits": enqueue_cache_hits,
+                    "credit_ceiling": credit_ceiling,
+                }
+                summary["governance"]["paid_calls_launched"] = jobs_created > 0
         (output_dir / "audit.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
@@ -510,7 +647,17 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     result = asyncio.run(_run(_arguments()))
-    print(json.dumps(result["checks"], indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "checks": result["checks"],
+                "pdp_budget": result["pdp_budget"],
+                "enrichment_run": result.get("enrichment_run"),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":

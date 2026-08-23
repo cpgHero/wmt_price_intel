@@ -517,6 +517,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Use a representative location where Search observed the product with a positive price.",
             "Add a targeted location sample only for contradictory identity evidence or a separately governed diagnostic; a price difference alone never changes Search price authority.",
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
+            "Live Search PDP launches convert the owner-approved USD ceiling to an integer credit ceiling at $0.002 per credit, fail closed when the qualified plan exceeds it, and refuse to create duplicate work when the same governed request is already queued or running.",
             "Validate retailer-specific parameters from the versioned endpoint catalog. Pickup and ShopRite shopping defaults are configuration, not category code.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
             "Audit PDP completeness separately from schema coverage. Zero unmapped fields means the provider payload was mapped; it does not mean every product supplied brand, identifiers, package specifications, descriptions, or multiple usable images.",
@@ -1603,6 +1604,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-23",
+              "Implemented and test-verified; owner-approved Spring Valley launch pending",
+              "Live Search PDP qualification gained an explicit USD-denominated hard ceiling and cross-run duplicate-work guard.",
+              "The owner-approved dollar amount is converted at the governed $0.002-per-credit rate without rounding up. Raw-checksum, Product Pack scope, endpoint eligibility, exact-context 30-day cache, and total-credit gates must all pass before a durable run is created. Exact request checksums already queued or running in another active run block a duplicate launch. Canonical product contexts record the immutable live Search run IDs, Pack version, observed location, Search price, and selection reason; Search remains price and availability authority. This workflow creates no AI work.",
+            ],
             [
               "2026-08-23",
               "Implemented and test-verified; deployment and bounded paid pilot pending",
