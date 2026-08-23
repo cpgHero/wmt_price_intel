@@ -168,6 +168,12 @@ export interface RetailCompetitiveIntelligenceProductPack {
       service_area_overlap_policy: "same_zip";
       missing_location_policy: "fail_closed" | "allow";
     };
+    candidate_retrieval?: {
+      mode: "disabled" | "lexical_top_k";
+      maximum_per_benchmark: number;
+      minimum_similarity: number;
+      stop_words: string[];
+    };
   };
   brand_rules?: {
     aliases?: {
