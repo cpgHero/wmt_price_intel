@@ -1,0 +1,2356 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_id": "spring_valley_walmart_anchor",
+  "source": {
+    "file": "Spring_Valley_Vitamin_Keywords_and_URLs.xlsx",
+    "supplied_by": "platform_owner",
+    "interpreted_on": "2026-08-23",
+    "purpose": "Auditable Spring Valley Walmart anchor universe and Search keyword source"
+  },
+  "retailer_id": "walmart_us",
+  "brand": "Spring Valley",
+  "brand_type": "private_label",
+  "keywords": [
+    "Adult 50+ vitamins",
+    "Adult unisex vitamins",
+    "Daily pack vitamins",
+    "Kids vitamins",
+    "Men's vitamins",
+    "Women's vitamins",
+    "Prenatal vitamins",
+    "B-complex vitamins",
+    "B12 vitamins",
+    "B6 vitamins",
+    "Biotin vitamins",
+    "D3+K2 vitamins",
+    "Folate vitamins",
+    "Niacin vitamins",
+    "Vitamin A vitamins",
+    "Vitamin C vitamins",
+    "Vitamin D3 vitamins",
+    "Vitamin E vitamins",
+    "Vitamin K2 vitamins",
+    "Cal-Mag-Zinc vitamins",
+    "Calcium vitamins",
+    "Chromium vitamins",
+    "Iron vitamins",
+    "Magnesium vitamins",
+    "Potassium vitamins",
+    "Selenium vitamins",
+    "Zinc vitamins",
+    "Algal vitamins",
+    "Cod liver vitamins",
+    "Fish oil vitamins",
+    "Flaxseed vitamins",
+    "Krill vitamins",
+    "Blood pressure vitamins",
+    "CoQ10 vitamins",
+    "Garlic vitamins",
+    "Red yeast rice vitamins",
+    "Glucosamine vitamins",
+    "MSM vitamins",
+    "SAMe vitamins",
+    "Digestive vitamins",
+    "Enzymes vitamins",
+    "Fiber vitamins",
+    "Greens vitamins",
+    "Probiotic vitamins",
+    "Synbiotic vitamins",
+    "Melatonin vitamins",
+    "Melatonin kids vitamins",
+    "Non-melatonin vitamins",
+    "Adaptogen vitamins",
+    "Amino vitamins",
+    "Botanical vitamins",
+    "Hormone vitamins",
+    "Biotin liquid vitamins",
+    "Collagen vitamins",
+    "HSN vitamins",
+    "Keratin vitamins",
+    "Topical vitamins",
+    "Combination vitamins",
+    "Echinacea vitamins",
+    "Elderberry vitamins",
+    "NAC vitamins",
+    "Oregano vitamins",
+    "Quercetin vitamins",
+    "ALCAR vitamins",
+    "Brain vitamins",
+    "Ginkgo vitamins",
+    "Mushroom vitamins",
+    "Prostate vitamins",
+    "Testosterone vitamins",
+    "Vitality vitamins",
+    "Menopause vitamins",
+    "UTI vitamins",
+    "GLP-1 vitamins",
+    "Metabolic vitamins",
+    "Black seed vitamins",
+    "Cayenne vitamins",
+    "Cinnamon vitamins",
+    "Fenugreek vitamins",
+    "Ginseng vitamins",
+    "Milk thistle vitamins",
+    "Turmeric vitamins",
+    "Valerian vitamins",
+    "5-HTP vitamins",
+    "ALA vitamins",
+    "Beet vitamins"
+  ],
+  "products": [
+    {
+      "ordinal": 1,
+      "keyword": "Adult 50+ vitamins",
+      "name": "Adult 50+ Multivitamin Tablets",
+      "url": "https://www.walmart.com/ip/19454607251",
+      "product_id": "19454607251"
+    },
+    {
+      "ordinal": 2,
+      "keyword": "Adult unisex vitamins",
+      "name": "Adult Multivitamin Capsules 30-Day",
+      "url": "https://www.walmart.com/ip/19168169786",
+      "product_id": "19168169786"
+    },
+    {
+      "ordinal": 3,
+      "keyword": "Adult unisex vitamins",
+      "name": "Adult Multivitamin Tablets",
+      "url": "https://www.walmart.com/ip/19411812887",
+      "product_id": "19411812887"
+    },
+    {
+      "ordinal": 4,
+      "keyword": "Adult unisex vitamins",
+      "name": "Multi + Probiotic and Fiber Adult Gummies",
+      "url": "https://www.walmart.com/ip/19371708404",
+      "product_id": "19371708404"
+    },
+    {
+      "ordinal": 5,
+      "keyword": "Adult unisex vitamins",
+      "name": "Multi Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/19281803828",
+      "product_id": "19281803828"
+    },
+    {
+      "ordinal": 6,
+      "keyword": "Adult unisex vitamins",
+      "name": "Multi Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/19281803840",
+      "product_id": "19281803840"
+    },
+    {
+      "ordinal": 7,
+      "keyword": "Daily pack vitamins",
+      "name": "Adult Wellness Daily Pack",
+      "url": "https://www.walmart.com/ip/19430708173",
+      "product_id": "19430708173"
+    },
+    {
+      "ordinal": 8,
+      "keyword": "Kids vitamins",
+      "name": "Kids Multi Multivitamin with Fiber & Probiotic",
+      "url": "https://www.walmart.com/ip/14938320879",
+      "product_id": "14938320879"
+    },
+    {
+      "ordinal": 9,
+      "keyword": "Kids vitamins",
+      "name": "Zero Sugar Kid's Multi + Cognition + Eye Gummy (Lutemax Kids lutein)",
+      "url": "https://www.walmart.com/ip/14560802832",
+      "product_id": "14560802832"
+    },
+    {
+      "ordinal": 10,
+      "keyword": "Kids vitamins",
+      "name": "Zero Sugar Kids Multi Gummy",
+      "url": "https://www.walmart.com/ip/5398869283",
+      "product_id": "5398869283"
+    },
+    {
+      "ordinal": 11,
+      "keyword": "Men's vitamins",
+      "name": "Men's 50+ Multi Tablets",
+      "url": "https://www.walmart.com/ip/5398869282",
+      "product_id": "5398869282"
+    },
+    {
+      "ordinal": 12,
+      "keyword": "Men's vitamins",
+      "name": "Men's Multi Tablets",
+      "url": "https://www.walmart.com/ip/5395472218",
+      "product_id": "5395472218"
+    },
+    {
+      "ordinal": 13,
+      "keyword": "Men's vitamins",
+      "name": "Zero Sugar Men's Multi Gummy",
+      "url": "https://www.walmart.com/ip/5395472217",
+      "product_id": "5395472217"
+    },
+    {
+      "ordinal": 14,
+      "keyword": "Women's vitamins",
+      "name": "Women's 50+ Multi Tablets",
+      "url": "https://www.walmart.com/ip/5398869284",
+      "product_id": "5398869284"
+    },
+    {
+      "ordinal": 15,
+      "keyword": "Women's vitamins",
+      "name": "Women's Multi Tablets",
+      "url": "https://www.walmart.com/ip/5395472216",
+      "product_id": "5395472216"
+    },
+    {
+      "ordinal": 16,
+      "keyword": "Women's vitamins",
+      "name": "Zero Sugar Women's Multi Gummy",
+      "url": "https://www.walmart.com/ip/5398869281",
+      "product_id": "5398869281"
+    },
+    {
+      "ordinal": 17,
+      "keyword": "Prenatal vitamins",
+      "name": "Iron Prenatal Health Tablets",
+      "url": "https://www.walmart.com/ip/871292216",
+      "product_id": "871292216"
+    },
+    {
+      "ordinal": 18,
+      "keyword": "Prenatal vitamins",
+      "name": "Prenatal Adult Gummy Value Size",
+      "url": "https://www.walmart.com/ip/590277068",
+      "product_id": "590277068"
+    },
+    {
+      "ordinal": 19,
+      "keyword": "Prenatal vitamins",
+      "name": "Prenatal Mini Multi + DHA Mini Softgels",
+      "url": "https://www.walmart.com/ip/190695247",
+      "product_id": "190695247"
+    },
+    {
+      "ordinal": 20,
+      "keyword": "Prenatal vitamins",
+      "name": "Prenatal Multivitamin Gummies with DHA & Folic Acid",
+      "url": "https://www.walmart.com/ip/873641",
+      "product_id": "873641"
+    },
+    {
+      "ordinal": 21,
+      "keyword": "Prenatal vitamins",
+      "name": "Prenatal Multivitamin/Multimineral (Pregnant & Nursing)",
+      "url": "https://www.walmart.com/ip/893200",
+      "product_id": "893200"
+    },
+    {
+      "ordinal": 22,
+      "keyword": "B-complex vitamins",
+      "name": "Super Vitamin B-Complex Tablets",
+      "url": "https://www.walmart.com/ip/40775779",
+      "product_id": "40775779"
+    },
+    {
+      "ordinal": 23,
+      "keyword": "B-complex vitamins",
+      "name": "Super Vitamin B-Complex Tablets",
+      "url": "https://www.walmart.com/ip/40775780",
+      "product_id": "40775780"
+    },
+    {
+      "ordinal": 24,
+      "keyword": "B-complex vitamins",
+      "name": "Super Vitamin B-Complex Tablets Value Size",
+      "url": "https://www.walmart.com/ip/306188231",
+      "product_id": "306188231"
+    },
+    {
+      "ordinal": 25,
+      "keyword": "B-complex vitamins",
+      "name": "Vitamin B Complex Vegetarian Gummies Strawberry",
+      "url": "https://www.walmart.com/ip/610197663",
+      "product_id": "610197663"
+    },
+    {
+      "ordinal": 26,
+      "keyword": "B-complex vitamins",
+      "name": "Vitamin B-50 Complex Timed-Release Tablets",
+      "url": "https://www.walmart.com/ip/22027161",
+      "product_id": "22027161"
+    },
+    {
+      "ordinal": 27,
+      "keyword": "B12 vitamins",
+      "name": "Extra Strength B12 Fast Dissolve Cherry",
+      "url": "https://www.walmart.com/ip/22066798",
+      "product_id": "22066798"
+    },
+    {
+      "ordinal": 28,
+      "keyword": "B12 vitamins",
+      "name": "Extra Strength B12 Fast Dissolve Cherry",
+      "url": "https://www.walmart.com/ip/787374421",
+      "product_id": "787374421"
+    },
+    {
+      "ordinal": 29,
+      "keyword": "B12 vitamins",
+      "name": "Extra Strength B12 Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/583611922",
+      "product_id": "583611922"
+    },
+    {
+      "ordinal": 30,
+      "keyword": "B12 vitamins",
+      "name": "Extra Strength B12 Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/197571007",
+      "product_id": "197571007"
+    },
+    {
+      "ordinal": 31,
+      "keyword": "B12 vitamins",
+      "name": "Extra Strength Liquid Vitamin B12 Berry",
+      "url": "https://www.walmart.com/ip/147266659",
+      "product_id": "147266659"
+    },
+    {
+      "ordinal": 32,
+      "keyword": "B12 vitamins",
+      "name": "Fast-Dissolve Extra Strength B12 Mixed Berry",
+      "url": "https://www.walmart.com/ip/35912858",
+      "product_id": "35912858"
+    },
+    {
+      "ordinal": 33,
+      "keyword": "B12 vitamins",
+      "name": "Sublingual Vitamin B12 Microlozenges Cherry (cyanocobalamin)",
+      "url": "https://www.walmart.com/ip/11047689",
+      "product_id": "11047689"
+    },
+    {
+      "ordinal": 34,
+      "keyword": "B12 vitamins",
+      "name": "Ultra Strength Vitamin B12 with METHYLCOBALAMIN",
+      "url": "https://www.walmart.com/ip/14942907191",
+      "product_id": "14942907191"
+    },
+    {
+      "ordinal": 35,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Quick-Dissolve Cherry",
+      "url": "https://www.walmart.com/ip/12167374",
+      "product_id": "12167374"
+    },
+    {
+      "ordinal": 36,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Quick-Dissolve Cherry",
+      "url": "https://www.walmart.com/ip/24547733",
+      "product_id": "24547733"
+    },
+    {
+      "ordinal": 37,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Tablets",
+      "url": "https://www.walmart.com/ip/22027163",
+      "product_id": "22027163"
+    },
+    {
+      "ordinal": 38,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Timed-Release Tablets",
+      "url": "https://www.walmart.com/ip/22027160",
+      "product_id": "22027160"
+    },
+    {
+      "ordinal": 39,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Vegetarian Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/815313634",
+      "product_id": "815313634"
+    },
+    {
+      "ordinal": 40,
+      "keyword": "B12 vitamins",
+      "name": "Vitamin B12 Vegetarian Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/587595485",
+      "product_id": "587595485"
+    },
+    {
+      "ordinal": 41,
+      "keyword": "B6 vitamins",
+      "name": "Vitamin B6 Supplement",
+      "url": "https://www.walmart.com/ip/893228",
+      "product_id": "893228"
+    },
+    {
+      "ordinal": 42,
+      "keyword": "Biotin vitamins",
+      "name": "Biotin Softgels",
+      "url": "https://www.walmart.com/ip/10324942",
+      "product_id": "10324942"
+    },
+    {
+      "ordinal": 43,
+      "keyword": "Biotin vitamins",
+      "name": "Biotin Softgels",
+      "url": "https://www.walmart.com/ip/11047685",
+      "product_id": "11047685"
+    },
+    {
+      "ordinal": 44,
+      "keyword": "Biotin vitamins",
+      "name": "Biotin Softgels",
+      "url": "https://www.walmart.com/ip/19758124",
+      "product_id": "19758124"
+    },
+    {
+      "ordinal": 45,
+      "keyword": "Biotin vitamins",
+      "name": "Biotin Softgels",
+      "url": "https://www.walmart.com/ip/24547739",
+      "product_id": "24547739"
+    },
+    {
+      "ordinal": 46,
+      "keyword": "Biotin vitamins",
+      "name": "Extra Strength Biotin Plus Keratin Tablets",
+      "url": "https://www.walmart.com/ip/24681645",
+      "product_id": "24681645"
+    },
+    {
+      "ordinal": 47,
+      "keyword": "Biotin vitamins",
+      "name": "Fast-Dissolve Biotin Strawberry",
+      "url": "https://www.walmart.com/ip/35912857",
+      "product_id": "35912857"
+    },
+    {
+      "ordinal": 48,
+      "keyword": "Biotin vitamins",
+      "name": "Organic Biotin Gummies Blueberry",
+      "url": "https://www.walmart.com/ip/892661012",
+      "product_id": "892661012"
+    },
+    {
+      "ordinal": 49,
+      "keyword": "Biotin vitamins",
+      "name": "Organic Biotin Gummies Strawberry",
+      "url": "https://www.walmart.com/ip/528858530",
+      "product_id": "528858530"
+    },
+    {
+      "ordinal": 50,
+      "keyword": "Biotin vitamins",
+      "name": "Organic Extra Strength Biotin Gummies Cherry",
+      "url": "https://www.walmart.com/ip/145281958",
+      "product_id": "145281958"
+    },
+    {
+      "ordinal": 51,
+      "keyword": "D3+K2 vitamins",
+      "name": "Vitamin K2 + Vitamin D3 Gummies Mixed Berry",
+      "url": "https://www.walmart.com/ip/329186707",
+      "product_id": "329186707"
+    },
+    {
+      "ordinal": 52,
+      "keyword": "D3+K2 vitamins",
+      "name": "Vitamin K2 90 mcg + D3 125 mcg Veg Capsules",
+      "url": "https://www.walmart.com/ip/306492394",
+      "product_id": "306492394"
+    },
+    {
+      "ordinal": 53,
+      "keyword": "Folate vitamins",
+      "name": "Folate Dietary Supplement (800 mcg folic acid)",
+      "url": "https://www.walmart.com/ip/36141703",
+      "product_id": "36141703"
+    },
+    {
+      "ordinal": 54,
+      "keyword": "Folate vitamins",
+      "name": "Folate Tablets (delivers folic acid)",
+      "url": "https://www.walmart.com/ip/932084",
+      "product_id": "932084"
+    },
+    {
+      "ordinal": 55,
+      "keyword": "Niacin vitamins",
+      "name": "Flush Free Niacin Capsules",
+      "url": "https://www.walmart.com/ip/10325001",
+      "product_id": "10325001"
+    },
+    {
+      "ordinal": 56,
+      "keyword": "Niacin vitamins",
+      "name": "Flush Free Niacin Capsules",
+      "url": "https://www.walmart.com/ip/281055101",
+      "product_id": "281055101"
+    },
+    {
+      "ordinal": 57,
+      "keyword": "Vitamin A vitamins",
+      "name": "Vitamin A Softgels",
+      "url": "https://www.walmart.com/ip/893197",
+      "product_id": "893197"
+    },
+    {
+      "ordinal": 58,
+      "keyword": "Vitamin C vitamins",
+      "name": "Extra Strength Vitamin C Gummies Orange",
+      "url": "https://www.walmart.com/ip/332715110",
+      "product_id": "332715110"
+    },
+    {
+      "ordinal": 59,
+      "keyword": "Vitamin C vitamins",
+      "name": "Ultra Strength Vitamin C Capsules",
+      "url": "https://www.walmart.com/ip/629337776",
+      "product_id": "629337776"
+    },
+    {
+      "ordinal": 60,
+      "keyword": "Vitamin C vitamins",
+      "name": "Ultra Strength Vitamin C Gummies Orange",
+      "url": "https://www.walmart.com/ip/14930903786",
+      "product_id": "14930903786"
+    },
+    {
+      "ordinal": 61,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Chewable Orange",
+      "url": "https://www.walmart.com/ip/10324968",
+      "product_id": "10324968"
+    },
+    {
+      "ordinal": 62,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Chewable Tropical Fruit",
+      "url": "https://www.walmart.com/ip/10324589",
+      "product_id": "10324589"
+    },
+    {
+      "ordinal": 63,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Fast Dissolve Orange",
+      "url": "https://www.walmart.com/ip/373866855",
+      "product_id": "373866855"
+    },
+    {
+      "ordinal": 64,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Immune Support Jelly Beans Orange",
+      "url": "https://www.walmart.com/ip/670572561",
+      "product_id": "670572561"
+    },
+    {
+      "ordinal": 65,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Vegetarian Gummies Orange",
+      "url": "https://www.walmart.com/ip/1043357",
+      "product_id": "1043357"
+    },
+    {
+      "ordinal": 66,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C Vegetarian Gummies Orange",
+      "url": "https://www.walmart.com/ip/679502494",
+      "product_id": "679502494"
+    },
+    {
+      "ordinal": 67,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C with Rose Hips",
+      "url": "https://www.walmart.com/ip/6139509340",
+      "product_id": "6139509340"
+    },
+    {
+      "ordinal": 68,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C with Rose Hips",
+      "url": "https://www.walmart.com/ip/5826196137",
+      "product_id": "5826196137"
+    },
+    {
+      "ordinal": 69,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C with Rose Hips",
+      "url": "https://www.walmart.com/ip/893222",
+      "product_id": "893222"
+    },
+    {
+      "ordinal": 70,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C with Rose Hips",
+      "url": "https://www.walmart.com/ip/10315364",
+      "product_id": "10315364"
+    },
+    {
+      "ordinal": 71,
+      "keyword": "Vitamin C vitamins",
+      "name": "Vitamin C with Rose Hips Value Size",
+      "url": "https://www.walmart.com/ip/558128350",
+      "product_id": "558128350"
+    },
+    {
+      "ordinal": 72,
+      "keyword": "Vitamin C vitamins",
+      "name": "Zero Sugar Vitamin C Gummies Orange",
+      "url": "https://www.walmart.com/ip/698784273",
+      "product_id": "698784273"
+    },
+    {
+      "ordinal": 73,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Extra Strength D3 Fast Dissolve Strawberry",
+      "url": "https://www.walmart.com/ip/164853940",
+      "product_id": "164853940"
+    },
+    {
+      "ordinal": 74,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Extra Strength Vitamin D3 Gummies",
+      "url": "https://www.walmart.com/ip/1093238714",
+      "product_id": "1093238714"
+    },
+    {
+      "ordinal": 75,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Extra Strength Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/13269741",
+      "product_id": "13269741"
+    },
+    {
+      "ordinal": 76,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Extra Strength Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/19758123",
+      "product_id": "19758123"
+    },
+    {
+      "ordinal": 77,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Extra Strength Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/302287205",
+      "product_id": "302287205"
+    },
+    {
+      "ordinal": 78,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Liquid Vitamin D3 Natural Orange",
+      "url": "https://www.walmart.com/ip/513439645",
+      "product_id": "513439645"
+    },
+    {
+      "ordinal": 79,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Gummies",
+      "url": "https://www.walmart.com/ip/14568798",
+      "product_id": "14568798"
+    },
+    {
+      "ordinal": 80,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Gummies Assorted Fruit",
+      "url": "https://www.walmart.com/ip/14568799",
+      "product_id": "14568799"
+    },
+    {
+      "ordinal": 81,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Gummies Assorted Fruits Value Size",
+      "url": "https://www.walmart.com/ip/787452716",
+      "product_id": "787452716"
+    },
+    {
+      "ordinal": 82,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/10316146",
+      "product_id": "10316146"
+    },
+    {
+      "ordinal": 83,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/694742832",
+      "product_id": "694742832"
+    },
+    {
+      "ordinal": 84,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/26077100",
+      "product_id": "26077100"
+    },
+    {
+      "ordinal": 85,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/1728703957",
+      "product_id": "1728703957"
+    },
+    {
+      "ordinal": 86,
+      "keyword": "Vitamin D3 vitamins",
+      "name": "Vitamin D3 Softgels",
+      "url": "https://www.walmart.com/ip/875210169",
+      "product_id": "875210169"
+    },
+    {
+      "ordinal": 87,
+      "keyword": "Vitamin E vitamins",
+      "name": "Natural Vitamin E",
+      "url": "https://www.walmart.com/ip/167599637",
+      "product_id": "167599637"
+    },
+    {
+      "ordinal": 88,
+      "keyword": "Vitamin E vitamins",
+      "name": "Vitamin E Softgels",
+      "url": "https://www.walmart.com/ip/878710",
+      "product_id": "878710"
+    },
+    {
+      "ordinal": 89,
+      "keyword": "Vitamin E vitamins",
+      "name": "Vitamin E Softgels",
+      "url": "https://www.walmart.com/ip/17102608231",
+      "product_id": "17102608231"
+    },
+    {
+      "ordinal": 90,
+      "keyword": "Vitamin E vitamins",
+      "name": "Vitamin E Softgels",
+      "url": "https://www.walmart.com/ip/10324579",
+      "product_id": "10324579"
+    },
+    {
+      "ordinal": 91,
+      "keyword": "Vitamin K2 vitamins",
+      "name": "Vitamin K2 Soft Gel Capsules",
+      "url": "https://www.walmart.com/ip/452896361",
+      "product_id": "452896361"
+    },
+    {
+      "ordinal": 92,
+      "keyword": "Vitamin K2 vitamins",
+      "name": "Vitamin K2 Softgels (MK-7)",
+      "url": "https://www.walmart.com/ip/40775778",
+      "product_id": "40775778"
+    },
+    {
+      "ordinal": 93,
+      "keyword": "Cal-Mag-Zinc vitamins",
+      "name": "Calcium Magnesium & Zinc Plus Vitamin D3 Caplets",
+      "url": "https://www.walmart.com/ip/10324581",
+      "product_id": "10324581"
+    },
+    {
+      "ordinal": 94,
+      "keyword": "Cal-Mag-Zinc vitamins",
+      "name": "Calcium Magnesium & Zinc with Vitamin D3 Capsules",
+      "url": "https://www.walmart.com/ip/108542553",
+      "product_id": "108542553"
+    },
+    {
+      "ordinal": 95,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium 500 mg + Vitamin D 25 mcg Gummies",
+      "url": "https://www.walmart.com/ip/829597644",
+      "product_id": "829597644"
+    },
+    {
+      "ordinal": 96,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Bone Health Tablets",
+      "url": "https://www.walmart.com/ip/10534204",
+      "product_id": "10534204"
+    },
+    {
+      "ordinal": 97,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Citrate Tablets",
+      "url": "https://www.walmart.com/ip/26077112",
+      "product_id": "26077112"
+    },
+    {
+      "ordinal": 98,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Citrate Tablets (2-tab serving)",
+      "url": "https://www.walmart.com/ip/47431969",
+      "product_id": "47431969"
+    },
+    {
+      "ordinal": 99,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Plus Vitamin D Tablets",
+      "url": "https://www.walmart.com/ip/893256",
+      "product_id": "893256"
+    },
+    {
+      "ordinal": 100,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Plus Vitamin D Tablets",
+      "url": "https://www.walmart.com/ip/893246",
+      "product_id": "893246"
+    },
+    {
+      "ordinal": 101,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Plus Vitamin D Value Size",
+      "url": "https://www.walmart.com/ip/655254775",
+      "product_id": "655254775"
+    },
+    {
+      "ordinal": 102,
+      "keyword": "Calcium vitamins",
+      "name": "Calcium Plus Vitamin D3 Mini Softgels",
+      "url": "https://www.walmart.com/ip/382004077",
+      "product_id": "382004077"
+    },
+    {
+      "ordinal": 103,
+      "keyword": "Calcium vitamins",
+      "name": "Rapid-Release Calcium 600 mg + Vitamin D Softgels",
+      "url": "https://www.walmart.com/ip/10324941",
+      "product_id": "10324941"
+    },
+    {
+      "ordinal": 104,
+      "keyword": "Chromium vitamins",
+      "name": "Chromium Metabolism Support Tablets",
+      "url": "https://www.walmart.com/ip/730201398",
+      "product_id": "730201398"
+    },
+    {
+      "ordinal": 105,
+      "keyword": "Chromium vitamins",
+      "name": "Chromium Tablets",
+      "url": "https://www.walmart.com/ip/13866106",
+      "product_id": "13866106"
+    },
+    {
+      "ordinal": 106,
+      "keyword": "Iron vitamins",
+      "name": "Blood Fortifier with Iron",
+      "url": "https://www.walmart.com/ip/19367913481",
+      "product_id": "19367913481"
+    },
+    {
+      "ordinal": 107,
+      "keyword": "Iron vitamins",
+      "name": "Iron Adult Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/19031319831",
+      "product_id": "19031319831"
+    },
+    {
+      "ordinal": 108,
+      "keyword": "Iron vitamins",
+      "name": "Iron General Wellness Tablets",
+      "url": "https://www.walmart.com/ip/10533016",
+      "product_id": "10533016"
+    },
+    {
+      "ordinal": 109,
+      "keyword": "Iron vitamins",
+      "name": "Iron Tablets",
+      "url": "https://www.walmart.com/ip/10898775",
+      "product_id": "10898775"
+    },
+    {
+      "ordinal": 110,
+      "keyword": "Iron vitamins",
+      "name": "Slow Release Iron Tablets",
+      "url": "https://www.walmart.com/ip/35912861",
+      "product_id": "35912861"
+    },
+    {
+      "ordinal": 111,
+      "keyword": "Magnesium vitamins",
+      "name": "Extra Strength Magnesium Gummies",
+      "url": "https://www.walmart.com/ip/5410505695",
+      "product_id": "5410505695"
+    },
+    {
+      "ordinal": 112,
+      "keyword": "Magnesium vitamins",
+      "name": "High Absorption Mag Glycinate Powder",
+      "url": "https://www.walmart.com/ip/14685823343",
+      "product_id": "14685823343"
+    },
+    {
+      "ordinal": 113,
+      "keyword": "Magnesium vitamins",
+      "name": "High Absorption Magnesium Glycinate Capsules",
+      "url": "https://www.walmart.com/ip/19275150103",
+      "product_id": "19275150103"
+    },
+    {
+      "ordinal": 114,
+      "keyword": "Magnesium vitamins",
+      "name": "Kid's Magnesium Glycinate Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/19315010479",
+      "product_id": "19315010479"
+    },
+    {
+      "ordinal": 115,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Bone & Muscle Tablets",
+      "url": "https://www.walmart.com/ip/40775784",
+      "product_id": "40775784"
+    },
+    {
+      "ordinal": 116,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Bone & Muscle Tablets",
+      "url": "https://www.walmart.com/ip/40775785",
+      "product_id": "40775785"
+    },
+    {
+      "ordinal": 117,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Bone & Muscle Tablets",
+      "url": "https://www.walmart.com/ip/35912859",
+      "product_id": "35912859"
+    },
+    {
+      "ordinal": 118,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Citrate Rapid Release Capsules",
+      "url": "https://www.walmart.com/ip/38570837",
+      "product_id": "38570837"
+    },
+    {
+      "ordinal": 119,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Glycinate Gummies Cherry Berry",
+      "url": "https://www.walmart.com/ip/14955706183",
+      "product_id": "14955706183"
+    },
+    {
+      "ordinal": 120,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Glycinate Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/17115360229",
+      "product_id": "17115360229"
+    },
+    {
+      "ordinal": 121,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Gummies Orange",
+      "url": "https://www.walmart.com/ip/499791976",
+      "product_id": "499791976"
+    },
+    {
+      "ordinal": 122,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Sleep Support Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/455098069",
+      "product_id": "455098069"
+    },
+    {
+      "ordinal": 123,
+      "keyword": "Magnesium vitamins",
+      "name": "Magnesium Stress Support Powder Raspberry Lemon",
+      "url": "https://www.walmart.com/ip/200070867",
+      "product_id": "200070867"
+    },
+    {
+      "ordinal": 124,
+      "keyword": "Potassium vitamins",
+      "name": "Potassium Caplets Value Size",
+      "url": "https://www.walmart.com/ip/511628656",
+      "product_id": "511628656"
+    },
+    {
+      "ordinal": 125,
+      "keyword": "Potassium vitamins",
+      "name": "Potassium Heart Health Caplets",
+      "url": "https://www.walmart.com/ip/11047723",
+      "product_id": "11047723"
+    },
+    {
+      "ordinal": 126,
+      "keyword": "Potassium vitamins",
+      "name": "Potassium Heart Health Caplets",
+      "url": "https://www.walmart.com/ip/12018787",
+      "product_id": "12018787"
+    },
+    {
+      "ordinal": 127,
+      "keyword": "Selenium vitamins",
+      "name": "Selenium Immune Health Tablets",
+      "url": "https://www.walmart.com/ip/893243",
+      "product_id": "893243"
+    },
+    {
+      "ordinal": 128,
+      "keyword": "Zinc vitamins",
+      "name": "Immune System Support Zinc Gummies Grapefruit",
+      "url": "https://www.walmart.com/ip/408109439",
+      "product_id": "408109439"
+    },
+    {
+      "ordinal": 129,
+      "keyword": "Zinc vitamins",
+      "name": "Zinc Gummies",
+      "url": "https://www.walmart.com/ip/19303456306",
+      "product_id": "19303456306"
+    },
+    {
+      "ordinal": 130,
+      "keyword": "Zinc vitamins",
+      "name": "Zinc Immune Health Caplets",
+      "url": "https://www.walmart.com/ip/10325002",
+      "product_id": "10325002"
+    },
+    {
+      "ordinal": 131,
+      "keyword": "Zinc vitamins",
+      "name": "Zinc with Vitamin D Immune Health Capsules",
+      "url": "https://www.walmart.com/ip/962902061",
+      "product_id": "962902061"
+    },
+    {
+      "ordinal": 132,
+      "keyword": "Algal vitamins",
+      "name": "Brain Omega-3 from Algal Oil Gummy",
+      "url": "https://www.walmart.com/ip/5416414555",
+      "product_id": "5416414555"
+    },
+    {
+      "ordinal": 133,
+      "keyword": "Algal vitamins",
+      "name": "Maximum Care Omega-3 from ALGAL OIL with D3 SOFTGEL",
+      "url": "https://www.walmart.com/ip/17324003850",
+      "product_id": "17324003850"
+    },
+    {
+      "ordinal": 134,
+      "keyword": "Algal vitamins",
+      "name": "Omega-3 Gummies from Plant-Based Algal Oil",
+      "url": "https://www.walmart.com/ip/8739874808",
+      "product_id": "8739874808"
+    },
+    {
+      "ordinal": 135,
+      "keyword": "Cod liver vitamins",
+      "name": "Cod Liver Oil plus Vitamins A & D3",
+      "url": "https://www.walmart.com/ip/10533301",
+      "product_id": "10533301"
+    },
+    {
+      "ordinal": 136,
+      "keyword": "Fish oil vitamins",
+      "name": "Daily Maintenance Omega-3",
+      "url": "https://www.walmart.com/ip/3585059228",
+      "product_id": "3585059228"
+    },
+    {
+      "ordinal": 137,
+      "keyword": "Fish oil vitamins",
+      "name": "Daily Maintenance Omega-3",
+      "url": "https://www.walmart.com/ip/1857225490",
+      "product_id": "1857225490"
+    },
+    {
+      "ordinal": 138,
+      "keyword": "Fish oil vitamins",
+      "name": "Daily Maintenance Omega-3 Lemon",
+      "url": "https://www.walmart.com/ip/2559412207",
+      "product_id": "2559412207"
+    },
+    {
+      "ordinal": 139,
+      "keyword": "Fish oil vitamins",
+      "name": "Fish Oil Omega-3 Softgels",
+      "url": "https://www.walmart.com/ip/2968538277",
+      "product_id": "2968538277"
+    },
+    {
+      "ordinal": 140,
+      "keyword": "Fish oil vitamins",
+      "name": "Maximum Care Omega-3 from Fish Oil",
+      "url": "https://www.walmart.com/ip/284003198",
+      "product_id": "284003198"
+    },
+    {
+      "ordinal": 141,
+      "keyword": "Fish oil vitamins",
+      "name": "Omega-3 Fish Oil Brain & Heart (1290 EPA / 620 DHA per 2sg)",
+      "url": "https://www.walmart.com/ip/3273655123",
+      "product_id": "3273655123"
+    },
+    {
+      "ordinal": 142,
+      "keyword": "Fish oil vitamins",
+      "name": "Omega-3 Fish Oil Mini Softgels",
+      "url": "https://www.walmart.com/ip/183169249",
+      "product_id": "183169249"
+    },
+    {
+      "ordinal": 143,
+      "keyword": "Fish oil vitamins",
+      "name": "Omega-3 from Fish Oil Proactive Health",
+      "url": "https://www.walmart.com/ip/925521724",
+      "product_id": "925521724"
+    },
+    {
+      "ordinal": 144,
+      "keyword": "Fish oil vitamins",
+      "name": "Proactive Support Omega-3 Fish Oil",
+      "url": "https://www.walmart.com/ip/875372857",
+      "product_id": "875372857"
+    },
+    {
+      "ordinal": 145,
+      "keyword": "Fish oil vitamins",
+      "name": "Proactive Support Omega-3 Fish Oil",
+      "url": "https://www.walmart.com/ip/413918797",
+      "product_id": "413918797"
+    },
+    {
+      "ordinal": 146,
+      "keyword": "Fish oil vitamins",
+      "name": "Proactive Support Omega-3 Fish Oil (645 EPA / 310 DHA per 2sg)",
+      "url": "https://www.walmart.com/ip/2248998371",
+      "product_id": "2248998371"
+    },
+    {
+      "ordinal": 147,
+      "keyword": "Fish oil vitamins",
+      "name": "Proactive Support Omega-3 Mini",
+      "url": "https://www.walmart.com/ip/634068132",
+      "product_id": "634068132"
+    },
+    {
+      "ordinal": 148,
+      "keyword": "Fish oil vitamins",
+      "name": "Triple Omega (Fish 800 / Flax 800 / Borage)",
+      "url": "https://www.walmart.com/ip/3554578603",
+      "product_id": "3554578603"
+    },
+    {
+      "ordinal": 149,
+      "keyword": "Flaxseed vitamins",
+      "name": "Flaxseed Oil Softgels",
+      "url": "https://www.walmart.com/ip/295377177",
+      "product_id": "295377177"
+    },
+    {
+      "ordinal": 150,
+      "keyword": "Flaxseed vitamins",
+      "name": "Flaxseed Oil Softgels",
+      "url": "https://www.walmart.com/ip/515369947",
+      "product_id": "515369947"
+    },
+    {
+      "ordinal": 151,
+      "keyword": "Krill vitamins",
+      "name": "100% Pure Krill Oil (Superba2)",
+      "url": "https://www.walmart.com/ip/46088971",
+      "product_id": "46088971"
+    },
+    {
+      "ordinal": 152,
+      "keyword": "Blood pressure vitamins",
+      "name": "Blood Pressure Support Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/767725784",
+      "product_id": "767725784"
+    },
+    {
+      "ordinal": 153,
+      "keyword": "CoQ10 vitamins",
+      "name": "CoQ10 Adult Gummies",
+      "url": "https://www.walmart.com/ip/24681611",
+      "product_id": "24681611"
+    },
+    {
+      "ordinal": 154,
+      "keyword": "CoQ10 vitamins",
+      "name": "CoQ10 Softgel",
+      "url": "https://www.walmart.com/ip/5262717796",
+      "product_id": "5262717796"
+    },
+    {
+      "ordinal": 155,
+      "keyword": "CoQ10 vitamins",
+      "name": "CoQ10 Softgels",
+      "url": "https://www.walmart.com/ip/26077093",
+      "product_id": "26077093"
+    },
+    {
+      "ordinal": 156,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10",
+      "url": "https://www.walmart.com/ip/10324967",
+      "product_id": "10324967"
+    },
+    {
+      "ordinal": 157,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10",
+      "url": "https://www.walmart.com/ip/602853507",
+      "product_id": "602853507"
+    },
+    {
+      "ordinal": 158,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10",
+      "url": "https://www.walmart.com/ip/43933365",
+      "product_id": "43933365"
+    },
+    {
+      "ordinal": 159,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10",
+      "url": "https://www.walmart.com/ip/115874084",
+      "product_id": "115874084"
+    },
+    {
+      "ordinal": 160,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10",
+      "url": "https://www.walmart.com/ip/579804209",
+      "product_id": "579804209"
+    },
+    {
+      "ordinal": 161,
+      "keyword": "CoQ10 vitamins",
+      "name": "Rapid-Release CoQ10 Heart Health",
+      "url": "https://www.walmart.com/ip/10316852",
+      "product_id": "10316852"
+    },
+    {
+      "ordinal": 162,
+      "keyword": "Garlic vitamins",
+      "name": "Odor-Controlled Garlic Softgels",
+      "url": "https://www.walmart.com/ip/10324958",
+      "product_id": "10324958"
+    },
+    {
+      "ordinal": 163,
+      "keyword": "Garlic vitamins",
+      "name": "Odor-Controlled Garlic Softgels Value Size",
+      "url": "https://www.walmart.com/ip/679590685",
+      "product_id": "679590685"
+    },
+    {
+      "ordinal": 164,
+      "keyword": "Red yeast rice vitamins",
+      "name": "Red Yeast Rice Capsules",
+      "url": "https://www.walmart.com/ip/11028017",
+      "product_id": "11028017"
+    },
+    {
+      "ordinal": 165,
+      "keyword": "Red yeast rice vitamins",
+      "name": "Red Yeast Rice Capsules Value Size",
+      "url": "https://www.walmart.com/ip/743208142",
+      "product_id": "743208142"
+    },
+    {
+      "ordinal": 166,
+      "keyword": "Glucosamine vitamins",
+      "name": "3X Glucosamine Chondroitin Joint Health",
+      "url": "https://www.walmart.com/ip/18971350150",
+      "product_id": "18971350150"
+    },
+    {
+      "ordinal": 167,
+      "keyword": "Glucosamine vitamins",
+      "name": "Glucosamine + Turmeric & Black Pepper",
+      "url": "https://www.walmart.com/ip/19313655481",
+      "product_id": "19313655481"
+    },
+    {
+      "ordinal": 168,
+      "keyword": "Glucosamine vitamins",
+      "name": "Glucosamine Sulfate Potassium Chloride",
+      "url": "https://www.walmart.com/ip/26077110",
+      "product_id": "26077110"
+    },
+    {
+      "ordinal": 169,
+      "keyword": "Glucosamine vitamins",
+      "name": "Glucosamine Sulfate Potassium Chloride",
+      "url": "https://www.walmart.com/ip/26077111",
+      "product_id": "26077111"
+    },
+    {
+      "ordinal": 170,
+      "keyword": "Glucosamine vitamins",
+      "name": "Triple Strength Glucosamine Chondroitin",
+      "url": "https://www.walmart.com/ip/21289134",
+      "product_id": "21289134"
+    },
+    {
+      "ordinal": 171,
+      "keyword": "Glucosamine vitamins",
+      "name": "Triple Strength Glucosamine Chondroitin",
+      "url": "https://www.walmart.com/ip/17325194",
+      "product_id": "17325194"
+    },
+    {
+      "ordinal": 172,
+      "keyword": "Glucosamine vitamins",
+      "name": "Triple Strength Glucosamine Chondroitin",
+      "url": "https://www.walmart.com/ip/457458829",
+      "product_id": "457458829"
+    },
+    {
+      "ordinal": 173,
+      "keyword": "Glucosamine vitamins",
+      "name": "Triple Strength Glucosamine Chondroitin Value Size",
+      "url": "https://www.walmart.com/ip/298019507",
+      "product_id": "298019507"
+    },
+    {
+      "ordinal": 174,
+      "keyword": "MSM vitamins",
+      "name": "MSM (OUT OF STOCK at capture)",
+      "url": "https://www.walmart.com/ip/13866105",
+      "product_id": "13866105"
+    },
+    {
+      "ordinal": 175,
+      "keyword": "SAMe vitamins",
+      "name": "SAMe Value Pack",
+      "url": "https://www.walmart.com/ip/46336875",
+      "product_id": "46336875"
+    },
+    {
+      "ordinal": 176,
+      "keyword": "Digestive vitamins",
+      "name": "Activated Charcoal Capsules",
+      "url": "https://www.walmart.com/ip/192114718",
+      "product_id": "192114718"
+    },
+    {
+      "ordinal": 177,
+      "keyword": "Digestive vitamins",
+      "name": "Aloe Vera Gel Softgels",
+      "url": "https://www.walmart.com/ip/10316845",
+      "product_id": "10316845"
+    },
+    {
+      "ordinal": 178,
+      "keyword": "Digestive vitamins",
+      "name": "Cascara Sagrada Whole Herb",
+      "url": "https://www.walmart.com/ip/10324862",
+      "product_id": "10324862"
+    },
+    {
+      "ordinal": 179,
+      "keyword": "Digestive vitamins",
+      "name": "Ginger Root Capsules",
+      "url": "https://www.walmart.com/ip/103181381",
+      "product_id": "103181381"
+    },
+    {
+      "ordinal": 180,
+      "keyword": "Enzymes vitamins",
+      "name": "Advanced Formula Digestive Enzymes + Probiotics + Prebiotics",
+      "url": "https://www.walmart.com/ip/770495984",
+      "product_id": "770495984"
+    },
+    {
+      "ordinal": 181,
+      "keyword": "Enzymes vitamins",
+      "name": "Probiotic Multi-Enzyme Digestive Formula Tablets",
+      "url": "https://www.walmart.com/ip/904354889",
+      "product_id": "904354889"
+    },
+    {
+      "ordinal": 182,
+      "keyword": "Enzymes vitamins",
+      "name": "Probiotic and Digestive Enzyme Bundle",
+      "url": "https://www.walmart.com/ip/20156909861",
+      "product_id": "20156909861"
+    },
+    {
+      "ordinal": 183,
+      "keyword": "Fiber vitamins",
+      "name": "Daily Fiber + ELECTROLYTES with Acacia Fiber Prebiotic",
+      "url": "https://www.walmart.com/ip/15126350838",
+      "product_id": "15126350838"
+    },
+    {
+      "ordinal": 184,
+      "keyword": "Fiber vitamins",
+      "name": "Daily Fiber 100% Natural Psyllium Husk Capsules",
+      "url": "https://www.walmart.com/ip/330632024",
+      "product_id": "330632024"
+    },
+    {
+      "ordinal": 185,
+      "keyword": "Fiber vitamins",
+      "name": "Vegetarian Fiber Gummies",
+      "url": "https://www.walmart.com/ip/175877612",
+      "product_id": "175877612"
+    },
+    {
+      "ordinal": 186,
+      "keyword": "Greens vitamins",
+      "name": "Daily Greens + Super Foods Mixed Berry",
+      "url": "https://www.walmart.com/ip/15089366492",
+      "product_id": "15089366492"
+    },
+    {
+      "ordinal": 187,
+      "keyword": "Probiotic vitamins",
+      "name": "5-in-1 Women's Probiotic with Zinc",
+      "url": "https://www.walmart.com/ip/15123769910",
+      "product_id": "15123769910"
+    },
+    {
+      "ordinal": 188,
+      "keyword": "Probiotic vitamins",
+      "name": "Adult 50+ Vitality Probiotic with Zinc",
+      "url": "https://www.walmart.com/ip/18882354600",
+      "product_id": "18882354600"
+    },
+    {
+      "ordinal": 189,
+      "keyword": "Probiotic vitamins",
+      "name": "Adult Healthy Skin Probiotics",
+      "url": "https://www.walmart.com/ip/18814409960",
+      "product_id": "18814409960"
+    },
+    {
+      "ordinal": 190,
+      "keyword": "Probiotic vitamins",
+      "name": "Daily Probiotic Delayed Release (contains LGG strain)",
+      "url": "https://www.walmart.com/ip/408267873",
+      "product_id": "408267873"
+    },
+    {
+      "ordinal": 191,
+      "keyword": "Probiotic vitamins",
+      "name": "Extra Strength Age 50+ Probiotic with Prebiotic",
+      "url": "https://www.walmart.com/ip/218509454",
+      "product_id": "218509454"
+    },
+    {
+      "ordinal": 192,
+      "keyword": "Probiotic vitamins",
+      "name": "Extra Strength Probiotic Vegetable Capsules",
+      "url": "https://www.walmart.com/ip/128696283",
+      "product_id": "128696283"
+    },
+    {
+      "ordinal": 193,
+      "keyword": "Probiotic vitamins",
+      "name": "Extra-Strength Probiotic Capsules",
+      "url": "https://www.walmart.com/ip/603210897",
+      "product_id": "603210897"
+    },
+    {
+      "ordinal": 194,
+      "keyword": "Probiotic vitamins",
+      "name": "High Potency Probiotic Gummies Strawberry Lemonade",
+      "url": "https://www.walmart.com/ip/5265483699",
+      "product_id": "5265483699"
+    },
+    {
+      "ordinal": 195,
+      "keyword": "Probiotic vitamins",
+      "name": "Probiotic Acidophilus Caplets",
+      "url": "https://www.walmart.com/ip/10324947",
+      "product_id": "10324947"
+    },
+    {
+      "ordinal": 196,
+      "keyword": "Probiotic vitamins",
+      "name": "Women's Period Support Probiotic",
+      "url": "https://www.walmart.com/ip/18826172467",
+      "product_id": "18826172467"
+    },
+    {
+      "ordinal": 197,
+      "keyword": "Probiotic vitamins",
+      "name": "Women's Probiotic",
+      "url": "https://www.walmart.com/ip/51254726",
+      "product_id": "51254726"
+    },
+    {
+      "ordinal": 198,
+      "keyword": "Probiotic vitamins",
+      "name": "Women's Probiotic Cranberry Value Size",
+      "url": "https://www.walmart.com/ip/812670531",
+      "product_id": "812670531"
+    },
+    {
+      "ordinal": 199,
+      "keyword": "Probiotic vitamins",
+      "name": "Women's Probiotic with Cranberry Gummies",
+      "url": "https://www.walmart.com/ip/663469616",
+      "product_id": "663469616"
+    },
+    {
+      "ordinal": 200,
+      "keyword": "Probiotic vitamins",
+      "name": "Zero Sugar Daily Immunity with Probiotics STICK PACK",
+      "url": "https://www.walmart.com/ip/19352451555",
+      "product_id": "19352451555"
+    },
+    {
+      "ordinal": 201,
+      "keyword": "Probiotic vitamins",
+      "name": "Zero Sugar Daily Immunity with Probiotics STICK PACK",
+      "url": "https://www.walmart.com/ip/19414257903",
+      "product_id": "19414257903"
+    },
+    {
+      "ordinal": 202,
+      "keyword": "Synbiotic vitamins",
+      "name": "Kid's Supergreens + Prebiotic Fiber + Probiotic",
+      "url": "https://www.walmart.com/ip/15060309359",
+      "product_id": "15060309359"
+    },
+    {
+      "ordinal": 203,
+      "keyword": "Synbiotic vitamins",
+      "name": "Probiotic with Prebiotic from Inulin Gummies",
+      "url": "https://www.walmart.com/ip/261313417",
+      "product_id": "261313417"
+    },
+    {
+      "ordinal": 204,
+      "keyword": "Synbiotic vitamins",
+      "name": "Synbiotic Vegetarian Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/5265483700",
+      "product_id": "5265483700"
+    },
+    {
+      "ordinal": 205,
+      "keyword": "Melatonin vitamins",
+      "name": "Extra Strength Melatonin Tablets",
+      "url": "https://www.walmart.com/ip/50733191",
+      "product_id": "50733191"
+    },
+    {
+      "ordinal": 206,
+      "keyword": "Melatonin vitamins",
+      "name": "Extra Strength Melatonin Tablets Value Size",
+      "url": "https://www.walmart.com/ip/858921782",
+      "product_id": "858921782"
+    },
+    {
+      "ordinal": 207,
+      "keyword": "Melatonin vitamins",
+      "name": "Fast-Dissolve Melatonin Strawberry",
+      "url": "https://www.walmart.com/ip/40711580",
+      "product_id": "40711580"
+    },
+    {
+      "ordinal": 208,
+      "keyword": "Melatonin vitamins",
+      "name": "Fast-Dissolve Melatonin Strawberry",
+      "url": "https://www.walmart.com/ip/40711581",
+      "product_id": "40711581"
+    },
+    {
+      "ordinal": 209,
+      "keyword": "Melatonin vitamins",
+      "name": "Fast-Dissolve Melatonin Strawberry",
+      "url": "https://www.walmart.com/ip/35912856",
+      "product_id": "35912856"
+    },
+    {
+      "ordinal": 210,
+      "keyword": "Melatonin vitamins",
+      "name": "Liquid Melatonin",
+      "url": "https://www.walmart.com/ip/930232734",
+      "product_id": "930232734"
+    },
+    {
+      "ordinal": 211,
+      "keyword": "Melatonin vitamins",
+      "name": "Melatonin Gummies Strawberry",
+      "url": "https://www.walmart.com/ip/24681606",
+      "product_id": "24681606"
+    },
+    {
+      "ordinal": 212,
+      "keyword": "Melatonin vitamins",
+      "name": "Melatonin Tablets",
+      "url": "https://www.walmart.com/ip/11047659",
+      "product_id": "11047659"
+    },
+    {
+      "ordinal": 213,
+      "keyword": "Melatonin vitamins",
+      "name": "Melatonin Tablets (ADULT low dose)",
+      "url": "https://www.walmart.com/ip/15136798",
+      "product_id": "15136798"
+    },
+    {
+      "ordinal": 214,
+      "keyword": "Melatonin vitamins",
+      "name": "Melatonin Tablets Value Size",
+      "url": "https://www.walmart.com/ip/412337414",
+      "product_id": "412337414"
+    },
+    {
+      "ordinal": 215,
+      "keyword": "Melatonin vitamins",
+      "name": "Non GMO Melatonin Gummies Blueberry",
+      "url": "https://www.walmart.com/ip/519919564",
+      "product_id": "519919564"
+    },
+    {
+      "ordinal": 216,
+      "keyword": "Melatonin vitamins",
+      "name": "Non GMO Melatonin Gummies Strawberry",
+      "url": "https://www.walmart.com/ip/105337513",
+      "product_id": "105337513"
+    },
+    {
+      "ordinal": 217,
+      "keyword": "Melatonin vitamins",
+      "name": "Ultra Strength Melatonin Fast-Dissolve",
+      "url": "https://www.walmart.com/ip/2955753786",
+      "product_id": "2955753786"
+    },
+    {
+      "ordinal": 218,
+      "keyword": "Melatonin vitamins",
+      "name": "Ultra Strength Melatonin Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/1233897715",
+      "product_id": "1233897715"
+    },
+    {
+      "ordinal": 219,
+      "keyword": "Melatonin vitamins",
+      "name": "Zero Sugar Melatonin Gummies",
+      "url": "https://www.walmart.com/ip/260561079",
+      "product_id": "260561079"
+    },
+    {
+      "ordinal": 220,
+      "keyword": "Melatonin kids vitamins",
+      "name": "Kid's Melatonin Liquid Berry",
+      "url": "https://www.walmart.com/ip/2027182098",
+      "product_id": "2027182098"
+    },
+    {
+      "ordinal": 221,
+      "keyword": "Melatonin kids vitamins",
+      "name": "Kids Melatonin CHEWABLE TABLETS Grape",
+      "url": "https://www.walmart.com/ip/118202779",
+      "product_id": "118202779"
+    },
+    {
+      "ordinal": 222,
+      "keyword": "Melatonin kids vitamins",
+      "name": "Kids Melatonin Gummies Raspberry",
+      "url": "https://www.walmart.com/ip/519575375",
+      "product_id": "519575375"
+    },
+    {
+      "ordinal": 223,
+      "keyword": "Melatonin kids vitamins",
+      "name": "Zero Sugar Kids Melatonin Gummies",
+      "url": "https://www.walmart.com/ip/581787911",
+      "product_id": "581787911"
+    },
+    {
+      "ordinal": 224,
+      "keyword": "Melatonin kids vitamins",
+      "name": "Zero Sugar Kids Melatonin Gummies",
+      "url": "https://www.walmart.com/ip/2816261379",
+      "product_id": "2816261379"
+    },
+    {
+      "ordinal": 225,
+      "keyword": "Non-melatonin vitamins",
+      "name": "Sleep and Stress Probiotic Delayed-Release",
+      "url": "https://www.walmart.com/ip/18853361981",
+      "product_id": "18853361981"
+    },
+    {
+      "ordinal": 226,
+      "keyword": "Adaptogen vitamins",
+      "name": "Ashwagandha Root Powder Veg Capsules",
+      "url": "https://www.walmart.com/ip/528758997",
+      "product_id": "528758997"
+    },
+    {
+      "ordinal": 227,
+      "keyword": "Adaptogen vitamins",
+      "name": "Ashwagandha Root Powder Veg Capsules",
+      "url": "https://www.walmart.com/ip/762223612",
+      "product_id": "762223612"
+    },
+    {
+      "ordinal": 228,
+      "keyword": "Adaptogen vitamins",
+      "name": "Ashwagandha Vegetarian Gummies Cherry",
+      "url": "https://www.walmart.com/ip/978103814",
+      "product_id": "978103814"
+    },
+    {
+      "ordinal": 229,
+      "keyword": "Adaptogen vitamins",
+      "name": "Extra Strength Ashwagandha",
+      "url": "https://www.walmart.com/ip/551386981",
+      "product_id": "551386981"
+    },
+    {
+      "ordinal": 230,
+      "keyword": "Adaptogen vitamins",
+      "name": "Magnesium + Ashwagandha + L-Theanine Stress Support",
+      "url": "https://www.walmart.com/ip/19273270046",
+      "product_id": "19273270046"
+    },
+    {
+      "ordinal": 231,
+      "keyword": "Amino vitamins",
+      "name": "GABA Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/186005866",
+      "product_id": "186005866"
+    },
+    {
+      "ordinal": 232,
+      "keyword": "Amino vitamins",
+      "name": "L-Theanine Capsules",
+      "url": "https://www.walmart.com/ip/45082260",
+      "product_id": "45082260"
+    },
+    {
+      "ordinal": 233,
+      "keyword": "Botanical vitamins",
+      "name": "St. John's Wort Standardized Extract",
+      "url": "https://www.walmart.com/ip/206029033",
+      "product_id": "206029033"
+    },
+    {
+      "ordinal": 234,
+      "keyword": "Hormone vitamins",
+      "name": "DHEA Tablets",
+      "url": "https://www.walmart.com/ip/13331052151",
+      "product_id": "13331052151"
+    },
+    {
+      "ordinal": 235,
+      "keyword": "Biotin liquid vitamins",
+      "name": "Biotin & Collagen Liquid Natural Berry",
+      "url": "https://www.walmart.com/ip/2016199673",
+      "product_id": "2016199673"
+    },
+    {
+      "ordinal": 236,
+      "keyword": "Collagen vitamins",
+      "name": "Collagen Peptides Type 1 & 3 Powder",
+      "url": "https://www.walmart.com/ip/806416181",
+      "product_id": "806416181"
+    },
+    {
+      "ordinal": 237,
+      "keyword": "Collagen vitamins",
+      "name": "Collagen Type 1 & 3 Plus Vitamin C",
+      "url": "https://www.walmart.com/ip/46342033",
+      "product_id": "46342033"
+    },
+    {
+      "ordinal": 238,
+      "keyword": "Collagen vitamins",
+      "name": "Collagen Type 1 & 3 Plus Vitamin C",
+      "url": "https://www.walmart.com/ip/858070735",
+      "product_id": "858070735"
+    },
+    {
+      "ordinal": 239,
+      "keyword": "Collagen vitamins",
+      "name": "Highly Absorbable Collagen + C Tablets",
+      "url": "https://www.walmart.com/ip/865121446",
+      "product_id": "865121446"
+    },
+    {
+      "ordinal": 240,
+      "keyword": "Collagen vitamins",
+      "name": "Zero Sugar Collagen Peptides Gummies",
+      "url": "https://www.walmart.com/ip/5314190496",
+      "product_id": "5314190496"
+    },
+    {
+      "ordinal": 241,
+      "keyword": "HSN vitamins",
+      "name": "Extra Strength Hair Skin & Nails Collagen Support Softgels",
+      "url": "https://www.walmart.com/ip/49929247",
+      "product_id": "49929247"
+    },
+    {
+      "ordinal": 242,
+      "keyword": "HSN vitamins",
+      "name": "Hair Skin & Nails Caplets",
+      "url": "https://www.walmart.com/ip/559310457",
+      "product_id": "559310457"
+    },
+    {
+      "ordinal": 243,
+      "keyword": "Keratin vitamins",
+      "name": "Keratin Dietary Supplement",
+      "url": "https://www.walmart.com/ip/40775781",
+      "product_id": "40775781"
+    },
+    {
+      "ordinal": 244,
+      "keyword": "Topical vitamins",
+      "name": "Cold-Pressed Castor Oil Organic",
+      "url": "https://www.walmart.com/ip/3653878100",
+      "product_id": "3653878100"
+    },
+    {
+      "ordinal": 245,
+      "keyword": "Topical vitamins",
+      "name": "Collagen Serum (TOPICAL)",
+      "url": "https://www.walmart.com/ip/573901012",
+      "product_id": "573901012"
+    },
+    {
+      "ordinal": 246,
+      "keyword": "Topical vitamins",
+      "name": "Hyaluronic Acid Serum (TOPICAL)",
+      "url": "https://www.walmart.com/ip/143318841",
+      "product_id": "143318841"
+    },
+    {
+      "ordinal": 247,
+      "keyword": "Topical vitamins",
+      "name": "Organic Castor Oil 100% Pure",
+      "url": "https://www.walmart.com/ip/596986661",
+      "product_id": "596986661"
+    },
+    {
+      "ordinal": 248,
+      "keyword": "Topical vitamins",
+      "name": "Skin Oil with Vitamin E",
+      "url": "https://www.walmart.com/ip/631199053",
+      "product_id": "631199053"
+    },
+    {
+      "ordinal": 249,
+      "keyword": "Topical vitamins",
+      "name": "Vitamin E Oil with Keratin",
+      "url": "https://www.walmart.com/ip/240505739",
+      "product_id": "240505739"
+    },
+    {
+      "ordinal": 250,
+      "keyword": "Topical vitamins",
+      "name": "Vitamin E Skin Oil",
+      "url": "https://www.walmart.com/ip/893210",
+      "product_id": "893210"
+    },
+    {
+      "ordinal": 251,
+      "keyword": "Combination vitamins",
+      "name": "Fast Dissolve Zinc with Vitamin C",
+      "url": "https://www.walmart.com/ip/487881975",
+      "product_id": "487881975"
+    },
+    {
+      "ordinal": 252,
+      "keyword": "Combination vitamins",
+      "name": "Immune Plus Gummies Elderberry (C + D + elderberry)",
+      "url": "https://www.walmart.com/ip/398565876",
+      "product_id": "398565876"
+    },
+    {
+      "ordinal": 253,
+      "keyword": "Echinacea vitamins",
+      "name": "Echinacea Goldenseal Blend",
+      "url": "https://www.walmart.com/ip/675692970",
+      "product_id": "675692970"
+    },
+    {
+      "ordinal": 254,
+      "keyword": "Echinacea vitamins",
+      "name": "Echinacea Herbal Liquid Extract",
+      "url": "https://www.walmart.com/ip/5144605716",
+      "product_id": "5144605716"
+    },
+    {
+      "ordinal": 255,
+      "keyword": "Echinacea vitamins",
+      "name": "Non GMO Echinacea Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/370579079",
+      "product_id": "370579079"
+    },
+    {
+      "ordinal": 256,
+      "keyword": "Elderberry vitamins",
+      "name": "Adult Elderberry Gummies",
+      "url": "https://www.walmart.com/ip/240308511",
+      "product_id": "240308511"
+    },
+    {
+      "ordinal": 257,
+      "keyword": "Elderberry vitamins",
+      "name": "Elderberry Adult Gummies",
+      "url": "https://www.walmart.com/ip/956337908",
+      "product_id": "956337908"
+    },
+    {
+      "ordinal": 258,
+      "keyword": "Elderberry vitamins",
+      "name": "Elderberry Chewable Tablets Wild Berry",
+      "url": "https://www.walmart.com/ip/402400814",
+      "product_id": "402400814"
+    },
+    {
+      "ordinal": 259,
+      "keyword": "Elderberry vitamins",
+      "name": "Kids Non GMO Elderberry Vegetarian Gummies",
+      "url": "https://www.walmart.com/ip/877082582",
+      "product_id": "877082582"
+    },
+    {
+      "ordinal": 260,
+      "keyword": "NAC vitamins",
+      "name": "NAC Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/433043856",
+      "product_id": "433043856"
+    },
+    {
+      "ordinal": 261,
+      "keyword": "NAC vitamins",
+      "name": "NAC with Selenium & Molybdenum",
+      "url": "https://www.walmart.com/ip/597075900",
+      "product_id": "597075900"
+    },
+    {
+      "ordinal": 262,
+      "keyword": "Oregano vitamins",
+      "name": "Mediterranean Oil of Oregano Extract Softgels",
+      "url": "https://www.walmart.com/ip/8591659495",
+      "product_id": "8591659495"
+    },
+    {
+      "ordinal": 263,
+      "keyword": "Oregano vitamins",
+      "name": "Mediterranean Oil of Oregano Extract Softgels",
+      "url": "https://www.walmart.com/ip/137224972",
+      "product_id": "137224972"
+    },
+    {
+      "ordinal": 264,
+      "keyword": "Quercetin vitamins",
+      "name": "Quercetin 500 mg with Zinc",
+      "url": "https://www.walmart.com/ip/702520629",
+      "product_id": "702520629"
+    },
+    {
+      "ordinal": 265,
+      "keyword": "ALCAR vitamins",
+      "name": "Acetyl L-Carnitine HCl 400 mg + Alpha Lipoic Acid 200 mg",
+      "url": "https://www.walmart.com/ip/983374345",
+      "product_id": "983374345"
+    },
+    {
+      "ordinal": 266,
+      "keyword": "Brain vitamins",
+      "name": "4-FUNCTION BRAIN SUPPORT (400mg Longvida turmeric + 635mg EPA/DHA)",
+      "url": "https://www.walmart.com/ip/13061843",
+      "product_id": "13061843"
+    },
+    {
+      "ordinal": 267,
+      "keyword": "Ginkgo vitamins",
+      "name": "Ginkgo Biloba Extract Memory Support Tablets",
+      "url": "https://www.walmart.com/ip/10324959",
+      "product_id": "10324959"
+    },
+    {
+      "ordinal": 268,
+      "keyword": "Ginkgo vitamins",
+      "name": "Ginkgo Biloba Extract Veg Capsules Memory Support",
+      "url": "https://www.walmart.com/ip/778574865",
+      "product_id": "778574865"
+    },
+    {
+      "ordinal": 269,
+      "keyword": "Ginkgo vitamins",
+      "name": "Standardized Extract Ginkgo Biloba Tablets",
+      "url": "https://www.walmart.com/ip/761468844",
+      "product_id": "761468844"
+    },
+    {
+      "ordinal": 270,
+      "keyword": "Mushroom vitamins",
+      "name": "Mushroom Complex (Reishi/Cordyceps/Lion's Mane)",
+      "url": "https://www.walmart.com/ip/2594178352",
+      "product_id": "2594178352"
+    },
+    {
+      "ordinal": 271,
+      "keyword": "Prostate vitamins",
+      "name": "Prostate + Bladder Control (saw palmetto + pumpkin seed + soy germ) OOS",
+      "url": "https://www.walmart.com/ip/901747517",
+      "product_id": "901747517"
+    },
+    {
+      "ordinal": 272,
+      "keyword": "Prostate vitamins",
+      "name": "Whole Herb Saw Palmetto Prostate Health",
+      "url": "https://www.walmart.com/ip/955050815",
+      "product_id": "955050815"
+    },
+    {
+      "ordinal": 273,
+      "keyword": "Testosterone vitamins",
+      "name": "MEN'S ULTIMATE SEXUAL HEALTH & TESTOSTERONE (Furosap)",
+      "url": "https://www.walmart.com/ip/19298217837",
+      "product_id": "19298217837"
+    },
+    {
+      "ordinal": 274,
+      "keyword": "Vitality vitamins",
+      "name": "Horny Goat Weed Complex with Maca Tribulus L-Arginine",
+      "url": "https://www.walmart.com/ip/453922224",
+      "product_id": "453922224"
+    },
+    {
+      "ordinal": 275,
+      "keyword": "Vitality vitamins",
+      "name": "Maca Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/843316669",
+      "product_id": "843316669"
+    },
+    {
+      "ordinal": 276,
+      "keyword": "Menopause vitamins",
+      "name": "Black Cohosh Menopause Support",
+      "url": "https://www.walmart.com/ip/14053315",
+      "product_id": "14053315"
+    },
+    {
+      "ordinal": 277,
+      "keyword": "Menopause vitamins",
+      "name": "Evening Primrose Oil Women's Health",
+      "url": "https://www.walmart.com/ip/10324999",
+      "product_id": "10324999"
+    },
+    {
+      "ordinal": 278,
+      "keyword": "Menopause vitamins",
+      "name": "Menopause Support with EstroG-100",
+      "url": "https://www.walmart.com/ip/19298267695",
+      "product_id": "19298267695"
+    },
+    {
+      "ordinal": 279,
+      "keyword": "Menopause vitamins",
+      "name": "Zero Sugar Complete Menopause Support Gummies",
+      "url": "https://www.walmart.com/ip/822781190",
+      "product_id": "822781190"
+    },
+    {
+      "ordinal": 280,
+      "keyword": "UTI vitamins",
+      "name": "Adult Gummy Cranberry",
+      "url": "https://www.walmart.com/ip/220002517",
+      "product_id": "220002517"
+    },
+    {
+      "ordinal": 281,
+      "keyword": "UTI vitamins",
+      "name": "Cranberry + Vitamin C Urinary Tract Support",
+      "url": "https://www.walmart.com/ip/236069946",
+      "product_id": "236069946"
+    },
+    {
+      "ordinal": 282,
+      "keyword": "UTI vitamins",
+      "name": "Cranberry Extract Urinary Tract Support",
+      "url": "https://www.walmart.com/ip/888195101",
+      "product_id": "888195101"
+    },
+    {
+      "ordinal": 283,
+      "keyword": "UTI vitamins",
+      "name": "D-MANNOSE Urinary Tract Support",
+      "url": "https://www.walmart.com/ip/606010804",
+      "product_id": "606010804"
+    },
+    {
+      "ordinal": 284,
+      "keyword": "UTI vitamins",
+      "name": "Extra Strength Cranberry (300mg 50:1 concentrate)",
+      "url": "https://www.walmart.com/ip/436756399",
+      "product_id": "436756399"
+    },
+    {
+      "ordinal": 285,
+      "keyword": "UTI vitamins",
+      "name": "Standardized Ext Cranberry Urinary Tract Health",
+      "url": "https://www.walmart.com/ip/731539365",
+      "product_id": "731539365"
+    },
+    {
+      "ordinal": 286,
+      "keyword": "GLP-1 vitamins",
+      "name": "GLP-1 SUPPORT PACK",
+      "url": "https://www.walmart.com/ip/19620550758",
+      "product_id": "19620550758"
+    },
+    {
+      "ordinal": 287,
+      "keyword": "Metabolic vitamins",
+      "name": "Advanced Formula Blood Sugar Support (500 mcg chromium)",
+      "url": "https://www.walmart.com/ip/15083853537",
+      "product_id": "15083853537"
+    },
+    {
+      "ordinal": 288,
+      "keyword": "Metabolic vitamins",
+      "name": "Apple Cider Vinegar Capsules",
+      "url": "https://www.walmart.com/ip/49929248",
+      "product_id": "49929248"
+    },
+    {
+      "ordinal": 289,
+      "keyword": "Metabolic vitamins",
+      "name": "Apple Cider Vinegar Capsules Value Size",
+      "url": "https://www.walmart.com/ip/382114592",
+      "product_id": "382114592"
+    },
+    {
+      "ordinal": 290,
+      "keyword": "Metabolic vitamins",
+      "name": "Apple Cider Vinegar Gummies",
+      "url": "https://www.walmart.com/ip/897617633",
+      "product_id": "897617633"
+    },
+    {
+      "ordinal": 291,
+      "keyword": "Metabolic vitamins",
+      "name": "Berberine Metabolism Support",
+      "url": "https://www.walmart.com/ip/5295279383",
+      "product_id": "5295279383"
+    },
+    {
+      "ordinal": 292,
+      "keyword": "Metabolic vitamins",
+      "name": "Blood Sugar Support Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/702651900",
+      "product_id": "702651900"
+    },
+    {
+      "ordinal": 293,
+      "keyword": "Metabolic vitamins",
+      "name": "Garcinia Cambogia",
+      "url": "https://www.walmart.com/ip/46342030",
+      "product_id": "46342030"
+    },
+    {
+      "ordinal": 294,
+      "keyword": "Metabolic vitamins",
+      "name": "Green Tea Standardized Extract",
+      "url": "https://www.walmart.com/ip/833809936",
+      "product_id": "833809936"
+    },
+    {
+      "ordinal": 295,
+      "keyword": "Metabolic vitamins",
+      "name": "Weight Management Gummy Chromium Picolinate Apple",
+      "url": "https://www.walmart.com/ip/528378458",
+      "product_id": "528378458"
+    },
+    {
+      "ordinal": 296,
+      "keyword": "Amino vitamins",
+      "name": "L-Arginine",
+      "url": "https://www.walmart.com/ip/11028019",
+      "product_id": "11028019"
+    },
+    {
+      "ordinal": 297,
+      "keyword": "Amino vitamins",
+      "name": "L-Arginine Value Size",
+      "url": "https://www.walmart.com/ip/460761278",
+      "product_id": "460761278"
+    },
+    {
+      "ordinal": 298,
+      "keyword": "Amino vitamins",
+      "name": "L-Carnitine",
+      "url": "https://www.walmart.com/ip/11028018",
+      "product_id": "11028018"
+    },
+    {
+      "ordinal": 299,
+      "keyword": "Amino vitamins",
+      "name": "L-Glutamine Tablets",
+      "url": "https://www.walmart.com/ip/201490594",
+      "product_id": "201490594"
+    },
+    {
+      "ordinal": 300,
+      "keyword": "Amino vitamins",
+      "name": "L-Lysine",
+      "url": "https://www.walmart.com/ip/17324899",
+      "product_id": "17324899"
+    },
+    {
+      "ordinal": 301,
+      "keyword": "Amino vitamins",
+      "name": "L-Lysine",
+      "url": "https://www.walmart.com/ip/10315363",
+      "product_id": "10315363"
+    },
+    {
+      "ordinal": 302,
+      "keyword": "Black seed vitamins",
+      "name": "Organic Cold Pressed Black Seed Oil",
+      "url": "https://www.walmart.com/ip/599137243",
+      "product_id": "599137243"
+    },
+    {
+      "ordinal": 303,
+      "keyword": "Cayenne vitamins",
+      "name": "Cayenne Capsules",
+      "url": "https://www.walmart.com/ip/10416559",
+      "product_id": "10416559"
+    },
+    {
+      "ordinal": 304,
+      "keyword": "Cinnamon vitamins",
+      "name": "Ceylon Cinnamon Veg Capsules",
+      "url": "https://www.walmart.com/ip/901727935",
+      "product_id": "901727935"
+    },
+    {
+      "ordinal": 305,
+      "keyword": "Cinnamon vitamins",
+      "name": "Cinnamon Capsules",
+      "url": "https://www.walmart.com/ip/40775782",
+      "product_id": "40775782"
+    },
+    {
+      "ordinal": 306,
+      "keyword": "Cinnamon vitamins",
+      "name": "Cinnamon Plus Chromium",
+      "url": "https://www.walmart.com/ip/182196395",
+      "product_id": "182196395"
+    },
+    {
+      "ordinal": 307,
+      "keyword": "Fenugreek vitamins",
+      "name": "Fenugreek Vegetarian Capsules",
+      "url": "https://www.walmart.com/ip/17352646",
+      "product_id": "17352646"
+    },
+    {
+      "ordinal": 308,
+      "keyword": "Ginseng vitamins",
+      "name": "Standardized Extract Korean Panax Ginseng",
+      "url": "https://www.walmart.com/ip/371018840",
+      "product_id": "371018840"
+    },
+    {
+      "ordinal": 309,
+      "keyword": "Milk thistle vitamins",
+      "name": "Standardized Extract Milk Thistle",
+      "url": "https://www.walmart.com/ip/43933360",
+      "product_id": "43933360"
+    },
+    {
+      "ordinal": 310,
+      "keyword": "Milk thistle vitamins",
+      "name": "Standardized Extract Milk Thistle Value Size",
+      "url": "https://www.walmart.com/ip/529354662",
+      "product_id": "529354662"
+    },
+    {
+      "ordinal": 311,
+      "keyword": "Turmeric vitamins",
+      "name": "Extra Strength Turmeric Curcumin Complex Softgels",
+      "url": "https://www.walmart.com/ip/445344850",
+      "product_id": "445344850"
+    },
+    {
+      "ordinal": 312,
+      "keyword": "Turmeric vitamins",
+      "name": "Turmeric Capsules",
+      "url": "https://www.walmart.com/ip/361798894",
+      "product_id": "361798894"
+    },
+    {
+      "ordinal": 313,
+      "keyword": "Turmeric vitamins",
+      "name": "Turmeric Curcumin Complex with CurcuWIN",
+      "url": "https://www.walmart.com/ip/117811721",
+      "product_id": "117811721"
+    },
+    {
+      "ordinal": 314,
+      "keyword": "Turmeric vitamins",
+      "name": "Turmeric Curcumin with Ginger Powder",
+      "url": "https://www.walmart.com/ip/55837098",
+      "product_id": "55837098"
+    },
+    {
+      "ordinal": 315,
+      "keyword": "Turmeric vitamins",
+      "name": "Turmeric Curcumin with Ginger Powder",
+      "url": "https://www.walmart.com/ip/525771648",
+      "product_id": "525771648"
+    },
+    {
+      "ordinal": 316,
+      "keyword": "Turmeric vitamins",
+      "name": "Turmeric Curcumin with Ginger Powder",
+      "url": "https://www.walmart.com/ip/430711181",
+      "product_id": "430711181"
+    },
+    {
+      "ordinal": 317,
+      "keyword": "Turmeric vitamins",
+      "name": "Ultra Strength Turmeric Curcumin (BioPerine)",
+      "url": "https://www.walmart.com/ip/683535729",
+      "product_id": "683535729"
+    },
+    {
+      "ordinal": 318,
+      "keyword": "Turmeric vitamins",
+      "name": "Whole Herb Turmeric Curcumin",
+      "url": "https://www.walmart.com/ip/11047686",
+      "product_id": "11047686"
+    },
+    {
+      "ordinal": 319,
+      "keyword": "Valerian vitamins",
+      "name": "Valerian Root Capsules",
+      "url": "https://www.walmart.com/ip/654159730",
+      "product_id": "654159730"
+    },
+    {
+      "ordinal": 320,
+      "keyword": "5-HTP vitamins",
+      "name": "5-HTP Capsules",
+      "url": "https://www.walmart.com/ip/24547751",
+      "product_id": "24547751"
+    },
+    {
+      "ordinal": 321,
+      "keyword": "ALA vitamins",
+      "name": "Alpha Lipoic Acid",
+      "url": "https://www.walmart.com/ip/10316850",
+      "product_id": "10316850"
+    },
+    {
+      "ordinal": 322,
+      "keyword": "Beet vitamins",
+      "name": "Beet Root",
+      "url": "https://www.walmart.com/ip/191721633",
+      "product_id": "191721633"
+    }
+  ]
+}
