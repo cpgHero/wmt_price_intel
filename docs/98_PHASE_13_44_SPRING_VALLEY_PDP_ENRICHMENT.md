@@ -19,7 +19,18 @@ The final production estimate re-read the immutable live Search artifacts and ex
 | Approved dollar ceiling | $15.00 |
 | Raw Search checksum failures | 0 |
 
-Durable Product Details run `9e03fc83-8e2f-4700-9464-d951021ebac7` contains all 2,431 qualified jobs. It is active in the production worker and continues independently from the administrator console.
+Durable Product Details run `9e03fc83-8e2f-4700-9464-d951021ebac7` completed with errors on August 23, 2026:
+
+| Final result | Count |
+|---|---:|
+| Normalized HTTP 200 products | 1,816 |
+| Explicit failed products | 615 |
+| Actual credits | 4,578 |
+| Actual provider cost | $9.156 |
+
+Amazon Same Day, Costco, Kroger, Sam's Club, and Walmart completed without a failed product. Meijer retained eight non-billable timeouts, Target retained two billable 404s, BJ's retained 56 billable 404s, CVS retained 178 billable 404s, and Walgreens returned 371 non-billable HTTP 400 responses.
+
+A controlled Walgreens diagnostic identified a contract-context defect: live Search described the offer as `SFS`, while MetricsCart's Walgreens PDP route requires `fulfillment_type=pickup`. The identical product ID `300391652`, ZIP `43230`, and store `9093` returned HTTP 200 when only fulfillment changed to `pickup`. The diagnostic consumed two credits ($0.004) within the existing owner-approved ceiling.
 
 ## Governing Source Runs
 
@@ -43,6 +54,8 @@ The live launcher:
 8. refuses a duplicate launch when the same request checksum is already queued or running; and
 9. relies on the durable Postgres queue, leases, retries, cancellation, and per-retailer shared rate limiter for execution.
 
+The corrective release adds catalog-level fixed parameters, so provider-required request values override incompatible observation vocabulary without a retailer branch in the engine. It also claims jobs fairly across retailers within priority and raises default batch concurrency to 18. Each retailer retains its independent globally shared 3-request-per-second and 180-request-per-minute ceiling.
+
 No AI task is created by this phase.
 
 ## Current Limitation
@@ -60,4 +73,3 @@ Before Matching v2 candidate generation begins, the completed run must be reconc
 - summarize PDP field completeness and unmapped schema evidence;
 - extract governed supplement specifications, unit-price inputs, markdown evidence, and certification evidence; and
 - keep unresolved identity or seller evidence visible rather than silently coercing it.
-

@@ -56,6 +56,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--product-pack-version", default="1.0.2")
     parser.add_argument(
+        "--retailer-id",
+        action="append",
+        dest="retailer_ids",
+        help="Restrict audit and paid launch to one or more retailer IDs.",
+    )
+    parser.add_argument(
         "--repository-root", type=Path, default=Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd()))
     )
     parser.add_argument(
@@ -231,10 +237,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         observations_by_product: dict[tuple[str, str], dict[str, Any]] = {}
         admitted_products: dict[tuple[str, str], dict[str, Any]] = {}
         checksum_failures: list[str] = []
+        selected_retailers = set(args.retailer_ids or [])
 
         for raw_row in task_rows:
             row = dict(raw_row)
             retailer_id = str(row["retailer_id"])
+            if selected_retailers and retailer_id not in selected_retailers:
+                continue
             status = str(row["status"])
             task_status[retailer_id][status] += 1
             if row["http_status"] is not None:
@@ -493,6 +502,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             "schema_version": "1.0.0",
             "generated_at": datetime.now(UTC).isoformat(),
             "run_ids": list(args.run_ids),
+            "retailer_filter": sorted(set(args.retailer_ids or [])),
             "product_pack": {"id": pack.id, "version": pack.version, "checksum": pack.checksum},
             "checks": {
                 "raw_artifact_checksum_failures": checksum_failures,

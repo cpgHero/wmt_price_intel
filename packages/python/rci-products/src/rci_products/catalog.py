@@ -44,6 +44,12 @@ class ProductDetailCatalog:
                         for name, parameter_value in value.get("default_params", {}).items()
                     )
                 ),
+                fixed_params=tuple(
+                    sorted(
+                        (str(name), str(parameter_value))
+                        for name, parameter_value in value.get("fixed_params", {}).items()
+                    )
+                ),
                 identity_param=(
                     cast(
                         Literal["product_id", "url"],

@@ -118,6 +118,19 @@
               "shopping_type": { "type": "string", "minLength": 1 }
             }
           },
+          "fixed_params": {
+            "description": "Provider-required values that override observation terminology.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "url": { "type": "string", "minLength": 1 },
+              "product_id": { "type": "string", "minLength": 1 },
+              "zipcode": { "type": "string", "minLength": 1 },
+              "store": { "type": "string", "minLength": 1 },
+              "fulfillment_type": { "type": "string", "minLength": 1 },
+              "shopping_type": { "type": "string", "minLength": 1 }
+            }
+          },
           "identity_param": {
             "enum": ["product_id", "url"]
           },

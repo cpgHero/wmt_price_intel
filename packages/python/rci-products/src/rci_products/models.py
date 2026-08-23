@@ -35,16 +35,20 @@ class ProductDetailEndpoint:
     supported_params: tuple[str, ...]
     contract_version: str = "1.0.0"
     default_params: tuple[tuple[str, str], ...] = ()
+    fixed_params: tuple[tuple[str, str], ...] = ()
     identity_param: Literal["product_id", "url"] | None = None
     product_id_left_pad_width: int | None = None
 
     def defaults(self) -> JsonObject:
         return dict(self.default_params)
 
+    def fixed(self) -> JsonObject:
+        return dict(self.fixed_params)
+
     def request_parameters(self, parameters: JsonObject) -> JsonObject:
         """Apply the versioned retailer contract without retailer branches."""
 
-        supplied = {**self.defaults(), **parameters}
+        supplied = {**self.defaults(), **parameters, **self.fixed()}
         requested = {
             name: supplied[name]
             for name in self.supported_params

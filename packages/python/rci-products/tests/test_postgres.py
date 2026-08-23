@@ -200,3 +200,66 @@ async def test_postgres_queue_cache_budget_and_identity_are_replica_safe() -> No
                 {"product_id": product.id},
             )
         await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Product Details Postgres integration",
+)
+async def test_postgres_queue_claims_one_job_per_retailer_before_second_jobs() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    repository = PostgresProductDetailRepository(database.engine, REPOSITORY_ROOT)
+    unique = uuid4().hex
+    run = await repository.create_run(max_credits=10)
+    products = []
+    try:
+        for retailer_id in ("walmart_us", "kroger_us", "walgreens_us"):
+            endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)
+            for index in range(2):
+                retailer_product_id = f"fair-{unique}-{retailer_id}-{index}"
+                product = await repository.upsert_serp_product(
+                    retailer_id=retailer_id,
+                    retailer_product_id=retailer_product_id,
+                    name=f"Fair queue {retailer_id} {index}",
+                    brand=None,
+                    url=f"https://example.test/{retailer_product_id}",
+                    image_primary=None,
+                    identifiers={"product_id": retailer_product_id},
+                    context={"source": "queue_fairness_test"},
+                )
+                products.append(product)
+                await repository.enqueue(
+                    run.id,
+                    product,
+                    endpoint,
+                    ProductDetailRequestContext(
+                        product_id=retailer_product_id,
+                        zipcode=f"4308{index}",
+                        store=f"store-{index}",
+                        fulfillment_type="SFS" if retailer_id == "walgreens_us" else "pickup",
+                    ),
+                )
+
+        claimed = await repository.claim("fair-worker", limit=3, lease_seconds=30)
+
+        assert len(claimed) == 3
+        assert {job.retailer_id for job in claimed} == {
+            "walmart_us",
+            "kroger_us",
+            "walgreens_us",
+        }
+    finally:
+        async with database.engine.begin() as connection:
+            await connection.execute(
+                text("DELETE FROM audit_event WHERE entity_id = :run_id"),
+                {"run_id": run.id},
+            )
+            await connection.execute(
+                text("DELETE FROM product_detail_enrichment_run WHERE id::text = :run_id"),
+                {"run_id": run.id},
+            )
+            await connection.execute(
+                text("DELETE FROM canonical_product WHERE id = ANY(CAST(:ids AS uuid[]))"),
+                {"ids": [product.id for product in products]},
+            )
+        await database.dispose()

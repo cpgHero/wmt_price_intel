@@ -495,6 +495,21 @@ def test_spring_valley_retailer_pdp_catalog_uses_supplied_metricscart_contracts(
         assert request.params["product_id"] == product_id
 
 
+def test_walgreens_contract_overrides_search_sfs_with_required_pickup() -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walgreens_us")
+    context = ProductDetailRequestContext(
+        product_id="300391652",
+        zipcode="43230",
+        store="9093",
+        fulfillment_type="SFS",
+    )
+
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
+
+    assert request.params["fulfillment_type"] == "pickup"
+    assert context.cache_identity(endpoint)["fulfillment_type"] == "pickup"
+
+
 @pytest.mark.parametrize("retailer_id", ["target_us", "sams_club_us"])
 def test_url_only_contract_rejects_product_id_without_url(retailer_id: str) -> None:
     endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)

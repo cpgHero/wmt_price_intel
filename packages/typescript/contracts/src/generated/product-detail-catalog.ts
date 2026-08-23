@@ -36,6 +36,17 @@ export interface MetricsCartProductDetailCatalog {
         fulfillment_type?: string;
         shopping_type?: string;
       };
+      /**
+       * Provider-required values that override observation terminology.
+       */
+      fixed_params?: {
+        url?: string;
+        product_id?: string;
+        zipcode?: string;
+        store?: string;
+        fulfillment_type?: string;
+        shopping_type?: string;
+      };
       identity_param?: "product_id" | "url";
       product_id_left_pad_width?: number;
     },
@@ -58,6 +69,17 @@ export interface MetricsCartProductDetailCatalog {
         ...("url" | "product_id" | "zipcode" | "store" | "fulfillment_type" | "shopping_type")[]
       ];
       default_params?: {
+        url?: string;
+        product_id?: string;
+        zipcode?: string;
+        store?: string;
+        fulfillment_type?: string;
+        shopping_type?: string;
+      };
+      /**
+       * Provider-required values that override observation terminology.
+       */
+      fixed_params?: {
         url?: string;
         product_id?: string;
         zipcode?: string;

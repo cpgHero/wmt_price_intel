@@ -524,8 +524,12 @@ class PostgresProductDetailRepository:
                     await connection.execute(
                         text(
                             """
-                            WITH candidates AS (
-                              SELECT j.id
+                            WITH ranked AS (
+                              SELECT j.id, j.retailer_id, j.priority, j.created_at,
+                                row_number() OVER (
+                                  PARTITION BY j.retailer_id, j.priority
+                                  ORDER BY j.created_at, j.id
+                                ) AS retailer_rank
                               FROM product_detail_job j
                               JOIN product_detail_enrichment_run r
                                 ON r.id = j.enrichment_run_id
@@ -533,7 +537,12 @@ class PostgresProductDetailRepository:
                                 (j.status = 'queued' AND j.available_at <= now()) OR
                                 (j.status = 'running' AND j.lease_expires_at <= now())
                               ) AND j.attempt_count < j.max_attempts
-                              ORDER BY j.priority, j.created_at, j.id
+                            ), candidates AS (
+                              SELECT j.id
+                              FROM product_detail_job j
+                              JOIN ranked candidate ON candidate.id = j.id
+                              ORDER BY candidate.priority, candidate.retailer_rank,
+                                candidate.created_at, candidate.id
                               FOR UPDATE OF j SKIP LOCKED
                               LIMIT :limit
                             ), updated AS (

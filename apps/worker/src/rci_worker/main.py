@@ -336,7 +336,7 @@ async def run() -> None:
             PostgresProductDetailRepository(database.engine, repository_root),
             product_detail_client,
             worker_id=f"{worker_id}-pdp",
-            claim_limit=int(os.getenv("PRODUCT_DETAIL_CLAIM_LIMIT", "1")),
+            claim_limit=int(os.getenv("PRODUCT_DETAIL_CLAIM_LIMIT", "18")),
             lease_seconds=int(os.getenv("PRODUCT_DETAIL_LEASE_SECONDS", "300")),
             cache_ttl_seconds=int(
                 os.getenv(

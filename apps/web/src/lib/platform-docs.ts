@@ -518,7 +518,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Add a targeted location sample only for contradictory identity evidence or a separately governed diagnostic; a price difference alone never changes Search price authority.",
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
             "Live Search PDP launches convert the owner-approved USD ceiling to an integer credit ceiling at $0.002 per credit, fail closed when the qualified plan exceeds it, and refuse to create duplicate work when the same governed request is already queued or running.",
-            "Validate retailer-specific parameters from the versioned endpoint catalog. Pickup and ShopRite shopping defaults are configuration, not category code.",
+            "Validate retailer-specific parameters from the versioned endpoint catalog. Catalog fixed parameters override incompatible Search terminology; for example, Walgreens Search SFS evidence is retained while its PDP contract always sends pickup. This is configuration, not category code.",
+            "PDP workers claim jobs fairly across retailers within each priority and run up to 18 jobs concurrently by default. The shared Postgres limiter still enforces 3 requests per second and 180 per minute independently for each retailer across every replica.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
             "Audit PDP completeness separately from schema coverage. Zero unmapped fields means the provider payload was mapped; it does not mean every product supplied brand, identifiers, package specifications, descriptions, or multiple usable images.",
           ],
@@ -1604,6 +1605,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-23",
+              "Implemented and test-verified; production recovery pending",
+              "Product Details contracts gained fixed request parameters and retailer-fair parallel queue claiming.",
+              "A controlled Walgreens diagnostic proved that the historical SFS request context produced HTTP 400 while the same observed product, store, and ZIP returned HTTP 200 with fulfillment_type=pickup. The catalog now fixes provider-required parameters after observation values, preserving Search fulfillment as evidence without sending it to an incompatible PDP contract. Queue claims round-robin retailers within priority and the default claim concurrency rises from one to 18; the shared Postgres retailer/type limiter, credit ceiling, SKIP LOCKED claims, leases, retries, cancellation, and idempotency remain authoritative. The initial Spring Valley run completed 1,816 successes and 615 explicit failures for 4,578 credits ($9.156), below its $15 ceiling. No AI call was made.",
+            ],
             [
               "2026-08-23",
               "Deployed, owner-approved, and actively processing",
