@@ -32,14 +32,14 @@ Live Search-by-ZIP collections can now produce the same exhaustive, governed Mat
 ## Spring Valley production scope
 
 - Search runs: `e962ced9-9e83-4cf3-b5f2-2cf514009ae3` and `3093b480-d633-4f61-af47-ba499a355bb9`
-- Product Pack: `vitamins_supplements@1.0.4`
+- Product Pack: `vitamins_supplements@1.0.5`
 - Benchmark: Walmart (Spring Valley allowlist only)
 - Competitors: Amazon Same Day, Target, Costco, Sam's Club, Kroger, Walgreens, CVS, Meijer, and BJ's
-- Intended queue version: `2026.08.23-spring-valley-3`
+- Intended queue version: `2026.08.23-spring-valley-4`
 
 Meijer remains explicitly partial because 45 of its 85 Search pages were unavailable. PDP evidence cannot infer missing assortment observations.
 
-Two pre-import diagnostics were rejected. The first empty queue exposed over-strict active-ingredient handling. The second produced 40,162 unresolved pairs because a title fallback mislabeled the entire title as the active ingredient and geography alone admitted too many unknown-attribute combinations. Neither diagnostic became an authoritative queue. Product Pack 1.0.4 removes that false field, makes structured PDP specification fields generically available to declared `raw.*` sources, and adds checksum-bound lexical top-K candidate retrieval. Import remains blocked until the replacement volume and representative cases pass audit.
+Three pre-import diagnostics were rejected. The first empty queue exposed over-strict active-ingredient handling. The second produced 40,162 unresolved pairs because a title fallback mislabeled the entire title as the active ingredient and geography alone admitted too many unknown-attribute combinations. The third reduced the funnel to 2,243, but representative sampling found numeric and dosage-form noise admitting implausible pairs. None became an authoritative queue. Product Pack 1.0.5 removes that false field, makes structured PDP specification fields generically available to declared `raw.*` sources, and bounds checksum-governed lexical retrieval to five identity-oriented candidates per Walmart product and retailer. Import remains blocked until the replacement volume and representative cases pass audit.
 
 ## Human and reporting gates
 

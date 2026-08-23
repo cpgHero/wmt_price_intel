@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -252,7 +252,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.0.0-shadow.3",
+    "policy_version": "1.0.0-shadow.4",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "soft_comparator", "critical": true, "weight": 10},
@@ -289,7 +289,7 @@
     },
     "candidate_retrieval": {
       "mode": "lexical_top_k",
-      "maximum_per_benchmark": 8,
+      "maximum_per_benchmark": 5,
       "minimum_similarity": 0.05,
       "stop_words": [
         "spring",
@@ -320,7 +320,37 @@
         "pack",
         "daily",
         "adult",
-        "adults"
+        "adults",
+        "vitamin",
+        "vitamins",
+        "caplet",
+        "caplets",
+        "chewable",
+        "chewables",
+        "vegetarian",
+        "vegan",
+        "formula",
+        "strength",
+        "maximum",
+        "extra",
+        "rapid",
+        "release",
+        "timed",
+        "high",
+        "potency",
+        "coated",
+        "fl",
+        "oz",
+        "serving",
+        "servings",
+        "per",
+        "of",
+        "to",
+        "from",
+        "in",
+        "on",
+        "as",
+        "by"
       ]
     }
   },
@@ -704,7 +734,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.4"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.5"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

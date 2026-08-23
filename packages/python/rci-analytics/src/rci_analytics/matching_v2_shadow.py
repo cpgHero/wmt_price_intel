@@ -692,17 +692,25 @@ class MatchingShadowEvaluatorV2:
 
 def _candidate_tokens(listing: ListingEvidence, stop_words: tuple[str, ...]) -> set[str]:
     text_values = [listing.title or ""]
-    for name in ("active_ingredient", "strength", "strength_unit", "dosage_form"):
+    for name in ("active_ingredient",):
         value = listing.attributes.get(name)
         if value is not None and value.value is not None and value.review_status != "conflicted":
             text_values.append(str(value.value))
     tokens = re.findall(r"[a-z0-9]+", " ".join(text_values).casefold())
     ignored = set(stop_words)
-    unigrams = [token for token in tokens if token not in ignored]
+
+    def usable(token: str) -> bool:
+        return not token.isdigit()
+
+    unigrams = [
+        token for token in tokens if token not in ignored and usable(token) and len(token) >= 2
+    ]
     bigrams = [
         f"{tokens[index]}_{tokens[index + 1]}"
         for index in range(len(tokens) - 1)
-        if tokens[index] not in ignored or tokens[index + 1] not in ignored
+        if usable(tokens[index])
+        and usable(tokens[index + 1])
+        and (tokens[index] not in ignored or tokens[index + 1] not in ignored)
     ]
     return {*unigrams, *bigrams}
 
