@@ -213,7 +213,7 @@ async def test_postgres_queue_claims_one_job_per_retailer_before_second_jobs() -
     run = await repository.create_run(max_credits=10)
     products = []
     try:
-        for retailer_id in ("walmart_us", "kroger_us", "walgreens_us"):
+        for retailer_id in ("walmart_us", "kroger_us", "target_us"):
             endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)
             for index in range(2):
                 retailer_product_id = f"fair-{unique}-{retailer_id}-{index}"
@@ -236,7 +236,12 @@ async def test_postgres_queue_claims_one_job_per_retailer_before_second_jobs() -
                         product_id=retailer_product_id,
                         zipcode=f"4308{index}",
                         store=f"store-{index}",
-                        fulfillment_type="SFS" if retailer_id == "walgreens_us" else "pickup",
+                        fulfillment_type="pickup",
+                        url=(
+                            f"https://example.test/{retailer_product_id}"
+                            if retailer_id == "target_us"
+                            else None
+                        ),
                     ),
                 )
 
@@ -246,7 +251,7 @@ async def test_postgres_queue_claims_one_job_per_retailer_before_second_jobs() -
         assert {job.retailer_id for job in claimed} == {
             "walmart_us",
             "kroger_us",
-            "walgreens_us",
+            "target_us",
         }
     finally:
         async with database.engine.begin() as connection:
