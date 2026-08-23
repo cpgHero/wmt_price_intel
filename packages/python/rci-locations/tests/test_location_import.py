@@ -101,6 +101,19 @@ def test_provider_safe_store_identifiers_are_collection_eligible() -> None:
     assert aldi.collection_eligible
     assert aldi.collection_eligibility_reason is None
 
+    for provider, expected_retailer in (
+        ("BJS", "bjs_us"),
+        ("Costco", "costco_us"),
+        ("CVS", "cvs_us"),
+        ("Walgreens", "walgreens_us"),
+    ):
+        location, _ = transform_row(
+            _row(Provider=provider, Store_No="1234", Zip_Code="43219"),
+            catalog,
+        )
+        assert location.retailer_id == expected_retailer
+        assert location.collection_eligible
+
 
 def test_provider_unsafe_store_identifiers_remain_auditable_but_ineligible() -> None:
     catalog = RetailerCatalog.from_path(CATALOG_PATH)
@@ -189,6 +202,10 @@ async def test_complete_supplied_location_master_is_country_scoped() -> None:
     assert repository.collection_eligible_counts["albertsons_us"] == 376
     assert repository.collection_eligible_counts["wegmans_us"] == 114
     assert repository.collection_eligible_counts["target_us"] == 2023
+    assert repository.collection_eligible_counts["bjs_us"] == 286
+    assert repository.collection_eligible_counts["costco_us"] == 652
+    assert repository.collection_eligible_counts["cvs_us"] == 9841
+    assert repository.collection_eligible_counts["walgreens_us"] == 8980
     assert repository.collection_eligible_counts["target__au"] == 0
     assert repository.collection_eligible_counts["target__unknown"] == 0
     assert "03500995" in repository.kroger_store_numbers

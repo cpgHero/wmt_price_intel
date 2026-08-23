@@ -52,6 +52,26 @@ def _strings(value: Any) -> list[str]:
     return [str(item) for item in value]
 
 
+def _query_keywords(query: JsonObject) -> list[str]:
+    raw_values = query.get("keywords")
+    if raw_values is None:
+        raw_values = [query.get("keyword")]
+    if not isinstance(raw_values, list):
+        raise ValueError("query keywords must be an array")
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        keyword = str(raw or "").strip()
+        if not keyword:
+            raise ValueError("query keywords cannot be blank")
+        if keyword not in seen:
+            seen.add(keyword)
+            keywords.append(keyword)
+    if not keywords:
+        raise ValueError("at least one query keyword is required")
+    return keywords
+
+
 def _deduplicated_zipcodes(rows: Iterable[LocationUnit]) -> list[str]:
     return sorted({row.zipcode for row in rows if row.zipcode})
 
@@ -74,6 +94,7 @@ class CollectionPlanner:
         geography = _object(config.get("geography"), "geography")
         pagination = _object(config.get("pagination"), "pagination")
         query = _object(config.get("query"), "query")
+        keywords = _query_keywords(query)
         retailers = [
             item
             for item in _objects(config.get("retailers"), "retailers")
@@ -175,6 +196,7 @@ class CollectionPlanner:
                         unit,
                         retailer,
                         query,
+                        keyword,
                         max_pages,
                         stop_on_empty,
                         stop_on_short_page,
@@ -183,6 +205,7 @@ class CollectionPlanner:
                     )
                     for unit in location_units
                     if unit.zipcode is not None
+                    for keyword in keywords
                 ]
             elif capability.location_dimension == "zipcode":
                 zipcodes = self._select_zip_units(
@@ -200,6 +223,7 @@ class CollectionPlanner:
                         zipcode,
                         retailer,
                         query,
+                        keyword,
                         max_pages,
                         stop_on_empty,
                         stop_on_short_page,
@@ -207,6 +231,7 @@ class CollectionPlanner:
                         self._max_attempts,
                     )
                     for zipcode in zipcodes
+                    for keyword in keywords
                 ]
             else:
                 raise ValueError(
@@ -214,8 +239,12 @@ class CollectionPlanner:
                     f"{capability.location_dimension!r}"
                 )
 
-            location_count = len(tasks)
-            estimated_pages = location_count * max_pages
+            location_count = (
+                len(location_units)
+                if capability.location_dimension == "store_zip"
+                else len(zipcodes)
+            )
+            estimated_pages = len(tasks) * max_pages
             estimated_credits = estimated_pages * capability.credits_per_successful_page
             estimates.append(
                 RetailerEstimate(
@@ -338,13 +367,14 @@ class CollectionPlanner:
         retailer: JsonObject,
         query: JsonObject,
         *,
+        keyword: str,
         zipcode: str,
         store_number: str | None,
     ) -> JsonObject:
         return {
             "retailer_id": str(retailer["retailer_id"]),
             "adapter_id": str(retailer["adapter_id"]),
-            "keyword": str(query["keyword"]),
+            "keyword": keyword,
             "amazon_same_day_url_template": query.get("amazon_same_day_url_template"),
             "zipcode": zipcode,
             "store_number": store_number,
@@ -359,6 +389,7 @@ class CollectionPlanner:
         unit: LocationUnit,
         retailer: JsonObject,
         query: JsonObject,
+        keyword: str,
         max_pages: int,
         stop_on_empty: bool,
         stop_on_short_page: bool,
@@ -367,7 +398,11 @@ class CollectionPlanner:
     ) -> TaskSeed:
         assert unit.zipcode is not None
         payload = cls._base_payload(
-            retailer, query, zipcode=unit.zipcode, store_number=unit.store_number
+            retailer,
+            query,
+            keyword=keyword,
+            zipcode=unit.zipcode,
+            store_number=unit.store_number,
         )
         return TaskSeed(
             retailer_id=str(retailer["retailer_id"]),
@@ -392,13 +427,16 @@ class CollectionPlanner:
         zipcode: str,
         retailer: JsonObject,
         query: JsonObject,
+        keyword: str,
         max_pages: int,
         stop_on_empty: bool,
         stop_on_short_page: bool,
         credits_per_success: int,
         max_attempts: int,
     ) -> TaskSeed:
-        payload = cls._base_payload(retailer, query, zipcode=zipcode, store_number=None)
+        payload = cls._base_payload(
+            retailer, query, keyword=keyword, zipcode=zipcode, store_number=None
+        )
         return TaskSeed(
             retailer_id=str(retailer["retailer_id"]),
             retailer_location_id=None,

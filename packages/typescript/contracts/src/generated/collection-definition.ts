@@ -19,6 +19,11 @@ export type RetailCompetitiveIntelligenceCollectionDefinition = {
   } | null;
   query: {
     keyword: string;
+    /**
+     * @minItems 1
+     * @maxItems 500
+     */
+    keywords?: [string, ...string[]];
     amazon_same_day_url_template?: string | null;
     notes?: string | null;
   };

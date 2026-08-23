@@ -1,0 +1,376 @@
+{
+  "id": "vitamins_supplements",
+  "name": "Vitamins & Supplements",
+  "version": "1.0.0",
+  "category_family": "health_wellness",
+  "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
+  "scope": {
+    "target_terms": ["vitamin", "supplement", "mineral", "amino acid"],
+    "include": ["oral vitamins, minerals, amino acids, botanicals, and dietary supplements"],
+    "exclude": [
+      "food and beverages",
+      "skin care and cosmetics",
+      "pet supplements",
+      "empty organizers and accessories",
+      "books and digital content"
+    ],
+    "hard_exclusion_patterns": [
+      "vitamin water",
+      "energy drink",
+      "body wash",
+      "face serum",
+      "skin cleanser",
+      "shampoo",
+      "pet vitamin",
+      "dog supplement",
+      "pill organizer",
+      "empty capsule",
+      "paperback",
+      "ebook"
+    ],
+    "availability_policy": "search_presence",
+    "require_positive_price": true
+  },
+  "attributes": [
+    {
+      "name": "active_ingredient",
+      "label": "Active ingredient",
+      "data_type": "string",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": ["retailer_field", "title_rule", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "field", "sources": ["raw.active_ingredient", "raw.ingredients", "title"]}
+      ]
+    },
+    {
+      "name": "strength",
+      "label": "Labeled strength",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {
+          "type": "number_pattern",
+          "sources": ["title", "raw.description_short", "raw.description_full"],
+          "patterns": ["(?:^|\\s)([0-9]+(?:\\.[0-9]+)?)\\s*(?:mcg|mg|g|iu|cfu|mEq)\\b"],
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "strength_unit",
+      "label": "Strength unit",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": ["mcg", "mg", "g", "IU", "CFU", "mEq", "Other", "Unknown"],
+      "unknown_values": ["Unknown"],
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "mcg": ["mcg", "microgram"],
+            "mg": ["mg", "milligram"],
+            "g": [" gram", "grams"],
+            "IU": ["iu", "international unit"],
+            "CFU": ["cfu"],
+            "mEq": ["meq"]
+          },
+          "default": "Unknown"
+        }
+      ]
+    },
+    {
+      "name": "dosage_form",
+      "label": "Dosage form",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": true,
+      "allowed_values": ["Tablet", "Capsule", "Softgel", "Gummy", "Liquid", "Powder", "Chewable", "Other", "Unknown"],
+      "unknown_values": ["Unknown"],
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {
+          "type": "term_map",
+          "values": {
+            "Tablet": ["tablet", "tablets", "caplet", "caplets"],
+            "Capsule": ["capsule", "capsules"],
+            "Softgel": ["softgel", "softgels"],
+            "Gummy": ["gummy", "gummies"],
+            "Liquid": ["liquid", "drops", "tincture"],
+            "Powder": ["powder"],
+            "Chewable": ["chewable", "chewables"]
+          },
+          "default": "Unknown"
+        }
+      ]
+    },
+    {
+      "name": "package_count",
+      "label": "Package count",
+      "data_type": "number",
+      "role": "matching",
+      "required_for_strict": true,
+      "unit": "each",
+      "unknown_policy": "reject_strict",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "measurement", "units": {"count": 1, "ct": 1, "tablet": 1, "capsule": 1, "softgel": 1, "gummy": 1, "each": 1}}
+      ]
+    },
+    {
+      "name": "servings_per_container",
+      "label": "Servings per container",
+      "data_type": "number",
+      "role": "normalization",
+      "required_for_strict": false,
+      "unit": "serving",
+      "unknown_policy": "review",
+      "extractors": ["retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "number_pattern", "sources": ["raw.description_short", "raw.description_full", "raw.specification"], "patterns": ["([0-9]+(?:\\.[0-9]+)?)\\s+servings?\\s+per\\s+container"], "group": 1}
+      ]
+    },
+    {
+      "name": "release_profile",
+      "label": "Release profile",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": false,
+      "allowed_values": ["Standard", "Extended Release", "Timed Release", "Fast Acting", "Unknown"],
+      "unknown_values": ["Unknown"],
+      "unknown_policy": "review",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "term_map", "values": {"Extended Release": ["extended release", "sustained release"], "Timed Release": ["time release", "timed release"], "Fast Acting": ["fast acting", "fast-acting"]}, "default": "Standard"}
+      ]
+    },
+    {
+      "name": "life_stage",
+      "label": "Life stage / audience",
+      "data_type": "enum",
+      "role": "matching",
+      "required_for_strict": false,
+      "allowed_values": ["Adult", "Children", "Prenatal", "Men", "Women", "Senior", "General", "Unknown"],
+      "unknown_values": ["Unknown"],
+      "unknown_policy": "review",
+      "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "term_map", "values": {"Children": ["children", "kids"], "Prenatal": ["prenatal"], "Men": ["men's", "for men"], "Women": ["women's", "for women"], "Senior": ["senior", "50+"], "Adult": ["adult"]}, "default": "General"}
+      ]
+    },
+    {
+      "name": "certifications",
+      "label": "Verified certifications",
+      "data_type": "array",
+      "role": "reporting",
+      "required_for_strict": false,
+      "unknown_policy": "review",
+      "extractors": ["retailer_field", "ai_fallback", "manual"],
+      "extraction_rules": [
+        {"type": "field", "sources": ["raw.certifications", "raw.specification", "raw.description_full"]}
+      ]
+    },
+    {
+      "name": "brand",
+      "label": "Brand",
+      "data_type": "string",
+      "role": "identity",
+      "required_for_strict": false,
+      "unknown_policy": "not_applicable",
+      "extractors": ["retailer_field", "title_rule"],
+      "extraction_rules": [{"type": "field", "sources": ["brand"]}]
+    }
+  ],
+  "normalization": {
+    "primary_display_metric": "package_price",
+    "secondary_metrics": ["price_per_item", "price_per_serving"],
+    "conversion_rules": [
+      {"from": "package_count", "to": "price_per_item", "formula": "price / package_count"},
+      {"from": "servings_per_container", "to": "price_per_serving", "formula": "price / servings_per_container"}
+    ],
+    "forbidden_metrics": [],
+    "package_equivalence_policy": "exact_package_first"
+  },
+  "matching_profiles": [
+    {
+      "id": "exact_spec",
+      "label": "Exact specification",
+      "geography": "radius",
+      "radius_miles": 5,
+      "dimensions": ["active_ingredient", "strength", "strength_unit", "dosage_form", "package_count", "release_profile", "life_stage"],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "reject",
+      "price_selection": "lowest_positive",
+      "comparison_metric": "package_price"
+    },
+    {
+      "id": "compatible_spec",
+      "label": "Compatible specification",
+      "geography": "radius",
+      "radius_miles": 5,
+      "dimensions": ["active_ingredient", "strength", "strength_unit", "dosage_form", "release_profile", "life_stage"],
+      "brand_policy": "ignore_brand",
+      "unknown_policy": "wildcard_if_one_unknown",
+      "wildcard_dimensions": ["release_profile", "life_stage"],
+      "price_selection": "lowest_positive",
+      "comparison_metric": "price_per_item"
+    }
+  ],
+  "matching_v2": {
+    "policy_version": "1.0.0-shadow.1",
+    "certification_state": "shadow",
+    "attribute_roles": {
+      "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 8},
+      "strength": {"role": "hard_blocker", "critical": true, "weight": 8, "numeric_tolerance": 0},
+      "strength_unit": {"role": "hard_blocker", "critical": true, "weight": 8},
+      "dosage_form": {"role": "hard_blocker", "critical": true, "weight": 6},
+      "package_count": {"role": "soft_comparator", "critical": true, "weight": 4, "numeric_tolerance": 0},
+      "servings_per_container": {"role": "soft_comparator", "critical": false, "weight": 3, "numeric_tolerance": 0},
+      "release_profile": {"role": "hard_blocker", "critical": false, "weight": 4, "unknown_is_blocking": false},
+      "life_stage": {"role": "soft_comparator", "critical": false, "weight": 3},
+      "certifications": {"role": "descriptive", "critical": false, "weight": 0},
+      "brand": {"role": "descriptive", "critical": false, "weight": 0}
+    },
+    "exact_item_identifier_schemes": ["gtin", "upc", "manufacturer_item_id"],
+    "eligible_price_bases": ["exact_package", "normalized_unit"],
+    "price_basis_requirements": {
+      "exact_package": ["package_count"],
+      "normalized_unit": ["package_count"]
+    },
+    "minimum_equivalent_coverage": 0.8,
+    "equivalent_score_threshold": 0.9,
+    "allow_comparable_substitute": true,
+    "auto_approval_tiers": [],
+    "geography_policy": "physical_store_radius",
+    "scope_mode": "observed_distribution",
+    "fulfillment_types": ["pickup"],
+    "maximum_candidate_pairs": 250000,
+    "candidate_geography": {
+      "mode": "observed_overlap",
+      "physical_radius_miles": 5,
+      "service_area_retailer_ids": ["amazon_us_same_day"],
+      "service_area_overlap_policy": "same_zip",
+      "missing_location_policy": "fail_closed"
+    }
+  },
+  "brand_rules": {
+    "aliases": {"Spring Valley": ["spring valley", "springvalley"]},
+    "private_labels": {"walmart_us": ["Spring Valley"]},
+    "portfolios": [
+      {
+        "id": "spring_valley_walmart",
+        "label": "Spring Valley",
+        "role": "private_label",
+        "retailer_ids": ["walmart_us"],
+        "brands": ["Spring Valley"],
+        "evidence_notes": "Owner-designated Walmart private-label anchor portfolio."
+      }
+    ]
+  },
+  "qa_rules": {
+    "parity_tolerance_dollars": 0.01,
+    "min_price": 0.25,
+    "max_price": 250,
+    "suspicious_gap_pct": 150,
+    "require_unit_confirmation_when": ["package_count is missing", "servings_per_container is missing"],
+    "human_review_conditions": [
+      "active ingredient or strength conflicts across evidence sources",
+      "dosage form is unknown",
+      "certification is visible only in an image",
+      "first-party seller status is unknown"
+    ],
+    "sensitivity_checks": []
+  },
+  "retailer_overrides": {
+    "walmart_us": {
+      "required_anchor_brand": "Spring Valley",
+      "seller_policy": "first_party_or_unknown",
+      "explicit_markdown_label": "Rollback"
+    },
+    "target_us": {"seller_policy": "first_party_or_unknown"},
+    "amazon_us_same_day": {"seller_policy": "first_party_only"}
+  },
+  "reporting": {
+    "headline_segments": ["active_ingredient", "strength", "dosage_form", "package_count", "life_stage"],
+    "required_caveats": [
+      "Spring Valley is the Walmart anchor portfolio; brand equality is not expected across retailers.",
+      "USP, NSF, MSC, or other certifications are reported only when supported by PDP text or label-image evidence.",
+      "Rollback is reported only when Walmart supplies explicit Rollback evidence; a regular-versus-current price difference alone is a generic markdown."
+    ],
+    "recommended_charts": ["competitive_footprint", "package_price_position", "unit_price_position", "certification_coverage"],
+    "decision_rules": {
+      "preferred_scorecard_profile_id": "exact_spec",
+      "profile_priority": ["exact_spec", "compatible_spec"],
+      "minimum_observations": 1,
+      "minimum_geographies": 1,
+      "executive_relationship_states": ["confirmed"],
+      "extreme_gap_behavior": "review",
+      "parity_display": "include"
+    },
+    "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.0"},
+    "narrative_playbook": {
+      "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
+      "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],
+      "decision_lenses": [
+        {"id": "exact_spec", "label": "Exact specification", "question": "Where does Spring Valley lead products with the same ingredient, strength, form, and package?", "metric_selectors": ["comparison.*.package_price.*"]},
+        {"id": "compatible_unit", "label": "Compatible unit value", "question": "Where does normalized unit price change the competitive position?", "metric_selectors": ["comparison.*.price_per_item.*", "comparison.*.price_per_serving.*"]},
+        {"id": "certification_evidence", "label": "Certification evidence", "question": "Which products have verified USP, NSF, MSC, or other label certification evidence?", "metric_selectors": ["quality.*", "assortment.*"]}
+      ],
+      "action_principles": [
+        "Keep exact specification and compatible specification conclusions separate.",
+        "Use package and normalized-unit price together before interpreting value.",
+        "Route missing or conflicting label evidence to review rather than inference."
+      ],
+      "forbidden_claims": [
+        "Do not claim a certification without PDP text or label-image evidence.",
+        "Do not call a markdown a Walmart Rollback without explicit Rollback evidence.",
+        "Do not treat brand equality as a match requirement for Spring Valley substitutes."
+      ],
+      "small_sample_threshold": 5
+    },
+    "insight_ranking": {
+      "weights": {"breadth": 0.25, "magnitude": 0.3, "confidence": 0.25, "actionability": 0.2},
+      "minimum_score": 0.3,
+      "max_candidates": 12
+    },
+    "insight_rules": [
+      {
+        "id": "competitive_pressure",
+        "scope": "both",
+        "condition": {"field": "competitor_lower_rate", "operator": "gt", "threshold": 0.5},
+        "title_template": "{competitor} price pressure in {segment}",
+        "summary_template": "{competitor} is lower more often than {benchmark} for the selected governed vitamin specification.",
+        "business_impact": "Review package and normalized-unit price before prioritizing a response.",
+        "severity": "high",
+        "breadth_scale": 100,
+        "magnitude_scale": 0.5,
+        "confidence_scale": 50,
+        "actionability": 0.9,
+        "minimum_matches": 1
+      },
+      {
+        "id": "benchmark_strength",
+        "scope": "both",
+        "condition": {"field": "benchmark_lower_rate", "operator": "gte", "threshold": 0.75},
+        "title_template": "{benchmark} value strength in {segment}",
+        "summary_template": "{benchmark} is lower across most validated comparisons in this specification.",
+        "business_impact": "Protect the value position and monitor evidence freshness.",
+        "severity": "positive",
+        "breadth_scale": 100,
+        "magnitude_scale": 0.25,
+        "confidence_scale": 50,
+        "actionability": 0.6,
+        "minimum_matches": 1
+      }
+    ]
+  }
+}

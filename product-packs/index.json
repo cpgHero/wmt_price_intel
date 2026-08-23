@@ -3,6 +3,13 @@
   "default_pack_id": "fresh_strawberries",
   "packs": [
     {
+      "id": "vitamins_supplements",
+      "name": "Vitamins & Supplements",
+      "version": "1.0.0",
+      "default_keyword": "vitamins",
+      "file": "vitamins_supplements.json"
+    },
+    {
       "id": "fresh_shell_eggs",
       "name": "Fresh Shell Eggs",
       "version": "1.2.3",

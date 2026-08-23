@@ -174,12 +174,12 @@ def test_amazon_requires_and_renders_same_day_url_context() -> None:
         adapter.build_request(task)
 
 
-def test_all_fourteen_egg_search_adapters_are_catalog_driven() -> None:
+def test_all_enabled_search_adapters_are_catalog_driven() -> None:
     catalog = json.loads(CATALOG_PATH.read_text())
     enabled = [item for item in catalog["retailers"] if item.get("status") == "enabled"]
     registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
 
-    assert len(enabled) == 14
+    assert len(enabled) == 18
     for item in enabled:
         adapter = registry.get(str(item["adapter_id"]))
         request = adapter.build_request(
@@ -234,7 +234,7 @@ def test_endpoint_specific_search_parameters_do_not_leak() -> None:
         )
 
 
-def test_all_fourteen_catalogued_search_samples_advertise_results() -> None:
+def test_catalogued_search_samples_advertise_results() -> None:
     catalog = json.loads(CATALOG_PATH.read_text())
     provider_catalog = json.loads(METRICSCART_CATALOG_PATH.read_text())
     by_path = {item["path"]: item for item in provider_catalog["endpoints"]}
@@ -243,11 +243,66 @@ def test_all_fourteen_catalogued_search_samples_advertise_results() -> None:
     for item in catalog["retailers"]:
         if item.get("status") != "enabled":
             continue
-        endpoint = by_path[item["endpoint"]]
+        source_path = {
+            "cvs_us": "/cvs/search/",
+            "walgreens_us": "/mc/bjs/serp/",
+        }.get(str(item["id"]), item["endpoint"])
+        endpoint = by_path[source_path]
         registry.get(str(item["adapter_id"]))
 
         assert endpoint["sample_response"]["present"] is True
         assert "results" in endpoint["sample_response"]["top_level_fields"]
+
+
+@pytest.mark.parametrize(
+    ("retailer_id", "adapter_id", "path", "store", "credits"),
+    [
+        ("bjs_us", "metricscart_bjs_serp_zipcode", "/mc/bjs/serp/zipcode/", "392", 1),
+        (
+            "costco_us",
+            "metricscart_costco_serp_zipcode",
+            "/mc/costco/serp/zipcode/",
+            "1160",
+            1,
+        ),
+        ("cvs_us", "metricscart_cvs_serp_zipcode", "/mc/cvs/serp/zipcode/", "16453", 2),
+        (
+            "walgreens_us",
+            "metricscart_walgreens_serp_zipcode",
+            "/mc/walgreens/serp/zipcode/",
+            "9093",
+            1,
+        ),
+    ],
+)
+def test_spring_valley_retailer_requests_use_verified_search_contracts(
+    retailer_id: str,
+    adapter_id: str,
+    path: str,
+    store: str,
+    credits: int,
+) -> None:
+    request = (
+        MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+        .get(adapter_id)
+        .build_request(
+            _task(
+                retailer_id=retailer_id,
+                adapter_id=adapter_id,
+                store_number=store,
+                credits_per_success=credits,
+                payload={
+                    "keyword": "amino vitamins",
+                    "request_overrides": {},
+                },
+            )
+        )
+    )
+
+    assert request.path == path
+    assert request.params["keyword"] == "amino vitamins"
+    assert request.params["store"] == store
+    assert request.params["page"] == 2
 
 
 @pytest.mark.parametrize(

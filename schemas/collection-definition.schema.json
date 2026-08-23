@@ -84,13 +84,21 @@
     "query": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "keyword"
-      ],
+      "required": ["keyword"],
       "properties": {
         "keyword": {
           "type": "string",
           "minLength": 1
+        },
+        "keywords": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "amazon_same_day_url_template": {
           "type": [

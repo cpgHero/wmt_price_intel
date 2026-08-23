@@ -13,6 +13,7 @@ from rci_analytics.product_pack import ProductPackLoader
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 PACK_ORDER = (
+    "vitamins_supplements",
     "fresh_strawberries",
     "fresh_shell_eggs",
     "fresh_fluid_milk",

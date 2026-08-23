@@ -402,6 +402,88 @@
       "status": "enabled"
     },
     {
+      "id": "bjs_us",
+      "display_name": "BJ's Wholesale Club",
+      "adapter_id": "metricscart_bjs_serp_zipcode",
+      "location_provider": "BJS",
+      "api_retailer_aliases": ["bj's", "bjs", "bjs.com"],
+      "endpoint": "/mc/bjs/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
+      "required_params": ["keyword", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
+    },
+    {
+      "id": "costco_us",
+      "display_name": "Costco",
+      "adapter_id": "metricscart_costco_serp_zipcode",
+      "location_provider": "Costco",
+      "api_retailer_aliases": ["costco", "costco.com"],
+      "endpoint": "/mc/costco/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
+      "required_params": ["zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled"
+    },
+    {
+      "id": "cvs_us",
+      "display_name": "CVS",
+      "adapter_id": "metricscart_cvs_serp_zipcode",
+      "location_provider": "CVS",
+      "api_retailer_aliases": ["cvs", "cvs.com"],
+      "endpoint": "/mc/cvs/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 2,
+      "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
+      "required_params": ["keyword", "zipcode", "store", "page"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "zipcode", "store", "page"],
+      "status": "enabled",
+      "quirks": [
+        "endpoint corrected from the 2026-08-16 export using the owner-validated MetricsCart playground request"
+      ]
+    },
+    {
+      "id": "walgreens_us",
+      "display_name": "Walgreens",
+      "adapter_id": "metricscart_walgreens_serp_zipcode",
+      "location_provider": "Walgreens",
+      "api_retailer_aliases": ["walgreens", "walgreens.com"],
+      "endpoint": "/mc/walgreens/serp/zipcode/",
+      "method": "GET",
+      "credits_per_successful_page": 1,
+      "location_dimension": "store_zip",
+      "location_collection_policy": {
+        "eligible_statuses": ["active"],
+        "store_number_pattern": "^[0-9]+$"
+      },
+      "required_params": ["keyword", "page", "zipcode", "store"],
+      "search_inputs": ["keyword"],
+      "supported_params": ["keyword", "page", "zipcode", "store"],
+      "status": "enabled",
+      "quirks": [
+        "endpoint corrected from the 2026-08-16 export using the owner-validated MetricsCart playground request"
+      ]
+    },
+    {
       "id": "walmart_mx",
       "display_name": "Walmart (Mexico)",
       "location_provider": null,

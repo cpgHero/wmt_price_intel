@@ -1,0 +1,36 @@
+{
+  "id": "spring_valley_vitamins_pilot",
+  "name": "Spring Valley Vitamins Pilot",
+  "version": "1.0.0",
+  "enabled": true,
+  "benchmark_retailer": "walmart_us",
+  "product_pack": {"id": "vitamins_supplements", "version": "1.0.0"},
+  "query": {
+    "keyword": "amino vitamins",
+    "keywords": ["amino vitamins", "vitamin c"],
+    "amazon_same_day_url_template": "https://www.amazon.com/s?k={{keyword}}&i=samedaystore",
+    "notes": "Contract example; operational pilot uses all approved workbook keywords and a frozen radius geography."
+  },
+  "retailers": [
+    {"retailer_id": "walmart_us", "adapter_id": "metricscart_walmart_search_zipcode_v2", "enabled": true, "sort": "Best Match", "max_pages_override": 1, "request_overrides": {}},
+    {"retailer_id": "cvs_us", "adapter_id": "metricscart_cvs_serp_zipcode", "enabled": true, "sort": null, "max_pages_override": 1, "request_overrides": {}},
+    {"retailer_id": "walgreens_us", "adapter_id": "metricscart_walgreens_serp_zipcode", "enabled": true, "sort": null, "max_pages_override": 1, "request_overrides": {}}
+  ],
+  "geography": {
+    "strategy": "custom_zips",
+    "benchmark_retailer": "walmart_us",
+    "country": "USA",
+    "states": [],
+    "zipcodes": ["43219"],
+    "location_ids": [],
+    "proximity_validation_miles": 5,
+    "refresh_policy": "frozen"
+  },
+  "pagination": {"max_pages": 1, "stop_on_empty": true, "stop_on_short_page": false},
+  "availability_gate": {"enabled": true, "retailer_ids": ["walmart_us", "cvs_us", "walgreens_us"], "sample_size_per_retailer": 1, "max_billable_404_rate": 0.5},
+  "schedule": {"type": "manual", "cron": null, "timezone": "America/Chicago"},
+  "analysis": {"comparison_profiles": ["exact_spec", "compatible_spec"], "enable_ai_fallback": true, "enable_proximity_validation": true},
+  "delivery": {"web_report": true, "excel": false, "leadership_email": false, "audit_package": true},
+  "budget": {"max_credits_per_run": 2500, "block_if_estimate_exceeds_budget": true},
+  "product_detail_enrichment": {"policy": "disabled", "approval": "separate_after_search", "analysis_admitted_products_only": true, "price_variation_samples": true}
+}

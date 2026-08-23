@@ -103,6 +103,56 @@ async def test_egg_vertical_slice_is_configuration_only_and_capped() -> None:
     assert len([task for task in plan.initial_tasks if task.is_preflight]) == 1
 
 
+async def test_multi_keyword_query_expands_tasks_and_cost_without_inflating_locations() -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id="walmart-2098",
+                retailer_id="walmart_us",
+                zipcode="43219",
+                store_number="2098",
+                state="OH",
+                country="USA",
+            )
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _egg_config()
+    config["query"] = {
+        "keyword": "amino vitamins",
+        "keywords": ["amino vitamins", "vitamin c"],
+        "amazon_same_day_url_template": "https://www.amazon.com/s?k={{keyword}}&i=samedaystore",
+        "notes": "Multi-keyword contract test.",
+    }
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+            "max_pages_override": 1,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "walmart_us",
+        "country": "USA",
+    }
+
+    plan = await planner.plan(config)
+
+    estimate = plan.estimate.retailers[0]
+    assert estimate.location_units == 1
+    assert estimate.estimated_pages == 2
+    assert estimate.estimated_credits == 2
+    assert len(plan.initial_tasks) == 2
+    assert {task.request_payload["keyword"] for task in plan.initial_tasks} == {
+        "amino vitamins",
+        "vitamin c",
+    }
+    assert len({task.request_fingerprint for task in plan.initial_tasks}) == 2
+
+
 async def test_non_paginated_retailer_rejects_multiple_pages_before_launch() -> None:
     repository = InMemoryCollectionRepository(
         [

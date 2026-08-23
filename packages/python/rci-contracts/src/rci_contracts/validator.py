@@ -143,7 +143,9 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         "product-pack-draft.schema.json",
         root / "examples" / "product-pack-draft.ground-beef.json",
     )
-    for product_pack in sorted((root / "product-packs").glob("fresh_*.json")):
+    for product_pack in sorted((root / "product-packs").glob("*.json")):
+        if product_pack.name == "index.json":
+            continue
         yield ContractTarget("product-pack.schema.json", product_pack)
     for retailer_pack in sorted((root / "retailer-packs").glob("*/*.json")):
         yield ContractTarget("retailer-pack.schema.json", retailer_pack)

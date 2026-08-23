@@ -45,8 +45,15 @@ def test_deployable_product_pack_catalog_contains_valid_immutable_versions() -> 
         "fresh_ground_beef",
         "fresh_shell_eggs",
         "fresh_strawberries",
+        "vitamins_supplements",
     }
-    assert {pack.version for pack in versions} == {"1.1.0", "1.2.0", "1.2.3", "1.6.0"}
+    assert {pack.version for pack in versions} == {
+        "1.0.0",
+        "1.1.0",
+        "1.2.0",
+        "1.2.3",
+        "1.6.0",
+    }
     assert next(pack for pack in versions if pack.id == "fresh_ground_beef").version == "1.2.0"
     milk = next(pack for pack in versions if pack.id == "fresh_fluid_milk")
     assert milk.version == "1.6.0"

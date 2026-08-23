@@ -85,16 +85,18 @@ def primary_exact_profile(
     *,
     configured_profile_ids: Iterable[str] | None = None,
 ) -> JsonObject:
-    """Select the Product Pack's preferred active exact-ZIP decision profile."""
+    """Select the Product Pack's preferred active direct-comparison profile."""
 
-    exact_profiles = [
-        profile for profile in pack.matching_profiles if str(profile["geography"]) == "exact_zip"
+    direct_profiles = [
+        profile
+        for profile in pack.matching_profiles
+        if str(profile["geography"]) in {"exact_zip", "radius"}
     ]
     configured = {str(value) for value in configured_profile_ids or ()}
-    active_profiles = [profile for profile in exact_profiles if str(profile["id"]) in configured]
-    candidates = active_profiles or exact_profiles
+    active_profiles = [profile for profile in direct_profiles if str(profile["id"]) in configured]
+    candidates = active_profiles or direct_profiles
     if not candidates:
-        raise ValueError("Product Pack has no exact-ZIP comparison profile")
+        raise ValueError("Product Pack has no direct comparison profile")
     preferred = str(
         pack.reporting.get("decision_rules", {}).get("preferred_scorecard_profile_id") or ""
     )

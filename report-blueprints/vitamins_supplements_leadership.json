@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.0.0",
+  "id": "vitamins_supplements_leadership",
+  "version": "1.0.0",
+  "product_pack": { "id": "vitamins_supplements", "version": "1.0.0" },
+  "brand_profile": {
+    "id": "cpghero_rci",
+    "version": "1.0.0",
+    "supports_light_mode": true,
+    "supports_dark_mode": true
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Retailer Scorecards",
+      "kind": "executive_summary",
+      "required": true,
+      "metric_selectors": [
+        "comparison.*.lower_rate",
+        "comparison.*.median_gap"
+      ],
+      "evidence_kinds": ["exact_matches", "compatible_matches"],
+      "visualization": "ranked_cards",
+      "empty_state": "No certified supplement comparisons are available.",
+      "narrative_section_id": "executive_summary"
+    },
+    {
+      "id": "coverage",
+      "title": "Competitive Footprint",
+      "kind": "coverage",
+      "required": true,
+      "metric_selectors": ["coverage.*"],
+      "evidence_kinds": ["classified_offers"],
+      "visualization": "map",
+      "empty_state": "No qualifying footprint evidence is available.",
+      "narrative_section_id": "coverage"
+    },
+    {
+      "id": "price_position",
+      "title": "Package and Unit Price Position",
+      "kind": "price_position",
+      "required": true,
+      "metric_selectors": [
+        "comparison.*.package_price.*",
+        "comparison.*.price_per_item.*",
+        "comparison.*.price_per_serving.*"
+      ],
+      "evidence_kinds": ["exact_matches", "compatible_matches"],
+      "visualization": "table",
+      "empty_state": "No governed price comparisons are available.",
+      "narrative_section_id": "price_position"
+    },
+    {
+      "id": "segments",
+      "title": "Ingredient and Specification Scorecards",
+      "kind": "segment_analysis",
+      "required": true,
+      "metric_selectors": ["comparison.*"],
+      "evidence_kinds": ["exact_matches", "compatible_matches"],
+      "visualization": "table",
+      "empty_state": "No defensible supplement specifications are available.",
+      "narrative_section_id": "segments"
+    },
+    {
+      "id": "assortment",
+      "title": "Assortment and Certification Evidence",
+      "kind": "assortment",
+      "required": true,
+      "metric_selectors": ["assortment.*", "quality.*"],
+      "evidence_kinds": ["product_catalog", "classified_offers"],
+      "visualization": "ranked_cards",
+      "empty_state": "No qualifying assortment evidence is available.",
+      "narrative_section_id": "products"
+    },
+    {
+      "id": "quality",
+      "title": "Data Quality and Label Evidence",
+      "kind": "data_quality",
+      "required": true,
+      "metric_selectors": ["quality.*"],
+      "evidence_kinds": ["validation_issues"],
+      "visualization": "table",
+      "empty_state": "Data-quality evidence is unavailable.",
+      "narrative_section_id": "quality"
+    },
+    {
+      "id": "methodology",
+      "title": "Methodology",
+      "kind": "methodology",
+      "required": true,
+      "metric_selectors": [],
+      "evidence_kinds": ["source_manifest", "validation_issues"],
+      "visualization": "none",
+      "empty_state": "Methodology metadata is unavailable.",
+      "narrative_section_id": "methodology"
+    }
+  ],
+  "artifact_profiles": [
+    {
+      "artifact_type": "html",
+      "section_ids": [
+        "executive_summary",
+        "coverage",
+        "price_position",
+        "segments",
+        "assortment",
+        "quality",
+        "methodology"
+      ]
+    },
+    {
+      "artifact_type": "xlsx",
+      "section_ids": [
+        "executive_summary",
+        "coverage",
+        "price_position",
+        "segments",
+        "assortment",
+        "quality",
+        "methodology"
+      ],
+      "worksheet_definitions": [
+        { "name": "Retailer Scorecards", "source": "retailer_scorecards" },
+        { "name": "Price Comparisons", "source": "comparisons" },
+        { "name": "Product Catalog", "source": "evidence_sets" },
+        { "name": "Data Quality", "source": "data_quality" }
+      ]
+    },
+    {
+      "artifact_type": "leadership_email",
+      "section_ids": [
+        "executive_summary",
+        "price_position",
+        "segments",
+        "quality",
+        "methodology"
+      ]
+    },
+    {
+      "artifact_type": "audit_zip",
+      "section_ids": [
+        "coverage",
+        "price_position",
+        "segments",
+        "assortment",
+        "quality",
+        "methodology"
+      ]
+    }
+  ],
+  "narrative_policy": {
+    "require_metric_refs": true,
+    "require_evidence_refs": true,
+    "allow_unreferenced_numbers": false,
+    "required_questions": [
+      "what_changed",
+      "why_it_matters",
+      "who_is_affected",
+      "what_to_do_next",
+      "what_is_the_evidence"
+    ]
+  }
+}

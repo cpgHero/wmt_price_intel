@@ -79,14 +79,14 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 22, 2026";
+const lastVerified = "August 23, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.48",
+  version: "1.3.49",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.41 monthly PDP freshness governance, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through Phase 13.41 monthly PDP freshness governance plus the test-verified Spring Valley collection foundation, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1603,6 +1603,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-23",
+              "Implemented and test-verified; deployment and bounded paid pilot pending",
+              "Spring Valley vitamins gain a reusable Product Pack, four additional Search-by-ZIP retailers, and governed multi-keyword collection planning.",
+              "The Vitamins & Supplements Product Pack keeps Spring Valley as Walmart's private-label anchor while ingredient, strength, strength unit, dosage form, package quantity, serving quantity, release profile, and audience govern exact- and compatible-spec comparisons without a category branch in the engine. Package, item, and serving price bases remain distinct. USP, NSF, MSC, or other certifications require PDP text or label-image evidence; a generic markdown is not labeled Rollback without explicit Walmart evidence. Catalog-driven BJ's, Costco, CVS, and Walgreens Search adapters use provider-safe Store_No plus ZIP contracts, including the owner-verified trailing-slash CVS and Walgreens paths. Collection definitions may carry one keyword plus an optional deduplicated list of up to 500; task and maximum-credit estimates expand per keyword while location counts retain their location grain. Search remains the only approved paid boundary in this pilot. PDP is separately approved after Search qualification and reuses successful evidence for 30 days.",
+            ],
             [
               "2026-08-22",
               "Deployed and production-verified",
