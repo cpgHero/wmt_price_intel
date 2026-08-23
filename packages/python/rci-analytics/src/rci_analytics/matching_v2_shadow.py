@@ -6,6 +6,7 @@ import hashlib
 import heapq
 import json
 import math
+import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -343,6 +344,7 @@ class MatchingShadowResultV2:
     blocked_review_edges: tuple[TieredMatchDecisionV2, ...] = ()
     attribute_blocked_pairs: int = 0
     geography_blocked_pairs: int = 0
+    retrieval_blocked_pairs: int = 0
 
     def summary(self) -> JsonObject:
         tiers = Counter(edge.tier or "none" for edge in self.edges)
@@ -362,6 +364,7 @@ class MatchingShadowResultV2:
             "blocked_pairs": self.blocked_pairs,
             "attribute_blocked_pairs": self.attribute_blocked_pairs,
             "geography_blocked_pairs": self.geography_blocked_pairs,
+            "retrieval_blocked_pairs": self.retrieval_blocked_pairs,
             "blocked_review_sample": len(self.blocked_review_edges),
             "tier_counts": dict(sorted(tiers.items())),
             "status_counts": dict(sorted(statuses.items())),
@@ -444,6 +447,7 @@ class MatchingShadowEvaluatorV2:
         geography_indexes = self._geographic_candidate_indexes(benchmark, competitor)
         attribute_blocked_pairs = 0
         geography_blocked_pairs = 0
+        retrieval_blocked_pairs = 0
         for benchmark_index, benchmark_listing in enumerate(benchmark):
             eligible_indexes = set(all_competitor_indexes)
             for rule in self._policy.attributes:
@@ -484,6 +488,14 @@ class MatchingShadowEvaluatorV2:
                 geographically_eligible = geography_indexes[benchmark_index]
                 geography_blocked_pairs += len(eligible_indexes - geographically_eligible)
                 eligible_indexes &= geographically_eligible
+            if self._policy.candidate_retrieval_mode == "lexical_top_k":
+                retrieved = self._lexical_candidates(
+                    benchmark_listing,
+                    competitor,
+                    eligible_indexes,
+                )
+                retrieval_blocked_pairs += len(eligible_indexes - retrieved)
+                eligible_indexes = retrieved
             if blocked_review_limit:
                 for competitor_index in all_competitor_indexes - attribute_eligible_indexes:
                     competitor_listing = competitor[competitor_index]
@@ -536,7 +548,38 @@ class MatchingShadowEvaluatorV2:
             blocked_review_edges=blocked_review_edges,
             attribute_blocked_pairs=attribute_blocked_pairs,
             geography_blocked_pairs=geography_blocked_pairs,
+            retrieval_blocked_pairs=retrieval_blocked_pairs,
         )
+
+    def _lexical_candidates(
+        self,
+        benchmark: ListingEvidence,
+        competitor: Sequence[ListingEvidence],
+        eligible_indexes: set[int],
+    ) -> set[int]:
+        """Retrieve a bounded, deterministic proposal set without deciding comparability."""
+
+        benchmark_tokens = _candidate_tokens(benchmark, self._policy.candidate_retrieval_stop_words)
+        ranked: list[tuple[float, str, int]] = []
+        for index in eligible_indexes:
+            candidate = competitor[index]
+            if _shares_allowed_identifier(benchmark, candidate, self._policy):
+                similarity = 1.0
+            else:
+                candidate_tokens = _candidate_tokens(
+                    candidate, self._policy.candidate_retrieval_stop_words
+                )
+                union = benchmark_tokens | candidate_tokens
+                similarity = len(benchmark_tokens & candidate_tokens) / len(union) if union else 0.0
+            if similarity >= self._policy.candidate_retrieval_minimum_similarity:
+                ranked.append((-similarity, candidate.listing_id, index))
+        ranked.sort()
+        return {
+            index
+            for _score, _listing_id, index in ranked[
+                : self._policy.candidate_retrieval_maximum_per_benchmark
+            ]
+        }
 
     def _candidate_indexes(
         self, competitor: Sequence[ListingEvidence]
@@ -645,6 +688,41 @@ class MatchingShadowEvaluatorV2:
                 matched.update(range(len(competitor)))
             results.append(matched)
         return tuple(results)
+
+
+def _candidate_tokens(listing: ListingEvidence, stop_words: tuple[str, ...]) -> set[str]:
+    text_values = [listing.title or ""]
+    for name in ("active_ingredient", "strength", "strength_unit", "dosage_form"):
+        value = listing.attributes.get(name)
+        if value is not None and value.value is not None and value.review_status != "conflicted":
+            text_values.append(str(value.value))
+    tokens = re.findall(r"[a-z0-9]+", " ".join(text_values).casefold())
+    ignored = set(stop_words)
+    unigrams = [token for token in tokens if token not in ignored]
+    bigrams = [
+        f"{tokens[index]}_{tokens[index + 1]}"
+        for index in range(len(tokens) - 1)
+        if tokens[index] not in ignored or tokens[index + 1] not in ignored
+    ]
+    return {*unigrams, *bigrams}
+
+
+def _shares_allowed_identifier(
+    benchmark: ListingEvidence,
+    competitor: ListingEvidence,
+    policy: MatchingPolicyV2,
+) -> bool:
+    allowed = set(policy.exact_item_identifier_schemes)
+    benchmark_values = {
+        (row.scheme, row.value)
+        for row in benchmark.identifiers
+        if row.scheme in allowed and row.verification_status != "disputed"
+    }
+    return any(
+        (row.scheme, row.value) in benchmark_values
+        for row in competitor.identifiers
+        if row.scheme in allowed and row.verification_status != "disputed"
+    )
 
 
 def _distance_miles(

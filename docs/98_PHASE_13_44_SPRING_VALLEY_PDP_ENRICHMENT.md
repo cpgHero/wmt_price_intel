@@ -30,7 +30,9 @@ Durable Product Details run `9e03fc83-8e2f-4700-9464-d951021ebac7` completed wit
 
 Amazon Same Day, Costco, Kroger, Sam's Club, and Walmart completed without a failed product. Meijer retained eight non-billable timeouts, Target retained two billable 404s, BJ's retained 56 billable 404s, CVS retained 178 billable 404s, and Walgreens returned 371 non-billable HTTP 400 responses.
 
-A controlled Walgreens diagnostic identified a contract-context defect: live Search described the offer as `SFS`, while MetricsCart's Walgreens PDP route requires `fulfillment_type=pickup`. The identical product ID `300391652`, ZIP `43230`, and store `9093` returned HTTP 200 when only fulfillment changed to `pickup`. The diagnostic consumed two credits ($0.004) within the existing owner-approved ceiling.
+A controlled Walgreens diagnostic identified two contract-context defects: live Search described the offer as `SFS`, while MetricsCart's Walgreens PDP route requires `fulfillment_type=pickup`; and the route accepts the retailer product ID as its identity without the extra Search URL. The identical product ID `300391652`, ZIP `43230`, and store `9093` returned HTTP 200 with the product-ID-only pickup request. The diagnostic consumed two credits ($0.004) within the existing owner-approved ceiling.
+
+Corrected recovery run `09e1979f-36fd-45b4-8576-5138f1504ca8` then completed **371 of 371** Walgreens products with normalized HTTP 200 responses for 742 credits ($1.484). The interrupted pre-correction recovery run persisted 30 HTTP 400 failures and consumed zero credits; it did not create usable PDP evidence. Aggregate Spring Valley PDP spend, including the controlled diagnostic, is **5,322 credits / $10.644**, below the approved $15 ceiling.
 
 ## Governing Source Runs
 
@@ -54,7 +56,7 @@ The live launcher:
 8. refuses a duplicate launch when the same request checksum is already queued or running; and
 9. relies on the durable Postgres queue, leases, retries, cancellation, and per-retailer shared rate limiter for execution.
 
-The corrective release adds catalog-level fixed parameters, so provider-required request values override incompatible observation vocabulary without a retailer branch in the engine. It also claims jobs fairly across retailers within priority and raises default batch concurrency to 18. Each retailer retains its independent globally shared 3-request-per-second and 180-request-per-minute ceiling.
+The corrective release adds catalog-level fixed parameters and catalog-governed identity selection, so provider-required request values override incompatible observation vocabulary and unsupported alternate identifiers are suppressed without a retailer branch in the engine. Durable queue serialization preserves both behaviors. It also claims jobs fairly across retailers within priority and raises default batch concurrency to 18. Each retailer retains its independent globally shared 3-request-per-second and 180-request-per-minute ceiling.
 
 No AI task is created by this phase.
 
@@ -64,7 +66,7 @@ The underlying Meijer Search evidence remains partial at 40 successful requests 
 
 ## Completion Gate
 
-Before Matching v2 candidate generation begins, the completed run must be reconciled by retailer and HTTP status. The next gate will:
+The Product Details run and Walgreens correction are reconciled. Before the operational Matching v2 queue is imported, the next gate will:
 
 - verify actual credits remain at or below 7,500;
 - retain every immutable PDP response, including billable 404 evidence;

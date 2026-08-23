@@ -80,6 +80,7 @@ def _listing(
     brand_verified: bool = False,
     identifier: IdentifierEvidence | None = None,
     locations: tuple[ListingLocationEvidence, ...] = (),
+    title: str | None = None,
 ) -> ListingEvidence:
     def value(item: object, name: str) -> AttributeValue | None:
         return None if item is None else AttributeValue(item, f"pdp:{retailer}:{product}:{name}")
@@ -106,6 +107,7 @@ def _listing(
         brand_verified=brand_verified,
         observed_location_count=len(locations),
         observed_locations=locations,
+        title=title,
     )
 
 
@@ -414,6 +416,7 @@ def test_operational_review_queue_keeps_every_governed_candidate() -> None:
     assert len(queue["cases"]) == len(result.edges)
     assert any(case["engine_proposal"]["tier"] is None for case in queue["cases"])
     assert queue["sampling"]["excluded_counts"] == {
+        "aldi_us:candidate_retrieval_pairs": result.retrieval_blocked_pairs,
         "aldi_us:hard_blocked_audit_sample": len(result.blocked_review_edges),
         "aldi_us:hard_blocked_pairs": result.attribute_blocked_pairs,
         "aldi_us:no_geographic_overlap_pairs": result.geography_blocked_pairs,
@@ -520,6 +523,7 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     assert queue["sampling"]["available_counts"] == queue["sampling"]["selected_counts"]
     assert queue["cases"] == []
     assert queue["sampling"]["excluded_counts"] == {
+        "aldi_us:candidate_retrieval_pairs": 0,
         "aldi_us:hard_blocked_audit_sample": 0,
         "aldi_us:hard_blocked_pairs": 0,
         "aldi_us:no_geographic_overlap_pairs": 1,
@@ -1178,6 +1182,37 @@ def test_candidate_geography_fails_closed_without_location_evidence() -> None:
 
     assert result.evaluated_pairs == 0
     assert result.geography_blocked_pairs == 1
+
+
+def test_lexical_candidate_retrieval_bounds_review_without_deciding_match() -> None:
+    policy = replace(
+        _policy(),
+        candidate_retrieval_mode="lexical_top_k",
+        candidate_retrieval_maximum_per_benchmark=2,
+        candidate_retrieval_minimum_similarity=0.05,
+        candidate_retrieval_stop_words=("milk", "gallon"),
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (_listing("walmart_us", "w1", title="Vitamin C with rose hips"),),
+        (
+            _listing("aldi_us", "a1", title="Vitamin C rose hips"),
+            _listing("aldi_us", "a2", title="Vitamin C immune formula"),
+            _listing("aldi_us", "a3", title="Fish oil omega three"),
+        ),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 2
+    assert result.retrieval_blocked_pairs == 1
+    assert {edge.competitor.retailer_product_id for edge in result.edges} == {"a1", "a2"}
 
 
 def test_unknown_blocking_hard_attribute_excludes_candidate() -> None:

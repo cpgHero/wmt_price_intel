@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -53,7 +53,20 @@
       "unknown_policy": "reject_strict",
       "extractors": ["retailer_field", "title_rule", "ai_fallback", "manual"],
       "extraction_rules": [
-        {"type": "field", "sources": ["raw.active_ingredient", "raw.ingredients", "title"]}
+        {
+          "type": "field",
+          "sources": [
+            "raw.primary_ingredient",
+            "raw.primary_dietary_ingredient",
+            "raw.primary_supplement_type",
+            "raw.primary_active_ingredient",
+            "raw.active_ingredient",
+            "raw.active_ingredients",
+            "raw.special_ingredients",
+            "raw.ingredients",
+            "raw.vitamin_&_supplement_type"
+          ]
+        }
       ]
     },
     {
@@ -239,7 +252,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.0.0-shadow.2",
+    "policy_version": "1.0.0-shadow.3",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "soft_comparator", "critical": true, "weight": 10},
@@ -273,6 +286,42 @@
       "service_area_retailer_ids": ["amazon_us_same_day"],
       "service_area_overlap_policy": "same_zip",
       "missing_location_policy": "fail_closed"
+    },
+    "candidate_retrieval": {
+      "mode": "lexical_top_k",
+      "maximum_per_benchmark": 8,
+      "minimum_similarity": 0.05,
+      "stop_words": [
+        "spring",
+        "valley",
+        "supplement",
+        "supplements",
+        "dietary",
+        "health",
+        "support",
+        "count",
+        "ct",
+        "tablet",
+        "tablets",
+        "capsule",
+        "capsules",
+        "softgel",
+        "softgels",
+        "gummy",
+        "gummies",
+        "mg",
+        "mcg",
+        "iu",
+        "for",
+        "with",
+        "and",
+        "the",
+        "plus",
+        "pack",
+        "daily",
+        "adult",
+        "adults"
+      ]
     }
   },
   "brand_rules": {
@@ -655,7 +704,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.3"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.4"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

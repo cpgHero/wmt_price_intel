@@ -128,6 +128,44 @@ def test_missing_claims_remain_unknown_and_pdp_can_resolve_them() -> None:
     assert enriched.attributes["_attribute_provenance"]["lactose_free"] == "pdp"
 
 
+def test_structured_pdp_fields_complete_product_pack_raw_attribute_sources() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    offer = NormalizedOffer(
+        offer_id="vitamin-1",
+        retailer_id="walmart_us",
+        retailer_product_id="6139509340",
+        title="Spring Valley Vitamin C with Rose Hips, 500 mg, 100 Count Tablets",
+        brand="Spring Valley",
+        price=Decimal("4.88"),
+        currency="USD",
+        zipcode="72712",
+        store_number="100",
+        latitude=36.37,
+        longitude=-94.2,
+        in_stock=True,
+        product_url="https://example.com/vitamin-c",
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+    search_classified = classifier.classify(offer)
+    assert search_classified.attributes["active_ingredient"] is None
+
+    enriched = complete_attributes_from_pdp(
+        search_classified,
+        {
+            "name": offer.title,
+            "specification": {"primary_ingredient": "Vitamin C"},
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert enriched.attributes["active_ingredient"] == "Vitamin C"
+    assert enriched.attributes["_attribute_provenance"]["active_ingredient"] == "pdp"
+
+
 def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     classifier = OfferClassifier(

@@ -549,6 +549,21 @@
             "service_area_overlap_policy": { "enum": ["same_zip"] },
             "missing_location_policy": { "enum": ["fail_closed", "allow"] }
           }
+        },
+        "candidate_retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "maximum_per_benchmark", "minimum_similarity", "stop_words"],
+          "properties": {
+            "mode": { "enum": ["disabled", "lexical_top_k"] },
+            "maximum_per_benchmark": { "type": "integer", "minimum": 1 },
+            "minimum_similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "stop_words": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
         }
       }
     },

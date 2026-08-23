@@ -47,6 +47,7 @@ MatchStatus = Literal[
 ]
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 CandidateGeographyMode = Literal["disabled", "observed_overlap"]
+CandidateRetrievalMode = Literal["disabled", "lexical_top_k"]
 ServiceAreaOverlapPolicy = Literal["same_zip"]
 CoverageReason = Literal[
     "comparable",
@@ -188,6 +189,10 @@ class MatchingPolicyV2:
     candidate_service_area_retailer_ids: tuple[str, ...] = ()
     candidate_service_area_overlap_policy: ServiceAreaOverlapPolicy = "same_zip"
     candidate_missing_location_policy: Literal["fail_closed", "allow"] = "fail_closed"
+    candidate_retrieval_mode: CandidateRetrievalMode = "disabled"
+    candidate_retrieval_maximum_per_benchmark: int = 25
+    candidate_retrieval_minimum_similarity: float = 0.0
+    candidate_retrieval_stop_words: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.attributes:
@@ -238,6 +243,14 @@ class MatchingPolicyV2:
             set(self.candidate_service_area_retailer_ids)
         ):
             raise ValueError("candidate service-area retailer IDs must be unique")
+        if self.candidate_retrieval_maximum_per_benchmark < 1:
+            raise ValueError("candidate retrieval maximum must be at least one")
+        if not 0 <= self.candidate_retrieval_minimum_similarity <= 1:
+            raise ValueError("candidate retrieval similarity must be between zero and one")
+        if len(self.candidate_retrieval_stop_words) != len(
+            set(self.candidate_retrieval_stop_words)
+        ):
+            raise ValueError("candidate retrieval stop words must be unique")
 
     @property
     def checksum(self) -> str:
@@ -275,6 +288,14 @@ class MatchingPolicyV2:
                     self.candidate_service_area_overlap_policy
                 ),
                 "candidate_missing_location_policy": self.candidate_missing_location_policy,
+                "candidate_retrieval_mode": self.candidate_retrieval_mode,
+                "candidate_retrieval_maximum_per_benchmark": (
+                    self.candidate_retrieval_maximum_per_benchmark
+                ),
+                "candidate_retrieval_minimum_similarity": (
+                    self.candidate_retrieval_minimum_similarity
+                ),
+                "candidate_retrieval_stop_words": self.candidate_retrieval_stop_words,
             }
         )
 
@@ -428,6 +449,7 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         "national": "national",
     }.get(geography, geography)
     candidate_geography = dict(configured.get("candidate_geography") or {})
+    candidate_retrieval = dict(configured.get("candidate_retrieval") or {})
     return MatchingPolicyV2(
         policy_id=f"{pack.id}:{profile_id}",
         version=str(configured.get("policy_version") or "2.0.0-shadow"),
@@ -486,6 +508,19 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         candidate_missing_location_policy=cast(
             Literal["fail_closed", "allow"],
             candidate_geography.get("missing_location_policy") or "fail_closed",
+        ),
+        candidate_retrieval_mode=cast(
+            CandidateRetrievalMode,
+            candidate_retrieval.get("mode") or "disabled",
+        ),
+        candidate_retrieval_maximum_per_benchmark=int(
+            candidate_retrieval.get("maximum_per_benchmark", 25)
+        ),
+        candidate_retrieval_minimum_similarity=float(
+            candidate_retrieval.get("minimum_similarity", 0)
+        ),
+        candidate_retrieval_stop_words=tuple(
+            str(value).casefold() for value in candidate_retrieval.get("stop_words", ())
         ),
     )
 

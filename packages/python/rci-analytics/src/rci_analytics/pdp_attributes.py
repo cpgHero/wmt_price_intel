@@ -56,6 +56,7 @@ def complete_attributes_from_pdp(
                 brand=(
                     str(context.get("brand")) if context.get("brand") else classified.offer.brand
                 ),
+                raw=_pdp_classification_raw(classified.offer.raw, context),
             )
             pdp_classified = classifier.classify(enriched_offer)
             pdp_provenance = (
@@ -176,6 +177,17 @@ def _pdp_text(context: JsonObject) -> str:
     for name in ("specification", "physical_properties", "variant_configuration"):
         _flatten(context.get(name), values)
     return " | ".join(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+
+def _pdp_classification_raw(current: JsonObject, context: JsonObject) -> JsonObject:
+    """Expose structured PDP fields to generic Product Pack ``raw.*`` extractors."""
+
+    merged = dict(current)
+    for name in ("specification", "physical_properties", "variant_configuration"):
+        value = context.get(name)
+        if isinstance(value, dict):
+            merged.update({str(key): item for key, item in value.items()})
+    return merged
 
 
 def _flatten(value: Any, output: list[str]) -> None:

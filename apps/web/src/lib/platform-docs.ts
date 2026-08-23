@@ -1607,9 +1607,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-23",
-              "Implemented and test-verified; production recovery pending",
+              "Deployed and production-verified",
               "Product Details contracts gained fixed request parameters and retailer-fair parallel queue claiming.",
-              "A controlled Walgreens diagnostic proved that the historical SFS request context produced HTTP 400 while the same observed product, store, and ZIP returned HTTP 200 with fulfillment_type=pickup. The catalog now fixes provider-required parameters after observation values, preserving Search fulfillment as evidence without sending it to an incompatible PDP contract. Queue claims round-robin retailers within priority and the default claim concurrency rises from one to 18; the shared Postgres retailer/type limiter, credit ceiling, SKIP LOCKED claims, leases, retries, cancellation, and idempotency remain authoritative. The initial Spring Valley run completed 1,816 successes and 615 explicit failures for 4,578 credits ($9.156), below its $15 ceiling. No AI call was made.",
+              "A controlled Walgreens diagnostic proved that the historical SFS request context and extra Search URL produced HTTP 400 while the same observed product, store, and ZIP returned HTTP 200 with a product-ID-only pickup request. The catalog now fixes provider-required parameters and selects the supported identity after observation values; durable queue serialization preserves both behaviors without retailer branches. Queue claims round-robin retailers within priority and the default claim concurrency rises from one to 18; the shared Postgres retailer/type limiter, credit ceiling, SKIP LOCKED claims, leases, retries, cancellation, and idempotency remain authoritative. Corrected run 09e1979f-36fd-45b4-8576-5138f1504ca8 completed 371/371 Walgreens products with HTTP 200 for 742 credits. Aggregate Spring Valley PDP spend including the diagnostic is 5,322 credits ($10.644), below the $15 ceiling. GitHub Actions runs 32671013676, 32671203338, and 32671662219 passed. No AI call was made.",
+            ],
+            [
+              "2026-08-23",
+              "Implemented and release-verified; replacement production queue audit pending",
+              "Live Search collections gained a checksum-verified bridge into exhaustive Matching v2 certification.",
+              "The bridge reads immutable successful Search pages, retains product-location evidence per retailer, selects the latest successful collection-linked PDP payload per product, and runs the generic Product Pack classifier and Matching v2 evaluator. A 40,162-pair diagnostic was blocked before import because geography plus unknown attributes admitted an unreviewable candidate set. Product Pack 1.0.4 removes the false full-title active-ingredient value, exposes structured PDP specification fields to declared raw-field extractors, and adds deterministic Product-Pack-governed lexical top-K retrieval. Critical evidence-profile findings, empty queues, and implausible volumes block import. Imported queues remain non-authoritative operational proposals; Match Certification, gold-set release, and governed replay remain explicit human gates. No new MetricsCart or OpenAI call is made.",
             ],
             [
               "2026-08-23",

@@ -247,6 +247,7 @@
         "blocked_pairs": { "$ref": "#/$defs/count" },
         "attribute_blocked_pairs": { "$ref": "#/$defs/count" },
         "geography_blocked_pairs": { "$ref": "#/$defs/count" },
+        "retrieval_blocked_pairs": { "$ref": "#/$defs/count" },
         "blocked_review_sample": { "$ref": "#/$defs/count" },
         "tier_counts": { "$ref": "#/$defs/countMap" },
         "status_counts": { "$ref": "#/$defs/countMap" },
