@@ -51,7 +51,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", action="append", required=True, dest="run_ids")
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--product-pack-version", default="1.0.1")
+    parser.add_argument("--product-pack-version", default="1.0.2")
     parser.add_argument(
         "--repository-root", type=Path, default=Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd()))
     )

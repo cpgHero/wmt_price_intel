@@ -80,6 +80,44 @@ def test_product_packs_load_in_required_expansion_order() -> None:
 
 
 @pytest.mark.parametrize(
+    "title",
+    [
+        "Dr.Althea Vitamin C Boosting Serum, 1.01 fl oz",
+        "Vitamin D3 Topical Formula Skin Moisturizer, 1.7 oz",
+        "Joint Health Supplement for Dogs, 45 Soft Chews",
+        "Orange Juice with Calcium and Vitamin D, 128 fl oz",
+        "Green Tea Bags with Elderberry Vitamin C, 18 count",
+    ],
+)
+def test_vitamin_pack_excludes_proven_non_oral_search_noise(
+    normalizer: CanonicalOfferNormalizer,
+    title: str,
+) -> None:
+    offers, _engine = _pipeline(
+        "vitamins_supplements",
+        normalizer,
+        [_row("target_us", title.casefold().replace(" ", "-"), title, "9.99")],
+    )
+
+    assert offers[0].in_scope is False
+    assert offers[0].scope_reason is not None
+    assert offers[0].scope_reason.startswith("excluded scope pattern:")
+
+
+def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    title = "Nature Made Vitamin D3 2000 IU Softgels, 100 Count"
+    offers, _engine = _pipeline(
+        "vitamins_supplements",
+        normalizer,
+        [_row("target_us", "vitamin-d3-softgels", title, "8.49")],
+    )
+
+    assert offers[0].in_scope is True
+
+
+@pytest.mark.parametrize(
     ("pack_id", "row", "expected_attributes", "metric", "expected_metric"),
     [
         (

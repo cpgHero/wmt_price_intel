@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -26,7 +26,19 @@
       "pill organizer",
       "empty capsule",
       "paperback",
-      "ebook"
+      "ebook",
+      "for dogs",
+      "for cats",
+      "topical formula",
+      "serum",
+      "moisturizer",
+      "conditioner",
+      "sunscreen",
+      "body lotion",
+      "cleanser",
+      "orange juice",
+      "juice drink",
+      "tea bags"
     ],
     "availability_policy": "search_presence",
     "require_positive_price": true
@@ -643,7 +655,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.1"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.0.2"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

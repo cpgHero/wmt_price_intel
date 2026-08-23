@@ -442,6 +442,59 @@ def test_trader_joes_request_restores_provider_catalog_leading_zero_id() -> None
     assert context.cache_identity(endpoint)["url"] is None
 
 
+@pytest.mark.parametrize(
+    ("retailer_id", "product_id", "url", "expected_path", "expected_fulfillment"),
+    [
+        ("bjs_us", "3000000000004707267", None, "/mc/bjs/pdp/zipcode/", None),
+        (
+            "costco_us",
+            "4000343973",
+            "https://www.costco.com/p/-/product/4000343973",
+            "/mc/costco/pdp/zipcode",
+            "shipping",
+        ),
+        (
+            "cvs_us",
+            "198990",
+            "https://www.cvs.com/shop/product-prodid-1180391?skuId=198990",
+            "/mc/cvs/pdp/zipcode",
+            "pickup",
+        ),
+        (
+            "walgreens_us",
+            "prod3388",
+            None,
+            "/mc/walgreens/pdp/zipcode",
+            "pickup",
+        ),
+    ],
+)
+def test_spring_valley_retailer_pdp_catalog_uses_supplied_metricscart_contracts(
+    retailer_id: str,
+    product_id: str,
+    url: str | None,
+    expected_path: str,
+    expected_fulfillment: str | None,
+) -> None:
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)
+    request = MetricsCartProductDetailAdapter(endpoint).build_request(
+        ProductDetailRequestContext(
+            product_id=product_id,
+            zipcode="43081",
+            store="0096",
+            url=url,
+        )
+    )
+
+    assert request.path == expected_path
+    assert request.params.get("fulfillment_type") == expected_fulfillment
+    assert request.params.get("url") == url
+    if retailer_id == "cvs_us":
+        assert "product_id" not in request.params
+    else:
+        assert request.params["product_id"] == product_id
+
+
 @pytest.mark.parametrize("retailer_id", ["target_us", "sams_club_us"])
 def test_url_only_contract_rejects_product_id_without_url(retailer_id: str) -> None:
     endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get(retailer_id)

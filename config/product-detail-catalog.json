@@ -58,6 +58,48 @@
       "supported_params": ["product_id", "url", "zipcode"]
     },
     {
+      "retailer_id": "bjs_us",
+      "provider_retailer": "bjs",
+      "domain": "bjs.com",
+      "endpoint_id": "52",
+      "contract_version": "2026-08-16",
+      "method": "GET",
+      "path": "/mc/bjs/pdp/zipcode/",
+      "credits_per_successful_page": 2,
+      "paid_calls_enabled": true,
+      "required_params": ["zipcode", "store"],
+      "supported_params": ["url", "product_id", "zipcode", "store"]
+    },
+    {
+      "retailer_id": "costco_us",
+      "provider_retailer": "costco",
+      "domain": "costco.com",
+      "endpoint_id": "61",
+      "contract_version": "2026-08-16",
+      "method": "GET",
+      "path": "/mc/costco/pdp/zipcode",
+      "credits_per_successful_page": 4,
+      "paid_calls_enabled": true,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"],
+      "default_params": { "fulfillment_type": "shipping" }
+    },
+    {
+      "retailer_id": "cvs_us",
+      "provider_retailer": "cvs",
+      "domain": "cvs.com",
+      "endpoint_id": "66",
+      "contract_version": "2026-08-16",
+      "method": "GET",
+      "path": "/mc/cvs/pdp/zipcode",
+      "credits_per_successful_page": 3,
+      "paid_calls_enabled": true,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["url", "zipcode", "store", "fulfillment_type"],
+      "default_params": { "fulfillment_type": "pickup" },
+      "identity_param": "url"
+    },
+    {
       "retailer_id": "giant_eagle_us",
       "provider_retailer": "gianteagle",
       "domain": "gianteagle.com",
@@ -194,6 +236,20 @@
       "paid_calls_enabled": true,
       "required_params": ["zipcode"],
       "supported_params": ["url", "product_id", "zipcode"]
+    },
+    {
+      "retailer_id": "walgreens_us",
+      "provider_retailer": "walgreens",
+      "domain": "walgreens.com",
+      "endpoint_id": "184",
+      "contract_version": "2026-08-16",
+      "method": "GET",
+      "path": "/mc/walgreens/pdp/zipcode",
+      "credits_per_successful_page": 2,
+      "paid_calls_enabled": true,
+      "required_params": ["zipcode", "store", "fulfillment_type"],
+      "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"],
+      "default_params": { "fulfillment_type": "pickup" }
     },
     {
       "retailer_id": "walmart_us",
