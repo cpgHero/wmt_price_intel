@@ -39,7 +39,9 @@ Live Search-by-ZIP collections can now produce the same exhaustive, governed Mat
 
 Meijer remains explicitly partial because 45 of its 85 Search pages were unavailable. PDP evidence cannot infer missing assortment observations.
 
-Three pre-import diagnostics were rejected. The first empty queue exposed over-strict active-ingredient handling. The second produced 40,162 unresolved pairs because a title fallback mislabeled the entire title as the active ingredient and geography alone admitted too many unknown-attribute combinations. The third reduced the funnel to 2,243, but representative sampling found numeric and dosage-form noise admitting implausible pairs. None became an authoritative queue. Product Pack 1.0.5 removes that false field, makes structured PDP specification fields generically available to declared `raw.*` sources, and bounds checksum-governed lexical retrieval to five identity-oriented candidates per Walmart product and retailer. Import remains blocked until the replacement volume and representative cases pass audit.
+Three pre-import diagnostics were rejected. The first empty queue exposed over-strict active-ingredient handling. The second produced 40,162 unresolved pairs because a title fallback mislabeled the entire title as the active ingredient and geography alone admitted too many unknown-attribute combinations. The third reduced the funnel to 2,243, but representative sampling found numeric and dosage-form noise admitting implausible pairs. None became an authoritative queue. Product Pack 1.0.5 removes that false field, makes structured PDP specification fields generically available to declared `raw.*` sources, and bounds checksum-governed lexical retrieval to five identity-oriented candidates per Walmart product and retailer.
+
+The audited production queue imported successfully as database record `0a21f7b0-adcc-4bff-bae9-aa106b2176a9`, version `2026.08.23-spring-valley-4`, checksum `3a1da8ad4f1ce4ce80c22d7414d5e05617b5d4d82d25fbce18992a1c61d41044`. It contains 1,186 pending cases covering 111 Spring Valley anchors and 605 competitor products across all nine selected competitors. Database reconciliation found zero cases with missing positive-price location evidence, zero non-Spring Valley benchmark anchors, and zero known third-party seller cases. The proposals remain non-authoritative until certification.
 
 ## Human and reporting gates
 
@@ -52,4 +54,4 @@ Three pre-import diagnostics were rejected. The first empty queue exposed over-s
 
 ## Verification
 
-GitHub Actions run `32671662219` passed 690 Python tests, schema and reversible migration checks, all TypeScript checks, 14 browser tests, production builds, and all four service-container builds. The Spring Valley queue build/import result is recorded in Platform Docs after the production evidence profile completes.
+GitHub Actions run `32674158407` passed Python tests, type checking, schema and reversible migration checks, all TypeScript checks, browser tests, production builds, and all four service-container builds. Production runs Product Pack 1.0.5 and the imported queue passed the post-import database reconciliation above.
