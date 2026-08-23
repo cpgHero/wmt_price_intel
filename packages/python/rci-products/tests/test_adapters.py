@@ -502,11 +502,14 @@ def test_walgreens_contract_overrides_search_sfs_with_required_pickup() -> None:
         zipcode="43230",
         store="9093",
         fulfillment_type="SFS",
+        url="https://www.walgreens.com/store/c/example/ID=300391652-product",
     )
 
     request = MetricsCartProductDetailAdapter(endpoint).build_request(context)
 
     assert request.params["fulfillment_type"] == "pickup"
+    assert request.params["product_id"] == "300391652"
+    assert "url" not in request.params
     assert context.cache_identity(endpoint)["fulfillment_type"] == "pickup"
 
 

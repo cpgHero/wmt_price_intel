@@ -242,14 +242,15 @@
       "provider_retailer": "walgreens",
       "domain": "walgreens.com",
       "endpoint_id": "184",
-      "contract_version": "2026-08-23.1",
+      "contract_version": "2026-08-23.2",
       "method": "GET",
       "path": "/mc/walgreens/pdp/zipcode",
       "credits_per_successful_page": 2,
       "paid_calls_enabled": true,
       "required_params": ["zipcode", "store", "fulfillment_type"],
       "supported_params": ["url", "product_id", "zipcode", "store", "fulfillment_type"],
-      "fixed_params": { "fulfillment_type": "pickup" }
+      "fixed_params": { "fulfillment_type": "pickup" },
+      "identity_param": "product_id"
     },
     {
       "retailer_id": "walmart_us",
