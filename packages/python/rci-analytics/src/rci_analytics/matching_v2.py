@@ -193,6 +193,7 @@ class MatchingPolicyV2:
     candidate_retrieval_maximum_per_benchmark: int = 25
     candidate_retrieval_minimum_similarity: float = 0.0
     candidate_retrieval_stop_words: tuple[str, ...] = ()
+    candidate_include_unknown_hard_blockers: bool = False
 
     def __post_init__(self) -> None:
         if not self.attributes:
@@ -296,6 +297,9 @@ class MatchingPolicyV2:
                     self.candidate_retrieval_minimum_similarity
                 ),
                 "candidate_retrieval_stop_words": self.candidate_retrieval_stop_words,
+                "candidate_include_unknown_hard_blockers": (
+                    self.candidate_include_unknown_hard_blockers
+                ),
             }
         )
 
@@ -522,6 +526,9 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         candidate_retrieval_stop_words=tuple(
             str(value).casefold() for value in candidate_retrieval.get("stop_words", ())
         ),
+        candidate_include_unknown_hard_blockers=bool(
+            candidate_retrieval.get("include_unknown_hard_blockers", False)
+        ),
     )
 
 
@@ -574,6 +581,11 @@ class DeterministicMatchEngineV2:
         hard_conflicts = [
             row for row in evidence if row.role == "hard_blocker" and row.outcome == "conflict"
         ]
+        hard_unknowns = [
+            row
+            for rule, row in zip(policy.attributes, evidence, strict=True)
+            if rule.role == "hard_blocker" and rule.unknown_is_blocking and row.outcome == "unknown"
+        ]
         critical_conflicts = [
             row
             for rule, row in zip(policy.attributes, evidence, strict=True)
@@ -594,6 +606,10 @@ class DeterministicMatchEngineV2:
             tier = None
             status = "not_comparable"
             reason = "A Product Pack hard-blocker attribute conflicts."
+        elif hard_unknowns:
+            tier = None
+            status = "unresolved"
+            reason = "A Product Pack hard-blocker attribute lacks governed evidence."
         elif verified_identifier and not critical_conflicts:
             tier = "exact_item"
             if tier in policy.auto_approval_tiers:

@@ -455,7 +455,10 @@ class MatchingShadowEvaluatorV2:
                     continue
                 value = benchmark_listing.attributes.get(rule.name)
                 if value is None or value.value is None or value.review_status == "conflicted":
-                    if rule.unknown_is_blocking:
+                    if (
+                        rule.unknown_is_blocking
+                        and not self._policy.candidate_include_unknown_hard_blockers
+                    ):
                         eligible_indexes.clear()
                     continue
                 if rule.numeric_tolerance is not None and not isinstance(value.value, bool):
@@ -467,7 +470,10 @@ class MatchingShadowEvaluatorV2:
                             or candidate_value.value is None
                             or candidate_value.review_status == "conflicted"
                         ):
-                            if not rule.unknown_is_blocking:
+                            if (
+                                not rule.unknown_is_blocking
+                                or self._policy.candidate_include_unknown_hard_blockers
+                            ):
                                 within_tolerance.add(index)
                             continue
                         try:
@@ -593,7 +599,10 @@ class MatchingShadowEvaluatorV2:
             for index, listing in enumerate(competitor):
                 value = listing.attributes.get(rule.name)
                 if value is None or value.value is None or value.review_status == "conflicted":
-                    if not rule.unknown_is_blocking:
+                    if (
+                        not rule.unknown_is_blocking
+                        or self._policy.candidate_include_unknown_hard_blockers
+                    ):
                         unknown.add(index)
                 else:
                     values[_canonical(value.value)].add(index)

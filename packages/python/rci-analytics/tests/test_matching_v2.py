@@ -1241,6 +1241,35 @@ def test_unknown_blocking_hard_attribute_excludes_candidate() -> None:
     assert result.attribute_blocked_pairs == 1
 
 
+def test_unknown_hard_attribute_can_enter_evidence_review_without_becoming_comparable() -> None:
+    policy = replace(
+        _policy(),
+        attributes=(
+            replace(_policy().attributes[0], unknown_is_blocking=True),
+            *_policy().attributes[1:],
+        ),
+        candidate_include_unknown_hard_blockers=True,
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (_listing("walmart_us", "w1", form=None),),
+        (_listing("aldi_us", "a1"),),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 1
+    assert result.attribute_blocked_pairs == 0
+    assert result.edges[0].tier is None
+    assert result.edges[0].status == "unresolved"
+
+
 def test_listing_evidence_corrects_conflicting_static_override_from_current_title() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     values: dict[str, object] = {

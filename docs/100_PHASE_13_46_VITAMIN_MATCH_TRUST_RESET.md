@@ -18,7 +18,7 @@ No current vitamin decision is eligible for successor carry-forward, gold-set re
 
 ## Corrected policy
 
-`vitamins_supplements@1.1.0` is fail-closed:
+`vitamins_supplements@1.1.1` is fail-closed:
 
 1. active ingredient or governed formulation, strength, strength unit, dosage form, release profile, and life-stage/audience are hard blockers;
 2. those attributes must be known before a comparable relationship can be certified;
@@ -27,6 +27,8 @@ No current vitamin decision is eligible for successor carry-forward, gold-set re
 5. complete critical evidence is required for an equivalent product;
 6. a package-count difference may support normalized-unit comparison only after all identity attributes agree; and
 7. candidate retrieval retains audience, dosage-form, release, and strength-unit identity words instead of discarding them as stop words.
+
+Candidate discovery and certification are deliberately separate gates. A lexical candidate may enter evidence review when a critical value is missing on either side, but the missing value remains a release blocker. Known critical conflicts are excluded from the candidate funnel. This preserves recall for PDP/vision-assisted review without allowing incomplete evidence to become a certified match.
 
 Brand remains non-authoritative because Spring Valley will normally compare with a competitor brand or private label. Brand disagreement cannot override a specification match and brand agreement cannot rescue an identity conflict.
 
@@ -38,7 +40,7 @@ The certification API now derives allowed relationship tiers from the active Pro
 
 The replacement queue must:
 
-- be generated from retained Search and PDP evidence under Product Pack 1.1.0;
+- be generated from retained Search and PDP evidence under Product Pack 1.1.1;
 - set `carry_forward_certified=false` and begin with zero final decisions;
 - contain no adult/children, prenatal/non-prenatal, sex-specific, senior/children, active-ingredient, strength, strength-unit, dosage-form, or release-profile conflicts among comparable proposals;
 - keep unknown required identity evidence unresolved;
@@ -49,3 +51,5 @@ The replacement queue must:
 ## Cost boundary
 
 This reset uses existing evidence. It makes no MetricsCart or OpenAI call. Additional AI review is blocked until the deterministic successor audit passes and the owner separately approves the disclosed case count and spend.
+
+The first fail-closed dry run under Product Pack 1.1.0 produced zero candidates because unknown critical evidence was being treated as both a certification blocker and a candidate-discovery blocker. It was not imported. Product Pack 1.1.1 keeps the certification blocker but permits bounded lexical evidence-review candidates when a critical value is unknown; this is a generic policy switch and does not weaken final certification.

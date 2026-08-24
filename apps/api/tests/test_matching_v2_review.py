@@ -50,7 +50,7 @@ def test_spring_valley_legacy_queue_is_explicitly_quarantined() -> None:
     assert quarantine is not None
     assert quarantine["carry_forward_allowed"] is False
     assert quarantine["reporting_release_allowed"] is False
-    assert quarantine["successor_product_pack_version"] == "1.1.0"
+    assert quarantine["successor_product_pack_version"] == "1.1.1"
 
 
 def _canonical(value: Any) -> str:
@@ -1421,7 +1421,7 @@ def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_
     policy = _active_certification_policy("vitamins_supplements")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.1.0"
+    assert policy["product_pack_version"] == "1.1.1"
     assert policy["allow_comparable_substitute"] is False
     assert "comparable_substitute" not in policy["allowed_tiers"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]
