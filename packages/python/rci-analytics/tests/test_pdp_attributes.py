@@ -231,26 +231,38 @@ def test_vitamin_formulation_terms_do_not_collapse_to_one_shared_minor_ingredien
             )
         ).attributes["active_ingredient"]
 
-    assert classify(
-        "15083853537",
-        "walmart_us",
-        "Spring Valley Advanced Formula Blood Sugar Support, 500 mcg Chromium",
-    ) == "blood_sugar_support_formula"
-    assert classify(
-        "94981479",
-        "target_us",
-        "Nature Made Metabolyze Capsules, Chromium Picolinate, Green Tea Extract and Vitamin B12",
-    ) == "metabolyze_formula"
-    assert classify(
-        "6139509340",
-        "walmart_us",
-        "Spring Valley Vitamin C with Rose Hips 500 mg Tablets",
-    ) == "vitamin_c_rose_hips"
-    assert classify(
-        "93731917",
-        "target_us",
-        "Nature Made Vitamin C 500 mg Tablets",
-    ) == "vitamin_c"
+    assert (
+        classify(
+            "15083853537",
+            "walmart_us",
+            "Spring Valley Advanced Formula Blood Sugar Support, 500 mcg Chromium",
+        )
+        == "blood_sugar_support_formula"
+    )
+    assert (
+        classify(
+            "94981479",
+            "target_us",
+            "Nature Made Metabolyze Capsules, Chromium Picolinate, Green Tea Extract and Vitamin B12",
+        )
+        == "metabolyze_formula"
+    )
+    assert (
+        classify(
+            "6139509340",
+            "walmart_us",
+            "Spring Valley Vitamin C with Rose Hips 500 mg Tablets",
+        )
+        == "vitamin_c_rose_hips"
+    )
+    assert (
+        classify(
+            "93731917",
+            "target_us",
+            "Nature Made Vitamin C 500 mg Tablets",
+        )
+        == "vitamin_c"
+    )
 
 
 def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact() -> None:
