@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.53",
+  version: "1.3.54",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. The second Product Pack 1.2.1 shadow reduced that to 239 but failed recall and zero-false-positive gates: 199 catalog anchors remained unobserved, 87–119 observed anchors per retailer had no candidate, one complex-formula pair was overstated, and retailer breadcrumb text contaminated one brand classification. Neither shadow was imported. Product Pack 1.2.2 preserves request keywords as retrieval-only context, bounds PDP brand evidence to structured brand plus product name, distinguishes additional formula variants, and temporarily disables deterministic vitamin auto-approval. Every proposal remains AI/human certified until a reviewed benchmark proves safe automation.",
+            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. The second Product Pack 1.2.1 shadow reduced that to 239 but failed recall and zero-false-positive gates. The third Product Pack 1.2.2 shadow produced 116 cases and zero automatic approvals, but requiring exact shared Search-keyword context hid too many candidates: 106–122 of 123 observed Walmart anchors lacked a candidate by retailer. None of the shadows was imported. Product Pack 1.2.3 uses Search keyword as a retrieval preference rather than a requirement, keeps PDP brand evidence bounded to structured brand plus product name, excludes obvious non-oral Search noise, and retains the zero-auto-approval gate. Every proposal remains AI/human certified until a reviewed benchmark proves safe automation.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented; fourth retained-evidence shadow pending",
+              "Spring Valley query context changed from a retrieval requirement to a preference after the third shadow failed recall.",
+              "The third read-only shadow produced 116 cases and zero automatic approvals, and corrected retailer-breadcrumb brand contamination. It was not imported because exact shared-keyword gating left 106–122 observed Walmart anchors without candidates per retailer. Product Pack 1.2.3 now prefers shared query context while permitting cross-query structured/lexical retrieval, retains zero deterministic vitamin auto-approval, and excludes wipes, transdermal patches, and drink mixes from oral supplement candidates. No paid Search, PDP, or AI call was made; production remains unchanged.",
+            ],
             [
               "2026-08-24",
               "Implemented and locally verified; third retained-evidence shadow pending deployment",

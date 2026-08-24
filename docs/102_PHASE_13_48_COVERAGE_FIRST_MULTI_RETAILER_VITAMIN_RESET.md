@@ -56,11 +56,11 @@ labels continue to resolve from Brand Foundation 2.0.0.
 
 ### Certification boundary
 
-Vitamins & Supplements Product Pack 1.2.2 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. It adds governed title/PDP formula-family extraction, preserves named release and audience conflicts, and permits `Standard` release and `General` audience only through explicit Product Pack absence policies. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
+Vitamins & Supplements Product Pack 1.2.3 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. It adds governed title/PDP formula-family extraction, preserves named release and audience conflicts, and permits `Standard` release and `General` audience only through explicit Product Pack absence policies. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
 
 The second retained-data shadow found that scalar ingredient evidence could still overstate
 complex-formula equivalence, such as a blood-sugar support blend versus a different
-chromium-containing formula. Product Pack 1.2.2 therefore disables deterministic automatic
+chromium-containing formula. Product Pack 1.2.3 therefore disables deterministic automatic
 approval while formula signatures are calibrated against a reviewed benchmark set. Exact-item
 and exact-specification proposals remain visible for AI/human review, but none can become final
 without certification. This is an intentional temporary trust gate, not a permanent requirement
@@ -73,8 +73,9 @@ conflicting hard blockers never auto-approve.
 
 The live Search bridge now preserves the exact request keyword on every normalized Search row.
 The listing accumulator collapses those values into product-level retrieval contexts. Product
-Packs may require a shared context when both products have it, which restores high recall within
-the owner-defined family without asserting comparability. Query context affects candidate
+Packs may prefer or require shared context. Product Pack 1.2.3 uses it as a preference, not a
+requirement, because the third shadow proved that exact shared-keyword gating hid valid
+cross-query candidates. Query context affects candidate
 retrieval and ordering only; it cannot override a hard conflict, create attribute evidence, or
 certify a match.
 
@@ -140,9 +141,15 @@ retailer, and 199 catalog anchors still lacked a positive-price observation. Sem
 also found the complex-formula false positive above and found retailer breadcrumb contamination
 in brand evidence. The queue was never imported.
 
-Product Pack 1.2.2, bounded PDP brand resolution, and shared-query-context retrieval are the
-response to that failed gate. The third shadow must show zero automatic approvals, no known
-audience/formula/strength/form/release conflicts among positive proposals, materially improved
-anchor coverage, accurate private-label attribution, and an operationally bounded case count.
-Only after those gates pass will the owner receive a priced, early-stopping multi-market Search
-recovery plan for the 199 unobserved catalog anchors and broader competitor discovery.
+Product Pack 1.2.2, bounded PDP brand resolution, and shared-query-context retrieval were the
+response to that failed gate. The third shadow produced 116 cases with zero automatic approvals
+and corrected the Meijer breadcrumb contamination, but exact shared-context gating was too
+restrictive: 106–122 observed anchors per retailer lacked a candidate. It was never imported.
+
+Product Pack 1.2.3 changes context overlap from required to preferred, retains the zero-auto-
+approval boundary, and excludes obvious non-oral Search noise such as wipes, patches, and drink
+mixes. The fourth shadow must show zero automatic approvals, no known audience/formula/strength/
+form/release conflicts among positive proposals, materially improved anchor coverage, accurate
+private-label attribution, and an operationally bounded case count. Only after those gates pass
+will the owner receive a priced, early-stopping multi-market Search recovery plan for the 199
+unobserved catalog anchors and broader competitor discovery.

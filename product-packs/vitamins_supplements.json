@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -38,7 +38,12 @@
       "cleanser",
       "orange juice",
       "juice drink",
-      "tea bags"
+      "tea bags",
+      "wet wipes",
+      "flushable wipes",
+      "vitamin patch",
+      "supplement patch",
+      "drink mix"
     ],
     "availability_policy": "search_presence",
     "require_positive_price": true
@@ -337,7 +342,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.2.2-shadow.1",
+    "policy_version": "1.2.3-shadow.1",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
@@ -382,7 +387,7 @@
       "minimum_structured_matches": 1,
       "minimum_per_brand_lane": 3,
       "preserve_numeric_tokens": true,
-      "context_overlap_mode": "require_when_available",
+      "context_overlap_mode": "prefer",
       "stop_words": [
         "spring",
         "valley",
@@ -807,7 +812,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.2"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.3"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

@@ -1422,7 +1422,7 @@ def test_vitamin_pack_uses_catalog_wide_structured_candidate_discovery() -> None
     assert policy.candidate_retrieval_structured_attributes == ("active_ingredient",)
     assert policy.candidate_retrieval_minimum_per_brand_lane == 3
     assert policy.candidate_retrieval_preserve_numeric_tokens is True
-    assert policy.candidate_retrieval_context_mode == "require_when_available"
+    assert policy.candidate_retrieval_context_mode == "prefer"
     assert policy.auto_approval_tiers == ()
 
 
