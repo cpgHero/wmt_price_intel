@@ -179,12 +179,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Area", "Use it for", "Important boundary"],
           rows: [
             [
-              "2026-08-24",
-              "Implemented during approved vitamin coverage recovery",
-              "Durable collection claims now prioritize eligible retailer preflight tasks before released bulk work.",
-              "The owner-approved Spring Valley Fishers panel launched as run 016e05c8-119b-4580-be1d-e7609fdd3621 with 850 Search calls, a hard 1,615-credit ($3.23) ceiling, and PDP disabled. Eight retailer gates passed promptly; retryable Costco 429 and Meijer 500 preflights exposed starvation behind already-released work. The generic SKIP LOCKED claim order now places eligible preflights first without bypassing retailer gates, leases, retries, cancellation, idempotency, or the run budget.",
-            ],
-            [
               "Home",
               "Recent analyses, collection activity, and operating health.",
               "A launch point, not an alternate analytics engine.",
@@ -1623,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented during approved vitamin coverage recovery",
+              "Durable collection claims now prioritize eligible retailer preflight tasks before released bulk work.",
+              "The owner-approved Spring Valley Fishers panel launched as run 016e05c8-119b-4580-be1d-e7609fdd3621 with 850 Search calls, a hard 1,615-credit ($3.23) ceiling, and PDP disabled. Retryable Costco 429 and Meijer 500 preflights exposed starvation behind already-released work. The generic SKIP LOCKED claim order now places eligible preflights first without bypassing retailer gates, leases, retries, cancellation, idempotency, or the run budget.",
+            ],
             [
               "2026-08-24",
               "Implemented and locally verified; paid collection not launched",
