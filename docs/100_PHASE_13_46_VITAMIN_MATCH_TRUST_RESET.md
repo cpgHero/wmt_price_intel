@@ -2,7 +2,9 @@
 
 ## Outcome
 
-The Spring Valley vitamin certification queue is not safe for reporting. Its decisions are quarantined and will not be carried into a successor queue. The retained Search, PDP, AI, and human-review records remain immutable audit evidence; they are not authoritative product relationships.
+The former Spring Valley vitamin certification queue is not safe for reporting. Its decisions are quarantined and were not carried into the clean successor queue. The retained Search, PDP, AI, and human-review records remain immutable audit evidence; they are not authoritative product relationships.
+
+Production queue `2026.08.24-spring-valley-7` is the clean successor. It contains 203 pending, unresolved candidates and zero inherited decisions, AI drafts, or active AI tasks. It remains non-authoritative until its cases receive new evidence review and human certification under Product Pack 1.1.2.
 
 ## Confirmed defect
 
@@ -38,7 +40,7 @@ The certification API now derives allowed relationship tiers from the active Pro
 
 ## Successor requirements
 
-The replacement queue must:
+The replacement queue was required to:
 
 - be generated from retained Search and PDP evidence under Product Pack 1.1.2;
 - set `carry_forward_certified=false` and begin with zero final decisions;
@@ -48,8 +50,24 @@ The replacement queue must:
 - pass deterministic regression, schema, queue checksum, seller-governance, observation-footprint, and representative case audits before any new paid AI review; and
 - remain non-authoritative until complete human certification and a new checksum-bound gold-set release.
 
+## Clean successor audit and import
+
+The final retained-evidence dry run passed the deterministic queue gate and was imported on August 24, 2026:
+
+- queue ID: `vitamins_supplements-matching-v2-operational-certification`;
+- queue version: `2026.08.24-spring-valley-7`;
+- Product Pack: `vitamins_supplements@1.1.2`;
+- queue checksum: `3597c4d11b4c42e81bba2cc63c5da14b232de77cd2aa463f5c47ea8ca268f439`;
+- 203 cases, all `pending`, `unresolved`, and without an engine-assigned comparable tier;
+- zero carried-forward decisions, final submissions, AI drafts, active AI tasks, known hard-blocker conflicts, known seller-ineligible listings, or zero-observation listings; and
+- coverage across Amazon Same Day (23), BJ's (7), Costco (7), CVS (44), Kroger (35), Meijer (23), Sam's Club (8), Target (8), and Walgreens (48).
+
+The audit also searched product titles for adult/children and prenatal/non-prenatal audience conflicts. One substantively related prenatal-iron versus general-iron candidate remains in the evidence-review funnel. It is not a match: the engine leaves it unresolved, and missing governed ingredient, strength, and life-stage evidence blocks comparable certification. That case must be explicitly resolved from authoritative evidence or rejected.
+
+The production queue view confirms Product Pack 1.1.2 is active, the old queue's quarantine is not inherited by the new queue, and every incomplete case exposes certification blockers. No old vitamin approval or rejection was preserved.
+
 ## Cost boundary
 
-This reset uses existing evidence. It makes no MetricsCart or OpenAI call. Additional AI review is blocked until the deterministic successor audit passes and the owner separately approves the disclosed case count and spend.
+This reset uses existing evidence. It made no MetricsCart or OpenAI call. The deterministic successor audit now passes. Any paid AI review of the 203 clean cases still requires a separate owner approval after the exact model and maximum spend are disclosed.
 
 The first fail-closed dry run under Product Pack 1.1.0 produced zero candidates because unknown critical evidence was being treated as both a certification blocker and a candidate-discovery blocker. It was not imported. Product Pack 1.1.2 keeps the certification blocker but permits bounded lexical evidence-review candidates when a critical value is unknown; this is a generic policy switch and does not weaken final certification. A second dry run at the original 0.05 lexical threshold produced 2,045 unresolved candidates and 50 obvious audience-conflict pairs. It was also withheld. Version 1.1.2 raises the review-funnel similarity floor to 0.15; the retained-evidence audit showed this removes 49 of those 50 conflicts while preserving the one substantively related prenatal-iron versus iron pair for explicit rejection review.
