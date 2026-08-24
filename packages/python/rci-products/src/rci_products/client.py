@@ -31,6 +31,29 @@ class ProductDetailLimiterRegistry(Protocol):
     def get(self, retailer_id: str) -> ProviderLimiter: ...
 
 
+class ProductDetailCompositeLimiter:
+    """Apply account-wide and retailer-specific permits to every PDP request."""
+
+    def __init__(
+        self,
+        global_limiter: ProviderLimiter,
+        retailer_limiter: ProviderLimiter,
+    ) -> None:
+        self._global_limiter = global_limiter
+        self._retailer_limiter = retailer_limiter
+
+    async def acquire(self, scope_key: str | None = None) -> None:
+        await self._global_limiter.acquire(scope_key)
+        await self._retailer_limiter.acquire(scope_key)
+
+    async def pause(self, seconds: float, scope_key: str | None = None) -> None:
+        # A provider 429 has been observed across several retailer PDP lanes at
+        # the same instant. Pause both scopes so another replica cannot turn a
+        # hidden account-wide throttle into repeated zero-evidence attempts.
+        await self._global_limiter.pause(seconds, scope_key)
+        await self._retailer_limiter.pause(seconds, scope_key)
+
+
 class StaticProductDetailLimiterRegistry:
     def __init__(self, factory: Callable[[str], ProviderLimiter]) -> None:
         self._factory = factory
@@ -48,15 +71,27 @@ class PostgresProductDetailLimiterRegistry(StaticProductDetailLimiterRegistry):
         api_key: str,
         rps: int = 3,
         rpm: int = 180,
+        global_rps: int = 2,
+        global_rpm: int = 120,
     ) -> None:
         budget_key = credential_budget_key(api_key)
+        global_limiter = PostgresProviderLimiter(
+            engine,
+            provider="metricscart:pdp:all_retailers",
+            budget_key=budget_key,
+            rps=global_rps,
+            rpm=global_rpm,
+        )
         super().__init__(
-            lambda retailer_id: PostgresProviderLimiter(
-                engine,
-                provider=f"metricscart:pdp:{retailer_id}",
-                budget_key=budget_key,
-                rps=rps,
-                rpm=rpm,
+            lambda retailer_id: ProductDetailCompositeLimiter(
+                global_limiter,
+                PostgresProviderLimiter(
+                    engine,
+                    provider=f"metricscart:pdp:{retailer_id}",
+                    budget_key=budget_key,
+                    rps=rps,
+                    rpm=rpm,
+                ),
             )
         )
 

@@ -10,7 +10,11 @@ import pytest
 import respx
 
 from rci_products.catalog import ProductDetailCatalog
-from rci_products.client import MetricsCartProductDetailClient, StaticProductDetailLimiterRegistry
+from rci_products.client import (
+    MetricsCartProductDetailClient,
+    ProductDetailCompositeLimiter,
+    StaticProductDetailLimiterRegistry,
+)
 from rci_products.models import ProductDetailJob, ProductDetailRequestContext
 from rci_products.storage import InMemoryProductDetailRawObjectStore
 from rci_providers.client import MetricsCartSettings
@@ -19,6 +23,36 @@ from rci_providers.models import RetryPolicy
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 BASE_URL = "https://metricscart.test"
+
+
+class RecordingLimiter:
+    def __init__(self, name: str, events: list[tuple[object, ...]]) -> None:
+        self.name = name
+        self.events = events
+
+    async def acquire(self, scope_key: str | None = None) -> None:
+        self.events.append(("acquire", self.name, scope_key))
+
+    async def pause(self, seconds: float, scope_key: str | None = None) -> None:
+        self.events.append(("pause", self.name, seconds, scope_key))
+
+
+async def test_composite_limiter_acquires_global_then_retailer_and_pauses_both() -> None:
+    events: list[tuple[object, ...]] = []
+    limiter = ProductDetailCompositeLimiter(
+        RecordingLimiter("global", events),
+        RecordingLimiter("retailer", events),
+    )
+
+    await limiter.acquire("pickup")
+    await limiter.pause(120, "pickup")
+
+    assert events == [
+        ("acquire", "global", "pickup"),
+        ("acquire", "retailer", "pickup"),
+        ("pause", "global", 120, "pickup"),
+        ("pause", "retailer", 120, "pickup"),
+    ]
 
 
 def _job(retailer_id: str = "walmart_us") -> ProductDetailJob:

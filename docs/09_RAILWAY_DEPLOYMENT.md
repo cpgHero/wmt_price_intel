@@ -85,6 +85,8 @@ RCI_INTERNAL_SERVICE_TOKEN=<same random secret as api>
 PRODUCT_DETAIL_ENRICHMENT_ENABLED=false
 PRODUCT_DETAIL_RPS=3
 PRODUCT_DETAIL_RPM=180
+PRODUCT_DETAIL_GLOBAL_RPS=2
+PRODUCT_DETAIL_GLOBAL_RPM=120
 PRODUCT_DETAIL_CLAIM_LIMIT=18
 PRODUCT_DETAIL_LEASE_SECONDS=300
 PRODUCT_DETAIL_CACHE_TTL_SECONDS=2592000
@@ -303,9 +305,13 @@ reclaims, duplicate task count, credits, database connections, CPU, and memory. 
 if 429 frequency or lease expiry rises without useful throughput. Never compensate for provider 429s
 by raising RPS/RPM above the contracted limit.
 
-PDP workers use the same replica-scaling discipline. Each retailer/type limiter row is keyed as
-`metricscart:pdp:<retailer_id>` plus a nonsecret credential hash, so Walmart PDP capacity does not
-consume Walmart search capacity or ALDI PDP capacity.
+PDP workers use the same replica-scaling discipline. Every request must obtain both an account-wide
+PDP permit (`metricscart:pdp:all_retailers`) and a retailer/type permit
+(`metricscart:pdp:<retailer_id>`), each keyed by the same nonsecret credential hash. The defaults
+pace all retailer PDP traffic at two requests per second / 120 per minute while retaining each
+retailer's documented three requests per second / 180 per minute ceiling. A 429 pauses both scopes,
+preventing replicas from exhausting job retries during a hidden account-wide provider cooldown.
+Search and PDP remain independent limiter domains.
 
 ## Rollback
 

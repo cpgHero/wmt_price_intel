@@ -159,6 +159,13 @@ provider transport. This changes throughput only; retailer-scoped rate limits, s
 leases, retries, cancellation, idempotency, immutable responses, and the run credit ceiling remain
 authoritative.
 
+The scaled recovery then exposed synchronized HTTP 429 responses across BJ's, Costco, Kroger,
+Meijer, and Walmart PDP lanes. The provider was enforcing an account-wide burst boundary in
+addition to the documented retailer/type limits. Product Details now acquires a shared two-per-second
+and 120-per-minute account permit before the retailer permit. A 429 pauses both scopes. This keeps
+multi-replica throughput bounded, prevents nonbillable cooldown attempts from consuming a job's
+retry allowance, and leaves completed 200/404 evidence and the 7,500-credit ceiling unchanged.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates

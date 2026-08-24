@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.58",
+  version: "1.3.59",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -519,7 +519,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
             "Live Search PDP launches convert the owner-approved USD ceiling to an integer credit ceiling at $0.002 per credit, fail closed when the qualified plan exceeds it, and refuse to create duplicate work when the same governed request is already queued or running.",
             "Validate retailer-specific parameters from the versioned endpoint catalog. Catalog fixed parameters override incompatible Search terminology; for example, Walgreens Search SFS evidence is retained while its PDP contract always sends pickup. This is configuration, not category code.",
-            "PDP workers claim a retailer-balanced batch within each priority and maintain up to 18 in-flight jobs by default. As each request finishes, the next loop refills only the free capacity instead of waiting for the slowest request in the batch. The shared Postgres limiter still enforces 3 requests per second and 180 per minute independently for each retailer across every replica.",
+            "PDP workers claim a retailer-balanced batch within each priority and maintain up to 18 in-flight jobs by default. As each request finishes, the next loop refills only the free capacity instead of waiting for the slowest request in the batch. Every request obtains a shared account-wide PDP permit at 2 requests per second / 120 per minute and its retailer permit at 3 requests per second / 180 per minute. A provider 429 pauses both Postgres-backed scopes across every replica.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
             "Audit PDP completeness separately from schema coverage. Zero unmapped fields means the provider payload was mapped; it does not mean every product supplied brand, identifiers, package specifications, descriptions, or multiple usable images.",
           ],
@@ -606,6 +606,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Matching v2 tiers",
           columns: ["Tier", "Meaning", "Current release treatment"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and test-verified; production recovery in progress",
+              "Product Details gained an account-wide provider limiter in addition to retailer limits.",
+              "The 2,553-product Spring Valley enrichment produced synchronized zero-cost 429s across five retailer PDP lanes when ten replicas respected only the documented per-retailer limits. Every PDP request now acquires a shared two-per-second / 120-per-minute account permit and its three-per-second / 180-per-minute retailer permit. A 429 pauses both credential-scoped Postgres rows. Completed 200/404 evidence, immutable raw responses, leases, idempotency, and the 7,500-credit hard ceiling are unchanged; only nonbillable transient failures may be requeued after all old workers stop.",
+            ],
             [
               "Exact item",
               "Same verified physical trade item and package.",

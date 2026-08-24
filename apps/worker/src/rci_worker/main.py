@@ -320,6 +320,8 @@ async def run() -> None:
                 api_key=metricscart_settings.api_key,
                 rps=int(os.getenv("PRODUCT_DETAIL_RPS", "3")),
                 rpm=int(os.getenv("PRODUCT_DETAIL_RPM", "180")),
+                global_rps=int(os.getenv("PRODUCT_DETAIL_GLOBAL_RPS", "2")),
+                global_rpm=int(os.getenv("PRODUCT_DETAIL_GLOBAL_RPM", "120")),
             ),
             S3ProductDetailRawObjectStore.create(
                 bucket=os.environ["OBJECT_STORAGE_BUCKET"],
