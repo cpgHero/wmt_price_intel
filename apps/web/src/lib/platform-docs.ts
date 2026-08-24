@@ -691,7 +691,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Vitamin certification reset",
-          text: "Vitamins & Supplements Product Pack 1.1.2 fails closed on product identity. Active ingredient or governed formulation, labeled strength and unit, dosage form, release profile, and life-stage/audience must be known and compatible. Adult, children, prenatal, men, women, senior, and general-audience conflicts are non-comparable. Package-count differences may support normalized-unit equivalent-product analysis only after the identity attributes agree. Broad comparable-substitute certification is prohibited. A bounded lexical candidate may enter PDP/vision evidence review when a critical value is missing, but it cannot be certified until every required value is known and compatible. Queue 2026.08.23-spring-valley-4 and all 300 decisions made from its unsafe policy are quarantined from reporting. Clean successor 2026.08.24-spring-valley-7 contains 203 pending unresolved cases, zero inherited decisions, zero AI drafts, and zero active AI tasks. Historical submissions remain immutable audit evidence only.",
+          text: "Vitamins & Supplements Product Pack 1.1.2 fails closed on product identity. Active ingredient or governed formulation, labeled strength and unit, dosage form, release profile, and life-stage/audience must be known and compatible. Adult, children, prenatal, men, women, senior, and general-audience conflicts are non-comparable. Package-count differences may support normalized-unit equivalent-product analysis only after the identity attributes agree. Broad comparable-substitute certification is prohibited. A bounded lexical candidate may enter PDP/vision evidence review when a critical value is missing, but it cannot be certified until every required value is known and compatible. Queue 2026.08.23-spring-valley-4 and all 300 decisions made from its unsafe policy are quarantined from reporting. Clean successor 2026.08.24-spring-valley-7 contains 203 pending unresolved cases and zero inherited decisions. Owner-approved gpt-5.6-terra review completed successfully for every case at $16.4078975 recorded usage: 81 not-comparable recommendations, 114 insufficient-evidence recommendations, and eight positive match proposals. The server blocks all insufficient-evidence drafts and all eight positive proposals from bulk certification because deterministic hard-blocker evidence remains unresolved. Every draft still requires a human decision; none automatically changed reporting.",
         },
         {
           kind: "callout",
@@ -1611,6 +1611,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "AI evidence review complete; human certification pending",
+              "Every clean Spring Valley candidate received a new advisory review under the fail-closed Product Pack.",
+              "All 203 latest AI tasks succeeded under gpt-5.6-terra for $16.4078975 recorded usage. The recommendation mix is 81 not comparable, 114 insufficient evidence, six equivalent product, and two exact specification; no prohibited comparable-substitute tier was proposed. All drafts require human review. The bulk preview permits only bounded explicit confirmation, blocks all insufficient-evidence cases, and blocks all eight positive proposals while deterministic hard-blocker evidence remains unresolved. A title-level audience audit found no adult, children, senior, prenatal, men, or women conflict among the positive proposals. Zero cases were automatically certified and all historical billing failures remain immutable zero-cost retry evidence.",
+            ],
             [
               "2026-08-24",
               "Deployed, trust-gated, and clean successor imported",

@@ -71,3 +71,20 @@ The production queue view confirms Product Pack 1.1.2 is active, the old queue's
 This reset uses existing evidence. It made no MetricsCart or OpenAI call. The deterministic successor audit now passes. Any paid AI review of the 203 clean cases still requires a separate owner approval after the exact model and maximum spend are disclosed.
 
 The first fail-closed dry run under Product Pack 1.1.0 produced zero candidates because unknown critical evidence was being treated as both a certification blocker and a candidate-discovery blocker. It was not imported. Product Pack 1.1.2 keeps the certification blocker but permits bounded lexical evidence-review candidates when a critical value is unknown; this is a generic policy switch and does not weaken final certification. A second dry run at the original 0.05 lexical threshold produced 2,045 unresolved candidates and 50 obvious audience-conflict pairs. It was also withheld. Version 1.1.2 raises the review-funnel similarity floor to 0.15; the retained-evidence audit showed this removes 49 of those 50 conflicts while preserving the one substantively related prenatal-iron versus iron pair for explicit rejection review.
+
+## Owner-approved AI evidence review
+
+The owner subsequently approved a paid `gpt-5.6-terra` evidence review of all 203 clean successor cases. Billing-limit and prepaid-balance failures were retained as immutable, zero-cost retry history. After credits were restored, every case completed successfully:
+
+- 203 of 203 cases have a latest successful advisory draft;
+- zero cases remain queued, running, or failed;
+- all 203 drafts explicitly require human review;
+- successful draft usage totals `$16.4078975`;
+- 81 drafts recommend `not_comparable`;
+- 114 recommend `insufficient_evidence` and therefore cannot become a final decision;
+- eight recommend a comparable relationship: six `equivalent_product` and two `exact_specification`; and
+- zero drafts propose the prohibited `comparable_substitute` tier.
+
+The server-owned bulk-certification preview remains fail-closed. It offers at most 50 cases per explicit confirmation. Its first preview offered 50 `not_comparable` recommendations, deferred 31 additional `not_comparable` recommendations to a later confirmation batch, blocked all 114 insufficient-evidence drafts, and blocked all eight positive match proposals because the current deterministic evidence still contains unresolved Product Pack hard blockers. The eight AI proposals may be useful leads, but image-derived assertions do not silently rewrite governed listing evidence and cannot bypass certification.
+
+A semantic audit found no AI-proposed comparable relationship whose product titles conflict on adult, children, senior, prenatal, men, or women audience markers. The previously certified adult-to-children relationships are absent from the clean successor queue. All 203 cases remain unresolved and no AI recommendation was automatically certified or released to reporting.
