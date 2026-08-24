@@ -243,7 +243,10 @@ def test_vitamin_formulation_terms_do_not_collapse_to_one_shared_minor_ingredien
         classify(
             "94981479",
             "target_us",
-            "Nature Made Metabolyze Capsules, Chromium Picolinate, Green Tea Extract and Vitamin B12",
+            (
+                "Nature Made Metabolyze Capsules, Chromium Picolinate, "
+                "Green Tea Extract and Vitamin B12"
+            ),
         )
         == "metabolyze_formula"
     )
