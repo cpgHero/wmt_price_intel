@@ -170,6 +170,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
     };
     candidate_retrieval?: {
       mode: "disabled" | "lexical_top_k";
+      include_unknown_hard_blockers?: boolean;
       maximum_per_benchmark: number;
       minimum_similarity: number;
       stop_words: string[];
