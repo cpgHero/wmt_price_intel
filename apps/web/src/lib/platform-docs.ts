@@ -1607,9 +1607,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-23",
-              "Implemented and test-verified; deployment pending",
+              "Deployed, production-verified, and actively processing",
               "Matching v2 AI review distinguishes successful drafts from terminal failures and tolerates provider image-download wording changes.",
-              "The latest-batch panel no longer labels terminal failures as completed AI reviews: it separately reports drafts ready and failed tasks. Vision review now falls back to structured evidence for both documented OpenAI image-download error phrasings instead of failing the case. Production diagnosis of the Spring Valley queue found 1,185 tasks rejected for insufficient OpenAI credits and one image-download failure, zero successful drafts, zero certifiable recommendations, and zero recorded AI spend; retry remains an explicit administrator action after credits are available.",
+              "The latest-batch panel no longer labels terminal failures as completed AI reviews: it separately reports drafts ready and failed tasks. Vision review now falls back to structured evidence for both documented OpenAI image-download error phrasings instead of failing the case. Production diagnosis of the Spring Valley queue found 1,185 tasks rejected for insufficient OpenAI credits and one image-download failure, zero successful drafts, zero certifiable recommendations, and zero recorded AI spend. After the owner restored credits, immutable retry batch b99c87dc-501b-4146-a819-807f0953e738 queued all 1,186 preserved failures under gpt-5.6-terra; the first completed task succeeded. Historical Matching v2 usage projects approximately $39 for the batch, while actual usage remains recorded per task. Commit 9867a60 and CI run 32680954184 are live.",
             ],
             [
               "2026-08-23",
