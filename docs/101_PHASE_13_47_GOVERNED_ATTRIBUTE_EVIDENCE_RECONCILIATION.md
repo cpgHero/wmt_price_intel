@@ -47,3 +47,12 @@ The Match Certification evidence drawer shows eligible and ineligible proposals 
 - production migration, protected UI, and Spring Valley case audit before any certification proceeds.
 
 No MetricsCart or OpenAI call is required by this phase. It uses already retained PDP, image, and AI evidence.
+
+## Production verification — 2026-08-24
+
+- Commit `904edf4` passed GitHub Actions run `32757946235`, including Python, TypeScript, migration round-trip, contract, browser, and all four container-build jobs.
+- Railway production is at Alembic head `0047_attribute_reconcile`.
+- The protected Match Certification route and web health route respond successfully.
+- The active Spring Valley queue remains `2026.08.24-spring-valley-7` with 203 pending, uncertified cases and 203 successful advisory AI drafts.
+- The server reconstructed 745 checksum-bound attribute proposals from retained evidence. Of those, 374 passed the Product Pack, source-attribution, visible-text, confidence, and normalization gates and are available for human verification; 371 remain advisory-only or ineligible.
+- No evidence decision was created during deployment verification, no verified overlay was applied automatically, and no certification or reporting replay was triggered.
