@@ -1214,7 +1214,10 @@ export function CollectionBuilder({
                       value={maximumNearbyPerRetailer}
                       onChange={(event) =>
                         setMaximumNearbyPerRetailer(
-                          Math.min(100, Math.max(1, Number(event.target.value))),
+                          Math.min(
+                            100,
+                            Math.max(1, Number(event.target.value)),
+                          ),
                         )
                       }
                     />
