@@ -54,6 +54,7 @@ def test_production_images_drop_root_and_pin_runtimes() -> None:
 def test_report_catalog_is_packaged_and_watched_by_runtime_consumers() -> None:
     api_dockerfile = (REPOSITORY_ROOT / "apps/api/Dockerfile").read_text()
     assert "COPY --chown=rci:rci report-blueprints report-blueprints" in api_dockerfile
+    assert "scripts/plan_spring_valley_location_panel.py" in api_dockerfile
 
     for service in ("api", "worker", "scheduler"):
         config = json.loads((REPOSITORY_ROOT / f"infra/railway/{service}.json").read_text())
