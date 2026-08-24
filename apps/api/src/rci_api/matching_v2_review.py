@@ -29,6 +29,13 @@ MatchTier = Literal[
     "comparable_substitute",
     "custom_approved",
 ]
+_ALL_MATCH_TIERS = (
+    "exact_item",
+    "exact_specification",
+    "equivalent_product",
+    "comparable_substitute",
+    "custom_approved",
+)
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
 _MAX_AI_RETRY_ROUNDS = 4
 _MAX_AI_REVIEW_BATCH_CASES = 1_500
@@ -294,6 +301,34 @@ def _repository_root() -> Path:
     return Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
 
 
+def _review_queue_quarantines(root: Path) -> list[dict[str, Any]]:
+    path = root / "config" / "matching-v2-quarantined-queues.json"
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not load Matching v2 queue quarantine catalog: {exc}") from exc
+    entries = document.get("queues") if isinstance(document, Mapping) else None
+    if not isinstance(entries, list):
+        raise ValueError("Matching v2 queue quarantine catalog must contain a queues array")
+    return [dict(entry) for entry in entries if isinstance(entry, Mapping)]
+
+
+def _review_queue_quarantine(
+    root: Path, queue_id: str, queue_version: str
+) -> dict[str, Any] | None:
+    """Return an explicit operational quarantine without mutating queue history."""
+
+    for entry in _review_queue_quarantines(root):
+        if (
+            str(entry.get("queue_id") or "") == queue_id
+            and str(entry.get("queue_version") or "") == queue_version
+        ):
+            return entry
+    return None
+
+
 def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
     """Load the current Product Pack roles used at the certification boundary.
 
@@ -324,12 +359,20 @@ def _active_certification_policy(product_pack_id: str) -> dict[str, Any]:
         raise ValueError(
             f"active Product Pack {product_pack_id!r} defines no certification hard blockers"
         )
+    allowed_tiers = [
+        tier
+        for tier in _ALL_MATCH_TIERS
+        if tier != "comparable_substitute"
+        or bool(matching_v2.get("allow_comparable_substitute", True))
+    ]
     return {
         "product_pack_id": pack.id,
         "product_pack_version": pack.version,
         "attribute_roles": attribute_roles,
         "hard_blocker_attributes": hard_blockers,
         "hard_blocker_unknown_is_blocking": unknown_is_blocking,
+        "allowed_tiers": allowed_tiers,
+        "allow_comparable_substitute": bool(matching_v2.get("allow_comparable_substitute", True)),
         "policy_checksum": pack.checksum,
         "queue_evidence_is_immutable": True,
         "stricter_active_policy_wins": True,
@@ -440,7 +483,32 @@ def _apply_active_certification_policy(
         document["certification_hard_blocker_attributes"],
         document["certification_unknown_nonblocking_attributes"],
     )
+    allowed_tiers = [
+        str(value)
+        for value in policy.get("allowed_tiers", _ALL_MATCH_TIERS)
+        if str(value) in _ALL_MATCH_TIERS
+    ]
+    document["certification_allowed_tiers"] = allowed_tiers
+    final_decision = document.get("final_decision")
+    final_decision = final_decision if isinstance(final_decision, Mapping) else {}
+    final_tiers = (
+        [str(value) for value in final_decision.get("allowed_tiers") or []]
+        if final_decision.get("verdict") == "comparable"
+        else []
+    )
+    document["certification_tier_blockers"] = sorted(
+        tier for tier in final_tiers if tier not in allowed_tiers
+    )
+    document["certification_release_blocked"] = bool(
+        document["certification_blockers"] or document["certification_tier_blockers"]
+    )
     return document
+
+
+def _disallowed_certification_tiers(tiers: Sequence[str], case: Mapping[str, Any]) -> list[str]:
+    allowed = case.get("certification_allowed_tiers")
+    allowed = allowed if isinstance(allowed, list) else list(_ALL_MATCH_TIERS)
+    return sorted({str(tier) for tier in tiers if str(tier) not in allowed})
 
 
 class ImportReviewQueueRequest(BaseModel):
@@ -590,6 +658,9 @@ _AI_BULK_REASON_LABELS = {
         "The AI recommendation is insufficient evidence and cannot become a final bulk decision."
     ),
     "tier_not_bulk_eligible": "The comparable recommendation has no supported match tier.",
+    "tier_disallowed_by_product_pack": (
+        "The active Product Pack does not permit this relationship tier."
+    ),
     "not_comparable_tier_present": (
         "A not-comparable recommendation cannot also carry a match tier."
     ),
@@ -678,6 +749,13 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
     if result and verdict == "comparable":
         if ai_tier not in _AI_BULK_CERTIFICATION_POLICY["allowed_tiers"]:
             reason_codes.append("tier_not_bulk_eligible")
+        active_allowed_tiers = case.get("certification_allowed_tiers")
+        if (
+            isinstance(active_allowed_tiers, list)
+            and ai_tier
+            and ai_tier not in active_allowed_tiers
+        ):
+            reason_codes.append("tier_disallowed_by_product_pack")
     elif result and verdict == "not_comparable" and ai_tier:
         reason_codes.append("not_comparable_tier_present")
 
@@ -3164,6 +3242,14 @@ class PostgresMatchingV2ReviewRepository:
                     "a comparable decision cannot be certified while current Product Pack "
                     f"hard blockers conflict or are unresolved: {blocked_attributes}"
                 )
+            disallowed_tiers = _disallowed_certification_tiers(
+                submission["allowed_tiers"], case_document
+            )
+            if submission["verdict"] == "comparable" and disallowed_tiers:
+                raise ValueError(
+                    "a comparable decision cannot use relationship tiers prohibited by the "
+                    f"current Product Pack: {', '.join(disallowed_tiers)}"
+                )
             existing = (
                 (
                     await connection.execute(
@@ -3358,6 +3444,14 @@ class PostgresMatchingV2ReviewRepository:
                 raise ValueError(
                     "a comparable adjudication cannot be certified while current Product Pack "
                     f"hard blockers conflict or are unresolved: {blocked_attributes}"
+                )
+            disallowed_tiers = _disallowed_certification_tiers(
+                adjudication["allowed_tiers"], case_document
+            )
+            if adjudication["verdict"] == "comparable" and disallowed_tiers:
+                raise ValueError(
+                    "a comparable adjudication cannot use relationship tiers prohibited by the "
+                    f"current Product Pack: {', '.join(disallowed_tiers)}"
                 )
             submissions = list(
                 (
@@ -3812,6 +3906,14 @@ class MatchingV2ReviewService:
 
     async def list_queues(self, *, limit: int) -> dict[str, Any]:
         queues = await self._repository.list_queues(limit=limit)
+        for queue in queues:
+            if not isinstance(queue, dict):
+                continue
+            queue["quarantine"] = _review_queue_quarantine(
+                self._root,
+                str(queue.get("queue_id") or queue.get("external_queue_id") or ""),
+                str(queue.get("version") or ""),
+            )
         return {
             "schema_version": "2.0.0-review-queue-index",
             "authoritative": False,
@@ -3854,6 +3956,18 @@ class MatchingV2ReviewService:
                 "review queue contains known third-party marketplace seller cases: "
                 f"{excluded_seller_cases!r}"
             )
+        if (
+            request.carry_forward_certified
+            and request.successor_of_version
+            and _review_queue_quarantine(
+                self._root,
+                str(queue.get("queue_id") or ""),
+                request.successor_of_version,
+            )
+        ):
+            raise ValueError(
+                "certified decisions cannot be carried forward from a quarantined Matching v2 queue"
+            )
         return await self._repository.import_queue(
             request.organization_id,
             queue,
@@ -3882,18 +3996,54 @@ class MatchingV2ReviewService:
             for case in cases
         ]
         document["certification_policy"] = certification_policy
+        document["quarantine"] = _review_queue_quarantine(
+            self._root,
+            external_queue_id,
+            str(queue.get("version") or ""),
+        )
         document["certification_blocker_summary"] = {
             "visible_case_count": len(document["cases"]),
             "blocked_case_count": sum(
-                1 for case in document["cases"] if case.get("certification_blockers")
+                1 for case in document["cases"] if case.get("certification_release_blocked")
             ),
             "finalized_comparable_case_count": sum(
                 1
                 for case in document["cases"]
-                if case.get("review_status") == "approved" and case.get("certification_blockers")
+                if case.get("review_status") == "approved"
+                and case.get("certification_release_blocked")
             ),
         }
         return document
+
+    async def _assert_queue_not_quarantined(self, external_queue_id: str) -> None:
+        if not any(
+            str(entry.get("queue_id") or "") == external_queue_id
+            for entry in _review_queue_quarantines(self._root)
+        ):
+            return
+        document = await self._repository.queue_view(
+            external_queue_id,
+            competitor_retailer_id=None,
+            benchmark_product_id=None,
+            competitor_product_id=None,
+            stratum=None,
+            review_status=None,
+            offset=0,
+            limit=0,
+        )
+        queue = document.get("queue")
+        queue = queue if isinstance(queue, Mapping) else {}
+        quarantine = _review_queue_quarantine(
+            self._root,
+            external_queue_id,
+            str(queue.get("version") or ""),
+        )
+        if quarantine:
+            raise ValueError(
+                "this Matching v2 queue is quarantined and cannot accept AI work, "
+                "certification, export, or replay: "
+                f"{quarantine.get('reason') or 'trust reset required'!s}"
+            )
 
     async def submit_review(
         self,
@@ -3901,6 +4051,7 @@ class MatchingV2ReviewService:
         external_case_id: str,
         request: ReviewSubmissionRequest,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         self._validate_tiers(request.verdict, request.allowed_tiers)
         payload = request.model_dump(mode="json")
         checksum = _checksum(
@@ -3921,6 +4072,7 @@ class MatchingV2ReviewService:
         *,
         model_id: str,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         prompt = self._matching_review_prompt()
         return await self._repository.request_ai_draft(
             external_queue_id,
@@ -3937,6 +4089,7 @@ class MatchingV2ReviewService:
         *,
         model_id: str,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         case_ids = list(dict.fromkeys(request.case_ids))
         if len(case_ids) != len(request.case_ids):
             raise ValueError("AI draft batch case IDs must be unique")
@@ -3984,6 +4137,7 @@ class MatchingV2ReviewService:
         *,
         model_id: str,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         case_ids = list(dict.fromkeys(request.case_ids))
         if len(case_ids) != len(request.case_ids):
             raise ValueError("AI retry case IDs must be unique")
@@ -4019,6 +4173,7 @@ class MatchingV2ReviewService:
         external_queue_id: str,
         request: AIBulkCertificationPreviewRequest,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         case_ids = list(dict.fromkeys(request.case_ids))
         if len(case_ids) != len(request.case_ids):
             raise ValueError("bulk certification case IDs must be unique")
@@ -4032,6 +4187,7 @@ class MatchingV2ReviewService:
         external_queue_id: str,
         request: AIBulkCertificationCommitRequest,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         case_ids = list(dict.fromkeys(request.case_ids))
         if len(case_ids) != len(request.case_ids):
             raise ValueError("bulk certification case IDs must be unique")
@@ -4061,6 +4217,7 @@ class MatchingV2ReviewService:
         external_case_id: str,
         request: AdjudicationRequest,
     ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         self._validate_tiers(request.verdict, request.allowed_tiers)
         if len(set(request.submission_ids)) < 2:
             raise ValueError("adjudication requires two distinct submission IDs")
@@ -4076,6 +4233,7 @@ class MatchingV2ReviewService:
         )
 
     async def gold_set(self, external_queue_id: str) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
         view = await self.queue_view(
             external_queue_id,
             competitor_retailer_id=None,
@@ -4134,9 +4292,9 @@ class MatchingV2ReviewService:
                 continue
             if case["review_status"] not in {"approved", "rejected"}:
                 continue
-            if case["review_status"] == "approved" and case.get("certification_blockers"):
+            if case["review_status"] == "approved" and case.get("certification_release_blocked"):
                 # A formerly approved comparable relationship is not exportable after a
-                # stricter current Product Pack exposes a hard compatibility conflict.
+                # stricter current Product Pack exposes a hard conflict or prohibited tier.
                 continue
             decision = case["final_decision"]
             if decision is None:

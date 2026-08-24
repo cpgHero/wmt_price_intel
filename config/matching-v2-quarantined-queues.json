@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "queues": [
+    {
+      "queue_id": "vitamins_supplements-matching-v2-operational-certification",
+      "queue_version": "2026.08.23-spring-valley-4",
+      "status": "quarantined",
+      "reason": "Unsafe vitamin identity policy admitted adult-to-children and active-ingredient-conflicting relationships; every decision requires clean reevaluation under Product Pack 1.1.0.",
+      "carry_forward_allowed": false,
+      "reporting_release_allowed": false,
+      "successor_product_pack_version": "1.1.0",
+      "quarantined_at": "2026-08-24"
+    }
+  ]
+}

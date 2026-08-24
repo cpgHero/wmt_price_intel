@@ -55,3 +55,7 @@ The audited production queue imported successfully as database record `0a21f7b0-
 ## Verification
 
 GitHub Actions run `32674158407` passed Python tests, type checking, schema and reversible migration checks, all TypeScript checks, browser tests, production builds, and all four service-container builds. Production runs Product Pack 1.0.5 and the imported queue passed the post-import database reconciliation above.
+
+## Superseded trust finding — 2026-08-24
+
+The structural queue reconciliation above was accurate, but it did not prove semantic match quality. A later audit found that Product Pack 1.0.5 treated life stage and active ingredient as soft evidence and allowed broad comparable substitutes, admitting adult-to-children and ingredient-conflicting relationships. Queue `2026.08.23-spring-valley-4` and every decision derived from it are quarantined from reporting. No certification is carried forward. Phase 13.46 defines the fail-closed Product Pack 1.1.0 policy and clean successor requirements; the historical queue, AI drafts, submissions, and source evidence remain immutable audit records only.

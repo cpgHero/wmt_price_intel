@@ -32,11 +32,25 @@ from rci_api.matching_v2_review import (
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     _matching_v2_certification_coverage,
+    _review_queue_quarantine,
     get_matching_v2_review_service,
 )
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_spring_valley_legacy_queue_is_explicitly_quarantined() -> None:
+    quarantine = _review_queue_quarantine(
+        REPOSITORY_ROOT,
+        "vitamins_supplements-matching-v2-operational-certification",
+        "2026.08.23-spring-valley-4",
+    )
+
+    assert quarantine is not None
+    assert quarantine["carry_forward_allowed"] is False
+    assert quarantine["reporting_release_allowed"] is False
+    assert quarantine["successor_product_pack_version"] == "1.1.0"
 
 
 def _canonical(value: Any) -> str:
@@ -1264,11 +1278,13 @@ def test_all_comparable_certification_paths_apply_current_product_pack_hard_bloc
 
     assert "_active_certification_policy" in submit_source
     assert 'submission["verdict"] == "comparable"' in submit_source
+    assert "_disallowed_certification_tiers" in submit_source
     assert "_active_certification_policy" in adjudicate_source
     assert 'adjudication["verdict"] == "comparable"' in adjudicate_source
+    assert "_disallowed_certification_tiers" in adjudicate_source
     assert "_apply_active_certification_policy" in bulk_source
     assert 'case["review_status"] == "approved"' in gold_source
-    assert 'case.get("certification_blockers")' in gold_source
+    assert '"certification_release_blocked"' in gold_source
 
 
 def test_current_milk_policy_upgrades_legacy_volume_evidence_to_hard_blocker() -> None:
@@ -1348,6 +1364,69 @@ def test_current_egg_policy_tolerates_unknown_organic_but_blocks_color_conflict(
     )
     assert shell_color["queue_role"] == "soft_comparator"
     assert shell_color["role"] == "hard_blocker"
+
+
+def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_tier() -> None:
+    case = _queue()["cases"][0]
+    case["edge"]["attribute_evidence"] = [
+        {
+            "attribute": "active_ingredient",
+            "role": "soft_comparator",
+            "benchmark_value": "Multivitamin",
+            "competitor_value": "Multivitamin",
+            "outcome": "match",
+        },
+        {
+            "attribute": "strength",
+            "role": "hard_blocker",
+            "benchmark_value": 1,
+            "competitor_value": 1,
+            "outcome": "match",
+        },
+        {
+            "attribute": "strength_unit",
+            "role": "hard_blocker",
+            "benchmark_value": "mg",
+            "competitor_value": "mg",
+            "outcome": "match",
+        },
+        {
+            "attribute": "dosage_form",
+            "role": "hard_blocker",
+            "benchmark_value": "Tablet",
+            "competitor_value": "Tablet",
+            "outcome": "match",
+        },
+        {
+            "attribute": "release_profile",
+            "role": "hard_blocker",
+            "benchmark_value": "Standard",
+            "competitor_value": "Standard",
+            "outcome": "match",
+        },
+        {
+            "attribute": "life_stage",
+            "role": "soft_comparator",
+            "benchmark_value": "Senior",
+            "competitor_value": "Children",
+            "outcome": "conflict",
+        },
+    ]
+    case["review_status"] = "approved"
+    case["final_decision"] = {
+        "verdict": "comparable",
+        "allowed_tiers": ["comparable_substitute"],
+    }
+
+    policy = _active_certification_policy("vitamins_supplements")
+    governed = _apply_active_certification_policy(case, policy)
+
+    assert policy["product_pack_version"] == "1.1.0"
+    assert policy["allow_comparable_substitute"] is False
+    assert "comparable_substitute" not in policy["allowed_tiers"]
+    assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]
+    assert governed["certification_tier_blockers"] == ["comparable_substitute"]
+    assert governed["certification_release_blocked"] is True
 
 
 def _bulk_eligible_case() -> dict[str, Any]:
@@ -1512,6 +1591,23 @@ def test_bulk_ai_certification_rejects_not_comparable_with_a_match_tier() -> Non
 
     assert evaluation["eligible"] is False
     assert evaluation["reason_codes"] == ["not_comparable_tier_present"]
+
+
+def test_bulk_ai_certification_obeys_active_product_pack_tier_policy() -> None:
+    case = _bulk_eligible_case()
+    case["ai_draft"]["output_document"]["result"]["tier_proposal"] = "comparable_substitute"
+    case["engine_proposal"]["tier"] = "comparable_substitute"
+    case["certification_allowed_tiers"] = [
+        "exact_item",
+        "exact_specification",
+        "equivalent_product",
+        "custom_approved",
+    ]
+
+    evaluation = _bulk_ai_certification_eligibility(case)
+
+    assert evaluation["eligible"] is False
+    assert evaluation["reason_codes"] == ["tier_disallowed_by_product_pack"]
 
 
 def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> None:

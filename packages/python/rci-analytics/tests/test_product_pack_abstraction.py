@@ -8,7 +8,12 @@ import pytest
 
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.matching import ComparisonEngine
-from rci_analytics.matching_v2 import compile_matching_policy_v2
+from rci_analytics.matching_v2 import (
+    AttributeValue,
+    DeterministicMatchEngineV2,
+    ListingEvidence,
+    compile_matching_policy_v2,
+)
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPackLoader
 
@@ -118,15 +123,93 @@ def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
     assert offers[0].in_scope is True
 
 
-def test_vitamin_pack_keeps_incomplete_evidence_in_the_certification_funnel() -> None:
+def test_vitamin_pack_fails_closed_on_missing_identity_evidence() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     policy = compile_matching_policy_v2(pack, "exact_spec")
     roles = {attribute.name: attribute for attribute in policy.attributes}
 
-    assert roles["active_ingredient"].role == "soft_comparator"
-    for name in ("strength", "strength_unit", "dosage_form"):
+    for name in (
+        "active_ingredient",
+        "strength",
+        "strength_unit",
+        "dosage_form",
+        "release_profile",
+        "life_stage",
+    ):
         assert roles[name].role == "hard_blocker"
-        assert roles[name].unknown_is_blocking is False
+        assert roles[name].unknown_is_blocking is True
+    assert policy.minimum_equivalent_coverage == 1
+    assert policy.allow_comparable_substitute is False
+
+
+def _vitamin_listing(
+    retailer_id: str,
+    product_id: str,
+    *,
+    active_ingredient: str | None = "Vitamin D3",
+    strength: float = 50,
+    strength_unit: str = "mcg",
+    dosage_form: str = "Tablet",
+    package_count: float = 100,
+    release_profile: str = "Standard",
+    life_stage: str = "Adult",
+) -> ListingEvidence:
+    values = {
+        "active_ingredient": active_ingredient,
+        "strength": strength,
+        "strength_unit": strength_unit,
+        "dosage_form": dosage_form,
+        "package_count": package_count,
+        "release_profile": release_profile,
+        "life_stage": life_stage,
+    }
+    return ListingEvidence(
+        listing_id=f"listing-{retailer_id}-{product_id}",
+        retailer_id=retailer_id,
+        retailer_product_id=product_id,
+        attributes={
+            name: AttributeValue(value, f"pdp:{retailer_id}:{product_id}:{name}")
+            for name, value in values.items()
+            if value is not None
+        },
+        brand="Spring Valley" if retailer_id == "walmart_us" else "Competitor Brand",
+        brand_type="private_label",
+        brand_verified=True,
+    )
+
+
+def test_vitamin_pack_never_matches_adult_and_children_products() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing("walmart_us", "adult", life_stage="Senior"),
+        _vitamin_listing("target_us", "children", life_stage="Children"),
+        policy,
+        decided_at="2026-08-24T12:00:00Z",
+    )
+
+    assert result.status == "not_comparable"
+    assert result.tier is None
+    life_stage = next(row for row in result.evidence if row.attribute == "life_stage")
+    assert life_stage.role == "hard_blocker"
+    assert life_stage.outcome == "conflict"
+
+
+def test_vitamin_pack_allows_package_count_only_equivalence_for_unit_price() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing("walmart_us", "100-count", package_count=100),
+        _vitamin_listing("target_us", "200-count", package_count=200),
+        policy,
+        decided_at="2026-08-24T12:00:00Z",
+    )
+
+    assert result.status == "candidate"
+    assert result.tier == "equivalent_product"
+    assert result.eligible_price_bases == ("normalized_unit",)
 
 
 @pytest.mark.parametrize(

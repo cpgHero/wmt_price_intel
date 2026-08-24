@@ -79,7 +79,7 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 23, 2026";
+const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -685,7 +685,13 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "success",
           title: "Administrator-confirmed bulk acceptance",
-          text: "An administrator may assess completed comparable and not-comparable AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. Comparable recommendations require a supported match tier and every current Product Pack hard blocker to be known and compatible; a hard-blocker conflict or unresolved value is a server-enforced exclusion that cannot be overridden. Not-comparable recommendations must have no tier and may be certified when a hard conflict supports rejection. Insufficient-evidence recommendations remain non-final and blocked. Deterministic tier disagreement, incomplete nonblocking evidence, AI conflicts, and confidence limits remain visible advisory warnings. A final decision, invalid draft, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds each recommended verdict and tier with case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. The completion result separately counts comparable and not-comparable decisions. No report reanalysis runs automatically; decisions remain final until flagged.",
+          text: "An administrator may assess completed comparable and not-comparable AI recommendations across the full pending queue and active retailer filter. The client submits up to 500 candidates, while the server binds no more than 50 confirmable cases into each confirmation and defers additional passing cases to the next batch. Comparable recommendations require a supported match tier, a tier permitted by the active Product Pack, and every current Product Pack hard blocker to be known and compatible; neither a hard-blocker conflict, unresolved required value, nor a prohibited broad-substitute tier can be overridden. Not-comparable recommendations must have no tier and may be certified when a hard conflict supports rejection. Insufficient-evidence recommendations remain non-final and blocked. Deterministic tier disagreement, incomplete nonblocking evidence, AI conflicts, and confidence limits remain visible advisory warnings. A final decision, invalid draft, known third-party seller, or missing immutable evidence remains a blocking exclusion. The preview binds each recommended verdict and tier with case checksums, AI task/output checksums, queue version, and policy version into one confirmation checksum. One explicit administrator confirmation writes an immutable bulk-action audit record plus the same final human submission used by individual approval, including all warnings and the complete AI evidence rationale in the reviewer comment. The completion result separately counts comparable and not-comparable decisions. No report reanalysis runs automatically; decisions remain final until flagged.",
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Vitamin certification reset",
+          text: "Vitamins & Supplements Product Pack 1.1.0 fails closed on product identity. Active ingredient or governed formulation, labeled strength and unit, dosage form, release profile, and life-stage/audience must be known and compatible. Adult, children, prenatal, men, women, senior, and general-audience conflicts are non-comparable. Package-count differences may support normalized-unit equivalent-product analysis only after the identity attributes agree. Broad comparable-substitute certification is prohibited. Queue 2026.08.23-spring-valley-4 and all decisions made from its unsafe policy are quarantined from reporting; no prior vitamin approval or rejection carries into its successor. Historical submissions remain immutable audit evidence only.",
         },
         {
           kind: "callout",
@@ -1605,6 +1611,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and trust-gated; deployment and clean successor queue pending",
+              "Spring Valley vitamin certification is reset after a systematic life-stage and ingredient-policy defect.",
+              "An audit found adult-to-children recommendations and certified relationships because life stage and active ingredient were configured as soft evidence; only 19 of 315 comparable AI proposals had complete critical evidence. Product Pack 1.1.0 makes ingredient/formulation, strength, strength unit, dosage form, release profile, and audience fail-closed hard blockers, removes audience and dosage identity terms from retrieval stop words, requires complete equivalent evidence, and prohibits broad comparable-substitute certification. The generic certification boundary now enforces Product-Pack-permitted tiers for individual review, adjudication, bulk acceptance, and gold-set export. All 300 existing vitamin decisions are excluded from carry-forward and reporting and remain only as immutable quarantined audit history. The successor queue will be generated from retained Search/PDP evidence with zero certified decisions; no additional AI or MetricsCart call is authorized until deterministic regressions and queue quality gates pass.",
+            ],
             [
               "2026-08-23",
               "Deployed, production-verified, and actively processing",

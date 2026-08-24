@@ -22,6 +22,16 @@ interface QueueSummary {
   reviewed_case_count: number;
   adjudicated_case_count: number;
   created_at: string;
+  quarantine?: QueueQuarantine | null;
+}
+
+interface QueueQuarantine {
+  status: "quarantined";
+  reason: string;
+  carry_forward_allowed: false;
+  reporting_release_allowed: false;
+  successor_product_pack_version: string;
+  quarantined_at: string;
 }
 
 interface ListingSummary {
@@ -281,6 +291,7 @@ interface QueueView {
   offset: number;
   limit: number;
   cases: ReviewCase[];
+  quarantine?: QueueQuarantine | null;
 }
 
 interface GoldSetReplayResult {
@@ -725,6 +736,7 @@ export function MatchingV2ReviewAdmin({
     [view],
   );
   const aiPolicy = view?.ai_review_policy ?? DISABLED_AI_POLICY;
+  const queueQuarantined = Boolean(view?.quarantine);
   const selectedPageCaseCount = eligibleCases.filter((reviewCase) =>
     selectedCaseIds.includes(reviewCase.case_id),
   ).length;
@@ -1339,6 +1351,7 @@ export function MatchingV2ReviewAdmin({
               <option value={queue.queue_id} key={queue.queue_id}>
                 {label(queue.product_pack.id)} · queue v{queue.version} ·{" "}
                 {queue.case_count} cases
+                {queue.quarantine ? " · QUARANTINED" : ""}
               </option>
             ))}
           </select>
@@ -1424,6 +1437,18 @@ export function MatchingV2ReviewAdmin({
           {notice}
         </p>
       ) : null}
+      {view?.quarantine ? (
+        <section className="cert-error" role="alert">
+          <strong>Queue quarantined — no decisions carry forward</strong>
+          <p>{view.quarantine.reason}</p>
+          <small>
+            Search, PDP, AI, and human-review history remains available for
+            audit only. A clean Product Pack v
+            {view.quarantine.successor_product_pack_version} queue will begin
+            with zero certified decisions.
+          </small>
+        </section>
+      ) : null}
 
       {view ? (
         <>
@@ -1451,14 +1476,20 @@ export function MatchingV2ReviewAdmin({
               <span style={{ width: `${progress}%` }} />
               <small>{progress.toFixed(1)}% complete</small>
             </div>
-            <a
-              className="button secondary cert-gold-link"
-              href={`/api/admin/matching-v2/review-queues/${encodeURIComponent(view.queue.queue_id)}/gold-set`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open certified gold set
-            </a>
+            {queueQuarantined ? (
+              <span className="button secondary cert-gold-link" aria-disabled>
+                Gold set blocked
+              </span>
+            ) : (
+              <a
+                className="button secondary cert-gold-link"
+                href={`/api/admin/matching-v2/review-queues/${encodeURIComponent(view.queue.queue_id)}/gold-set`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open certified gold set
+              </a>
+            )}
           </section>
 
           <form className="cert-replay" onSubmit={createGovernedReplay}>
@@ -1489,7 +1520,9 @@ export function MatchingV2ReviewAdmin({
             <button
               className="button primary"
               type="submit"
-              disabled={busy || !replaySourceAnalysisId.trim()}
+              disabled={
+                busy || queueQuarantined || !replaySourceAnalysisId.trim()
+              }
             >
               {busy ? "Creating replay…" : "Create governed replay"}
             </button>
@@ -1538,6 +1571,7 @@ export function MatchingV2ReviewAdmin({
                 type="checkbox"
                 checked={pageSelectionComplete}
                 disabled={
+                  queueQuarantined ||
                   !aiPolicy.enabled ||
                   !eligibleCases.length ||
                   pageSelectionCapacity === 0
@@ -1590,7 +1624,12 @@ export function MatchingV2ReviewAdmin({
               <button
                 className="button secondary"
                 type="button"
-                disabled={busy || !aiPolicy.enabled || !selectedCaseIds.length}
+                disabled={
+                  busy ||
+                  queueQuarantined ||
+                  !aiPolicy.enabled ||
+                  !selectedCaseIds.length
+                }
                 aria-busy={busy}
                 onClick={openBatchConfirmation}
               >
@@ -1603,6 +1642,7 @@ export function MatchingV2ReviewAdmin({
                 type="button"
                 disabled={
                   busy ||
+                  queueQuarantined ||
                   !aiPolicy.enabled ||
                   aiPolicy.queue_wide_selection !== true
                 }
@@ -1692,7 +1732,12 @@ export function MatchingV2ReviewAdmin({
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={busy || !aiPolicy.enabled || !retryableCases.length}
+                  disabled={
+                    busy ||
+                    queueQuarantined ||
+                    !aiPolicy.enabled ||
+                    !retryableCases.length
+                  }
                   onClick={() =>
                     openRetryConfirmation(
                       retryableCases
@@ -1739,7 +1784,9 @@ export function MatchingV2ReviewAdmin({
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={busy || !aiDraftStatusCounts.succeeded}
+                  disabled={
+                    busy || queueQuarantined || !aiDraftStatusCounts.succeeded
+                  }
                   aria-busy={busy}
                   onClick={() => void assessBulkAIRecommendations()}
                 >
@@ -2313,7 +2360,11 @@ export function MatchingV2ReviewAdmin({
                                 <button
                                   className="button secondary"
                                   type="button"
-                                  disabled={busy || !aiPolicy.enabled}
+                                  disabled={
+                                    busy ||
+                                    queueQuarantined ||
+                                    !aiPolicy.enabled
+                                  }
                                   onClick={() =>
                                     openRetryConfirmation(
                                       [activeCase.case_id],
@@ -2554,7 +2605,7 @@ export function MatchingV2ReviewAdmin({
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={busy}
+                        disabled={busy || queueQuarantined}
                         onClick={() =>
                           void submitReview(activeCase, "insufficient_evidence")
                         }
@@ -2582,8 +2633,11 @@ export function MatchingV2ReviewAdmin({
                             type="button"
                             key={verdict}
                             disabled={
-                              verdict === "comparable" &&
-                              Boolean(activeCase.certification_blockers?.length)
+                              queueQuarantined ||
+                              (verdict === "comparable" &&
+                                Boolean(
+                                  activeCase.certification_blockers?.length,
+                                ))
                             }
                             onClick={() =>
                               updateDraft(activeCase.case_id, { verdict })
@@ -2601,6 +2655,7 @@ export function MatchingV2ReviewAdmin({
                             defaultDraft(activeCase).tier
                           }
                           disabled={
+                            queueQuarantined ||
                             drafts[activeCase.case_id]?.verdict !== "comparable"
                           }
                           onChange={(event) =>
@@ -2633,6 +2688,7 @@ export function MatchingV2ReviewAdmin({
                         type="button"
                         disabled={
                           busy ||
+                          queueQuarantined ||
                           (drafts[activeCase.case_id]?.verdict ===
                             "comparable" &&
                             Boolean(activeCase.certification_blockers?.length))
