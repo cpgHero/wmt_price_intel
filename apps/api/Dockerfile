@@ -40,6 +40,7 @@ COPY --chown=rci:rci brand-foundations brand-foundations
 COPY --chown=rci:rci agent-prompts agent-prompts
 COPY --chown=rci:rci report-blueprints report-blueprints
 COPY --chown=rci:rci schemas schemas
+COPY --chown=rci:rci scripts/build_live_matching_v2_queue.py scripts/build_live_matching_v2_queue.py
 RUN uv sync --frozen --no-dev --package rci-api
 
 EXPOSE 8000
