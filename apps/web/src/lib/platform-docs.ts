@@ -607,12 +607,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Tier", "Meaning", "Current release treatment"],
           rows: [
             [
-              "2026-08-24",
-              "Implemented and release-verified; production rollout pending",
-              "Product Details workers gained rolling concurrency without weakening durable queue controls.",
-              "A 2,553-product Spring Valley enrichment exposed batch-tail latency: a worker waited for every claimed request before refilling, so one slow retailer idled capacity. The worker now retains unfinished leased tasks, waits only for the next completion, and refills the freed slots from the retailer-balanced SKIP LOCKED queue. Graceful shutdown finishes already-leased calls before closing the transport. The shared per-retailer limiter, cooldowns, leases, retries, cancellation, immutable raw evidence, idempotency, and 7,500-credit hard ceiling remain unchanged. Eighty-two Product Details and worker tests pass with three expected database-dependent skips; mypy and Ruff pass. The live run remains immutable and no duplicate provider call or AI task is created by this change.",
-            ],
-            [
               "Exact item",
               "Same verified physical trade item and package.",
               "Certification required; automatic approval remains off until precision gates pass.",
@@ -1623,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented, release-verified, and deployed",
+              "Product Details workers gained rolling concurrency without weakening durable queue controls.",
+              "A 2,553-product Spring Valley enrichment exposed batch-tail latency: a worker waited for every claimed request before refilling, so one slow retailer idled capacity. The worker now retains unfinished leased tasks, waits only for the next completion, and refills the freed slots from the retailer-balanced SKIP LOCKED queue. Graceful shutdown finishes already-leased calls before closing the transport. The shared per-retailer limiter, cooldowns, leases, retries, cancellation, immutable raw evidence, idempotency, and 7,500-credit hard ceiling remain unchanged. Eighty-two Product Details and worker tests pass with three expected database-dependent skips; mypy and Ruff pass. The live run remains immutable and no duplicate provider call or AI task is created by this change.",
+            ],
             [
               "2026-08-24",
               "Implemented during approved vitamin coverage recovery",
