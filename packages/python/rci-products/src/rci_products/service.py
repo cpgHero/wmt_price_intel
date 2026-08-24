@@ -36,15 +36,53 @@ class ProductDetailWorker:
         self._claim_limit = claim_limit
         self._lease_seconds = lease_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._inflight: set[asyncio.Task[None]] = set()
 
     async def run_once(self) -> int:
-        jobs = await self._repository.claim(
-            self._worker_id,
-            limit=self._claim_limit,
-            lease_seconds=self._lease_seconds,
+        await self._reap_completed()
+        capacity = max(self._claim_limit - len(self._inflight), 0)
+        jobs = (
+            await self._repository.claim(
+                self._worker_id,
+                limit=capacity,
+                lease_seconds=self._lease_seconds,
+            )
+            if capacity
+            else []
         )
-        await asyncio.gather(*(self._execute(job) for job in jobs))
+        self._inflight.update(asyncio.create_task(self._execute(job)) for job in jobs)
+        if self._inflight:
+            done, _ = await asyncio.wait(
+                self._inflight,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            await self._reap(done)
         return len(jobs)
+
+    async def close(self) -> None:
+        """Finish already-leased calls before the transport is closed."""
+
+        if not self._inflight:
+            return
+        tasks = tuple(self._inflight)
+        self._inflight.clear()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.error(
+                    "Product Details in-flight task failed during shutdown",
+                    exc_info=(type(result), result, result.__traceback__),
+                    extra={"event": "product_detail_shutdown_task_failed"},
+                )
+
+    async def _reap_completed(self) -> None:
+        await self._reap({task for task in self._inflight if task.done()})
+
+    async def _reap(self, tasks: set[asyncio.Task[None]]) -> None:
+        if not tasks:
+            return
+        self._inflight.difference_update(tasks)
+        await asyncio.gather(*tasks)
 
     async def _execute(self, job: ProductDetailJob) -> None:
         finished = asyncio.Event()

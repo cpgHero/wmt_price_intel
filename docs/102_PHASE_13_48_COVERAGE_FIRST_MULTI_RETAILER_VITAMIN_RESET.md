@@ -137,6 +137,28 @@ claim order now prioritizes eligible preflight tasks before normal priority, whi
 `FOR UPDATE SKIP LOCKED`, leases, retry limits, and retailer gates. This is an execution-order
 repair only; it does not bypass a gate or change the approved credit ceiling.
 
+The completed Search recovery used three immutable title-based runs plus one bounded product-ID
+diagnostic. It spent 1,803 credits ($3.606) under the $3.628 ceiling and recovered 248 of the 322
+governed Walmart anchors (77.02%). The remaining 74 anchors are explicit catalog-coverage gaps;
+the product-ID diagnostic failed closed and the Sacramento second-market title recovery added only
+one anchor, so further blind geographic expansion was rejected as low-value paid work. Across all
+successful Search evidence, 2,553 distinct admitted products require cache-aware PDP qualification.
+
+Product Details run `0e5ac06f-d372-42a8-9130-13415a3b5570` is the owner-approved enrichment run.
+It contains 2,553 jobs, planned exposure of 5,567 credits, and a hard ceiling of 7,500 credits
+($15.00). It reuses the 30-day cache contract, enriches one representative observed context per
+distinct admitted product, and remains in progress. No Matching v2 queue may consume this evidence
+until the run is terminal and its retailer/status, seller, normalized-field, checksum, and credit
+audit passes.
+
+The live run also exposed a generic concurrency defect: a worker waited for the slowest request in
+each claimed batch before refilling. Product Details workers now retain unfinished leased tasks,
+wait only for the next completion, and refill the freed capacity from the existing retailer-balanced
+`SKIP LOCKED` claim order. Graceful shutdown finishes already-leased calls before closing the
+provider transport. This changes throughput only; retailer-scoped rate limits, shared cooldowns,
+leases, retries, cancellation, idempotency, immutable responses, and the run credit ceiling remain
+authoritative.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates

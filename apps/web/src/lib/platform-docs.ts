@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.57",
+  version: "1.3.58",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -519,7 +519,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Reuse immutable cached payloads and run zero-credit re-normalization when the normalizer improves.",
             "Live Search PDP launches convert the owner-approved USD ceiling to an integer credit ceiling at $0.002 per credit, fail closed when the qualified plan exceeds it, and refuse to create duplicate work when the same governed request is already queued or running.",
             "Validate retailer-specific parameters from the versioned endpoint catalog. Catalog fixed parameters override incompatible Search terminology; for example, Walgreens Search SFS evidence is retained while its PDP contract always sends pickup. This is configuration, not category code.",
-            "PDP workers claim jobs fairly across retailers within each priority and run up to 18 jobs concurrently by default. The shared Postgres limiter still enforces 3 requests per second and 180 per minute independently for each retailer across every replica.",
+            "PDP workers claim a retailer-balanced batch within each priority and maintain up to 18 in-flight jobs by default. As each request finishes, the next loop refills only the free capacity instead of waiting for the slowest request in the batch. The shared Postgres limiter still enforces 3 requests per second and 180 per minute independently for each retailer across every replica.",
             "Retain useful identity, descriptions, identifiers, package facts, media, fulfillment, reviews, demand, and relationships; leave oversized provider-native bodies in raw evidence until a governed use exists.",
             "Audit PDP completeness separately from schema coverage. Zero unmapped fields means the provider payload was mapped; it does not mean every product supplied brand, identifiers, package specifications, descriptions, or multiple usable images.",
           ],
@@ -606,6 +606,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Matching v2 tiers",
           columns: ["Tier", "Meaning", "Current release treatment"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and release-verified; production rollout pending",
+              "Product Details workers gained rolling concurrency without weakening durable queue controls.",
+              "A 2,553-product Spring Valley enrichment exposed batch-tail latency: a worker waited for every claimed request before refilling, so one slow retailer idled capacity. The worker now retains unfinished leased tasks, waits only for the next completion, and refills the freed slots from the retailer-balanced SKIP LOCKED queue. Graceful shutdown finishes already-leased calls before closing the transport. The shared per-retailer limiter, cooldowns, leases, retries, cancellation, immutable raw evidence, idempotency, and 7,500-credit hard ceiling remain unchanged. Eighty-two Product Details and worker tests pass with three expected database-dependent skips; mypy and Ruff pass. The live run remains immutable and no duplicate provider call or AI task is created by this change.",
+            ],
             [
               "Exact item",
               "Same verified physical trade item and package.",

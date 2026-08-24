@@ -51,15 +51,18 @@ class FixtureFetcher:
         )
 
 
-async def _product(repository: InMemoryProductDetailRepository):
+async def _product(
+    repository: InMemoryProductDetailRepository,
+    product_id: str = "677669806",
+):
     return await repository.upsert_serp_product(
         retailer_id="walmart_us",
-        retailer_product_id="677669806",
+        retailer_product_id=product_id,
         name="SERP title",
         brand=None,
-        url="https://www.walmart.com/ip/677669806",
+        url=f"https://www.walmart.com/ip/{product_id}",
         image_primary=None,
-        identifiers={"item_id": "677669806"},
+        identifiers={"item_id": product_id},
         context=source_context(
             source="serp",
             observed_at=datetime.now(UTC),
@@ -168,6 +171,67 @@ async def test_one_cached_pdp_enriches_all_linked_serp_observations_without_over
     assert highlights[0]["category_path"]
     assert highlights[0]["identifiers"]["upc"] == "028400310413"
     assert highlights[0]["role"] == "PDP-enriched reference"
+
+
+class SelectiveBlockingFetcher(FixtureFetcher):
+    def __init__(self, payload: dict[str, object], slow_product_id: str) -> None:
+        super().__init__(payload)
+        self.slow_product_id = slow_product_id
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.product_ids: list[str] = []
+
+    async def fetch(self, job):
+        self.product_ids.append(job.context.product_id or "")
+        if job.context.product_id == self.slow_product_id:
+            self.started.set()
+            await self.release.wait()
+        return await super().fetch(job)
+
+
+async def test_worker_refills_capacity_without_waiting_for_slowest_claimed_job() -> None:
+    import json
+
+    repository = InMemoryProductDetailRepository(REPOSITORY_ROOT)
+    catalog = ProductDetailCatalog.from_path(REPOSITORY_ROOT)
+    endpoint = catalog.get("walmart_us")
+    run = await repository.create_run(max_credits=6)
+    product_ids = ("100000001", "100000002", "100000003")
+    for product_id in product_ids:
+        product = await _product(repository, product_id)
+        await repository.enqueue(
+            run.id,
+            product,
+            endpoint,
+            ProductDetailRequestContext(
+                product_id=product_id,
+                zipcode="90020",
+                store="2464",
+                fulfillment_type="pickup",
+            ),
+        )
+    payload = json.loads(
+        (REPOSITORY_ROOT / "fixtures/api_samples/metricscart_pdp_walmart_200.json").read_text()
+    )
+    fetcher = SelectiveBlockingFetcher(payload, product_ids[0])
+    worker = ProductDetailWorker(
+        repository,
+        fetcher,
+        worker_id="rolling-worker",
+        claim_limit=2,
+    )
+
+    first_pass = asyncio.create_task(worker.run_once())
+    await asyncio.wait_for(fetcher.started.wait(), timeout=1)
+    assert await asyncio.wait_for(first_pass, timeout=1) == 2
+    assert fetcher.release.is_set() is False
+
+    assert await asyncio.wait_for(worker.run_once(), timeout=1) == 1
+    assert product_ids[2] in fetcher.product_ids
+    assert fetcher.release.is_set() is False
+
+    fetcher.release.set()
+    await asyncio.wait_for(worker.close(), timeout=1)
 
 
 async def test_concurrent_enqueue_enforces_atomic_credit_ceiling() -> None:

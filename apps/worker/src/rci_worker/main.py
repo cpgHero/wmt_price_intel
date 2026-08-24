@@ -426,6 +426,8 @@ async def run() -> None:
         await health_server.close()
         if metricscart_client is not None:
             await metricscart_client.close()
+        if product_detail_worker is not None:
+            await product_detail_worker.close()
         if product_detail_client is not None:
             await product_detail_client.close()
         await database.dispose()
