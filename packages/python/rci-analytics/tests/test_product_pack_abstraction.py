@@ -121,6 +121,41 @@ def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
     )
 
     assert offers[0].in_scope is True
+    assert offers[0].attributes["active_ingredient"] == "vitamin_d3"
+    assert offers[0].attributes["release_profile"] == "Standard"
+    assert offers[0].attributes["life_stage"] == "General"
+
+
+def test_vitamin_pack_preserves_audience_and_release_conflicts(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    adult = normalizer.normalize(
+        _row(
+            "walmart_us",
+            "10316852",
+            "Adult 50+ Rapid-Release CoQ10 Supplement Softgels, 100 mg, 60 Count",
+            "9.88",
+        )
+    )
+    child = normalizer.normalize(
+        _row(
+            "target_us",
+            "child-standard",
+            "Children's CoQ10 Supplement Softgels, 100 mg, 60 Count",
+            "10.49",
+        )
+    )
+
+    adult_classified = classifier.classify(adult)
+    child_classified = classifier.classify(child)
+
+    assert adult_classified.attributes["active_ingredient"] == "coenzyme_q10"
+    assert adult_classified.attributes["life_stage"] == "Senior"
+    assert adult_classified.attributes["release_profile"] == "Fast Acting"
+    assert child_classified.attributes["life_stage"] == "Children"
+    assert child_classified.attributes["release_profile"] == "Standard"
 
 
 def test_vitamin_pack_fails_closed_on_missing_identity_evidence() -> None:

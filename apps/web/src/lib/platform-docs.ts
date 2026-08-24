@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.51",
+  version: "1.3.52",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -697,7 +697,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Coverage-first vitamin successor in shadow",
-          text: "Product Pack 1.2.0 is implemented but is not yet the production queue. Its evidence profile accounts for all 322 governed Spring Valley products against every configured competitor, including products not observed in the one-market pilot. Generic structured high-recall retrieval preserves numeric strength evidence and distinct competitor brand lanes after deterministic hard-conflict filtering. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. Only verified exact-item or complete exact-specification evidence may auto-approve. Equivalent relationships, missing hard blockers, and conflicts still require governed review or fail closed. The existing 203-case queue remains quarantined until retained-evidence shadow recall, precision, seller, retailer-coverage, and checksum gates pass. Any broader Search recovery requires a separately disclosed and approved paid-call plan.",
+          text: "Product Pack 1.2.1 is implemented but is not yet the production queue. Its evidence profile accounts for all 322 governed Spring Valley products against every configured competitor, including products not observed in the one-market pilot. The first retained-data shadow found broad recall but an unacceptable 11,429 unresolved cases, so it was blocked and never imported. Formula-family extraction, exact retailer-scoped private-label coverage, stronger lexical evidence, and tighter per-brand-lane limits now reduce noise without relaxing ingredient, strength, form, release, or audience conflicts. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. Only verified exact-item or complete exact-specification evidence may auto-approve. The existing 203-case queue remains quarantined until a second shadow passes recall, precision, seller, retailer-coverage, conflict, and checksum gates. Any broader Search recovery requires a separately disclosed and approved paid-call plan.",
         },
         {
           kind: "callout",
@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. Product Pack 1.2.0 authorizes deterministic exact-item and complete exact-specification approval only; equivalent and broader relationships remain human-approved, and no new queue has been imported.",
+            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow broadened recall but produced 11,429 unresolved cases and was blocked without import. Product Pack 1.2.1 adds governed formula-family extraction and versioned Retailer Pack private-label coverage while tightening retrieval; it still authorizes deterministic exact-item and complete exact-specification approval only. Equivalent and broader relationships remain human-approved, and no new queue has been imported.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1619,7 +1619,13 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-24",
-              "Implemented and test-verified; retained-evidence shadow audit pending",
+              "Implemented; second retained-evidence shadow pending",
+              "The first Spring Valley coverage shadow was blocked, then retailer-brand and formula evidence were repaired without importing its queue.",
+              "The read-only shadow used 2,187 retained PDP snapshots and produced 11,429 unresolved cases, proving broad retailer recall but unacceptable review volume. No case was imported. Product Pack 1.2.1 adds governed formula-family extraction, explicit Standard-release and General-audience absence policies, a 0.10 lexical floor, a 24-case retailer cap, and three candidates per brand lane. Versioned Retailer Packs add exact retailer-scoped private-label coverage for Amazon, BJ's, Costco, CVS, Meijer, Sam's Club, and Walgreens; existing Kroger and Target brands continue from the shared foundation. Brand classification cannot override ingredient, strength, form, release, or audience conflicts. No paid Search, PDP, or AI call was made.",
+            ],
+            [
+              "2026-08-24",
+              "Implemented and test-verified; first shadow blocked by precision gate",
               "Spring Valley matching gained an all-retailer coverage ledger and generic structured high-recall retrieval.",
               "Every one of the 322 governed Walmart anchors is now accounted for against each of the nine configured competitors as not observed, candidate found, or observed without a retained candidate. Product Pack 1.2.0 separates catalog-wide identity discovery from later geographic price applicability, preserves numeric strength evidence, and retains diverse competitor brand lanes before filling ranked candidate capacity. The same generic engine applies to every retailer; Target is not special-cased. Deterministic auto-approval is limited to verified exact-item or complete exact-specification evidence, while unknown hard blockers remain review-only. The existing 203-case queue remains quarantined and production reporting is unchanged. No MetricsCart, PDP, or OpenAI call was made; paid recovery Search requires a separate exact-call and spend approval after the retained-evidence shadow audit.",
             ],

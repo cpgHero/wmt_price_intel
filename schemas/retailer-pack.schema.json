@@ -134,7 +134,26 @@
           }
         },
         "unknown_behavior": { "const": "queue_candidate_never_auto_approve" },
-        "fuzzy_behavior": { "const": "suggestion_only_within_retailer" }
+        "fuzzy_behavior": { "const": "suggestion_only_within_retailer" },
+        "verified_private_labels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["brand_name", "aliases", "category_tags", "evidence_notes"],
+            "properties": {
+              "brand_name": { "type": "string", "minLength": 1 },
+              "aliases": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "category_tags": { "type": "string" },
+              "evidence_notes": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
       }
     },
     "enrichment_policy": {

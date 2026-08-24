@@ -1367,8 +1367,10 @@ def test_vitamin_pack_uses_catalog_wide_structured_candidate_discovery() -> None
 
     assert policy.candidate_geography_mode == "disabled"
     assert policy.candidate_retrieval_mode == "structured_high_recall"
-    assert policy.candidate_retrieval_maximum_per_benchmark == 40
-    assert policy.candidate_retrieval_minimum_per_brand_lane == 4
+    assert policy.candidate_retrieval_maximum_per_benchmark == 24
+    assert policy.candidate_retrieval_minimum_similarity == 0.1
+    assert policy.candidate_retrieval_structured_attributes == ("active_ingredient",)
+    assert policy.candidate_retrieval_minimum_per_brand_lane == 3
     assert policy.candidate_retrieval_preserve_numeric_tokens is True
 
 

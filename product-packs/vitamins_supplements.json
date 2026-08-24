@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -53,6 +53,83 @@
       "unknown_policy": "reject_strict",
       "extractors": ["retailer_field", "title_rule", "ai_fallback", "manual"],
       "extraction_rules": [
+        {
+          "type": "term_map",
+          "sources": ["text"],
+          "values": {
+            "prenatal_multivitamin": ["prenatal multivitamin", "prenatal multi", "prenatal vitamin"],
+            "multivitamin": ["multivitamin", "multi vitamin", "multi-vitamin", "daily multi", "adult multi", "kids multi", "children's multi", "childrens multi", "men's multi", "mens multi", "women's multi", "womens multi"],
+            "vitamin_d3_k2": ["vitamin d3 + k2", "vitamin d3 and k2", "d3 k2", "d3+k2"],
+            "calcium_magnesium_zinc": ["calcium magnesium zinc", "cal mag zinc", "cal-mag-zinc"],
+            "glucosamine_chondroitin": ["glucosamine chondroitin", "glucosamine and chondroitin"],
+            "b_complex": ["vitamin b complex", "b complex", "b-complex"],
+            "vitamin_b12": ["vitamin b12", "vitamin b-12", "methylcobalamin", "cyanocobalamin", "cobalamin"],
+            "vitamin_b6": ["vitamin b6", "vitamin b-6", "pyridoxine"],
+            "vitamin_b1": ["vitamin b1", "vitamin b-1", "thiamine", "thiamin"],
+            "vitamin_b2": ["vitamin b2", "vitamin b-2", "riboflavin"],
+            "biotin": ["vitamin b7", "vitamin b-7", "biotin"],
+            "folate": ["vitamin b9", "vitamin b-9", "folic acid", "methylfolate", "folate"],
+            "niacin": ["vitamin b3", "vitamin b-3", "nicotinic acid", "niacin"],
+            "vitamin_a": ["vitamin a", "beta carotene", "beta-carotene"],
+            "vitamin_c": ["vitamin c", "ascorbic acid"],
+            "vitamin_d3": ["vitamin d3", "vitamin d-3", "cholecalciferol"],
+            "vitamin_d2": ["vitamin d2", "vitamin d-2", "ergocalciferol"],
+            "vitamin_e": ["vitamin e", "tocopherol"],
+            "vitamin_k2": ["vitamin k2", "vitamin k-2", "menaquinone", "mk-7", "mk7"],
+            "calcium": ["calcium"],
+            "chromium": ["chromium picolinate", "chromium"],
+            "iron": ["ferrous sulfate", "ferrous fumarate", "iron"],
+            "magnesium": ["magnesium glycinate", "magnesium citrate", "magnesium oxide", "magnesium"],
+            "potassium": ["potassium"],
+            "selenium": ["selenium"],
+            "zinc": ["zinc"],
+            "algal_oil": ["algal oil", "algae oil"],
+            "cod_liver_oil": ["cod liver oil"],
+            "fish_oil": ["omega 3 fish oil", "omega-3 fish oil", "fish oil"],
+            "flaxseed_oil": ["flaxseed oil", "flax seed oil"],
+            "krill_oil": ["krill oil"],
+            "coenzyme_q10": ["coenzyme q10", "coq10", "co q10"],
+            "garlic": ["garlic"],
+            "red_yeast_rice": ["red yeast rice"],
+            "msm": ["methylsulfonylmethane", "msm"],
+            "s_adenosyl_methionine": ["s-adenosyl methionine", "s adenosyl methionine", "sam-e"],
+            "digestive_enzymes": ["digestive enzymes", "digestive enzyme"],
+            "psyllium_fiber": ["psyllium husk", "psyllium fiber"],
+            "fiber": ["fiber supplement", "prebiotic fiber"],
+            "greens": ["super greens", "greens powder", "greens supplement"],
+            "probiotic": ["probiotic", "probiotics"],
+            "synbiotic": ["synbiotic", "synbiotics"],
+            "melatonin": ["melatonin"],
+            "collagen": ["collagen peptides", "hydrolyzed collagen", "collagen"],
+            "echinacea": ["echinacea"],
+            "elderberry": ["elderberry", "sambucus"],
+            "n_acetyl_cysteine": ["n acetyl cysteine", "n-acetyl cysteine", "nac"],
+            "oregano_oil": ["oil of oregano", "oregano oil"],
+            "quercetin": ["quercetin"],
+            "acetyl_l_carnitine": ["acetyl l carnitine", "acetyl-l-carnitine", "alcar"],
+            "ginkgo_biloba": ["ginkgo biloba", "ginkgo"],
+            "mushroom_complex": ["mushroom complex", "mushroom blend"],
+            "black_seed_oil": ["black seed oil", "black cumin seed oil"],
+            "cayenne": ["cayenne"],
+            "cinnamon": ["cinnamon"],
+            "fenugreek": ["fenugreek"],
+            "ginseng": ["panax ginseng", "american ginseng", "ginseng"],
+            "milk_thistle": ["milk thistle", "silymarin"],
+            "turmeric": ["turmeric curcumin", "turmeric", "curcumin"],
+            "valerian": ["valerian root", "valerian"],
+            "5_htp": ["5-htp", "5 htp", "5-hydroxytryptophan"],
+            "alpha_lipoic_acid": ["alpha lipoic acid", "alpha-lipoic acid", "ala"],
+            "beet_root": ["beet root", "beetroot"],
+            "ashwagandha": ["ashwagandha"],
+            "l_arginine": ["l-arginine", "l arginine", "arginine"],
+            "l_lysine": ["l-lysine", "l lysine", "lysine"],
+            "lutein": ["lutein"],
+            "saw_palmetto": ["saw palmetto"],
+            "apple_cider_vinegar": ["apple cider vinegar"],
+            "berberine": ["berberine"],
+            "inositol": ["myo inositol", "myo-inositol", "inositol"]
+          }
+        },
         {
           "type": "field",
           "sources": [
@@ -174,7 +251,7 @@
       "unknown_policy": "review",
       "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
       "extraction_rules": [
-        {"type": "term_map", "values": {"Extended Release": ["extended release", "sustained release"], "Timed Release": ["time release", "timed release"], "Fast Acting": ["fast acting", "fast-acting"]}, "default": "Standard"}
+        {"type": "term_map", "values": {"Extended Release": ["extended release", "sustained release", "controlled release"], "Timed Release": ["time release", "timed release"], "Fast Acting": ["fast acting", "fast-acting", "rapid release", "rapid-release"]}, "default": "Standard", "absence_policy": "infer_default"}
       ]
     },
     {
@@ -188,7 +265,7 @@
       "unknown_policy": "review",
       "extractors": ["title_rule", "retailer_field", "ai_fallback", "manual"],
       "extraction_rules": [
-        {"type": "term_map", "values": {"Children": ["children", "kids"], "Prenatal": ["prenatal"], "Men": ["men's", "for men"], "Women": ["women's", "for women"], "Senior": ["senior", "50+"], "Adult": ["adult"]}, "default": "General"}
+        {"type": "term_map", "values": {"Children": ["children", "children's", "childrens", "kids", "kid's", "toddler", "infant", "teen"], "Prenatal": ["prenatal", "pregnancy"], "Men": ["men's", "mens", "for men"], "Women": ["women's", "womens", "for women", "menopause"], "Senior": ["adult 50+", "men's 50+", "women's 50+", "mens 50+", "womens 50+", "50 plus", "senior", "50+"], "Adult": ["adult", "18 years and up", "adult use only"]}, "default": "General", "absence_policy": "infer_default"}
       ]
     },
     {
@@ -251,7 +328,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.2.0-shadow.1",
+    "policy_version": "1.2.1-shadow.1",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
@@ -288,20 +365,13 @@
     "candidate_retrieval": {
       "mode": "structured_high_recall",
       "include_unknown_hard_blockers": true,
-      "maximum_per_benchmark": 40,
-      "minimum_similarity": 0.03,
+      "maximum_per_benchmark": 24,
+      "minimum_similarity": 0.1,
       "structured_attributes": [
-        "active_ingredient",
-        "strength",
-        "strength_unit",
-        "dosage_form",
-        "release_profile",
-        "life_stage",
-        "package_count",
-        "servings_per_container"
+        "active_ingredient"
       ],
       "minimum_structured_matches": 1,
-      "minimum_per_brand_lane": 4,
+      "minimum_per_brand_lane": 3,
       "preserve_numeric_tokens": true,
       "stop_words": [
         "spring",
@@ -727,7 +797,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.0"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.1"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

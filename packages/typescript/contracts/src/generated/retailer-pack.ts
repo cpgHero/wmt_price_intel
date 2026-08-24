@@ -52,6 +52,12 @@ export interface RetailCompetitiveIntelligenceRetailerPack {
     ];
     unknown_behavior: "queue_candidate_never_auto_approve";
     fuzzy_behavior: "suggestion_only_within_retailer";
+    verified_private_labels?: {
+      brand_name: string;
+      aliases: string[];
+      category_tags: string;
+      evidence_notes: string;
+    }[];
   };
   enrichment_policy: {
     identity_scope: "unique_admitted_products";

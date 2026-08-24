@@ -34,6 +34,10 @@ def test_file_catalog_validates_every_versioned_retailer_pack() -> None:
         "target_us",
         "trader_joes_us",
         "wegmans_us",
+        "bjs_us",
+        "costco_us",
+        "cvs_us",
+        "walgreens_us",
     }
     assert all(record.checksum == canonical_checksum(record.document) for record in records)
 
@@ -136,6 +140,36 @@ def test_exact_title_fallback_recovers_one_unambiguous_governed_brand() -> None:
     assert marketside.canonical_brand_name == "Marketside"
     assert marketside.strict_private_label is True
     assert ambiguous.status == "unresolved"
+
+
+def test_retailer_pack_private_labels_close_versioned_coverage_gaps() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    expected = {
+        "amazon_us_same_day": "Amazon Elements",
+        "bjs_us": "Berkley Jensen",
+        "costco_us": "Kirkland Signature",
+        "cvs_us": "CVS Health",
+        "meijer_us": "Meijer",
+        "sams_club_us": "Member's Mark",
+        "walgreens_us": "Walgreens Free & Pure",
+    }
+    for retailer_id, brand_name in expected.items():
+        resolution = resolver.resolve(retailer_id, brand_name, category="Vitamins & Supplements")
+        assert resolution.status == "resolved"
+        assert resolution.strict_private_label is True
+        assert resolution.role == "private_label"
+        assert resolution.canonical_brand_id == (
+            f"retailer_pack__{retailer_id}__{normalize_brand_name(brand_name)}"
+        )
+
+
+def test_retailer_pack_private_labels_remain_retailer_scoped() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    assert resolver.resolve("costco_us", "Kirkland").strict_private_label is True
+    assert resolver.resolve("walmart_us", "Kirkland").status == "unresolved"
+    assert resolver.resolve("cvs_us", "CVS").canonical_brand_name == "CVS Health"
 
 
 def test_acquired_brand_is_not_strict_private_label() -> None:

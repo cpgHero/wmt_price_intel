@@ -150,7 +150,7 @@ def test_structured_pdp_fields_complete_product_pack_raw_attribute_sources() -> 
         raw={},
     )
     search_classified = classifier.classify(offer)
-    assert search_classified.attributes["active_ingredient"] is None
+    assert search_classified.attributes["active_ingredient"] == "vitamin_c"
 
     enriched = complete_attributes_from_pdp(
         search_classified,
@@ -162,8 +162,8 @@ def test_structured_pdp_fields_complete_product_pack_raw_attribute_sources() -> 
         pack=pack,
     )
 
-    assert enriched.attributes["active_ingredient"] == "Vitamin C"
-    assert enriched.attributes["_attribute_provenance"]["active_ingredient"] == "pdp"
+    assert enriched.attributes["active_ingredient"] == "vitamin_c"
+    assert enriched.attributes["_attribute_provenance"]["active_ingredient"] == "search"
 
 
 def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact() -> None:

@@ -379,12 +379,76 @@ class GovernedBrandResolver:
         for row in foundation.document.get("aliases", []):
             if str(row["retailer_id"]) == "__global__":
                 self._global_aliases.setdefault(str(row["alias_normalized"]), dict(row))
+        self._register_retailer_pack_private_labels()
         self._alias_conflicts = {
             (str(row["retailer_id"]), str(row["alias_normalized"])): tuple(
                 str(value) for value in row["candidate_brand_ids"]
             )
             for row in foundation.document.get("alias_conflicts", [])
         }
+
+    def _register_retailer_pack_private_labels(self) -> None:
+        """Add versioned retailer-owned brand evidence without mutating the master.
+
+        The broad brand foundation remains the shared source of truth. Retailer Packs
+        may close a verified, retailer-specific coverage gap immediately while the
+        next foundation release is curated. Resolution remains exact, retailer-scoped,
+        and fully represented in Retailer Pack provenance.
+        """
+
+        for retailer_id, pack in self._packs.items():
+            configured = pack.document["brand_policy"].get("verified_private_labels", [])
+            for brand in configured:
+                brand_name = str(brand["brand_name"]).strip()
+                normalized = normalize_brand_name(brand_name)
+                key = (retailer_id, normalized)
+                if key in self._canonical:
+                    continue
+                brand_id = f"retailer_pack__{retailer_id}__{normalized}"
+                row: JsonObject = {
+                    "brand_id": brand_id,
+                    "source_retailer_id": retailer_id,
+                    "retailer_id": retailer_id,
+                    "retailer": pack.display_name,
+                    "retailer_parent": pack.display_name,
+                    "brand_name": brand_name,
+                    "brand_name_normalized": normalized,
+                    "brand_family": brand_name,
+                    "brand_bucket": "Private Label",
+                    "brand_class": "private_label_owned",
+                    "ownership_model": "retailer_owned",
+                    "in_private_label_matching": True,
+                    "is_grocery_relevant": True,
+                    "department_scope": "Retailer-wide",
+                    "category_tags": str(brand.get("category_tags") or ""),
+                    "competitive_brand_role": f"retailer_{retailer_id}_private_label",
+                    "positioning": "Retailer-owned private label",
+                    "status": "Active",
+                    "retailer_exclusive": True,
+                    "matching_priority": "High",
+                    "confidence": "Verified",
+                    "source_type": "retailer_pack_verified_private_label",
+                    "source_url": "https://www.cpghero.com/",
+                    "last_verified_at": None,
+                    "first_seen_at": None,
+                    "last_seen_at": None,
+                    "review_status": "Approved",
+                    "notes": str(brand["evidence_notes"]),
+                }
+                self._brands_by_id[brand_id] = row
+                self._canonical[key] = row
+                for alias_name in brand.get("aliases", []):
+                    alias_normalized = normalize_brand_name(str(alias_name))
+                    alias_key = (retailer_id, alias_normalized)
+                    existing = self._aliases.get(alias_key)
+                    if existing is not None and str(existing["canonical_brand_id"]) != brand_id:
+                        raise ContractError(f"ambiguous Retailer Pack brand alias {alias_key!r}")
+                    self._aliases[alias_key] = {
+                        "retailer_id": retailer_id,
+                        "alias_normalized": alias_normalized,
+                        "canonical_brand_id": brand_id,
+                        "status": "Active",
+                    }
 
     @classmethod
     def from_repository(

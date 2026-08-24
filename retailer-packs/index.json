@@ -26,23 +26,44 @@
       "version": "1.2.0",
       "file": "amazon_us_same_day/1.2.0.json"
     },
+    {
+      "id": "amazon_us_same_day",
+      "version": "1.3.0",
+      "file": "amazon_us_same_day/1.3.0.json"
+    },
     { "id": "heb_us", "version": "1.0.0", "file": "heb_us/1.0.0.json" },
     { "id": "heb_us", "version": "1.1.0", "file": "heb_us/1.1.0.json" },
     { "id": "kroger_us", "version": "1.0.0", "file": "kroger_us/1.0.0.json" },
     { "id": "kroger_us", "version": "1.1.0", "file": "kroger_us/1.1.0.json" },
+    { "id": "kroger_us", "version": "1.2.0", "file": "kroger_us/1.2.0.json" },
     { "id": "target_us", "version": "1.0.0", "file": "target_us/1.0.0.json" },
     { "id": "target_us", "version": "1.1.0", "file": "target_us/1.1.0.json" },
     { "id": "target_us", "version": "1.2.0", "file": "target_us/1.2.0.json" },
+    { "id": "target_us", "version": "1.3.0", "file": "target_us/1.3.0.json" },
     {
       "id": "giant_eagle_us",
       "version": "1.0.0",
       "file": "giant_eagle_us/1.0.0.json"
     },
     { "id": "meijer_us", "version": "1.0.0", "file": "meijer_us/1.0.0.json" },
+    { "id": "meijer_us", "version": "1.1.0", "file": "meijer_us/1.1.0.json" },
     {
       "id": "sams_club_us",
       "version": "1.0.0",
       "file": "sams_club_us/1.0.0.json"
+    },
+    {
+      "id": "sams_club_us",
+      "version": "1.1.0",
+      "file": "sams_club_us/1.1.0.json"
+    },
+    { "id": "bjs_us", "version": "1.0.0", "file": "bjs_us/1.0.0.json" },
+    { "id": "costco_us", "version": "1.0.0", "file": "costco_us/1.0.0.json" },
+    { "id": "cvs_us", "version": "1.0.0", "file": "cvs_us/1.0.0.json" },
+    {
+      "id": "walgreens_us",
+      "version": "1.0.0",
+      "file": "walgreens_us/1.0.0.json"
     },
     {
       "id": "safeway_us",

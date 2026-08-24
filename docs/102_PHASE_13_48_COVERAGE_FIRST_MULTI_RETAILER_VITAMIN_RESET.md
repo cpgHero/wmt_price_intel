@@ -44,9 +44,19 @@ The generic matching engine now supports a Product-Pack-configured `structured_h
 
 The capability contains no vitamin-specific or retailer-specific branch. Product Pack configuration selects attributes, thresholds, numeric handling, lane diversity, candidate limits, and certification requirements.
 
+### Retailer-wide brand governance
+
+Retailer Packs now support exact, versioned `verified_private_labels` when a confirmed
+retailer-owned brand has not yet reached the next shared Brand Foundation release. The
+resolver remains fail-closed, retailer-scoped, and exact; these entries only classify a
+brand lane and never prove product compatibility. Governed coverage now includes Amazon
+Elements and Solimo, Berkley Jensen and Wellsley Farms, Kirkland Signature, CVS Health,
+Meijer, Member's Mark, and Walgreens/Free & Pure. Existing Target and Kroger private
+labels continue to resolve from Brand Foundation 2.0.0.
+
 ### Certification boundary
 
-Vitamins & Supplements Product Pack 1.2.0 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
+Vitamins & Supplements Product Pack 1.2.1 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. It adds governed title/PDP formula-family extraction, preserves named release and audience conflicts, and permits `Standard` release and `General` audience only through explicit Product Pack absence policies. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
 
 The pack authorizes deterministic automatic approval only for:
 
@@ -86,3 +96,21 @@ The new queue may replace the quarantined Spring Valley queue only when all gate
 ## Verification
 
 Implementation verification includes Product Pack and evidence-profile schema validation, deterministic unit tests for brand-lane retention and numeric strength ranking, coverage-ledger reconciliation tests, Python lint/type/tests, TypeScript contract generation, and a retained-evidence shadow build. The read-only shadow builder is included in the API image; queue mutation still requires its separate explicit import flag. Deployment and paid collection are deliberately separate gates.
+
+## Retained-evidence shadow findings
+
+The first read-only shadow used 2,187 retained PDP snapshots and all successful Spring
+Valley Search evidence. It generated 11,429 unresolved cases. That queue was correctly
+blocked and was never imported: it proved that candidate recall had expanded across all
+nine competitors, but also exposed unacceptable manual-review volume and missing critical
+attribute evidence. It also confirmed that 199 of the 322 governed Walmart anchors were
+not positively observed in the one-market pilot; that is a collection-coverage issue, not
+proof of national unavailability.
+
+The repair after that gate failure is Product Pack 1.2.1 plus the versioned Retailer Pack
+brand coverage above. Candidate retrieval now requires either the same governed formula
+family or materially stronger lexical evidence, retains at most 24 candidates per
+benchmark/retailer, and preserves three candidates per brand lane. A second retained-data
+shadow must demonstrate materially lower case volume, zero known critical conflicts among
+certifiable proposals, and visible private-label coverage before any queue import or paid
+recovery Search.
