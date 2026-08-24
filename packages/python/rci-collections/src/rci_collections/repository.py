@@ -1165,7 +1165,8 @@ class PostgresCollectionRepository:
                     )
                   )
                 )
-              ORDER BY t.priority, t.created_at, t.id
+              ORDER BY CASE WHEN t.is_preflight THEN 0 ELSE 1 END,
+                       t.priority, t.created_at, t.id
               FOR UPDATE OF t SKIP LOCKED
               LIMIT :claim_limit
             )

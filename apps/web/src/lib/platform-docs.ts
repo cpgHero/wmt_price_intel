@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.56",
+  version: "1.3.57",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -178,6 +178,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Primary navigation",
           columns: ["Area", "Use it for", "Important boundary"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented during approved vitamin coverage recovery",
+              "Durable collection claims now prioritize eligible retailer preflight tasks before released bulk work.",
+              "The owner-approved Spring Valley Fishers panel launched as run 016e05c8-119b-4580-be1d-e7609fdd3621 with 850 Search calls, a hard 1,615-credit ($3.23) ceiling, and PDP disabled. Eight retailer gates passed promptly; retryable Costco 429 and Meijer 500 preflights exposed starvation behind already-released work. The generic SKIP LOCKED claim order now places eligible preflights first without bypassing retailer gates, leases, retries, cancellation, idempotency, or the run budget.",
+            ],
             [
               "Home",
               "Recent analyses, collection activity, and operating health.",

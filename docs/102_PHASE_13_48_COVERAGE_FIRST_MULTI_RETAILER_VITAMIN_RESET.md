@@ -128,6 +128,15 @@ most 199 calls and credits ($0.398), for a disclosed first-stage ceiling of 1,04
 credits, and $3.628. These are ceilings, not authorization. No paid call is launched until the owner
 approves the staged budget.
 
+The owner approved the $3.63 first-stage ceiling on August 24, 2026. Run
+`016e05c8-119b-4580-be1d-e7609fdd3621` launched the 850-call panel with a hard 1,615-credit
+budget and PDP enrichment disabled. Its single-call retailer availability gates passed promptly
+for eight retailers. Retryable Costco HTTP 429 and Meijer HTTP 500 preflights exposed a generic
+queue-order defect: released bulk tasks could sort ahead of eligible retrying preflights. Durable
+claim order now prioritizes eligible preflight tasks before normal priority, while retaining
+`FOR UPDATE SKIP LOCKED`, leases, retry limits, and retailer gates. This is an execution-order
+repair only; it does not bypass a gate or change the approved credit ceiling.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates

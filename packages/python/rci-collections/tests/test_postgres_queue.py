@@ -234,3 +234,83 @@ async def test_postgres_retailer_gates_release_healthy_retailer_independently() 
         }
     finally:
         await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres preflight-priority integration",
+)
+async def test_postgres_claims_eligible_preflight_before_released_bulk_work() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    repository = PostgresCollectionRepository(database.engine)
+    stable_key = f"postgres-preflight-priority-{uuid4()}"
+    config: dict[str, object] = {
+        "id": stable_key,
+        "name": "Postgres Preflight Priority Test",
+        "enabled": True,
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    seeds = (
+        TaskSeed(
+            retailer_id="walmart_us",
+            retailer_location_id=None,
+            adapter_id="fake",
+            location_scope_key="walmart-bulk",
+            zipcode="46038",
+            store_number="5767",
+            page_number=1,
+            max_pages=1,
+            stop_on_empty=True,
+            stop_on_short_page=False,
+            credits_per_success=1,
+            request_payload={"page": 1, "zipcode": "46038"},
+            request_fingerprint="walmart-bulk-fingerprint",
+            priority=1,
+            is_preflight=False,
+        ),
+        TaskSeed(
+            retailer_id="aldi_us",
+            retailer_location_id=None,
+            adapter_id="fake",
+            location_scope_key="aldi-preflight",
+            zipcode="46060",
+            store_number="13",
+            page_number=1,
+            max_pages=1,
+            stop_on_empty=True,
+            stop_on_short_page=False,
+            credits_per_success=1,
+            request_payload={"page": 1, "zipcode": "46060"},
+            request_fingerprint="aldi-preflight-fingerprint",
+            priority=100,
+            is_preflight=True,
+        ),
+    )
+    plan = CollectionPlan(
+        estimate=CostEstimate(
+            definition_id=stable_key,
+            retailers=(
+                RetailerEstimate("walmart_us", 1, 1, 1, 1, 1),
+                RetailerEstimate("aldi_us", 1, 1, 1, 1, 1),
+            ),
+            estimated_total_pages=2,
+            estimated_total_credits=2,
+        ),
+        initial_tasks=seeds,
+        availability_gate={
+            "enabled": True,
+            "retailer_ids": ["aldi_us"],
+            "sample_size_per_retailer": 1,
+            "max_billable_404_rate": 0,
+        },
+    )
+    try:
+        await repository.create_run(definition, plan)
+        claimed = await repository.claim_tasks(
+            "preflight-priority-worker", claim_limit=1, lease_seconds=30
+        )
+        assert len(claimed) == 1
+        assert claimed[0].retailer_id == "aldi_us"
+        assert claimed[0].is_preflight is True
+    finally:
+        await database.dispose()
