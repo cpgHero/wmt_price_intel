@@ -144,6 +144,68 @@ async def test_radius_resolution_deduplicates_competitors_and_preserves_edges() 
     assert all(edge.distance_miles <= 3 for edge in resolution.edges)
 
 
+async def test_radius_resolution_can_limit_nearest_locations_per_retailer() -> None:
+    primary = _unit(
+        "00000000-0000-0000-0000-000000000013",
+        "walmart_us",
+        "13",
+        "46038",
+        "IN",
+        39.980997,
+        -86.001516,
+    )
+    near_aldi = _unit(
+        "10000000-0000-0000-0000-000000000013",
+        "aldi_us",
+        "A13",
+        "46038",
+        "IN",
+        39.981,
+        -86.002,
+    )
+    farther_aldi = _unit(
+        "10000000-0000-0000-0000-000000000014",
+        "aldi_us",
+        "A14",
+        "46038",
+        "IN",
+        39.99,
+        -86.01,
+    )
+    target = _unit(
+        "20000000-0000-0000-0000-000000000013",
+        "target_us",
+        "T13",
+        "46038",
+        "IN",
+        39.982,
+        -86.003,
+    )
+    repository = InMemoryCollectionRepository([primary, farther_aldi, target, near_aldi])
+    resolver = CollectionGeographyResolver(repository, _catalog())
+
+    resolution = await resolver.resolve(
+        {
+            "primary_retailer_id": "walmart_us",
+            "competitor_retailer_ids": ["aldi_us", "target_us"],
+            "country": "USA",
+            "primary_selection": {"mode": "all_locations"},
+            "competitor_correspondence": {
+                "mode": "radius",
+                "radius_miles": 5,
+                "maximum_locations_per_retailer_per_primary": 1,
+            },
+        }
+    )
+
+    competitors = [item for item in resolution.locations if item.role == "competitor"]
+    assert {(item.retailer_id, item.store_number) for item in competitors} == {
+        ("aldi_us", "A13"),
+        ("target_us", "T13"),
+    }
+    assert len(resolution.edges) == 2
+
+
 async def test_approved_resolution_plans_from_snapshot_not_live_master() -> None:
     repository = InMemoryCollectionRepository(
         [

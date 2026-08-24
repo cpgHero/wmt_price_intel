@@ -21,6 +21,7 @@ export interface RetailCompetitiveIntelligenceCollectionGeographyRequest {
   competitor_correspondence: {
     mode: "same_zip" | "primary_states" | "radius";
     radius_miles?: 1 | 3 | 5 | null;
+    maximum_locations_per_retailer_per_primary?: number | null;
   };
   exclusions?: {
     retailer_id: string;

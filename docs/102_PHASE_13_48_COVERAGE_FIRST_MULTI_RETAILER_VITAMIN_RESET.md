@@ -105,6 +105,29 @@ Walmart-anchor panel that covers the configured physical competitors. A returned
 authorized for collection merely because it is geographically close; its provider-safe store ID,
 ZIP, retailer status, and collection-eligibility result must pass the normal collection preflight.
 
+The generic radius resolver also supports an optional
+`maximum_locations_per_retailer_per_primary` control. When configured, it deterministically selects
+the nearest N eligible stores for each competitor retailer around every selected primary-retailer
+location. The cap is independent by retailer, so a dense CVS or Kroger footprint cannot crowd out
+BJ's, Costco, Meijer, Sam's Club, Target, or Walgreens. Omitting the control preserves the existing
+all-stores-within-radius behavior. The collection builder exposes the control explicitly and records
+it in the immutable geography request and resolution snapshot.
+
+The production location-master diagnostic found that Walmart store 5767 in Fishers, Indiana
+(ZIP 46038) has at least one eligible location from all eight physical competitor retailers within
+five miles; Amazon Same Day uses the Walmart ZIP. Without a per-retailer cap, that anchor expands to
+34 physical competitor locations and would collect materially more evidence than the owner's
+one-location-per-retailer discovery objective. With N=1, the proposed first recovery panel contains
+one Walmart location, one Amazon ZIP, and the nearest eligible BJ's, Costco, CVS, Kroger, Meijer,
+Sam's Club, Target, and Walgreens location. Provider preflight and the collection cost ceiling remain
+mandatory before launch.
+
+For the 85-keyword catalog, the N=1 first panel is 850 Search calls and 1,615 provider credits
+($3.23). A separate exact-title Walmart recovery for the 199 currently unobserved anchors adds at
+most 199 calls and credits ($0.398), for a disclosed first-stage ceiling of 1,049 calls, 1,814
+credits, and $3.628. These are ceilings, not authorization. No paid call is launched until the owner
+approves the staged budget.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates

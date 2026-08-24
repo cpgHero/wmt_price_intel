@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.55",
+  version: "1.3.56",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -697,7 +697,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Coverage-first vitamin successor in shadow",
-          text: "Product Pack 1.2.3 is implemented in shadow and accounts for all 322 governed Spring Valley products against all nine configured competitors. Four retained-evidence shadows were blocked and never imported. The latest retailer-scoped shadow produced 240 cases, ten plausible positive proposals, and zero automatic approvals, but failed recall because 88–119 of 123 observed anchors lacked a candidate by retailer and 199 catalog anchors were not positively observed in the one-market pilot. Formula-family extraction, exact retailer-scoped private-label coverage, query-context ranking, seller governance, and bounded brand-lane retrieval remain active without relaxing ingredient, strength, form, release, or audience conflicts. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. The existing 203-case queue remains quarantined. Any multi-market Search recovery requires a separately disclosed and approved task count, early-stop policy, and dollar ceiling.",
+          text: "Product Pack 1.2.3 is implemented in shadow and accounts for all 322 governed Spring Valley products against all nine configured competitors. Four retained-evidence shadows were blocked and never imported. The latest retailer-scoped shadow produced 240 cases, ten plausible positive proposals, and zero automatic approvals, but failed recall because 88–119 of 123 observed anchors lacked a candidate by retailer and 199 catalog anchors were not positively observed in the one-market pilot. Formula-family extraction, exact retailer-scoped private-label coverage, query-context ranking, seller governance, and bounded brand-lane retrieval remain active without relaxing ingredient, strength, form, release, or audience conflicts. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. The existing 203-case queue remains quarantined. Radius planning can now cap each competitor independently to the nearest N eligible stores around every Walmart anchor. The proposed Fishers first stage uses N=1 and has a disclosed $3.628 Search ceiling including exact-title Walmart recovery, but remains unlaunched until owner approval.",
         },
         {
           kind: "callout",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and locally verified; paid collection not launched",
+              "Radius collection planning gained a deterministic nearest-N location cap per competitor retailer.",
+              "The optional maximum_locations_per_retailer_per_primary control selects the nearest N eligible stores independently for every competitor around each Walmart location; omitting it preserves all-stores-within-radius behavior. The production location-master planner identified Walmart 5767 in Fishers, Indiana as a one-anchor panel covering all eight physical competitors within five miles, with Amazon Same Day using ZIP 46038. N=1 bounds the proposed 85-keyword first stage to 850 Search calls and 1,615 credits ($3.23); exact-title recovery for 199 unobserved Walmart anchors adds at most 199 calls and credits ($0.398). No paid call has been launched.",
+            ],
             [
               "2026-08-24",
               "Retained-evidence gate failed; paid recovery not launched",

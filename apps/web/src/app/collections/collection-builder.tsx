@@ -328,6 +328,15 @@ export function CollectionBuilder({
   const [radiusMiles, setRadiusMiles] = useState<1 | 3 | 5>(
     initialRequest?.competitor_correspondence.radius_miles ?? 3,
   );
+  const initialNearbyLimit =
+    initialRequest?.competitor_correspondence
+      .maximum_locations_per_retailer_per_primary;
+  const [limitNearbyLocations, setLimitNearbyLocations] = useState(
+    initialNearbyLimit != null,
+  );
+  const [maximumNearbyPerRetailer, setMaximumNearbyPerRetailer] = useState(
+    initialNearbyLimit ?? 1,
+  );
   const [exclusions, setExclusions] = useState<
     NonNullable<CollectionGeographyRequest["exclusions"]>
   >(initialRequest?.exclusions ?? []);
@@ -434,6 +443,10 @@ export function CollectionBuilder({
       competitor_correspondence: {
         mode: correspondenceMode,
         radius_miles: correspondenceMode === "radius" ? radiusMiles : null,
+        maximum_locations_per_retailer_per_primary:
+          correspondenceMode === "radius" && limitNearbyLocations
+            ? maximumNearbyPerRetailer
+            : null,
       },
       exclusions,
     };
@@ -442,7 +455,9 @@ export function CollectionBuilder({
     correspondenceMode,
     exclusions,
     locationIdText,
+    limitNearbyLocations,
     locationsPerState,
+    maximumNearbyPerRetailer,
     primaryMode,
     primaryRetailerId,
     radiusMiles,
@@ -1179,6 +1194,38 @@ export function CollectionBuilder({
                   primary-to-competitor edge. A selected Product Pack may still
                   use exact-ZIP comparisons only.
                 </p>
+                <label className="builder-inline-field">
+                  <span>
+                    <input
+                      type="checkbox"
+                      checked={limitNearbyLocations}
+                      onChange={(event) =>
+                        setLimitNearbyLocations(event.target.checked)
+                      }
+                    />{" "}
+                    Limit nearby locations per competitor
+                  </span>
+                  {limitNearbyLocations ? (
+                    <input
+                      aria-label="Maximum nearby locations per competitor retailer"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={maximumNearbyPerRetailer}
+                      onChange={(event) =>
+                        setMaximumNearbyPerRetailer(
+                          Math.min(100, Math.max(1, Number(event.target.value))),
+                        )
+                      }
+                    />
+                  ) : null}
+                  <small>
+                    Choose the nearest N stores from each competitor for every
+                    selected {displayLabel(primaryRetailerId)} location. Leave
+                    off when the collection requires every store within the
+                    radius.
+                  </small>
+                </label>
               </fieldset>
             ) : null}
             <div className="zip-retailer-note">

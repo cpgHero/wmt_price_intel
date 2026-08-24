@@ -128,6 +128,14 @@
             5,
             null
           ]
+        },
+        "maximum_locations_per_retailer_per_primary": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 100
         }
       }
     },

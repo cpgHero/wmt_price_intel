@@ -356,6 +356,10 @@ class CollectionGeographyResolver:
         radius = int(correspondence.get("radius_miles") or 0)
         if radius not in {1, 3, 5}:
             raise ValueError("radius_miles must be 1, 3, or 5")
+        raw_limit = correspondence.get("maximum_locations_per_retailer_per_primary")
+        maximum_per_retailer = int(raw_limit) if raw_limit is not None else None
+        if maximum_per_retailer is not None and not 1 <= maximum_per_retailer <= 100:
+            raise ValueError("maximum_locations_per_retailer_per_primary must be between 1 and 100")
         grid: dict[tuple[int, int], list[LocationUnit]] = defaultdict(list)
         for row in competitor_rows:
             if row.latitude is not None and row.longitude is not None:
@@ -366,6 +370,7 @@ class CollectionGeographyResolver:
             if primary.latitude is None or primary.longitude is None:
                 continue
             cell = (math.floor(primary.latitude), math.floor(primary.longitude))
+            nearby_by_retailer: dict[str, list[tuple[float, LocationUnit]]] = defaultdict(list)
             for lat_offset in (-1, 0, 1):
                 for lon_offset in (-1, 0, 1):
                     for competitor in grid.get((cell[0] + lat_offset, cell[1] + lon_offset), []):
@@ -373,14 +378,25 @@ class CollectionGeographyResolver:
                             *_coordinates(primary), *_coordinates(competitor)
                         )
                         if distance <= radius:
-                            selected[competitor.id] = competitor
-                            edges.append(
-                                (
-                                    primary.id,
-                                    f"{competitor.retailer_id}|{competitor.id}",
-                                    distance,
-                                )
+                            nearby_by_retailer[competitor.retailer_id].append(
+                                (distance, competitor)
                             )
+            for retailer_id in sorted(nearby_by_retailer):
+                rows = sorted(
+                    nearby_by_retailer[retailer_id],
+                    key=lambda item: (item[0], item[1].store_number, item[1].id),
+                )
+                if maximum_per_retailer is not None:
+                    rows = rows[:maximum_per_retailer]
+                for distance, competitor in rows:
+                    selected[competitor.id] = competitor
+                    edges.append(
+                        (
+                            primary.id,
+                            f"{competitor.retailer_id}|{competitor.id}",
+                            distance,
+                        )
+                    )
         return sorted(selected.values(), key=_location_sort_key), edges
 
     @staticmethod
