@@ -18,7 +18,7 @@ No current vitamin decision is eligible for successor carry-forward, gold-set re
 
 ## Corrected policy
 
-`vitamins_supplements@1.1.1` is fail-closed:
+`vitamins_supplements@1.1.2` is fail-closed:
 
 1. active ingredient or governed formulation, strength, strength unit, dosage form, release profile, and life-stage/audience are hard blockers;
 2. those attributes must be known before a comparable relationship can be certified;
@@ -40,7 +40,7 @@ The certification API now derives allowed relationship tiers from the active Pro
 
 The replacement queue must:
 
-- be generated from retained Search and PDP evidence under Product Pack 1.1.1;
+- be generated from retained Search and PDP evidence under Product Pack 1.1.2;
 - set `carry_forward_certified=false` and begin with zero final decisions;
 - contain no adult/children, prenatal/non-prenatal, sex-specific, senior/children, active-ingredient, strength, strength-unit, dosage-form, or release-profile conflicts among comparable proposals;
 - keep unknown required identity evidence unresolved;
@@ -52,4 +52,4 @@ The replacement queue must:
 
 This reset uses existing evidence. It makes no MetricsCart or OpenAI call. Additional AI review is blocked until the deterministic successor audit passes and the owner separately approves the disclosed case count and spend.
 
-The first fail-closed dry run under Product Pack 1.1.0 produced zero candidates because unknown critical evidence was being treated as both a certification blocker and a candidate-discovery blocker. It was not imported. Product Pack 1.1.1 keeps the certification blocker but permits bounded lexical evidence-review candidates when a critical value is unknown; this is a generic policy switch and does not weaken final certification.
+The first fail-closed dry run under Product Pack 1.1.0 produced zero candidates because unknown critical evidence was being treated as both a certification blocker and a candidate-discovery blocker. It was not imported. Product Pack 1.1.2 keeps the certification blocker but permits bounded lexical evidence-review candidates when a critical value is unknown; this is a generic policy switch and does not weaken final certification. A second dry run at the original 0.05 lexical threshold produced 2,045 unresolved candidates and 50 obvious audience-conflict pairs. It was also withheld. Version 1.1.2 raises the review-funnel similarity floor to 0.15; the retained-evidence audit showed this removes 49 of those 50 conflicts while preserving the one substantively related prenatal-iron versus iron pair for explicit rejection review.
