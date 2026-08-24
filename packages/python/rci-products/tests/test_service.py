@@ -189,6 +189,48 @@ class SelectiveBlockingFetcher(FixtureFetcher):
         return await super().fetch(job)
 
 
+class FailingRecordRepository(InMemoryProductDetailRepository):
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.record_attempts = 0
+
+    async def record_fetch(self, *args, **kwargs):
+        self.record_attempts += 1
+        raise RuntimeError("simulated durable-record failure")
+
+
+async def test_one_record_failure_does_not_terminate_product_detail_worker() -> None:
+    import json
+
+    repository = FailingRecordRepository(REPOSITORY_ROOT)
+    product = await _product(repository)
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    run = await repository.create_run(max_credits=2)
+    await repository.enqueue(
+        run.id,
+        product,
+        endpoint,
+        ProductDetailRequestContext(
+            product_id="677669806",
+            zipcode="90020",
+            store="2464",
+            fulfillment_type="pickup",
+        ),
+    )
+    payload = json.loads(
+        (REPOSITORY_ROOT / "fixtures/api_samples/metricscart_pdp_walmart_200.json").read_text()
+    )
+    worker = ProductDetailWorker(
+        repository,
+        FixtureFetcher(payload),
+        worker_id="resilient-worker",
+    )
+
+    assert await worker.run_once() == 1
+    assert repository.record_attempts == 1
+    assert await worker.run_once() == 0
+
+
 async def test_worker_refills_capacity_without_waiting_for_slowest_claimed_job() -> None:
     import json
 

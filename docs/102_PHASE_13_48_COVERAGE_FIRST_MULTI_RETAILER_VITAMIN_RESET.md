@@ -166,6 +166,14 @@ and 120-per-minute account permit before the retailer permit. A 429 pauses both 
 multi-replica throughput bounded, prevents nonbillable cooldown attempts from consuming a job's
 retry allowance, and leaves completed 200/404 evidence and the 7,500-credit ceiling unchanged.
 
+The first operational transient requeue also exposed an attempt-ledger repair defect. The manual
+repair reset a job counter even though its immutable attempt-one snapshot remained present, so the
+database uniqueness constraint correctly rejected a second attempt-one record. Recovery now restores
+affected counters from the maximum retained snapshot attempt before retrying. The worker also isolates
+and logs an individual durable-record failure rather than terminating the process; the lease remains
+recoverable by the queue. Existing snapshots are never overwritten or deleted, billable 404s are not
+requeued, and the run credit ceiling is unchanged.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates

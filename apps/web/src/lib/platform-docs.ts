@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.59",
+  version: "1.3.60",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and regression-tested; production counter repair required",
+              "A failed Product Details task no longer terminates the durable worker loop.",
+              "A manually requeued zero-cost transient job retained immutable attempt evidence but had its job counter reset, so the database uniqueness guard rejected a second attempt-1 snapshot. The worker now logs an isolated record failure and continues processing other leases; the affected durable lease remains recoverable. Production recovery must restore each affected job counter from its existing snapshot ledger before retrying. No snapshot is overwritten or deleted, no billable 404 is retried, and the credit ceiling remains unchanged.",
+            ],
             [
               "2026-08-24",
               "Implemented and test-verified; production recovery in progress",

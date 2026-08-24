@@ -82,7 +82,14 @@ class ProductDetailWorker:
         if not tasks:
             return
         self._inflight.difference_update(tasks)
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                logger.error(
+                    "Product Details task failed; the durable lease will recover it",
+                    exc_info=(type(result), result, result.__traceback__),
+                    extra={"event": "product_detail_task_failed"},
+                )
 
     async def _execute(self, job: ProductDetailJob) -> None:
         finished = asyncio.Event()
