@@ -151,7 +151,10 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   await expect(statusSummary).toContainText("1 reviewing");
   await expect(statusSummary).toContainText("1 drafts ready");
   await expect(statusSummary).toContainText("1 needs attention");
-  await expect(statusSummary).toContainText("Latest batch · 2 of 4 complete");
+  await expect(statusSummary).toContainText(
+    "Latest batch · 2 of 4 reached a terminal state",
+  );
+  await expect(statusSummary).toContainText("1 drafts ready · 1 failed");
   await expect(statusSummary).toContainText("Estimated remaining: About 2 min");
   await expect(statusSummary).toContainText("Recorded cost $0.1234");
   await expect(

@@ -295,8 +295,15 @@ class OpenAIMatchingReviewProvider:
         try:
             response = await request(image_urls)
         except BadRequestError as exc:
-            message = str(exc)
-            if not image_urls or "Error while downloading file" not in message:
+            message = str(exc).lower()
+            image_download_failed = any(
+                marker in message
+                for marker in (
+                    "error while downloading file",
+                    "failed to download file",
+                )
+            )
+            if not image_urls or not image_download_failed:
                 raise
             warnings = ("vision_image_download_unavailable",)
             logger.warning(

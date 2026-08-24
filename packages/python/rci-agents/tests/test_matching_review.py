@@ -34,8 +34,14 @@ class FakeResponsesEndpoint:
 
 
 class ImageDownloadFallbackEndpoint:
-    def __init__(self, result: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        result: dict[str, Any],
+        *,
+        error_message: str = "Error while downloading file. Upstream status code: 403.",
+    ) -> None:
         self.result = result
+        self.error_message = error_message
         self.calls: list[dict[str, Any]] = []
 
     async def create(self, **kwargs: Any) -> object:
@@ -44,7 +50,7 @@ class ImageDownloadFallbackEndpoint:
             request = SimpleNamespace(method="POST", url="https://api.openai.com/v1/responses")
             response = SimpleNamespace(status_code=400, request=request, headers={})
             raise BadRequestError(
-                "Error while downloading file. Upstream status code: 403.",
+                self.error_message,
                 response=response,  # type: ignore[arg-type]
                 body={"error": {"code": "invalid_value"}},
             )
@@ -220,7 +226,16 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
     assert proposal["properties"]["source_image_url"] == {"type": "null"}
 
 
-async def test_matching_review_falls_back_when_retailer_image_download_is_blocked() -> None:
+@pytest.mark.parametrize(
+    "error_message",
+    [
+        "Error while downloading file. Upstream status code: 403.",
+        "Failed to download file.",
+    ],
+)
+async def test_matching_review_falls_back_when_retailer_image_download_is_blocked(
+    error_message: str,
+) -> None:
     endpoint = ImageDownloadFallbackEndpoint(
         {
             "verdict_proposal": "insufficient_evidence",
@@ -229,7 +244,8 @@ async def test_matching_review_falls_back_when_retailer_image_download_is_blocke
             "attribute_proposals": [],
             "conflicts": [],
             "requires_human_review": True,
-        }
+        },
+        error_message=error_message,
     )
     provider = OpenAIMatchingReviewProvider(
         api_key="test-key",

@@ -1643,7 +1643,7 @@ export function MatchingV2ReviewAdmin({
                   <div>
                     <strong>
                       Latest batch · {latestAIBatch.completed_count} of{" "}
-                      {latestAIBatch.task_count} complete
+                      {latestAIBatch.task_count} reached a terminal state
                     </strong>
                     <span>
                       Submitted {formatTimestamp(latestAIBatch.submitted_at)} by{" "}
@@ -1663,6 +1663,10 @@ export function MatchingV2ReviewAdmin({
                     />
                   </div>
                   <div className="cert-ai-batch-meta">
+                    <span>
+                      {latestAIBatch.succeeded} drafts ready ·{" "}
+                      {latestAIBatch.needs_review} failed
+                    </span>
                     <span>
                       {latestAIBatch.completed_at
                         ? `Finished ${formatTimestamp(latestAIBatch.completed_at)}`

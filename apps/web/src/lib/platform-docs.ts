@@ -1607,6 +1607,12 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-23",
+              "Implemented and test-verified; deployment pending",
+              "Matching v2 AI review distinguishes successful drafts from terminal failures and tolerates provider image-download wording changes.",
+              "The latest-batch panel no longer labels terminal failures as completed AI reviews: it separately reports drafts ready and failed tasks. Vision review now falls back to structured evidence for both documented OpenAI image-download error phrasings instead of failing the case. Production diagnosis of the Spring Valley queue found 1,185 tasks rejected for insufficient OpenAI credits and one image-download failure, zero successful drafts, zero certifiable recommendations, and zero recorded AI spend; retry remains an explicit administrator action after credits are available.",
+            ],
+            [
+              "2026-08-23",
               "Deployed and production-verified",
               "Product Details contracts gained fixed request parameters and retailer-fair parallel queue claiming.",
               "A controlled Walgreens diagnostic proved that the historical SFS request context and extra Search URL produced HTTP 400 while the same observed product, store, and ZIP returned HTTP 200 with a product-ID-only pickup request. The catalog now fixes provider-required parameters and selects the supported identity after observation values; durable queue serialization preserves both behaviors without retailer branches. Queue claims round-robin retailers within priority and the default claim concurrency rises from one to 18; the shared Postgres retailer/type limiter, credit ceiling, SKIP LOCKED claims, leases, retries, cancellation, and idempotency remain authoritative. Corrected run 09e1979f-36fd-45b4-8576-5138f1504ca8 completed 371/371 Walgreens products with HTTP 200 for 742 credits. Aggregate Spring Valley PDP spend including the diagnostic is 5,322 credits ($10.644), below the $15 ceiling. GitHub Actions runs 32671013676, 32671203338, and 32671662219 passed. No AI call was made.",
