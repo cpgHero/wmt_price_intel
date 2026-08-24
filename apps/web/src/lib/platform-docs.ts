@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.54",
+  version: "1.3.55",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -697,7 +697,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Coverage-first vitamin successor in shadow",
-          text: "Product Pack 1.2.1 is implemented but is not yet the production queue. Its evidence profile accounts for all 322 governed Spring Valley products against every configured competitor, including products not observed in the one-market pilot. The first retained-data shadow found broad recall but an unacceptable 11,429 unresolved cases, so it was blocked and never imported. Formula-family extraction, exact retailer-scoped private-label coverage, stronger lexical evidence, and tighter per-brand-lane limits now reduce noise without relaxing ingredient, strength, form, release, or audience conflicts. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. Only verified exact-item or complete exact-specification evidence may auto-approve. The existing 203-case queue remains quarantined until a second shadow passes recall, precision, seller, retailer-coverage, conflict, and checksum gates. Any broader Search recovery requires a separately disclosed and approved paid-call plan.",
+          text: "Product Pack 1.2.3 is implemented in shadow and accounts for all 322 governed Spring Valley products against all nine configured competitors. Four retained-evidence shadows were blocked and never imported. The latest retailer-scoped shadow produced 240 cases, ten plausible positive proposals, and zero automatic approvals, but failed recall because 88–119 of 123 observed anchors lacked a candidate by retailer and 199 catalog anchors were not positively observed in the one-market pilot. Formula-family extraction, exact retailer-scoped private-label coverage, query-context ranking, seller governance, and bounded brand-lane retrieval remain active without relaxing ingredient, strength, form, release, or audience conflicts. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. The existing 203-case queue remains quarantined. Any multi-market Search recovery requires a separately disclosed and approved task count, early-stop policy, and dollar ceiling.",
         },
         {
           kind: "callout",
@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. The second Product Pack 1.2.1 shadow reduced that to 239 but failed recall and zero-false-positive gates. The third Product Pack 1.2.2 shadow produced 116 cases and zero automatic approvals, but requiring exact shared Search-keyword context hid too many candidates: 106–122 of 123 observed Walmart anchors lacked a candidate by retailer. None of the shadows was imported. Product Pack 1.2.3 uses Search keyword as a retrieval preference rather than a requirement, keeps PDP brand evidence bounded to structured brand plus product name, excludes obvious non-oral Search noise, and retains the zero-auto-approval gate. Every proposal remains AI/human certified until a reviewed benchmark proves safe automation.",
+            "Production vitamin Matching v2 remains quarantined until the Phase 13.48 gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. Product Pack 1.2.1 reduced that to 239 but failed recall and zero-false-positive gates. Product Pack 1.2.2 produced 116 cases and zero automatic approvals but hid too many candidates by requiring exact shared Search-keyword context. Product Pack 1.2.3 produced 240 retailer-scoped cases: 230 unresolved, seven exact-specification candidates, three equivalent-product candidates, and zero automatic approvals. All ten positive proposals were semantically plausible, and governed Target private label appeared correctly, but 88–119 of 123 observed Walmart anchors still lacked a candidate by retailer and 199 of 322 catalog anchors remained unobserved. None of the shadows was imported. Broader Search and cache-aware PDP evidence are required before further AI review.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Retained-evidence gate failed; paid recovery not launched",
+              "The fourth Spring Valley shadow was completed retailer by retailer after the combined build exceeded one API replica's memory limit.",
+              "The nine read-only builds produced 240 cases, ten plausible positive proposals, and zero automatic approvals. Recall still failed: 88–119 observed anchors lacked a candidate per retailer, competitor critical-attribute completion ranged from 10.7% to 55.9%, and 199 Walmart catalog anchors remained unobserved. No queue was imported and no Search, PDP, or AI spend occurred. The next safe action is a disclosed multi-market Search recovery followed by 30-day-cache-aware PDP enrichment.",
+            ],
             [
               "2026-08-24",
               "Implemented; fourth retained-evidence shadow pending",

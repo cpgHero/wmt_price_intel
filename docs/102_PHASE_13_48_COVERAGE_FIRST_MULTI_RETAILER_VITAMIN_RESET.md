@@ -98,6 +98,13 @@ The matching reset does not infer national availability from the catalog. It cre
 6. record every retailer × keyword × market outcome, including HTTP failures and zero-result responses; and
 7. rerun the coverage ledger before paid matching or certification.
 
+`scripts/plan_spring_valley_location_panel.py` provides a read-only, reproducible location-master
+diagnostic. It reports active and collection-eligible rows by retailer, finds the nearest physical
+competitor stores within five miles of each Walmart location, and constructs a greedy minimum
+Walmart-anchor panel that covers the configured physical competitors. A returned location is not
+authorized for collection merely because it is geographically close; its provider-safe store ID,
+ZIP, retailer status, and collection-eligibility result must pass the normal collection preflight.
+
 No paid Search, PDP, or AI call is authorized by this phase document alone. The administrator must receive an exact task count, credit exposure, dollar ceiling, early-stop rules, and retry policy before launch.
 
 ## Release gates
@@ -153,3 +160,17 @@ form/release conflicts among positive proposals, materially improved anchor cove
 private-label attribution, and an operationally bounded case count. Only after those gates pass
 will the owner receive a priced, early-stopping multi-market Search recovery plan for the 199
 unobserved catalog anchors and broader competitor discovery.
+
+The fourth retained-evidence shadow was evaluated independently for all nine competitors after
+the combined build exceeded the API replica's memory limit. The retailer-scoped builds produced
+240 cases: 230 unresolved, seven exact-specification candidates, three equivalent-product
+candidates, and zero automatic approvals. Semantic inspection of all ten positive proposals found
+plausible strength, form, release, and audience relationships; the corrected Target lane included
+governed up & up private-label products rather than silently losing that assortment.
+
+The fourth shadow nevertheless failed recall. Depending on retailer, 88–119 of the 123 observed
+Spring Valley anchors had no retained candidate. The competitor critical-attribute completion
+rate ranged from 10.7% to 55.9%, and 199 of 322 governed Walmart catalog anchors remained
+unobserved at a positive price. No fourth-shadow queue was imported. The evidence supports a
+bounded multi-market Search recovery plus cache-aware PDP enrichment; it does not support more AI
+review of the current one-market candidate set.
