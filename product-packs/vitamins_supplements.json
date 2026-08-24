@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -57,6 +57,11 @@
           "type": "term_map",
           "sources": ["text"],
           "values": {
+            "blood_sugar_support_formula": ["advanced formula blood sugar support", "blood sugar support"],
+            "metabolyze_formula": ["nature made metabolyze", "metabolyze"],
+            "vitamin_c_rose_hips": ["vitamin c with rose hips", "vitamin c with rose", "vitamin c rose hips"],
+            "calcium_vitamin_d": ["calcium plus vitamin d", "calcium and vitamin d", "calcium & vitamin d"],
+            "vitamin_c_zinc": ["zinc with vitamin c", "zinc plus vitamin c"],
             "prenatal_multivitamin": ["prenatal multivitamin", "prenatal multi", "prenatal vitamin"],
             "multivitamin": ["multivitamin", "multi vitamin", "multi-vitamin", "daily multi", "adult multi", "kids multi", "children's multi", "childrens multi", "men's multi", "mens multi", "women's multi", "womens multi"],
             "vitamin_d3_k2": ["vitamin d3 + k2", "vitamin d3 and k2", "d3 k2", "d3+k2"],
@@ -79,7 +84,11 @@
             "calcium": ["calcium"],
             "chromium": ["chromium picolinate", "chromium"],
             "iron": ["ferrous sulfate", "ferrous fumarate", "iron"],
-            "magnesium": ["magnesium glycinate", "magnesium citrate", "magnesium oxide", "magnesium"],
+            "magnesium_glycinate": ["magnesium glycinate"],
+            "magnesium_citrate": ["magnesium citrate"],
+            "magnesium_oxide": ["magnesium oxide"],
+            "magnesium_l_threonate": ["magnesium l-threonate", "magnesium l threonate"],
+            "magnesium": ["magnesium"],
             "potassium": ["potassium"],
             "selenium": ["selenium"],
             "zinc": ["zinc"],
@@ -328,7 +337,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.2.1-shadow.1",
+    "policy_version": "1.2.2-shadow.1",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
@@ -350,7 +359,7 @@
     "minimum_equivalent_coverage": 1.0,
     "equivalent_score_threshold": 0.9,
     "allow_comparable_substitute": false,
-    "auto_approval_tiers": ["exact_item", "exact_specification"],
+    "auto_approval_tiers": [],
     "geography_policy": "physical_store_radius",
     "scope_mode": "observed_distribution",
     "fulfillment_types": ["pickup"],
@@ -373,6 +382,7 @@
       "minimum_structured_matches": 1,
       "minimum_per_brand_lane": 3,
       "preserve_numeric_tokens": true,
+      "context_overlap_mode": "require_when_available",
       "stop_words": [
         "spring",
         "valley",
@@ -797,7 +807,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.1"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.2"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

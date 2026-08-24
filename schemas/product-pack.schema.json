@@ -567,6 +567,9 @@
             "minimum_structured_matches": { "type": "integer", "minimum": 0 },
             "minimum_per_brand_lane": { "type": "integer", "minimum": 0 },
             "preserve_numeric_tokens": { "type": "boolean" },
+            "context_overlap_mode": {
+              "enum": ["disabled", "prefer", "require_when_available"]
+            },
             "stop_words": {
               "type": "array",
               "uniqueItems": true,

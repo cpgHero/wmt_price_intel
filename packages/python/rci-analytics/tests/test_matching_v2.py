@@ -81,6 +81,7 @@ def _listing(
     identifier: IdentifierEvidence | None = None,
     locations: tuple[ListingLocationEvidence, ...] = (),
     title: str | None = None,
+    retrieval_contexts: tuple[str, ...] = (),
 ) -> ListingEvidence:
     def value(item: object, name: str) -> AttributeValue | None:
         return None if item is None else AttributeValue(item, f"pdp:{retailer}:{product}:{name}")
@@ -108,6 +109,7 @@ def _listing(
         observed_location_count=len(locations),
         observed_locations=locations,
         title=title,
+        retrieval_contexts=retrieval_contexts,
     )
 
 
@@ -1361,6 +1363,54 @@ def test_structured_high_recall_uses_numeric_identity_tokens() -> None:
     assert result.edges[0].competitor.retailer_product_id == "right"
 
 
+def test_structured_high_recall_can_require_shared_collection_query_context() -> None:
+    policy = replace(
+        _policy(),
+        candidate_retrieval_mode="structured_high_recall",
+        candidate_retrieval_maximum_per_benchmark=10,
+        candidate_retrieval_minimum_similarity=1,
+        candidate_retrieval_structured_attributes=(),
+        candidate_retrieval_minimum_structured_matches=1,
+        candidate_retrieval_context_mode="require_when_available",
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (
+            _listing(
+                "walmart_us",
+                "w1",
+                title="Spring Valley adult multivitamin",
+                retrieval_contexts=("adult unisex vitamins",),
+            ),
+        ),
+        (
+            _listing(
+                "target_us",
+                "same-query",
+                title="up and up daily multi",
+                retrieval_contexts=("adult unisex vitamins",),
+            ),
+            _listing(
+                "target_us",
+                "wrong-query",
+                title="Spring Valley adult multivitamin",
+                retrieval_contexts=("fish oil vitamins",),
+            ),
+        ),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="target_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 1
+    assert result.edges[0].competitor.retailer_product_id == "same-query"
+
+
 def test_vitamin_pack_uses_catalog_wide_structured_candidate_discovery() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     policy = compile_matching_policy_v2(pack, "exact_spec")
@@ -1372,6 +1422,8 @@ def test_vitamin_pack_uses_catalog_wide_structured_candidate_discovery() -> None
     assert policy.candidate_retrieval_structured_attributes == ("active_ingredient",)
     assert policy.candidate_retrieval_minimum_per_brand_lane == 3
     assert policy.candidate_retrieval_preserve_numeric_tokens is True
+    assert policy.candidate_retrieval_context_mode == "require_when_available"
+    assert policy.auto_approval_tiers == ()
 
 
 def test_unknown_blocking_hard_attribute_excludes_candidate() -> None:

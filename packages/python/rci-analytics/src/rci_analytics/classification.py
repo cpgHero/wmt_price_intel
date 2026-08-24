@@ -192,26 +192,16 @@ class OfferClassifier:
                 if bool(definition.get("required_for_strict")) and value is None:
                     review.append(f"required attribute {name} is unresolved")
             attributes["_attribute_provenance"] = provenance
-            if self._brand_resolver is not None:
-                observed_brand = attributes.get("brand") or offer.brand
-                resolution = self._brand_resolver.resolve(
-                    offer.retailer_id,
-                    str(observed_brand) if observed_brand else None,
-                    category=self.pack.name,
-                )
-                resolution_source: str = resolution.resolution_method
-                if resolution.status != "resolved":
-                    title_resolution = self._brand_resolver.resolve_from_text(
-                        offer.retailer_id,
-                        offer.title,
-                        category=self.pack.name,
-                    )
-                    if title_resolution.status == "resolved":
-                        resolution = title_resolution
-                        resolution_source = "retailer_pack_title"
-                attributes["_brand_governance"] = resolution.to_record()
-                if resolution.canonical_brand_name:
-                    attributes["brand"] = resolution.canonical_brand_name
+            brand_evidence = self.resolve_brand_evidence(
+                offer,
+                observed_brand=attributes.get("brand") or offer.brand,
+                evidence_text=offer.title,
+            )
+            if brand_evidence is not None:
+                governance, canonical_brand, resolution_source = brand_evidence
+                attributes["_brand_governance"] = governance
+                if canonical_brand:
+                    attributes["brand"] = canonical_brand
                     provenance["brand"] = resolution_source
 
         metrics = self._metrics(offer, attributes) if in_scope else {}
@@ -223,6 +213,40 @@ class OfferClassifier:
             metrics=metrics,
             review_reasons=tuple(review),
         )
+
+    def resolve_brand_evidence(
+        self,
+        offer: NormalizedOffer,
+        *,
+        observed_brand: Any,
+        evidence_text: str | None,
+    ) -> tuple[JsonObject, str | None, str] | None:
+        """Resolve brand identity from a bounded, product-only evidence surface.
+
+        Retailer breadcrumb/category text must never establish private-label
+        ownership. Callers enriching from PDP data should therefore pass only the
+        explicit PDP brand and product name, not category paths or descriptions.
+        """
+
+        if self._brand_resolver is None:
+            return None
+        observed = str(observed_brand).strip() if observed_brand not in (None, "") else None
+        resolution = self._brand_resolver.resolve(
+            offer.retailer_id,
+            observed,
+            category=self.pack.name,
+        )
+        resolution_source: str = resolution.resolution_method
+        if resolution.status != "resolved":
+            title_resolution = self._brand_resolver.resolve_from_text(
+                offer.retailer_id,
+                evidence_text,
+                category=self.pack.name,
+            )
+            if title_resolution.status == "resolved":
+                resolution = title_resolution
+                resolution_source = "retailer_pack_title"
+        return resolution.to_record(), resolution.canonical_brand_name, resolution_source
 
     def classify_many(self, offers: list[NormalizedOffer]) -> list[ClassifiedOffer]:
         return [self.classify(offer) for offer in offers]

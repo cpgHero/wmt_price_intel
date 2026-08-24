@@ -51,6 +51,11 @@ def _source_reliability(source: str) -> float:
     }.get(source, 0.7)
 
 
+def _retrieval_context(value: Any) -> str | None:
+    normalized = " ".join(str(value or "").casefold().split())
+    return normalized or None
+
+
 def _brand_type(attributes: Mapping[str, Any]) -> str:
     governance = attributes.get("_brand_governance")
     if isinstance(governance, dict):
@@ -106,6 +111,7 @@ class _ListingAccumulatorState:
     brand_governance: Counter[str] = field(default_factory=Counter)
     seller_governance: Counter[str] = field(default_factory=Counter)
     pdp_evidence: Counter[str] = field(default_factory=Counter)
+    retrieval_contexts: set[str] = field(default_factory=set)
     locations: dict[str, ListingLocationEvidence] = field(default_factory=dict)
 
 
@@ -144,6 +150,9 @@ class ListingEvidenceAccumulatorV2:
                 latitude=offer.latitude,
                 longitude=offer.longitude,
             )
+        context = _retrieval_context(offer.raw.get("collection_keyword"))
+        if context:
+            state.retrieval_contexts.add(context)
         for definition in self._pack.attributes:
             name = str(definition["name"])
             value = item.attributes.get(name)
@@ -285,6 +294,7 @@ class ListingEvidenceAccumulatorV2:
                     brand_governance=_representative_document(state.brand_governance),
                     seller_governance=_representative_document(state.seller_governance),
                     pdp_evidence=_representative_document(state.pdp_evidence),
+                    retrieval_contexts=tuple(sorted(state.retrieval_contexts)),
                     observed_location_count=len(state.locations),
                     observed_locations=tuple(
                         state.locations[key] for key in sorted(state.locations)
@@ -612,8 +622,9 @@ class MatchingShadowEvaluatorV2:
 
         Known hard conflicts have already been removed before this method runs. This
         stage therefore ranks only potentially compatible products. Structured
-        attribute agreement is authoritative for retrieval; title similarity and
-        brand type affect ordering, never final match eligibility.
+        attribute agreement and shared collection-query context are retrieval
+        evidence; title similarity and brand type affect ordering. None of these
+        signals can certify a relationship or override a known hard conflict.
         """
 
         attribute_names = self._policy.candidate_retrieval_structured_attributes
@@ -623,9 +634,19 @@ class MatchingShadowEvaluatorV2:
             attribute_names=attribute_names,
             preserve_numeric=self._policy.candidate_retrieval_preserve_numeric_tokens,
         )
-        ranked: list[tuple[int, int, int, float, str, int]] = []
+        ranked: list[tuple[int, int, int, int, float, str, int]] = []
+        benchmark_contexts = set(benchmark.retrieval_contexts)
         for index in eligible_indexes:
             candidate = competitor[index]
+            candidate_contexts = set(candidate.retrieval_contexts)
+            shared_contexts = benchmark_contexts & candidate_contexts
+            if (
+                self._policy.candidate_retrieval_context_mode == "require_when_available"
+                and benchmark_contexts
+                and candidate_contexts
+                and not shared_contexts
+            ):
+                continue
             shares_identifier = _shares_allowed_identifier(benchmark, candidate, self._policy)
             structured_matches = _structured_attribute_match_count(
                 benchmark,
@@ -642,6 +663,10 @@ class MatchingShadowEvaluatorV2:
             similarity = len(benchmark_tokens & candidate_tokens) / len(union) if union else 0.0
             if not (
                 shares_identifier
+                or (
+                    self._policy.candidate_retrieval_context_mode != "disabled"
+                    and bool(shared_contexts)
+                )
                 or structured_matches >= self._policy.candidate_retrieval_minimum_structured_matches
                 or similarity >= self._policy.candidate_retrieval_minimum_similarity
             ):
@@ -650,6 +675,11 @@ class MatchingShadowEvaluatorV2:
             ranked.append(
                 (
                     -int(shares_identifier),
+                    -(
+                        len(shared_contexts)
+                        if self._policy.candidate_retrieval_context_mode != "disabled"
+                        else 0
+                    ),
                     -structured_matches,
                     -same_brand_lane,
                     -similarity,
@@ -663,7 +693,7 @@ class MatchingShadowEvaluatorV2:
         lane_minimum = self._policy.candidate_retrieval_minimum_per_brand_lane
         selected: set[int] = set()
         if lane_minimum:
-            lanes: dict[str, list[tuple[int, int, int, float, str, int]]] = defaultdict(list)
+            lanes: dict[str, list[tuple[int, int, int, int, float, str, int]]] = defaultdict(list)
             for row in ranked:
                 lanes[competitor[row[-1]].brand_type].append(row)
             lane_order = ("private_label", "national", "regional", "unclassified")

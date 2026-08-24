@@ -129,6 +129,16 @@ def _safe(value: str) -> str:
     return _SAFE_NAME.sub("-", value).strip("-._") or "value"
 
 
+def _collection_keyword(task: QueueTask) -> str | None:
+    """Retain the governed Search query as retrieval evidence, never match authority."""
+
+    for key in ("keyword", "query", "search_term"):
+        value = task.request_payload.get(key)
+        if value not in (None, "") and str(value).strip():
+            return str(value).strip()
+    return None
+
+
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fields = sorted({str(field) for row in rows for field in row})
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -288,6 +298,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 normalized = {
                     **result,
                     **adapter.normalize_result(result, task),
+                    "collection_keyword": _collection_keyword(task),
                     "latitude": row["latitude"],
                     "longitude": row["longitude"],
                     "collected_at": row["artifact_created_at"].isoformat(),

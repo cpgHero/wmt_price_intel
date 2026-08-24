@@ -56,14 +56,34 @@ labels continue to resolve from Brand Foundation 2.0.0.
 
 ### Certification boundary
 
-Vitamins & Supplements Product Pack 1.2.1 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. It adds governed title/PDP formula-family extraction, preserves named release and audience conflicts, and permits `Standard` release and `General` audience only through explicit Product Pack absence policies. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
+Vitamins & Supplements Product Pack 1.2.2 keeps active ingredient/formulation, strength and unit, dosage form, release profile, and life stage as fail-closed hard blockers. It adds governed title/PDP formula-family extraction, preserves named release and audience conflicts, and permits `Standard` release and `General` audience only through explicit Product Pack absence policies. Brand is descriptive, so a retailer private label can match Spring Valley when governed specifications agree. Package count remains a price-basis attribute rather than a substitute for product identity.
 
-The pack authorizes deterministic automatic approval only for:
+The second retained-data shadow found that scalar ingredient evidence could still overstate
+complex-formula equivalence, such as a blood-sugar support blend versus a different
+chromium-containing formula. Product Pack 1.2.2 therefore disables deterministic automatic
+approval while formula signatures are calibrated against a reviewed benchmark set. Exact-item
+and exact-specification proposals remain visible for AI/human review, but none can become final
+without certification. This is an intentional temporary trust gate, not a permanent requirement
+for manual review.
 
-- a verified shared item identifier with no critical contradiction; or
-- an exact-specification relationship where every critical attribute is known and compatible.
+Equivalent-product and broader relationships also require human certification. Unknown or
+conflicting hard blockers never auto-approve.
 
-Equivalent-product and broader relationships still require human certification. Unknown or conflicting hard blockers never auto-approve.
+### Collection-query retrieval evidence
+
+The live Search bridge now preserves the exact request keyword on every normalized Search row.
+The listing accumulator collapses those values into product-level retrieval contexts. Product
+Packs may require a shared context when both products have it, which restores high recall within
+the owner-defined family without asserting comparability. Query context affects candidate
+retrieval and ordering only; it cannot override a hard conflict, create attribute evidence, or
+certify a match.
+
+### Bounded PDP brand evidence
+
+PDP brand resolution now uses only the structured PDP brand and product name. Retailer category
+breadcrumbs and long descriptions are excluded from the brand-resolution surface. This prevents
+rows such as `Meijer > Nature Made Vitamin C` from being mislabeled as Meijer private label while
+still allowing a genuine Meijer-branded product to resolve from explicit brand/name evidence.
 
 ## Collection implication
 
@@ -107,10 +127,22 @@ attribute evidence. It also confirmed that 199 of the 322 governed Walmart ancho
 not positively observed in the one-market pilot; that is a collection-coverage issue, not
 proof of national unavailability.
 
-The repair after that gate failure is Product Pack 1.2.1 plus the versioned Retailer Pack
+The repair after that gate failure was Product Pack 1.2.1 plus the versioned Retailer Pack
 brand coverage above. Candidate retrieval now requires either the same governed formula
 family or materially stronger lexical evidence, retains at most 24 candidates per
-benchmark/retailer, and preserves three candidates per brand lane. A second retained-data
-shadow must demonstrate materially lower case volume, zero known critical conflicts among
-certifiable proposals, and visible private-label coverage before any queue import or paid
-recovery Search.
+benchmark/retailer, and preserves three candidates per brand lane.
+
+The second read-only shadow produced 239 cases: 223 unresolved, three equivalent-product
+candidates, and 13 automatic exact-specification proposals. It materially repaired precision,
+but failed both the recall and zero-false-positive gates. Only 4–57 candidate pairs survived per
+retailer, 87–119 of the 123 observed Walmart anchors lacked any retained candidate depending on
+retailer, and 199 catalog anchors still lacked a positive-price observation. Semantic inspection
+also found the complex-formula false positive above and found retailer breadcrumb contamination
+in brand evidence. The queue was never imported.
+
+Product Pack 1.2.2, bounded PDP brand resolution, and shared-query-context retrieval are the
+response to that failed gate. The third shadow must show zero automatic approvals, no known
+audience/formula/strength/form/release conflicts among positive proposals, materially improved
+anchor coverage, accurate private-label attribution, and an operationally bounded case count.
+Only after those gates pass will the owner receive a priced, early-stopping multi-market Search
+recovery plan for the 199 unobserved catalog anchors and broader competitor discovery.

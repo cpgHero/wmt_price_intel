@@ -177,6 +177,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
       minimum_structured_matches?: number;
       minimum_per_brand_lane?: number;
       preserve_numeric_tokens?: boolean;
+      context_overlap_mode?: "disabled" | "prefer" | "require_when_available";
       stop_words: string[];
     };
   };

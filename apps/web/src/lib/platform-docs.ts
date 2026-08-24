@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.52",
+  version: "1.3.53",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow broadened recall but produced 11,429 unresolved cases and was blocked without import. Product Pack 1.2.1 adds governed formula-family extraction and versioned Retailer Pack private-label coverage while tightening retrieval; it still authorizes deterministic exact-item and complete exact-specification approval only. Equivalent and broader relationships remain human-approved, and no new queue has been imported.",
+            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. The second Product Pack 1.2.1 shadow reduced that to 239 but failed recall and zero-false-positive gates: 199 catalog anchors remained unobserved, 87–119 observed anchors per retailer had no candidate, one complex-formula pair was overstated, and retailer breadcrumb text contaminated one brand classification. Neither shadow was imported. Product Pack 1.2.2 preserves request keywords as retrieval-only context, bounds PDP brand evidence to structured brand plus product name, distinguishes additional formula variants, and temporarily disables deterministic vitamin auto-approval. Every proposal remains AI/human certified until a reviewed benchmark proves safe automation.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and locally verified; third retained-evidence shadow pending deployment",
+              "Spring Valley retrieval now uses bounded request-keyword context and PDP brand evidence without relaxing certification.",
+              "The second read-only shadow used 2,187 retained PDP snapshots and produced 239 cases, but it failed recall and semantic precision gates and was not imported. Product Pack 1.2.2 records the exact Search keyword as retrieval-only context, requires shared context when both listings provide it, distinguishes additional high-risk vitamin formulations, and temporarily disables automatic vitamin certification. PDP brand resolution now excludes retailer breadcrumbs and descriptions, preventing a Nature Made item under a Meijer category path from becoming Meijer private label. Query context cannot override hard conflicts or certify a match. No paid Search, PDP, or AI call was made, and the quarantined production queue remains unchanged.",
+            ],
             [
               "2026-08-24",
               "Implemented; second retained-evidence shadow pending",

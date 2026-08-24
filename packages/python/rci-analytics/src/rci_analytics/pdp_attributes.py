@@ -66,6 +66,11 @@ def complete_attributes_from_pdp(
             )
             for definition in pack.attributes:
                 name = str(definition["name"])
+                if name == "brand":
+                    # Brand identity is resolved below from a bounded product-only
+                    # evidence surface. PDP category breadcrumbs and descriptions
+                    # must not label a national brand as the retailer's private label.
+                    continue
                 current = attributes.get(name)
                 candidate = pdp_classified.attributes.get(name)
                 unknown_values = definition.get("unknown_values", [])
@@ -89,23 +94,30 @@ def complete_attributes_from_pdp(
                 else:
                     provenance[name] = "unresolved"
             current_brand_governance = attributes.get("_brand_governance")
-            pdp_brand_governance = pdp_classified.attributes.get("_brand_governance")
             current_brand_resolved = (
                 isinstance(current_brand_governance, dict)
                 and current_brand_governance.get("status") == "resolved"
             )
-            pdp_brand_resolved = (
-                isinstance(pdp_brand_governance, dict)
-                and pdp_brand_governance.get("status") == "resolved"
+            pdp_brand = str(context.get("brand") or "").strip()
+            pdp_name = str(context.get("name") or "").strip()
+            brand_evidence = classifier.resolve_brand_evidence(
+                classified.offer,
+                observed_brand=pdp_brand or None,
+                evidence_text=" | ".join(value for value in (pdp_name, pdp_brand) if value),
             )
-            if not current_brand_resolved and pdp_brand_resolved:
+            if not current_brand_resolved and (pdp_brand or brand_evidence is not None):
                 # PDP may complete product identity, but not Search price or placement.
-                assert isinstance(pdp_brand_governance, dict)
-                attributes["_brand_governance"] = dict(pdp_brand_governance)
-                pdp_brand = pdp_classified.attributes.get("brand")
-                if pdp_brand:
-                    attributes["brand"] = pdp_brand
-                    provenance["brand"] = "pdp"
+                canonical_brand: str | None = None
+                resolution_source = "pdp"
+                if brand_evidence is not None:
+                    pdp_brand_governance, canonical_brand, resolution_source = brand_evidence
+                    attributes["_brand_governance"] = dict(pdp_brand_governance)
+                selected_brand = canonical_brand or pdp_brand
+                if selected_brand:
+                    attributes["brand"] = selected_brand
+                    provenance["brand"] = (
+                        resolution_source if canonical_brand else "pdp_unclassified"
+                    )
             for name, value in pdp_classified.metrics.items():
                 if metrics.get(name) is None and value is not None:
                     metrics[name] = value

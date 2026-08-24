@@ -48,6 +48,7 @@ MatchStatus = Literal[
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 CandidateGeographyMode = Literal["disabled", "observed_overlap"]
 CandidateRetrievalMode = Literal["disabled", "lexical_top_k", "structured_high_recall"]
+CandidateRetrievalContextMode = Literal["disabled", "prefer", "require_when_available"]
 ServiceAreaOverlapPolicy = Literal["same_zip"]
 CoverageReason = Literal[
     "comparable",
@@ -135,6 +136,7 @@ class ListingEvidence:
     brand_governance: Mapping[str, Any] = field(default_factory=dict)
     seller_governance: Mapping[str, Any] = field(default_factory=dict)
     pdp_evidence: Mapping[str, Any] = field(default_factory=dict)
+    retrieval_contexts: tuple[str, ...] = ()
     observed_location_count: int = 0
     observed_locations: tuple[ListingLocationEvidence, ...] = ()
 
@@ -143,6 +145,8 @@ class ListingEvidence:
             raise ValueError("observed location count cannot be negative")
         if len({row.scope_key for row in self.observed_locations}) != len(self.observed_locations):
             raise ValueError("observed listing location scope keys must be unique")
+        if len(self.retrieval_contexts) != len(set(self.retrieval_contexts)):
+            raise ValueError("listing retrieval contexts must be unique")
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +202,7 @@ class MatchingPolicyV2:
     candidate_retrieval_minimum_structured_matches: int = 1
     candidate_retrieval_minimum_per_brand_lane: int = 0
     candidate_retrieval_preserve_numeric_tokens: bool = False
+    candidate_retrieval_context_mode: CandidateRetrievalContextMode = "disabled"
 
     def __post_init__(self) -> None:
         if not self.attributes:
@@ -271,6 +276,12 @@ class MatchingPolicyV2:
             raise ValueError("candidate retrieval structured match minimum cannot be negative")
         if self.candidate_retrieval_minimum_per_brand_lane < 0:
             raise ValueError("candidate retrieval brand-lane minimum cannot be negative")
+        if self.candidate_retrieval_context_mode not in {
+            "disabled",
+            "prefer",
+            "require_when_available",
+        }:
+            raise ValueError("unsupported candidate retrieval context overlap mode")
 
     @property
     def checksum(self) -> str:
@@ -331,6 +342,7 @@ class MatchingPolicyV2:
                 "candidate_retrieval_preserve_numeric_tokens": (
                     self.candidate_retrieval_preserve_numeric_tokens
                 ),
+                "candidate_retrieval_context_mode": self.candidate_retrieval_context_mode,
             }
         )
 
@@ -571,6 +583,10 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         ),
         candidate_retrieval_preserve_numeric_tokens=bool(
             candidate_retrieval.get("preserve_numeric_tokens", False)
+        ),
+        candidate_retrieval_context_mode=cast(
+            CandidateRetrievalContextMode,
+            candidate_retrieval.get("context_overlap_mode") or "disabled",
         ),
     )
 
