@@ -607,12 +607,6 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Tier", "Meaning", "Current release treatment"],
           rows: [
             [
-              "2026-08-24",
-              "Implemented and test-verified; production recovery in progress",
-              "Product Details gained an account-wide provider limiter in addition to retailer limits.",
-              "The 2,553-product Spring Valley enrichment produced synchronized zero-cost 429s across five retailer PDP lanes when ten replicas respected only the documented per-retailer limits. Every PDP request now acquires a shared two-per-second / 120-per-minute account permit and its three-per-second / 180-per-minute retailer permit. A 429 pauses both credential-scoped Postgres rows. Completed 200/404 evidence, immutable raw responses, leases, idempotency, and the 7,500-credit hard ceiling are unchanged; only nonbillable transient failures may be requeued after all old workers stop.",
-            ],
-            [
               "Exact item",
               "Same verified physical trade item and package.",
               "Certification required; automatic approval remains off until precision gates pass.",
@@ -1623,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and test-verified; production recovery in progress",
+              "Product Details gained an account-wide provider limiter in addition to retailer limits.",
+              "The 2,553-product Spring Valley enrichment produced synchronized zero-cost 429s across five retailer PDP lanes when ten replicas respected only the documented per-retailer limits. Every PDP request now acquires a shared two-per-second / 120-per-minute account permit and its three-per-second / 180-per-minute retailer permit. A 429 pauses both credential-scoped Postgres rows. Completed 200/404 evidence, immutable raw responses, leases, idempotency, and the 7,500-credit hard ceiling are unchanged; only nonbillable transient failures may be requeued after all old workers stop.",
+            ],
             [
               "2026-08-24",
               "Implemented, release-verified, and deployed",
