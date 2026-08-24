@@ -613,7 +613,7 @@ class GoldSetReplayRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "certify_ai_recommendations",
@@ -630,6 +630,7 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "require_ai_engine_tier_agreement": False,
     "require_zero_ai_conflicts": False,
     "require_no_hard_blocker_conflicts": True,
+    "require_known_hard_blocker_conflict_for_not_comparable": True,
     "warn_on_ai_engine_tier_disagreement": True,
     "warn_on_ai_conflicts": True,
     "warn_on_hard_blocker_conflicts": True,
@@ -674,6 +675,11 @@ _AI_BULK_REASON_LABELS = {
     "ai_conflict_present": "The AI draft identifies one or more unresolved conflicts.",
     "hard_blocker_conflict": (
         "A current Product Pack hard-blocker attribute conflicts or has blocking unknown evidence."
+    ),
+    "not_comparable_conflict_unverified": (
+        "A bulk not-comparable decision requires a known deterministic Product Pack "
+        "hard-blocker conflict; AI-only or internally contradictory evidence requires "
+        "individual review."
     ),
     "low_confidence_ai_attribute": "An AI-proposed attribute is below the bulk confidence floor.",
     "known_third_party_seller": (
@@ -808,6 +814,12 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
     )
     if verdict == "comparable" and hard_blocker_issues:
         reason_codes.append("hard_blocker_conflict")
+    if verdict == "not_comparable" and not any(
+        str(issue.get("outcome") or "").lower() == "conflict"
+        for issue in hard_blocker_issues
+        if isinstance(issue, Mapping)
+    ):
+        reason_codes.append("not_comparable_conflict_unverified")
 
     attribute_proposals = result.get("attribute_proposals", []) if result else []
     if isinstance(attribute_proposals, list):

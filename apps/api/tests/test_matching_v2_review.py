@@ -1467,6 +1467,15 @@ def _bulk_not_comparable_case() -> dict[str, Any]:
     result["rationale"] = "The governed package facts contain a material conflict."
     case["engine_proposal"]["tier"] = None
     case["engine_proposal"]["status"] = "rejected"
+    case["edge"]["attribute_evidence"].append(
+        {
+            "attribute": "dosage_form",
+            "role": "hard_blocker",
+            "benchmark_value": "Tablet",
+            "competitor_value": "Capsule",
+            "outcome": "conflict",
+        }
+    )
     return case
 
 
@@ -1539,6 +1548,20 @@ def test_bulk_ai_certification_accepts_not_comparable_but_not_insufficient_evide
 
     assert blocked["eligible"] is False
     assert blocked["reason_codes"] == ["ai_verdict_not_certifiable"]
+
+
+def test_bulk_ai_certification_blocks_ai_only_not_comparable_rejection() -> None:
+    not_comparable = _bulk_not_comparable_case()
+    not_comparable["edge"]["attribute_evidence"] = [
+        evidence
+        for evidence in not_comparable["edge"]["attribute_evidence"]
+        if evidence.get("outcome") != "conflict"
+    ]
+
+    blocked = _bulk_ai_certification_eligibility(not_comparable)
+
+    assert blocked["eligible"] is False
+    assert blocked["reason_codes"] == ["not_comparable_conflict_unverified"]
 
 
 def test_bulk_certification_blocks_cross_volume_comparable_but_allows_rejection() -> None:
