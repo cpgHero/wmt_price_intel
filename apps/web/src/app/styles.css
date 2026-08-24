@@ -5689,6 +5689,89 @@ tbody tr:last-child td {
 .cert-ai-result > .button {
   justify-self: start;
 }
+.cert-reconciliation > p {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+  margin: 0.55rem 0 0;
+}
+.cert-reconciliation-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+.cert-reconciliation-list article {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+.cert-reconciliation-list article > header {
+  align-items: start;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+}
+.cert-reconciliation-list header div,
+.cert-reconciliation-list label {
+  display: grid;
+  gap: 0.15rem;
+}
+.cert-reconciliation-list header small,
+.cert-reconciliation-list article > small,
+.cert-reconciliation-list label span {
+  color: var(--muted);
+  font-size: 0.57rem;
+}
+.cert-reconciliation-list dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+.cert-reconciliation-list article > a {
+  color: var(--green);
+  font-size: 0.6rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.cert-reconciliation-list textarea {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.62rem;
+  min-height: 64px;
+  padding: 0.5rem;
+  resize: vertical;
+}
+.cert-reconciliation-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+.cert-evidence-decision {
+  border-radius: 999px;
+  font-size: 0.55rem;
+  font-weight: 850;
+  padding: 0.22rem 0.45rem;
+  white-space: nowrap;
+}
+.cert-evidence-decision.verified {
+  background: var(--success-soft);
+  color: var(--success);
+}
+.cert-evidence-decision.rejected,
+.cert-evidence-decision.ineligible {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.cert-evidence-decision.pending {
+  background: var(--warning-soft);
+  color: var(--amber);
+}
 .cert-status.queued,
 .cert-status.running {
   background: var(--info-soft);

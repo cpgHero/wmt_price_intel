@@ -83,10 +83,10 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.49",
+  version: "1.3.50",
   lastVerified,
   baseline:
-    "Production implementation through Phase 13.41 monthly PDP freshness governance plus the test-verified Spring Valley collection foundation, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -661,7 +661,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Review current authoritative relationships",
               detail:
-                "Match Certification is the authoritative relationship surface. Inspect product images, PDP and attribute evidence, approve or reject once, and reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
+                "Match Certification is the authoritative relationship surface. Inspect product images, PDP and attribute evidence; explicitly verify or reject eligible cited image attributes before certification; then approve or reject the relationship once. Reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
             },
             {
               title: "Independently certify Matching v2",
@@ -679,7 +679,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied. When critical attributes are missing or conflicting, the evidence packet adds the primary and available secondary PDP images, interleaved across both products and bounded to six per product. Image proposals must cite visible text and the exact supplied image URL. A blocked retailer image host causes a recorded structured-only fallback, never an invented visual claim. Every draft remains advisory and requires a human decision.",
+          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied. When critical attributes are missing or conflicting, the evidence packet adds the primary and available secondary PDP images, interleaved across both products and bounded to six per product. An image proposal is eligible for reconciliation only when it names an active Product Pack attribute, cites visible label text, cites an exact image attached to exactly one listing, meets the 85% confidence floor, and normalizes under the active Product Pack. Structured AI proposals cannot enter this lane because they are not attributable to one listing. An identified reviewer verifies or rejects each eligible proposal with a rationale. The append-only decision is bound to the case, AI task/output, source image, visible text, normalized value, Product Pack policy, and proposal checksum. Only the latest verified decision overlays the derived certification view; raw Search, PDP, AI, and queue evidence never changes. Conflicting verified values fail closed. A final match cannot be certified before this reconciliation step, and reporting still changes only through an explicit gold-set replay. Every AI draft remains advisory.",
         },
         {
           kind: "callout",
@@ -1611,6 +1611,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and validation pending deployment",
+              "Matching v2 gained governed PDP/image attribute-evidence reconciliation before certification.",
+              "Only exact-image, visible-text, confidence-qualified, Product-Pack-normalizable AI proposals can enter the reconciliation lane. Reviewer verify/reject decisions are immutable, checksum-bound, reversible by superseding events, and applied only to a derived certification view. Raw evidence remains unchanged; ambiguous images, structured AI proposals, conflicting verified values, and finalized cases fail closed. Individual and bulk certification consume the same reconciled view.",
+            ],
             [
               "2026-08-24",
               "AI evidence review complete; human certification pending",

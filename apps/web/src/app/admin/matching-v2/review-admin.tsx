@@ -219,6 +219,40 @@ interface ReviewCase {
     allowed_tiers: string[];
     rationale: string;
   };
+  attribute_evidence_reconciliation?: {
+    schema_version: string;
+    advisory_proposal_count: number;
+    eligible_proposal_count: number;
+    verified_proposal_count: number;
+    raw_evidence_mutated: false;
+    human_verification_required: true;
+    conflicts: Array<{
+      listing_role: string;
+      attribute: string;
+      reason: string;
+    }>;
+    proposals: Array<{
+      proposal_checksum: string;
+      listing_role: "benchmark" | "competitor" | null;
+      listing_id: string;
+      attribute: string;
+      raw_value: unknown;
+      normalized_value: unknown;
+      evidence_source: string;
+      confidence: number;
+      visible_text: string | null;
+      source_image_url: string | null;
+      eligible: boolean;
+      ineligibility_reasons: string[];
+      decision: null | {
+        id: string;
+        decision: "verified" | "rejected";
+        reviewer_id: string;
+        rationale: string;
+        created_at: string;
+      };
+    }>;
+  };
   ai_draft?: null | {
     id: string;
     batch_id: string;
@@ -547,6 +581,9 @@ export function MatchingV2ReviewAdmin({
   );
   const [offset, setOffset] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
+  const [evidenceRationales, setEvidenceRationales] = useState<
+    Record<string, string>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -961,6 +998,56 @@ export function MatchingV2ReviewAdmin({
         [reviewCase.case_id]: defaultDraft(reviewCase),
       }));
       closeEvidenceDrawer();
+      await loadQueue();
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decideAttributeEvidence(
+    reviewCase: ReviewCase,
+    proposal: NonNullable<
+      ReviewCase["attribute_evidence_reconciliation"]
+    >["proposals"][number],
+    decision: "verified" | "rejected",
+  ) {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before reconciling attribute evidence.",
+      );
+      return;
+    }
+    const rationale = evidenceRationales[proposal.proposal_checksum]?.trim();
+    if (!rationale) {
+      setError(
+        "Record why the cited label evidence is valid or invalid before deciding.",
+      );
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await jsonRequest(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/attribute-evidence-decisions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reviewer_id: reviewerId.trim(),
+            proposal_checksum: proposal.proposal_checksum,
+            decision,
+            rationale,
+            supersedes_decision_id: proposal.decision?.id ?? null,
+          }),
+        },
+      );
+      setNotice(
+        decision === "verified"
+          ? "The image evidence was verified and applied to the derived certification view. Raw PDP and queue evidence remain unchanged."
+          : "The advisory image proposal was rejected and preserved in the audit history.",
+      );
       await loadQueue();
     } catch (cause) {
       handleError(cause);
@@ -2278,44 +2365,145 @@ export function MatchingV2ReviewAdmin({
                                 )}
                               </ul>
                             ) : null}
-                            {activeCase.ai_draft.output_document.result
-                              .attribute_proposals.length ? (
-                              <details>
-                                <summary>Inspect proposed attributes</summary>
-                                <dl>
-                                  {activeCase.ai_draft.output_document.result.attribute_proposals.map(
+                            {activeCase.attribute_evidence_reconciliation
+                              ?.proposals.length ? (
+                              <details className="cert-reconciliation" open>
+                                <summary>
+                                  Reconcile cited label attributes before
+                                  certification
+                                </summary>
+                                <p>
+                                  AI proposals are advisory. Only eligible image
+                                  evidence that you explicitly verify is applied
+                                  to the derived certification view; source PDP
+                                  and queue records remain immutable.
+                                </p>
+                                <div className="cert-reconciliation-list">
+                                  {activeCase.attribute_evidence_reconciliation.proposals.map(
                                     (proposal) => (
-                                      <div
-                                        key={`${proposal.attribute}-${proposal.value}`}
-                                      >
-                                        <dt>{label(proposal.attribute)}</dt>
-                                        <dd>
-                                          {proposal.value} ·{" "}
-                                          {label(proposal.evidence_source)} ·{" "}
-                                          {Math.round(
-                                            proposal.confidence * 100,
-                                          )}
-                                          % confidence
-                                          {proposal.visible_text ? (
+                                      <article key={proposal.proposal_checksum}>
+                                        <header>
+                                          <div>
+                                            <strong>
+                                              {label(proposal.attribute)}
+                                            </strong>
                                             <small>
-                                              Visible evidence: “
-                                              {proposal.visible_text}”
+                                              {proposal.listing_role
+                                                ? `${label(proposal.listing_role)} product`
+                                                : "Listing unresolved"}
+                                              {" · "}
+                                              {Math.round(
+                                                proposal.confidence * 100,
+                                              )}
+                                              % confidence
                                             </small>
-                                          ) : null}
-                                          {proposal.source_image_url ? (
-                                            <a
-                                              href={proposal.source_image_url}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                            >
-                                              Open cited product image
-                                            </a>
-                                          ) : null}
-                                        </dd>
-                                      </div>
+                                          </div>
+                                          <span
+                                            className={`cert-evidence-decision ${proposal.decision?.decision ?? (proposal.eligible ? "pending" : "ineligible")}`}
+                                          >
+                                            {proposal.decision
+                                              ? label(
+                                                  proposal.decision.decision,
+                                                )
+                                              : proposal.eligible
+                                                ? "Awaiting verification"
+                                                : "Not eligible"}
+                                          </span>
+                                        </header>
+                                        <dl>
+                                          <div>
+                                            <dt>Proposed value</dt>
+                                            <dd>
+                                              {evidenceValue(
+                                                proposal.normalized_value,
+                                              )}
+                                            </dd>
+                                          </div>
+                                          <div>
+                                            <dt>Visible label text</dt>
+                                            <dd>
+                                              {proposal.visible_text ??
+                                                "Not supplied"}
+                                            </dd>
+                                          </div>
+                                        </dl>
+                                        {proposal.source_image_url ? (
+                                          <a
+                                            href={proposal.source_image_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            Open the exact cited product image
+                                          </a>
+                                        ) : null}
+                                        {!proposal.eligible ? (
+                                          <small>
+                                            Not eligible:{" "}
+                                            {proposal.ineligibility_reasons
+                                              .map(label)
+                                              .join("; ")}
+                                          </small>
+                                        ) : (
+                                          <>
+                                            <label>
+                                              <span>Verification note</span>
+                                              <textarea
+                                                value={
+                                                  evidenceRationales[
+                                                    proposal.proposal_checksum
+                                                  ] ??
+                                                  proposal.decision
+                                                    ?.rationale ??
+                                                  ""
+                                                }
+                                                onChange={(event) =>
+                                                  setEvidenceRationales(
+                                                    (current) => ({
+                                                      ...current,
+                                                      [proposal.proposal_checksum]:
+                                                        event.target.value,
+                                                    }),
+                                                  )
+                                                }
+                                                placeholder="State what the cited label visibly proves or why it is unreliable."
+                                              />
+                                            </label>
+                                            <div className="cert-reconciliation-actions">
+                                              <button
+                                                className="button secondary"
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  void decideAttributeEvidence(
+                                                    activeCase,
+                                                    proposal,
+                                                    "rejected",
+                                                  )
+                                                }
+                                              >
+                                                Reject evidence
+                                              </button>
+                                              <button
+                                                className="button"
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  void decideAttributeEvidence(
+                                                    activeCase,
+                                                    proposal,
+                                                    "verified",
+                                                  )
+                                                }
+                                              >
+                                                Verify & apply
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
+                                      </article>
                                     ),
                                   )}
-                                </dl>
+                                </div>
                               </details>
                             ) : null}
                             <button

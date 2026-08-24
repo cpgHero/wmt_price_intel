@@ -19,6 +19,7 @@ from rci_api.matching_v2_review import (
     AIReviewBatchRequest,
     AIReviewDraftRequest,
     AIReviewRetryRequest,
+    AttributeEvidenceDecisionRequest,
     GoldSetReplayRequest,
     ImportReviewQueueRequest,
     MatchingV2ReviewService,
@@ -26,18 +27,33 @@ from rci_api.matching_v2_review import (
     ReviewSubmissionRequest,
     _active_certification_policy,
     _apply_active_certification_policy,
+    _apply_attribute_reconciliation,
     _apply_observed_location_sidecar,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     _matching_v2_certification_coverage,
+    _reconciliation_proposals,
     _review_queue_quarantine,
     get_matching_v2_review_service,
 )
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_attribute_evidence_decision_example_validates() -> None:
+    validate_instance(
+        REPOSITORY_ROOT,
+        "matching-v2-attribute-evidence-decision.schema.json",
+        json.loads(
+            (
+                REPOSITORY_ROOT / "examples/matching-v2-attribute-evidence-decision.vitamin.json"
+            ).read_text()
+        ),
+        label="attribute evidence decision example",
+    )
 
 
 def test_spring_valley_legacy_queue_is_explicitly_quarantined() -> None:
@@ -129,6 +145,102 @@ def test_ai_review_requires_both_search_observed_footprints() -> None:
     assert not _has_complete_observed_location_evidence(case)
     case["competitor_listing"]["observed_location_count"] = None
     assert not _has_complete_observed_location_evidence(case)
+
+
+def _reconciliation_case(*, evidence_source: str = "image") -> dict[str, Any]:
+    return {
+        "case_id": "case-reconcile",
+        "case_checksum": "c" * 64,
+        "benchmark_listing_id": "walmart_us:one",
+        "competitor_listing_id": "target_us:two",
+        "benchmark_listing": {
+            "listing_id": "walmart_us:one",
+            "image_urls": ["https://images.example/walmart.jpg"],
+        },
+        "competitor_listing": {
+            "listing_id": "target_us:two",
+            "image_urls": ["https://images.example/target.jpg"],
+        },
+        "edge": {
+            "attribute_evidence": [
+                {
+                    "attribute": "strength",
+                    "role": "hard_blocker",
+                    "benchmark_value": 5,
+                    "competitor_value": None,
+                    "outcome": "unknown",
+                }
+            ]
+        },
+        "ai_draft": {
+            "id": "00000000-0000-0000-0000-000000000099",
+            "status": "succeeded",
+            "output_checksum": "a" * 64,
+            "output_document": {
+                "result": {
+                    "attribute_proposals": [
+                        {
+                            "attribute": "strength",
+                            "value": "5 mg",
+                            "evidence_source": evidence_source,
+                            "confidence": 0.96,
+                            "visible_text": "Melatonin 5 mg",
+                            "source_image_url": "https://images.example/target.jpg",
+                        }
+                    ]
+                }
+            },
+        },
+    }
+
+
+def _reconciliation_policy() -> dict[str, Any]:
+    return {
+        "policy_checksum": "b" * 64,
+        "attribute_definitions": {"strength": {"data_type": "number", "allowed_values": []}},
+        "comparison_rules": {"strength": {"numeric_tolerance": 0}},
+        "attribute_roles": {"strength": "hard_blocker"},
+        "hard_blocker_attributes": ["strength"],
+        "hard_blocker_unknown_is_blocking": {"strength": True},
+        "allowed_tiers": ["exact_specification"],
+    }
+
+
+def test_verified_image_evidence_is_applied_only_to_derived_certification_view() -> None:
+    case = _reconciliation_case()
+    policy = _reconciliation_policy()
+    proposal = _reconciliation_proposals(case, policy)[0]
+    decision = {
+        "id": "00000000-0000-0000-0000-000000000077",
+        "proposal_checksum": proposal["proposal_checksum"],
+        "decision": "verified",
+        "reviewer_id": "owner@cpghero.com",
+        "rationale": "The exact cited competitor label visibly states 5 mg.",
+    }
+
+    reconciled = _apply_attribute_reconciliation(case, policy, [decision])
+    certified = _apply_active_certification_policy(reconciled, policy)
+
+    assert case["edge"]["attribute_evidence"][0]["competitor_value"] is None
+    evidence = certified["edge"]["attribute_evidence"][0]
+    assert evidence["competitor_value"] == 5
+    assert evidence["competitor_source"] == "human_verified_ai_vision"
+    assert evidence["outcome"] == "match"
+    assert certified["certification_blockers"] == []
+    assert certified["evidence_refs"] == [
+        "matching-v2-attribute-evidence-decision:00000000-0000-0000-0000-000000000077"
+    ]
+    assert certified["attribute_evidence_reconciliation"]["raw_evidence_mutated"] is False
+
+
+def test_structured_ai_attribute_proposal_cannot_enter_reconciliation_lane() -> None:
+    proposal = _reconciliation_proposals(
+        _reconciliation_case(evidence_source="structured"),
+        _reconciliation_policy(),
+    )[0]
+
+    assert proposal["eligible"] is False
+    assert "structured_ai_proposal_is_not_source_attributable" in proposal["ineligibility_reasons"]
 
 
 def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
@@ -460,6 +572,7 @@ class ReviewRepository:
     def __init__(self) -> None:
         self.imported: dict[str, Any] | None = None
         self.submissions: list[dict[str, Any]] = []
+        self.attribute_decisions: list[dict[str, Any]] = []
         self.adjudications: list[dict[str, Any]] = []
         self.ai_drafts: list[dict[str, Any]] = []
         self.ai_retries: list[dict[str, Any]] = []
@@ -523,6 +636,23 @@ class ReviewRepository:
             }
         )
         return {"case_id": external_case_id, "checksum": submission_checksum}
+
+    async def decide_attribute_evidence(
+        self,
+        external_queue_id: str,
+        external_case_id: str,
+        decision: Mapping[str, Any],
+        *,
+        decision_checksum: str,
+    ) -> dict[str, Any]:
+        record = {
+            "queue_id": external_queue_id,
+            "case_id": external_case_id,
+            **decision,
+            "checksum": decision_checksum,
+        }
+        self.attribute_decisions.append(record)
+        return record
 
     async def adjudicate(
         self,
@@ -1013,6 +1143,27 @@ async def test_review_service_rejects_known_third_party_seller_queue() -> None:
         )
 
     assert repository.imported is None
+
+
+async def test_attribute_evidence_decision_service_is_checksum_bound() -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    request = AttributeEvidenceDecisionRequest(
+        reviewer_id="owner@cpghero.com",
+        proposal_checksum="a" * 64,
+        decision="verified",
+        rationale="The exact cited label visibly states 5 mg.",
+    )
+
+    result = await service.decide_attribute_evidence(
+        "queue-one",
+        "vitamin-case-one",
+        request,
+    )
+
+    assert result["decision"] == "verified"
+    assert len(result["checksum"]) == 64
+    assert repository.attribute_decisions[0]["proposal_checksum"] == "a" * 64
 
 
 async def test_review_service_preserves_large_integers_from_raw_queue_json() -> None:

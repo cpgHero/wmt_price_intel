@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "queue_id": "vitamins_supplements-matching-v2-operational-certification",
+  "case_id": "vitamins_supplements:example-case",
+  "reviewer_id": "platform-owner@cpghero.com",
+  "proposal_checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "decision": "verified",
+  "rationale": "The exact cited competitor label visibly states Melatonin 5 mg.",
+  "supersedes_decision_id": null
+}
