@@ -5,7 +5,7 @@
     {
       "id": "vitamins_supplements",
       "name": "Vitamins & Supplements",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "default_keyword": "vitamins",
       "file": "vitamins_supplements.json"
     },

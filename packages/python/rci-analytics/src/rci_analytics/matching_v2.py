@@ -47,7 +47,7 @@ MatchStatus = Literal[
 ]
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 CandidateGeographyMode = Literal["disabled", "observed_overlap"]
-CandidateRetrievalMode = Literal["disabled", "lexical_top_k"]
+CandidateRetrievalMode = Literal["disabled", "lexical_top_k", "structured_high_recall"]
 ServiceAreaOverlapPolicy = Literal["same_zip"]
 CoverageReason = Literal[
     "comparable",
@@ -194,6 +194,10 @@ class MatchingPolicyV2:
     candidate_retrieval_minimum_similarity: float = 0.0
     candidate_retrieval_stop_words: tuple[str, ...] = ()
     candidate_include_unknown_hard_blockers: bool = False
+    candidate_retrieval_structured_attributes: tuple[str, ...] = ()
+    candidate_retrieval_minimum_structured_matches: int = 1
+    candidate_retrieval_minimum_per_brand_lane: int = 0
+    candidate_retrieval_preserve_numeric_tokens: bool = False
 
     def __post_init__(self) -> None:
         if not self.attributes:
@@ -252,6 +256,21 @@ class MatchingPolicyV2:
             set(self.candidate_retrieval_stop_words)
         ):
             raise ValueError("candidate retrieval stop words must be unique")
+        if len(self.candidate_retrieval_structured_attributes) != len(
+            set(self.candidate_retrieval_structured_attributes)
+        ):
+            raise ValueError("candidate retrieval structured attributes must be unique")
+        unknown_retrieval_attributes = sorted(
+            set(self.candidate_retrieval_structured_attributes) - set(names)
+        )
+        if unknown_retrieval_attributes:
+            raise ValueError(
+                f"candidate retrieval references unknown attributes: {unknown_retrieval_attributes}"
+            )
+        if self.candidate_retrieval_minimum_structured_matches < 0:
+            raise ValueError("candidate retrieval structured match minimum cannot be negative")
+        if self.candidate_retrieval_minimum_per_brand_lane < 0:
+            raise ValueError("candidate retrieval brand-lane minimum cannot be negative")
 
     @property
     def checksum(self) -> str:
@@ -299,6 +318,18 @@ class MatchingPolicyV2:
                 "candidate_retrieval_stop_words": self.candidate_retrieval_stop_words,
                 "candidate_include_unknown_hard_blockers": (
                     self.candidate_include_unknown_hard_blockers
+                ),
+                "candidate_retrieval_structured_attributes": (
+                    self.candidate_retrieval_structured_attributes
+                ),
+                "candidate_retrieval_minimum_structured_matches": (
+                    self.candidate_retrieval_minimum_structured_matches
+                ),
+                "candidate_retrieval_minimum_per_brand_lane": (
+                    self.candidate_retrieval_minimum_per_brand_lane
+                ),
+                "candidate_retrieval_preserve_numeric_tokens": (
+                    self.candidate_retrieval_preserve_numeric_tokens
                 ),
             }
         )
@@ -528,6 +559,18 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         ),
         candidate_include_unknown_hard_blockers=bool(
             candidate_retrieval.get("include_unknown_hard_blockers", False)
+        ),
+        candidate_retrieval_structured_attributes=tuple(
+            str(value) for value in candidate_retrieval.get("structured_attributes", ())
+        ),
+        candidate_retrieval_minimum_structured_matches=int(
+            candidate_retrieval.get("minimum_structured_matches", 1)
+        ),
+        candidate_retrieval_minimum_per_brand_lane=int(
+            candidate_retrieval.get("minimum_per_brand_lane", 0)
+        ),
+        candidate_retrieval_preserve_numeric_tokens=bool(
+            candidate_retrieval.get("preserve_numeric_tokens", False)
         ),
     )
 

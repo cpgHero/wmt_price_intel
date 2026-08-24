@@ -169,10 +169,14 @@ export interface RetailCompetitiveIntelligenceProductPack {
       missing_location_policy: "fail_closed" | "allow";
     };
     candidate_retrieval?: {
-      mode: "disabled" | "lexical_top_k";
+      mode: "disabled" | "lexical_top_k" | "structured_high_recall";
       include_unknown_hard_blockers?: boolean;
       maximum_per_benchmark: number;
       minimum_similarity: number;
+      structured_attributes?: string[];
+      minimum_structured_matches?: number;
+      minimum_per_brand_lane?: number;
+      preserve_numeric_tokens?: boolean;
       stop_words: string[];
     };
   };

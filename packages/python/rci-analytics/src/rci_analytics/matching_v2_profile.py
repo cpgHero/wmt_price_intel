@@ -22,6 +22,7 @@ from rci_analytics.matching_v2_review import (
 from rci_analytics.matching_v2_shadow import (
     ListingEvidenceAccumulatorV2,
     MatchingShadowEvaluatorV2,
+    MatchingShadowResultV2,
 )
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
@@ -329,6 +330,100 @@ def _quality_findings(
     return findings
 
 
+def _configured_benchmark_catalog(
+    pack: ProductPack,
+    benchmark_retailer_id: str,
+    observed_product_ids: set[str],
+) -> tuple[str, set[str]]:
+    overrides = pack.document.get("retailer_overrides")
+    retailer = overrides.get(benchmark_retailer_id) if isinstance(overrides, dict) else None
+    products = retailer.get("products") if isinstance(retailer, dict) else None
+    if not isinstance(products, dict):
+        return "observed_benchmark_evidence", set(observed_product_ids)
+    configured = {
+        str(product_id)
+        for product_id, rule in products.items()
+        if not isinstance(rule, dict) or str(rule.get("scope") or "include") == "include"
+    }
+    return "product_pack_retailer_override", configured | observed_product_ids
+
+
+def _coverage_ledger(
+    *,
+    pack: ProductPack,
+    benchmark_retailer_id: str,
+    benchmark_listings: tuple[ListingEvidence, ...],
+    competitor_listings: dict[str, tuple[ListingEvidence, ...]],
+    results: tuple[MatchingShadowResultV2, ...],
+) -> JsonObject:
+    observed_ids = {listing.retailer_product_id for listing in benchmark_listings}
+    catalog_source, catalog_ids = _configured_benchmark_catalog(
+        pack,
+        benchmark_retailer_id,
+        observed_ids,
+    )
+    results_by_retailer = {result.competitor_retailer_id: result for result in results}
+    rows: list[JsonObject] = []
+    summaries: list[JsonObject] = []
+    for retailer_id in sorted(competitor_listings):
+        result = results_by_retailer[retailer_id]
+        candidate_counts = Counter(edge.benchmark.retailer_product_id for edge in result.edges)
+        listings = competitor_listings[retailer_id]
+        brand_type_counts = Counter(listing.brand_type for listing in listings)
+        observed_with_candidates = 0
+        observed_without_candidates = 0
+        for product_id in sorted(catalog_ids):
+            observed = product_id in observed_ids
+            candidate_count = candidate_counts[product_id] if observed else 0
+            if not observed:
+                status = "benchmark_not_observed"
+            elif candidate_count:
+                status = "candidate_found"
+                observed_with_candidates += 1
+            else:
+                status = "no_candidate_after_retrieval"
+                observed_without_candidates += 1
+            rows.append(
+                {
+                    "benchmark_retailer_product_id": product_id,
+                    "competitor_retailer_id": retailer_id,
+                    "benchmark_observed": observed,
+                    "candidate_count": candidate_count,
+                    "status": status,
+                }
+            )
+        summaries.append(
+            {
+                "competitor_retailer_id": retailer_id,
+                "competitor_products": len(listings),
+                "competitor_brand_type_counts": {
+                    brand_type: brand_type_counts.get(brand_type, 0)
+                    for brand_type in (
+                        "private_label",
+                        "regional",
+                        "national",
+                        "unclassified",
+                    )
+                },
+                "candidate_pairs": len(result.edges),
+                "observed_benchmark_products_with_candidates": observed_with_candidates,
+                "observed_benchmark_products_without_candidates": observed_without_candidates,
+                "unobserved_catalog_products": len(catalog_ids - observed_ids),
+            }
+        )
+    document: JsonObject = {
+        "grain": "benchmark_product_x_competitor_retailer",
+        "catalog_source": catalog_source,
+        "benchmark_catalog_products": len(catalog_ids),
+        "observed_benchmark_products": len(observed_ids),
+        "unobserved_catalog_products": len(catalog_ids - observed_ids),
+        "retailer_summaries": summaries,
+        "rows": rows,
+    }
+    document["checksum"] = _checksum(document)
+    return document
+
+
 def build_matching_v2_evidence_profile(
     repository_root: Path,
     *,
@@ -536,10 +631,46 @@ def build_matching_v2_evidence_profile(
         expected_retailer_mismatches,
         retailer_documents,
     )
+    coverage_ledger = _coverage_ledger(
+        pack=pack,
+        benchmark_retailer_id=benchmark_retailer_id,
+        benchmark_listings=benchmark_listings,
+        competitor_listings={
+            retailer_id: listings_by_retailer[retailer_id] for retailer_id in competitors
+        },
+        results=results,
+    )
+    unobserved_catalog_products = int(coverage_ledger["unobserved_catalog_products"])
+    if unobserved_catalog_products:
+        findings.append(
+            {
+                "severity": "warning",
+                "code": "benchmark_catalog_products_not_observed",
+                "retailer_id": benchmark_retailer_id,
+                "message": (
+                    f"{unobserved_catalog_products} configured benchmark catalog products have "
+                    "no positive-price Search observation in the supplied evidence."
+                ),
+            }
+        )
+    for summary in coverage_ledger["retailer_summaries"]:
+        missing = int(summary["observed_benchmark_products_without_candidates"])
+        if missing:
+            findings.append(
+                {
+                    "severity": "warning",
+                    "code": "observed_benchmark_products_without_candidates",
+                    "retailer_id": summary["competitor_retailer_id"],
+                    "message": (
+                        f"{missing} observed benchmark products have no retained candidate for "
+                        f"{summary['competitor_retailer_id']}."
+                    ),
+                }
+            )
     document: JsonObject = {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "profile_id": f"{product_pack_id}-matching-v2-evidence-profile",
-        "profile_version": "1.0.0",
+        "profile_version": "1.1.0",
         "authoritative": False,
         "product_pack": {"id": pack.id, "version": pack.version},
         "matching_policy": {
@@ -560,6 +691,7 @@ def build_matching_v2_evidence_profile(
         "normalization_failure_reasons": dict(sorted(normalization_failures.items())),
         "retailers": retailer_documents,
         "shadow_results": [result.summary() for result in results],
+        "coverage_ledger": coverage_ledger,
         "review_queue": {
             "queue_id": queue["queue_id"],
             "version": queue["version"],

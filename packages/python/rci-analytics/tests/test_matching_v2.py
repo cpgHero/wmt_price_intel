@@ -517,6 +517,45 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
         "known third-party marketplace seller excluded by Retailer Pack policy": 1
     }
     assert profile["release_use"]["eligible"] is False
+    assert profile["coverage_ledger"]["grain"] == ("benchmark_product_x_competitor_retailer")
+    configured_catalog_count = sum(
+        rule.get("scope") == "include"
+        for rule in ProductPackLoader(REPOSITORY_ROOT)
+        .load("fresh_fluid_milk")
+        .document["retailer_overrides"]["walmart_us"]["products"]
+        .values()
+    )
+    assert profile["coverage_ledger"]["benchmark_catalog_products"] == (
+        configured_catalog_count + 1
+    )
+    assert profile["coverage_ledger"]["observed_benchmark_products"] == 1
+    assert profile["coverage_ledger"]["unobserved_catalog_products"] == configured_catalog_count
+    retailer_summary = profile["coverage_ledger"]["retailer_summaries"][0]
+    assert retailer_summary == {
+        "competitor_retailer_id": "aldi_us",
+        "competitor_products": 1,
+        "competitor_brand_type_counts": {
+            "private_label": 1,
+            "regional": 0,
+            "national": 0,
+            "unclassified": 0,
+        },
+        "candidate_pairs": 0,
+        "observed_benchmark_products_with_candidates": 0,
+        "observed_benchmark_products_without_candidates": 1,
+        "unobserved_catalog_products": configured_catalog_count,
+    }
+    assert next(
+        row
+        for row in profile["coverage_ledger"]["rows"]
+        if row["benchmark_retailer_product_id"] == "wm1"
+    ) == {
+        "benchmark_retailer_product_id": "wm1",
+        "competitor_retailer_id": "aldi_us",
+        "benchmark_observed": True,
+        "candidate_count": 0,
+        "status": "no_candidate_after_retrieval",
+    }
     assert queue["authoritative"] is False
     assert queue["version"] == "1.1.0"
     assert queue["purpose"] == "operational_match_certification"
@@ -1213,6 +1252,124 @@ def test_lexical_candidate_retrieval_bounds_review_without_deciding_match() -> N
     assert result.evaluated_pairs == 2
     assert result.retrieval_blocked_pairs == 1
     assert {edge.competitor.retailer_product_id for edge in result.edges} == {"a1", "a2"}
+
+
+def test_structured_high_recall_preserves_private_label_candidate_lane() -> None:
+    policy = replace(
+        _policy(),
+        candidate_retrieval_mode="structured_high_recall",
+        candidate_retrieval_maximum_per_benchmark=3,
+        candidate_retrieval_minimum_similarity=0.01,
+        candidate_retrieval_structured_attributes=(
+            "product_form",
+            "fat_percent",
+            "volume_fl_oz",
+            "organic",
+            "container",
+        ),
+        candidate_retrieval_minimum_structured_matches=1,
+        candidate_retrieval_minimum_per_brand_lane=1,
+        candidate_retrieval_preserve_numeric_tokens=True,
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+
+    result = evaluator.evaluate_listings(
+        (
+            _listing(
+                "walmart_us",
+                "w1",
+                title="Spring Valley Vitamin D3 1000 IU tablets",
+                brand_type="private_label",
+            ),
+        ),
+        (
+            _listing(
+                "target_us",
+                "target-pl",
+                container="carton",
+                title="up & up D3 supplement 1000 IU",
+                brand_type="private_label",
+            ),
+            _listing(
+                "target_us",
+                "national-1",
+                title="Spring Valley Vitamin D3 1000 IU tablets",
+                brand_type="national",
+            ),
+            _listing(
+                "target_us",
+                "regional-1",
+                title="Regional Vitamin D3 1000 IU tablets",
+                brand_type="regional",
+            ),
+            _listing(
+                "target_us",
+                "unknown-1",
+                title="Vitamin D3 1000 IU tablets",
+                brand_type="unclassified",
+            ),
+        ),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="target_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 3
+    assert "target-pl" in {edge.competitor.retailer_product_id for edge in result.edges}
+
+
+def test_structured_high_recall_uses_numeric_identity_tokens() -> None:
+    policy = replace(
+        _policy(),
+        candidate_retrieval_mode="structured_high_recall",
+        candidate_retrieval_maximum_per_benchmark=1,
+        candidate_retrieval_minimum_similarity=0.01,
+        candidate_retrieval_structured_attributes=(),
+        candidate_retrieval_minimum_structured_matches=1,
+        candidate_retrieval_preserve_numeric_tokens=True,
+        candidate_retrieval_stop_words=("vitamin",),
+    )
+    evaluator = MatchingShadowEvaluatorV2(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk"),
+        "all_brand",
+        policy=policy,
+    )
+    empty = {
+        "fat": None,
+        "volume": None,
+        "organic": None,
+        "form": None,
+        "container": None,
+    }
+
+    result = evaluator.evaluate_listings(
+        (_listing("walmart_us", "w1", title="Vitamin D3 1000 IU", **empty),),
+        (
+            _listing("target_us", "right", title="Vitamin D3 1000 IU", **empty),
+            _listing("target_us", "wrong", title="Vitamin D3 5000 IU", **empty),
+        ),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="target_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.evaluated_pairs == 1
+    assert result.edges[0].competitor.retailer_product_id == "right"
+
+
+def test_vitamin_pack_uses_catalog_wide_structured_candidate_discovery() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "exact_spec")
+
+    assert policy.candidate_geography_mode == "disabled"
+    assert policy.candidate_retrieval_mode == "structured_high_recall"
+    assert policy.candidate_retrieval_maximum_per_benchmark == 40
+    assert policy.candidate_retrieval_minimum_per_brand_lane == 4
+    assert policy.candidate_retrieval_preserve_numeric_tokens is True
 
 
 def test_unknown_blocking_hard_attribute_excludes_candidate() -> None:

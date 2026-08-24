@@ -349,6 +349,8 @@ class MatchingShadowResultV2:
     def summary(self) -> JsonObject:
         tiers = Counter(edge.tier or "none" for edge in self.edges)
         statuses = Counter(edge.status for edge in self.edges)
+        benchmark_with_candidates = {edge.benchmark.retailer_product_id for edge in self.edges}
+        competitor_with_candidates = {edge.competitor.retailer_product_id for edge in self.edges}
         return {
             "schema_version": self.schema_version,
             "product_pack_id": self.product_pack_id,
@@ -359,6 +361,11 @@ class MatchingShadowResultV2:
             "competitor_retailer_id": self.competitor_retailer_id,
             "benchmark_listings": self.benchmark_listings,
             "competitor_listings": self.competitor_listings,
+            "benchmark_listings_with_candidates": len(benchmark_with_candidates),
+            "benchmark_listings_without_candidates": (
+                self.benchmark_listings - len(benchmark_with_candidates)
+            ),
+            "competitor_listings_with_candidates": len(competitor_with_candidates),
             "possible_pairs": self.possible_pairs,
             "evaluated_pairs": self.evaluated_pairs,
             "blocked_pairs": self.blocked_pairs,
@@ -502,6 +509,14 @@ class MatchingShadowEvaluatorV2:
                 )
                 retrieval_blocked_pairs += len(eligible_indexes - retrieved)
                 eligible_indexes = retrieved
+            elif self._policy.candidate_retrieval_mode == "structured_high_recall":
+                retrieved = self._structured_high_recall_candidates(
+                    benchmark_listing,
+                    competitor,
+                    eligible_indexes,
+                )
+                retrieval_blocked_pairs += len(eligible_indexes - retrieved)
+                eligible_indexes = retrieved
             if blocked_review_limit:
                 for competitor_index in all_competitor_indexes - attribute_eligible_indexes:
                     competitor_listing = competitor[competitor_index]
@@ -586,6 +601,82 @@ class MatchingShadowEvaluatorV2:
                 : self._policy.candidate_retrieval_maximum_per_benchmark
             ]
         }
+
+    def _structured_high_recall_candidates(
+        self,
+        benchmark: ListingEvidence,
+        competitor: Sequence[ListingEvidence],
+        eligible_indexes: set[int],
+    ) -> set[int]:
+        """Retrieve evidence-bearing candidates without letting title rank erase brand lanes.
+
+        Known hard conflicts have already been removed before this method runs. This
+        stage therefore ranks only potentially compatible products. Structured
+        attribute agreement is authoritative for retrieval; title similarity and
+        brand type affect ordering, never final match eligibility.
+        """
+
+        attribute_names = self._policy.candidate_retrieval_structured_attributes
+        benchmark_tokens = _candidate_tokens(
+            benchmark,
+            self._policy.candidate_retrieval_stop_words,
+            attribute_names=attribute_names,
+            preserve_numeric=self._policy.candidate_retrieval_preserve_numeric_tokens,
+        )
+        ranked: list[tuple[int, int, int, float, str, int]] = []
+        for index in eligible_indexes:
+            candidate = competitor[index]
+            shares_identifier = _shares_allowed_identifier(benchmark, candidate, self._policy)
+            structured_matches = _structured_attribute_match_count(
+                benchmark,
+                candidate,
+                attribute_names,
+            )
+            candidate_tokens = _candidate_tokens(
+                candidate,
+                self._policy.candidate_retrieval_stop_words,
+                attribute_names=attribute_names,
+                preserve_numeric=self._policy.candidate_retrieval_preserve_numeric_tokens,
+            )
+            union = benchmark_tokens | candidate_tokens
+            similarity = len(benchmark_tokens & candidate_tokens) / len(union) if union else 0.0
+            if not (
+                shares_identifier
+                or structured_matches >= self._policy.candidate_retrieval_minimum_structured_matches
+                or similarity >= self._policy.candidate_retrieval_minimum_similarity
+            ):
+                continue
+            same_brand_lane = int(benchmark.brand_type == candidate.brand_type)
+            ranked.append(
+                (
+                    -int(shares_identifier),
+                    -structured_matches,
+                    -same_brand_lane,
+                    -similarity,
+                    candidate.listing_id,
+                    index,
+                )
+            )
+
+        ranked.sort()
+        maximum = self._policy.candidate_retrieval_maximum_per_benchmark
+        lane_minimum = self._policy.candidate_retrieval_minimum_per_brand_lane
+        selected: set[int] = set()
+        if lane_minimum:
+            lanes: dict[str, list[tuple[int, int, int, float, str, int]]] = defaultdict(list)
+            for row in ranked:
+                lanes[competitor[row[-1]].brand_type].append(row)
+            lane_order = ("private_label", "national", "regional", "unclassified")
+            for position in range(lane_minimum):
+                for lane in lane_order:
+                    rows = lanes.get(lane, ())
+                    if position < len(rows) and len(selected) < maximum:
+                        selected.add(rows[position][-1])
+        for row in ranked:
+            if len(selected) >= maximum:
+                break
+            selected.add(row[-1])
+        return selected
 
     def _candidate_indexes(
         self, competitor: Sequence[ListingEvidence]
@@ -699,17 +790,50 @@ class MatchingShadowEvaluatorV2:
         return tuple(results)
 
 
-def _candidate_tokens(listing: ListingEvidence, stop_words: tuple[str, ...]) -> set[str]:
+def _structured_attribute_match_count(
+    benchmark: ListingEvidence,
+    competitor: ListingEvidence,
+    attribute_names: tuple[str, ...],
+) -> int:
+    matches = 0
+    for name in attribute_names:
+        benchmark_value = benchmark.attributes.get(name)
+        competitor_value = competitor.attributes.get(name)
+        if (
+            benchmark_value is None
+            or benchmark_value.value is None
+            or benchmark_value.review_status == "conflicted"
+            or competitor_value is None
+            or competitor_value.value is None
+            or competitor_value.review_status == "conflicted"
+        ):
+            continue
+        if _canonical(benchmark_value.value) == _canonical(competitor_value.value):
+            matches += 1
+    return matches
+
+
+def _candidate_tokens(
+    listing: ListingEvidence,
+    stop_words: tuple[str, ...],
+    *,
+    attribute_names: tuple[str, ...] = ("active_ingredient",),
+    preserve_numeric: bool = False,
+) -> set[str]:
     text_values = [listing.title or ""]
-    for name in ("active_ingredient",):
+    attribute_tokens: set[str] = set()
+    for name in attribute_names:
         value = listing.attributes.get(name)
         if value is not None and value.value is not None and value.review_status != "conflicted":
             text_values.append(str(value.value))
+            normalized = re.sub(r"[^a-z0-9]+", "_", str(value.value).casefold()).strip("_")
+            if normalized:
+                attribute_tokens.add(f"attribute_{name}_{normalized}")
     tokens = re.findall(r"[a-z0-9]+", " ".join(text_values).casefold())
     ignored = set(stop_words)
 
     def usable(token: str) -> bool:
-        return not token.isdigit()
+        return preserve_numeric or not token.isdigit()
 
     unigrams = [
         token for token in tokens if token not in ignored and usable(token) and len(token) >= 2
@@ -721,7 +845,7 @@ def _candidate_tokens(listing: ListingEvidence, stop_words: tuple[str, ...]) -> 
         and usable(tokens[index + 1])
         and (tokens[index] not in ignored or tokens[index + 1] not in ignored)
     ]
-    return {*unigrams, *bigrams}
+    return {*unigrams, *bigrams, *attribute_tokens}
 
 
 def _shares_allowed_identifier(

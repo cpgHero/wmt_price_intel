@@ -83,7 +83,7 @@ const lastVerified = "August 24, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.50",
+  version: "1.3.51",
   lastVerified,
   baseline:
     "Production implementation through the governed Matching v2 PDP/image attribute-evidence reconciliation workflow, built on the Phase 13.30 five-category certified baseline",
@@ -692,6 +692,12 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "attention",
           title: "Vitamin certification reset",
           text: "Vitamins & Supplements Product Pack 1.1.2 fails closed on product identity. Active ingredient or governed formulation, labeled strength and unit, dosage form, release profile, and life-stage/audience must be known and compatible. Adult, children, prenatal, men, women, senior, and general-audience conflicts are non-comparable. Package-count differences may support normalized-unit equivalent-product analysis only after the identity attributes agree. Broad comparable-substitute certification is prohibited. A bounded lexical candidate may enter PDP/vision evidence review when a critical value is missing, but it cannot be certified until every required value is known and compatible. Queue 2026.08.23-spring-valley-4 and all 300 decisions made from its unsafe policy are quarantined from reporting. Clean successor 2026.08.24-spring-valley-7 contains 203 pending unresolved cases and zero inherited decisions. Owner-approved gpt-5.6-terra review completed successfully for every case at $16.4078975 recorded usage: 81 not-comparable recommendations, 114 insufficient-evidence recommendations, and eight positive match proposals. The audit found that one AI rejection relied on a structured PDP ingredient value that contradicted the title and product image. Bulk policy 1.4.0 now requires a known deterministic hard-blocker conflict for batch rejection; AI-only or internally contradictory evidence stays in individual review. The server also blocks all insufficient-evidence drafts and all eight positive proposals while deterministic hard-blocker evidence remains unresolved. Every draft still requires a human decision; none automatically changed reporting.",
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Coverage-first vitamin successor in shadow",
+          text: "Product Pack 1.2.0 is implemented but is not yet the production queue. Its evidence profile accounts for all 322 governed Spring Valley products against every configured competitor, including products not observed in the one-market pilot. Generic structured high-recall retrieval preserves numeric strength evidence and distinct competitor brand lanes after deterministic hard-conflict filtering. Product identity discovery is catalog-wide; store/radius applicability is evaluated later from observed prices. Only verified exact-item or complete exact-specification evidence may auto-approve. Equivalent relationships, missing hard blockers, and conflicts still require governed review or fail closed. The existing 203-case queue remains quarantined until retained-evidence shadow recall, precision, seller, retailer-coverage, and checksum gates pass. Any broader Search recovery requires a separately disclosed and approved paid-call plan.",
         },
         {
           kind: "callout",
@@ -1538,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Automatic Matching v2 approval tiers are currently empty. Equivalent and substitute tiers remain human-approved.",
+            "Production vitamin Matching v2 remains on the quarantined Product Pack 1.1.2 queue until the Phase 13.48 shadow gates pass. Product Pack 1.2.0 authorizes deterministic exact-item and complete exact-specification approval only; equivalent and broader relationships remain human-approved, and no new queue has been imported.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1611,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and test-verified; retained-evidence shadow audit pending",
+              "Spring Valley matching gained an all-retailer coverage ledger and generic structured high-recall retrieval.",
+              "Every one of the 322 governed Walmart anchors is now accounted for against each of the nine configured competitors as not observed, candidate found, or observed without a retained candidate. Product Pack 1.2.0 separates catalog-wide identity discovery from later geographic price applicability, preserves numeric strength evidence, and retains diverse competitor brand lanes before filling ranked candidate capacity. The same generic engine applies to every retailer; Target is not special-cased. Deterministic auto-approval is limited to verified exact-item or complete exact-specification evidence, while unknown hard blockers remain review-only. The existing 203-case queue remains quarantined and production reporting is unchanged. No MetricsCart, PDP, or OpenAI call was made; paid recovery Search requires a separate exact-call and spend approval after the retained-evidence shadow audit.",
+            ],
             [
               "2026-08-24",
               "Implemented and validation pending deployment",

@@ -555,10 +555,18 @@
           "additionalProperties": false,
           "required": ["mode", "maximum_per_benchmark", "minimum_similarity", "stop_words"],
           "properties": {
-            "mode": { "enum": ["disabled", "lexical_top_k"] },
+            "mode": { "enum": ["disabled", "lexical_top_k", "structured_high_recall"] },
             "include_unknown_hard_blockers": { "type": "boolean" },
             "maximum_per_benchmark": { "type": "integer", "minimum": 1 },
             "minimum_similarity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "structured_attributes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "minimum_structured_matches": { "type": "integer", "minimum": 0 },
+            "minimum_per_brand_lane": { "type": "integer", "minimum": 0 },
+            "preserve_numeric_tokens": { "type": "boolean" },
             "stop_words": {
               "type": "array",
               "uniqueItems": true,

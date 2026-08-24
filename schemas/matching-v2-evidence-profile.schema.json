@@ -19,13 +19,14 @@
     "normalization_failure_reasons",
     "retailers",
     "shadow_results",
+    "coverage_ledger",
     "review_queue",
     "quality_findings",
     "release_use",
     "checksum"
   ],
   "properties": {
-    "schema_version": { "const": "2.0.0" },
+    "schema_version": { "const": "2.1.0" },
     "profile_id": { "type": "string", "minLength": 1 },
     "profile_version": { "type": "string", "minLength": 1 },
     "authoritative": { "const": false },
@@ -80,6 +81,7 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/shadowResult" }
     },
+    "coverage_ledger": { "$ref": "#/$defs/coverageLedger" },
     "review_queue": {
       "type": "object",
       "additionalProperties": false,
@@ -222,6 +224,9 @@
         "competitor_retailer_id",
         "benchmark_listings",
         "competitor_listings",
+        "benchmark_listings_with_candidates",
+        "benchmark_listings_without_candidates",
+        "competitor_listings_with_candidates",
         "possible_pairs",
         "evaluated_pairs",
         "blocked_pairs",
@@ -242,6 +247,9 @@
         "competitor_retailer_id": { "type": "string", "minLength": 1 },
         "benchmark_listings": { "$ref": "#/$defs/count" },
         "competitor_listings": { "$ref": "#/$defs/count" },
+        "benchmark_listings_with_candidates": { "$ref": "#/$defs/count" },
+        "benchmark_listings_without_candidates": { "$ref": "#/$defs/count" },
+        "competitor_listings_with_candidates": { "$ref": "#/$defs/count" },
         "possible_pairs": { "$ref": "#/$defs/count" },
         "evaluated_pairs": { "$ref": "#/$defs/count" },
         "blocked_pairs": { "$ref": "#/$defs/count" },
@@ -256,6 +264,96 @@
         "not_comparable_edges": { "$ref": "#/$defs/count" }
       },
       "additionalProperties": false
+    },
+    "coverageLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grain",
+        "catalog_source",
+        "benchmark_catalog_products",
+        "observed_benchmark_products",
+        "unobserved_catalog_products",
+        "retailer_summaries",
+        "rows",
+        "checksum"
+      ],
+      "properties": {
+        "grain": { "const": "benchmark_product_x_competitor_retailer" },
+        "catalog_source": {
+          "enum": ["product_pack_retailer_override", "observed_benchmark_evidence"]
+        },
+        "benchmark_catalog_products": { "$ref": "#/$defs/count" },
+        "observed_benchmark_products": { "$ref": "#/$defs/count" },
+        "unobserved_catalog_products": { "$ref": "#/$defs/count" },
+        "retailer_summaries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/coverageRetailerSummary" }
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/coverageRow" }
+        },
+        "checksum": { "$ref": "#/$defs/checksum" }
+      }
+    },
+    "coverageRetailerSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "competitor_retailer_id",
+        "competitor_products",
+        "competitor_brand_type_counts",
+        "candidate_pairs",
+        "observed_benchmark_products_with_candidates",
+        "observed_benchmark_products_without_candidates",
+        "unobserved_catalog_products"
+      ],
+      "properties": {
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "competitor_products": { "$ref": "#/$defs/count" },
+        "competitor_brand_type_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["private_label", "regional", "national", "unclassified"],
+          "properties": {
+            "private_label": { "$ref": "#/$defs/count" },
+            "regional": { "$ref": "#/$defs/count" },
+            "national": { "$ref": "#/$defs/count" },
+            "unclassified": { "$ref": "#/$defs/count" }
+          }
+        },
+        "candidate_pairs": { "$ref": "#/$defs/count" },
+        "observed_benchmark_products_with_candidates": { "$ref": "#/$defs/count" },
+        "observed_benchmark_products_without_candidates": { "$ref": "#/$defs/count" },
+        "unobserved_catalog_products": { "$ref": "#/$defs/count" }
+      }
+    },
+    "coverageRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmark_retailer_product_id",
+        "competitor_retailer_id",
+        "benchmark_observed",
+        "candidate_count",
+        "status"
+      ],
+      "properties": {
+        "benchmark_retailer_product_id": { "type": "string", "minLength": 1 },
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "benchmark_observed": { "type": "boolean" },
+        "candidate_count": { "$ref": "#/$defs/count" },
+        "status": {
+          "enum": [
+            "benchmark_not_observed",
+            "candidate_found",
+            "no_candidate_after_retrieval"
+          ]
+        }
+      }
     },
     "finding": {
       "type": "object",
