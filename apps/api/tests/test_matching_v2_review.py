@@ -1798,9 +1798,7 @@ def test_legacy_ignored_hard_blocker_fails_closed_without_active_applicability()
 
     governed = _apply_active_certification_policy(case, policy)
 
-    assert "strength" in {
-        issue["attribute"] for issue in governed["certification_blockers"]
-    }
+    assert "strength" in {issue["attribute"] for issue in governed["certification_blockers"]}
     assert _missing_evidence_listing_ids(governed) == {
         case["benchmark_listing_id"],
         case["competitor_listing_id"],
