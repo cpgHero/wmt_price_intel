@@ -29,6 +29,7 @@ from rci_api.matching_v2_review import (
     _apply_active_certification_policy,
     _apply_attribute_reconciliation,
     _apply_observed_location_sidecar,
+    _attribute_evidence_proposal_index,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
     _derived_certification_view,
@@ -135,6 +136,111 @@ def test_review_cases_order_by_observed_benchmark_then_competitor_footprint() ->
         "large-primary-small-competitor",
         "small-primary",
     ]
+
+
+def test_attribute_evidence_index_groups_retries_under_the_root_batch() -> None:
+    def evidence_case(
+        case_id: str,
+        *,
+        batch_id: str,
+        root_batch_id: str,
+        activity_at: str,
+        eligible: bool,
+    ) -> dict[str, Any]:
+        return {
+            "case_id": case_id,
+            "review_status": "pending",
+            "competitor_retailer_id": "target_us",
+            "benchmark_listing": {
+                "listing_id": f"walmart:{case_id}",
+                "retailer_id": "walmart_us",
+                "retailer_product_id": case_id,
+                "title": f"Spring Valley {case_id}",
+            },
+            "competitor_listing": {
+                "listing_id": f"target:{case_id}",
+                "retailer_id": "target_us",
+                "retailer_product_id": f"target-{case_id}",
+                "title": f"Target {case_id}",
+            },
+            "ai_draft": {
+                "id": f"task-{case_id}",
+                "batch_id": batch_id,
+                "root_batch_id": root_batch_id,
+                "status": "succeeded",
+                "model_id": "gpt-5.6-luna",
+                "completed_at": activity_at,
+            },
+            "attribute_evidence_reconciliation": {
+                "proposals": [
+                    {
+                        "proposal_checksum": case_id[0] * 64,
+                        "listing_role": "competitor",
+                        "listing_id": f"target:{case_id}",
+                        "attribute": "strength",
+                        "normalized_value": 10 if eligible else None,
+                        "confidence": 0.99,
+                        "visible_text": "10 mg",
+                        "source_image_url": "https://images.example/label.jpg",
+                        "eligible": eligible,
+                        "ineligibility_reasons": (
+                            [] if eligible else ["attribute_value_already_resolved"]
+                        ),
+                        "decision": None,
+                    }
+                ]
+            },
+        }
+
+    view = _attribute_evidence_proposal_index(
+        {
+            "queue": {"queue_id": "vitamins", "version": "one"},
+            "cases": [
+                evidence_case(
+                    "a-case",
+                    batch_id="root-batch",
+                    root_batch_id="root-batch",
+                    activity_at="2026-08-25T10:00:00Z",
+                    eligible=True,
+                ),
+                evidence_case(
+                    "b-case",
+                    batch_id="retry-batch",
+                    root_batch_id="root-batch",
+                    activity_at="2026-08-25T11:00:00Z",
+                    eligible=False,
+                ),
+                evidence_case(
+                    "c-case",
+                    batch_id="older-batch",
+                    root_batch_id="older-batch",
+                    activity_at="2026-08-24T11:00:00Z",
+                    eligible=True,
+                ),
+            ],
+        },
+        batch_scope="latest_lineage",
+        root_batch_id=None,
+        eligibility="eligible",
+        decision_status="undecided",
+        offset=0,
+        limit=50,
+    )
+
+    assert view["selected_root_batch_id"] == "root-batch"
+    assert view["summary"] == {
+        "proposal_count": 2,
+        "distinct_claim_count": 2,
+        "eligible_proposal_count": 1,
+        "ineligible_proposal_count": 1,
+        "undecided_proposal_count": 2,
+        "verified_proposal_count": 0,
+        "rejected_proposal_count": 0,
+    }
+    assert view["selected_proposal_count"] == 1
+    assert [row["case_id"] for row in view["proposals"]] == ["a-case"]
+    assert view["batch_lineages"][0]["case_count"] == 2
+    assert view["batch_lineages"][0]["batch_ids"] == ["retry-batch", "root-batch"]
 
 
 def test_ai_review_requires_both_search_observed_footprints() -> None:

@@ -327,6 +327,192 @@ test("prepares and confirms every eligible case in the retailer-scoped queue", a
   ).toBeVisible();
 });
 
+test("reviews eligible image evidence by retry lineage before match certification", async ({
+  page,
+}) => {
+  let evidenceDecision: Record<string, unknown> | null = null;
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (
+      request.method() === "POST" &&
+      url.pathname.endsWith("/attribute-evidence-decisions")
+    ) {
+      evidenceDecision = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          decision: "verified",
+          checksum: "a".repeat(64),
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    if (url.pathname.endsWith("/attribute-evidence-proposals")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          authoritative: false,
+          human_verification_required: true,
+          selected_root_batch_id: "pilot-root-batch",
+          batch_lineages: [
+            {
+              root_batch_id: "pilot-root-batch",
+              batch_ids: ["pilot-root-batch", "pilot-retry-batch"],
+              model_ids: ["gpt-5.6-luna"],
+              case_count: 25,
+              proposal_count: 67,
+              eligible_proposal_count: 29,
+              ineligible_proposal_count: 38,
+              undecided_proposal_count: 67,
+              verified_proposal_count: 0,
+              rejected_proposal_count: 0,
+              latest_activity_at: "2026-08-25T16:30:00Z",
+            },
+          ],
+          summary: {
+            proposal_count: 67,
+            distinct_claim_count: 65,
+            eligible_proposal_count: 29,
+            ineligible_proposal_count: 38,
+            undecided_proposal_count: 67,
+            verified_proposal_count: 0,
+            rejected_proposal_count: 0,
+          },
+          selected_proposal_count: 29,
+          offset: 0,
+          limit: 50,
+          proposals: [
+            {
+              proposal_checksum: "b".repeat(64),
+              case_id: "case-evidence-pilot",
+              case_review_status: "pending",
+              competitor_retailer_id: "target_us",
+              listing_role: "competitor",
+              listing_id: "target:vitamin-one",
+              attribute: "strength",
+              raw_value: "10 mg",
+              normalized_value: 10,
+              confidence: 0.99,
+              visible_text: "Vitamin D3 10 mg",
+              source_image_url: "https://images.example/target-label.jpg",
+              eligible: true,
+              ineligibility_reasons: [],
+              decision_status: "undecided",
+              decision: null,
+              listing: {
+                listing_id: "target:vitamin-one",
+                retailer_id: "target_us",
+                retailer_product_id: "target-vitamin-one",
+                title: "Target Vitamin D3",
+                brand: "up & up",
+                image_url: "https://images.example/target-label.jpg",
+                product_url: "https://target.example/vitamin-one",
+                observed_location_count: 3,
+              },
+              counterpart: {
+                listing_id: "walmart:vitamin-one",
+                retailer_id: "walmart_us",
+                retailer_product_id: "walmart-vitamin-one",
+                title: "Spring Valley Vitamin D3",
+                brand: "Spring Valley",
+                image_url: null,
+              },
+              ai_draft: {
+                id: "pilot-task",
+                batch_id: "pilot-retry-batch",
+                root_batch_id: "pilot-root-batch",
+                model_id: "gpt-5.6-luna",
+                completed_at: "2026-08-25T16:30:00Z",
+              },
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        ai_review_policy: {
+          enabled: true,
+          model_id: "gpt-5.6-luna",
+          max_batch_cases: 1500,
+          max_request_cost_usd: 0.35,
+          vision_policy: "missing_or_conflicting_critical_evidence_only",
+          authoritative: false,
+          human_review_required: true,
+        },
+        status_counts: { pending: 30 },
+        competitor_retailers: [{ retailer_id: "target_us", case_count: 30 }],
+        total_cases: 30,
+        selected_case_count: 30,
+        offset: 0,
+        limit: 50,
+        cases,
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("button", { name: "Attribute evidence proposals", exact: true })
+    .click();
+  const evidenceWorkspace = page.getByRole("region", {
+    name: "Attribute Evidence Proposals",
+  });
+  await expect(
+    evidenceWorkspace.getByText("67", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    evidenceWorkspace.getByText("29", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    evidenceWorkspace.getByText("38", { exact: true }),
+  ).toBeVisible();
+  await expect(evidenceWorkspace).toContainText("25 cases · 29 eligible");
+  await expect(evidenceWorkspace).toContainText("Target Vitamin D3");
+  await expect(evidenceWorkspace).toContainText("Vitamin D3 10 mg");
+
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("owner@cpghero.com");
+  await evidenceWorkspace
+    .getByRole("textbox", { name: "Verification note" })
+    .fill("The exact cited label visibly states Vitamin D3 10 mg.");
+  await evidenceWorkspace
+    .getByRole("button", { name: "Verify & apply" })
+    .click();
+  await expect(
+    page.getByText(
+      "The image evidence was verified and applied to the derived certification view. Raw PDP and queue evidence remain unchanged.",
+    ),
+  ).toBeVisible();
+  expect(evidenceDecision).toEqual({
+    reviewer_id: "owner@cpghero.com",
+    proposal_checksum: "b".repeat(64),
+    decision: "verified",
+    rationale: "The exact cited label visibly states Vitamin D3 10 mg.",
+    supersedes_decision_id: null,
+  });
+});
+
 test("retries terminal AI failures as confirmed linked individual or bulk work", async ({
   page,
 }) => {

@@ -86,3 +86,24 @@ The next production expansion, if approved after administrator review of the pil
 targets the 883 distinct-evidence coverage cases that cover all 1,020 unresolved product
 identities—not all 2,316 pair-level cases. This avoids paying repeatedly for the same product label
 evidence across different candidate pairs.
+
+## Administrator proposal workspace
+
+Match Certification now includes a dedicated **Attribute evidence proposals** workspace. The view
+groups an original AI batch and every immutable retry task under one root lineage, so the bounded
+pilot remains one auditable review set even though five cases required a later retry batch. The
+default view selects the latest lineage and shows only eligible, undecided claims. Administrators
+can instead select any available lineage, combine all latest case drafts, include retained
+ineligible claims, or filter by verified/rejected status and competitor retailer.
+
+The workspace reconciles the pilot counts directly: 67 total image proposals, 65 distinct
+listing-attribute claims, 29 eligible proposals, and 38 retained ineligible proposals. Every card
+shows the exact cited PDP image, visible label text, typed proposed value, confidence, listing and
+counterpart identity, and observed-location context. Verification and rejection use the existing
+append-only checksum-bound decision endpoint and require an identified reviewer and rationale.
+Opening a proposal does not certify its product relationship, rerun analysis, or change reporting.
+
+The proposal index is a read projection over immutable queue, AI-task, and decision evidence. It
+does not create a second evidence store. Retry lineage is resolved recursively from
+`retry_of_task_id`, and current eligibility is recomputed through the active Product Pack before a
+proposal is shown as actionable.

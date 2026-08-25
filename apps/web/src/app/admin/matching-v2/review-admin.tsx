@@ -258,6 +258,7 @@ interface ReviewCase {
   ai_draft?: null | {
     id: string;
     batch_id: string;
+    root_batch_id?: string;
     status: AIDraftStatus;
     model_id: string;
     requested_by: string;
@@ -331,6 +332,89 @@ interface QueueView {
   limit: number;
   cases: ReviewCase[];
   quarantine?: QueueQuarantine | null;
+}
+
+type AttributeEvidenceEligibility = "all" | "eligible" | "ineligible";
+type AttributeEvidenceDecisionStatus =
+  "all" | "undecided" | "verified" | "rejected";
+
+interface AttributeEvidenceProduct {
+  listing_id: string;
+  retailer_id: string;
+  retailer_product_id: string;
+  title: string | null;
+  brand: string | null;
+  image_url: string | null;
+  product_url?: string | null;
+  observed_location_count?: number;
+}
+
+interface AttributeEvidenceProposal {
+  proposal_checksum: string;
+  case_id: string;
+  case_review_status: string;
+  competitor_retailer_id: string;
+  listing_role: "benchmark" | "competitor" | null;
+  listing_id: string;
+  attribute: string;
+  raw_value: unknown;
+  normalized_value: unknown;
+  confidence: number;
+  visible_text: string | null;
+  source_image_url: string | null;
+  eligible: boolean;
+  ineligibility_reasons: string[];
+  decision_status: "undecided" | "verified" | "rejected";
+  decision: null | {
+    id: string;
+    decision: "verified" | "rejected";
+    reviewer_id: string;
+    rationale: string;
+    created_at: string;
+  };
+  listing: AttributeEvidenceProduct;
+  counterpart: AttributeEvidenceProduct;
+  ai_draft: {
+    id: string;
+    batch_id: string;
+    root_batch_id: string;
+    model_id: string;
+    completed_at: string | null;
+  };
+}
+
+interface AttributeEvidenceLineage {
+  root_batch_id: string;
+  batch_ids: string[];
+  model_ids: string[];
+  case_count: number;
+  proposal_count: number;
+  eligible_proposal_count: number;
+  ineligible_proposal_count: number;
+  undecided_proposal_count: number;
+  verified_proposal_count: number;
+  rejected_proposal_count: number;
+  latest_activity_at: string;
+}
+
+interface AttributeEvidenceProposalView {
+  authoritative: false;
+  human_verification_required: true;
+  selected_root_batch_id: string | null;
+  batch_lineages: AttributeEvidenceLineage[];
+  summary: {
+    proposal_count: number;
+    distinct_claim_count: number;
+    eligible_proposal_count: number;
+    ineligible_proposal_count: number;
+    undecided_proposal_count: number;
+    verified_proposal_count: number;
+    rejected_proposal_count: number;
+  };
+  selected_proposal_count: number;
+  offset: number;
+  limit: number;
+  proposals: AttributeEvidenceProposal[];
 }
 
 interface GoldSetReplayResult {
@@ -576,6 +660,18 @@ export function MatchingV2ReviewAdmin({
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
   const [queueRefresh, setQueueRefresh] = useState(0);
   const [view, setView] = useState<QueueView | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<
+    "certification" | "attribute-evidence"
+  >("certification");
+  const [attributeEvidenceView, setAttributeEvidenceView] =
+    useState<AttributeEvidenceProposalView | null>(null);
+  const [attributeBatchRoot, setAttributeBatchRoot] = useState("latest");
+  const [attributeEligibility, setAttributeEligibility] =
+    useState<AttributeEvidenceEligibility>("eligible");
+  const [attributeDecisionStatus, setAttributeDecisionStatus] =
+    useState<AttributeEvidenceDecisionStatus>("undecided");
+  const [attributeOffset, setAttributeOffset] = useState(0);
+  const [attributeLoading, setAttributeLoading] = useState(false);
   const [reviewerId, setReviewerId] = useState("");
   const [replaySourceAnalysisId, setReplaySourceAnalysisId] = useState("");
   const [replayResult, setReplayResult] = useState<GoldSetReplayResult | null>(
@@ -714,6 +810,40 @@ export function MatchingV2ReviewAdmin({
     statusFilter,
   ]);
 
+  const loadAttributeEvidence = useCallback(async () => {
+    if (!selectedQueueId) return;
+    setAttributeLoading(true);
+    const query = new URLSearchParams({
+      eligibility: attributeEligibility,
+      decision_status: attributeDecisionStatus,
+      offset: String(attributeOffset),
+      limit: String(PAGE_SIZE),
+      batch_scope:
+        attributeBatchRoot === "all" ? "all_lineages" : "latest_lineage",
+    });
+    if (attributeBatchRoot !== "latest" && attributeBatchRoot !== "all") {
+      query.set("root_batch_id", attributeBatchRoot);
+    }
+    if (competitorFilter !== "all") {
+      query.set("competitor_retailer_id", competitorFilter);
+    }
+    try {
+      const response = await jsonRequest<AttributeEvidenceProposalView>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}/attribute-evidence-proposals?${query}`,
+      );
+      setAttributeEvidenceView(response);
+    } finally {
+      setAttributeLoading(false);
+    }
+  }, [
+    attributeBatchRoot,
+    attributeDecisionStatus,
+    attributeEligibility,
+    attributeOffset,
+    competitorFilter,
+    selectedQueueId,
+  ]);
+
   useEffect(() => {
     void jsonRequest<AdminSession>("/api/admin/session")
       .then((value) => {
@@ -735,6 +865,19 @@ export function MatchingV2ReviewAdmin({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (session?.authenticated) void loadQueue().catch(handleError);
   }, [loadQueue, queueRefresh, session?.authenticated]);
+
+  useEffect(() => {
+    if (session?.authenticated && workspaceView === "attribute-evidence") {
+      // The state updates occur after the protected evidence-index request resolves.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadAttributeEvidence().catch(handleError);
+    }
+  }, [
+    loadAttributeEvidence,
+    queueRefresh,
+    session?.authenticated,
+    workspaceView,
+  ]);
 
   const closeEvidenceDrawer = useCallback(() => {
     setActiveCaseId(null);
@@ -1017,10 +1160,12 @@ export function MatchingV2ReviewAdmin({
   }
 
   async function decideAttributeEvidence(
-    reviewCase: ReviewCase,
-    proposal: NonNullable<
-      ReviewCase["attribute_evidence_reconciliation"]
-    >["proposals"][number],
+    caseId: string,
+    proposal:
+      | NonNullable<
+          ReviewCase["attribute_evidence_reconciliation"]
+        >["proposals"][number]
+      | AttributeEvidenceProposal,
     decision: "verified" | "rejected",
   ) {
     if (!reviewerId.trim()) {
@@ -1041,7 +1186,7 @@ export function MatchingV2ReviewAdmin({
     setNotice(null);
     try {
       await jsonRequest(
-        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(reviewCase.case_id)}/attribute-evidence-decisions`,
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/cases/${encodeURIComponent(caseId)}/attribute-evidence-decisions`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -1059,6 +1204,9 @@ export function MatchingV2ReviewAdmin({
           : "The advisory image proposal was rejected and preserved in the audit history.",
       );
       await loadQueue();
+      if (workspaceView === "attribute-evidence") {
+        await loadAttributeEvidence();
+      }
     } catch (cause) {
       handleError(cause);
     } finally {
@@ -1451,6 +1599,9 @@ export function MatchingV2ReviewAdmin({
               setSelectionDeferredCaseCount(0);
               setBatchConfirmOpen(false);
               setBulkCertificationPreview(null);
+              setAttributeEvidenceView(null);
+              setAttributeBatchRoot("latest");
+              setAttributeOffset(0);
             }}
           >
             <option value="">Select a queue</option>
@@ -1475,6 +1626,7 @@ export function MatchingV2ReviewAdmin({
               setSelectionDeferredCaseCount(0);
               setBatchConfirmOpen(false);
               setBulkCertificationPreview(null);
+              setAttributeOffset(0);
             }}
           >
             <option value="all">All competitor retailers</option>
@@ -1599,615 +1751,545 @@ export function MatchingV2ReviewAdmin({
             )}
           </section>
 
-          <form className="cert-replay" onSubmit={createGovernedReplay}>
-            <div>
-              <small>Immutable reporting release</small>
-              <h3>Create governed replay</h3>
-              <p>
-                Bind the current certified gold set to its source analysis and
-                queue a new report. The existing publication remains unchanged
-                for audit, unresolved cases stay excluded, and this action does
-                not collect data or call AI.
-              </p>
-            </div>
-            <label>
-              <span>Source analysis ID</span>
-              <input
-                value={replaySourceAnalysisId}
-                onChange={(event) => {
-                  setReplaySourceAnalysisId(event.target.value);
-                  setReplayResult(null);
-                  if (event.target.value.trim()) setError(null);
-                }}
-                placeholder="source-analysis-id"
-                autoComplete="off"
-              />
-              <small>Use the analysis ID before any -match-v2 suffix.</small>
-            </label>
-            <button
-              className="button primary"
-              type="submit"
-              disabled={
-                busy || queueQuarantined || !replaySourceAnalysisId.trim()
-              }
-            >
-              {busy ? "Creating replay…" : "Create governed replay"}
-            </button>
-            {replayResult ? (
-              <dl className="cert-replay-result">
-                <div>
-                  <dt>Analysis run</dt>
-                  <dd>{replayResult.analysis_run_id}</dd>
-                </div>
-                <div>
-                  <dt>Certified</dt>
-                  <dd>
-                    {replayResult.coverage.certified_count.toLocaleString()}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Unresolved</dt>
-                  <dd>
-                    {replayResult.coverage.unresolved_count.toLocaleString()}
-                  </dd>
-                </div>
-              </dl>
-            ) : null}
-          </form>
-
-          <section
-            className="cert-ai-batch"
-            aria-labelledby="cert-ai-batch-title"
+          <nav
+            className="cert-workspace-switch"
+            aria-label="Certification workspace view"
           >
-            <div>
-              <small>Bounded evidence assistance</small>
-              <h3 id="cert-ai-batch-title">
-                AI review drafts for selected cases
-              </h3>
-              <p>
-                Select cases on this page or prepare every eligible candidate in
-                the current queue and competitor filter, up to the governed{" "}
-                {aiPolicy.max_batch_cases.toLocaleString()}-case run limit.
-                Drafts remain advisory, cannot certify a match, and use product
-                images only when critical structured evidence is incomplete or
-                conflicting.
-              </p>
-            </div>
-            <label className="cert-ai-select-all">
-              <input
-                type="checkbox"
-                checked={pageSelectionComplete}
-                disabled={
-                  queueQuarantined ||
-                  !aiPolicy.enabled ||
-                  !eligibleCases.length ||
-                  pageSelectionCapacity === 0
-                }
-                onChange={(event) => {
-                  const pageCaseIds = eligibleCases.map(
-                    (reviewCase) => reviewCase.case_id,
-                  );
-                  setSelectedCaseIds((current) =>
-                    event.target.checked
-                      ? [...new Set([...current, ...pageCaseIds])].slice(
-                          0,
-                          aiPolicy.max_batch_cases,
-                        )
-                      : current.filter(
-                          (caseId) => !pageCaseIds.includes(caseId),
-                        ),
-                  );
-                  setSelectionScope("manual");
-                  setSelectionDeferredCaseCount(0);
-                  setBatchConfirmOpen(false);
-                }}
-              />
-              <span>
-                Select eligible cases on this page
-                <small>
-                  {eligibleCases.length.toLocaleString()} without an existing
-                  draft or final decision; up to{" "}
-                  {pageSelectionCapacity.toLocaleString()} fit in the current
-                  batch
-                </small>
-              </span>
-            </label>
-            <div className="cert-ai-batch-actions">
-              <span>
-                <strong>{selectedCaseIds.length}</strong> selected
-                {selectedCaseIds.length ? (
-                  <>
-                    <small>
-                      Maximum policy exposure: ${selectedMaximumCost.toFixed(2)}
-                    </small>
-                    {!reviewerId.trim() ? (
-                      <small className="cert-ai-requirement" role="status">
-                        Enter your reviewer identity above to continue.
-                      </small>
-                    ) : null}
-                  </>
-                ) : null}
-              </span>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={
-                  busy ||
-                  queueQuarantined ||
-                  !aiPolicy.enabled ||
-                  !selectedCaseIds.length
-                }
-                aria-busy={busy}
-                onClick={openBatchConfirmation}
-              >
-                {selectedCaseIds.length
-                  ? `Review ${selectedCaseIds.length} selected with AI`
-                  : "Review selected with AI"}
-              </button>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={
-                  busy ||
-                  queueQuarantined ||
-                  !aiPolicy.enabled ||
-                  aiPolicy.queue_wide_selection !== true
-                }
-                aria-busy={busy}
-                onClick={() =>
-                  void openQueueWideAIReviewConfirmation(
-                    "product_evidence_coverage",
-                  )
-                }
-              >
-                {aiPolicy.queue_wide_selection !== true
-                  ? "Product-evidence review unavailable"
-                  : busy
-                    ? "Assessing product evidence…"
-                    : "Review distinct product evidence"}
-              </button>
-              <button
-                className="button primary"
-                type="button"
-                disabled={
-                  busy ||
-                  queueQuarantined ||
-                  !aiPolicy.enabled ||
-                  aiPolicy.queue_wide_selection !== true
-                }
-                aria-busy={busy}
-                onClick={() =>
-                  void openQueueWideAIReviewConfirmation("all_cases")
-                }
-              >
-                {aiPolicy.queue_wide_selection !== true
-                  ? "Queue-wide review unavailable"
-                  : busy
-                    ? "Assessing eligible queue…"
-                    : competitorFilter === "all"
-                      ? "Review all eligible with AI"
-                      : `Review all eligible ${label(competitorFilter)} cases`}
-              </button>
-            </div>
-            <div className="cert-ai-status-summary" aria-live="polite">
-              <div className="cert-ai-status-counts">
-                <span className="queued">
-                  <i aria-hidden="true" />
-                  <strong>{aiDraftStatusCounts.queued}</strong> queued
-                </span>
-                <span className="running">
-                  <i aria-hidden="true" />
-                  <strong>{aiDraftStatusCounts.running}</strong> reviewing
-                </span>
-                <span className="succeeded">
-                  <i aria-hidden="true" />
-                  <strong>{aiDraftStatusCounts.succeeded}</strong> drafts ready
-                </span>
-                <span className="needs-review">
-                  <i aria-hidden="true" />
-                  <strong>{aiDraftStatusCounts.needs_review}</strong> needs
-                  attention
-                </span>
-              </div>
-              {latestAIBatch ? (
-                <div className="cert-ai-progress-panel">
-                  <div>
-                    <strong>
-                      Latest batch · {latestAIBatch.completed_count} of{" "}
-                      {latestAIBatch.task_count} reached a terminal state
-                    </strong>
-                    <span>
-                      Submitted {formatTimestamp(latestAIBatch.submitted_at)} by{" "}
-                      {latestAIBatch.requested_by}
-                    </span>
-                  </div>
-                  <div
-                    className="cert-ai-progress-track"
-                    role="progressbar"
-                    aria-label="Latest AI review batch progress"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={latestAIBatch.progress_percent}
-                  >
-                    <span
-                      style={{ width: `${latestAIBatch.progress_percent}%` }}
-                    />
-                  </div>
-                  <div className="cert-ai-batch-meta">
-                    <span>
-                      {latestAIBatch.succeeded} drafts ready ·{" "}
-                      {latestAIBatch.needs_review} failed
-                    </span>
-                    <span>
-                      {latestAIBatch.completed_at
-                        ? `Finished ${formatTimestamp(latestAIBatch.completed_at)}`
-                        : `Estimated remaining: ${formatDuration(latestAIBatch.estimated_seconds_remaining)}`}
-                    </span>
-                    <span>
-                      Recorded cost $
-                      {latestAIBatch.estimated_cost_usd.toFixed(4)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p>No AI review batches are recorded for this queue yet.</p>
-              )}
-              <p>
-                {hasRunningAIDrafts
-                  ? "Queue-wide status refreshes automatically while AI work is queued or running."
-                  : visibleAIDraftCount
-                    ? "Queue-wide status is current. Open Review evidence on a ready case to make the final human decision."
-                    : "No AI drafts are recorded for this queue yet."}
-              </p>
-              <div className="cert-ai-status-actions">
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={
-                    busy ||
-                    queueQuarantined ||
-                    !aiPolicy.enabled ||
-                    !retryableCases.length
-                  }
-                  onClick={() =>
-                    openRetryConfirmation(
-                      retryableCases
-                        .slice(0, aiPolicy.max_batch_cases)
-                        .map((reviewCase) => reviewCase.case_id),
-                      "batch",
-                    )
-                  }
-                >
-                  {retryableCases.length
-                    ? `Retry ${Math.min(retryableCases.length, aiPolicy.max_batch_cases)} needs-attention ${retryableCases.length === 1 ? "item" : "items"}`
-                    : "No retryable failures"}
-                </button>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={refreshingAI}
-                  aria-busy={refreshingAI}
-                  onClick={() => void refreshAIStatus()}
-                >
-                  {refreshingAI ? "Refreshing…" : "Refresh AI status"}
-                </button>
-              </div>
-            </div>
-            <section
-              className="cert-bulk-certification"
-              aria-labelledby="cert-bulk-certification-title"
+            <button
+              type="button"
+              className={workspaceView === "certification" ? "active" : ""}
+              aria-current={
+                workspaceView === "certification" ? "page" : undefined
+              }
+              onClick={() => setWorkspaceView("certification")}
             >
-              <header>
+              Match candidates
+            </button>
+            <button
+              type="button"
+              className={workspaceView === "attribute-evidence" ? "active" : ""}
+              aria-current={
+                workspaceView === "attribute-evidence" ? "page" : undefined
+              }
+              onClick={() => setWorkspaceView("attribute-evidence")}
+            >
+              Attribute evidence proposals
+            </button>
+          </nav>
+
+          {workspaceView === "attribute-evidence" ? (
+            <section
+              className="cert-attribute-index"
+              aria-labelledby="cert-attribute-index-title"
+            >
+              <header className="cert-attribute-index-header">
                 <div>
-                  <small>Guarded human certification</small>
-                  <h3 id="cert-bulk-certification-title">
-                    Bulk accept AI certification recommendations
+                  <small>Source-attributable label review</small>
+                  <h3 id="cert-attribute-index-title">
+                    Attribute Evidence Proposals
                   </h3>
                   <p>
-                    The app finds completed comparable and not-comparable AI
-                    recommendations across the pending queue and current
-                    retailer filter, then the server prepares up to 50 at a
-                    time. Insufficient-evidence proposals and true eligibility
-                    failures stay blocked; evidence and confidence concerns are
-                    shown as warnings for your explicit decision.
+                    Review image-derived attribute claims independently from the
+                    match decision. Verification updates only the derived
+                    certification view; immutable Search, PDP, AI, and queue
+                    evidence remains unchanged.
                   </p>
                 </div>
                 <button
                   className="button secondary"
                   type="button"
-                  disabled={
-                    busy || queueQuarantined || !aiDraftStatusCounts.succeeded
+                  disabled={attributeLoading}
+                  aria-busy={attributeLoading}
+                  onClick={() =>
+                    void loadAttributeEvidence().catch(handleError)
                   }
-                  aria-busy={busy}
-                  onClick={() => void assessBulkAIRecommendations()}
                 >
-                  {busy ? "Assessing…" : "Assess queue-wide recommendations"}
+                  {attributeLoading ? "Refreshing…" : "Refresh evidence"}
                 </button>
               </header>
-              <div
-                className="cert-bulk-guardrails"
-                aria-label="Bulk acceptance guardrails"
-              >
-                <span>Comparable or not comparable</span>
-                <span>Valid governed draft</span>
-                <span>No known third-party seller</span>
-                <span>Immutable source evidence</span>
-                <span>Administrator confirmation</span>
+
+              <div className="cert-attribute-filters">
+                <label>
+                  <span>AI batch lineage</span>
+                  <select
+                    value={attributeBatchRoot}
+                    onChange={(event) => {
+                      setAttributeBatchRoot(event.target.value);
+                      setAttributeOffset(0);
+                    }}
+                  >
+                    <option value="latest">Latest retry lineage</option>
+                    <option value="all">All latest case drafts</option>
+                    {(attributeEvidenceView?.batch_lineages ?? []).map(
+                      (lineage) => (
+                        <option
+                          value={lineage.root_batch_id}
+                          key={lineage.root_batch_id}
+                        >
+                          {formatTimestamp(lineage.latest_activity_at)} ·{" "}
+                          {lineage.case_count} cases ·{" "}
+                          {lineage.eligible_proposal_count} eligible
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label>
+                  <span>Eligibility</span>
+                  <select
+                    value={attributeEligibility}
+                    onChange={(event) => {
+                      setAttributeEligibility(
+                        event.target.value as AttributeEvidenceEligibility,
+                      );
+                      setAttributeOffset(0);
+                    }}
+                  >
+                    <option value="eligible">Eligible only</option>
+                    <option value="ineligible">Ineligible lineage</option>
+                    <option value="all">All proposals</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Human decision</span>
+                  <select
+                    value={attributeDecisionStatus}
+                    onChange={(event) => {
+                      setAttributeDecisionStatus(
+                        event.target.value as AttributeEvidenceDecisionStatus,
+                      );
+                      setAttributeOffset(0);
+                    }}
+                  >
+                    <option value="undecided">Awaiting review</option>
+                    <option value="verified">Verified</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="all">All decisions</option>
+                  </select>
+                </label>
               </div>
-              <p className="cert-bulk-boundary">
-                Engine disagreement, incomplete deterministic evidence, AI
-                conflicts, and confidence limits remain visible as advisory
-                warnings. Your explicit bulk approval accepts each displayed AI
-                recommendation, is recorded under your reviewer identity, is
-                final until flagged, and does not trigger reanalysis
-                automatically.
-              </p>
-              {bulkCertificationPreview ? (
-                <div
-                  className="cert-bulk-preview"
-                  role="region"
-                  aria-label="Bulk certification preview"
-                >
-                  <header>
-                    <div>
-                      <small>Checksum-bound preview</small>
-                      <h4>
-                        {bulkCertificationPreview.eligible_case_count} eligible
-                        {bulkCertificationPreview.excluded_case_count
-                          ? ` · ${bulkCertificationPreview.excluded_case_count} excluded`
-                          : " · no exclusions"}
-                      </h4>
+
+              {attributeEvidenceView ? (
+                <>
+                  <div className="cert-attribute-metrics">
+                    <article>
+                      <span>All image proposals</span>
+                      <strong>
+                        {attributeEvidenceView.summary.proposal_count.toLocaleString()}
+                      </strong>
+                      <small>
+                        {attributeEvidenceView.summary.distinct_claim_count.toLocaleString()}{" "}
+                        distinct product attributes
+                      </small>
+                    </article>
+                    <article className="eligible">
+                      <span>Eligible</span>
+                      <strong>
+                        {attributeEvidenceView.summary.eligible_proposal_count.toLocaleString()}
+                      </strong>
+                      <small>Missing or declared-unknown values only</small>
+                    </article>
+                    <article className="ineligible">
+                      <span>Retained but ineligible</span>
+                      <strong>
+                        {attributeEvidenceView.summary.ineligible_proposal_count.toLocaleString()}
+                      </strong>
+                      <small>Visible for lineage; cannot be applied</small>
+                    </article>
+                    <article>
+                      <span>Awaiting review</span>
+                      <strong>
+                        {attributeEvidenceView.summary.undecided_proposal_count.toLocaleString()}
+                      </strong>
+                    </article>
+                    <article>
+                      <span>Verified</span>
+                      <strong>
+                        {attributeEvidenceView.summary.verified_proposal_count.toLocaleString()}
+                      </strong>
+                    </article>
+                    <article>
+                      <span>Rejected</span>
+                      <strong>
+                        {attributeEvidenceView.summary.rejected_proposal_count.toLocaleString()}
+                      </strong>
+                    </article>
+                  </div>
+
+                  <div className="cert-attribute-boundary">
+                    <span>
+                      Retry lineage{" "}
+                      <code>
+                        {attributeEvidenceView.selected_root_batch_id ??
+                          "all lineages"}
+                      </code>
+                    </span>
+                    <span>
+                      Showing{" "}
+                      {attributeEvidenceView.selected_proposal_count.toLocaleString()}{" "}
+                      matching proposals
+                    </span>
+                    <span>No match or report changes occur here</span>
+                  </div>
+
+                  {attributeLoading ? (
+                    <div className="builder-loading" role="status">
+                      Loading governed evidence proposals…
                     </div>
-                    <code>
-                      Policy {bulkCertificationPreview.policy.id} v
-                      {bulkCertificationPreview.policy.version}
-                    </code>
-                  </header>
-                  {bulkCertificationPreview.eligible_cases.length ? (
-                    <div className="cert-bulk-candidate-list">
-                      {bulkCertificationPreview.eligible_cases.map(
-                        (candidate) => (
-                          <article key={candidate.case_id}>
-                            <div className="cert-bulk-pair">
-                              <BulkProductIdentity
-                                product={candidate.benchmark_product}
+                  ) : attributeEvidenceView.proposals.length ? (
+                    <div className="cert-attribute-list">
+                      {attributeEvidenceView.proposals.map((proposal) => (
+                        <article
+                          className="cert-attribute-card"
+                          key={`${proposal.case_id}:${proposal.proposal_checksum}`}
+                        >
+                          <div className="cert-attribute-image">
+                            {proposal.source_image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={proposal.source_image_url}
+                                alt={`Cited label evidence for ${proposal.listing.title ?? proposal.listing.retailer_product_id}`}
                               />
-                              <span>
-                                {bulkCandidateVerdict(candidate) ===
-                                "comparable"
-                                  ? "matches"
-                                  : "is not comparable with"}
-                              </span>
-                              <BulkProductIdentity
-                                product={candidate.competitor_product}
-                              />
-                            </div>
-                            <div className="cert-bulk-evidence-summary">
-                              <strong>
-                                {bulkCandidateVerdict(candidate) ===
-                                "comparable"
-                                  ? label(candidate.recommended_tier)
-                                  : "Not comparable"}
-                              </strong>
-                              <span>
-                                {Math.round(candidate.critical_coverage * 100)}%
-                                critical evidence ·{" "}
-                                {label(candidate.engine_status)}
-                              </span>
-                              {bulkCandidateVerdict(candidate) ===
-                              "comparable" ? (
+                            ) : (
+                              <b>No cited image</b>
+                            )}
+                          </div>
+                          <div className="cert-attribute-content">
+                            <header>
+                              <div>
+                                <small>
+                                  {label(proposal.listing.retailer_id)} ·{" "}
+                                  {label(proposal.listing_role)} product
+                                </small>
+                                <h4>{proposal.listing.title}</h4>
                                 <span>
-                                  Price comparison:{" "}
-                                  {(
-                                    candidate.recommended_comparison_bases ?? []
-                                  )
-                                    .map(label)
-                                    .join(" + ")}
+                                  {proposal.listing.brand || "Brand unresolved"}{" "}
+                                  · ID {proposal.listing.retailer_product_id}
+                                  {proposal.listing.observed_location_count !==
+                                  undefined
+                                    ? ` · ${proposal.listing.observed_location_count.toLocaleString()} observed`
+                                    : ""}
                                 </span>
-                              ) : null}
-                              <p>{candidate.ai_rationale}</p>
-                              {candidate.warnings.length ? (
-                                <ul className="cert-bulk-warnings">
-                                  {candidate.warnings.map((warning) => (
-                                    <li key={warning}>{warning}</li>
-                                  ))}
-                                </ul>
-                              ) : null}
+                              </div>
+                              <span
+                                className={`cert-evidence-decision ${proposal.decision_status === "undecided" ? (proposal.eligible ? "pending" : "ineligible") : proposal.decision_status}`}
+                              >
+                                {proposal.decision_status === "undecided"
+                                  ? proposal.eligible
+                                    ? "Awaiting verification"
+                                    : "Not eligible"
+                                  : label(proposal.decision_status)}
+                              </span>
+                            </header>
+                            <div className="cert-attribute-claim">
+                              <div>
+                                <span>{label(proposal.attribute)}</span>
+                                <strong>
+                                  {evidenceValue(proposal.normalized_value)}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Visible label text</span>
+                                <strong>
+                                  {proposal.visible_text || "Not supplied"}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Confidence</span>
+                                <strong>
+                                  {Math.round(proposal.confidence * 100)}%
+                                </strong>
+                              </div>
                             </div>
-                          </article>
-                        ),
-                      )}
+                            <p className="cert-attribute-counterpart">
+                              Surfaced while comparing with{" "}
+                              <b>{label(proposal.counterpart.retailer_id)}</b>:{" "}
+                              {proposal.counterpart.title ||
+                                proposal.counterpart.retailer_product_id}
+                            </p>
+                            <div className="cert-attribute-links">
+                              {proposal.source_image_url ? (
+                                <a
+                                  href={proposal.source_image_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open exact cited image
+                                </a>
+                              ) : null}
+                              {proposal.listing.product_url ? (
+                                <a
+                                  href={proposal.listing.product_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open retailer product
+                                </a>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWorkspaceView("certification");
+                                  setStatusFilter("all");
+                                  setOffset(0);
+                                  initialEvidenceOpened.current = false;
+                                  const parameters = new URLSearchParams(
+                                    window.location.search,
+                                  );
+                                  parameters.set(
+                                    "benchmark_product",
+                                    proposal.listing_role === "benchmark"
+                                      ? proposal.listing.retailer_product_id
+                                      : proposal.counterpart
+                                          .retailer_product_id,
+                                  );
+                                  parameters.set(
+                                    "competitor_product",
+                                    proposal.listing_role === "competitor"
+                                      ? proposal.listing.retailer_product_id
+                                      : proposal.counterpart
+                                          .retailer_product_id,
+                                  );
+                                  window.location.search =
+                                    parameters.toString();
+                                }}
+                              >
+                                Open full match evidence
+                              </button>
+                            </div>
+                            {!proposal.eligible ? (
+                              <p className="cert-attribute-ineligible">
+                                Cannot apply:{" "}
+                                {proposal.ineligibility_reasons
+                                  .map(label)
+                                  .join("; ")}
+                              </p>
+                            ) : (
+                              <div className="cert-attribute-decision-form">
+                                {proposal.decision ? (
+                                  <p>
+                                    <b>
+                                      {label(proposal.decision.decision)} by{" "}
+                                      {proposal.decision.reviewer_id}
+                                    </b>
+                                    {proposal.decision.rationale}
+                                  </p>
+                                ) : null}
+                                <label>
+                                  <span>Verification note</span>
+                                  <textarea
+                                    value={
+                                      evidenceRationales[
+                                        proposal.proposal_checksum
+                                      ] ??
+                                      proposal.decision?.rationale ??
+                                      ""
+                                    }
+                                    onChange={(event) =>
+                                      setEvidenceRationales((current) => ({
+                                        ...current,
+                                        [proposal.proposal_checksum]:
+                                          event.target.value,
+                                      }))
+                                    }
+                                    placeholder="State exactly what the cited label proves or why it is unreliable."
+                                  />
+                                </label>
+                                <div>
+                                  <button
+                                    className="button secondary"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      void decideAttributeEvidence(
+                                        proposal.case_id,
+                                        proposal,
+                                        "rejected",
+                                      )
+                                    }
+                                  >
+                                    Reject evidence
+                                  </button>
+                                  <button
+                                    className="button"
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      void decideAttributeEvidence(
+                                        proposal.case_id,
+                                        proposal,
+                                        "verified",
+                                      )
+                                    }
+                                  >
+                                    Verify & apply
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      ))}
                     </div>
                   ) : (
-                    <p className="cert-bulk-empty">
-                      No AI recommendation passed the required certification
-                      gates. Review the blocking exclusions before proceeding.
-                    </p>
+                    <div className="cert-empty">
+                      <h4>No proposals match these filters</h4>
+                      <p>
+                        Change the eligibility, decision, retailer, or batch
+                        lineage filter. No evidence has been deleted.
+                      </p>
+                    </div>
                   )}
-                  {bulkCertificationPreview.exclusion_summary.length ? (
-                    <details className="cert-bulk-exclusions">
-                      <summary>
-                        Why {bulkCertificationPreview.excluded_case_count}{" "}
-                        {bulkCertificationPreview.excluded_case_count === 1
-                          ? "case was"
-                          : "cases were"}{" "}
-                        excluded
-                      </summary>
-                      <ul>
-                        {bulkCertificationPreview.exclusion_summary.map(
-                          (reason) => (
-                            <li key={reason.reason_code}>
-                              <b>{reason.case_count}</b> {reason.reason}
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </details>
-                  ) : null}
-                  {bulkCertificationPreview.warning_summary.length ? (
-                    <details className="cert-bulk-exclusions" open>
-                      <summary>
-                        Advisory warnings on accepted recommendations
-                      </summary>
-                      <ul>
-                        {bulkCertificationPreview.warning_summary.map(
-                          (warning) => (
-                            <li key={warning.warning_code}>
-                              <b>{warning.case_count}</b> {warning.warning}
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </details>
-                  ) : null}
-                  <footer>
-                    <p>
-                      <b>Human confirmation required.</b> You are accepting each
-                      displayed comparable or not-comparable outcome—not
-                      delegating the decision to AI. The complete AI evidence
-                      rationale is copied into each final reviewer comment for
-                      auditability.
-                    </p>
-                    <button
-                      className="button secondary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setBulkCertificationPreview(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="button primary"
-                      type="button"
-                      disabled={
-                        busy ||
-                        !bulkCertificationPreview.eligible_case_count ||
-                        !bulkCertificationPreview.confirmation_checksum
-                      }
-                      aria-busy={busy}
-                      onClick={() => void commitBulkAIRecommendations()}
-                    >
-                      {busy
-                        ? "Finalizing…"
-                        : `Finalize ${bulkCertificationPreview.eligible_case_count} ${bulkCertificationPreview.eligible_case_count === 1 ? "recommendation" : "recommendations"}`}
-                    </button>
-                  </footer>
-                </div>
-              ) : null}
-            </section>
-            {!aiPolicy.enabled ? (
-              <p className="cert-ai-policy-note">
-                The advisory worker is not enabled in this environment. Human
-                certification remains available.
-              </p>
-            ) : null}
-            {batchConfirmOpen ? (
-              <div className="cert-ai-batch-confirm" role="alert">
-                <div>
-                  <strong>
-                    Queue {selectedCaseIds.length.toLocaleString()} advisory
-                    drafts?
-                  </strong>
-                  <p>
-                    {selectionScope === "queue-wide"
-                      ? `This is the complete currently eligible ${competitorFilter === "all" ? "queue" : label(competitorFilter) + " scope"}${selectionDeferredCaseCount ? ` within the ${aiPolicy.max_batch_cases.toLocaleString()}-case governed run limit; ${selectionDeferredCaseCount.toLocaleString()} additional eligible cases will remain for a subsequent run` : ""}. `
-                      : selectionScope === "product-evidence"
-                        ? `This is a deterministic minimum-coverage scope: ${selectedCaseIds.length.toLocaleString()} pair cases cover ${selectionProductEvidenceCount.toLocaleString()} distinct products that currently lack governed hard-attribute evidence. Verified product evidence will be reused across every applicable case in this immutable queue; ${selectionDeferredCaseCount.toLocaleString()} other pair cases are intentionally deferred. `
-                        : "This is the explicitly selected page scope. "}
-                    Model: {aiPolicy.model_id}. The configured per-request
-                    ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)} per
-                    case, so the worst-case policy exposure for this run is $
-                    {selectedMaximumCost.toFixed(2)}. Actual usage is recorded
-                    per case. Human review is still required for every decision.
-                  </p>
-                </div>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setBatchConfirmOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="button primary"
-                  type="button"
-                  disabled={busy}
-                  aria-busy={busy}
-                  onClick={() => void requestSelectedAIReviews()}
-                >
-                  {busy ? "Queueing…" : "Confirm advisory review"}
-                </button>
-              </div>
-            ) : null}
-            {retryConfirmationPlacement === "batch" &&
-            retryConfirmCaseIds.length ? (
-              <div
-                className="cert-ai-batch-confirm cert-ai-retry-confirm"
-                role="alert"
-              >
-                <div>
-                  <strong>
-                    Retry {retryConfirmCaseIds.length} terminal AI failure
-                    {retryConfirmCaseIds.length === 1 ? "" : "s"}?
-                  </strong>
-                  <p>
-                    This creates new linked tasks; it does not reset or erase
-                    prior attempts. Model: {aiPolicy.model_id}. Maximum new
-                    policy exposure: ${retryMaximumCost.toFixed(2)}. Each new
-                    task still requires a human decision.
-                  </p>
-                </div>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setRetryConfirmCaseIds([]);
-                    setRetryConfirmationPlacement(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="button primary"
-                  type="button"
-                  disabled={busy}
-                  aria-busy={busy}
-                  onClick={() => void requestAIRetries()}
-                >
-                  {busy ? "Queueing…" : "Confirm governed retry"}
-                </button>
-              </div>
-            ) : null}
-          </section>
 
-          <div className="cert-case-list">
-            {view.cases.map((reviewCase) => (
-              <article
-                className="cert-case cert-case-compact"
-                key={reviewCase.case_id}
+                  {attributeEvidenceView.selected_proposal_count > PAGE_SIZE ? (
+                    <nav
+                      className="cert-pagination"
+                      aria-label="Attribute evidence proposal pages"
+                    >
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={attributeOffset === 0 || attributeLoading}
+                        onClick={() =>
+                          setAttributeOffset((current) =>
+                            Math.max(0, current - PAGE_SIZE),
+                          )
+                        }
+                      >
+                        Previous proposals
+                      </button>
+                      <span>
+                        {attributeOffset + 1}–
+                        {Math.min(
+                          attributeOffset + PAGE_SIZE,
+                          attributeEvidenceView.selected_proposal_count,
+                        )}{" "}
+                        of{" "}
+                        {attributeEvidenceView.selected_proposal_count.toLocaleString()}
+                      </span>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={
+                          attributeLoading ||
+                          attributeOffset + PAGE_SIZE >=
+                            attributeEvidenceView.selected_proposal_count
+                        }
+                        onClick={() =>
+                          setAttributeOffset((current) => current + PAGE_SIZE)
+                        }
+                      >
+                        Next proposals
+                      </button>
+                    </nav>
+                  ) : null}
+                </>
+              ) : (
+                <div className="builder-loading" role="status">
+                  Loading governed evidence proposals…
+                </div>
+              )}
+            </section>
+          ) : (
+            <>
+              <form className="cert-replay" onSubmit={createGovernedReplay}>
+                <div>
+                  <small>Immutable reporting release</small>
+                  <h3>Create governed replay</h3>
+                  <p>
+                    Bind the current certified gold set to its source analysis
+                    and queue a new report. The existing publication remains
+                    unchanged for audit, unresolved cases stay excluded, and
+                    this action does not collect data or call AI.
+                  </p>
+                </div>
+                <label>
+                  <span>Source analysis ID</span>
+                  <input
+                    value={replaySourceAnalysisId}
+                    onChange={(event) => {
+                      setReplaySourceAnalysisId(event.target.value);
+                      setReplayResult(null);
+                      if (event.target.value.trim()) setError(null);
+                    }}
+                    placeholder="source-analysis-id"
+                    autoComplete="off"
+                  />
+                  <small>
+                    Use the analysis ID before any -match-v2 suffix.
+                  </small>
+                </label>
+                <button
+                  className="button primary"
+                  type="submit"
+                  disabled={
+                    busy || queueQuarantined || !replaySourceAnalysisId.trim()
+                  }
+                >
+                  {busy ? "Creating replay…" : "Create governed replay"}
+                </button>
+                {replayResult ? (
+                  <dl className="cert-replay-result">
+                    <div>
+                      <dt>Analysis run</dt>
+                      <dd>{replayResult.analysis_run_id}</dd>
+                    </div>
+                    <div>
+                      <dt>Certified</dt>
+                      <dd>
+                        {replayResult.coverage.certified_count.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Unresolved</dt>
+                      <dd>
+                        {replayResult.coverage.unresolved_count.toLocaleString()}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : null}
+              </form>
+
+              <section
+                className="cert-ai-batch"
+                aria-labelledby="cert-ai-batch-title"
               >
-                <label className="cert-case-select">
+                <div>
+                  <small>Bounded evidence assistance</small>
+                  <h3 id="cert-ai-batch-title">
+                    AI review drafts for selected cases
+                  </h3>
+                  <p>
+                    Select cases on this page or prepare every eligible
+                    candidate in the current queue and competitor filter, up to
+                    the governed {aiPolicy.max_batch_cases.toLocaleString()}
+                    -case run limit. Drafts remain advisory, cannot certify a
+                    match, and use product images only when critical structured
+                    evidence is incomplete or conflicting.
+                  </p>
+                </div>
+                <label className="cert-ai-select-all">
                   <input
                     type="checkbox"
-                    aria-label={`Select ${reviewCase.benchmark_listing.title ?? reviewCase.benchmark_listing.retailer_product_id} versus ${reviewCase.competitor_listing.title ?? reviewCase.competitor_listing.retailer_product_id} for AI evidence review`}
-                    checked={selectedCaseIds.includes(reviewCase.case_id)}
+                    checked={pageSelectionComplete}
                     disabled={
+                      queueQuarantined ||
                       !aiPolicy.enabled ||
-                      !["pending", "flagged"].includes(
-                        reviewCase.review_status,
-                      ) ||
-                      Boolean(reviewCase.ai_draft)
+                      !eligibleCases.length ||
+                      pageSelectionCapacity === 0
                     }
                     onChange={(event) => {
+                      const pageCaseIds = eligibleCases.map(
+                        (reviewCase) => reviewCase.case_id,
+                      );
                       setSelectedCaseIds((current) =>
                         event.target.checked
-                          ? current.length < aiPolicy.max_batch_cases
-                            ? [...current, reviewCase.case_id]
-                            : current
+                          ? [...new Set([...current, ...pageCaseIds])].slice(
+                              0,
+                              aiPolicy.max_batch_cases,
+                            )
                           : current.filter(
-                              (caseId) => caseId !== reviewCase.case_id,
+                              (caseId) => !pageCaseIds.includes(caseId),
                             ),
                       );
                       setSelectionScope("manual");
@@ -2216,747 +2298,1335 @@ export function MatchingV2ReviewAdmin({
                     }}
                   />
                   <span>
-                    {reviewCase.ai_draft
-                      ? aiDraftStatusLabel(reviewCase.ai_draft.status)
-                      : ["approved", "rejected"].includes(
-                            reviewCase.review_status,
-                          )
-                        ? "Finalized"
-                        : "Select for AI"}
+                    Select eligible cases on this page
+                    <small>
+                      {eligibleCases.length.toLocaleString()} without an
+                      existing draft or final decision; up to{" "}
+                      {pageSelectionCapacity.toLocaleString()} fit in the
+                      current batch
+                    </small>
                   </span>
                 </label>
-                <div className="cert-case-products">
-                  <ProductIdentity listing={reviewCase.benchmark_listing} />
-                  <span className="cert-pair-mark">versus</span>
-                  <ProductIdentity listing={reviewCase.competitor_listing} />
-                </div>
-                <div className="cert-case-meta">
-                  <span className={`cert-status ${reviewCase.review_status}`}>
-                    {label(reviewCase.review_status)}
+                <div className="cert-ai-batch-actions">
+                  <span>
+                    <strong>{selectedCaseIds.length}</strong> selected
+                    {selectedCaseIds.length ? (
+                      <>
+                        <small>
+                          Maximum policy exposure: $
+                          {selectedMaximumCost.toFixed(2)}
+                        </small>
+                        {!reviewerId.trim() ? (
+                          <small className="cert-ai-requirement" role="status">
+                            Enter your reviewer identity above to continue.
+                          </small>
+                        ) : null}
+                      </>
+                    ) : null}
                   </span>
-                  <strong>{label(reviewCase.engine_proposal.tier)}</strong>
-                  <small>
-                    {Math.round(
-                      reviewCase.engine_proposal.evidence_coverage
-                        .critical_coverage * 100,
-                    )}
-                    % critical evidence
-                  </small>
-                  {reviewCase.certification_blockers?.length ? (
-                    <span className="cert-package-blocked">
-                      {reviewCase.certification_blockers.some(
-                        (issue) => issue.attribute === "volume_oz",
-                      )
-                        ? "Package size blocked"
-                        : "Compatibility blocked"}
-                    </span>
-                  ) : null}
-                </div>
-                <button
-                  className="button secondary"
-                  type="button"
-                  onClick={() => setActiveCaseId(reviewCase.case_id)}
-                >
-                  {["approved", "rejected"].includes(reviewCase.review_status)
-                    ? "View decision"
-                    : "Review evidence"}
-                </button>
-              </article>
-            ))}
-            {view.cases.length === 0 ? (
-              <section className="cert-empty">
-                <h2>No cases match this status</h2>
-                <p>Select another queue status or import a new review queue.</p>
-              </section>
-            ) : null}
-          </div>
-          {view.selected_case_count > PAGE_SIZE ? (
-            <nav className="cert-pagination" aria-label="Review queue pages">
-              <button
-                className="button secondary"
-                type="button"
-                disabled={busy || offset === 0}
-                onClick={() => {
-                  setOffset((current) => Math.max(0, current - PAGE_SIZE));
-                  setBatchConfirmOpen(false);
-                }}
-              >
-                Previous cases
-              </button>
-              <span>
-                {offset + 1}–
-                {Math.min(offset + PAGE_SIZE, view.selected_case_count)} of{" "}
-                {view.selected_case_count.toLocaleString()}
-              </span>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={
-                  busy || offset + PAGE_SIZE >= view.selected_case_count
-                }
-                onClick={() => {
-                  setOffset((current) => current + PAGE_SIZE);
-                  setBatchConfirmOpen(false);
-                }}
-              >
-                Next cases
-              </button>
-            </nav>
-          ) : null}
-          {activeCase ? (
-            <div
-              className="cert-drawer-backdrop"
-              role="presentation"
-              onMouseDown={(event) => {
-                if (event.target === event.currentTarget) closeEvidenceDrawer();
-              }}
-            >
-              <aside
-                className="cert-drawer"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="cert-drawer-title"
-              >
-                <header className="cert-drawer-header">
-                  <div>
-                    <small>{label(activeCase.stratum)}</small>
-                    <h2 id="cert-drawer-title">Match evidence review</h2>
-                    <p>
-                      Engine suggestion:{" "}
-                      {label(activeCase.engine_proposal.tier)}. The reviewer
-                      makes the final human decision.
-                    </p>
-                  </div>
                   <button
                     className="button secondary"
                     type="button"
-                    onClick={closeEvidenceDrawer}
-                    aria-label="Close evidence drawer"
+                    disabled={
+                      busy ||
+                      queueQuarantined ||
+                      !aiPolicy.enabled ||
+                      !selectedCaseIds.length
+                    }
+                    aria-busy={busy}
+                    onClick={openBatchConfirmation}
                   >
-                    Close
+                    {selectedCaseIds.length
+                      ? `Review ${selectedCaseIds.length} selected with AI`
+                      : "Review selected with AI"}
                   </button>
-                </header>
-                <div className="cert-drawer-body">
-                  <div className="cert-product-pair">
-                    <ProductIdentity listing={activeCase.benchmark_listing} />
-                    <span className="cert-pair-mark">compared with</span>
-                    <ProductIdentity listing={activeCase.competitor_listing} />
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={
+                      busy ||
+                      queueQuarantined ||
+                      !aiPolicy.enabled ||
+                      aiPolicy.queue_wide_selection !== true
+                    }
+                    aria-busy={busy}
+                    onClick={() =>
+                      void openQueueWideAIReviewConfirmation(
+                        "product_evidence_coverage",
+                      )
+                    }
+                  >
+                    {aiPolicy.queue_wide_selection !== true
+                      ? "Product-evidence review unavailable"
+                      : busy
+                        ? "Assessing product evidence…"
+                        : "Review distinct product evidence"}
+                  </button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={
+                      busy ||
+                      queueQuarantined ||
+                      !aiPolicy.enabled ||
+                      aiPolicy.queue_wide_selection !== true
+                    }
+                    aria-busy={busy}
+                    onClick={() =>
+                      void openQueueWideAIReviewConfirmation("all_cases")
+                    }
+                  >
+                    {aiPolicy.queue_wide_selection !== true
+                      ? "Queue-wide review unavailable"
+                      : busy
+                        ? "Assessing eligible queue…"
+                        : competitorFilter === "all"
+                          ? "Review all eligible with AI"
+                          : `Review all eligible ${label(competitorFilter)} cases`}
+                  </button>
+                </div>
+                <div className="cert-ai-status-summary" aria-live="polite">
+                  <div className="cert-ai-status-counts">
+                    <span className="queued">
+                      <i aria-hidden="true" />
+                      <strong>{aiDraftStatusCounts.queued}</strong> queued
+                    </span>
+                    <span className="running">
+                      <i aria-hidden="true" />
+                      <strong>{aiDraftStatusCounts.running}</strong> reviewing
+                    </span>
+                    <span className="succeeded">
+                      <i aria-hidden="true" />
+                      <strong>{aiDraftStatusCounts.succeeded}</strong> drafts
+                      ready
+                    </span>
+                    <span className="needs-review">
+                      <i aria-hidden="true" />
+                      <strong>{aiDraftStatusCounts.needs_review}</strong> needs
+                      attention
+                    </span>
                   </div>
-                  <p className="cert-engine-reason">
-                    <b>Why the engine surfaced this pair:</b>{" "}
-                    {activeCase.engine_proposal.decision_reason}
-                  </p>
-                  <section className="cert-ai-draft">
-                    <header>
+                  {latestAIBatch ? (
+                    <div className="cert-ai-progress-panel">
                       <div>
-                        <small>Advisory evidence assistant</small>
-                        <h3>AI draft review</h3>
+                        <strong>
+                          Latest batch · {latestAIBatch.completed_count} of{" "}
+                          {latestAIBatch.task_count} reached a terminal state
+                        </strong>
+                        <span>
+                          Submitted{" "}
+                          {formatTimestamp(latestAIBatch.submitted_at)} by{" "}
+                          {latestAIBatch.requested_by}
+                        </span>
+                      </div>
+                      <div
+                        className="cert-ai-progress-track"
+                        role="progressbar"
+                        aria-label="Latest AI review batch progress"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={latestAIBatch.progress_percent}
+                      >
+                        <span
+                          style={{
+                            width: `${latestAIBatch.progress_percent}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="cert-ai-batch-meta">
+                        <span>
+                          {latestAIBatch.succeeded} drafts ready ·{" "}
+                          {latestAIBatch.needs_review} failed
+                        </span>
+                        <span>
+                          {latestAIBatch.completed_at
+                            ? `Finished ${formatTimestamp(latestAIBatch.completed_at)}`
+                            : `Estimated remaining: ${formatDuration(latestAIBatch.estimated_seconds_remaining)}`}
+                        </span>
+                        <span>
+                          Recorded cost $
+                          {latestAIBatch.estimated_cost_usd.toFixed(4)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>No AI review batches are recorded for this queue yet.</p>
+                  )}
+                  <p>
+                    {hasRunningAIDrafts
+                      ? "Queue-wide status refreshes automatically while AI work is queued or running."
+                      : visibleAIDraftCount
+                        ? "Queue-wide status is current. Open Review evidence on a ready case to make the final human decision."
+                        : "No AI drafts are recorded for this queue yet."}
+                  </p>
+                  <div className="cert-ai-status-actions">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={
+                        busy ||
+                        queueQuarantined ||
+                        !aiPolicy.enabled ||
+                        !retryableCases.length
+                      }
+                      onClick={() =>
+                        openRetryConfirmation(
+                          retryableCases
+                            .slice(0, aiPolicy.max_batch_cases)
+                            .map((reviewCase) => reviewCase.case_id),
+                          "batch",
+                        )
+                      }
+                    >
+                      {retryableCases.length
+                        ? `Retry ${Math.min(retryableCases.length, aiPolicy.max_batch_cases)} needs-attention ${retryableCases.length === 1 ? "item" : "items"}`
+                        : "No retryable failures"}
+                    </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={refreshingAI}
+                      aria-busy={refreshingAI}
+                      onClick={() => void refreshAIStatus()}
+                    >
+                      {refreshingAI ? "Refreshing…" : "Refresh AI status"}
+                    </button>
+                  </div>
+                </div>
+                <section
+                  className="cert-bulk-certification"
+                  aria-labelledby="cert-bulk-certification-title"
+                >
+                  <header>
+                    <div>
+                      <small>Guarded human certification</small>
+                      <h3 id="cert-bulk-certification-title">
+                        Bulk accept AI certification recommendations
+                      </h3>
+                      <p>
+                        The app finds completed comparable and not-comparable AI
+                        recommendations across the pending queue and current
+                        retailer filter, then the server prepares up to 50 at a
+                        time. Insufficient-evidence proposals and true
+                        eligibility failures stay blocked; evidence and
+                        confidence concerns are shown as warnings for your
+                        explicit decision.
+                      </p>
+                    </div>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={
+                        busy ||
+                        queueQuarantined ||
+                        !aiDraftStatusCounts.succeeded
+                      }
+                      aria-busy={busy}
+                      onClick={() => void assessBulkAIRecommendations()}
+                    >
+                      {busy
+                        ? "Assessing…"
+                        : "Assess queue-wide recommendations"}
+                    </button>
+                  </header>
+                  <div
+                    className="cert-bulk-guardrails"
+                    aria-label="Bulk acceptance guardrails"
+                  >
+                    <span>Comparable or not comparable</span>
+                    <span>Valid governed draft</span>
+                    <span>No known third-party seller</span>
+                    <span>Immutable source evidence</span>
+                    <span>Administrator confirmation</span>
+                  </div>
+                  <p className="cert-bulk-boundary">
+                    Engine disagreement, incomplete deterministic evidence, AI
+                    conflicts, and confidence limits remain visible as advisory
+                    warnings. Your explicit bulk approval accepts each displayed
+                    AI recommendation, is recorded under your reviewer identity,
+                    is final until flagged, and does not trigger reanalysis
+                    automatically.
+                  </p>
+                  {bulkCertificationPreview ? (
+                    <div
+                      className="cert-bulk-preview"
+                      role="region"
+                      aria-label="Bulk certification preview"
+                    >
+                      <header>
+                        <div>
+                          <small>Checksum-bound preview</small>
+                          <h4>
+                            {bulkCertificationPreview.eligible_case_count}{" "}
+                            eligible
+                            {bulkCertificationPreview.excluded_case_count
+                              ? ` · ${bulkCertificationPreview.excluded_case_count} excluded`
+                              : " · no exclusions"}
+                          </h4>
+                        </div>
+                        <code>
+                          Policy {bulkCertificationPreview.policy.id} v
+                          {bulkCertificationPreview.policy.version}
+                        </code>
+                      </header>
+                      {bulkCertificationPreview.eligible_cases.length ? (
+                        <div className="cert-bulk-candidate-list">
+                          {bulkCertificationPreview.eligible_cases.map(
+                            (candidate) => (
+                              <article key={candidate.case_id}>
+                                <div className="cert-bulk-pair">
+                                  <BulkProductIdentity
+                                    product={candidate.benchmark_product}
+                                  />
+                                  <span>
+                                    {bulkCandidateVerdict(candidate) ===
+                                    "comparable"
+                                      ? "matches"
+                                      : "is not comparable with"}
+                                  </span>
+                                  <BulkProductIdentity
+                                    product={candidate.competitor_product}
+                                  />
+                                </div>
+                                <div className="cert-bulk-evidence-summary">
+                                  <strong>
+                                    {bulkCandidateVerdict(candidate) ===
+                                    "comparable"
+                                      ? label(candidate.recommended_tier)
+                                      : "Not comparable"}
+                                  </strong>
+                                  <span>
+                                    {Math.round(
+                                      candidate.critical_coverage * 100,
+                                    )}
+                                    % critical evidence ·{" "}
+                                    {label(candidate.engine_status)}
+                                  </span>
+                                  {bulkCandidateVerdict(candidate) ===
+                                  "comparable" ? (
+                                    <span>
+                                      Price comparison:{" "}
+                                      {(
+                                        candidate.recommended_comparison_bases ??
+                                        []
+                                      )
+                                        .map(label)
+                                        .join(" + ")}
+                                    </span>
+                                  ) : null}
+                                  <p>{candidate.ai_rationale}</p>
+                                  {candidate.warnings.length ? (
+                                    <ul className="cert-bulk-warnings">
+                                      {candidate.warnings.map((warning) => (
+                                        <li key={warning}>{warning}</li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                </div>
+                              </article>
+                            ),
+                          )}
+                        </div>
+                      ) : (
+                        <p className="cert-bulk-empty">
+                          No AI recommendation passed the required certification
+                          gates. Review the blocking exclusions before
+                          proceeding.
+                        </p>
+                      )}
+                      {bulkCertificationPreview.exclusion_summary.length ? (
+                        <details className="cert-bulk-exclusions">
+                          <summary>
+                            Why {bulkCertificationPreview.excluded_case_count}{" "}
+                            {bulkCertificationPreview.excluded_case_count === 1
+                              ? "case was"
+                              : "cases were"}{" "}
+                            excluded
+                          </summary>
+                          <ul>
+                            {bulkCertificationPreview.exclusion_summary.map(
+                              (reason) => (
+                                <li key={reason.reason_code}>
+                                  <b>{reason.case_count}</b> {reason.reason}
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </details>
+                      ) : null}
+                      {bulkCertificationPreview.warning_summary.length ? (
+                        <details className="cert-bulk-exclusions" open>
+                          <summary>
+                            Advisory warnings on accepted recommendations
+                          </summary>
+                          <ul>
+                            {bulkCertificationPreview.warning_summary.map(
+                              (warning) => (
+                                <li key={warning.warning_code}>
+                                  <b>{warning.case_count}</b> {warning.warning}
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </details>
+                      ) : null}
+                      <footer>
                         <p>
-                          The draft can inspect incomplete label evidence, but
-                          it cannot approve a relationship or alter reporting.
+                          <b>Human confirmation required.</b> You are accepting
+                          each displayed comparable or not-comparable
+                          outcome—not delegating the decision to AI. The
+                          complete AI evidence rationale is copied into each
+                          final reviewer comment for auditability.
+                        </p>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setBulkCertificationPreview(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="button primary"
+                          type="button"
+                          disabled={
+                            busy ||
+                            !bulkCertificationPreview.eligible_case_count ||
+                            !bulkCertificationPreview.confirmation_checksum
+                          }
+                          aria-busy={busy}
+                          onClick={() => void commitBulkAIRecommendations()}
+                        >
+                          {busy
+                            ? "Finalizing…"
+                            : `Finalize ${bulkCertificationPreview.eligible_case_count} ${bulkCertificationPreview.eligible_case_count === 1 ? "recommendation" : "recommendations"}`}
+                        </button>
+                      </footer>
+                    </div>
+                  ) : null}
+                </section>
+                {!aiPolicy.enabled ? (
+                  <p className="cert-ai-policy-note">
+                    The advisory worker is not enabled in this environment.
+                    Human certification remains available.
+                  </p>
+                ) : null}
+                {batchConfirmOpen ? (
+                  <div className="cert-ai-batch-confirm" role="alert">
+                    <div>
+                      <strong>
+                        Queue {selectedCaseIds.length.toLocaleString()} advisory
+                        drafts?
+                      </strong>
+                      <p>
+                        {selectionScope === "queue-wide"
+                          ? `This is the complete currently eligible ${competitorFilter === "all" ? "queue" : label(competitorFilter) + " scope"}${selectionDeferredCaseCount ? ` within the ${aiPolicy.max_batch_cases.toLocaleString()}-case governed run limit; ${selectionDeferredCaseCount.toLocaleString()} additional eligible cases will remain for a subsequent run` : ""}. `
+                          : selectionScope === "product-evidence"
+                            ? `This is a deterministic minimum-coverage scope: ${selectedCaseIds.length.toLocaleString()} pair cases cover ${selectionProductEvidenceCount.toLocaleString()} distinct products that currently lack governed hard-attribute evidence. Verified product evidence will be reused across every applicable case in this immutable queue; ${selectionDeferredCaseCount.toLocaleString()} other pair cases are intentionally deferred. `
+                            : "This is the explicitly selected page scope. "}
+                        Model: {aiPolicy.model_id}. The configured per-request
+                        ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)}{" "}
+                        per case, so the worst-case policy exposure for this run
+                        is ${selectedMaximumCost.toFixed(2)}. Actual usage is
+                        recorded per case. Human review is still required for
+                        every decision.
+                      </p>
+                    </div>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setBatchConfirmOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={busy}
+                      aria-busy={busy}
+                      onClick={() => void requestSelectedAIReviews()}
+                    >
+                      {busy ? "Queueing…" : "Confirm advisory review"}
+                    </button>
+                  </div>
+                ) : null}
+                {retryConfirmationPlacement === "batch" &&
+                retryConfirmCaseIds.length ? (
+                  <div
+                    className="cert-ai-batch-confirm cert-ai-retry-confirm"
+                    role="alert"
+                  >
+                    <div>
+                      <strong>
+                        Retry {retryConfirmCaseIds.length} terminal AI failure
+                        {retryConfirmCaseIds.length === 1 ? "" : "s"}?
+                      </strong>
+                      <p>
+                        This creates new linked tasks; it does not reset or
+                        erase prior attempts. Model: {aiPolicy.model_id}.
+                        Maximum new policy exposure: $
+                        {retryMaximumCost.toFixed(2)}. Each new task still
+                        requires a human decision.
+                      </p>
+                    </div>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setRetryConfirmCaseIds([]);
+                        setRetryConfirmationPlacement(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={busy}
+                      aria-busy={busy}
+                      onClick={() => void requestAIRetries()}
+                    >
+                      {busy ? "Queueing…" : "Confirm governed retry"}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+
+              <div className="cert-case-list">
+                {view.cases.map((reviewCase) => (
+                  <article
+                    className="cert-case cert-case-compact"
+                    key={reviewCase.case_id}
+                  >
+                    <label className="cert-case-select">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${reviewCase.benchmark_listing.title ?? reviewCase.benchmark_listing.retailer_product_id} versus ${reviewCase.competitor_listing.title ?? reviewCase.competitor_listing.retailer_product_id} for AI evidence review`}
+                        checked={selectedCaseIds.includes(reviewCase.case_id)}
+                        disabled={
+                          !aiPolicy.enabled ||
+                          !["pending", "flagged"].includes(
+                            reviewCase.review_status,
+                          ) ||
+                          Boolean(reviewCase.ai_draft)
+                        }
+                        onChange={(event) => {
+                          setSelectedCaseIds((current) =>
+                            event.target.checked
+                              ? current.length < aiPolicy.max_batch_cases
+                                ? [...current, reviewCase.case_id]
+                                : current
+                              : current.filter(
+                                  (caseId) => caseId !== reviewCase.case_id,
+                                ),
+                          );
+                          setSelectionScope("manual");
+                          setSelectionDeferredCaseCount(0);
+                          setBatchConfirmOpen(false);
+                        }}
+                      />
+                      <span>
+                        {reviewCase.ai_draft
+                          ? aiDraftStatusLabel(reviewCase.ai_draft.status)
+                          : ["approved", "rejected"].includes(
+                                reviewCase.review_status,
+                              )
+                            ? "Finalized"
+                            : "Select for AI"}
+                      </span>
+                    </label>
+                    <div className="cert-case-products">
+                      <ProductIdentity listing={reviewCase.benchmark_listing} />
+                      <span className="cert-pair-mark">versus</span>
+                      <ProductIdentity
+                        listing={reviewCase.competitor_listing}
+                      />
+                    </div>
+                    <div className="cert-case-meta">
+                      <span
+                        className={`cert-status ${reviewCase.review_status}`}
+                      >
+                        {label(reviewCase.review_status)}
+                      </span>
+                      <strong>{label(reviewCase.engine_proposal.tier)}</strong>
+                      <small>
+                        {Math.round(
+                          reviewCase.engine_proposal.evidence_coverage
+                            .critical_coverage * 100,
+                        )}
+                        % critical evidence
+                      </small>
+                      {reviewCase.certification_blockers?.length ? (
+                        <span className="cert-package-blocked">
+                          {reviewCase.certification_blockers.some(
+                            (issue) => issue.attribute === "volume_oz",
+                          )
+                            ? "Package size blocked"
+                            : "Compatibility blocked"}
+                        </span>
+                      ) : null}
+                    </div>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => setActiveCaseId(reviewCase.case_id)}
+                    >
+                      {["approved", "rejected"].includes(
+                        reviewCase.review_status,
+                      )
+                        ? "View decision"
+                        : "Review evidence"}
+                    </button>
+                  </article>
+                ))}
+                {view.cases.length === 0 ? (
+                  <section className="cert-empty">
+                    <h2>No cases match this status</h2>
+                    <p>
+                      Select another queue status or import a new review queue.
+                    </p>
+                  </section>
+                ) : null}
+              </div>
+              {view.selected_case_count > PAGE_SIZE ? (
+                <nav
+                  className="cert-pagination"
+                  aria-label="Review queue pages"
+                >
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={busy || offset === 0}
+                    onClick={() => {
+                      setOffset((current) => Math.max(0, current - PAGE_SIZE));
+                      setBatchConfirmOpen(false);
+                    }}
+                  >
+                    Previous cases
+                  </button>
+                  <span>
+                    {offset + 1}–
+                    {Math.min(offset + PAGE_SIZE, view.selected_case_count)} of{" "}
+                    {view.selected_case_count.toLocaleString()}
+                  </span>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={
+                      busy || offset + PAGE_SIZE >= view.selected_case_count
+                    }
+                    onClick={() => {
+                      setOffset((current) => current + PAGE_SIZE);
+                      setBatchConfirmOpen(false);
+                    }}
+                  >
+                    Next cases
+                  </button>
+                </nav>
+              ) : null}
+              {activeCase ? (
+                <div
+                  className="cert-drawer-backdrop"
+                  role="presentation"
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget)
+                      closeEvidenceDrawer();
+                  }}
+                >
+                  <aside
+                    className="cert-drawer"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="cert-drawer-title"
+                  >
+                    <header className="cert-drawer-header">
+                      <div>
+                        <small>{label(activeCase.stratum)}</small>
+                        <h2 id="cert-drawer-title">Match evidence review</h2>
+                        <p>
+                          Engine suggestion:{" "}
+                          {label(activeCase.engine_proposal.tier)}. The reviewer
+                          makes the final human decision.
                         </p>
                       </div>
                       <button
                         className="button secondary"
                         type="button"
-                        disabled={
-                          busy ||
-                          ["approved", "rejected"].includes(
-                            activeCase.review_status,
-                          ) ||
-                          Boolean(activeCase.ai_draft)
-                        }
-                        onClick={() => void requestAIReview(activeCase)}
+                        onClick={closeEvidenceDrawer}
+                        aria-label="Close evidence drawer"
                       >
-                        {activeCase.ai_draft
-                          ? `AI ${label(activeCase.ai_draft.status)}`
-                          : ["approved", "rejected"].includes(
-                                activeCase.review_status,
-                              )
-                            ? "Decision finalized"
-                            : "Run AI evidence review"}
+                        Close
                       </button>
                     </header>
-                    {activeCase.ai_draft ? (
-                      <div className="cert-ai-result">
-                        <span
-                          className={`cert-status ${activeCase.ai_draft.status}`}
-                        >
-                          {label(activeCase.ai_draft.status)}
-                        </span>
-                        <small>{activeCase.ai_draft.model_id}</small>
-                        {(activeCase.ai_draft.retry_sequence ?? 0) > 0 ? (
-                          <small>
-                            Manual retry round{" "}
-                            {activeCase.ai_draft.retry_sequence}
-                            {" of "}
-                            {aiPolicy.max_retry_rounds} · Prior task preserved
-                          </small>
-                        ) : null}
-                        {activeCase.ai_draft.output_document?.result ? (
-                          <>
-                            <strong>
-                              Proposed:{" "}
-                              {label(
-                                activeCase.ai_draft.output_document.result
-                                  .verdict_proposal,
-                              )}
-                              {activeCase.ai_draft.output_document.result
-                                .tier_proposal
-                                ? ` · ${label(activeCase.ai_draft.output_document.result.tier_proposal)}`
-                                : ""}
-                            </strong>
-                            {activeCase.ai_draft.output_document.result
-                              .comparison_basis_proposal?.length ? (
-                              <small>
-                                Price comparison:{" "}
-                                {activeCase.ai_draft.output_document.result.comparison_basis_proposal
-                                  .map(label)
-                                  .join(" + ")}
-                              </small>
-                            ) : null}
+                    <div className="cert-drawer-body">
+                      <div className="cert-product-pair">
+                        <ProductIdentity
+                          listing={activeCase.benchmark_listing}
+                        />
+                        <span className="cert-pair-mark">compared with</span>
+                        <ProductIdentity
+                          listing={activeCase.competitor_listing}
+                        />
+                      </div>
+                      <p className="cert-engine-reason">
+                        <b>Why the engine surfaced this pair:</b>{" "}
+                        {activeCase.engine_proposal.decision_reason}
+                      </p>
+                      <section className="cert-ai-draft">
+                        <header>
+                          <div>
+                            <small>Advisory evidence assistant</small>
+                            <h3>AI draft review</h3>
                             <p>
-                              {
-                                activeCase.ai_draft.output_document.result
-                                  .rationale
-                              }
+                              The draft can inspect incomplete label evidence,
+                              but it cannot approve a relationship or alter
+                              reporting.
                             </p>
-                            {activeCase.ai_draft.output_document.result
-                              .conflicts.length ? (
-                              <ul>
-                                {activeCase.ai_draft.output_document.result.conflicts.map(
-                                  (conflict) => (
-                                    <li key={conflict}>{conflict}</li>
-                                  ),
-                                )}
-                              </ul>
-                            ) : null}
-                            {activeCase.attribute_evidence_reconciliation
-                              ?.proposals.length ? (
-                              <details className="cert-reconciliation" open>
-                                <summary>
-                                  Reconcile cited label attributes before
-                                  certification
-                                </summary>
-                                <p>
-                                  AI proposals are advisory. Only eligible image
-                                  evidence that you explicitly verify is applied
-                                  to the derived certification view; source PDP
-                                  and queue records remain immutable.
-                                </p>
-                                <div className="cert-reconciliation-list">
-                                  {activeCase.attribute_evidence_reconciliation.proposals.map(
-                                    (proposal) => (
-                                      <article key={proposal.proposal_checksum}>
-                                        <header>
-                                          <div>
-                                            <strong>
-                                              {label(proposal.attribute)}
-                                            </strong>
-                                            <small>
-                                              {proposal.listing_role
-                                                ? `${label(proposal.listing_role)} product`
-                                                : "Listing unresolved"}
-                                              {" · "}
-                                              {Math.round(
-                                                proposal.confidence * 100,
-                                              )}
-                                              % confidence
-                                            </small>
-                                          </div>
-                                          <span
-                                            className={`cert-evidence-decision ${proposal.decision?.decision ?? (proposal.eligible ? "pending" : "ineligible")}`}
-                                          >
-                                            {proposal.decision
-                                              ? label(
-                                                  proposal.decision.decision,
-                                                )
-                                              : proposal.eligible
-                                                ? "Awaiting verification"
-                                                : "Not eligible"}
-                                          </span>
-                                        </header>
-                                        <dl>
-                                          <div>
-                                            <dt>Proposed value</dt>
-                                            <dd>
-                                              {evidenceValue(
-                                                proposal.normalized_value,
-                                              )}
-                                            </dd>
-                                          </div>
-                                          <div>
-                                            <dt>Visible label text</dt>
-                                            <dd>
-                                              {proposal.visible_text ??
-                                                "Not supplied"}
-                                            </dd>
-                                          </div>
-                                        </dl>
-                                        {proposal.source_image_url ? (
-                                          <a
-                                            href={proposal.source_image_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                          >
-                                            Open the exact cited product image
-                                          </a>
-                                        ) : null}
-                                        {!proposal.eligible ? (
-                                          <small>
-                                            Not eligible:{" "}
-                                            {proposal.ineligibility_reasons
-                                              .map(label)
-                                              .join("; ")}
-                                          </small>
-                                        ) : (
-                                          <>
-                                            <label>
-                                              <span>Verification note</span>
-                                              <textarea
-                                                value={
-                                                  evidenceRationales[
-                                                    proposal.proposal_checksum
-                                                  ] ??
-                                                  proposal.decision
-                                                    ?.rationale ??
-                                                  ""
-                                                }
-                                                onChange={(event) =>
-                                                  setEvidenceRationales(
-                                                    (current) => ({
-                                                      ...current,
-                                                      [proposal.proposal_checksum]:
-                                                        event.target.value,
-                                                    }),
-                                                  )
-                                                }
-                                                placeholder="State what the cited label visibly proves or why it is unreliable."
-                                              />
-                                            </label>
-                                            <div className="cert-reconciliation-actions">
-                                              <button
-                                                className="button secondary"
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() =>
-                                                  void decideAttributeEvidence(
-                                                    activeCase,
-                                                    proposal,
-                                                    "rejected",
-                                                  )
-                                                }
-                                              >
-                                                Reject evidence
-                                              </button>
-                                              <button
-                                                className="button"
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() =>
-                                                  void decideAttributeEvidence(
-                                                    activeCase,
-                                                    proposal,
-                                                    "verified",
-                                                  )
-                                                }
-                                              >
-                                                Verify & apply
-                                              </button>
-                                            </div>
-                                          </>
-                                        )}
-                                      </article>
-                                    ),
-                                  )}
-                                </div>
-                              </details>
-                            ) : null}
-                            <button
-                              className="button secondary"
-                              type="button"
-                              onClick={() => adoptAIProposal(activeCase)}
+                          </div>
+                          <button
+                            className="button secondary"
+                            type="button"
+                            disabled={
+                              busy ||
+                              ["approved", "rejected"].includes(
+                                activeCase.review_status,
+                              ) ||
+                              Boolean(activeCase.ai_draft)
+                            }
+                            onClick={() => void requestAIReview(activeCase)}
+                          >
+                            {activeCase.ai_draft
+                              ? `AI ${label(activeCase.ai_draft.status)}`
+                              : ["approved", "rejected"].includes(
+                                    activeCase.review_status,
+                                  )
+                                ? "Decision finalized"
+                                : "Run AI evidence review"}
+                          </button>
+                        </header>
+                        {activeCase.ai_draft ? (
+                          <div className="cert-ai-result">
+                            <span
+                              className={`cert-status ${activeCase.ai_draft.status}`}
                             >
-                              Copy proposal into my review
-                            </button>
-                            {activeCase.ai_draft.usage?.estimated_cost_usd !=
-                            null ? (
+                              {label(activeCase.ai_draft.status)}
+                            </span>
+                            <small>{activeCase.ai_draft.model_id}</small>
+                            {(activeCase.ai_draft.retry_sequence ?? 0) > 0 ? (
                               <small>
-                                Recorded estimated cost: $
-                                {activeCase.ai_draft.usage.estimated_cost_usd.toFixed(
-                                  4,
-                                )}
+                                Manual retry round{" "}
+                                {activeCase.ai_draft.retry_sequence}
+                                {" of "}
+                                {aiPolicy.max_retry_rounds} · Prior task
+                                preserved
                               </small>
                             ) : null}
-                          </>
-                        ) : activeCase.ai_draft.last_error_message ? (
-                          <div className="cert-ai-error-detail" role="status">
-                            <strong>
-                              {activeCase.ai_draft.status === "needs_review"
-                                ? "The AI draft could not be completed"
-                                : "The worker will retry this draft"}
-                            </strong>
-                            <p>{activeCase.ai_draft.last_error_message}</p>
-                            <small>
-                              {activeCase.ai_draft.last_error_type
-                                ? `${activeCase.ai_draft.last_error_type} · `
-                                : ""}
-                              Attempt {activeCase.ai_draft.attempt_count} of{" "}
-                              {activeCase.ai_draft.max_attempts} · Last activity{" "}
-                              {formatTimestamp(activeCase.ai_draft.updated_at)}
-                            </small>
-                            {activeCase.ai_draft.status === "needs_review" ? (
-                              (activeCase.ai_draft.retry_sequence ?? 0) <
-                                aiPolicy.max_retry_rounds &&
-                              !_isRetryIntegrityFailure(
-                                activeCase.ai_draft.last_error_message ?? "",
-                              ) ? (
+                            {activeCase.ai_draft.output_document?.result ? (
+                              <>
+                                <strong>
+                                  Proposed:{" "}
+                                  {label(
+                                    activeCase.ai_draft.output_document.result
+                                      .verdict_proposal,
+                                  )}
+                                  {activeCase.ai_draft.output_document.result
+                                    .tier_proposal
+                                    ? ` · ${label(activeCase.ai_draft.output_document.result.tier_proposal)}`
+                                    : ""}
+                                </strong>
+                                {activeCase.ai_draft.output_document.result
+                                  .comparison_basis_proposal?.length ? (
+                                  <small>
+                                    Price comparison:{" "}
+                                    {activeCase.ai_draft.output_document.result.comparison_basis_proposal
+                                      .map(label)
+                                      .join(" + ")}
+                                  </small>
+                                ) : null}
+                                <p>
+                                  {
+                                    activeCase.ai_draft.output_document.result
+                                      .rationale
+                                  }
+                                </p>
+                                {activeCase.ai_draft.output_document.result
+                                  .conflicts.length ? (
+                                  <ul>
+                                    {activeCase.ai_draft.output_document.result.conflicts.map(
+                                      (conflict) => (
+                                        <li key={conflict}>{conflict}</li>
+                                      ),
+                                    )}
+                                  </ul>
+                                ) : null}
+                                {activeCase.attribute_evidence_reconciliation
+                                  ?.proposals.length ? (
+                                  <details className="cert-reconciliation" open>
+                                    <summary>
+                                      Reconcile cited label attributes before
+                                      certification
+                                    </summary>
+                                    <p>
+                                      AI proposals are advisory. Only eligible
+                                      image evidence that you explicitly verify
+                                      is applied to the derived certification
+                                      view; source PDP and queue records remain
+                                      immutable.
+                                    </p>
+                                    <div className="cert-reconciliation-list">
+                                      {activeCase.attribute_evidence_reconciliation.proposals.map(
+                                        (proposal) => (
+                                          <article
+                                            key={proposal.proposal_checksum}
+                                          >
+                                            <header>
+                                              <div>
+                                                <strong>
+                                                  {label(proposal.attribute)}
+                                                </strong>
+                                                <small>
+                                                  {proposal.listing_role
+                                                    ? `${label(proposal.listing_role)} product`
+                                                    : "Listing unresolved"}
+                                                  {" · "}
+                                                  {Math.round(
+                                                    proposal.confidence * 100,
+                                                  )}
+                                                  % confidence
+                                                </small>
+                                              </div>
+                                              <span
+                                                className={`cert-evidence-decision ${proposal.decision?.decision ?? (proposal.eligible ? "pending" : "ineligible")}`}
+                                              >
+                                                {proposal.decision
+                                                  ? label(
+                                                      proposal.decision
+                                                        .decision,
+                                                    )
+                                                  : proposal.eligible
+                                                    ? "Awaiting verification"
+                                                    : "Not eligible"}
+                                              </span>
+                                            </header>
+                                            <dl>
+                                              <div>
+                                                <dt>Proposed value</dt>
+                                                <dd>
+                                                  {evidenceValue(
+                                                    proposal.normalized_value,
+                                                  )}
+                                                </dd>
+                                              </div>
+                                              <div>
+                                                <dt>Visible label text</dt>
+                                                <dd>
+                                                  {proposal.visible_text ??
+                                                    "Not supplied"}
+                                                </dd>
+                                              </div>
+                                            </dl>
+                                            {proposal.source_image_url ? (
+                                              <a
+                                                href={proposal.source_image_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                              >
+                                                Open the exact cited product
+                                                image
+                                              </a>
+                                            ) : null}
+                                            {!proposal.eligible ? (
+                                              <small>
+                                                Not eligible:{" "}
+                                                {proposal.ineligibility_reasons
+                                                  .map(label)
+                                                  .join("; ")}
+                                              </small>
+                                            ) : (
+                                              <>
+                                                <label>
+                                                  <span>Verification note</span>
+                                                  <textarea
+                                                    value={
+                                                      evidenceRationales[
+                                                        proposal
+                                                          .proposal_checksum
+                                                      ] ??
+                                                      proposal.decision
+                                                        ?.rationale ??
+                                                      ""
+                                                    }
+                                                    onChange={(event) =>
+                                                      setEvidenceRationales(
+                                                        (current) => ({
+                                                          ...current,
+                                                          [proposal.proposal_checksum]:
+                                                            event.target.value,
+                                                        }),
+                                                      )
+                                                    }
+                                                    placeholder="State what the cited label visibly proves or why it is unreliable."
+                                                  />
+                                                </label>
+                                                <div className="cert-reconciliation-actions">
+                                                  <button
+                                                    className="button secondary"
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                      void decideAttributeEvidence(
+                                                        activeCase.case_id,
+                                                        proposal,
+                                                        "rejected",
+                                                      )
+                                                    }
+                                                  >
+                                                    Reject evidence
+                                                  </button>
+                                                  <button
+                                                    className="button"
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                      void decideAttributeEvidence(
+                                                        activeCase.case_id,
+                                                        proposal,
+                                                        "verified",
+                                                      )
+                                                    }
+                                                  >
+                                                    Verify & apply
+                                                  </button>
+                                                </div>
+                                              </>
+                                            )}
+                                          </article>
+                                        ),
+                                      )}
+                                    </div>
+                                  </details>
+                                ) : null}
                                 <button
                                   className="button secondary"
                                   type="button"
-                                  disabled={
-                                    busy ||
-                                    queueQuarantined ||
-                                    !aiPolicy.enabled
-                                  }
-                                  onClick={() =>
-                                    openRetryConfirmation(
-                                      [activeCase.case_id],
-                                      "drawer",
-                                    )
-                                  }
+                                  onClick={() => adoptAIProposal(activeCase)}
                                 >
-                                  Retry AI evidence review
+                                  Copy proposal into my review
                                 </button>
-                              ) : (
-                                <small>
-                                  {_isRetryIntegrityFailure(
-                                    activeCase.ai_draft.last_error_message,
-                                  )
-                                    ? "An evidence-integrity failure requires engineering review and cannot trigger another paid call."
-                                    : `The governed limit of ${aiPolicy.max_retry_rounds} manual retry rounds has been reached.`}
-                                </small>
-                              )
-                            ) : null}
-                            {retryConfirmationPlacement === "drawer" &&
-                            retryConfirmCaseIds.includes(activeCase.case_id) ? (
-                              <div className="cert-ai-drawer-retry-confirm">
+                                {activeCase.ai_draft.usage
+                                  ?.estimated_cost_usd != null ? (
+                                  <small>
+                                    Recorded estimated cost: $
+                                    {activeCase.ai_draft.usage.estimated_cost_usd.toFixed(
+                                      4,
+                                    )}
+                                  </small>
+                                ) : null}
+                              </>
+                            ) : activeCase.ai_draft.last_error_message ? (
+                              <div
+                                className="cert-ai-error-detail"
+                                role="status"
+                              >
                                 <strong>
-                                  Confirm a new linked retry task?
+                                  {activeCase.ai_draft.status === "needs_review"
+                                    ? "The AI draft could not be completed"
+                                    : "The worker will retry this draft"}
                                 </strong>
-                                <p>
-                                  Prior attempts, this exact error, and any
-                                  recorded cost remain preserved. The maximum
-                                  new policy exposure is $
-                                  {aiPolicy.max_request_cost_usd.toFixed(2)}.
-                                </p>
-                                <div>
-                                  <button
-                                    className="button secondary"
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      setRetryConfirmCaseIds([]);
-                                      setRetryConfirmationPlacement(null);
-                                    }}
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    className="button primary"
-                                    type="button"
-                                    disabled={busy}
-                                    aria-busy={busy}
-                                    onClick={() => void requestAIRetries()}
-                                  >
-                                    {busy
-                                      ? "Queueing…"
-                                      : "Confirm governed retry"}
-                                  </button>
-                                </div>
+                                <p>{activeCase.ai_draft.last_error_message}</p>
+                                <small>
+                                  {activeCase.ai_draft.last_error_type
+                                    ? `${activeCase.ai_draft.last_error_type} · `
+                                    : ""}
+                                  Attempt {activeCase.ai_draft.attempt_count} of{" "}
+                                  {activeCase.ai_draft.max_attempts} · Last
+                                  activity{" "}
+                                  {formatTimestamp(
+                                    activeCase.ai_draft.updated_at,
+                                  )}
+                                </small>
+                                {activeCase.ai_draft.status ===
+                                "needs_review" ? (
+                                  (activeCase.ai_draft.retry_sequence ?? 0) <
+                                    aiPolicy.max_retry_rounds &&
+                                  !_isRetryIntegrityFailure(
+                                    activeCase.ai_draft.last_error_message ??
+                                      "",
+                                  ) ? (
+                                    <button
+                                      className="button secondary"
+                                      type="button"
+                                      disabled={
+                                        busy ||
+                                        queueQuarantined ||
+                                        !aiPolicy.enabled
+                                      }
+                                      onClick={() =>
+                                        openRetryConfirmation(
+                                          [activeCase.case_id],
+                                          "drawer",
+                                        )
+                                      }
+                                    >
+                                      Retry AI evidence review
+                                    </button>
+                                  ) : (
+                                    <small>
+                                      {_isRetryIntegrityFailure(
+                                        activeCase.ai_draft.last_error_message,
+                                      )
+                                        ? "An evidence-integrity failure requires engineering review and cannot trigger another paid call."
+                                        : `The governed limit of ${aiPolicy.max_retry_rounds} manual retry rounds has been reached.`}
+                                    </small>
+                                  )
+                                ) : null}
+                                {retryConfirmationPlacement === "drawer" &&
+                                retryConfirmCaseIds.includes(
+                                  activeCase.case_id,
+                                ) ? (
+                                  <div className="cert-ai-drawer-retry-confirm">
+                                    <strong>
+                                      Confirm a new linked retry task?
+                                    </strong>
+                                    <p>
+                                      Prior attempts, this exact error, and any
+                                      recorded cost remain preserved. The
+                                      maximum new policy exposure is $
+                                      {aiPolicy.max_request_cost_usd.toFixed(2)}
+                                      .
+                                    </p>
+                                    <div>
+                                      <button
+                                        className="button secondary"
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          setRetryConfirmCaseIds([]);
+                                          setRetryConfirmationPlacement(null);
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        className="button primary"
+                                        type="button"
+                                        disabled={busy}
+                                        aria-busy={busy}
+                                        onClick={() => void requestAIRetries()}
+                                      >
+                                        {busy
+                                          ? "Queueing…"
+                                          : "Confirm governed retry"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
-                            ) : null}
+                            ) : (
+                              <p>
+                                The worker is preparing this advisory draft.
+                                Attempt {activeCase.ai_draft.attempt_count} of{" "}
+                                {activeCase.ai_draft.max_attempts}.
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p>
-                            The worker is preparing this advisory draft. Attempt{" "}
-                            {activeCase.ai_draft.attempt_count} of{" "}
-                            {activeCase.ai_draft.max_attempts}.
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
-                  </section>
-                  <section className="cert-governance-grid">
-                    {[
-                      activeCase.benchmark_listing,
-                      activeCase.competitor_listing,
-                    ].map((listing) => (
-                      <article key={listing.listing_id}>
-                        <small>{label(listing.retailer_id)} governance</small>
-                        <dl>
-                          <div>
-                            <dt>Brand</dt>
-                            <dd>{listing.brand || "Unresolved"}</dd>
-                          </div>
-                          <div>
-                            <dt>Brand status</dt>
-                            <dd>
-                              {label(
-                                String(
-                                  listing.brand_governance?.status ??
-                                    "unresolved",
-                                ),
-                              )}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>PDP seller</dt>
-                            <dd>
-                              {evidenceValue(
-                                listing.seller_governance?.observed_seller,
-                              )}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Seller eligibility</dt>
-                            <dd>
-                              {label(
-                                String(
-                                  listing.seller_governance?.status ??
-                                    "not governed",
-                                ),
-                              )}
-                            </dd>
-                          </div>
-                        </dl>
-                      </article>
-                    ))}
-                  </section>
-                  {activeCase.certification_blockers?.length ? (
-                    <section
-                      className="cert-certification-blocker"
-                      role="alert"
-                    >
-                      <div>
-                        <small>Current Product Pack guardrail</small>
-                        <h3>This pair cannot be approved as comparable</h3>
-                        <p>
-                          Package and compatibility rules use the current
-                          Product Pack even when this queue was created under an
-                          older version. Choose Reject match when the values
-                          conflict, or Needs evidence when a required value is
-                          unresolved.
-                        </p>
-                      </div>
-                      <ul>
-                        {activeCase.certification_blockers.map((issue) => (
-                          <li key={issue.attribute}>
-                            <b>{label(issue.attribute)}</b>
-                            <span>
-                              {evidenceValue(issue.benchmark_value)} versus{" "}
-                              {evidenceValue(issue.competitor_value)} ·{" "}
-                              {label(issue.outcome)}
-                            </span>
-                          </li>
+                        ) : null}
+                      </section>
+                      <section className="cert-governance-grid">
+                        {[
+                          activeCase.benchmark_listing,
+                          activeCase.competitor_listing,
+                        ].map((listing) => (
+                          <article key={listing.listing_id}>
+                            <small>
+                              {label(listing.retailer_id)} governance
+                            </small>
+                            <dl>
+                              <div>
+                                <dt>Brand</dt>
+                                <dd>{listing.brand || "Unresolved"}</dd>
+                              </div>
+                              <div>
+                                <dt>Brand status</dt>
+                                <dd>
+                                  {label(
+                                    String(
+                                      listing.brand_governance?.status ??
+                                        "unresolved",
+                                    ),
+                                  )}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>PDP seller</dt>
+                                <dd>
+                                  {evidenceValue(
+                                    listing.seller_governance?.observed_seller,
+                                  )}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Seller eligibility</dt>
+                                <dd>
+                                  {label(
+                                    String(
+                                      listing.seller_governance?.status ??
+                                        "not governed",
+                                    ),
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+                          </article>
                         ))}
-                      </ul>
-                    </section>
-                  ) : null}
-                  <section className="cert-evidence">
-                    <h3>Attribute evidence</h3>
-                    <div role="table">
-                      <div role="row" className="cert-evidence-head">
-                        <span>Attribute</span>
-                        <span>Primary</span>
-                        <span>Competitor</span>
-                        <span>Outcome</span>
-                      </div>
-                      {activeCase.edge.attribute_evidence.map((evidence) => (
-                        <div role="row" key={evidence.attribute}>
-                          <span data-label="Attribute">
-                            <b>{label(evidence.attribute)}</b>
-                            <small>{label(evidence.role)}</small>
-                            {evidence.queue_role &&
-                            evidence.queue_role !== evidence.role ? (
-                              <small>
-                                Queue role: {label(evidence.queue_role)} ·
-                                current policy applies
-                              </small>
-                            ) : null}
-                          </span>
-                          <span data-label="Primary">
-                            {evidenceValue(evidence.benchmark_value)}
-                          </span>
-                          <span data-label="Competitor">
-                            {evidenceValue(evidence.competitor_value)}
-                          </span>
-                          <span
-                            className={`evidence-${evidence.outcome}`}
-                            data-label="Outcome"
-                          >
-                            {label(evidence.outcome)}
-                          </span>
+                      </section>
+                      {activeCase.certification_blockers?.length ? (
+                        <section
+                          className="cert-certification-blocker"
+                          role="alert"
+                        >
+                          <div>
+                            <small>Current Product Pack guardrail</small>
+                            <h3>This pair cannot be approved as comparable</h3>
+                            <p>
+                              Package and compatibility rules use the current
+                              Product Pack even when this queue was created
+                              under an older version. Choose Reject match when
+                              the values conflict, or Needs evidence when a
+                              required value is unresolved.
+                            </p>
+                          </div>
+                          <ul>
+                            {activeCase.certification_blockers.map((issue) => (
+                              <li key={issue.attribute}>
+                                <b>{label(issue.attribute)}</b>
+                                <span>
+                                  {evidenceValue(issue.benchmark_value)} versus{" "}
+                                  {evidenceValue(issue.competitor_value)} ·{" "}
+                                  {label(issue.outcome)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
+                      ) : null}
+                      <section className="cert-evidence">
+                        <h3>Attribute evidence</h3>
+                        <div role="table">
+                          <div role="row" className="cert-evidence-head">
+                            <span>Attribute</span>
+                            <span>Primary</span>
+                            <span>Competitor</span>
+                            <span>Outcome</span>
+                          </div>
+                          {activeCase.edge.attribute_evidence.map(
+                            (evidence) => (
+                              <div role="row" key={evidence.attribute}>
+                                <span data-label="Attribute">
+                                  <b>{label(evidence.attribute)}</b>
+                                  <small>{label(evidence.role)}</small>
+                                  {evidence.queue_role &&
+                                  evidence.queue_role !== evidence.role ? (
+                                    <small>
+                                      Queue role: {label(evidence.queue_role)} ·
+                                      current policy applies
+                                    </small>
+                                  ) : null}
+                                </span>
+                                <span data-label="Primary">
+                                  {evidenceValue(evidence.benchmark_value)}
+                                </span>
+                                <span data-label="Competitor">
+                                  {evidenceValue(evidence.competitor_value)}
+                                </span>
+                                <span
+                                  className={`evidence-${evidence.outcome}`}
+                                  data-label="Outcome"
+                                >
+                                  {label(evidence.outcome)}
+                                </span>
+                              </div>
+                            ),
+                          )}
                         </div>
-                      ))}
+                      </section>
+                      <details className="cert-pdp-evidence">
+                        <summary>Product Details evidence</summary>
+                        <div>
+                          {[
+                            activeCase.benchmark_listing,
+                            activeCase.competitor_listing,
+                          ].map((listing) => (
+                            <article key={listing.listing_id}>
+                              <strong>{label(listing.retailer_id)}</strong>
+                              <pre>
+                                {Object.keys(listing.pdp_evidence ?? {}).length
+                                  ? JSON.stringify(
+                                      listing.pdp_evidence,
+                                      null,
+                                      2,
+                                    )
+                                  : "No PDP evidence is attached to this queue version."}
+                              </pre>
+                            </article>
+                          ))}
+                        </div>
+                      </details>
+                      {activeCase.review_submissions.length ? (
+                        <div className="cert-review-history">
+                          {activeCase.review_submissions.map((review) => (
+                            <span key={review.id}>
+                              <b>{review.reviewer_id}</b>
+                              {label(review.verdict)}
+                              <small>{review.rationale}</small>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                  </section>
-                  <details className="cert-pdp-evidence">
-                    <summary>Product Details evidence</summary>
-                    <div>
-                      {[
-                        activeCase.benchmark_listing,
-                        activeCase.competitor_listing,
-                      ].map((listing) => (
-                        <article key={listing.listing_id}>
-                          <strong>{label(listing.retailer_id)}</strong>
-                          <pre>
-                            {Object.keys(listing.pdp_evidence ?? {}).length
-                              ? JSON.stringify(listing.pdp_evidence, null, 2)
-                              : "No PDP evidence is attached to this queue version."}
-                          </pre>
-                        </article>
-                      ))}
-                    </div>
-                  </details>
-                  {activeCase.review_submissions.length ? (
-                    <div className="cert-review-history">
-                      {activeCase.review_submissions.map((review) => (
-                        <span key={review.id}>
-                          <b>{review.reviewer_id}</b>
-                          {label(review.verdict)}
-                          <small>{review.rationale}</small>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                <footer className="cert-drawer-footer">
-                  {activeCase.final_decision &&
-                  ["approved", "rejected"].includes(
-                    activeCase.review_status,
-                  ) ? (
-                    <div className="cert-final-decision">
-                      <p>
-                        <b>Final decision: {label(activeCase.review_status)}</b>
-                        {activeCase.final_decision.rationale}
-                        <small>
-                          Decided by {activeCase.final_decision.reviewer_id}
-                        </small>
-                      </p>
-                      <label className="cert-rationale">
-                        <span>Reason to flag this decision</span>
-                        <textarea
-                          value={drafts[activeCase.case_id]?.rationale ?? ""}
-                          onChange={(event) =>
-                            updateDraft(activeCase.case_id, {
-                              rationale: event.target.value,
-                            })
-                          }
-                          placeholder="Explain what evidence or product detail should be reconsidered."
-                        />
-                      </label>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={busy || queueQuarantined}
-                        onClick={() =>
-                          void submitReview(activeCase, "insufficient_evidence")
-                        }
-                      >
-                        Flag for re-review
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="cert-review-form cert-review-form-drawer">
-                      <fieldset>
-                        <legend>Final decision</legend>
-                        {(
-                          [
-                            ["comparable", "Approve match"],
-                            ["not_comparable", "Reject match"],
-                            ["insufficient_evidence", "Needs evidence"],
-                          ] as const
-                        ).map(([verdict, text]) => (
+                    <footer className="cert-drawer-footer">
+                      {activeCase.final_decision &&
+                      ["approved", "rejected"].includes(
+                        activeCase.review_status,
+                      ) ? (
+                        <div className="cert-final-decision">
+                          <p>
+                            <b>
+                              Final decision: {label(activeCase.review_status)}
+                            </b>
+                            {activeCase.final_decision.rationale}
+                            <small>
+                              Decided by {activeCase.final_decision.reviewer_id}
+                            </small>
+                          </p>
+                          <label className="cert-rationale">
+                            <span>Reason to flag this decision</span>
+                            <textarea
+                              value={
+                                drafts[activeCase.case_id]?.rationale ?? ""
+                              }
+                              onChange={(event) =>
+                                updateDraft(activeCase.case_id, {
+                                  rationale: event.target.value,
+                                })
+                              }
+                              placeholder="Explain what evidence or product detail should be reconsidered."
+                            />
+                          </label>
                           <button
-                            className={
-                              drafts[activeCase.case_id]?.verdict === verdict
-                                ? "selected"
-                                : ""
-                            }
+                            className="button secondary"
                             type="button"
-                            key={verdict}
+                            disabled={busy || queueQuarantined}
+                            onClick={() =>
+                              void submitReview(
+                                activeCase,
+                                "insufficient_evidence",
+                              )
+                            }
+                          >
+                            Flag for re-review
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="cert-review-form cert-review-form-drawer">
+                          <fieldset>
+                            <legend>Final decision</legend>
+                            {(
+                              [
+                                ["comparable", "Approve match"],
+                                ["not_comparable", "Reject match"],
+                                ["insufficient_evidence", "Needs evidence"],
+                              ] as const
+                            ).map(([verdict, text]) => (
+                              <button
+                                className={
+                                  drafts[activeCase.case_id]?.verdict ===
+                                  verdict
+                                    ? "selected"
+                                    : ""
+                                }
+                                type="button"
+                                key={verdict}
+                                disabled={
+                                  queueQuarantined ||
+                                  (verdict === "comparable" &&
+                                    Boolean(
+                                      activeCase.certification_blockers?.length,
+                                    ))
+                                }
+                                onClick={() =>
+                                  updateDraft(activeCase.case_id, { verdict })
+                                }
+                              >
+                                {text}
+                              </button>
+                            ))}
+                          </fieldset>
+                          <label>
+                            <span>Approved tier</span>
+                            <select
+                              value={
+                                drafts[activeCase.case_id]?.tier ??
+                                defaultDraft(activeCase).tier
+                              }
+                              disabled={
+                                queueQuarantined ||
+                                drafts[activeCase.case_id]?.verdict !==
+                                  "comparable"
+                              }
+                              onChange={(event) =>
+                                updateDraft(activeCase.case_id, {
+                                  tier: event.target.value,
+                                })
+                              }
+                            >
+                              {TIERS.map((tier) => (
+                                <option value={tier} key={tier}>
+                                  {label(tier)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="cert-rationale">
+                            <span>Evidence rationale</span>
+                            <textarea
+                              value={
+                                drafts[activeCase.case_id]?.rationale ?? ""
+                              }
+                              onChange={(event) =>
+                                updateDraft(activeCase.case_id, {
+                                  rationale: event.target.value,
+                                })
+                              }
+                              placeholder="Explain the product identity, package, claims, and any conflicts."
+                            />
+                          </label>
+                          <button
+                            className="button primary"
+                            type="button"
                             disabled={
+                              busy ||
                               queueQuarantined ||
-                              (verdict === "comparable" &&
+                              (drafts[activeCase.case_id]?.verdict ===
+                                "comparable" &&
                                 Boolean(
                                   activeCase.certification_blockers?.length,
                                 ))
                             }
-                            onClick={() =>
-                              updateDraft(activeCase.case_id, { verdict })
-                            }
+                            onClick={() => void submitReview(activeCase)}
                           >
-                            {text}
+                            Save final decision
                           </button>
-                        ))}
-                      </fieldset>
-                      <label>
-                        <span>Approved tier</span>
-                        <select
-                          value={
-                            drafts[activeCase.case_id]?.tier ??
-                            defaultDraft(activeCase).tier
-                          }
-                          disabled={
-                            queueQuarantined ||
-                            drafts[activeCase.case_id]?.verdict !== "comparable"
-                          }
-                          onChange={(event) =>
-                            updateDraft(activeCase.case_id, {
-                              tier: event.target.value,
-                            })
-                          }
-                        >
-                          {TIERS.map((tier) => (
-                            <option value={tier} key={tier}>
-                              {label(tier)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="cert-rationale">
-                        <span>Evidence rationale</span>
-                        <textarea
-                          value={drafts[activeCase.case_id]?.rationale ?? ""}
-                          onChange={(event) =>
-                            updateDraft(activeCase.case_id, {
-                              rationale: event.target.value,
-                            })
-                          }
-                          placeholder="Explain the product identity, package, claims, and any conflicts."
-                        />
-                      </label>
-                      <button
-                        className="button primary"
-                        type="button"
-                        disabled={
-                          busy ||
-                          queueQuarantined ||
-                          (drafts[activeCase.case_id]?.verdict ===
-                            "comparable" &&
-                            Boolean(activeCase.certification_blockers?.length))
-                        }
-                        onClick={() => void submitReview(activeCase)}
-                      >
-                        Save final decision
-                      </button>
-                    </div>
-                  )}
-                </footer>
-              </aside>
-            </div>
-          ) : null}
+                        </div>
+                      )}
+                    </footer>
+                  </aside>
+                </div>
+              ) : null}
+            </>
+          )}
         </>
       ) : (
         <section className="cert-empty">

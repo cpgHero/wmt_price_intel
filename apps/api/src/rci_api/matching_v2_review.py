@@ -47,6 +47,9 @@ _ALL_MATCH_TIERS = (
 )
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
 AIReviewSelectionMode = Literal["all_cases", "product_evidence_coverage"]
+AttributeEvidenceBatchScope = Literal["latest_lineage", "all_lineages"]
+AttributeEvidenceEligibility = Literal["all", "eligible", "ineligible"]
+AttributeEvidenceDecisionStatus = Literal["all", "undecided", "verified", "rejected"]
 _MAX_AI_RETRY_ROUNDS = 4
 _MAX_AI_REVIEW_BATCH_CASES = 1_500
 _AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
@@ -1225,6 +1228,213 @@ def _derived_certification_view(
     governed = _apply_active_certification_policy(reconciled, policy)
     recomputed = _recompute_certification_engine(governed, policy)
     return _apply_active_certification_policy(recomputed, policy)
+
+
+def _attribute_evidence_proposal_index(
+    queue_view: Mapping[str, Any],
+    *,
+    batch_scope: AttributeEvidenceBatchScope,
+    root_batch_id: str | None,
+    eligibility: AttributeEvidenceEligibility,
+    decision_status: AttributeEvidenceDecisionStatus,
+    offset: int,
+    limit: int,
+) -> dict[str, Any]:
+    """Project latest advisory image proposals into an administrator review index.
+
+    The review queue remains immutable. This projection only groups the latest task for each
+    case by its retry-lineage root and exposes the existing checksum-bound decision lane.
+    """
+
+    queue = queue_view.get("queue")
+    queue = queue if isinstance(queue, Mapping) else {}
+    cases = queue_view.get("cases")
+    cases = cases if isinstance(cases, list) else []
+    rows: list[dict[str, Any]] = []
+    lineages: dict[str, dict[str, Any]] = {}
+    for raw_case in cases:
+        if not isinstance(raw_case, Mapping):
+            continue
+        ai_draft = raw_case.get("ai_draft")
+        if not isinstance(ai_draft, Mapping) or ai_draft.get("status") != "succeeded":
+            continue
+        batch_id = str(ai_draft.get("batch_id") or "")
+        lineage_id = str(ai_draft.get("root_batch_id") or batch_id)
+        if not lineage_id:
+            continue
+        reconciliation = raw_case.get("attribute_evidence_reconciliation")
+        reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
+        proposals = reconciliation.get("proposals")
+        proposals = proposals if isinstance(proposals, list) else []
+        lineage = lineages.setdefault(
+            lineage_id,
+            {
+                "root_batch_id": lineage_id,
+                "batch_ids": set(),
+                "model_ids": set(),
+                "case_ids": set(),
+                "proposal_count": 0,
+                "eligible_proposal_count": 0,
+                "ineligible_proposal_count": 0,
+                "undecided_proposal_count": 0,
+                "verified_proposal_count": 0,
+                "rejected_proposal_count": 0,
+                "latest_activity_at": "",
+            },
+        )
+        if batch_id:
+            lineage["batch_ids"].add(batch_id)
+        if ai_draft.get("model_id"):
+            lineage["model_ids"].add(str(ai_draft["model_id"]))
+        lineage["case_ids"].add(str(raw_case.get("case_id") or ""))
+        activity_at = str(
+            ai_draft.get("completed_at")
+            or ai_draft.get("updated_at")
+            or ai_draft.get("created_at")
+            or ""
+        )
+        lineage["latest_activity_at"] = max(lineage["latest_activity_at"], activity_at)
+        for raw_proposal in proposals:
+            if not isinstance(raw_proposal, Mapping):
+                continue
+            proposal = dict(raw_proposal)
+            proposal_decision = proposal.get("decision")
+            proposal_decision = (
+                proposal_decision if isinstance(proposal_decision, Mapping) else None
+            )
+            current_decision = (
+                str(proposal_decision.get("decision") or "undecided")
+                if proposal_decision
+                else "undecided"
+            )
+            is_eligible = bool(proposal.get("eligible"))
+            listing_role = str(proposal.get("listing_role") or "")
+            listing = raw_case.get(f"{listing_role}_listing")
+            listing = listing if isinstance(listing, Mapping) else {}
+            counterpart_role = "competitor" if listing_role == "benchmark" else "benchmark"
+            counterpart = raw_case.get(f"{counterpart_role}_listing")
+            counterpart = counterpart if isinstance(counterpart, Mapping) else {}
+            lineage["proposal_count"] += 1
+            lineage["eligible_proposal_count" if is_eligible else "ineligible_proposal_count"] += 1
+            lineage[f"{current_decision}_proposal_count"] += 1
+            rows.append(
+                {
+                    **proposal,
+                    "case_id": str(raw_case.get("case_id") or ""),
+                    "case_review_status": str(raw_case.get("review_status") or "pending"),
+                    "competitor_retailer_id": str(
+                        raw_case.get("competitor_retailer_id")
+                        or (raw_case.get("competitor_listing") or {}).get("retailer_id")
+                        or ""
+                    ),
+                    "listing": {
+                        "listing_id": str(listing.get("listing_id") or ""),
+                        "retailer_id": str(listing.get("retailer_id") or ""),
+                        "retailer_product_id": str(listing.get("retailer_product_id") or ""),
+                        "title": listing.get("title"),
+                        "brand": listing.get("brand"),
+                        "image_url": listing.get("image_url"),
+                        "product_url": listing.get("product_url"),
+                        "observed_location_count": int(listing.get("observed_location_count") or 0),
+                    },
+                    "counterpart": {
+                        "listing_id": str(counterpart.get("listing_id") or ""),
+                        "retailer_id": str(counterpart.get("retailer_id") or ""),
+                        "retailer_product_id": str(counterpart.get("retailer_product_id") or ""),
+                        "title": counterpart.get("title"),
+                        "brand": counterpart.get("brand"),
+                        "image_url": counterpart.get("image_url"),
+                    },
+                    "decision_status": current_decision,
+                    "ai_draft": {
+                        "id": str(ai_draft.get("id") or ""),
+                        "batch_id": batch_id,
+                        "root_batch_id": lineage_id,
+                        "model_id": str(ai_draft.get("model_id") or ""),
+                        "completed_at": ai_draft.get("completed_at"),
+                    },
+                }
+            )
+
+    rendered_lineages = []
+    for lineage in lineages.values():
+        case_ids = lineage["case_ids"]
+        rendered_lineages.append(
+            {
+                **{key: value for key, value in lineage.items() if key != "case_ids"},
+                "batch_ids": sorted(lineage["batch_ids"]),
+                "model_ids": sorted(lineage["model_ids"]),
+                "case_count": len(case_ids),
+            }
+        )
+    rendered_lineages.sort(
+        key=lambda row: (str(row["latest_activity_at"]), str(row["root_batch_id"])),
+        reverse=True,
+    )
+    selected_root_batch_id = root_batch_id
+    if selected_root_batch_id is None and batch_scope == "latest_lineage":
+        selected_root_batch_id = (
+            str(rendered_lineages[0]["root_batch_id"]) if rendered_lineages else None
+        )
+    if selected_root_batch_id is not None and selected_root_batch_id not in lineages:
+        raise KeyError(f"attribute-evidence batch lineage {selected_root_batch_id!r} was not found")
+    if selected_root_batch_id is not None:
+        rows = [row for row in rows if row["ai_draft"]["root_batch_id"] == selected_root_batch_id]
+
+    summary_rows = list(rows)
+    summary = {
+        "proposal_count": len(summary_rows),
+        "distinct_claim_count": len(
+            {
+                (str(row.get("listing_id") or ""), str(row.get("attribute") or ""))
+                for row in summary_rows
+            }
+        ),
+        "eligible_proposal_count": sum(bool(row.get("eligible")) for row in summary_rows),
+        "ineligible_proposal_count": sum(not bool(row.get("eligible")) for row in summary_rows),
+        "undecided_proposal_count": sum(
+            row["decision_status"] == "undecided" for row in summary_rows
+        ),
+        "verified_proposal_count": sum(
+            row["decision_status"] == "verified" for row in summary_rows
+        ),
+        "rejected_proposal_count": sum(
+            row["decision_status"] == "rejected" for row in summary_rows
+        ),
+    }
+    if eligibility == "eligible":
+        rows = [row for row in rows if row.get("eligible")]
+    elif eligibility == "ineligible":
+        rows = [row for row in rows if not row.get("eligible")]
+    if decision_status != "all":
+        rows = [row for row in rows if row["decision_status"] == decision_status]
+    rows.sort(
+        key=lambda row: (
+            row["decision_status"] != "undecided",
+            -float(row.get("confidence") or 0),
+            str(row["listing"].get("retailer_id") or ""),
+            str(row.get("attribute") or ""),
+            str(row.get("proposal_checksum") or ""),
+        )
+    )
+    return {
+        "schema_version": "1.0.0-attribute-evidence-index",
+        "authoritative": False,
+        "human_verification_required": True,
+        "queue": dict(queue),
+        "batch_scope": batch_scope,
+        "selected_root_batch_id": selected_root_batch_id,
+        "batch_lineages": rendered_lineages,
+        "filters": {
+            "eligibility": eligibility,
+            "decision_status": decision_status,
+        },
+        "summary": summary,
+        "selected_proposal_count": len(rows),
+        "offset": offset,
+        "limit": limit,
+        "proposals": rows[offset : offset + limit],
+    }
 
 
 def _certification_evidence_refs(
@@ -2694,18 +2904,33 @@ class PostgresMatchingV2ReviewRepository:
             await connection.execute(
                 text(
                     """
-                    SELECT DISTINCT ON (review_case_id)
-                           id::text, batch_id::text, review_case_id::text,
-                           status, requested_by,
-                           model_provider, model_id, prompt_id, prompt_version,
-                           prompt_checksum, input_checksum, output_checksum,
-                           output_document, usage, attempt_count, max_attempts,
-                           retry_of_task_id::text, retry_sequence, retry_reason,
-                           last_error_type, last_error_message, created_at,
-                           updated_at, locked_at, lease_expires_at, completed_at
-                    FROM matching_v2_ai_review_task
-                    WHERE review_case_id = ANY(CAST(:case_ids AS uuid[]))
-                    ORDER BY review_case_id, created_at DESC, id DESC
+                    WITH RECURSIVE task_lineage AS (
+                      SELECT task.id, task.batch_id AS root_batch_id
+                      FROM matching_v2_ai_review_task task
+                      WHERE task.retry_of_task_id IS NULL
+                      UNION ALL
+                      SELECT child.id, parent.root_batch_id
+                      FROM matching_v2_ai_review_task child
+                      JOIN task_lineage parent ON parent.id = child.retry_of_task_id
+                    )
+                    SELECT DISTINCT ON (task.review_case_id)
+                           task.id::text, task.batch_id::text,
+                           lineage.root_batch_id::text,
+                           task.review_case_id::text,
+                           task.status, task.requested_by,
+                           task.model_provider, task.model_id, task.prompt_id,
+                           task.prompt_version, task.prompt_checksum,
+                           task.input_checksum, task.output_checksum,
+                           task.output_document, task.usage, task.attempt_count,
+                           task.max_attempts, task.retry_of_task_id::text,
+                           task.retry_sequence, task.retry_reason,
+                           task.last_error_type, task.last_error_message,
+                           task.created_at, task.updated_at, task.locked_at,
+                           task.lease_expires_at, task.completed_at
+                    FROM matching_v2_ai_review_task task
+                    JOIN task_lineage lineage ON lineage.id = task.id
+                    WHERE task.review_case_id = ANY(CAST(:case_ids AS uuid[]))
+                    ORDER BY task.review_case_id, task.created_at DESC, task.id DESC
                     """
                 ),
                 {"case_ids": list(case_ids)},
@@ -5282,6 +5507,38 @@ class MatchingV2ReviewService:
         }
         return document
 
+    async def attribute_evidence_proposals(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+        batch_scope: AttributeEvidenceBatchScope,
+        root_batch_id: str | None,
+        eligibility: AttributeEvidenceEligibility,
+        decision_status: AttributeEvidenceDecisionStatus,
+        offset: int,
+        limit: int,
+    ) -> dict[str, Any]:
+        queue_view = await self.queue_view(
+            external_queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+            benchmark_product_id=None,
+            competitor_product_id=None,
+            stratum=None,
+            review_status=None,
+            offset=0,
+            limit=100_000,
+        )
+        return _attribute_evidence_proposal_index(
+            queue_view,
+            batch_scope=batch_scope,
+            root_batch_id=root_batch_id,
+            eligibility=eligibility,
+            decision_status=decision_status,
+            offset=offset,
+            limit=limit,
+        )
+
     async def _assert_queue_not_quarantined(self, external_queue_id: str) -> None:
         if not any(
             str(entry.get("queue_id") or "") == external_queue_id
@@ -5814,6 +6071,36 @@ async def get_matching_v2_review_queue(
         document["ai_review_policy"] = _matching_ai_review_policy()
         document["ai_bulk_certification_policy"] = _ai_bulk_certification_policy()
         return document
+    except KeyError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/review-queues/{queue_id}/attribute-evidence-proposals")
+async def list_matching_v2_attribute_evidence_proposals(
+    queue_id: str,
+    request: Request,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+    competitor_retailer_id: str | None = Query(default=None),
+    batch_scope: Annotated[AttributeEvidenceBatchScope, Query()] = "latest_lineage",
+    root_batch_id: str | None = Query(default=None),
+    eligibility: Annotated[AttributeEvidenceEligibility, Query()] = "eligible",
+    decision_status: Annotated[AttributeEvidenceDecisionStatus, Query()] = "undecided",
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.attribute_evidence_proposals(
+            queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+            batch_scope=batch_scope,
+            root_batch_id=root_batch_id,
+            eligibility=eligibility,
+            decision_status=decision_status,
+            offset=offset,
+            limit=limit,
+        )
     except KeyError as exc:
         raise _http_error(exc) from exc
 

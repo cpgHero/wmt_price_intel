@@ -79,7 +79,7 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 24, 2026";
+const lastVerified = "August 25, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -661,7 +661,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Review current authoritative relationships",
               detail:
-                "Match Certification is the authoritative relationship surface. Inspect product images, PDP and attribute evidence; explicitly verify or reject eligible cited image attributes before certification; then approve or reject the relationship once. Reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
+                "Match Certification is the authoritative relationship surface. Use Attribute evidence proposals to review the latest AI batch and its retry lineage as one auditable set, filter eligible versus retained ineligible claims, and verify or reject each exact image citation. Then inspect product images, PDP and attribute evidence and approve or reject the relationship once. Reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
             },
             {
               title: "Independently certify Matching v2",
@@ -679,7 +679,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Structured evidence is always supplied. When critical attributes are missing or conflicting, the evidence packet adds the primary and available secondary PDP images, interleaved across both products and bounded to six per product. An image proposal is eligible for reconciliation only when it names an active Product Pack attribute, cites visible label text, cites an exact image attached to exactly one listing, meets the 85% confidence floor, and normalizes under the active Product Pack. Structured AI proposals cannot enter this lane because they are not attributable to one listing. An identified reviewer verifies or rejects each eligible proposal with a rationale. The append-only decision is bound to the case, AI task/output, source image, visible text, normalized value, Product Pack policy, and proposal checksum. Only the latest verified decision overlays the derived certification view; raw Search, PDP, AI, and queue evidence never changes. Conflicting verified values fail closed. A final match cannot be certified before this reconciliation step, and reporting still changes only through an explicit gold-set replay. Every AI draft remains advisory.",
+          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any candidate missing nonzero Search-derived benchmark or competitor observed-location evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Match Certification groups those retry tasks under the original batch lineage in Attribute evidence proposals, so an administrator can reconcile one disclosed pilot or production run without manually opening every pair. Structured evidence is always supplied. When critical attributes are missing or conflicting, the evidence packet adds the primary and available secondary PDP images, interleaved across both products and bounded to six per product. An image proposal is eligible for reconciliation only when it names an active Product Pack attribute, cites visible label text, cites an exact image attached to exactly one listing, meets the 85% confidence floor, and normalizes under the active Product Pack. Structured AI proposals cannot enter this lane because they are not attributable to one listing. An identified reviewer verifies or rejects each eligible proposal with a rationale. The append-only decision is bound to the case, AI task/output, source image, visible text, normalized value, Product Pack policy, and proposal checksum. Only the latest verified decision overlays the derived certification view; raw Search, PDP, AI, and queue evidence never changes. Conflicting verified values fail closed. A final match cannot be certified before this reconciliation step, and reporting still changes only through an explicit gold-set replay. Every AI draft remains advisory.",
         },
         {
           kind: "callout",
@@ -867,7 +867,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Resolve relationship exceptions",
               detail:
-                "Inspect pair evidence, images, attributes, scope, and alternate lenses in Match Certification. Approve or reject once, reopen only when explicitly flagged, and trigger governed reporting replay after the review set is ready.",
+                "First use Attribute evidence proposals to work the eligible image claims for the selected AI retry lineage, with ineligible claims retained for audit. Then inspect pair evidence, images, attributes, scope, and alternate lenses in Match Certification. Approve or reject once, reopen only when explicitly flagged, and trigger governed reporting replay after the review set is ready.",
               link: {
                 href: "/admin/matching-v2",
                 label: "Match Certification",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-25",
+              "Implemented and regression-tested; production deployment pending",
+              "Match Certification gained a queue-wide Attribute Evidence Proposals workspace grouped by immutable AI retry lineage.",
+              "The protected proposal index groups the original batch and every lineage-linked retry, reports all, eligible, retained-ineligible, undecided, verified, and rejected counts, and supports retailer, lineage, eligibility, and decision filters. Each review card shows the exact cited image, visible label text, proposed typed value, confidence, listing identity, counterpart, and observed-store count. Existing checksum-bound verify/reject decisions are reused; AI remains advisory, ineligible proposals remain visible for audit, certification remains separate, and no report changes automatically.",
+            ],
             [
               "2026-08-25",
               "Production deployed and full differential audit passed",
