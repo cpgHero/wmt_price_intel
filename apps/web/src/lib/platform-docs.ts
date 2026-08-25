@@ -1619,9 +1619,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-25",
-              "Implemented and regression-tested; production deployment pending",
+              "Production deployed and API reconciliation verified",
               "Match Certification gained a queue-wide Attribute Evidence Proposals workspace grouped by immutable AI retry lineage.",
-              "The protected proposal index groups the original batch and every lineage-linked retry, reports all, eligible, retained-ineligible, undecided, verified, and rejected counts, and supports retailer, lineage, eligibility, and decision filters. Each review card shows the exact cited image, visible label text, proposed typed value, confidence, listing identity, counterpart, and observed-store count. Existing checksum-bound verify/reject decisions are reused; AI remains advisory, ineligible proposals remain visible for audit, certification remains separate, and no report changes automatically.",
+              "The protected proposal index groups the original batch and every lineage-linked retry, reports all, eligible, retained-ineligible, undecided, verified, and rejected counts, and supports retailer, lineage, eligibility, and decision filters. Production reconciles the bounded pilot as 25 cases, 67 proposals, 65 distinct claims, 29 eligible, and 38 retained ineligible. Each review card shows the exact cited image, visible label text, proposed typed value, confidence, listing identity, counterpart, and observed-store count. Existing checksum-bound verify/reject decisions are reused; AI remains advisory, ineligible proposals remain visible for audit, certification remains separate, and no report changes automatically. Commit e7338ec deployed successfully to Railway.",
             ],
             [
               "2026-08-25",

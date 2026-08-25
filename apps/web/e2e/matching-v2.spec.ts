@@ -478,13 +478,22 @@ test("reviews eligible image evidence by retry lineage before match certificatio
     name: "Attribute Evidence Proposals",
   });
   await expect(
-    evidenceWorkspace.getByText("67", { exact: true }),
+    evidenceWorkspace
+      .getByRole("article")
+      .filter({ hasText: /^All image proposals/ })
+      .getByText("67", { exact: true }),
   ).toBeVisible();
   await expect(
-    evidenceWorkspace.getByText("29", { exact: true }),
+    evidenceWorkspace
+      .getByRole("article")
+      .filter({ hasText: /^Eligible/ })
+      .getByText("29", { exact: true }),
   ).toBeVisible();
   await expect(
-    evidenceWorkspace.getByText("38", { exact: true }),
+    evidenceWorkspace
+      .getByRole("article")
+      .filter({ hasText: /^Retained but ineligible/ })
+      .getByText("38", { exact: true }),
   ).toBeVisible();
   await expect(evidenceWorkspace).toContainText("25 cases · 29 eligible");
   await expect(evidenceWorkspace).toContainText("Target Vitamin D3");
