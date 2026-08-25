@@ -73,12 +73,14 @@ succeeded for an additional recorded `$0.0467164`, with no warnings.
 Across the final 25 successful pilot cases, recorded model cost was `$0.2225386` and the drafts
 contained 67 source-attributable image proposals covering 65 distinct listing-attribute claims.
 All had visible text, confidence was at least 0.90 (median 0.99), and no listing-attribute claim
-conflicted across cases. The semantic audit then found that 8 of the 67 proposals attempted to
-restate or replace values already marked resolved, including materially different dosage-form and
-life-stage values. This is why structural source attribution alone was not accepted as sufficient.
-Prompt/schema 1.3.0 and the independent API guard now restrict reconciliation to the remaining 59
-genuinely unresolved side-attribute claims. The eight legacy claims are retained for lineage but
-are ineligible; none changed certification or reporting.
+conflicted across cases. An initial heuristic found eight attempts to replace values on rows whose
+comparison outcome was already `match`, including materially different dosage-form and life-stage
+values. The stricter listing-side audit then correctly treated a `conflict` between two known
+product values as comparison evidence rather than unresolved source evidence. Under the deployed
+1.3.0 guard, 38 legacy proposals target an already resolved listing-side value and are ineligible;
+only 29 target a genuinely missing or declared-unknown value. This is why structural source
+attribution alone was not accepted as sufficient. The 38 ineligible claims are retained for
+lineage; none changed certification or reporting.
 
 The next production expansion, if approved after administrator review of the pilot evidence,
 targets the 883 distinct-evidence coverage cases that cover all 1,020 unresolved product
