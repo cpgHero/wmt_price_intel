@@ -1222,9 +1222,7 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
             reason_codes.append("tier_disallowed_by_product_pack")
         if not proposed_comparison_bases:
             reason_codes.append("comparison_basis_missing")
-        elif any(
-            basis not in eligible_comparison_bases for basis in proposed_comparison_bases
-        ):
+        elif any(basis not in eligible_comparison_bases for basis in proposed_comparison_bases):
             reason_codes.append("comparison_basis_not_eligible")
     elif result and verdict == "not_comparable" and ai_tier:
         reason_codes.append("not_comparable_tier_present")
@@ -1378,9 +1376,7 @@ def _bulk_confirmation_checksum(
                     "ai_output_checksum": candidate["ai_output_checksum"],
                     "recommended_verdict": candidate["recommended_verdict"],
                     "recommended_tier": candidate["recommended_tier"],
-                    "recommended_comparison_bases": candidate[
-                        "recommended_comparison_bases"
-                    ],
+                    "recommended_comparison_bases": candidate["recommended_comparison_bases"],
                 }
                 for candidate in sorted(candidates, key=lambda row: str(row["case_id"]))
             ],
@@ -2957,9 +2953,7 @@ class PostgresMatchingV2ReviewRepository:
                         "ai_output_checksum": candidate["ai_output_checksum"],
                         "recommended_verdict": candidate["recommended_verdict"],
                         "recommended_tier": candidate["recommended_tier"],
-                        "recommended_comparison_bases": candidate[
-                            "recommended_comparison_bases"
-                        ],
+                        "recommended_comparison_bases": candidate["recommended_comparison_bases"],
                     }
                     for candidate in preview["eligible_cases"]
                 ],
