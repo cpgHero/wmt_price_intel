@@ -186,6 +186,31 @@ def test_unknown_values_never_agree_and_prevent_exact_specification() -> None:
     assert decision.critical_coverage < 1
 
 
+@pytest.mark.parametrize("source", ["unresolved", "product_pack_default"])
+def test_inferred_default_is_not_governed_match_evidence(source: str) -> None:
+    benchmark = _listing("walmart_us", "w1")
+    competitor = _listing("target_us", "t1")
+    benchmark_attributes = dict(benchmark.attributes)
+    competitor_attributes = dict(competitor.attributes)
+    benchmark_attributes["container"] = AttributeValue(
+        "Standard", source, reliability=0.0 if source == "unresolved" else 0.4
+    )
+    competitor_attributes["container"] = AttributeValue(
+        "Standard", source, reliability=0.0 if source == "unresolved" else 0.4
+    )
+
+    decision = DeterministicMatchEngineV2().evaluate(
+        replace(benchmark, attributes=benchmark_attributes),
+        replace(competitor, attributes=competitor_attributes),
+        _policy(),
+        decided_at=DECIDED_AT,
+    )
+
+    container = next(row for row in decision.evidence if row.attribute == "container")
+    assert container.outcome == "unknown"
+    assert decision.tier != "exact_specification"
+
+
 def test_hard_conflict_is_not_comparable_and_price_never_enters_evidence() -> None:
     decision = DeterministicMatchEngineV2().evaluate(
         _listing("walmart_us", "w1", form="fluid_milk"),

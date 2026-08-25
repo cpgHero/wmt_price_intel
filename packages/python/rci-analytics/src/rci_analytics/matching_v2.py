@@ -1222,7 +1222,13 @@ def _brand_relationship(benchmark: ListingEvidence, competitor: ListingEvidence)
 
 
 def _is_unknown_or_conflicted(value: AttributeValue | None) -> bool:
-    return value is None or value.value is None or value.review_status == "conflicted"
+    return (
+        value is None
+        or value.value is None
+        or value.review_status == "conflicted"
+        or value.source in {"unresolved", "product_pack_default"}
+        or value.reliability <= 0
+    )
 
 
 def _selection_key(
