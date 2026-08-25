@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -356,7 +356,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.2.8-shadow.1",
+    "policy_version": "1.2.9-shadow.1",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
@@ -725,8 +725,8 @@
         "573901012": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
         "143318841": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
         "596986661": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
-        "631199053": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
-        "240505739": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
+        "631199053": {"scope": "exclude", "attributes": {"brand": "Spring Valley"}},
+        "240505739": {"scope": "exclude", "attributes": {"brand": "Spring Valley"}},
         "893210": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
         "487881975": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
         "398565876": {"scope": "include", "attributes": {"brand": "Spring Valley"}},
@@ -826,7 +826,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.8"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.9"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

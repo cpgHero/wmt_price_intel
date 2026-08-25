@@ -117,6 +117,34 @@ def test_vitamin_pack_excludes_proven_non_oral_search_noise(
     assert offers[0].scope_reason.startswith("excluded scope pattern:")
 
 
+@pytest.mark.parametrize(
+    ("product_id", "title"),
+    [
+        (
+            "631199053",
+            "Spring Valley Skin Oil with Vitamin E for Skin Health, 24,000 IU, 3 fl oz",
+        ),
+        (
+            "240505739",
+            "Spring Valley Vitamin E Oil with Keratin for Skin Care, 12000 IU, 2 fl oz",
+        ),
+    ],
+)
+def test_vitamin_pack_catalog_excludes_non_oral_spring_valley_products(
+    normalizer: CanonicalOfferNormalizer,
+    product_id: str,
+    title: str,
+) -> None:
+    offers, _engine = _pipeline(
+        "vitamins_supplements",
+        normalizer,
+        [_row("walmart_us", product_id, title, "9.99", brand="Spring Valley")],
+    )
+
+    assert offers[0].in_scope is False
+    assert offers[0].scope_reason == "retailer product is explicitly excluded"
+
+
 def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
