@@ -1619,9 +1619,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-25",
-              "Implemented and regression testing in progress; production deployment pending",
+              "Production deployed and verified",
               "Vitamin matching separates product compatibility from package and normalized-unit price bases and moves new AI reviews to gpt-5.6-luna.",
-              "Product Pack 1.3.0 requires known positive package counts before normalized-unit analysis. Prompt 1.1.0 first evaluates ingredient/formula, strength, form, release, and audience without price, then identifies package price, normalized unit price, or both. The API rejects a comparable draft whose proposed basis is absent or unsupported and binds valid bases into human bulk certification. Luna pricing is pinned at the current public $0.20/M input and $1.20/M output rates. Deterministic evidence remains authoritative; normalized unit pricing never creates a match and AI never auto-certifies.",
+              "Product Pack 1.3.0 requires known positive package counts before normalized-unit analysis. Prompt 1.1.0 first evaluates ingredient/formula, strength, form, release, and audience without price, then identifies package price, normalized unit price, or both. The API rejects a comparable draft whose proposed basis is absent or unsupported and binds valid bases into human bulk certification. Luna pricing is pinned at the current public $0.20/M input and $1.20/M output rates. Deterministic evidence remains authoritative; normalized unit pricing never creates a match and AI never auto-certifies. GitHub Actions run 32889170545 passed every release gate; Railway API deployment a2c6274f-655c-4aa8-9528-076ca0714e87 and worker deployment 4ffc7aad-ef19-4c5e-a819-973fac2b56b1 succeeded, and both live processes report gpt-5.6-luna. No paid AI or MetricsCart call was launched during deployment.",
             ],
             [
               "2026-08-24",

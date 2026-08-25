@@ -37,8 +37,18 @@ No category branch was added to the core engine.
 
 ## Cost governance
 
-The pinned Luna rates are `$0.20` per million input tokens and `$1.20` per million output tokens. Existing immutable Terra tasks retain their original model and usage records. New or explicitly retried tasks use the current configured Luna model only after deployment. Per-request maximum-cost validation, durable queues, retry lineage, and recorded usage remain in force.
+The pinned Luna rates are `$0.20` per million input tokens and `$1.20` per million output tokens. Existing immutable Terra tasks retain their original model and usage records. New or explicitly retried tasks use the current configured Luna model. Per-request maximum-cost validation, durable queues, retry lineage, and recorded usage remain in force.
 
 ## Auto-certification boundary
 
 Higher throughput comes from deterministic eligibility plus checksum-bound administrator bulk certification. Raw model confidence is not an auto-certification authority. Truly automatic certification remains disabled until a category-specific certified gold set proves the existing release threshold without unlabeled auto-approvals or hard-blocker conflicts.
+
+## Production verification
+
+The release is active in Railway production as of 2026-08-25.
+
+- GitHub Actions run `32889170545` passed Python, TypeScript, browser, migration, contract, and all four container gates.
+- API deployment `a2c6274f-655c-4aa8-9528-076ca0714e87` succeeded.
+- Worker deployment `4ffc7aad-ef19-4c5e-a819-973fac2b56b1` succeeded.
+- Direct process inspection confirmed `OPENAI_MODEL_MATCHING_REVIEW=gpt-5.6-luna` in both the API and worker.
+- No paid AI review or MetricsCart collection was launched as part of the deployment.
