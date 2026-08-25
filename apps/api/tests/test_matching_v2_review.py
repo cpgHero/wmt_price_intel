@@ -1857,7 +1857,7 @@ def _bulk_not_comparable_case() -> dict[str, Any]:
     return case
 
 
-def test_bulk_ai_certification_accepts_affirmative_recommendations_with_warnings() -> None:
+def test_bulk_ai_certification_requires_deterministic_tier_agreement() -> None:
     eligible = _bulk_eligible_case()
 
     evaluation = _bulk_ai_certification_eligibility(eligible)
@@ -1877,11 +1877,11 @@ def test_bulk_ai_certification_accepts_affirmative_recommendations_with_warnings
     rejected = _bulk_ai_certification_eligibility(conflicting)
 
     assert rejected["eligible"] is False
-    assert rejected["reason_codes"] == ["known_third_party_seller"]
-    assert {
+    assert rejected["reason_codes"] == [
         "ai_engine_tier_disagreement",
-        "ai_conflict_present",
-    }.issubset(rejected["warning_codes"])
+        "known_third_party_seller",
+    ]
+    assert rejected["warning_codes"] == ["ai_conflict_present"]
 
     administrator_approvable = _bulk_eligible_case()
     administrator_approvable["ai_draft"]["output_document"]["result"]["conflicts"] = [

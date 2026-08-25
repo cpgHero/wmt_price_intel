@@ -59,6 +59,14 @@ The model correctly avoided package-price comparison when package counts differe
 
 The immutable validation audit is stored at `s3://artifacts-usb-pmrd1jcxsy9/matching-v2/validations/vitamins_supplements/2026-08-25/luna-bounded-validation/batch_id=8e862ad6-d981-43dd-b893-fa574d33f44d/audit.json` with SHA-256 `091c153c04ca39d3b2e91fb2062f4bd2a63c2712ee7d0c99dc374d3fdc0288d9`.
 
+## Post-validation governance hardening
+
+The bounded run exposed a certification-boundary defect: an AI draft could propose a match tier different from the deterministic engine tier and the bulk preview treated that disagreement as an advisory warning. No validation case was certified, but warning-only treatment was too permissive.
+
+Policy `guarded_ai_recommendation_bulk_certification@1.6.0` now fails closed when the deterministic tier is missing, blocked, or different from the AI proposal. The request-specific Structured Outputs schema exposes only the deterministic engine tier and only deterministic eligible price bases. Application validation repeats both checks after generation. This prevents AI from creating, promoting, or widening product compatibility and prevents an unsupported package or normalized-unit basis from reaching certification, including for historical drafts generated under an earlier schema.
+
+AI-extracted PDP or image attributes remain proposals. They must be verified through the governed evidence-reconciliation workflow and the deterministic edge must be recomputed before a stronger tier or additional comparison basis can become eligible. The AI result itself never upgrades the edge.
+
 ## Auto-certification boundary
 
 Higher throughput comes from deterministic eligibility plus checksum-bound administrator bulk certification. Raw model confidence is not an auto-certification authority. Truly automatic certification remains disabled until a category-specific certified gold set proves the existing release threshold without unlabeled auto-approvals or hard-blocker conflicts.

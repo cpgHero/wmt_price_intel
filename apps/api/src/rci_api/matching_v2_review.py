@@ -1040,7 +1040,7 @@ class GoldSetReplayRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "certify_ai_recommendations",
@@ -1054,11 +1054,11 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     ],
     "minimum_critical_coverage": 1.0,
     "minimum_ai_attribute_confidence": 0.85,
-    "require_ai_engine_tier_agreement": False,
+    "require_ai_engine_tier_agreement": True,
     "require_zero_ai_conflicts": False,
     "require_no_hard_blocker_conflicts": True,
     "require_known_hard_blocker_conflict_for_not_comparable": True,
-    "warn_on_ai_engine_tier_disagreement": True,
+    "warn_on_ai_engine_tier_disagreement": False,
     "warn_on_ai_conflicts": True,
     "warn_on_hard_blocker_conflicts": True,
     "require_no_known_third_party_seller": True,
@@ -1068,10 +1068,7 @@ _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
 
 
 _AI_BULK_WARNING_CODES = {
-    "engine_tier_missing",
-    "ai_engine_tier_disagreement",
     "ai_engine_verdict_disagreement",
-    "engine_proposal_blocked",
     "critical_evidence_incomplete",
     "ai_conflict_present",
     "low_confidence_ai_attribute",

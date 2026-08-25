@@ -79,8 +79,12 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
                 "https://example.com/aldi-label.jpg",
             ],
         },
-        "engine_proposal": {"evidence_coverage": {"critical_coverage": coverage}},
+        "engine_proposal": {
+            "tier": "equivalent_product",
+            "evidence_coverage": {"critical_coverage": coverage},
+        },
         "edge": {
+            "eligible_price_bases": ["exact_package", "normalized_unit"],
             "attribute_evidence": [
                 {
                     "attribute": "fat_content",
@@ -88,7 +92,7 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
                     "competitor_value": None,
                     "outcome": "unknown",
                 }
-            ]
+            ],
         },
     }
 
@@ -151,6 +155,13 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
     assert "uniqueItems" not in json.dumps(result_schema)
     assert result_schema["properties"]["verdict_proposal"]["type"] == "string"
     assert result_schema["properties"]["tier_proposal"]["anyOf"][0]["type"] == "string"
+    assert result_schema["properties"]["tier_proposal"]["anyOf"][0]["enum"] == [
+        "equivalent_product"
+    ]
+    assert result_schema["properties"]["comparison_basis_proposal"]["items"]["enum"] == [
+        "package_price",
+        "normalized_unit_price",
+    ]
     assert result_schema["properties"]["requires_human_review"] == {
         "type": "boolean",
         "const": True,
@@ -211,6 +222,77 @@ async def test_matching_review_rejects_duplicate_comparison_bases_after_generati
             _case(),
             model_id="gpt-5.6-luna",
         )
+
+
+async def test_matching_review_binds_tier_and_price_basis_to_deterministic_evidence() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "comparable",
+            "tier_proposal": "exact_specification",
+            "comparison_basis_proposal": ["package_price"],
+            "rationale": "The proposal attempts to promote the deterministic relationship.",
+            "attribute_proposals": [],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+    case = _case()
+    case["edge"]["eligible_price_bases"] = ["normalized_unit"]
+
+    with pytest.raises(ValueError, match="deterministic engine tier"):
+        await provider.generate(
+            load_matching_review_prompt(REPOSITORY_ROOT),
+            case,
+            model_id="gpt-5.6-luna",
+        )
+
+    schema = endpoint.kwargs["text"]["format"]["schema"]
+    assert schema["properties"]["tier_proposal"]["anyOf"][0]["enum"] == ["equivalent_product"]
+    assert schema["properties"]["comparison_basis_proposal"]["items"]["enum"] == [
+        "normalized_unit_price"
+    ]
+
+
+async def test_matching_review_disallows_comparable_draft_without_engine_tier_or_basis() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "comparable",
+            "tier_proposal": "equivalent_product",
+            "comparison_basis_proposal": ["normalized_unit_price"],
+            "rationale": "The draft invents authority absent from deterministic evidence.",
+            "attribute_proposals": [],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+    case = _case()
+    case["engine_proposal"].pop("tier")
+    case["edge"]["eligible_price_bases"] = []
+
+    with pytest.raises(ValueError, match="deterministic engine tier"):
+        await provider.generate(
+            load_matching_review_prompt(REPOSITORY_ROOT),
+            case,
+            model_id="gpt-5.6-luna",
+        )
+
+    schema = endpoint.kwargs["text"]["format"]["schema"]
+    assert schema["properties"]["tier_proposal"] == {"type": "null"}
+    assert schema["properties"]["comparison_basis_proposal"]["maxItems"] == 0
 
 
 async def test_matching_review_schema_disallows_image_claims_without_input_images() -> None:

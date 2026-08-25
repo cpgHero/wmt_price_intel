@@ -102,7 +102,29 @@ _RESULT_SCHEMA: JsonObject = {
 }
 
 
-def _result_schema(image_urls: list[str]) -> JsonObject:
+def _deterministic_tier(case_document: JsonObject) -> str | None:
+    engine = case_document.get("engine_proposal")
+    if not isinstance(engine, dict):
+        return None
+    tier = str(engine.get("tier") or "")
+    return tier if tier in _ALLOWED_TIERS else None
+
+
+def _deterministic_comparison_bases(case_document: JsonObject) -> list[str]:
+    edge = case_document.get("edge")
+    if not isinstance(edge, dict):
+        return []
+    eligible = edge.get("eligible_price_bases")
+    eligible = set(str(value) for value in eligible) if isinstance(eligible, list) else set()
+    result: list[str] = []
+    if "exact_package" in eligible:
+        result.append("package_price")
+    if "normalized_unit" in eligible:
+        result.append("normalized_unit_price")
+    return result
+
+
+def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObject:
     """Bind image-derived proposals to the exact images sent to the model.
 
     The prior static schema allowed ``evidence_source=image`` even when no image
@@ -112,6 +134,16 @@ def _result_schema(image_urls: list[str]) -> JsonObject:
     """
 
     schema = json.loads(json.dumps(_RESULT_SCHEMA))
+    deterministic_tier = _deterministic_tier(case_document)
+    if deterministic_tier is None:
+        schema["properties"]["tier_proposal"] = {"type": "null"}
+    else:
+        schema["properties"]["tier_proposal"]["anyOf"][0]["enum"] = [deterministic_tier]
+    comparison_bases = _deterministic_comparison_bases(case_document)
+    comparison_basis_schema = schema["properties"]["comparison_basis_proposal"]
+    comparison_basis_schema["maxItems"] = len(comparison_bases)
+    if comparison_bases:
+        comparison_basis_schema["items"]["enum"] = comparison_bases
     proposals = schema["properties"]["attribute_proposals"]
     if not image_urls:
         proposals["items"]["properties"]["evidence_source"] = {
@@ -293,7 +325,7 @@ class OpenAIMatchingReviewProvider:
                         "type": "json_schema",
                         "name": "rci_matching_review_draft",
                         "strict": True,
-                        "schema": _result_schema(urls),
+                        "schema": _result_schema(urls, case_document),
                     },
                 },
             )
@@ -326,7 +358,11 @@ class OpenAIMatchingReviewProvider:
             image_urls = []
             response = await request(image_urls)
         result = json.loads(str(response.output_text))
-        _validate_matching_review_result(result, image_urls=image_urls)
+        _validate_matching_review_result(
+            result,
+            image_urls=image_urls,
+            case_document=case_document,
+        )
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -389,7 +425,9 @@ def _vision_image_urls(case_document: JsonObject) -> list[str]:
     return urls[:12]
 
 
-def _validate_matching_review_result(result: object, *, image_urls: list[str]) -> None:
+def _validate_matching_review_result(
+    result: object, *, image_urls: list[str], case_document: JsonObject
+) -> None:
     if not isinstance(result, dict) or result.get("requires_human_review") is not True:
         raise ValueError("AI matching result did not preserve mandatory human review")
     verdict = str(result.get("verdict_proposal") or "")
@@ -397,6 +435,9 @@ def _validate_matching_review_result(result: object, *, image_urls: list[str]) -
     comparison_bases = result.get("comparison_basis_proposal")
     if verdict == "comparable" and tier not in _ALLOWED_TIERS:
         raise ValueError("comparable AI draft requires a governed tier")
+    deterministic_tier = _deterministic_tier(case_document)
+    if verdict == "comparable" and tier != deterministic_tier:
+        raise ValueError("comparable AI draft must use the deterministic engine tier")
     if verdict != "comparable" and tier is not None:
         raise ValueError("non-comparable AI draft cannot propose a tier")
     if not isinstance(comparison_bases, list):
@@ -408,6 +449,12 @@ def _validate_matching_review_result(result: object, *, image_urls: list[str]) -
         raise ValueError("AI matching result proposed duplicate price-comparison bases")
     if len(comparison_bases) > len(allowed_comparison_bases):
         raise ValueError("AI matching result proposed too many price-comparison bases")
+    deterministic_comparison_bases = set(_deterministic_comparison_bases(case_document))
+    if any(value not in deterministic_comparison_bases for value in comparison_bases):
+        raise ValueError(
+            "AI matching result proposed a price-comparison basis absent from "
+            "deterministic evidence"
+        )
     if verdict == "comparable" and not comparison_bases:
         raise ValueError("comparable AI draft requires at least one price-comparison basis")
     if verdict != "comparable" and comparison_bases:
