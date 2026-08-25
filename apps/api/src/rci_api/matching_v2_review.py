@@ -653,6 +653,23 @@ def _listing_image_urls(listing: Any) -> set[str]:
     return images
 
 
+def _attribute_value_is_unresolved(value: Any, definition: Mapping[str, Any]) -> bool:
+    """Treat only an absent/declared-unknown value as open to AI image reconciliation."""
+
+    if value is None or value == "" or value == []:
+        return True
+    unknown_values = list(definition.get("unknown_values") or [])
+    if isinstance(value, str):
+        rendered = value.strip().casefold()
+        if rendered in {"", "unknown"}:
+            return True
+        return any(
+            isinstance(unknown, str) and rendered == unknown.strip().casefold()
+            for unknown in unknown_values
+        )
+    return _canonical(value) in {_canonical(unknown) for unknown in unknown_values}
+
+
 def _normalize_reconciled_attribute(attribute: str, value: Any, policy: Mapping[str, Any]) -> Any:
     definitions = policy.get("attribute_definitions")
     definitions = definitions if isinstance(definitions, Mapping) else {}
@@ -703,6 +720,13 @@ def _reconciliation_proposals(
     policy_checksum = str(policy.get("policy_checksum") or "")
     attributes = policy.get("attribute_definitions")
     attributes = attributes if isinstance(attributes, Mapping) else {}
+    edge = case.get("edge")
+    evidence_rows = edge.get("attribute_evidence") if isinstance(edge, Mapping) else None
+    evidence_by_attribute = {
+        str(row.get("attribute") or ""): row
+        for row in evidence_rows or []
+        if isinstance(row, Mapping)
+    }
     output_rows: list[dict[str, Any]] = []
     for index, raw in enumerate(proposals):
         if not isinstance(raw, Mapping):
@@ -727,6 +751,23 @@ def _reconciliation_proposals(
             reasons.append("structured_ai_proposal_is_not_source_attributable")
         if len(sides) != 1:
             reasons.append("image_must_resolve_to_exactly_one_listing")
+        side = sides[0] if len(sides) == 1 else None
+        definition = attributes.get(attribute)
+        definition = definition if isinstance(definition, Mapping) else {}
+        evidence_row = evidence_by_attribute.get(attribute)
+        current_value = (
+            evidence_row.get(f"{side}_value")
+            if side and isinstance(evidence_row, Mapping)
+            else None
+        )
+        if (
+            side
+            and isinstance(evidence_row, Mapping)
+            and not _attribute_value_is_unresolved(current_value, definition)
+        ):
+            reasons.append("attribute_value_already_resolved")
+        elif side and not isinstance(evidence_row, Mapping):
+            reasons.append("attribute_not_present_in_governed_edge")
         if not visible_text:
             reasons.append("visible_label_text_required")
         if confidence < 0.85:
@@ -746,7 +787,6 @@ def _reconciliation_proposals(
                     reasons.append("declared_unknown_value_cannot_resolve_evidence")
             except ValueError as exc:
                 reasons.append(f"normalization_failed:{exc}")
-        side = sides[0] if len(sides) == 1 else None
         listing = case.get(f"{side}_listing") if side else None
         listing = listing if isinstance(listing, Mapping) else {}
         descriptor = {

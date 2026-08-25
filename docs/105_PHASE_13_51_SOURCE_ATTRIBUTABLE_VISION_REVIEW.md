@@ -14,7 +14,7 @@ a structured proposal even when label images were available.
 
 ## Governed correction
 
-Prompt `matching_v2_evidence_review@1.2.0` and its request-specific Structured Output schema now:
+Prompt `matching_v2_evidence_review@1.3.0` and its request-specific Structured Output schema now:
 
 - allow attribute proposals only when at least one retained product image is in the request;
 - allow only attributes defined by the active Product Pack certification policy;
@@ -22,13 +22,17 @@ Prompt `matching_v2_evidence_review@1.2.0` and its request-specific Structured O
 - exclude Product Pack-declared unknown enum values;
 - require `evidence_source=image`, an exact URL from the images sent to the model, and non-empty
   visible label text;
-- instruct the model to inspect every supplied image on both products and report every reliably
-  visible unresolved or conflicting governed attribute; and
+- bind each allowed image URL to the exact listing side and only the governed attributes whose
+  value is actually missing or declared unknown on that side;
+- treat a conflict between two known product values as comparison evidence—not permission to
+  rewrite either value; and
 - set the proposal limit to zero when images are absent or unavailable.
 
 Post-response validation independently rejects structured proposals, inactive attributes,
-uncited images, and missing visible evidence. Search and PDP facts remain deterministic governed
-inputs; AI cannot re-label them as new evidence.
+uncited images, missing visible evidence, ambiguous cross-listing image references, and attempts
+to replace an already resolved attribute. The API reconciliation lane repeats the resolved-value
+check, which also makes pre-1.3.0 drafts fail closed. Search and PDP facts remain deterministic
+governed inputs; AI cannot re-label them as new evidence.
 
 ## Trust boundary
 
@@ -63,4 +67,20 @@ The failed responses exposed an execution-envelope issue rather than an evidence
 OpenAI's Responses API counts reasoning tokens inside `max_output_tokens`. The matching worker now
 uses medium reasoning and a 6,000-token response envelope for Luna, and provider errors record the
 response status, incomplete reason, and output-token count instead of surfacing a generic JSON
-decoder message. Only the five failed pilot cases are retried after deployment.
+decoder message. The five failed cases were retried once under that envelope and all five
+succeeded for an additional recorded `$0.0467164`, with no warnings.
+
+Across the final 25 successful pilot cases, recorded model cost was `$0.2225386` and the drafts
+contained 67 source-attributable image proposals covering 65 distinct listing-attribute claims.
+All had visible text, confidence was at least 0.90 (median 0.99), and no listing-attribute claim
+conflicted across cases. The semantic audit then found that 8 of the 67 proposals attempted to
+restate or replace values already marked resolved, including materially different dosage-form and
+life-stage values. This is why structural source attribution alone was not accepted as sufficient.
+Prompt/schema 1.3.0 and the independent API guard now restrict reconciliation to the remaining 59
+genuinely unresolved side-attribute claims. The eight legacy claims are retained for lineage but
+are ineligible; none changed certification or reporting.
+
+The next production expansion, if approved after administrator review of the pilot evidence,
+targets the 883 distinct-evidence coverage cases that cover all 1,020 unresolved product
+identities—not all 2,316 pair-level cases. This avoids paying repeatedly for the same product label
+evidence across different candidate pairs.

@@ -262,6 +262,16 @@ def test_declared_unknown_ai_value_cannot_resolve_governed_evidence() -> None:
     assert "declared_unknown_value_cannot_resolve_evidence" in proposal["ineligibility_reasons"]
 
 
+def test_image_proposal_cannot_replace_an_already_resolved_attribute_value() -> None:
+    case = _reconciliation_case()
+    case["edge"]["attribute_evidence"][0].update({"competitor_value": 10, "outcome": "conflict"})
+
+    proposal = _reconciliation_proposals(case, _reconciliation_policy())[0]
+
+    assert proposal["eligible"] is False
+    assert "attribute_value_already_resolved" in proposal["ineligibility_reasons"]
+
+
 def test_verified_evidence_recomputes_engine_tier_and_price_basis_from_active_pack() -> None:
     policy = _active_certification_policy("vitamins_supplements")
     case = _reconciliation_case()

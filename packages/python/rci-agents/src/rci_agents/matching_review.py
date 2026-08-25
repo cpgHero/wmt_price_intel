@@ -124,6 +124,66 @@ def _deterministic_comparison_bases(case_document: JsonObject) -> list[str]:
     return result
 
 
+def _attribute_value_is_unknown(value: object, definition: JsonObject) -> bool:
+    if value is None or value == "" or value == []:
+        return True
+    unknown_values = list(definition.get("unknown_values") or [])
+    if isinstance(value, str):
+        rendered = value.strip().casefold()
+        if rendered in {"", "unknown"}:
+            return True
+        return any(
+            isinstance(unknown, str) and rendered == unknown.strip().casefold()
+            for unknown in unknown_values
+        )
+    return _canonical(value) in {_canonical(unknown) for unknown in unknown_values}
+
+
+def _missing_attribute_targets(case_document: JsonObject) -> dict[str, set[str]]:
+    """Return only listing-side attributes whose governed value is unresolved."""
+
+    certification_policy = case_document.get("certification_policy")
+    certification_policy = certification_policy if isinstance(certification_policy, dict) else {}
+    definitions = certification_policy.get("attribute_definitions")
+    definitions = definitions if isinstance(definitions, dict) else {}
+    edge = case_document.get("edge")
+    evidence_rows = edge.get("attribute_evidence") if isinstance(edge, dict) else None
+    targets: dict[str, set[str]] = {"benchmark": set(), "competitor": set()}
+    if not isinstance(evidence_rows, list):
+        return targets
+    for row in evidence_rows:
+        if not isinstance(row, dict):
+            continue
+        attribute = str(row.get("attribute") or "")
+        definition = definitions.get(attribute)
+        if not attribute or not isinstance(definition, dict):
+            continue
+        for side in targets:
+            if _attribute_value_is_unknown(row.get(f"{side}_value"), definition):
+                targets[side].add(attribute)
+    return targets
+
+
+def _listing_vision_urls(case_document: JsonObject) -> dict[str, list[str]]:
+    targets = _missing_attribute_targets(case_document)
+    result: dict[str, list[str]] = {"benchmark": [], "competitor": []}
+    for side in result:
+        if not targets[side]:
+            continue
+        listing = case_document.get(f"{side}_listing")
+        if not isinstance(listing, dict):
+            continue
+        candidates = listing.get("image_urls")
+        values = list(candidates) if isinstance(candidates, list) else []
+        values.insert(0, listing.get("image_url"))
+        for candidate in values:
+            value = str(candidate or "").strip()
+            if value.startswith(("https://", "http://")) and value not in result[side]:
+                result[side].append(value)
+        result[side] = result[side][:6]
+    return result
+
+
 def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObject:
     """Bind image-derived proposals to the exact images sent to the model.
 
@@ -164,52 +224,69 @@ def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObje
         "visible_text",
         "source_image_url",
     ]
+    targets = _missing_attribute_targets(case_document)
+    listing_urls = _listing_vision_urls(case_document)
+    ambiguous_urls = set(listing_urls["benchmark"]) & set(listing_urls["competitor"])
+    sent_urls = set(image_urls)
     variants: list[JsonObject] = []
-    for attribute, definition_value in sorted(definitions.items()):
-        if not isinstance(definition_value, dict):
+    for side in ("benchmark", "competitor"):
+        allowed_urls = [
+            value
+            for value in listing_urls[side]
+            if value in sent_urls and value not in ambiguous_urls
+        ]
+        if not allowed_urls:
             continue
-        data_type = str(definition_value.get("data_type") or "string")
-        if data_type == "number":
-            value_schema: JsonObject = {"type": "number"}
-        elif data_type == "array":
-            value_schema = {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 20,
-                "items": {"type": "string", "minLength": 1, "maxLength": 200},
-            }
-        elif data_type == "enum":
-            unknown_values = {
-                str(value).casefold() for value in definition_value.get("unknown_values") or []
-            }
-            allowed_values = [
-                str(value)
-                for value in definition_value.get("allowed_values") or []
-                if str(value).casefold() not in unknown_values
-            ]
-            value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
-            if allowed_values:
-                value_schema["enum"] = allowed_values
-        else:
-            value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
-        variants.append(
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": required,
-                "properties": {
-                    "attribute": {"type": "string", "enum": [str(attribute)]},
-                    "value": value_schema,
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "evidence_source": {"type": "string", "enum": ["image"]},
-                    "visible_text": {"type": "string", "minLength": 1, "maxLength": 500},
-                    "source_image_url": {
-                        "type": "string",
-                        "enum": list(image_urls),
+        for attribute in sorted(targets[side]):
+            definition_value = definitions.get(attribute)
+            if not isinstance(definition_value, dict):
+                continue
+            data_type = str(definition_value.get("data_type") or "string")
+            if data_type == "number":
+                value_schema: JsonObject = {"type": "number"}
+            elif data_type == "array":
+                value_schema = {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 200},
+                }
+            elif data_type == "enum":
+                unknown_values = {
+                    str(value).casefold() for value in definition_value.get("unknown_values") or []
+                }
+                allowed_values = [
+                    str(value)
+                    for value in definition_value.get("allowed_values") or []
+                    if str(value).casefold() not in unknown_values
+                ]
+                value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
+                if allowed_values:
+                    value_schema["enum"] = allowed_values
+            else:
+                value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
+            variants.append(
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": required,
+                    "properties": {
+                        "attribute": {"type": "string", "enum": [str(attribute)]},
+                        "value": value_schema,
+                        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                        "evidence_source": {"type": "string", "enum": ["image"]},
+                        "visible_text": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                        },
+                        "source_image_url": {
+                            "type": "string",
+                            "enum": allowed_urls,
+                        },
                     },
-                },
-            }
-        )
+                }
+            )
     if not variants:
         proposals["maxItems"] = 0
     else:
@@ -411,42 +488,13 @@ class OpenAIMatchingReviewProvider:
 
 
 def _vision_image_urls(case_document: JsonObject) -> list[str]:
-    coverage = (
-        case_document.get("engine_proposal", {})
-        .get("evidence_coverage", {})
-        .get("critical_coverage", 0)
-    )
-    attribute_rows = case_document.get("edge", {}).get("attribute_evidence", [])
-    incomplete = not isinstance(coverage, (int, float)) or coverage < 1
-    if isinstance(attribute_rows, list):
-        incomplete = incomplete or any(
-            isinstance(row, dict)
-            and (
-                row.get("benchmark_value") in (None, "", "unknown")
-                or row.get("competitor_value") in (None, "", "unknown")
-                or row.get("outcome") in {"unknown", "conflict"}
-            )
-            for row in attribute_rows
-        )
-    if not incomplete:
+    if not any(_missing_attribute_targets(case_document).values()):
         return []
     # Secondary PDP images commonly contain the package side/back label and are
     # often more useful than the hero image for governed package attributes.
     # Bound the request while preserving both sides of the proposed relationship.
-    per_listing_urls: list[list[str]] = []
-    for side in ("benchmark_listing", "competitor_listing"):
-        listing = case_document.get(side)
-        if not isinstance(listing, dict):
-            continue
-        candidates = listing.get("image_urls")
-        values = list(candidates) if isinstance(candidates, list) else []
-        values.insert(0, listing.get("image_url"))
-        listing_urls: list[str] = []
-        for candidate in values:
-            value = str(candidate or "").strip()
-            if value.startswith(("https://", "http://")) and value not in listing_urls:
-                listing_urls.append(value)
-        per_listing_urls.append(listing_urls[:6])
+    side_urls = _listing_vision_urls(case_document)
+    per_listing_urls = [side_urls[side] for side in ("benchmark", "competitor")]
     urls: list[str] = []
     for index in range(6):
         for listing_urls in per_listing_urls:
@@ -495,6 +543,16 @@ def _validate_matching_review_result(
     active_attributes = (
         set(attribute_definitions) if isinstance(attribute_definitions, dict) else set()
     )
+    targets = _missing_attribute_targets(case_document)
+    listing_urls = _listing_vision_urls(case_document)
+    ambiguous_urls = set(listing_urls["benchmark"]) & set(listing_urls["competitor"])
+    allowed_proposals = {
+        (attribute, source_url)
+        for side in ("benchmark", "competitor")
+        for attribute in targets[side]
+        for source_url in listing_urls[side]
+        if source_url in image_urls and source_url not in ambiguous_urls
+    }
     for row in result.get("attribute_proposals", []):
         if not isinstance(row, dict):
             raise ValueError("AI attribute proposal must be an object")
@@ -504,6 +562,10 @@ def _validate_matching_review_result(
             raise ValueError("AI attribute proposal is not active in the Product Pack")
         if not row.get("visible_text") or row.get("source_image_url") not in image_urls:
             raise ValueError("image evidence must cite visible evidence and an input image")
+        if (row.get("attribute"), row.get("source_image_url")) not in allowed_proposals:
+            raise ValueError(
+                "image evidence may only resolve a missing attribute on the cited listing"
+            )
 
 
 @dataclass(frozen=True, slots=True)
