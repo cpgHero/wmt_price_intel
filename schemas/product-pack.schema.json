@@ -65,6 +65,10 @@
             "minLength": 1
           }
         },
+        "target_attribute": {
+          "type": "string",
+          "minLength": 1
+        },
         "availability_policy": {
           "enum": [
             "search_presence",

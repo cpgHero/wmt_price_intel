@@ -34,6 +34,7 @@ from rci_api.matching_v2_review import (
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     _matching_v2_certification_coverage,
+    _product_evidence_coverage_selection,
     _reconciliation_proposals,
     _review_queue_quarantine,
     get_matching_v2_review_service,
@@ -241,6 +242,148 @@ def test_structured_ai_attribute_proposal_cannot_enter_reconciliation_lane() -> 
 
     assert proposal["eligible"] is False
     assert "structured_ai_proposal_is_not_source_attributable" in proposal["ineligibility_reasons"]
+
+
+def test_verified_image_evidence_is_reused_for_same_product_in_another_case() -> None:
+    source_case = _reconciliation_case()
+    policy = _reconciliation_policy()
+    proposal = _reconciliation_proposals(source_case, policy)[0]
+    decision = {
+        "id": "00000000-0000-0000-0000-000000000078",
+        "proposal_checksum": proposal["proposal_checksum"],
+        "proposal_document": proposal,
+        "decision": "verified",
+        "reviewer_id": "owner@cpghero.com",
+        "rationale": "The cited Target label visibly states 5 mg.",
+    }
+    another_case = _reconciliation_case()
+    another_case["case_id"] = "case-reuse"
+    another_case["case_checksum"] = "d" * 64
+    another_case["benchmark_listing_id"] = "walmart_us:another"
+    another_case["benchmark_listing"]["listing_id"] = "walmart_us:another"
+    another_case["ai_draft"] = None
+
+    reconciled = _apply_attribute_reconciliation(another_case, policy, [decision])
+    evidence = reconciled["edge"]["attribute_evidence"][0]
+
+    assert evidence["competitor_value"] == 5
+    assert evidence["competitor_source"] == "human_verified_ai_vision"
+    assert evidence["outcome"] == "match"
+    assert reconciled["attribute_evidence_reconciliation"]["reused_product_evidence_count"] == 1
+    assert another_case["edge"]["attribute_evidence"][0]["competitor_value"] is None
+
+
+def test_reused_product_evidence_is_policy_bound_and_fails_closed_on_conflict() -> None:
+    source_case = _reconciliation_case()
+    policy = _reconciliation_policy()
+    proposal = _reconciliation_proposals(source_case, policy)[0]
+    conflicting = {**proposal, "normalized_value": 10, "raw_value": "10 mg"}
+    decisions = [
+        {
+            "id": "00000000-0000-0000-0000-000000000079",
+            "proposal_checksum": proposal["proposal_checksum"],
+            "proposal_document": proposal,
+            "decision": "verified",
+        },
+        {
+            "id": "00000000-0000-0000-0000-000000000080",
+            "proposal_checksum": "f" * 64,
+            "proposal_document": conflicting,
+            "decision": "verified",
+        },
+    ]
+    another_case = _reconciliation_case()
+    another_case["case_id"] = "case-conflict"
+    another_case["case_checksum"] = "e" * 64
+    another_case["benchmark_listing_id"] = "walmart_us:another"
+    another_case["benchmark_listing"]["listing_id"] = "walmart_us:another"
+    another_case["ai_draft"] = None
+
+    reconciled = _apply_attribute_reconciliation(another_case, policy, decisions)
+
+    assert reconciled["edge"]["attribute_evidence"][0]["competitor_value"] is None
+    assert reconciled["attribute_evidence_reconciliation"]["conflicts"] == [
+        {
+            "listing_role": "competitor",
+            "attribute": "strength",
+            "reason": "multiple_verified_values_conflict",
+            "proposal_checksums": [proposal["proposal_checksum"], "f" * 64],
+        }
+    ]
+
+
+def _evidence_gap_case(
+    case_id: str,
+    benchmark_listing_id: str,
+    competitor_listing_id: str,
+    *,
+    benchmark_missing: bool = True,
+    competitor_missing: bool = True,
+) -> dict[str, Any]:
+    return {
+        "case_id": case_id,
+        "benchmark_listing_id": benchmark_listing_id,
+        "competitor_listing_id": competitor_listing_id,
+        "benchmark_listing": {
+            "listing_id": benchmark_listing_id,
+            "observed_location_count": 10,
+        },
+        "competitor_listing": {
+            "listing_id": competitor_listing_id,
+            "observed_location_count": 10,
+        },
+        "edge": {
+            "attribute_evidence": [
+                {
+                    "attribute": "strength",
+                    "role": "hard_blocker",
+                    "outcome": "unknown",
+                    "benchmark_value": None if benchmark_missing else 5,
+                    "benchmark_source": "unresolved" if benchmark_missing else "pdp",
+                    "competitor_value": None if competitor_missing else 5,
+                    "competitor_source": "unresolved" if competitor_missing else "pdp",
+                }
+            ]
+        },
+    }
+
+
+def test_product_evidence_selection_covers_distinct_products_with_fewer_pair_calls() -> None:
+    cases = [
+        _evidence_gap_case("case-ab", "a", "b"),
+        _evidence_gap_case("case-ac", "a", "c"),
+        _evidence_gap_case("case-de", "d", "e"),
+        _evidence_gap_case(
+            "case-resolved",
+            "resolved-a",
+            "resolved-b",
+            benchmark_missing=False,
+            competitor_missing=False,
+        ),
+    ]
+
+    selected, product_count = _product_evidence_coverage_selection(cases, limit=10)
+
+    assert product_count == 5
+    assert [case["case_id"] for case in selected] == ["case-ab", "case-de", "case-ac"]
+
+
+def test_product_evidence_selection_respects_limit_and_unresolved_provenance() -> None:
+    cases = [
+        _evidence_gap_case("case-ab", "a", "b"),
+        _evidence_gap_case("case-cd", "c", "d"),
+    ]
+    cases[0]["edge"]["attribute_evidence"][0].update(
+        {
+            "benchmark_value": "Standard",
+            "benchmark_source": "unresolved",
+        }
+    )
+
+    selected, product_count = _product_evidence_coverage_selection(cases, limit=1)
+
+    assert product_count == 4
+    assert [case["case_id"] for case in selected] == ["case-ab"]
 
 
 def test_observed_location_sidecar_backfills_legacy_queue_without_overwriting(
@@ -719,12 +862,14 @@ class ReviewRepository:
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        selection_mode: str,
         limit: int,
     ) -> dict[str, Any]:
         case_ids = [f"case-{index}" for index in range(30)][:limit]
         return {
             "queue_id": external_queue_id,
             "competitor_retailer_id": competitor_retailer_id,
+            "selection_mode": selection_mode,
             "eligible_case_count": 30,
             "selected_case_count": len(case_ids),
             "deferred_case_count": 30 - len(case_ids),
@@ -1345,6 +1490,7 @@ async def test_ai_review_eligible_scope_is_queue_wide_and_retailer_scoped() -> N
     result = await service.eligible_ai_review_cases(
         "queue-1",
         competitor_retailer_id="aldi_us",
+        selection_mode="all_cases",
     )
 
     assert result["competitor_retailer_id"] == "aldi_us"
@@ -1572,7 +1718,7 @@ def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_
     policy = _active_certification_policy("vitamins_supplements")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.2.3"
+    assert policy["product_pack_version"] == "1.2.4"
     assert policy["allow_comparable_substitute"] is False
     assert "comparable_substitute" not in policy["allowed_tiers"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]

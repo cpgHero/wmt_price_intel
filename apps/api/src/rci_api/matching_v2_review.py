@@ -38,6 +38,7 @@ _ALL_MATCH_TIERS = (
     "custom_approved",
 )
 ReviewVerdict = Literal["comparable", "not_comparable", "insufficient_evidence"]
+AIReviewSelectionMode = Literal["all_cases", "product_evidence_coverage"]
 _MAX_AI_RETRY_ROUNDS = 4
 _MAX_AI_REVIEW_BATCH_CASES = 1_500
 _AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
@@ -213,6 +214,59 @@ def _case_order_key(case: Mapping[str, Any]) -> tuple[int, int, int, str, str]:
         str(case.get("stratum") or ""),
         str(case.get("case_id") or ""),
     )
+
+
+def _missing_evidence_listing_ids(case: Mapping[str, Any]) -> set[str]:
+    """Return products whose hard-blocker evidence is unknown in this pair."""
+
+    edge = case.get("edge")
+    rows = edge.get("attribute_evidence") if isinstance(edge, Mapping) else None
+    if not isinstance(rows, list):
+        return set()
+    missing: set[str] = set()
+    for side in ("benchmark", "competitor"):
+        listing = case.get(f"{side}_listing")
+        listing = listing if isinstance(listing, Mapping) else {}
+        listing_id = str(listing.get("listing_id") or case.get(f"{side}_listing_id") or "")
+        if not listing_id:
+            continue
+        if any(
+            isinstance(row, Mapping)
+            and row.get("role") == "hard_blocker"
+            and (
+                row.get(f"{side}_value") in (None, "", "Unknown", "unknown")
+                or row.get(f"{side}_source") in (None, "unresolved")
+            )
+            for row in rows
+        ):
+            missing.add(listing_id)
+    return missing
+
+
+def _product_evidence_coverage_selection(
+    cases: Sequence[Mapping[str, Any]], *, limit: int
+) -> tuple[list[Mapping[str, Any]], int]:
+    """Greedily cover distinct unresolved products with the fewest pair-level AI calls."""
+
+    uncovered = set().union(*(_missing_evidence_listing_ids(case) for case in cases))
+    total_product_count = len(uncovered)
+    remaining = list(cases)
+    selected: list[Mapping[str, Any]] = []
+    while uncovered and remaining and len(selected) < limit:
+        candidate = min(
+            remaining,
+            key=lambda case: (
+                -len(_missing_evidence_listing_ids(case) & uncovered),
+                *_case_order_key(case),
+            ),
+        )
+        covered = _missing_evidence_listing_ids(candidate) & uncovered
+        if not covered:
+            break
+        selected.append(candidate)
+        uncovered -= covered
+        remaining.remove(candidate)
+    return selected, total_product_count
 
 
 def _apply_observed_location_sidecar(
@@ -706,6 +760,68 @@ def _apply_attribute_reconciliation(
             and current_decision.get("decision") == "verified"
         ):
             verified[(str(proposal["listing_role"]), str(proposal["attribute"]))].append(proposal)
+    # A label attribute belongs to the distinct retailer product, not to only the
+    # pair in which it was first reviewed. Reuse a human-verified image proposal
+    # across cases in the same immutable queue when its Product Pack policy,
+    # listing identity, normalized value, and source attribution remain bound in
+    # the persisted proposal document. This removes repeated review without
+    # weakening the evidence gate or mutating raw Search/PDP evidence.
+    listing_sides = {
+        str(document.get(f"{side}_listing_id") or ""): side for side in ("benchmark", "competitor")
+    }
+    for side in ("benchmark", "competitor"):
+        listing = document.get(f"{side}_listing")
+        if isinstance(listing, Mapping) and listing.get("listing_id"):
+            listing_sides[str(listing["listing_id"])] = side
+    local_proposal_checksums = {
+        str(proposal.get("proposal_checksum") or "") for proposal in proposals
+    }
+    reused_decision_ids: set[str] = set()
+    for decision_row in latest_by_proposal.values():
+        if decision_row.get("decision") != "verified":
+            continue
+        proposal_checksum = str(decision_row.get("proposal_checksum") or "")
+        decision_id = str(decision_row.get("id") or "")
+        if proposal_checksum in local_proposal_checksums or (
+            decision_id and decision_id in reused_decision_ids
+        ):
+            continue
+        source_proposal = decision_row.get("proposal_document")
+        if not isinstance(source_proposal, Mapping):
+            continue
+        listing_id = str(source_proposal.get("listing_id") or "")
+        reuse_side = listing_sides.get(listing_id)
+        attribute = str(source_proposal.get("attribute") or "")
+        attribute_definitions = policy.get("attribute_definitions")
+        attribute_definitions = (
+            attribute_definitions if isinstance(attribute_definitions, Mapping) else {}
+        )
+        if (
+            reuse_side is None
+            or not source_proposal.get("eligible")
+            or str(source_proposal.get("policy_checksum") or "")
+            != str(policy.get("policy_checksum") or "")
+            or attribute not in attribute_definitions
+        ):
+            continue
+        try:
+            normalized_value = _normalize_reconciled_attribute(
+                attribute, source_proposal.get("normalized_value"), policy
+            )
+        except ValueError:
+            continue
+        verified[(reuse_side, attribute)].append(
+            {
+                **dict(source_proposal),
+                "proposal_checksum": proposal_checksum,
+                "listing_role": reuse_side,
+                "normalized_value": normalized_value,
+                "decision": dict(decision_row),
+                "reused_product_evidence": True,
+            }
+        )
+        if decision_id:
+            reused_decision_ids.add(decision_id)
     resolved: dict[tuple[str, str], dict[str, Any]] = {}
     conflicts: list[dict[str, Any]] = []
     for key, values in verified.items():
@@ -752,6 +868,12 @@ def _apply_attribute_reconciliation(
             for row in proposals
             if isinstance(row.get("decision"), Mapping)
             and row["decision"].get("decision") == "verified"
+        ),
+        "reused_product_evidence_count": sum(
+            1
+            for values in verified.values()
+            for value in values
+            if value.get("reused_product_evidence")
         ),
         "conflicts": conflicts,
         "proposals": proposals,
@@ -1331,6 +1453,7 @@ class MatchingV2ReviewRepository(Protocol):
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        selection_mode: AIReviewSelectionMode,
         limit: int,
     ) -> dict[str, Any]: ...
 
@@ -1941,7 +2064,9 @@ class PostgresMatchingV2ReviewRepository:
             submissions = await self._submission_rows(connection, case_ids)
             adjudications = await self._adjudication_rows(connection, case_ids)
             ai_drafts = await self._ai_draft_rows(connection, case_ids)
-            attribute_decisions = await self._attribute_decision_rows(connection, case_ids)
+            attribute_decisions = await self._queue_attribute_decision_rows(
+                connection, str(queue["id"])
+            )
             ai_review_summary = await self._ai_review_summary(connection, str(queue["id"]))
         documents = self._case_documents(
             cases, submissions, adjudications, ai_drafts, attribute_decisions
@@ -2188,6 +2313,41 @@ class PostgresMatchingV2ReviewRepository:
         return [dict(row) for row in rows]
 
     @staticmethod
+    async def _queue_attribute_decision_rows(
+        connection: AsyncConnection, review_queue_id: str
+    ) -> list[Mapping[str, Any]]:
+        """Return immutable evidence decisions available to any case for that product."""
+
+        rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT decision.id::text,
+                           decision.review_case_id::text,
+                           decision.ai_review_task_id::text,
+                           decision.proposal_checksum,
+                           decision.proposal_document,
+                           decision.decision,
+                           decision.reviewer_id,
+                           decision.rationale,
+                           decision.decision_checksum,
+                           decision.supersedes_decision_id::text,
+                           decision.created_at
+                    FROM matching_v2_attribute_evidence_decision decision
+                    JOIN matching_v2_review_case review_case
+                      ON review_case.id = decision.review_case_id
+                    WHERE review_case.review_queue_id = CAST(:review_queue_id AS uuid)
+                    ORDER BY decision.proposal_checksum,
+                             decision.created_at DESC,
+                             decision.id DESC
+                    """
+                ),
+                {"review_queue_id": review_queue_id},
+            )
+        ).mappings()
+        return [dict(row) for row in rows]
+
+    @staticmethod
     async def _ai_review_summary(
         connection: AsyncConnection, review_queue_id: str
     ) -> dict[str, Any]:
@@ -2342,14 +2502,19 @@ class PostgresMatchingV2ReviewRepository:
             for row in ai_drafts
         }
         attribute_decisions_by_case: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        attribute_decisions_by_listing: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for row in attribute_decisions:
-            attribute_decisions_by_case[str(row["review_case_id"])].append(
-                {
-                    key: (value.isoformat() if hasattr(value, "isoformat") else value)
-                    for key, value in row.items()
-                    if key != "review_case_id"
-                }
-            )
+            rendered = {
+                key: (value.isoformat() if hasattr(value, "isoformat") else value)
+                for key, value in row.items()
+                if key != "review_case_id"
+            }
+            attribute_decisions_by_case[str(row["review_case_id"])].append(rendered)
+            proposal_document = row.get("proposal_document")
+            if isinstance(proposal_document, Mapping) and proposal_document.get("listing_id"):
+                attribute_decisions_by_listing[str(proposal_document["listing_id"])].append(
+                    rendered
+                )
         output: list[dict[str, Any]] = []
         for row in cases:
             case_id = str(row["id"])
@@ -2385,9 +2550,26 @@ class PostgresMatchingV2ReviewRepository:
                 review_status = "rejected"
             else:
                 review_status = "flagged"
+            case_document = dict(row["case_document"])
+            product_decisions: list[dict[str, Any]] = []
+            for side in ("benchmark", "competitor"):
+                listing = case_document.get(f"{side}_listing")
+                listing_id = (
+                    str(listing.get("listing_id") or "")
+                    if isinstance(listing, Mapping)
+                    else str(case_document.get(f"{side}_listing_id") or "")
+                )
+                product_decisions.extend(attribute_decisions_by_listing.get(listing_id, []))
+            decisions = list(attribute_decisions_by_case.get(case_id, []))
+            known_decision_ids = {str(decision.get("id") or "") for decision in decisions}
+            decisions.extend(
+                decision
+                for decision in product_decisions
+                if str(decision.get("id") or "") not in known_decision_ids
+            )
             output.append(
                 {
-                    **dict(row["case_document"]),
+                    **case_document,
                     "database_id": case_id,
                     "case_checksum": str(
                         row.get("case_checksum") or _checksum(row["case_document"])
@@ -2397,7 +2579,7 @@ class PostgresMatchingV2ReviewRepository:
                     "adjudication": adjudication,
                     "final_decision": final_decision,
                     "ai_draft": ai_draft_by_case.get(case_id),
-                    "attribute_evidence_decisions": attribute_decisions_by_case.get(case_id, []),
+                    "attribute_evidence_decisions": decisions,
                 }
             )
         return output
@@ -2487,12 +2669,9 @@ class PostgresMatchingV2ReviewRepository:
                 f"{external_queue_id!r}"
             )
         certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
-        decision_rows = await PostgresMatchingV2ReviewRepository._attribute_decision_rows(
-            connection, [str(row["review_case_id"]) for row in rows]
+        decision_rows = await PostgresMatchingV2ReviewRepository._queue_attribute_decision_rows(
+            connection, str(rows[0]["review_queue_id"])
         )
-        decisions_by_case: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-        for decision in decision_rows:
-            decisions_by_case[str(decision["review_case_id"])].append(decision)
         snapshots: list[dict[str, Any]] = []
         for external_case_id in external_case_ids:
             row = rows_by_case[external_case_id]
@@ -2514,7 +2693,7 @@ class PostgresMatchingV2ReviewRepository:
             document = _apply_attribute_reconciliation(
                 document,
                 certification_policy,
-                decisions_by_case.get(str(row["review_case_id"]), []),
+                decision_rows,
             )
             document = _apply_active_certification_policy(document, certification_policy)
             current_verdict = row["current_verdict"]
@@ -2870,6 +3049,7 @@ class PostgresMatchingV2ReviewRepository:
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        selection_mode: AIReviewSelectionMode,
         limit: int,
     ) -> dict[str, Any]:
         """Return a lightweight, exposure-ranked scope for a paid AI review run."""
@@ -2888,7 +3068,9 @@ class PostgresMatchingV2ReviewRepository:
                               LIMIT 1
                             )
                             SELECT c.external_case_id, c.case_document,
-                                   q.version AS queue_version
+                                   q.id::text AS review_queue_id,
+                                   q.version AS queue_version,
+                                   q.product_pack_id
                             FROM matching_v2_review_case c
                             JOIN selected_queue q ON q.id = c.review_queue_id
                             LEFT JOIN LATERAL (
@@ -2947,9 +3129,12 @@ class PostgresMatchingV2ReviewRepository:
             return {
                 "queue_id": external_queue_id,
                 "competitor_retailer_id": competitor_retailer_id,
+                "selection_mode": selection_mode,
                 "eligible_case_count": 0,
                 "selected_case_count": 0,
                 "deferred_case_count": 0,
+                "unresolved_product_evidence_count": 0,
+                "selected_product_evidence_count": 0,
                 "case_ids": [],
             }
         documents = [dict(row["case_document"]) for row in rows]
@@ -2959,6 +3144,18 @@ class PostgresMatchingV2ReviewRepository:
             queue_version=str(rows[0]["queue_version"]),
             root=_repository_root(),
         )
+        async with self._engine.connect() as connection:
+            evidence_decisions = await self._queue_attribute_decision_rows(
+                connection, str(rows[0]["review_queue_id"])
+            )
+        certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
+        documents = [
+            _apply_active_certification_policy(
+                _apply_attribute_reconciliation(document, certification_policy, evidence_decisions),
+                certification_policy,
+            )
+            for document in documents
+        ]
         documents = [
             document for document in documents if not _case_has_known_third_party_seller(document)
         ]
@@ -2973,13 +3170,27 @@ class PostgresMatchingV2ReviewRepository:
                 f"{incomplete_footprints[:10]!r}"
             )
         documents.sort(key=_case_order_key)
-        selected = documents[:limit]
+        evidence_product_count = len(
+            set().union(*(_missing_evidence_listing_ids(document) for document in documents))
+        )
+        selected: Sequence[Mapping[str, Any]]
+        if selection_mode == "product_evidence_coverage":
+            selected, evidence_product_count = _product_evidence_coverage_selection(
+                documents, limit=limit
+            )
+        else:
+            selected = documents[:limit]
         return {
             "queue_id": external_queue_id,
             "competitor_retailer_id": competitor_retailer_id,
+            "selection_mode": selection_mode,
             "eligible_case_count": len(documents),
             "selected_case_count": len(selected),
             "deferred_case_count": max(0, len(documents) - len(selected)),
+            "unresolved_product_evidence_count": evidence_product_count,
+            "selected_product_evidence_count": len(
+                set().union(*(_missing_evidence_listing_ids(document) for document in selected))
+            ),
             "case_ids": [str(document["case_id"]) for document in selected],
         }
 
@@ -3726,6 +3937,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                         SELECT review_case.case_document, review_case.case_checksum,
+                               review_queue.id::text AS review_queue_id,
                                review_queue.version,
                                review_queue.product_pack_id
                         FROM matching_v2_review_case review_case
@@ -3757,7 +3969,9 @@ class PostgresMatchingV2ReviewRepository:
                     for key, value in ai_rows[0].items()
                     if key != "review_case_id"
                 }
-            decisions = await self._attribute_decision_rows(connection, [case_id])
+            decisions = await self._queue_attribute_decision_rows(
+                connection, str(case_row["review_queue_id"])
+            )
             policy = _active_certification_policy(str(case_row["product_pack_id"]))
             case_document = _apply_attribute_reconciliation(case_document, policy, decisions)
             case_document = _apply_active_certification_policy(case_document, policy)
@@ -3940,6 +4154,7 @@ class PostgresMatchingV2ReviewRepository:
                         text(
                             """
                             SELECT review_case.case_document, review_case.case_checksum,
+                                   review_queue.id::text AS review_queue_id,
                                    review_queue.version,
                                    review_queue.product_pack_id
                             FROM matching_v2_review_case review_case
@@ -3969,7 +4184,9 @@ class PostgresMatchingV2ReviewRepository:
                     for key, value in ai_rows[0].items()
                     if key != "review_case_id"
                 }
-            decisions = await self._attribute_decision_rows(connection, [case_id])
+            decisions = await self._queue_attribute_decision_rows(
+                connection, str(case_row["review_queue_id"])
+            )
             policy = _active_certification_policy(str(case_row["product_pack_id"]))
             case_document = _apply_attribute_reconciliation(case_document, policy, decisions)
             case_document = _apply_active_certification_policy(case_document, policy)
@@ -4691,10 +4908,12 @@ class MatchingV2ReviewService:
         external_queue_id: str,
         *,
         competitor_retailer_id: str | None,
+        selection_mode: AIReviewSelectionMode,
     ) -> dict[str, Any]:
         return await self._repository.eligible_ai_review_cases(
             external_queue_id,
             competitor_retailer_id=competitor_retailer_id,
+            selection_mode=selection_mode,
             limit=_MAX_AI_REVIEW_BATCH_CASES,
         )
 
@@ -5183,6 +5402,7 @@ async def list_matching_v2_ai_draft_eligible_cases(
     service: MatchingV2ReviewServiceDependency,
     x_rci_admin_token: AdminToken = None,
     competitor_retailer_id: str | None = Query(default=None),
+    selection_mode: AIReviewSelectionMode = "all_cases",
 ) -> dict[str, Any]:
     _require_review_access(request, x_rci_admin_token)
     _require_matching_ai_review()
@@ -5190,6 +5410,7 @@ async def list_matching_v2_ai_draft_eligible_cases(
         document = await service.eligible_ai_review_cases(
             queue_id,
             competitor_retailer_id=competitor_retailer_id,
+            selection_mode=selection_mode,
         )
         document["policy"] = _matching_ai_review_policy()
         document["authoritative"] = False

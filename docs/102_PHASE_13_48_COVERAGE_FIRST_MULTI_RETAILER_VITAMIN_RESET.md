@@ -145,11 +145,12 @@ one anchor, so further blind geographic expansion was rejected as low-value paid
 successful Search evidence, 2,553 distinct admitted products require cache-aware PDP qualification.
 
 Product Details run `0e5ac06f-d372-42a8-9130-13415a3b5570` is the owner-approved enrichment run.
-It contains 2,553 jobs, planned exposure of 5,567 credits, and a hard ceiling of 7,500 credits
-($15.00). It reuses the 30-day cache contract, enriches one representative observed context per
-distinct admitted product, and remains in progress. No Matching v2 queue may consume this evidence
-until the run is terminal and its retailer/status, seller, normalized-field, checksum, and credit
-audit passes.
+It completed 2,553 jobs with 2,284 successful normalized products and 269 terminal failures. It
+consumed 5,417 credits ($10.834) under the 7,500-credit ($15.00) hard ceiling. It reused the
+30-day cache contract and enriched one representative observed context per distinct admitted
+product. The audit reconciled snapshots, normalized rows, seller governance, checksums, and
+credits. Amazon, Target, and Walmart known third-party offers were excluded before the read-only
+matching shadow; blank seller evidence remains explicitly unverified rather than assumed 1P.
 
 The live run also exposed a generic concurrency defect: a worker waited for the slowest request in
 each claimed batch before refilling. Product Details workers now retain unfinished leased tasks,

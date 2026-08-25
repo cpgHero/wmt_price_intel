@@ -93,6 +93,10 @@ def test_product_packs_load_in_required_expansion_order() -> None:
         "Joint Health Supplement for Dogs, 45 Soft Chews",
         "Orange Juice with Calcium and Vitamin D, 128 fl oz",
         "Green Tea Bags with Elderberry Vitamin C, 18 count",
+        "Noka Superfood Fruit Smoothie Pouches with Vitamins, 6 Pack",
+        "Vitamin B12 Transdermal Wellness Patch, 30 Count",
+        "Vitamin C Brightening Eye Treatment Cream, 0.5 oz",
+        "Cold Pressed Vitamin C Juice Beverage, 64 fl oz",
     ],
 )
 def test_vitamin_pack_excludes_proven_non_oral_search_noise(
@@ -124,6 +128,43 @@ def test_vitamin_pack_retains_oral_supplement_after_noise_refinement(
     assert offers[0].attributes["active_ingredient"] == "vitamin_d3"
     assert offers[0].attributes["release_profile"] == "Standard"
     assert offers[0].attributes["life_stage"] == "General"
+
+
+@pytest.mark.parametrize(
+    ("title", "expected_strength", "expected_unit"),
+    [
+        ("Vitamin B12 2,500 mcg Tablets, 120 Count", 2500.0, "mcg"),
+        ("Probiotic 10 Billion CFU Capsules, 30 Count", 10.0, "CFU"),
+    ],
+)
+def test_vitamin_pack_normalizes_formatted_label_strengths(
+    normalizer: CanonicalOfferNormalizer,
+    title: str,
+    expected_strength: float,
+    expected_unit: str,
+) -> None:
+    offers, _engine = _pipeline(
+        "vitamins_supplements",
+        normalizer,
+        [_row("target_us", title.casefold().replace(" ", "-"), title, "12.49")],
+    )
+
+    assert offers[0].in_scope is True
+    assert offers[0].attributes["strength"] == expected_strength
+    assert offers[0].attributes["strength_unit"] == expected_unit
+
+
+def test_vitamin_pack_retains_oral_eye_health_supplements(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    title = "PreserVision AREDS 2 Eye Vitamin Supplement Softgels, 120 Count"
+    offers, _engine = _pipeline(
+        "vitamins_supplements",
+        normalizer,
+        [_row("target_us", "preservision-areds-2", title, "29.99")],
+    )
+
+    assert offers[0].in_scope is True
 
 
 def test_vitamin_pack_preserves_audience_and_release_conflicts(

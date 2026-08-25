@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin Matching v2 remains quarantined until the Phase 13.48 gates pass. The first Product Pack 1.2.0 retained-data shadow produced 11,429 unresolved cases. Product Pack 1.2.1 reduced that to 239 but failed recall and zero-false-positive gates. Product Pack 1.2.2 produced 116 cases and zero automatic approvals but hid too many candidates by requiring exact shared Search-keyword context. Product Pack 1.2.3 produced 240 retailer-scoped cases: 230 unresolved, seven exact-specification candidates, three equivalent-product candidates, and zero automatic approvals. All ten positive proposals were semantically plausible, and governed Target private label appeared correctly, but 88–119 of 123 observed Walmart anchors still lacked a candidate by retailer and 199 of 322 catalog anchors remained unobserved. None of the shadows was imported. Broader Search and cache-aware PDP evidence are required before further AI review.",
+            "Production vitamin Matching v2 remains quarantined until the Phase 13.49 gates pass. The completed recovery observed 248 of 322 Spring Valley anchors, retained 74 explicit catalog gaps, and normalized PDP evidence for 2,284 of 2,553 admitted products under the approved Search and PDP ceilings. The latest read-only shadow contains 648 pair cases but 533 distinct products; 250 products recur across cases. Product Pack 1.2.4 and queue-wide verified product-evidence reuse are source-implemented so repeated pairs do not require repeated label review. The replacement shadow, semantic audit, priced AI scope, and explicit import approval remain pending; no shadow has been imported and no new AI call is authorized.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-24",
+              "Implemented and regression-tested; deployment and replacement shadow pending",
+              "Matching v2 gained distinct-product evidence reuse and a minimum-coverage AI review scope; Vitamins & Supplements advanced to Product Pack 1.2.4.",
+              "A verified image attribute can be reused for the identical listing throughout one immutable queue only when the current policy checksum and source-bound proposal still agree; contradictory values fail closed. Administrators can prepare a deterministic set-cover scope that reviews distinct missing product evidence instead of every pair. Plural/ingredient-led supplement scope, comma-formatted strengths, Billion-CFU labels, and additional non-oral noise are repaired without enabling automatic approvals. No paid API or AI call was made.",
+            ],
             [
               "2026-08-24",
               "Implemented and regression-tested; production counter repair required",

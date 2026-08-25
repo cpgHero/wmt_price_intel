@@ -113,9 +113,7 @@ class OfferClassifier:
         self._brand_resolver = brand_resolver
         self._targets = _target_terms(pack)
         self._exclusions = _exclusion_patterns(pack)
-        self._target_patterns = tuple(
-            re.compile(rf"\b{re.escape(term)}\b") for term in sorted(self._targets)
-        )
+        self._target_patterns = tuple(_compile_term_pattern(term) for term in sorted(self._targets))
         self._exclusion_patterns = tuple(
             (value, _compile_term_pattern(value)) for value in self._exclusions
         )
@@ -276,7 +274,24 @@ class OfferClassifier:
         if not explicit_include and not any(
             pattern.search(title) for pattern in self._target_patterns
         ):
-            return False, "target product term absent"
+            target_attribute = self.pack.document["scope"].get("target_attribute")
+            definition = next(
+                (
+                    attribute
+                    for attribute in self.pack.attributes
+                    if str(attribute["name"]) == str(target_attribute)
+                ),
+                None,
+            )
+            target_value = (
+                self._extract_attribute(str(target_attribute), definition, offer, product_override)[
+                    0
+                ]
+                if definition is not None
+                else None
+            )
+            if target_value is None:
+                return False, "target product term or governed target attribute absent"
         if not explicit_include:
             for value, pattern in self._exclusion_patterns:
                 if pattern.search(text):
@@ -437,7 +452,11 @@ class OfferClassifier:
         data_type = str(definition["data_type"])
         if data_type == "number":
             try:
-                return float(Decimal(str(value)).normalize())
+                # Retailer titles and PDP fields commonly render thousands
+                # separators (for example, "2,500 mcg"). The separator is
+                # presentation, not magnitude, so normalize it before Decimal.
+                normalized = "".join(str(value).split()).replace(",", "")
+                return float(Decimal(normalized).normalize())
             except (InvalidOperation, ValueError):
                 return None
         if data_type == "boolean":

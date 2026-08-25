@@ -102,6 +102,16 @@ def test_egg_matching_policy_blocks_known_color_conflicts_not_unknown_organic() 
     assert roles["organic"]["unknown_is_blocking"] is False
 
 
+def test_product_pack_rejects_unknown_scope_target_attribute() -> None:
+    document = json.loads(
+        (REPOSITORY_ROOT / "product-packs" / "vitamins_supplements.json").read_text()
+    )
+    document["scope"]["target_attribute"] = "not_a_governed_attribute"
+
+    with pytest.raises(ContractError, match="scope target_attribute references unknown"):
+        ProductPackLoader(REPOSITORY_ROOT).load_document(document)
+
+
 def test_narrative_golden_topics_match_each_product_pack_playbook() -> None:
     narrative_benchmarks = json.loads(
         (REPOSITORY_ROOT / "fixtures/golden/narrative-benchmarks.json").read_text()

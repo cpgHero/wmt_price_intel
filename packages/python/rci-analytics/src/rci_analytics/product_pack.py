@@ -161,6 +161,11 @@ class ProductPackLoader:
         if len(profile_ids) != len(set(profile_ids)):
             raise ContractError("Product Pack matching profile IDs must be unique")
         known = set(attribute_names)
+        target_attribute = document.get("scope", {}).get("target_attribute")
+        if target_attribute is not None and str(target_attribute) not in known:
+            raise ContractError(
+                f"scope target_attribute references unknown attribute {target_attribute!r}"
+            )
         for attribute in attributes:
             ProductPackLoader._validate_extraction_rules(attribute)
         for profile in profiles:

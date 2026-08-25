@@ -351,9 +351,12 @@ interface ReviewDraft {
 interface EligibleAIReviewScope {
   queue_id: string;
   competitor_retailer_id: string | null;
+  selection_mode: "all_cases" | "product_evidence_coverage";
   eligible_case_count: number;
   selected_case_count: number;
   deferred_case_count: number;
+  unresolved_product_evidence_count: number;
+  selected_product_evidence_count: number;
   case_ids: string[];
   authoritative: false;
   human_review_required: true;
@@ -589,10 +592,12 @@ export function MatchingV2ReviewAdmin({
   const [busy, setBusy] = useState(false);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
-  const [selectionScope, setSelectionScope] = useState<"manual" | "queue-wide">(
-    "manual",
-  );
+  const [selectionScope, setSelectionScope] = useState<
+    "manual" | "queue-wide" | "product-evidence"
+  >("manual");
   const [selectionDeferredCaseCount, setSelectionDeferredCaseCount] =
+    useState(0);
+  const [selectionProductEvidenceCount, setSelectionProductEvidenceCount] =
     useState(0);
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
   const [retryConfirmCaseIds, setRetryConfirmCaseIds] = useState<string[]>([]);
@@ -1114,8 +1119,9 @@ export function MatchingV2ReviewAdmin({
       setSelectedCaseIds([]);
       setSelectionScope("manual");
       setSelectionDeferredCaseCount(0);
+      setSelectionProductEvidenceCount(0);
       setNotice(
-        `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted${selectionScope === "queue-wide" ? " from the queue-wide eligible scope" : ""}. Status refreshes automatically while the work is queued or running.`,
+        `${requestedCount} AI review ${requestedCount === 1 ? "draft was" : "drafts were"} accepted${selectionScope === "queue-wide" ? " from the queue-wide eligible scope" : selectionScope === "product-evidence" ? " from the distinct-product evidence scope" : ""}. Status refreshes automatically while the work is queued or running.`,
       );
       await loadQueue();
     } catch (cause) {
@@ -1192,10 +1198,13 @@ export function MatchingV2ReviewAdmin({
     setNotice(null);
     setSelectionScope("manual");
     setSelectionDeferredCaseCount(0);
+    setSelectionProductEvidenceCount(0);
     setBatchConfirmOpen(true);
   }
 
-  async function openQueueWideAIReviewConfirmation() {
+  async function openQueueWideAIReviewConfirmation(
+    selectionMode: "all_cases" | "product_evidence_coverage" = "all_cases",
+  ) {
     if (!reviewerId.trim()) {
       setError(
         "Enter your reviewer identity before reviewing the eligible queue with AI.",
@@ -1211,6 +1220,7 @@ export function MatchingV2ReviewAdmin({
       if (competitorFilter !== "all") {
         query.set("competitor_retailer_id", competitorFilter);
       }
+      query.set("selection_mode", selectionMode);
       const scope = await jsonRequest<EligibleAIReviewScope>(
         `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/ai-drafts/eligible-cases${query.size ? `?${query}` : ""}`,
       );
@@ -1220,8 +1230,13 @@ export function MatchingV2ReviewAdmin({
         );
       }
       setSelectedCaseIds(scope.case_ids);
-      setSelectionScope("queue-wide");
+      setSelectionScope(
+        selectionMode === "product_evidence_coverage"
+          ? "product-evidence"
+          : "queue-wide",
+      );
       setSelectionDeferredCaseCount(scope.deferred_case_count);
+      setSelectionProductEvidenceCount(scope.selected_product_evidence_count);
       setBatchConfirmOpen(true);
     } catch (cause) {
       handleError(cause);
@@ -1725,6 +1740,28 @@ export function MatchingV2ReviewAdmin({
                   : "Review selected with AI"}
               </button>
               <button
+                className="button secondary"
+                type="button"
+                disabled={
+                  busy ||
+                  queueQuarantined ||
+                  !aiPolicy.enabled ||
+                  aiPolicy.queue_wide_selection !== true
+                }
+                aria-busy={busy}
+                onClick={() =>
+                  void openQueueWideAIReviewConfirmation(
+                    "product_evidence_coverage",
+                  )
+                }
+              >
+                {aiPolicy.queue_wide_selection !== true
+                  ? "Product-evidence review unavailable"
+                  : busy
+                    ? "Assessing product evidence…"
+                    : "Review distinct product evidence"}
+              </button>
+              <button
                 className="button primary"
                 type="button"
                 disabled={
@@ -1734,7 +1771,9 @@ export function MatchingV2ReviewAdmin({
                   aiPolicy.queue_wide_selection !== true
                 }
                 aria-busy={busy}
-                onClick={() => void openQueueWideAIReviewConfirmation()}
+                onClick={() =>
+                  void openQueueWideAIReviewConfirmation("all_cases")
+                }
               >
                 {aiPolicy.queue_wide_selection !== true
                   ? "Queue-wide review unavailable"
@@ -2056,7 +2095,9 @@ export function MatchingV2ReviewAdmin({
                   <p>
                     {selectionScope === "queue-wide"
                       ? `This is the complete currently eligible ${competitorFilter === "all" ? "queue" : label(competitorFilter) + " scope"}${selectionDeferredCaseCount ? ` within the ${aiPolicy.max_batch_cases.toLocaleString()}-case governed run limit; ${selectionDeferredCaseCount.toLocaleString()} additional eligible cases will remain for a subsequent run` : ""}. `
-                      : "This is the explicitly selected page scope. "}
+                      : selectionScope === "product-evidence"
+                        ? `This is a deterministic minimum-coverage scope: ${selectedCaseIds.length.toLocaleString()} pair cases cover ${selectionProductEvidenceCount.toLocaleString()} distinct products that currently lack governed hard-attribute evidence. Verified product evidence will be reused across every applicable case in this immutable queue; ${selectionDeferredCaseCount.toLocaleString()} other pair cases are intentionally deferred. `
+                        : "This is the explicitly selected page scope. "}
                     Model: {aiPolicy.model_id}. The configured per-request
                     ceiling is ${aiPolicy.max_request_cost_usd.toFixed(2)} per
                     case, so the worst-case policy exposure for this run is $

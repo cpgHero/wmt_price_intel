@@ -14,6 +14,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
      * @minItems 1
      */
     target_terms?: [string, ...string[]];
+    target_attribute?: string;
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     require_positive_price?: boolean;
     [k: string]: unknown;
