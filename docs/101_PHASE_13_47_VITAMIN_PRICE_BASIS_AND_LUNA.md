@@ -45,7 +45,19 @@ The first production validation uses the immutable Product Pack `1.3.0` shadow q
 
 Batch `efc2b2fa-a9cf-4c03-b49c-184bc75e9481` failed closed before inference because the strict response schema contained the unsupported JSON Schema keyword `uniqueItems`. All 18 historical task records remain immutable, no draft was accepted, no relationship was certified, reporting was unchanged, and recorded model cost was `$0.00`.
 
-The response schema now uses only the OpenAI Structured Outputs subset. Duplicate or unsupported comparison bases remain rejected by application validation after parsing, so schema compatibility does not relax the governed price-basis boundary. Any rerun must create lineage-linked retry tasks; it must not overwrite or reset the failed tasks.
+The response schema now uses only the OpenAI Structured Outputs subset. Duplicate or unsupported comparison bases remain rejected by application validation after parsing, so schema compatibility does not relax the governed price-basis boundary. Lineage-linked retry batch `8e862ad6-d981-43dd-b893-fa574d33f44d` preserved the failed tasks and completed all 18 cases on Luna for `$0.1312886` with zero technical failures.
+
+The semantic result is a validation checkpoint, not a certification release:
+
+- 10 drafts remained `insufficient_evidence`;
+- two proposed `not_comparable` after identifying active-ingredient-form conflicts;
+- six proposed `comparable` with normalized-unit pricing only;
+- the server blocked one comparable proposal because deterministic evidence did not support its proposed unit-price basis; and
+- the remaining five carried deterministic-tier disagreement and low-confidence attribute-evidence warnings, so none were certified during validation.
+
+The model correctly avoided package-price comparison when package counts differed, but it frequently described descriptive brand and package-count differences as generic conflicts. Attribute proposals still require the governed evidence-verification workflow before deterministic recomputation. No AI output changed product compatibility, reporting, or price math.
+
+The immutable validation audit is stored at `s3://artifacts-usb-pmrd1jcxsy9/matching-v2/validations/vitamins_supplements/2026-08-25/luna-bounded-validation/batch_id=8e862ad6-d981-43dd-b893-fa574d33f44d/audit.json` with SHA-256 `091c153c04ca39d3b2e91fb2062f4bd2a63c2712ee7d0c99dc374d3fdc0288d9`.
 
 ## Auto-certification boundary
 
@@ -60,3 +72,6 @@ The release is active in Railway production as of 2026-08-25.
 - Worker deployment `4ffc7aad-ef19-4c5e-a819-973fac2b56b1` succeeded.
 - Direct process inspection confirmed `OPENAI_MODEL_MATCHING_REVIEW=gpt-5.6-luna` in both the API and worker.
 - No paid AI review or MetricsCart collection was launched as part of the deployment.
+- GitHub Actions run `32891810158` passed the complete release gate for schema compatibility commit `788fedd`.
+- Railway API deployment `e18f7c81-700d-40f1-9b1f-dc3d9040460f` and worker deployment `e4c47c59-3924-44bb-aa75-5e49b664ea29` succeeded on that commit.
+- Direct worker inspection confirmed the production response schema contains no `uniqueItems` keyword and remains pinned to `gpt-5.6-luna`.
