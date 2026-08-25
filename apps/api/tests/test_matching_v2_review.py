@@ -248,9 +248,7 @@ def test_structured_ai_attribute_proposal_cannot_enter_reconciliation_lane() -> 
 
 def test_declared_unknown_ai_value_cannot_resolve_governed_evidence() -> None:
     case = _reconciliation_case()
-    case["ai_draft"]["output_document"]["result"]["attribute_proposals"][0]["value"] = (
-        "Unknown"
-    )
+    case["ai_draft"]["output_document"]["result"]["attribute_proposals"][0]["value"] = "Unknown"
     policy = _reconciliation_policy()
     policy["attribute_definitions"]["strength"] = {
         "data_type": "enum",
@@ -261,9 +259,7 @@ def test_declared_unknown_ai_value_cannot_resolve_governed_evidence() -> None:
     proposal = _reconciliation_proposals(case, policy)[0]
 
     assert proposal["eligible"] is False
-    assert "declared_unknown_value_cannot_resolve_evidence" in proposal[
-        "ineligibility_reasons"
-    ]
+    assert "declared_unknown_value_cannot_resolve_evidence" in proposal["ineligibility_reasons"]
 
 
 def test_verified_evidence_recomputes_engine_tier_and_price_basis_from_active_pack() -> None:

@@ -1088,11 +1088,14 @@ def _recompute_certification_engine(
             profile_id,
             str(policy.get("policy_checksum") or ""),
         )
-        decided_at = str(
-            (edge.get("decision") or {}).get("decided_at")
-            if isinstance(edge.get("decision"), Mapping)
-            else ""
-        ) or "1970-01-01T00:00:00Z"
+        decided_at = (
+            str(
+                (edge.get("decision") or {}).get("decided_at")
+                if isinstance(edge.get("decision"), Mapping)
+                else ""
+            )
+            or "1970-01-01T00:00:00Z"
+        )
         decision = DeterministicMatchEngineV2().evaluate(
             _listing_evidence_from_certification_view(document, "benchmark"),
             _listing_evidence_from_certification_view(document, "competitor"),
@@ -3251,9 +3254,7 @@ class PostgresMatchingV2ReviewRepository:
                     {
                         "case_id": candidate["case_id"],
                         "case_checksum": candidate["case_checksum"],
-                        "certification_view_checksum": candidate[
-                            "certification_view_checksum"
-                        ],
+                        "certification_view_checksum": candidate["certification_view_checksum"],
                         "ai_task_id": candidate["ai_task_id"],
                         "ai_output_checksum": candidate["ai_output_checksum"],
                         "recommended_verdict": candidate["recommended_verdict"],
