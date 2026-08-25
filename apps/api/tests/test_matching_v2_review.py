@@ -31,6 +31,7 @@ from rci_api.matching_v2_review import (
     _apply_observed_location_sidecar,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
+    _derived_certification_view,
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     _matching_v2_certification_coverage,
@@ -243,6 +244,105 @@ def test_structured_ai_attribute_proposal_cannot_enter_reconciliation_lane() -> 
 
     assert proposal["eligible"] is False
     assert "structured_ai_proposal_is_not_source_attributable" in proposal["ineligibility_reasons"]
+
+
+def test_declared_unknown_ai_value_cannot_resolve_governed_evidence() -> None:
+    case = _reconciliation_case()
+    case["ai_draft"]["output_document"]["result"]["attribute_proposals"][0]["value"] = (
+        "Unknown"
+    )
+    policy = _reconciliation_policy()
+    policy["attribute_definitions"]["strength"] = {
+        "data_type": "enum",
+        "allowed_values": ["5 mg", "Unknown"],
+        "unknown_values": ["Unknown"],
+    }
+
+    proposal = _reconciliation_proposals(case, policy)[0]
+
+    assert proposal["eligible"] is False
+    assert "declared_unknown_value_cannot_resolve_evidence" in proposal[
+        "ineligibility_reasons"
+    ]
+
+
+def test_verified_evidence_recomputes_engine_tier_and_price_basis_from_active_pack() -> None:
+    policy = _active_certification_policy("vitamins_supplements")
+    case = _reconciliation_case()
+    case["edge"] = {
+        "policy": {"policy_id": "vitamins_supplements:compatible_spec"},
+        "decision": {"decided_at": "2026-08-25T12:00:00Z"},
+        "eligible_price_bases": [],
+        "attribute_evidence": [],
+    }
+    values = {
+        "active_ingredient": ("melatonin", "melatonin"),
+        "strength": (5, None),
+        "strength_unit": ("mg", "mg"),
+        "dosage_form": ("Tablet", "Tablet"),
+        "package_count": (100, 120),
+        "servings_per_container": (100, 120),
+        "release_profile": ("Standard", "Standard"),
+        "life_stage": ("Adult", "Adult"),
+        "certifications": ([], []),
+        "brand": ("Spring Valley", "up & up"),
+    }
+    for attribute, (benchmark_value, competitor_value) in values.items():
+        case["edge"]["attribute_evidence"].append(
+            {
+                "attribute": attribute,
+                "role": policy["attribute_roles"][attribute],
+                "benchmark_value": benchmark_value,
+                "competitor_value": competitor_value,
+                "benchmark_source": "pdp:walmart",
+                "competitor_source": "pdp:target" if competitor_value is not None else "unresolved",
+                "outcome": (
+                    "unknown"
+                    if competitor_value is None
+                    else "match"
+                    if benchmark_value == competitor_value
+                    else "conflict"
+                ),
+                "reliability": 0.95 if competitor_value is not None else 0,
+            }
+        )
+    for side, index in (("benchmark", 0), ("competitor", 1)):
+        listing = case[f"{side}_listing"]
+        listing.update(
+            {
+                "retailer_id": "walmart_us" if side == "benchmark" else "target_us",
+                "retailer_product_id": "one" if side == "benchmark" else "two",
+                "observed_location_count": 10,
+                "attributes": {
+                    attribute: {
+                        "value": pair[index],
+                        "source": "pdp" if pair[index] is not None else "unresolved",
+                        "reliability": 0.95 if pair[index] is not None else 0,
+                        "review_status": "verified" if pair[index] is not None else "unreviewed",
+                    }
+                    for attribute, pair in values.items()
+                },
+            }
+        )
+    proposal = _reconciliation_proposals(case, policy)[0]
+    decision = {
+        "id": "00000000-0000-0000-0000-000000000081",
+        "proposal_checksum": proposal["proposal_checksum"],
+        "proposal_document": proposal,
+        "decision": "verified",
+        "reviewer_id": "owner@cpghero.com",
+        "rationale": "The cited label visibly states 5 mg.",
+    }
+
+    before = _derived_certification_view(case, policy, [])
+    after = _derived_certification_view(case, policy, [decision])
+
+    assert before["engine_proposal"]["tier"] is None
+    assert after["engine_proposal"]["tier"] == "equivalent_product"
+    assert after["edge"]["eligible_price_bases"] == ["normalized_unit"]
+    assert after["certification_engine_recomputation"]["status"] == "succeeded"
+    assert len(after["certification_view_checksum"]) == 64
+    assert "engine_proposal" not in case
 
 
 def test_verified_image_evidence_is_reused_for_same_product_in_another_case() -> None:
@@ -1508,9 +1608,13 @@ def test_postgres_ai_review_scope_excludes_finalized_existing_drafts_and_third_p
     assert "matching_v2_ai_review_task" in source
     assert "_case_has_known_third_party_seller" in source
     assert "documents.sort(key=_case_order_key)" in source
+    assert "latest_ai_input_checksum" in source
+    assert "_derived_certification_view" in source
     request_source = inspect.getsource(PostgresMatchingV2ReviewRepository.request_ai_drafts)
     assert '"case_document": sidecar_documents[case_id]' in request_source
     assert "nonzero Search-derived observed-location evidence" in request_source
+    assert "_queue_attribute_decision_rows" in request_source
+    assert "_derived_certification_view" in request_source
 
 
 async def test_ai_review_retry_is_new_linked_advisory_work_with_preserved_history() -> None:
@@ -1580,7 +1684,7 @@ def test_all_comparable_certification_paths_apply_current_product_pack_hard_bloc
     assert "_active_certification_policy" in adjudicate_source
     assert 'adjudication["verdict"] == "comparable"' in adjudicate_source
     assert "_disallowed_certification_tiers" in adjudicate_source
-    assert "_apply_active_certification_policy" in bulk_source
+    assert "_derived_certification_view" in bulk_source
     assert 'case["review_status"] == "approved"' in gold_source
     assert '"certification_release_blocked"' in gold_source
 
@@ -1809,6 +1913,9 @@ def _bulk_eligible_case() -> dict[str, Any]:
     case = _queue()["cases"][0]
     case["review_status"] = "pending"
     case["case_checksum"] = "b" * 64
+    case["certification_view_checksum"] = "a" * 64
+    case["certification_engine_recomputation"] = {"status": "succeeded"}
+    case["attribute_evidence_reconciliation"] = {"conflicts": []}
     case["ai_output_checksum"] = "c" * 64
     case["benchmark_listing"]["seller_governance"] = {"status": "verified_first_party"}
     case["competitor_listing"]["seller_governance"] = {"status": "not_governed"}
@@ -2050,6 +2157,21 @@ def test_bulk_ai_preview_binds_eligible_ai_output_and_policy_to_checksum() -> No
     assert preview["confirmation_checksum"] != changed_preview["confirmation_checksum"]
     assert preview["human_confirmation_required"] is True
     assert preview["automatically_changes_reporting"] is False
+
+
+def test_bulk_ai_preview_binds_derived_certification_view_to_checksum() -> None:
+    first = _bulk_eligible_case()
+    changed = _bulk_eligible_case()
+    changed["certification_view_checksum"] = "f" * 64
+
+    first_preview = _bulk_preview_document(
+        queue_id="queue-one", queue_version="1.0.0", snapshots=[first]
+    )
+    changed_preview = _bulk_preview_document(
+        queue_id="queue-one", queue_version="1.0.0", snapshots=[changed]
+    )
+
+    assert first_preview["confirmation_checksum"] != changed_preview["confirmation_checksum"]
 
 
 def test_bulk_ai_preview_binds_recommended_verdict_to_confirmation_checksum() -> None:

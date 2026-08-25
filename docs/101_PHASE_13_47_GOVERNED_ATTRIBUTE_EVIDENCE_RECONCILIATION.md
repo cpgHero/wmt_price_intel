@@ -31,6 +31,12 @@ If two active verified proposals disagree for the same product and attribute, ne
 
 Individual approval and administrator bulk preview/commit consume this same derived evidence view. No reconciliation decision runs reporting automatically. Reporting still requires completion of the certification queue, a checksum-bound gold-set release, an explicit governed replay, and publication trust gates.
 
+Phase 13.50 closes the remaining implementation gap: after this overlay, the generic deterministic
+engine reruns under the named active Product Pack profile and recalculates the tier, evidence
+coverage, and eligible price bases. The resulting certification-view checksum is shared by paid AI
+input and every certification path. See
+`docs/104_PHASE_13_50_DERIVED_CERTIFICATION_RECOMPUTATION.md`.
+
 ## Administrator experience
 
 The Match Certification evidence drawer shows eligible and ineligible proposals separately. Each proposal identifies the product side, normalized value, visible label text, confidence, exact cited image, current decision, and ineligibility reasons. Verify/reject controls require reviewer identity and a written note. The attribute evidence table and blocker summary refresh after the decision so the administrator can see exactly what certification will use.

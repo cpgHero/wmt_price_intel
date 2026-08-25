@@ -10,14 +10,22 @@ import re
 import secrets
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from rci_analytics.matching_v2 import (
+    AttributeValue,
+    DeterministicMatchEngineV2,
+    IdentifierEvidence,
+    ListingEvidence,
+    compile_matching_policy_v2,
+)
 from rci_analytics.product_pack import ProductPackLoader
 from rci_contracts import ContractError, validate_instance
 
@@ -609,8 +617,19 @@ def _apply_active_certification_policy(
     document["certification_tier_blockers"] = sorted(
         tier for tier in final_tiers if tier not in allowed_tiers
     )
+    reconciliation = document.get("attribute_evidence_reconciliation")
+    reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
+    reconciliation_conflicts = reconciliation.get("conflicts")
+    reconciliation_conflicts = (
+        reconciliation_conflicts if isinstance(reconciliation_conflicts, list) else []
+    )
+    recomputation = document.get("certification_engine_recomputation")
+    recomputation = recomputation if isinstance(recomputation, Mapping) else {}
     document["certification_release_blocked"] = bool(
-        document["certification_blockers"] or document["certification_tier_blockers"]
+        document["certification_blockers"]
+        or document["certification_tier_blockers"]
+        or reconciliation_conflicts
+        or recomputation.get("status") == "blocked"
     )
     return document
 
@@ -718,6 +737,13 @@ def _reconciliation_proposals(
                 normalized_value = _normalize_reconciled_attribute(
                     attribute, raw.get("value"), policy
                 )
+                definition = attributes.get(attribute)
+                definition = definition if isinstance(definition, Mapping) else {}
+                unknown_values = {
+                    _canonical(value) for value in definition.get("unknown_values") or []
+                }
+                if _canonical(normalized_value) in unknown_values:
+                    reasons.append("declared_unknown_value_cannot_resolve_evidence")
             except ValueError as exc:
                 reasons.append(f"normalization_failed:{exc}")
         side = sides[0] if len(sides) == 1 else None
@@ -922,6 +948,263 @@ def _apply_attribute_reconciliation(
     return document
 
 
+def _listing_evidence_from_certification_view(
+    document: Mapping[str, Any], side: Literal["benchmark", "competitor"]
+) -> ListingEvidence:
+    """Rebuild engine input from the derived edge without changing queue evidence."""
+
+    listing = document.get(f"{side}_listing")
+    listing = listing if isinstance(listing, Mapping) else {}
+    listed_attributes = listing.get("attributes")
+    listed_attributes = listed_attributes if isinstance(listed_attributes, Mapping) else {}
+    edge = document.get("edge")
+    edge = edge if isinstance(edge, Mapping) else {}
+    rows = edge.get("attribute_evidence")
+    rows = rows if isinstance(rows, list) else []
+    attributes: dict[str, AttributeValue] = {}
+    for row in rows:
+        if not isinstance(row, Mapping) or not row.get("attribute"):
+            continue
+        attribute = str(row["attribute"])
+        value = row.get(f"{side}_value")
+        listed = listed_attributes.get(attribute)
+        listed = listed if isinstance(listed, Mapping) else {}
+        source = str(row.get(f"{side}_source") or listed.get("source") or "unresolved")
+        if source == "human_verified_ai_vision":
+            reliability = 1.0
+            review_status = "verified"
+        else:
+            try:
+                reliability = float(listed.get("reliability", row.get("reliability", 0)))
+            except (TypeError, ValueError):
+                reliability = 0.0
+            review_status = str(listed.get("review_status") or "unreviewed")
+            if review_status not in {"unreviewed", "verified", "conflicted"}:
+                review_status = "unreviewed"
+        attributes[attribute] = AttributeValue(
+            value=value,
+            source=source,
+            reliability=max(0.0, min(1.0, reliability)),
+            review_status=cast(Any, review_status),
+        )
+    identifiers: list[IdentifierEvidence] = []
+    for row in listing.get("identifiers") or []:
+        if not isinstance(row, Mapping) or not row.get("scheme") or not row.get("value"):
+            continue
+        status_value = str(row.get("verification_status") or "observed")
+        if status_value not in {"observed", "verified", "disputed"}:
+            status_value = "observed"
+        identifiers.append(
+            IdentifierEvidence(
+                scheme=str(row["scheme"]),
+                value=str(row["value"]),
+                verification_status=cast(Any, status_value),
+                source=str(row.get("source") or "unknown"),
+            )
+        )
+    brand_type = str(listing.get("brand_type") or "unclassified")
+    if brand_type not in {"private_label", "regional", "national", "unclassified"}:
+        brand_type = "unclassified"
+    image_urls = tuple(
+        dict.fromkeys(str(value) for value in listing.get("image_urls") or [] if value)
+    )
+    retrieval_contexts = tuple(
+        dict.fromkeys(str(value) for value in listing.get("retrieval_contexts") or [] if value)
+    )
+    return ListingEvidence(
+        listing_id=str(
+            listing.get("listing_id") or document.get(f"{side}_listing_id") or f"{side}:unknown"
+        ),
+        retailer_id=str(listing.get("retailer_id") or "unknown"),
+        retailer_product_id=str(listing.get("retailer_product_id") or "unknown"),
+        attributes=attributes,
+        identifiers=tuple(identifiers),
+        title=str(listing.get("title")) if listing.get("title") is not None else None,
+        image_url=(str(listing.get("image_url")) if listing.get("image_url") else None),
+        image_urls=image_urls,
+        product_url=(str(listing.get("product_url")) if listing.get("product_url") else None),
+        brand=str(listing.get("brand")) if listing.get("brand") is not None else None,
+        brand_type=cast(Any, brand_type),
+        brand_verified=bool(listing.get("brand_verified", False)),
+        brand_governance=(
+            dict(listing.get("brand_governance") or {})
+            if isinstance(listing.get("brand_governance"), Mapping)
+            else {}
+        ),
+        seller_governance=(
+            dict(listing.get("seller_governance") or {})
+            if isinstance(listing.get("seller_governance"), Mapping)
+            else {}
+        ),
+        pdp_evidence=(
+            dict(listing.get("pdp_evidence") or {})
+            if isinstance(listing.get("pdp_evidence"), Mapping)
+            else {}
+        ),
+        retrieval_contexts=retrieval_contexts,
+        observed_location_count=int(listing.get("observed_location_count") or 0),
+    )
+
+
+@lru_cache(maxsize=64)
+def _compiled_certification_matching_policy(
+    product_pack_id: str, profile_id: str, policy_checksum: str
+) -> Any:
+    pack = ProductPackLoader(_repository_root()).load(product_pack_id)
+    if str(pack.checksum) != policy_checksum:
+        raise ValueError("the active Product Pack checksum changed during recomputation")
+    return compile_matching_policy_v2(pack, profile_id)
+
+
+def _recompute_certification_engine(
+    case: Mapping[str, Any], policy: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Re-run the deterministic engine against the governed derived evidence view."""
+
+    document = dict(case)
+    edge = document.get("edge")
+    edge = dict(edge) if isinstance(edge, Mapping) else {}
+    edge_policy = edge.get("policy")
+    edge_policy = edge_policy if isinstance(edge_policy, Mapping) else {}
+    policy_id = str(edge_policy.get("policy_id") or "")
+    product_pack_id = str(policy.get("product_pack_id") or "")
+    expected_prefix = f"{product_pack_id}:"
+    profile_id = (
+        policy_id.removeprefix(expected_prefix) if policy_id.startswith(expected_prefix) else ""
+    )
+    reconciliation = document.get("attribute_evidence_reconciliation")
+    reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
+    conflicts = reconciliation.get("conflicts")
+    conflicts = conflicts if isinstance(conflicts, list) else []
+    failure: str | None = None
+    decision_contract: dict[str, Any] | None = None
+    try:
+        if not product_pack_id or not profile_id:
+            raise ValueError("the queue edge does not identify an active Product Pack profile")
+        if conflicts:
+            raise ValueError("verified attribute evidence conflicts for this product pair")
+        matching_policy = _compiled_certification_matching_policy(
+            product_pack_id,
+            profile_id,
+            str(policy.get("policy_checksum") or ""),
+        )
+        decided_at = str(
+            (edge.get("decision") or {}).get("decided_at")
+            if isinstance(edge.get("decision"), Mapping)
+            else ""
+        ) or "1970-01-01T00:00:00Z"
+        decision = DeterministicMatchEngineV2().evaluate(
+            _listing_evidence_from_certification_view(document, "benchmark"),
+            _listing_evidence_from_certification_view(document, "competitor"),
+            matching_policy,
+            decided_at=decided_at,
+        )
+        decision_contract = decision.to_contract()
+    except (KeyError, TypeError, ValueError) as exc:
+        failure = str(exc)
+
+    queue_engine = document.get("queue_engine_proposal")
+    if not isinstance(queue_engine, Mapping):
+        queue_engine = document.get("engine_proposal")
+    document["queue_engine_proposal"] = (
+        dict(queue_engine) if isinstance(queue_engine, Mapping) else {}
+    )
+    if decision_contract is None:
+        edge["tier"] = None
+        edge["status"] = "unresolved"
+        edge["eligible_price_bases"] = []
+        document["engine_proposal"] = {
+            "edge_id": None,
+            "tier": None,
+            "status": "unresolved",
+            "decision_reason": failure,
+            "evidence_coverage": {},
+            "origin": "derived_certification_recomputation",
+        }
+        recomputation = {
+            "status": "blocked",
+            "error": failure,
+            "active_policy_checksum": policy.get("policy_checksum"),
+            "profile_id": profile_id or None,
+        }
+    else:
+        for key in (
+            "tier",
+            "status",
+            "eligible_price_bases",
+            "evidence_coverage",
+            "attribute_evidence",
+        ):
+            edge[key] = decision_contract[key]
+        edge["policy"] = decision_contract["policy"]
+        edge["decision"] = decision_contract["decision"]
+        document["engine_proposal"] = {
+            "edge_id": decision_contract["edge_id"],
+            "tier": decision_contract["tier"],
+            "status": decision_contract["status"],
+            "decision_reason": decision_contract["decision"]["reason"],
+            "evidence_coverage": decision_contract["evidence_coverage"],
+            "origin": "derived_certification_recomputation",
+        }
+        recomputation = {
+            "status": "succeeded",
+            "error": None,
+            "active_policy_checksum": policy.get("policy_checksum"),
+            "profile_id": profile_id,
+            "queue_engine_proposal": document["queue_engine_proposal"],
+            "derived_engine_proposal": document["engine_proposal"],
+        }
+    document["edge"] = edge
+    recomputation["checksum"] = _checksum(recomputation)
+    document["certification_engine_recomputation"] = recomputation
+    document["certification_view_checksum"] = _checksum(
+        {
+            "case_checksum": document.get("case_checksum"),
+            "active_policy_checksum": policy.get("policy_checksum"),
+            "engine_proposal": document.get("engine_proposal"),
+            "eligible_price_bases": edge.get("eligible_price_bases"),
+            "attribute_evidence": edge.get("attribute_evidence"),
+            "evidence_refs": sorted(str(value) for value in document.get("evidence_refs") or []),
+            "recomputation_checksum": recomputation["checksum"],
+        }
+    )
+    return document
+
+
+def _derived_certification_view(
+    case: Mapping[str, Any],
+    policy: Mapping[str, Any],
+    decisions: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Build the one certification view shared by AI, UI, bulk, and release paths."""
+
+    reconciled = _apply_attribute_reconciliation(case, policy, decisions)
+    governed = _apply_active_certification_policy(reconciled, policy)
+    recomputed = _recompute_certification_engine(governed, policy)
+    return _apply_active_certification_policy(recomputed, policy)
+
+
+def _certification_evidence_refs(
+    document: Mapping[str, Any], submitted_refs: Sequence[str]
+) -> list[str]:
+    checksum = str(document.get("certification_view_checksum") or "")
+    case_id = str(document.get("case_id") or "unknown")
+    view_reference = (
+        f"matching-v2-certification-view://{case_id}#sha256={checksum}"
+        if len(checksum) == 64
+        else None
+    )
+    return list(
+        dict.fromkeys(
+            [
+                *(str(value) for value in document.get("evidence_refs") or []),
+                *(str(value) for value in submitted_refs),
+                *([view_reference] if view_reference else []),
+            ]
+        )
+    )
+
+
 def _disallowed_certification_tiers(tiers: Sequence[str], case: Mapping[str, Any]) -> list[str]:
     allowed = case.get("certification_allowed_tiers")
     allowed = allowed if isinstance(allowed, list) else list(_ALL_MATCH_TIERS)
@@ -1040,7 +1323,7 @@ class GoldSetReplayRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "certify_ai_recommendations",
@@ -1118,6 +1401,15 @@ _AI_BULK_REASON_LABELS = {
     "known_third_party_seller": (
         "A known third-party marketplace seller makes the listing ineligible."
     ),
+    "certification_view_invalid": (
+        "The checksum-bound deterministic certification view is missing or invalid."
+    ),
+    "certification_recomputation_blocked": (
+        "The deterministic certification view could not be recomputed from governed evidence."
+    ),
+    "attribute_reconciliation_conflict": (
+        "Verified attribute evidence conflicts and requires individual resolution."
+    ),
     "evidence_refs_missing": "The case has no immutable source-evidence references.",
     "bulk_batch_limit": (
         "The relationship passed the required gates but is deferred to the next 50-case "
@@ -1174,6 +1466,18 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
     reason_codes: list[str] = []
     if case.get("review_status") != "pending":
         reason_codes.append("final_decision_exists")
+    certification_view_checksum = str(case.get("certification_view_checksum") or "")
+    if len(certification_view_checksum) != 64:
+        reason_codes.append("certification_view_invalid")
+    recomputation = case.get("certification_engine_recomputation")
+    recomputation = recomputation if isinstance(recomputation, Mapping) else {}
+    if recomputation.get("status") != "succeeded":
+        reason_codes.append("certification_recomputation_blocked")
+    reconciliation = case.get("attribute_evidence_reconciliation")
+    reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
+    reconciliation_conflicts = reconciliation.get("conflicts")
+    if isinstance(reconciliation_conflicts, list) and reconciliation_conflicts:
+        reason_codes.append("attribute_reconciliation_conflict")
 
     ai_draft = case.get("ai_draft")
     if not isinstance(ai_draft, Mapping) or ai_draft.get("status") != "succeeded":
@@ -1327,6 +1631,7 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
         "ai_task_id": (str(ai_draft.get("id")) if isinstance(ai_draft, Mapping) else None),
         "ai_rationale": str(result.get("rationale") or "") or None,
         "hard_blocker_issues": hard_blocker_issues,
+        "certification_view_checksum": certification_view_checksum,
         "benchmark_product": _bulk_product_summary(case.get("benchmark_listing")),
         "competitor_product": _bulk_product_summary(case.get("competitor_listing")),
     }
@@ -1369,6 +1674,7 @@ def _bulk_confirmation_checksum(
                 {
                     "case_id": candidate["case_id"],
                     "case_checksum": candidate["case_checksum"],
+                    "certification_view_checksum": candidate["certification_view_checksum"],
                     "ai_task_id": candidate["ai_task_id"],
                     "ai_output_checksum": candidate["ai_output_checksum"],
                     "recommended_verdict": candidate["recommended_verdict"],
@@ -2766,12 +3072,11 @@ class PostgresMatchingV2ReviewRepository:
                 }
             document["case_checksum"] = str(row["case_checksum"])
             document["ai_draft"] = ai_draft
-            document = _apply_attribute_reconciliation(
+            document = _derived_certification_view(
                 document,
                 certification_policy,
                 decision_rows,
             )
-            document = _apply_active_certification_policy(document, certification_policy)
             current_verdict = row["current_verdict"]
             if current_verdict is None:
                 review_status = "pending"
@@ -2946,6 +3251,9 @@ class PostgresMatchingV2ReviewRepository:
                     {
                         "case_id": candidate["case_id"],
                         "case_checksum": candidate["case_checksum"],
+                        "certification_view_checksum": candidate[
+                            "certification_view_checksum"
+                        ],
                         "ai_task_id": candidate["ai_task_id"],
                         "ai_output_checksum": candidate["ai_output_checksum"],
                         "recommended_verdict": candidate["recommended_verdict"],
@@ -3004,8 +3312,9 @@ class PostgresMatchingV2ReviewRepository:
                     f"matching-v2-ai-review://{candidate['ai_task_id']}"
                     f"#sha256={candidate['ai_output_checksum']}"
                 )
-                evidence_refs = list(
-                    dict.fromkeys([*snapshot.get("evidence_refs", []), ai_reference])
+                evidence_refs = _certification_evidence_refs(
+                    snapshot,
+                    [*snapshot.get("evidence_refs", []), ai_reference],
                 )
                 recommended_verdict = str(candidate["recommended_verdict"])
                 allowed_tiers = (
@@ -3145,12 +3454,27 @@ class PostgresMatchingV2ReviewRepository:
                               ORDER BY created_at DESC
                               LIMIT 1
                             )
-                            SELECT c.external_case_id, c.case_document,
+                            SELECT c.external_case_id, c.case_document, c.case_checksum,
                                    q.id::text AS review_queue_id,
                                    q.version AS queue_version,
-                                   q.product_pack_id
+                                   q.product_pack_id,
+                                   latest_task.input_checksum AS latest_ai_input_checksum,
+                                   latest_task.status AS latest_ai_status,
+                                   (
+                                     SELECT count(*)
+                                     FROM matching_v2_ai_review_task active_task
+                                     WHERE active_task.review_case_id = c.id
+                                       AND active_task.status IN ('queued', 'running')
+                                   ) AS active_ai_task_count
                             FROM matching_v2_review_case c
                             JOIN selected_queue q ON q.id = c.review_queue_id
+                            LEFT JOIN LATERAL (
+                              SELECT task.input_checksum, task.status
+                              FROM matching_v2_ai_review_task task
+                              WHERE task.review_case_id = c.id
+                              ORDER BY task.created_at DESC, task.id DESC
+                              LIMIT 1
+                            ) latest_task ON true
                             LEFT JOIN LATERAL (
                               SELECT decision.verdict
                               FROM (
@@ -3170,11 +3494,6 @@ class PostgresMatchingV2ReviewRepository:
                                       CAST(:competitor_retailer_id AS text))
                               AND coalesce(current_decision.verdict, 'pending')
                                   NOT IN ('comparable', 'not_comparable')
-                              AND NOT EXISTS (
-                                SELECT 1
-                                FROM matching_v2_ai_review_task task
-                                WHERE task.review_case_id = c.id
-                              )
                             """
                         ),
                         {
@@ -3215,7 +3534,11 @@ class PostgresMatchingV2ReviewRepository:
                 "selected_product_evidence_count": 0,
                 "case_ids": [],
             }
-        documents = [dict(row["case_document"]) for row in rows]
+        documents = []
+        for row in rows:
+            document = dict(row["case_document"])
+            document["case_checksum"] = str(row["case_checksum"])
+            documents.append(document)
         _apply_observed_location_sidecar(
             documents,
             queue_id=external_queue_id,
@@ -3228,11 +3551,16 @@ class PostgresMatchingV2ReviewRepository:
             )
         certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
         documents = [
-            _apply_active_certification_policy(
-                _apply_attribute_reconciliation(document, certification_policy, evidence_decisions),
-                certification_policy,
-            )
+            _derived_certification_view(document, certification_policy, evidence_decisions)
             for document in documents
+        ]
+        row_by_case = {str(row["external_case_id"]): row for row in rows}
+        documents = [
+            document
+            for document in documents
+            if int(row_by_case[str(document["case_id"])]["active_ai_task_count"] or 0) == 0
+            and str(row_by_case[str(document["case_id"])]["latest_ai_input_checksum"] or "")
+            != _checksum(document)
         ]
         documents = [
             document for document in documents if not _case_has_known_third_party_seller(document)
@@ -3299,6 +3627,12 @@ class PostgresMatchingV2ReviewRepository:
                                    q.version AS queue_version,
                                    q.product_pack_id,
                                    (
+                                     SELECT count(*)
+                                     FROM matching_v2_ai_review_task active_task
+                                     WHERE active_task.review_case_id = c.id
+                                       AND active_task.status IN ('queued', 'running')
+                                   ) AS active_ai_task_count,
+                                   (
                                      SELECT decision.verdict
                                      FROM (
                                        SELECT s.verdict, s.created_at, s.id
@@ -3331,7 +3665,10 @@ class PostgresMatchingV2ReviewRepository:
                     f"{external_queue_id!r}"
                 )
             sidecar_documents = {
-                case_id: dict(rows_by_case[case_id]["case_document"])
+                case_id: {
+                    **dict(rows_by_case[case_id]["case_document"]),
+                    "case_checksum": str(rows_by_case[case_id]["case_checksum"]),
+                }
                 for case_id in external_case_ids
             }
             _apply_observed_location_sidecar(
@@ -3341,8 +3678,13 @@ class PostgresMatchingV2ReviewRepository:
                 root=_repository_root(),
             )
             certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
+            evidence_decisions = await self._queue_attribute_decision_rows(
+                connection, str(rows[0]["review_queue_id"])
+            )
             sidecar_documents = {
-                case_id: _apply_active_certification_policy(document, certification_policy)
+                case_id: _derived_certification_view(
+                    document, certification_policy, evidence_decisions
+                )
                 for case_id, document in sidecar_documents.items()
             }
             excluded_seller_cases = [
@@ -3372,6 +3714,13 @@ class PostgresMatchingV2ReviewRepository:
             ]
             if finalized:
                 raise ValueError(f"finalized review cases cannot request AI drafts: {finalized!r}")
+            active = [
+                case_id
+                for case_id in external_case_ids
+                if int(rows_by_case[case_id]["active_ai_task_count"] or 0) > 0
+            ]
+            if active:
+                raise ValueError(f"review cases already have active AI tasks: {active!r}")
             batch = await self._insert_ai_review_batch(
                 connection,
                 review_queue_id=str(rows[0]["review_queue_id"]),
@@ -3379,6 +3728,12 @@ class PostgresMatchingV2ReviewRepository:
                 requested_by=requested_by,
                 model_id=model_id,
                 prompt=prompt,
+                idempotency_context=_checksum(
+                    {
+                        case_id: sidecar_documents[case_id]["certification_view_checksum"]
+                        for case_id in sorted(external_case_ids)
+                    }
+                ),
             )
             tasks = [
                 await self._insert_ai_draft_task(
@@ -3493,7 +3848,10 @@ class PostgresMatchingV2ReviewRepository:
                     f"{external_queue_id!r}"
                 )
             sidecar_documents = {
-                case_id: dict(rows_by_case[case_id]["case_document"])
+                case_id: {
+                    **dict(rows_by_case[case_id]["case_document"]),
+                    "case_checksum": str(rows_by_case[case_id]["case_checksum"]),
+                }
                 for case_id in external_case_ids
             }
             _apply_observed_location_sidecar(
@@ -3503,8 +3861,13 @@ class PostgresMatchingV2ReviewRepository:
                 root=_repository_root(),
             )
             certification_policy = _active_certification_policy(str(rows[0]["product_pack_id"]))
+            evidence_decisions = await self._queue_attribute_decision_rows(
+                connection, str(rows[0]["review_queue_id"])
+            )
             sidecar_documents = {
-                case_id: _apply_active_certification_policy(document, certification_policy)
+                case_id: _derived_certification_view(
+                    document, certification_policy, evidence_decisions
+                )
                 for case_id, document in sidecar_documents.items()
             }
             excluded_seller_cases = [
@@ -3592,6 +3955,7 @@ class PostgresMatchingV2ReviewRepository:
                     prompt=prompt,
                     retry_reason=retry_reason,
                     certification_policy=certification_policy,
+                    certification_input_document=sidecar_documents[case_id],
                 )
                 for case_id in external_case_ids
             ]
@@ -3664,6 +4028,7 @@ class PostgresMatchingV2ReviewRepository:
         prompt: Mapping[str, str],
         retry_reason: str,
         certification_policy: Mapping[str, Any],
+        certification_input_document: Mapping[str, Any],
     ) -> dict[str, Any]:
         stored_input_document = dict(row["ai_input_document"])
         stored_input_checksum = _checksum(stored_input_document)
@@ -3671,9 +4036,11 @@ class PostgresMatchingV2ReviewRepository:
             raise ValueError(
                 f"stored AI input checksum is invalid for case {row['external_case_id']!r}"
             )
-        input_document = _apply_active_certification_policy(
-            stored_input_document, certification_policy
-        )
+        input_document = dict(certification_input_document)
+        if str(input_document.get("certification_policy", {}).get("policy_checksum") or "") != str(
+            certification_policy.get("policy_checksum") or ""
+        ):
+            raise ValueError("AI retry certification input does not use the active Product Pack")
         input_checksum = _checksum(input_document)
         retry_sequence = int(row["ai_retry_sequence"] or 0) + 1
         idempotency_key = _checksum(
@@ -4051,8 +4418,18 @@ class PostgresMatchingV2ReviewRepository:
                 connection, str(case_row["review_queue_id"])
             )
             policy = _active_certification_policy(str(case_row["product_pack_id"]))
-            case_document = _apply_attribute_reconciliation(case_document, policy, decisions)
-            case_document = _apply_active_certification_policy(case_document, policy)
+            case_document = _derived_certification_view(case_document, policy, decisions)
+            submission = dict(submission)
+            submission["evidence_refs"] = _certification_evidence_refs(
+                case_document, submission.get("evidence_refs") or []
+            )
+            submission_checksum = _checksum(
+                {
+                    "queue_id": external_queue_id,
+                    "case_id": external_case_id,
+                    **submission,
+                }
+            )
             certification_blockers = case_document.get("certification_blockers")
             if submission["verdict"] == "comparable" and certification_blockers:
                 blocked_attributes = ", ".join(
@@ -4266,8 +4643,18 @@ class PostgresMatchingV2ReviewRepository:
                 connection, str(case_row["review_queue_id"])
             )
             policy = _active_certification_policy(str(case_row["product_pack_id"]))
-            case_document = _apply_attribute_reconciliation(case_document, policy, decisions)
-            case_document = _apply_active_certification_policy(case_document, policy)
+            case_document = _derived_certification_view(case_document, policy, decisions)
+            adjudication = dict(adjudication)
+            adjudication["evidence_refs"] = _certification_evidence_refs(
+                case_document, adjudication.get("evidence_refs") or []
+            )
+            adjudication_checksum = _checksum(
+                {
+                    "queue_id": external_queue_id,
+                    "case_id": external_case_id,
+                    **adjudication,
+                }
+            )
             certification_blockers = case_document.get("certification_blockers")
             if adjudication["verdict"] == "comparable" and certification_blockers:
                 blocked_attributes = ", ".join(
@@ -4830,9 +5217,8 @@ class MatchingV2ReviewService:
                 continue
             decisions = case.get("attribute_evidence_decisions")
             decisions = decisions if isinstance(decisions, list) else []
-            reconciled = _apply_attribute_reconciliation(case, certification_policy, decisions)
             reconciled_cases.append(
-                _apply_active_certification_policy(reconciled, certification_policy)
+                _derived_certification_view(case, certification_policy, decisions)
             )
         document["cases"] = reconciled_cases
         document["certification_policy"] = certification_policy
