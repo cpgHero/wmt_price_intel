@@ -135,6 +135,12 @@ The result is deliberately conservative:
 - zero prohibited non-oral/noise titles; and
 - zero senior-versus-ordinary-adult mismatch.
 
+The complete queue, evidence-gap audit, and product-evidence selection manifest are durably
+archived at
+`s3://artifacts-usb-pmrd1jcxsy9/matching-v2/shadows/vitamins_supplements/2026.08.25-spring-valley-coverage-shadow-6.tar.gz`.
+The verified archive is 21,910,849 bytes with SHA-256
+`a0ff58d16f32b0a82a6eaff4c3de06aed306fb8e00aa164065797c0238d8d992`.
+
 The active-policy minimum set cover reduces 2,389 evidence-eligible pair cases to 928 pair-level
 AI calls that collectively expose all 1,067 distinct products with unresolved hard evidence.
 That defers 1,461 redundant pair calls while retaining every retailer:
