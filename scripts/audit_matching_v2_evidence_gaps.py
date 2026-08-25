@@ -91,9 +91,14 @@ def audit(queue: JsonObject) -> JsonObject:
         summary["case_appearances"] += case_counts[listing_id]
         if listing.get("image_url") or listing.get("image_urls"):
             summary["products_with_images"].add(listing_id)
-        if missing[listing_id]:
+        listing_missing = missing.get(listing_id, set())
+        if listing_missing:
             summary["missing_products"].add(listing_id)
-            summary["missing_attributes"].update(missing[listing_id])
+            summary["missing_attributes"].update(listing_missing)
+
+    missing_products = {
+        listing_id: attributes for listing_id, attributes in missing.items() if attributes
+    }
 
     return {
         "queue_id": queue.get("queue_id"),
@@ -113,16 +118,16 @@ def audit(queue: JsonObject) -> JsonObject:
         "mean_case_appearances_per_product": (
             round(sum(case_counts.values()) / len(case_counts), 2) if case_counts else 0
         ),
-        "products_missing_hard_evidence": len(missing),
+        "products_missing_hard_evidence": len(missing_products),
         "products_missing_hard_evidence_excluding_release_profile": sum(
-            1 for attributes in missing.values() if attributes - {"release_profile"}
+            1 for attributes in missing_products.values() if attributes - {"release_profile"}
         ),
         "missing_attribute_combinations": dict(
-            Counter(",".join(sorted(attributes)) or "none" for attributes in missing.values())
+            Counter(",".join(sorted(attributes)) for attributes in missing_products.values())
         ),
         "missing_products_with_images": sum(
             1
-            for listing_id in missing
+            for listing_id in missing_products
             if products[listing_id].get("image_url") or products[listing_id].get("image_urls")
         ),
         "case_statuses": dict(statuses),
@@ -146,7 +151,7 @@ def audit(queue: JsonObject) -> JsonObject:
                 "retailer_id": products[listing_id]["retailer_id"],
                 "title": products[listing_id]["title"],
                 "case_count": count,
-                "missing_hard_attributes": sorted(missing[listing_id]),
+                "missing_hard_attributes": sorted(missing_products.get(listing_id, set())),
             }
             for listing_id, count in case_counts.most_common(25)
         ],
@@ -167,19 +172,19 @@ def audit(queue: JsonObject) -> JsonObject:
                             if value
                         }
                     ),
-                    "all_missing_hard_attributes": sorted(missing[listing_id]),
+                    "all_missing_hard_attributes": sorted(missing_products[listing_id]),
                 }
                 for listing_id in sorted(
                     (
                         listing_id
-                        for listing_id, attributes in missing.items()
+                        for listing_id, attributes in missing_products.items()
                         if attribute in attributes
                     ),
                     key=lambda value: (-case_counts[value], value),
                 )[:30]
             ]
             for attribute in sorted(
-                {attribute for attributes in missing.values() for attribute in attributes}
+                {attribute for attributes in missing_products.values() for attribute in attributes}
             )
         },
         "deterministic_candidate_examples": candidate_examples,

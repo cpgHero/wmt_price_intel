@@ -226,6 +226,25 @@ def test_vitamin_pack_distinguishes_quick_dissolve_from_standard_tablets(
     assert classifier.classify(standard).attributes["release_profile"] == "Standard"
 
 
+def test_vitamin_pack_prioritizes_fifty_plus_over_gender_audience(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    classified = classifier.classify(
+        normalizer.normalize(
+            _row(
+                "target_us",
+                "women-50-plus",
+                "Women's Multivitamin 50+ Gummies, 150 Count",
+                "12.49",
+            )
+        )
+    )
+
+    assert classified.attributes["life_stage"] == "Senior"
+
+
 def test_vitamin_pack_fails_closed_on_missing_identity_evidence() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     policy = compile_matching_policy_v2(pack, "exact_spec")

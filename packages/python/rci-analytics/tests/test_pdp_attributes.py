@@ -268,6 +268,46 @@ def test_vitamin_formulation_terms_do_not_collapse_to_one_shared_minor_ingredien
     )
 
 
+def test_pdp_warning_and_broad_age_eligibility_do_not_create_child_audience() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    offer = NormalizedOffer(
+        offer_id="digestive-enzyme-1",
+        retailer_id="walmart_us",
+        retailer_product_id="770495984",
+        title="Advanced Digestive Enzymes Vegetarian Capsules, 60 Count",
+        brand="Spring Valley",
+        price=Decimal("9.88"),
+        currency="USD",
+        zipcode="72712",
+        store_number="100",
+        latitude=36.37,
+        longitude=-94.2,
+        in_stock=True,
+        product_url=None,
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+
+    enriched = complete_attributes_from_pdp(
+        classifier.classify(offer),
+        {
+            "name": offer.title,
+            "specification": {
+                "age_group": "Adult, Senior, Teen",
+                "product_warning": "Keep out of reach of children",
+                "stop_use_indications": "Consult a doctor and keep out of reach of children",
+            },
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert enriched.attributes["life_stage"] == "General"
+    assert enriched.attributes["_attribute_provenance"]["life_stage"] == "unresolved"
+
+
 def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     classifier = OfferClassifier(

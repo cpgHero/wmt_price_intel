@@ -10,6 +10,14 @@ from rci_analytics.models import ClassifiedOffer, JsonObject
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedSellerResolver
 
+_CLASSIFICATION_EXCLUDED_PDP_KEYS = {
+    "product_warning",
+    "safety_warning",
+    "stop_use_indications",
+    "warning",
+    "warnings",
+}
+
 
 def product_context_index(values: list[JsonObject]) -> dict[str, JsonObject]:
     """Index only records backed by a normalized Product Details snapshot."""
@@ -205,6 +213,13 @@ def _pdp_classification_raw(current: JsonObject, context: JsonObject) -> JsonObj
 def _flatten(value: Any, output: list[str]) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
+            normalized_key = str(key).strip().casefold().replace("-", "_").replace(" ", "_")
+            if normalized_key in _CLASSIFICATION_EXCLUDED_PDP_KEYS:
+                continue
+            if normalized_key == "age_group" and isinstance(item, str) and "," in item:
+                # Broad retailer eligibility lists (for example, "Adult, Senior, Teen")
+                # are not a precise product audience and must not create a hard match fact.
+                continue
             output.append(str(key))
             _flatten(item, output)
     elif isinstance(value, list):
