@@ -550,6 +550,10 @@ class PostgresProductDetailRepository:
                               SELECT j.id
                               FROM product_detail_job j
                               JOIN ranked candidate ON candidate.id = j.id
+                              WHERE (
+                                (j.status = 'queued' AND j.available_at <= now()) OR
+                                (j.status = 'running' AND j.lease_expires_at <= now())
+                              ) AND j.attempt_count < j.max_attempts
                               ORDER BY candidate.priority, candidate.retailer_rank,
                                 candidate.created_at, candidate.id
                               FOR UPDATE OF j SKIP LOCKED
