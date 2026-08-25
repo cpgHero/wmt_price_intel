@@ -358,8 +358,8 @@
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
-      "strength": {"role": "hard_blocker", "critical": true, "weight": 8, "numeric_tolerance": 0, "unknown_is_blocking": true},
-      "strength_unit": {"role": "hard_blocker", "critical": true, "weight": 8, "unknown_is_blocking": true},
+      "strength": {"role": "hard_blocker", "critical": true, "weight": 8, "numeric_tolerance": 0, "unknown_is_blocking": true, "not_applicable_when": {"attribute": "active_ingredient", "values": ["blood_sugar_support_formula", "metabolyze_formula", "calcium_vitamin_d", "vitamin_c_zinc", "prenatal_multivitamin", "multivitamin", "vitamin_d3_k2", "calcium_magnesium_zinc", "glucosamine_chondroitin", "b_complex", "digestive_enzymes", "greens"]}},
+      "strength_unit": {"role": "hard_blocker", "critical": true, "weight": 8, "unknown_is_blocking": true, "not_applicable_when": {"attribute": "active_ingredient", "values": ["blood_sugar_support_formula", "metabolyze_formula", "calcium_vitamin_d", "vitamin_c_zinc", "prenatal_multivitamin", "multivitamin", "vitamin_d3_k2", "calcium_magnesium_zinc", "glucosamine_chondroitin", "b_complex", "digestive_enzymes", "greens"]}},
       "dosage_form": {"role": "hard_blocker", "critical": true, "weight": 6, "unknown_is_blocking": true},
       "package_count": {"role": "soft_comparator", "critical": true, "weight": 4, "numeric_tolerance": 0},
       "servings_per_container": {"role": "soft_comparator", "critical": false, "weight": 3, "numeric_tolerance": 0},

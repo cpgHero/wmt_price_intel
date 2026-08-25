@@ -34,6 +34,7 @@ from rci_api.matching_v2_review import (
     _has_complete_observed_location_evidence,
     _is_ai_retry_integrity_failure,
     _matching_v2_certification_coverage,
+    _missing_evidence_listing_ids,
     _product_evidence_coverage_selection,
     _reconciliation_proposals,
     _review_queue_quarantine,
@@ -1718,12 +1719,92 @@ def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_
     policy = _active_certification_policy("vitamins_supplements")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.2.4"
+    assert policy["product_pack_version"] == "1.2.5"
     assert policy["allow_comparable_substitute"] is False
     assert "comparable_substitute" not in policy["allowed_tiers"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]
     assert governed["certification_tier_blockers"] == ["comparable_substitute"]
     assert governed["certification_release_blocked"] is True
+
+
+def test_active_policy_honors_governed_multi_ingredient_applicability() -> None:
+    case = _queue()["cases"][0]
+    case["edge"]["attribute_evidence"] = [
+        {
+            "attribute": "active_ingredient",
+            "role": "hard_blocker",
+            "benchmark_value": "multivitamin",
+            "competitor_value": "multivitamin",
+            "outcome": "match",
+        },
+        {
+            "attribute": "strength",
+            "role": "hard_blocker",
+            "benchmark_value": None,
+            "competitor_value": None,
+            "benchmark_source": "unresolved",
+            "competitor_source": "unresolved",
+            "outcome": "unknown",
+        },
+        {
+            "attribute": "strength_unit",
+            "role": "hard_blocker",
+            "benchmark_value": None,
+            "competitor_value": None,
+            "benchmark_source": "unresolved",
+            "competitor_source": "unresolved",
+            "outcome": "unknown",
+        },
+    ]
+
+    governed = _apply_active_certification_policy(
+        case, _active_certification_policy("vitamins_supplements")
+    )
+    evidence = {row["attribute"]: row for row in governed["edge"]["attribute_evidence"]}
+
+    assert evidence["strength"]["outcome"] == "ignored"
+    assert evidence["strength"]["conditional_not_applicable"] is True
+    assert evidence["strength_unit"]["outcome"] == "ignored"
+    assert evidence["strength_unit"]["conditional_not_applicable"] is True
+    assert not {issue["attribute"] for issue in governed["certification_blockers"]} & {
+        "strength",
+        "strength_unit",
+    }
+    assert _missing_evidence_listing_ids(governed) == set()
+
+
+def test_legacy_ignored_hard_blocker_fails_closed_without_active_applicability() -> None:
+    case = _queue()["cases"][0]
+    case["edge"]["attribute_evidence"] = [
+        {
+            "attribute": "strength",
+            "role": "hard_blocker",
+            "benchmark_value": None,
+            "competitor_value": None,
+            "benchmark_source": "unresolved",
+            "competitor_source": "unresolved",
+            "outcome": "ignored",
+        }
+    ]
+    policy = _active_certification_policy("vitamins_supplements")
+    policy["comparison_rules"] = {
+        **policy["comparison_rules"],
+        "strength": {
+            key: value
+            for key, value in policy["comparison_rules"]["strength"].items()
+            if key != "not_applicable_when"
+        },
+    }
+
+    governed = _apply_active_certification_policy(case, policy)
+
+    assert "strength" in {
+        issue["attribute"] for issue in governed["certification_blockers"]
+    }
+    assert _missing_evidence_listing_ids(governed) == {
+        case["benchmark_listing_id"],
+        case["competitor_listing_id"],
+    }
 
 
 def _bulk_eligible_case() -> dict[str, Any]:

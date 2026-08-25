@@ -128,6 +128,13 @@ export interface RetailCompetitiveIntelligenceProductPack {
         weight: number;
         numeric_tolerance?: number;
         unknown_is_blocking?: boolean;
+        not_applicable_when?: {
+          attribute: string;
+          /**
+           * @minItems 1
+           */
+          values: [unknown, ...unknown[]];
+        };
       };
     };
     /**

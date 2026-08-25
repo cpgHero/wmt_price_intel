@@ -250,8 +250,8 @@ def _vitamin_listing(
     product_id: str,
     *,
     active_ingredient: str | None = "Vitamin D3",
-    strength: float = 50,
-    strength_unit: str = "mcg",
+    strength: float | None = 50,
+    strength_unit: str | None = "mcg",
     dosage_form: str = "Tablet",
     package_count: float = 100,
     release_profile: str = "Standard",
@@ -313,6 +313,37 @@ def test_vitamin_pack_allows_package_count_only_equivalence_for_unit_price() -> 
     assert result.status == "candidate"
     assert result.tier == "equivalent_product"
     assert result.eligible_price_bases == ("normalized_unit",)
+
+
+def test_vitamin_pack_routes_multi_ingredient_formulas_to_equivalent_review() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing(
+            "walmart_us",
+            "adult-multi",
+            active_ingredient="multivitamin",
+            strength=None,
+            strength_unit=None,
+        ),
+        _vitamin_listing(
+            "target_us",
+            "adult-multi",
+            active_ingredient="multivitamin",
+            strength=None,
+            strength_unit=None,
+        ),
+        policy,
+        decided_at="2026-08-24T12:00:00Z",
+    )
+
+    assert result.status == "candidate"
+    assert result.tier == "equivalent_product"
+    evidence = {row.attribute: row for row in result.evidence}
+    assert evidence["strength"].outcome == "ignored"
+    assert evidence["strength_unit"].outcome == "ignored"
+    assert evidence["active_ingredient"].outcome == "match"
 
 
 @pytest.mark.parametrize(

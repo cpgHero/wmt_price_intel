@@ -455,7 +455,21 @@
               "critical": { "type": "boolean" },
               "weight": { "type": "number", "minimum": 0 },
               "numeric_tolerance": { "type": "number", "minimum": 0 },
-              "unknown_is_blocking": { "type": "boolean" }
+              "unknown_is_blocking": { "type": "boolean" },
+              "not_applicable_when": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["attribute", "values"],
+                "properties": {
+                  "attribute": { "type": "string", "minLength": 1 },
+                  "values": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {}
+                  }
+                }
+              }
             }
           }
         },

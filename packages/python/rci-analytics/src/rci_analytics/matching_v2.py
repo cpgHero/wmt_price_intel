@@ -157,12 +157,16 @@ class AttributePolicyV2:
     numeric_tolerance: float | None = None
     critical: bool = True
     unknown_is_blocking: bool = False
+    not_applicable_when_attribute: str | None = None
+    not_applicable_when_values: tuple[Any, ...] = ()
 
     def __post_init__(self) -> None:
         if self.weight < 0:
             raise ValueError("attribute weight cannot be negative")
         if self.numeric_tolerance is not None and self.numeric_tolerance < 0:
             raise ValueError("numeric tolerance cannot be negative")
+        if bool(self.not_applicable_when_attribute) != bool(self.not_applicable_when_values):
+            raise ValueError("conditional attribute applicability requires an attribute and values")
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +214,19 @@ class MatchingPolicyV2:
         names = [rule.name for rule in self.attributes]
         if len(names) != len(set(names)):
             raise ValueError("matching policy attribute names must be unique")
+        unknown_applicability_attributes = sorted(
+            {
+                rule.not_applicable_when_attribute
+                for rule in self.attributes
+                if rule.not_applicable_when_attribute
+                and rule.not_applicable_when_attribute not in names
+            }
+        )
+        if unknown_applicability_attributes:
+            raise ValueError(
+                "conditional applicability references unknown attributes: "
+                f"{unknown_applicability_attributes}"
+            )
         if not self.eligible_price_bases:
             raise ValueError("matching policy must define an eligible price basis")
         if len(self.eligible_price_bases) != len(set(self.eligible_price_bases)):
@@ -299,6 +316,8 @@ class MatchingPolicyV2:
                         "numeric_tolerance": rule.numeric_tolerance,
                         "critical": rule.critical,
                         "unknown_is_blocking": rule.unknown_is_blocking,
+                        "not_applicable_when_attribute": rule.not_applicable_when_attribute,
+                        "not_applicable_when_values": rule.not_applicable_when_values,
                     }
                     for rule in self.attributes
                 ],
@@ -447,6 +466,8 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
         name = str(attribute["name"])
         configured_rule = configured_roles.get(name)
         if isinstance(configured_rule, dict):
+            applicability = configured_rule.get("not_applicable_when")
+            applicability = applicability if isinstance(applicability, Mapping) else {}
             rules.append(
                 AttributePolicyV2(
                     name=name,
@@ -459,6 +480,10 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
                     ),
                     critical=bool(configured_rule["critical"]),
                     unknown_is_blocking=bool(configured_rule.get("unknown_is_blocking", False)),
+                    not_applicable_when_attribute=(
+                        str(applicability["attribute"]) if applicability.get("attribute") else None
+                    ),
+                    not_applicable_when_values=tuple(applicability.get("values") or ()),
                 )
             )
         elif name in dimensions:
@@ -604,12 +629,10 @@ class DeterministicMatchEngineV2:
     ) -> TieredMatchDecisionV2:
         _validate_datetime(decided_at)
         evidence = tuple(
-            self._compare_attribute(
-                rule,
-                benchmark.attributes.get(rule.name),
-                competitor.attributes.get(rule.name),
-            )
-            for rule in policy.attributes
+            self._compare_pair_attribute(rule, benchmark, competitor) for rule in policy.attributes
+        )
+        conditionally_inapplicable = any(
+            row.outcome == "ignored" and row.role != "ignored" for row in evidence
         )
         critical_rows = [
             row
@@ -683,7 +706,12 @@ class DeterministicMatchEngineV2:
                     f"Verified shared {verified_identifier} with no contradictory critical "
                     "evidence; Product Pack review is required for this tier."
                 )
-        elif not critical_conflicts and not required_unknowns and critical_coverage == 1:
+        elif (
+            not critical_conflicts
+            and not required_unknowns
+            and critical_coverage == 1
+            and not conditionally_inapplicable
+        ):
             tier = "exact_specification"
             if tier in policy.auto_approval_tiers:
                 status = "auto_approved"
@@ -743,6 +771,48 @@ class DeterministicMatchEngineV2:
             evidence=evidence,
             decision_reason=reason,
             decided_at=decided_at,
+        )
+
+    @staticmethod
+    def _compare_pair_attribute(
+        policy: AttributePolicyV2,
+        benchmark: ListingEvidence,
+        competitor: ListingEvidence,
+    ) -> AttributeComparisonV2:
+        context_attribute = policy.not_applicable_when_attribute
+        if context_attribute:
+            benchmark_context = benchmark.attributes.get(context_attribute)
+            competitor_context = competitor.attributes.get(context_attribute)
+            allowed = {_normalized_scalar(value) for value in policy.not_applicable_when_values}
+            if (
+                benchmark_context is not None
+                and competitor_context is not None
+                and not _is_unknown_or_conflicted(benchmark_context)
+                and not _is_unknown_or_conflicted(competitor_context)
+                and _normalized_scalar(benchmark_context.value) in allowed
+                and _normalized_scalar(competitor_context.value) in allowed
+            ):
+                benchmark_value = benchmark.attributes.get(policy.name)
+                competitor_value = competitor.attributes.get(policy.name)
+                return AttributeComparisonV2(
+                    attribute=policy.name,
+                    role=policy.role,
+                    benchmark_value=(benchmark_value.value if benchmark_value else None),
+                    competitor_value=(competitor_value.value if competitor_value else None),
+                    outcome="ignored",
+                    benchmark_source=(benchmark_value.source if benchmark_value else None),
+                    competitor_source=(competitor_value.source if competitor_value else None),
+                    weight=policy.weight,
+                    reliability=0,
+                    rationale=(
+                        f"Not applicable when both {context_attribute} values are governed "
+                        "multi-ingredient formulations."
+                    ),
+                )
+        return DeterministicMatchEngineV2._compare_attribute(
+            policy,
+            benchmark.attributes.get(policy.name),
+            competitor.attributes.get(policy.name),
         )
 
     @staticmethod

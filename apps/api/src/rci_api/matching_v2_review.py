@@ -234,6 +234,13 @@ def _missing_evidence_listing_ids(case: Mapping[str, Any]) -> set[str]:
             isinstance(row, Mapping)
             and row.get("role") == "hard_blocker"
             and (
+                row.get("outcome") == "unknown"
+                or (
+                    row.get("outcome") == "ignored"
+                    and row.get("conditional_not_applicable") is not True
+                )
+            )
+            and (
                 row.get(f"{side}_value") in (None, "", "Unknown", "unknown")
                 or row.get(f"{side}_source") in (None, "unresolved")
             )
@@ -471,6 +478,12 @@ def _hard_blocker_issues(
         outcome = str(evidence.get("outcome") or "missing") if evidence else "missing"
         if outcome in {"match", "within_tolerance"}:
             continue
+        if (
+            outcome == "ignored"
+            and evidence is not None
+            and evidence.get("conditional_not_applicable") is True
+        ):
+            continue
         if outcome in {"missing", "unknown"} and attribute in unknown_nonblocking:
             continue
         issues.append(
@@ -526,6 +539,32 @@ def _apply_active_certification_policy(
             row["queue_role"] = queue_role or None
             row["role"] = active_role
             row["role_source"] = "active_product_pack_certification_policy"
+        rule = policy.get("comparison_rules", {}).get(attribute)
+        applicability = rule.get("not_applicable_when") if isinstance(rule, Mapping) else None
+        row.pop("conditional_not_applicable", None)
+        if isinstance(applicability, Mapping):
+            context_attribute = str(applicability.get("attribute") or "")
+            allowed_values = {_canonical(value) for value in applicability.get("values") or []}
+            context_row = next(
+                (
+                    candidate
+                    for candidate in rows
+                    if isinstance(candidate, Mapping)
+                    and str(candidate.get("attribute") or "") == context_attribute
+                ),
+                None,
+            )
+            if (
+                isinstance(context_row, Mapping)
+                and _canonical(context_row.get("benchmark_value")) in allowed_values
+                and _canonical(context_row.get("competitor_value")) in allowed_values
+            ):
+                row["outcome"] = "ignored"
+                row["conditional_not_applicable"] = True
+                row["rationale"] = (
+                    f"Not applicable when both {context_attribute} values are governed "
+                    "multi-ingredient formulations."
+                )
         updated_rows.append(row)
     edge["attribute_evidence"] = updated_rows
     document["edge"] = edge

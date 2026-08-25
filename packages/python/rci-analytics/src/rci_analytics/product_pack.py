@@ -227,6 +227,22 @@ class ProductPackLoader:
                 raise ContractError(
                     f"matching_v2 references unknown attributes {sorted(unknown_v2_attributes)}"
                 )
+            for attribute_name, rule in matching_v2["attribute_roles"].items():
+                applicability = rule.get("not_applicable_when")
+                if not isinstance(applicability, dict):
+                    continue
+                context_attribute = str(applicability["attribute"])
+                if context_attribute not in known:
+                    raise ContractError(
+                        "matching_v2 conditional applicability for "
+                        f"{attribute_name!r} references unknown attribute "
+                        f"{context_attribute!r}"
+                    )
+                if context_attribute == str(attribute_name):
+                    raise ContractError(
+                        "matching_v2 conditional applicability cannot reference itself for "
+                        f"{attribute_name!r}"
+                    )
             price_bases = {str(value) for value in matching_v2["eligible_price_bases"]}
             price_basis_requirements = matching_v2["price_basis_requirements"]
             unknown_requirement_bases = set(price_basis_requirements) - price_bases
