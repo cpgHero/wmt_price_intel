@@ -55,7 +55,6 @@ _RESULT_SCHEMA: JsonObject = {
         "comparison_basis_proposal": {
             "type": "array",
             "maxItems": 2,
-            "uniqueItems": True,
             "items": {
                 "type": "string",
                 "enum": ["package_price", "normalized_unit_price"],
@@ -402,6 +401,13 @@ def _validate_matching_review_result(result: object, *, image_urls: list[str]) -
         raise ValueError("non-comparable AI draft cannot propose a tier")
     if not isinstance(comparison_bases, list):
         raise ValueError("AI matching result must propose governed price-comparison bases")
+    allowed_comparison_bases = {"package_price", "normalized_unit_price"}
+    if any(value not in allowed_comparison_bases for value in comparison_bases):
+        raise ValueError("AI matching result proposed an unsupported price-comparison basis")
+    if len(comparison_bases) != len(set(comparison_bases)):
+        raise ValueError("AI matching result proposed duplicate price-comparison bases")
+    if len(comparison_bases) > len(allowed_comparison_bases):
+        raise ValueError("AI matching result proposed too many price-comparison bases")
     if verdict == "comparable" and not comparison_bases:
         raise ValueError("comparable AI draft requires at least one price-comparison basis")
     if verdict != "comparable" and comparison_bases:

@@ -39,6 +39,14 @@ No category branch was added to the core engine.
 
 The pinned Luna rates are `$0.20` per million input tokens and `$1.20` per million output tokens. Existing immutable Terra tasks retain their original model and usage records. New or explicitly retried tasks use the current configured Luna model. Per-request maximum-cost validation, durable queues, retry lineage, and recorded usage remain in force.
 
+## Bounded Luna validation
+
+The first production validation uses the immutable Product Pack `1.3.0` shadow queue `2026.08.25-spring-valley-luna-shadow-9`. Its 2,316 pair identities exactly match the accepted predecessor, with zero added or removed pairs, zero observed-location failures, zero price-basis invariant failures, and no known third-party seller leakage. Eighteen cases spanning all nine competitors were selected before any model request, with a disclosed aggregate maximum of `$6.30`.
+
+Batch `efc2b2fa-a9cf-4c03-b49c-184bc75e9481` failed closed before inference because the strict response schema contained the unsupported JSON Schema keyword `uniqueItems`. All 18 historical task records remain immutable, no draft was accepted, no relationship was certified, reporting was unchanged, and recorded model cost was `$0.00`.
+
+The response schema now uses only the OpenAI Structured Outputs subset. Duplicate or unsupported comparison bases remain rejected by application validation after parsing, so schema compatibility does not relax the governed price-basis boundary. Any rerun must create lineage-linked retry tasks; it must not overwrite or reset the failed tasks.
+
 ## Auto-certification boundary
 
 Higher throughput comes from deterministic eligibility plus checksum-bound administrator bulk certification. Raw model confidence is not an auto-certification authority. Truly automatic certification remains disabled until a category-specific certified gold set proves the existing release threshold without unlabeled auto-approvals or hard-blocker conflicts.

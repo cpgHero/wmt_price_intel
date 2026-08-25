@@ -1544,7 +1544,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "Production vitamin reporting remains blocked on human reconciliation and certification. The accepted Product Pack 1.2.9 replacement observed 248 of 322 Spring Valley anchors, retains 74 explicit catalog gaps, excludes two known topical catalog products, and imports 2,316 clean pair cases with carry-forward disabled. Under the owner-approved $50 aggregate ceiling, 366 unique cases completed advisory AI evidence review for $41.7666525. They expose 499 of 1,020 products with unresolved hard evidence and generated 610 source-attributable image proposals eligible for human verification; the semantic audit found zero hard guardrail failures and zero certifiable AI relationship proposals. The remaining 521 products and all unverified proposals stay unresolved. No output has automatically certified a relationship or changed reporting.",
+            "Production vitamin reporting remains blocked on human reconciliation and certification. Product Pack 1.3.0 shadow queue 2026.08.25-spring-valley-luna-shadow-9 preserves the accepted 2,316 pair identities with zero added or removed pairs, zero observed-location failures, zero price-basis invariant failures, and no known third-party seller leakage. Its first 18-case Luna validation failed closed before inference because strict Structured Outputs rejected an unsupported uniqueItems schema keyword; all failed tasks remain immutable, accepted output and certification counts are zero, reporting is unchanged, and recorded cost is $0.00. The compatibility fix removes that provider keyword while retaining application-level rejection of duplicate or unsupported comparison bases. Earlier Product Pack 1.2.9 evidence remains preserved: 366 unique cases cost $41.7666525, exposed 499 of 1,020 products with unresolved hard evidence, and generated 610 source-attributable image proposals eligible for human verification, with zero certifiable AI relationship proposals.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-25",
+              "Implemented and regression-tested; production retry pending",
+              "The Matching v2 Luna response schema was aligned to the supported OpenAI Structured Outputs subset without weakening comparison-basis governance.",
+              "An immutable 18-case validation batch spanning all nine vitamin competitors failed before inference because uniqueItems is not supported in a strict response schema. The failure created no accepted drafts, no certifications, no reporting changes, and $0.00 recorded model cost. The provider schema no longer sends that keyword; post-parse validation still rejects duplicate, unknown, or excessive comparison bases. The failed task lineage remains immutable, and any production rerun must use linked retry tasks rather than resets or mutation.",
+            ],
             [
               "2026-08-25",
               "Production deployed and verified",

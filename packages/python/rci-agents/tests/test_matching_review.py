@@ -148,6 +148,7 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
     assert endpoint.kwargs["store"] is False
     assert endpoint.kwargs["text"]["format"]["strict"] is True
     result_schema = endpoint.kwargs["text"]["format"]["schema"]
+    assert "uniqueItems" not in json.dumps(result_schema)
     assert result_schema["properties"]["verdict_proposal"]["type"] == "string"
     assert result_schema["properties"]["tier_proposal"]["anyOf"][0]["type"] == "string"
     assert result_schema["properties"]["requires_human_review"] == {
@@ -182,6 +183,34 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         "https://example.com/walmart-label.jpg",
         "https://example.com/aldi-label.jpg",
     ]
+
+
+async def test_matching_review_rejects_duplicate_comparison_bases_after_generation() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "comparable",
+            "tier_proposal": "equivalent_product",
+            "comparison_basis_proposal": ["package_price", "package_price"],
+            "rationale": "The products have compatible governed attributes.",
+            "attribute_proposals": [],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+
+    with pytest.raises(ValueError, match="duplicate price-comparison bases"):
+        await provider.generate(
+            load_matching_review_prompt(REPOSITORY_ROOT),
+            _case(),
+            model_id="gpt-5.6-luna",
+        )
 
 
 async def test_matching_review_schema_disallows_image_claims_without_input_images() -> None:
