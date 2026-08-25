@@ -14,24 +14,25 @@ weaken a hard blocker, alter Search or PDP evidence, or authorize an AI call.
 
 ## Evidence audit
 
-The final read-only Spring Valley coverage shadow uses all three retained collection runs and
-Product Pack `1.2.7`. It contains 2,398 pair cases spanning 152 observed Walmart products and
-1,335 competitor products. Seven hundred thirty-three products recur across cases, so
-pair-by-pair evidence review would repeatedly inspect the same labels.
+The final Spring Valley coverage shadow uses all three retained collection runs and Product Pack
+`1.2.9`. It contains 2,316 pair cases. The reduction from the earlier 2,398-case shadow is an
+intentional scope correction: Walmart products `631199053` and `240505739` are topical skin oils,
+not oral supplements, and are now explicit catalog exclusions. Their 82 contaminated pairs were
+removed before the replacement queue was imported.
 
 The source boundary is explicit and reproducible:
 
 - 23,716 successful Search rows across Walmart and nine competitors;
 - 2,324 retained PDP snapshots;
-- 2,398 cases where both products have a positive Search-derived observed-location footprint;
-- zero cases excluded for a known third-party seller because no admitted candidate carried
-  known third-party evidence; and
+- 2,316 cases where both products have a positive Search-derived observed-location footprint;
+- zero admitted cases with a known third-party seller;
+- zero admitted known topical/non-oral products; and
 - 74 configured Spring Valley anchors retained as catalog gaps because they had no
   positive-price Search observation.
 
-The final evidence audit found 1,067 distinct products with unresolved hard evidence, all with
-at least one image. Seven hundred eighty-four still have a substantive gap when release profile
-is excluded. The unresolved population is not converted into matches by assumptions.
+The active-policy audit found 1,020 distinct products with unresolved hard evidence. A greedy,
+deterministic minimum-coverage scope selects 883 pair cases that collectively expose every one
+of those products. The unresolved population is not converted into matches by assumptions.
 
 The audit is reproducible with `scripts/audit_matching_v2_evidence_gaps.py`. It is read-only and
 produces product-, retailer-, attribute-, and reuse-level counts without mutating a queue.
@@ -68,7 +69,7 @@ cases, model, per-case ceiling, and maximum exposure. It still requires explicit
 confirmation before creating paid AI work. The existing all-eligible and manually selected modes
 remain available.
 
-### Product Pack 1.2.7 deterministic and certification repair
+### Product Pack 1.2.9 deterministic and certification repair
 
 The Vitamins & Supplements Product Pack and certification boundary now:
 
@@ -84,7 +85,9 @@ The Vitamins & Supplements Product Pack and certification boundary now:
   comma-separated age-group values from becoming product life-stage evidence;
 - distinguishes senior `50+` formulations from ordinary adult formulations; and
 - treats unresolved values, Product Pack defaults, and zero-reliability inferences as unknown
-  rather than positive evidence at the certification boundary.
+  rather than positive evidence at the certification boundary; and
+- prevents explicit catalog membership from overriding an explicit product-ID exclusion, which
+  is how the two known Spring Valley topical products are now removed generically.
 
 Zero automatic approval remains the policy. Life stage, ingredient/formulation, strength,
 strength unit, dosage form, and named release profile still fail closed when applicable.
@@ -101,9 +104,14 @@ conflict.
   conditional rule is limited to the governed multi-ingredient formula family and cannot make
   an exact-specification proposal; it only makes the pair eligible for evidence review.
 - The 269 terminal PDP failures remain retained evidence. Billable 404s are not blindly retried.
-- No additional MetricsCart or OpenAI call is authorized by this phase.
-- The new shadow must be rebuilt and audited before any production queue import. Import, AI
-  launch, certification, and reporting replay remain separate explicit actions.
+- No new MetricsCart call was made for the evidence review; it uses retained Search, PDP, and
+  label-image evidence.
+- The owner authorized an aggregate OpenAI ceiling of `$50.00`. Recorded usage is
+  `$41.7666525`; unused authority is `$8.2333475`.
+- AI output is advisory evidence only. Source-attributable image proposals require an explicit
+  human verification or rejection before they can influence certification.
+- Queue import, AI evidence review, evidence verification, relationship certification, and
+  reporting replay remain separate explicit actions.
 
 ## Release gates
 
@@ -118,17 +126,23 @@ conflict.
    already reusable.
 8. Every positive deterministic proposal receives a semantic audit.
 9. The owner receives an estimated and maximum OpenAI cost before any paid review is launched.
-10. Production import remains blocked until the shadow and cost plan are accepted explicitly.
+10. Production import and paid AI work require explicit owner acceptance of the replacement
+    shadow and aggregate cost ceiling.
+11. Every paid output requires `requires_human_review=true`; comparable output may not coexist
+    with a known or AI-declared hard conflict.
+12. No AI proposal automatically mutates Product Pack evidence, certifies a relationship, or
+    triggers reporting replay.
 
-## Final shadow and semantic verification
+## Final shadow, import, and semantic verification
 
-Queue `2026.08.25-spring-valley-coverage-shadow-6` was rebuilt on Railway without importing it.
-The result is deliberately conservative:
+Queue `2026.08.25-spring-valley-coverage-shadow-8` was rebuilt and audited on Railway, then
+imported as the operational certification replacement with carry-forward disabled. Its database
+queue ID is `d0eac24f-574e-40ce-b44f-b00a33f5888f`. The result is deliberately conservative:
 
-- 2,398 total cases;
-- 2,392 unresolved cases;
+- 2,316 total cases;
+- 2,310 unresolved cases;
 - six deterministic candidates: one exact-specification and five equivalent-product proposals;
-- all six are visibly coherent fast-dissolve melatonin or vitamin B12 relationships;
+- zero inherited decisions or certifications;
 - zero known third-party cases;
 - zero candidate hard-blocker violations;
 - zero positive hard-blocker values sourced from `unresolved` or `product_pack_default`;
@@ -137,33 +151,57 @@ The result is deliberately conservative:
 
 The complete queue, evidence-gap audit, and product-evidence selection manifest are durably
 archived at
-`s3://artifacts-usb-pmrd1jcxsy9/matching-v2/shadows/vitamins_supplements/2026.08.25-spring-valley-coverage-shadow-6.tar.gz`.
-The verified archive is 21,910,849 bytes with SHA-256
-`a0ff58d16f32b0a82a6eaff4c3de06aed306fb8e00aa164065797c0238d8d992`.
+`s3://artifacts-usb-pmrd1jcxsy9/matching-v2/shadows/vitamins_supplements/2026.08.25-spring-valley-coverage-shadow-8.tar.gz`.
+The verified archive is 21,713,581 bytes with SHA-256
+`d39f23b0f72915b23511dfc58c40b72b9506ee65dd7f5827edbb113428e834e2`.
 
-The active-policy minimum set cover reduces 2,389 evidence-eligible pair cases to 928 pair-level
-AI calls that collectively expose all 1,067 distinct products with unresolved hard evidence.
-That defers 1,461 redundant pair calls while retaining every retailer:
+The active-policy minimum set cover reduces the eligible population to 883 pair-level calls that
+collectively expose all 1,020 distinct products with unresolved hard evidence. It retains every
+retailer:
 
 | Competitor | Selected pair calls |
 | --- | ---: |
 | Amazon Same Day | 106 |
-| BJ's | 39 |
+| BJ's | 38 |
 | Costco | 31 |
-| CVS | 88 |
+| CVS | 83 |
 | Kroger | 123 |
-| Meijer | 178 |
-| Sam's Club | 33 |
-| Target | 136 |
-| Walgreens | 194 |
-| **Total** | **928** |
+| Meijer | 171 |
+| Sam's Club | 32 |
+| Target | 131 |
+| Walgreens | 168 |
+| **Total** | **883** |
 
-Historical successful Matching v2 usage averages about `$0.0413167863` per task, producing a
-planning estimate of **$38.34** for 928 calls. A **$50 aggregate maximum** is proposed. This is
-not authorization: the shadow remains unimported, no OpenAI task has been created, and both
-production import and the paid AI launch require the owner's explicit acceptance of the final
-shadow and cost ceiling.
+## Paid evidence-review ledger
 
-Source implementation is deployed at commit `ad9cd2a`. GitHub CI run `32808802572` passed the
-Python, TypeScript, contract, migration, container-build, and browser-test gates. Railway was
-verified to serve Product Pack `1.2.7` before the final rebuild.
+The owner accepted a `$50.00` aggregate maximum. The governed execution stopped at
+`$41.7666525`, leaving `$8.2333475` unused. Credit-balance and project-limit failures recorded
+zero usage and were retried only after the owner restored the corresponding OpenAI control. Each
+retry created a new linked task; no successful task was repeated and failure history was not
+rewritten.
+
+Across the clean Product Pack `1.2.9` queue:
+
+- 366 unique pair cases completed AI evidence review;
+- 499 of the 1,020 unresolved products were exposed in those completed cases;
+- 167 drafts proposed `not_comparable`;
+- 199 drafts proposed `insufficient_evidence`;
+- zero drafts proposed a certifiable relationship;
+- 1,224 attribute proposals were advisory;
+- 610 proposals met the source-image, visible-label, confidence, active-attribute, and
+  normalization eligibility gates; and
+- the full semantic audit found zero hard guardrail failures.
+
+The remaining 521 products have not received AI evidence review. They remain unresolved rather
+than being inferred. The 610 eligible image proposals are also unresolved until a human verifies
+or rejects them in Match Certification.
+
+The evidence-gap audit, set-cover manifest, per-wave audits, complete paid-task ledger, per-case
+results, cost reconciliation, and semantic audit are durably archived at
+`s3://artifacts-usb-pmrd1jcxsy9/matching-v2/audits/vitamins_supplements/2026.08.25-spring-valley-shadow-8-ai-audit.tar.gz`.
+The archive is 45,628 bytes with SHA-256
+`2771c6c4ed75ff662d44e64005b36daa6153f8d29a69926b170c981b481d58ae`.
+
+No AI draft or image proposal has automatically certified a match or changed reporting. The next
+governed action is human attribute-evidence reconciliation, followed by relationship
+certification and an explicit reporting replay.
