@@ -44,6 +44,8 @@ def audit(queue: JsonObject) -> JsonObject:
             for row in evidence_rows:
                 if row.get("role") != "hard_blocker":
                     continue
+                if row.get("conditional_not_applicable") is True:
+                    continue
                 if _unknown(row.get(f"{side}_value"), row.get(f"{side}_source")):
                     missing[listing_id].add(str(row["attribute"]))
         for row in evidence_rows:

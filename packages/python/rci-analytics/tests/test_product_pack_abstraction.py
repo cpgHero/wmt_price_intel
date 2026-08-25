@@ -342,8 +342,14 @@ def test_vitamin_pack_routes_multi_ingredient_formulas_to_equivalent_review() ->
     assert result.tier == "equivalent_product"
     evidence = {row.attribute: row for row in result.evidence}
     assert evidence["strength"].outcome == "ignored"
+    assert evidence["strength"].conditional_not_applicable is True
     assert evidence["strength_unit"].outcome == "ignored"
+    assert evidence["strength_unit"].conditional_not_applicable is True
     assert evidence["active_ingredient"].outcome == "match"
+    contract_evidence = {
+        row["attribute"]: row for row in result.to_contract()["attribute_evidence"]
+    }
+    assert contract_evidence["strength"]["conditional_not_applicable"] is True
 
 
 @pytest.mark.parametrize(

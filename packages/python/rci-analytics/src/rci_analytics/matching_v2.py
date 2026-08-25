@@ -378,6 +378,7 @@ class AttributeComparisonV2:
     weight: float
     reliability: float
     rationale: str | None = None
+    conditional_not_applicable: bool = False
 
     def to_contract(self) -> JsonObject:
         return {
@@ -391,6 +392,7 @@ class AttributeComparisonV2:
             "weight": self.weight,
             "reliability": self.reliability,
             "rationale": self.rationale,
+            "conditional_not_applicable": self.conditional_not_applicable,
         }
 
 
@@ -808,6 +810,7 @@ class DeterministicMatchEngineV2:
                         f"Not applicable when both {context_attribute} values are governed "
                         "multi-ingredient formulations."
                     ),
+                    conditional_not_applicable=True,
                 )
         return DeterministicMatchEngineV2._compare_attribute(
             policy,
