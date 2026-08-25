@@ -207,11 +207,11 @@ async def run() -> None:
                 OpenAIMatchingReviewProvider(
                     api_key=os.environ["OPENAI_API_KEY"],
                     timeout_seconds=float(os.getenv("OPENAI_MATCHING_TIMEOUT_SECONDS", "90")),
-                    max_output_tokens=int(os.getenv("OPENAI_MATCHING_MAX_OUTPUT_TOKENS", "3000")),
+                    max_output_tokens=int(os.getenv("OPENAI_MATCHING_MAX_OUTPUT_TOKENS", "6000")),
                     max_request_cost_usd=float(
                         os.getenv("OPENAI_MATCHING_MAX_REQUEST_COST_USD", "0.35")
                     ),
-                    reasoning_effort=os.getenv("OPENAI_MATCHING_REASONING_EFFORT", "high"),
+                    reasoning_effort=os.getenv("OPENAI_MATCHING_REASONING_EFFORT", "medium"),
                 ),
                 repository_root=repository_root,
                 worker_id=f"{worker_id}-matching-agent",

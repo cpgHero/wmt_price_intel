@@ -60,6 +60,16 @@ class ImageDownloadFallbackEndpoint:
         )
 
 
+class IncompleteResponsesEndpoint:
+    async def create(self, **_: Any) -> object:
+        return SimpleNamespace(
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+            output_text="",
+            usage=SimpleNamespace(input_tokens=800, output_tokens=3000),
+        )
+
+
 def _case(*, coverage: float = 0.5) -> dict[str, Any]:
     return {
         "case_id": "case-1",
@@ -500,6 +510,26 @@ async def test_matching_review_rejects_structured_attribute_proposal() -> None:
             load_matching_review_prompt(REPOSITORY_ROOT),
             _case(),
             model_id="gpt-5.6-terra",
+        )
+
+
+async def test_matching_review_reports_incomplete_response_reason() -> None:
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=3000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=IncompleteResponsesEndpoint()),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"status=incomplete, reason=max_output_tokens, output_tokens=3000",
+    ):
+        await provider.generate(
+            load_matching_review_prompt(REPOSITORY_ROOT),
+            _case(),
+            model_id="gpt-5.6-luna",
         )
 
 

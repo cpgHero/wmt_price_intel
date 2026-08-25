@@ -1625,9 +1625,9 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "2026-08-25",
-              "Implemented and regression-tested; bounded production pilot pending",
+              "Production deployed; bounded pilot passed evidence quality and exposed retry-envelope follow-up",
               "Matching v2 vision review now emits only source-attributable, Product-Pack-typed image evidence.",
-              "The audit of 105 existing Luna attribute proposals found only two image-sourced proposals and 103 structured restatements that could not enter reconciliation. Prompt 1.2.0 now tells the model to inspect every supplied image, while its request-specific schema permits only active Product Pack attributes, typed values, exact sent-image URLs, and visible label text. No-image and image-download-fallback requests permit zero attribute proposals. Post-response validation independently rejects structured proposals and inactive or uncited claims. Human verification, derived recomputation, certification, and publication remain separate gates; normalized-unit pricing still cannot create a match.",
+              "The audit of 105 existing Luna attribute proposals found only two image-sourced proposals and 103 structured restatements that could not enter reconciliation. Prompt 1.2.0 now tells the model to inspect every supplied image, while its request-specific schema permits only active Product Pack attributes, typed values, exact sent-image URLs, and visible label text. The 25-case production pilot cost $0.1758222 for 20 successful drafts and produced 31 proposals: all image-sourced, source-bound, Product-Pack-valid, and eligible for human verification, with zero structured claims or automatic decisions. Five empty or truncated responses exposed that reasoning tokens share the max-output envelope. The worker now uses medium reasoning and 6,000 output tokens and records explicit incomplete-response diagnostics before retrying only those five cases. Human verification, derived recomputation, certification, and publication remain separate gates; normalized-unit pricing still cannot create a match.",
             ],
             [
               "2026-08-25",

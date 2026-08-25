@@ -260,7 +260,7 @@ class OpenAIMatchingReviewProvider:
         timeout_seconds: float,
         max_output_tokens: int,
         max_request_cost_usd: float | None,
-        reasoning_effort: str = "high",
+        reasoning_effort: str = "medium",
         client: Any | None = None,
         model_pricing: dict[str, ModelPricing] | None = None,
     ) -> None:
@@ -375,7 +375,19 @@ class OpenAIMatchingReviewProvider:
             )
             image_urls = []
             response = await request(image_urls)
-        result = json.loads(str(response.output_text))
+        response_status = str(getattr(response, "status", "completed") or "completed")
+        output_text = str(getattr(response, "output_text", "") or "")
+        if response_status != "completed" or not output_text.strip():
+            incomplete_details = getattr(response, "incomplete_details", None)
+            incomplete_reason = str(getattr(incomplete_details, "reason", "") or "unknown")
+            usage = getattr(response, "usage", None)
+            output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+            raise RuntimeError(
+                "OpenAI matching review returned no complete JSON output "
+                f"(status={response_status}, reason={incomplete_reason}, "
+                f"output_tokens={output_tokens})"
+            )
+        result = json.loads(output_text)
         _validate_matching_review_result(
             result,
             image_urls=image_urls,

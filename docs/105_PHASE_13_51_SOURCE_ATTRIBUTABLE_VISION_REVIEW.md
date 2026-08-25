@@ -48,3 +48,19 @@ recalculated only after product comparability exists; it never creates a relatio
    certification impact before any scaled review.
 
 No proposal is bulk verified or certified as part of the pilot.
+
+## Bounded production pilot — 2026-08-25
+
+Batch `dd810008-8a36-42fe-b382-882f039210b9` submitted 25 image-backed, distinct-evidence
+coverage cases to `gpt-5.6-luna`. Twenty succeeded and five returned empty or truncated JSON after
+their automatic retry. Recorded successful-call cost was `$0.1758222`. The successful drafts
+produced 31 attribute proposals: all 31 were image-sourced, all 31 resolved to exactly one retained
+listing image with visible text, all 31 were active Product Pack attributes, and all 31 passed the
+server reconciliation eligibility checks. There were zero structured proposals, zero proposal
+blockers, zero human decisions, and zero certification or reporting changes.
+
+The failed responses exposed an execution-envelope issue rather than an evidence-governance issue.
+OpenAI's Responses API counts reasoning tokens inside `max_output_tokens`. The matching worker now
+uses medium reasoning and a 6,000-token response envelope for Luna, and provider errors record the
+response status, incomplete reason, and output-token count instead of surfacing a generic JSON
+decoder message. Only the five failed pilot cases are retried after deployment.
