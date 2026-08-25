@@ -95,6 +95,7 @@ def test_product_packs_load_in_required_expansion_order() -> None:
         "Green Tea Bags with Elderberry Vitamin C, 18 count",
         "Noka Superfood Fruit Smoothie Pouches with Vitamins, 6 Pack",
         "Vitamin B12 Transdermal Wellness Patch, 30 Count",
+        "barriere Energy Boost Vitamin B12 Patch - 36ct",
         "Vitamin C Brightening Eye Treatment Cream, 0.5 oz",
         "Cold Pressed Vitamin C Juice Beverage, 64 fl oz",
     ],
@@ -197,6 +198,32 @@ def test_vitamin_pack_preserves_audience_and_release_conflicts(
     assert adult_classified.attributes["release_profile"] == "Fast Acting"
     assert child_classified.attributes["life_stage"] == "Children"
     assert child_classified.attributes["release_profile"] == "Standard"
+
+
+def test_vitamin_pack_distinguishes_quick_dissolve_from_standard_tablets(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    quick_dissolve = normalizer.normalize(
+        _row(
+            "walmart_us",
+            "10316852",
+            "Spring Valley Vitamin B12 Quick-Dissolve Tablets, 2500 mcg, 60 Count",
+            "9.88",
+        )
+    )
+    standard = normalizer.normalize(
+        _row(
+            "target_us",
+            "standard-tablet",
+            "Vitamin B12 Tablets, 2500 mcg, 60 Count",
+            "10.49",
+        )
+    )
+
+    assert classifier.classify(quick_dissolve).attributes["release_profile"] == "Quick Dissolve"
+    assert classifier.classify(standard).attributes["release_profile"] == "Standard"
 
 
 def test_vitamin_pack_fails_closed_on_missing_identity_evidence() -> None:
