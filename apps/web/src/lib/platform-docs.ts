@@ -1619,9 +1619,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-25",
-              "Implemented and regression-tested; deployment and full differential audit pending",
+              "Production deployed and full differential audit passed",
               "Matching v2 now recomputes one checksum-bound deterministic certification view after governed PDP/image evidence reconciliation.",
-              "Queue display, paid AI input, evidence-triggered AI re-analysis, individual certification, bulk preview/commit, and gold-set release now share the same derived evidence path. The generic engine reruns under the named active Product Pack profile, recalculates tier and eligible package/unit bases, and fails closed on policy/profile errors or conflicting verified evidence. Bulk policy 1.7.0 binds this derived view into preview and action checksums; unchanged AI input is not charged again. Declared unknown values cannot resolve evidence. A read-only audit of vitamin queue 2026.08.25-spring-valley-luna-shadow-9 found 2,316 cases, 19 successful latest Luna drafts, 105 attribute proposals (2 image and 103 structured), and zero human evidence decisions. No MetricsCart or OpenAI call was made.",
+              "Queue display, paid AI input, evidence-triggered AI re-analysis, individual certification, bulk preview/commit, and gold-set release now share the same derived evidence path. The generic engine reruns under the named active Product Pack profile, recalculates tier and eligible package/unit bases, and fails closed on policy/profile errors or conflicting verified evidence. Bulk policy 1.7.0 binds this derived view into preview and action checksums; unchanged AI input is not charged again. Declared unknown values cannot resolve evidence. All 2,316 vitamin cases recomputed successfully with zero errors and zero invalid checksums; the result remained 2,310 unresolved, five equivalent-product candidates, and one exact-specification candidate because no verified evidence decisions exist. GitHub Actions run 32897486492 and the Railway API/scheduler deployments passed. No MetricsCart or OpenAI call was made for the audit.",
+            ],
+            [
+              "2026-08-25",
+              "Implemented and regression-tested; bounded production pilot pending",
+              "Matching v2 vision review now emits only source-attributable, Product-Pack-typed image evidence.",
+              "The audit of 105 existing Luna attribute proposals found only two image-sourced proposals and 103 structured restatements that could not enter reconciliation. Prompt 1.2.0 now tells the model to inspect every supplied image, while its request-specific schema permits only active Product Pack attributes, typed values, exact sent-image URLs, and visible label text. No-image and image-download-fallback requests permit zero attribute proposals. Post-response validation independently rejects structured proposals and inactive or uncited claims. Human verification, derived recomputation, certification, and publication remain separate gates; normalized-unit pricing still cannot create a match.",
             ],
             [
               "2026-08-25",

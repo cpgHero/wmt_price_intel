@@ -146,19 +146,16 @@ def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObje
         comparison_basis_schema["items"]["enum"] = comparison_bases
     proposals = schema["properties"]["attribute_proposals"]
     if not image_urls:
-        proposals["items"]["properties"]["evidence_source"] = {
-            "type": "string",
-            "enum": ["structured"],
-        }
-        proposals["items"]["properties"]["visible_text"] = {"type": "null"}
-        proposals["items"]["properties"]["source_image_url"] = {"type": "null"}
+        # Structured facts are already present in the governed case and are
+        # evaluated by the deterministic engine. Repeating them as advisory AI
+        # proposals creates unactionable evidence that can never be reconciled.
+        proposals["maxItems"] = 0
         return schema
 
-    common_properties: JsonObject = {
-        "attribute": {"type": "string", "minLength": 1, "maxLength": 120},
-        "value": {"type": "string", "minLength": 1, "maxLength": 500},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    }
+    certification_policy = case_document.get("certification_policy")
+    certification_policy = certification_policy if isinstance(certification_policy, dict) else {}
+    definitions = certification_policy.get("attribute_definitions")
+    definitions = definitions if isinstance(definitions, dict) else {}
     required = [
         "attribute",
         "value",
@@ -167,25 +164,43 @@ def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObje
         "visible_text",
         "source_image_url",
     ]
-    proposals["items"] = {
-        "anyOf": [
+    variants: list[JsonObject] = []
+    for attribute, definition_value in sorted(definitions.items()):
+        if not isinstance(definition_value, dict):
+            continue
+        data_type = str(definition_value.get("data_type") or "string")
+        if data_type == "number":
+            value_schema: JsonObject = {"type": "number"}
+        elif data_type == "array":
+            value_schema = {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string", "minLength": 1, "maxLength": 200},
+            }
+        elif data_type == "enum":
+            unknown_values = {
+                str(value).casefold() for value in definition_value.get("unknown_values") or []
+            }
+            allowed_values = [
+                str(value)
+                for value in definition_value.get("allowed_values") or []
+                if str(value).casefold() not in unknown_values
+            ]
+            value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
+            if allowed_values:
+                value_schema["enum"] = allowed_values
+        else:
+            value_schema = {"type": "string", "minLength": 1, "maxLength": 500}
+        variants.append(
             {
                 "type": "object",
                 "additionalProperties": False,
                 "required": required,
                 "properties": {
-                    **common_properties,
-                    "evidence_source": {"type": "string", "enum": ["structured"]},
-                    "visible_text": {"type": "null"},
-                    "source_image_url": {"type": "null"},
-                },
-            },
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": required,
-                "properties": {
-                    **common_properties,
+                    "attribute": {"type": "string", "enum": [str(attribute)]},
+                    "value": value_schema,
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                     "evidence_source": {"type": "string", "enum": ["image"]},
                     "visible_text": {"type": "string", "minLength": 1, "maxLength": 500},
                     "source_image_url": {
@@ -193,9 +208,12 @@ def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObje
                         "enum": list(image_urls),
                     },
                 },
-            },
-        ]
-    }
+            }
+        )
+    if not variants:
+        proposals["maxItems"] = 0
+    else:
+        proposals["items"] = {"anyOf": variants}
     return schema
 
 
@@ -298,7 +316,7 @@ class OpenAIMatchingReviewProvider:
                                 "allowed_source_image_urls": urls,
                                 "image_proposals_require_exact_source_url": True,
                                 "image_proposals_require_visible_text": True,
-                                "structured_proposals_require_null_image_fields": True,
+                                "structured_attribute_proposals_permitted": False,
                             },
                             "case": case_document,
                         }
@@ -459,12 +477,20 @@ def _validate_matching_review_result(
         raise ValueError("comparable AI draft requires at least one price-comparison basis")
     if verdict != "comparable" and comparison_bases:
         raise ValueError("non-comparable AI draft cannot propose a price-comparison basis")
+    certification_policy = case_document.get("certification_policy")
+    certification_policy = certification_policy if isinstance(certification_policy, dict) else {}
+    attribute_definitions = certification_policy.get("attribute_definitions")
+    active_attributes = (
+        set(attribute_definitions) if isinstance(attribute_definitions, dict) else set()
+    )
     for row in result.get("attribute_proposals", []):
         if not isinstance(row, dict):
             raise ValueError("AI attribute proposal must be an object")
-        if row.get("evidence_source") == "image" and (
-            not row.get("visible_text") or row.get("source_image_url") not in image_urls
-        ):
+        if row.get("evidence_source") != "image":
+            raise ValueError("AI attribute proposals must be source-attributable image evidence")
+        if row.get("attribute") not in active_attributes:
+            raise ValueError("AI attribute proposal is not active in the Product Pack")
+        if not row.get("visible_text") or row.get("source_image_url") not in image_urls:
             raise ValueError("image evidence must cite visible evidence and an input image")
 
 

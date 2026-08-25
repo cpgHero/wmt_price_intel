@@ -49,13 +49,20 @@ Product Pack normalization, and a human verify decision. Values declared as Prod
 cannot resolve missing evidence. Raw Search, PDP, image, AI output, queue cases, and prior decisions
 are never rewritten.
 
-## Pre-deployment production audit — 2026-08-25
+## Production verification and audit — 2026-08-25
 
 The latest vitamin queue is
 `2026.08.25-spring-valley-luna-shadow-9` with 2,316 immutable candidates. It has 19 successful
 latest Luna drafts containing 105 attribute proposals: 2 image-sourced and 103 structured. It has
-zero attribute-evidence decisions, so this change does not silently alter a current human decision
-or certification. No MetricsCart or OpenAI call was made for the audit.
+zero attribute-evidence decisions, so this change did not silently alter a current human decision
+or certification. All 2,316 cases recomputed successfully, with zero recomputation errors and zero
+invalid certification-view checksums. The resulting distribution remained 2,310 unresolved, five
+equivalent-product candidates, and one exact-specification candidate because no human-verified
+attribute decision exists yet. No MetricsCart or OpenAI call was made for the audit.
+
+GitHub Actions run `32897486492` passed Python tests, mypy, contract checks, migration
+upgrade/downgrade/upgrade, TypeScript checks, production builds, 14 browser tests, and all four
+container builds. Railway API and scheduler deployed commit `30d49d6` successfully.
 
 ## Verification requirements
 

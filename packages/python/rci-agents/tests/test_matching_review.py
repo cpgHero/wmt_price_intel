@@ -94,23 +94,45 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
                 }
             ],
         },
+        "certification_policy": {
+            "attribute_definitions": {
+                "certifications": {
+                    "data_type": "array",
+                    "allowed_values": [],
+                    "unknown_values": [],
+                },
+                "fat_content": {
+                    "data_type": "enum",
+                    "allowed_values": ["Skim", "1%", "2%", "Whole", "Unknown"],
+                    "unknown_values": ["Unknown"],
+                },
+                "package_count": {
+                    "data_type": "number",
+                    "allowed_values": [],
+                    "unknown_values": [],
+                },
+            }
+        },
     }
 
 
 def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     prompt = load_matching_review_prompt(REPOSITORY_ROOT)
+    instructions = prompt.instructions.casefold()
 
-    assert prompt.version == "1.1.0"
+    assert prompt.version == "1.2.0"
     assert "Product Pack attribute roles" in prompt.instructions
-    assert "different or unknown brands do not independently prevent" in prompt.instructions
-    assert "Brand agreement never overrides" in prompt.instructions
+    assert "different or unknown brands do not independently prevent" in instructions
+    assert "brand agreement never overrides" in instructions
     assert "gallon, half-gallon, quart, pint" in prompt.instructions
     assert "never creates, rescues, widens, or upgrades" in prompt.instructions
     assert "Use two ordered decisions" in prompt.instructions
     assert "normalized_unit_price" in prompt.instructions
     assert "certification_unknown_nonblocking_attributes" in prompt.instructions
     assert "certification_allowed_tiers" in prompt.instructions
-    assert "never propose a tier absent" in prompt.instructions
+    assert "never propose a tier absent" in instructions
+    assert "inspect every supplied image" in instructions
+    assert "do not emit a structured attribute proposal" in instructions
 
 
 async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None:
@@ -185,15 +207,37 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         ],
         "image_proposals_require_exact_source_url": True,
         "image_proposals_require_visible_text": True,
-        "structured_proposals_require_null_image_fields": True,
+        "structured_attribute_proposals_permitted": False,
     }
     proposal_variants = result_schema["properties"]["attribute_proposals"]["items"]["anyOf"]
-    assert proposal_variants[1]["properties"]["source_image_url"]["enum"] == [
+    assert all(
+        proposal["properties"]["evidence_source"]["enum"] == ["image"]
+        for proposal in proposal_variants
+    )
+    fat_content = next(
+        proposal
+        for proposal in proposal_variants
+        if proposal["properties"]["attribute"]["enum"] == ["fat_content"]
+    )
+    assert fat_content["properties"]["value"]["enum"] == ["Skim", "1%", "2%", "Whole"]
+    assert fat_content["properties"]["source_image_url"]["enum"] == [
         "https://example.com/walmart.jpg",
         "https://example.com/aldi.jpg",
         "https://example.com/walmart-label.jpg",
         "https://example.com/aldi-label.jpg",
     ]
+    package_count = next(
+        proposal
+        for proposal in proposal_variants
+        if proposal["properties"]["attribute"]["enum"] == ["package_count"]
+    )
+    assert package_count["properties"]["value"] == {"type": "number"}
+    certifications = next(
+        proposal
+        for proposal in proposal_variants
+        if proposal["properties"]["attribute"]["enum"] == ["certifications"]
+    )
+    assert certifications["properties"]["value"]["type"] == "array"
 
 
 async def test_matching_review_rejects_duplicate_comparison_bases_after_generation() -> None:
@@ -302,16 +346,7 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
             "tier_proposal": "equivalent_product",
             "comparison_basis_proposal": ["package_price", "normalized_unit_price"],
             "rationale": "The governed structured attributes agree.",
-            "attribute_proposals": [
-                {
-                    "attribute": "fat_content",
-                    "value": "2%",
-                    "evidence_source": "structured",
-                    "confidence": 0.99,
-                    "visible_text": None,
-                    "source_image_url": None,
-                }
-            ],
+            "attribute_proposals": [],
             "conflicts": [],
             "requires_human_review": True,
         }
@@ -337,10 +372,7 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
     content = endpoint.kwargs["input"][0]["content"]
     assert [item["type"] for item in content] == ["input_text"]
     schema = endpoint.kwargs["text"]["format"]["schema"]
-    proposal = schema["properties"]["attribute_proposals"]["items"]
-    assert proposal["properties"]["evidence_source"]["enum"] == ["structured"]
-    assert proposal["properties"]["visible_text"] == {"type": "null"}
-    assert proposal["properties"]["source_image_url"] == {"type": "null"}
+    assert schema["properties"]["attribute_proposals"]["maxItems"] == 0
 
 
 @pytest.mark.parametrize(
@@ -389,9 +421,12 @@ async def test_matching_review_falls_back_when_retailer_image_download_is_blocke
         "input_image",
     ]
     assert [item["type"] for item in endpoint.calls[1]["input"][0]["content"]] == ["input_text"]
-    assert endpoint.calls[1]["text"]["format"]["schema"]["properties"]["attribute_proposals"][
-        "items"
-    ]["properties"]["evidence_source"]["enum"] == ["structured"]
+    assert (
+        endpoint.calls[1]["text"]["format"]["schema"]["properties"]["attribute_proposals"][
+            "maxItems"
+        ]
+        == 0
+    )
 
 
 async def test_matching_review_rejects_uncited_image_claim() -> None:
@@ -424,6 +459,43 @@ async def test_matching_review_rejects_uncited_image_claim() -> None:
     )
 
     with pytest.raises(ValueError, match="visible evidence"):
+        await provider.generate(
+            load_matching_review_prompt(REPOSITORY_ROOT),
+            _case(),
+            model_id="gpt-5.6-terra",
+        )
+
+
+async def test_matching_review_rejects_structured_attribute_proposal() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "insufficient_evidence",
+            "tier_proposal": None,
+            "comparison_basis_proposal": [],
+            "rationale": "The model repeated a structured fact instead of citing the label.",
+            "attribute_proposals": [
+                {
+                    "attribute": "fat_content",
+                    "value": "2%",
+                    "evidence_source": "structured",
+                    "confidence": 0.99,
+                    "visible_text": None,
+                    "source_image_url": None,
+                }
+            ],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+
+    with pytest.raises(ValueError, match="source-attributable image evidence"):
         await provider.generate(
             load_matching_review_prompt(REPOSITORY_ROOT),
             _case(),
