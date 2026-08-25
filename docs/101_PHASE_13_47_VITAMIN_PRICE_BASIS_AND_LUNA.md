@@ -67,6 +67,8 @@ Policy `guarded_ai_recommendation_bulk_certification@1.6.0` now fails closed whe
 
 AI-extracted PDP or image attributes remain proposals. They must be verified through the governed evidence-reconciliation workflow and the deterministic edge must be recomputed before a stronger tier or additional comparison basis can become eligible. The AI result itself never upgrades the edge.
 
+Production task `7ab6ea7f-23a2-4a8f-9dae-1a6e1c063766` in batch `8f467713-3b85-4558-8d02-c13db8372f97` then verified the hardened schema against the live provider. The untouched case had no deterministic tier or eligible price basis. Luna completed for `$0.0023444` and returned `insufficient_evidence` with a null tier and no comparison basis, exactly preserving that boundary. The provider could not retrieve the remote images, so the recorded structured-evidence fallback completed successfully. The task remains advisory; no relationship was certified and reporting did not change.
+
 ## Auto-certification boundary
 
 Higher throughput comes from deterministic eligibility plus checksum-bound administrator bulk certification. Raw model confidence is not an auto-certification authority. Truly automatic certification remains disabled until a category-specific certified gold set proves the existing release threshold without unlabeled auto-approvals or hard-blocker conflicts.
