@@ -960,6 +960,7 @@ def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() 
         "exact_item_identifier_schemes": ["gtin", "upc"],
         "eligible_price_bases": ["exact_package", "normalized_unit"],
         "price_basis_requirements": {"exact_package": ["volume_oz"]},
+        "price_basis_known_requirements": {"normalized_unit": ["volume_oz"]},
         "minimum_equivalent_coverage": 0.9,
         "equivalent_score_threshold": 0.95,
         "allow_comparable_substitute": True,
@@ -978,6 +979,7 @@ def test_product_pack_can_configure_v2_attribute_roles_without_core_branching() 
     assert policy.minimum_equivalent_coverage == 0.9
     assert policy.eligible_price_bases == ("exact_package", "normalized_unit")
     assert policy.price_basis_requirements == (("exact_package", ("volume_oz",)),)
+    assert policy.price_basis_known_requirements == (("normalized_unit", ("volume_oz",)),)
 
 
 def _classified_offer(

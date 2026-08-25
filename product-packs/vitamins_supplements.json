@@ -1,7 +1,7 @@
 {
   "id": "vitamins_supplements",
   "name": "Vitamins & Supplements",
-  "version": "1.2.9",
+  "version": "1.3.0",
   "category_family": "health_wellness",
   "description": "Governed package and normalized-unit comparison of vitamins and dietary supplements, including evidence-backed label certifications.",
   "scope": {
@@ -356,7 +356,7 @@
     }
   ],
   "matching_v2": {
-    "policy_version": "1.2.9-shadow.1",
+    "policy_version": "1.3.0-shadow.1",
     "certification_state": "shadow",
     "attribute_roles": {
       "active_ingredient": {"role": "hard_blocker", "critical": true, "weight": 10, "unknown_is_blocking": true},
@@ -374,6 +374,9 @@
     "eligible_price_bases": ["exact_package", "normalized_unit"],
     "price_basis_requirements": {
       "exact_package": ["package_count"]
+    },
+    "price_basis_known_requirements": {
+      "normalized_unit": ["package_count"]
     },
     "minimum_equivalent_coverage": 1.0,
     "equivalent_score_threshold": 0.9,
@@ -826,7 +829,7 @@
       "parity_display": "include"
     },
     "alertable_metrics": ["benchmark_lower_rate", "median_package_gap", "median_unit_gap", "certification_coverage"],
-    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.2.9"},
+    "report_blueprint": {"id": "vitamins_supplements_leadership", "version": "1.3.0"},
     "narrative_playbook": {
       "leadership_objective": "Show where Spring Valley leads or trails equivalent vitamin and supplement specifications on package and normalized-unit price, with auditable label evidence.",
       "required_topics": ["data_scope", "footprint", "exact_price", "normalized_price", "segment_drivers", "geography", "brand_assortment", "actions", "caveats"],

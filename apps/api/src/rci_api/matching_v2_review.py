@@ -1040,7 +1040,7 @@ class GoldSetReplayRequest(BaseModel):
 
 _AI_BULK_CERTIFICATION_POLICY: dict[str, Any] = {
     "id": "guarded_ai_recommendation_bulk_certification",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "max_cases": 50,
     "max_candidates_assessed": 500,
     "action": "certify_ai_recommendations",
@@ -1091,6 +1091,15 @@ _AI_BULK_REASON_LABELS = {
     ),
     "not_comparable_tier_present": (
         "A not-comparable recommendation cannot also carry a match tier."
+    ),
+    "comparison_basis_missing": (
+        "A comparable recommendation must name package price, normalized unit price, or both."
+    ),
+    "comparison_basis_not_eligible": (
+        "The proposed price basis is not supported by the deterministic package evidence."
+    ),
+    "non_comparable_basis_present": (
+        "A non-comparable recommendation cannot carry a price-comparison basis."
     ),
     "engine_tier_missing": "The deterministic engine did not propose a match tier.",
     "ai_engine_tier_disagreement": "The AI and deterministic engine propose different tiers.",
@@ -1147,6 +1156,21 @@ def _case_has_known_third_party_seller(case: Mapping[str, Any]) -> bool:
     )
 
 
+def _deterministic_comparison_bases(case: Mapping[str, Any]) -> list[str]:
+    """Translate engine-owned price bases; product compatibility is decided elsewhere."""
+
+    edge = case.get("edge")
+    edge = edge if isinstance(edge, Mapping) else {}
+    eligible = edge.get("eligible_price_bases")
+    eligible = set(str(value) for value in eligible) if isinstance(eligible, list) else set()
+    result: list[str] = []
+    if "exact_package" in eligible:
+        result.append("package_price")
+    if "normalized_unit" in eligible:
+        result.append("normalized_unit_price")
+    return result
+
+
 def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any]:
     """Evaluate a case under deterministic, server-owned bulk-certification guardrails."""
 
@@ -1177,6 +1201,13 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
 
     verdict = str(result.get("verdict_proposal") or "")
     ai_tier = str(result.get("tier_proposal") or "")
+    proposed_comparison_bases = result.get("comparison_basis_proposal", [])
+    proposed_comparison_bases = (
+        [str(value) for value in proposed_comparison_bases]
+        if isinstance(proposed_comparison_bases, list)
+        else []
+    )
+    eligible_comparison_bases = _deterministic_comparison_bases(case)
     if result and verdict not in _AI_BULK_CERTIFICATION_POLICY["allowed_verdicts"]:
         reason_codes.append("ai_verdict_not_certifiable")
     if result and verdict == "comparable":
@@ -1189,8 +1220,16 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
             and ai_tier not in active_allowed_tiers
         ):
             reason_codes.append("tier_disallowed_by_product_pack")
+        if not proposed_comparison_bases:
+            reason_codes.append("comparison_basis_missing")
+        elif any(
+            basis not in eligible_comparison_bases for basis in proposed_comparison_bases
+        ):
+            reason_codes.append("comparison_basis_not_eligible")
     elif result and verdict == "not_comparable" and ai_tier:
         reason_codes.append("not_comparable_tier_present")
+    if result and verdict != "comparable" and proposed_comparison_bases:
+        reason_codes.append("non_comparable_basis_present")
 
     engine = case.get("engine_proposal")
     engine = engine if isinstance(engine, Mapping) else {}
@@ -1286,6 +1325,8 @@ def _bulk_ai_certification_eligibility(case: Mapping[str, Any]) -> dict[str, Any
         "warnings": [_AI_BULK_REASON_LABELS[code] for code in warning_codes],
         "recommended_verdict": verdict or None,
         "recommended_tier": ai_tier or None,
+        "recommended_comparison_bases": proposed_comparison_bases,
+        "eligible_comparison_bases": eligible_comparison_bases,
         "critical_coverage": critical_coverage,
         "engine_status": engine_status or None,
         "ai_task_id": (str(ai_draft.get("id")) if isinstance(ai_draft, Mapping) else None),
@@ -1337,6 +1378,9 @@ def _bulk_confirmation_checksum(
                     "ai_output_checksum": candidate["ai_output_checksum"],
                     "recommended_verdict": candidate["recommended_verdict"],
                     "recommended_tier": candidate["recommended_tier"],
+                    "recommended_comparison_bases": candidate[
+                        "recommended_comparison_bases"
+                    ],
                 }
                 for candidate in sorted(candidates, key=lambda row: str(row["case_id"]))
             ],
@@ -2913,6 +2957,9 @@ class PostgresMatchingV2ReviewRepository:
                         "ai_output_checksum": candidate["ai_output_checksum"],
                         "recommended_verdict": candidate["recommended_verdict"],
                         "recommended_tier": candidate["recommended_tier"],
+                        "recommended_comparison_bases": candidate[
+                            "recommended_comparison_bases"
+                        ],
                     }
                     for candidate in preview["eligible_cases"]
                 ],
@@ -2974,7 +3021,8 @@ class PostgresMatchingV2ReviewRepository:
                     [candidate["recommended_tier"]] if recommended_verdict == "comparable" else []
                 )
                 certified_outcome = (
-                    f"comparable at {candidate['recommended_tier']}"
+                    f"comparable at {candidate['recommended_tier']} using "
+                    f"{', '.join(candidate['recommended_comparison_bases'])}"
                     if recommended_verdict == "comparable"
                     else "not comparable"
                 )

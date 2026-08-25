@@ -364,6 +364,21 @@ def test_vitamin_pack_allows_package_count_only_equivalence_for_unit_price() -> 
     assert result.eligible_price_bases == ("normalized_unit",)
 
 
+def test_vitamin_pack_requires_known_positive_counts_for_unit_price() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing("walmart_us", "unknown-count", package_count=None),
+        _vitamin_listing("target_us", "known-count", package_count=200),
+        policy,
+        decided_at="2026-08-24T12:00:00Z",
+    )
+
+    assert result.tier is None
+    assert result.eligible_price_bases == ()
+
+
 def test_vitamin_pack_routes_multi_ingredient_formulas_to_equivalent_review() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     policy = compile_matching_policy_v2(pack, "compatible_spec")

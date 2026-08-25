@@ -178,6 +178,7 @@ class MatchingPolicyV2:
     attributes: tuple[AttributePolicyV2, ...]
     eligible_price_bases: tuple[str, ...]
     price_basis_requirements: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    price_basis_known_requirements: tuple[tuple[str, tuple[str, ...]], ...] = ()
     exact_item_identifier_schemes: tuple[str, ...] = (
         "gtin",
         "upc",
@@ -260,6 +261,37 @@ class MatchingPolicyV2:
             raise ValueError(
                 f"price-basis requirements reference unknown attributes: {unknown_attributes}"
             )
+        known_requirement_bases = [basis for basis, _ in self.price_basis_known_requirements]
+        if len(known_requirement_bases) != len(set(known_requirement_bases)):
+            raise ValueError("matching policy known-value price-basis keys must be unique")
+        if any(
+            not attributes or len(attributes) != len(set(attributes))
+            for _, attributes in self.price_basis_known_requirements
+        ):
+            raise ValueError(
+                "matching policy known-value price-basis requirements must be non-empty and unique"
+            )
+        unknown_known_bases = sorted(
+            basis
+            for basis, _ in self.price_basis_known_requirements
+            if basis not in self.eligible_price_bases
+        )
+        if unknown_known_bases:
+            raise ValueError(
+                "known-value price-basis requirements reference ineligible bases: "
+                f"{unknown_known_bases}"
+            )
+        unknown_known_attributes = sorted(
+            name
+            for _, required_attributes in self.price_basis_known_requirements
+            for name in required_attributes
+            if name not in names
+        )
+        if unknown_known_attributes:
+            raise ValueError(
+                "known-value price-basis requirements reference unknown attributes: "
+                f"{unknown_known_attributes}"
+            )
         if not 0 <= self.minimum_equivalent_coverage <= 1:
             raise ValueError("minimum equivalent coverage must be between zero and one")
         if not 0 <= self.equivalent_score_threshold <= 1:
@@ -323,6 +355,7 @@ class MatchingPolicyV2:
                 ],
                 "eligible_price_bases": self.eligible_price_bases,
                 "price_basis_requirements": self.price_basis_requirements,
+                "price_basis_known_requirements": self.price_basis_known_requirements,
                 "exact_item_identifier_schemes": self.exact_item_identifier_schemes,
                 "auto_approval_tiers": self.auto_approval_tiers,
                 "minimum_equivalent_coverage": self.minimum_equivalent_coverage,
@@ -540,6 +573,12 @@ def compile_matching_policy_v2(pack: ProductPack, profile_id: str) -> MatchingPo
             (str(basis), tuple(str(name) for name in required_attributes))
             for basis, required_attributes in sorted(
                 dict(configured.get("price_basis_requirements") or {}).items()
+            )
+        ),
+        price_basis_known_requirements=tuple(
+            (str(basis), tuple(str(name) for name in required_attributes))
+            for basis, required_attributes in sorted(
+                dict(configured.get("price_basis_known_requirements") or {}).items()
             )
         ),
         exact_item_identifier_schemes=tuple(
@@ -897,6 +936,7 @@ class DeterministicMatchEngineV2:
             return ()
         evidence_by_attribute = {row.attribute: row for row in evidence}
         configured_requirements = dict(policy.price_basis_requirements)
+        configured_known_requirements = dict(policy.price_basis_known_requirements)
         eligible: list[str] = []
         for basis in policy.eligible_price_bases:
             requirements = configured_requirements.get(basis)
@@ -909,8 +949,25 @@ class DeterministicMatchEngineV2:
                 for name in requirements
             ):
                 continue
+            known_requirements = configured_known_requirements.get(basis, ())
+            if not all(
+                _price_basis_value_is_known(evidence_by_attribute[name].benchmark_value)
+                and _price_basis_value_is_known(evidence_by_attribute[name].competitor_value)
+                for name in known_requirements
+            ):
+                continue
             eligible.append(basis)
         return tuple(dict.fromkeys(eligible))
+
+
+def _price_basis_value_is_known(value: Any) -> bool:
+    """Require a usable denominator without requiring the two denominators to match."""
+
+    if value is None or (isinstance(value, str) and value.strip().casefold() in {"", "unknown"}):
+        return False
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return math.isfinite(float(value)) and float(value) > 0
+    return True
 
 
 @dataclass(frozen=True, slots=True)

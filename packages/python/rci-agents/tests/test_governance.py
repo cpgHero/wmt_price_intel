@@ -1111,6 +1111,13 @@ async def test_openai_provider_records_pinned_cost_and_rejects_over_budget_reque
     )
     assert sol_response.estimated_cost_usd == pytest.approx(0.000355)
 
+    luna_response = await provider.generate(
+        prompt,
+        {"analysis_id": "analysis-1"},
+        model_id="gpt-5.6-luna",
+    )
+    assert luna_response.estimated_cost_usd == pytest.approx(0.0000142)
+
     blocked_endpoint = FakeResponsesEndpoint()
     blocked = OpenAIResponsesProvider(
         api_key="test-only-key",

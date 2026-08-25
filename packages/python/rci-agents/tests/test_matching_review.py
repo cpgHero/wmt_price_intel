@@ -96,12 +96,14 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
 def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     prompt = load_matching_review_prompt(REPOSITORY_ROOT)
 
-    assert prompt.version == "1.0.6"
+    assert prompt.version == "1.1.0"
     assert "Product Pack attribute roles" in prompt.instructions
     assert "different or unknown brands do not independently prevent" in prompt.instructions
     assert "Brand agreement never overrides" in prompt.instructions
     assert "gallon, half-gallon, quart, pint" in prompt.instructions
-    assert "unit-price normalization never creates a product match" in prompt.instructions
+    assert "never creates, rescues, widens, or upgrades" in prompt.instructions
+    assert "Use two ordered decisions" in prompt.instructions
+    assert "normalized_unit_price" in prompt.instructions
     assert "certification_unknown_nonblocking_attributes" in prompt.instructions
     assert "certification_allowed_tiers" in prompt.instructions
     assert "never propose a tier absent" in prompt.instructions
@@ -112,6 +114,7 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         {
             "verdict_proposal": "insufficient_evidence",
             "tier_proposal": None,
+            "comparison_basis_proposal": [],
             "rationale": "The competitor fat content needs human confirmation.",
             "attribute_proposals": [
                 {
@@ -186,6 +189,7 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
         {
             "verdict_proposal": "comparable",
             "tier_proposal": "equivalent_product",
+            "comparison_basis_proposal": ["package_price", "normalized_unit_price"],
             "rationale": "The governed structured attributes agree.",
             "attribute_proposals": [
                 {
@@ -242,6 +246,7 @@ async def test_matching_review_falls_back_when_retailer_image_download_is_blocke
         {
             "verdict_proposal": "insufficient_evidence",
             "tier_proposal": None,
+            "comparison_basis_proposal": [],
             "rationale": "Structured evidence is not sufficient for an automatic proposal.",
             "attribute_proposals": [],
             "conflicts": [],
@@ -283,6 +288,7 @@ async def test_matching_review_rejects_uncited_image_claim() -> None:
         {
             "verdict_proposal": "comparable",
             "tier_proposal": "equivalent_product",
+            "comparison_basis_proposal": ["normalized_unit_price"],
             "rationale": "The products appear compatible.",
             "attribute_proposals": [
                 {
@@ -370,6 +376,7 @@ async def test_matching_review_worker_processes_a_bounded_concurrent_batch() -> 
                 result={
                     "verdict_proposal": "insufficient_evidence",
                     "tier_proposal": None,
+                    "comparison_basis_proposal": [],
                     "rationale": "Human confirmation is required.",
                     "attribute_proposals": [],
                     "conflicts": [],

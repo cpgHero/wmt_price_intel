@@ -157,6 +157,12 @@ export interface RetailCompetitiveIntelligenceProductPack {
        */
       [k: string]: [string, ...string[]];
     };
+    price_basis_known_requirements?: {
+      /**
+       * @minItems 1
+       */
+      [k: string]: [string, ...string[]];
+    };
     minimum_equivalent_coverage: number;
     equivalent_score_threshold: number;
     allow_comparable_substitute: boolean;

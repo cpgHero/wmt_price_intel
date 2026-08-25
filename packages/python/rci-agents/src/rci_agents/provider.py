@@ -43,8 +43,8 @@ PINNED_MODEL_PRICING: dict[str, ModelPricing] = {
         output_usd_per_million_tokens=15.00,
     ),
     "gpt-5.6-luna": ModelPricing(
-        input_usd_per_million_tokens=1.00,
-        output_usd_per_million_tokens=6.00,
+        input_usd_per_million_tokens=0.20,
+        output_usd_per_million_tokens=1.20,
     ),
     "gpt-5.4-2026-03-05": ModelPricing(
         input_usd_per_million_tokens=2.50,

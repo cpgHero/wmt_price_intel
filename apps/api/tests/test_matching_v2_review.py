@@ -1719,7 +1719,7 @@ def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_
     policy = _active_certification_policy("vitamins_supplements")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.2.9"
+    assert policy["product_pack_version"] == "1.3.0"
     assert policy["allow_comparable_substitute"] is False
     assert "comparable_substitute" not in policy["allowed_tiers"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]
@@ -1821,6 +1821,7 @@ def _bulk_eligible_case() -> dict[str, Any]:
             "result": {
                 "verdict_proposal": "comparable",
                 "tier_proposal": "exact_specification",
+                "comparison_basis_proposal": ["package_price", "normalized_unit_price"],
                 "rationale": "The governed package facts agree.",
                 "attribute_proposals": [],
                 "conflicts": [],
@@ -1840,6 +1841,7 @@ def _bulk_not_comparable_case() -> dict[str, Any]:
     result = case["ai_draft"]["output_document"]["result"]
     result["verdict_proposal"] = "not_comparable"
     result["tier_proposal"] = None
+    result["comparison_basis_proposal"] = []
     result["rationale"] = "The governed package facts contain a material conflict."
     case["engine_proposal"]["tier"] = None
     case["engine_proposal"]["status"] = "rejected"
@@ -1973,6 +1975,7 @@ def test_bulk_certification_blocks_cross_volume_comparable_but_allows_rejection(
     result = governed["ai_draft"]["output_document"]["result"]
     result["verdict_proposal"] = "not_comparable"
     result["tier_proposal"] = None
+    result["comparison_basis_proposal"] = []
     governed["engine_proposal"]["tier"] = None
     governed["engine_proposal"]["status"] = "rejected"
 
@@ -1990,6 +1993,23 @@ def test_bulk_ai_certification_rejects_not_comparable_with_a_match_tier() -> Non
 
     assert evaluation["eligible"] is False
     assert evaluation["reason_codes"] == ["not_comparable_tier_present"]
+
+
+def test_bulk_ai_certification_requires_engine_supported_comparison_basis() -> None:
+    case = _bulk_eligible_case()
+    case["edge"]["eligible_price_bases"] = ["exact_package"]
+    result = case["ai_draft"]["output_document"]["result"]
+    result["comparison_basis_proposal"] = ["normalized_unit_price"]
+
+    blocked = _bulk_ai_certification_eligibility(case)
+
+    assert blocked["eligible"] is False
+    assert blocked["reason_codes"] == ["comparison_basis_not_eligible"]
+
+    result["comparison_basis_proposal"] = ["package_price"]
+    accepted = _bulk_ai_certification_eligibility(case)
+    assert accepted["eligible"] is True
+    assert accepted["recommended_comparison_bases"] == ["package_price"]
 
 
 def test_bulk_ai_certification_obeys_active_product_pack_tier_policy() -> None:

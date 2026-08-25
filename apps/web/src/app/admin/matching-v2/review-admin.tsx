@@ -124,6 +124,8 @@ interface AIBulkCertificationCandidate {
   warnings: string[];
   recommended_verdict?: "comparable" | "not_comparable";
   recommended_tier: string | null;
+  recommended_comparison_bases?: string[];
+  eligible_comparison_bases?: string[];
   critical_coverage: number;
   engine_status: string | null;
   ai_task_id: string | null;
@@ -266,6 +268,9 @@ interface ReviewCase {
         verdict_proposal:
           "comparable" | "not_comparable" | "insufficient_evidence";
         tier_proposal: string | null;
+        comparison_basis_proposal?: Array<
+          "package_price" | "normalized_unit_price"
+        >;
         rationale: string;
         attribute_proposals: Array<{
           attribute: string;
@@ -1989,6 +1994,17 @@ export function MatchingV2ReviewAdmin({
                                 critical evidence ·{" "}
                                 {label(candidate.engine_status)}
                               </span>
+                              {bulkCandidateVerdict(candidate) ===
+                              "comparable" ? (
+                                <span>
+                                  Price comparison:{" "}
+                                  {(
+                                    candidate.recommended_comparison_bases ?? []
+                                  )
+                                    .map(label)
+                                    .join(" + ")}
+                                </span>
+                              ) : null}
                               <p>{candidate.ai_rationale}</p>
                               {candidate.warnings.length ? (
                                 <ul className="cert-bulk-warnings">
@@ -2390,6 +2406,15 @@ export function MatchingV2ReviewAdmin({
                                 ? ` · ${label(activeCase.ai_draft.output_document.result.tier_proposal)}`
                                 : ""}
                             </strong>
+                            {activeCase.ai_draft.output_document.result
+                              .comparison_basis_proposal?.length ? (
+                              <small>
+                                Price comparison:{" "}
+                                {activeCase.ai_draft.output_document.result.comparison_basis_proposal
+                                  .map(label)
+                                  .join(" + ")}
+                              </small>
+                            ) : null}
                             <p>
                               {
                                 activeCase.ai_draft.output_document.result

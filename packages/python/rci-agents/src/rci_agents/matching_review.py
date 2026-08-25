@@ -35,6 +35,7 @@ _RESULT_SCHEMA: JsonObject = {
     "required": [
         "verdict_proposal",
         "tier_proposal",
+        "comparison_basis_proposal",
         "rationale",
         "attribute_proposals",
         "conflicts",
@@ -50,6 +51,15 @@ _RESULT_SCHEMA: JsonObject = {
                 {"type": "string", "enum": sorted(_ALLOWED_TIERS)},
                 {"type": "null"},
             ]
+        },
+        "comparison_basis_proposal": {
+            "type": "array",
+            "maxItems": 2,
+            "uniqueItems": True,
+            "items": {
+                "type": "string",
+                "enum": ["package_price", "normalized_unit_price"],
+            },
         },
         "rationale": {"type": "string", "minLength": 1, "maxLength": 4000},
         "attribute_proposals": {
@@ -385,10 +395,17 @@ def _validate_matching_review_result(result: object, *, image_urls: list[str]) -
         raise ValueError("AI matching result did not preserve mandatory human review")
     verdict = str(result.get("verdict_proposal") or "")
     tier = result.get("tier_proposal")
+    comparison_bases = result.get("comparison_basis_proposal")
     if verdict == "comparable" and tier not in _ALLOWED_TIERS:
         raise ValueError("comparable AI draft requires a governed tier")
     if verdict != "comparable" and tier is not None:
         raise ValueError("non-comparable AI draft cannot propose a tier")
+    if not isinstance(comparison_bases, list):
+        raise ValueError("AI matching result must propose governed price-comparison bases")
+    if verdict == "comparable" and not comparison_bases:
+        raise ValueError("comparable AI draft requires at least one price-comparison basis")
+    if verdict != "comparable" and comparison_bases:
+        raise ValueError("non-comparable AI draft cannot propose a price-comparison basis")
     for row in result.get("attribute_proposals", []):
         if not isinstance(row, dict):
             raise ValueError("AI attribute proposal must be an object")

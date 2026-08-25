@@ -697,7 +697,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Coverage-first vitamin evidence recovery",
-          text: "Product Pack 1.2.9 accounts for the governed Spring Valley catalog against all nine configured competitors while explicitly excluding two cataloged topical skin-oil products. Operational queue 2026.08.25-spring-valley-coverage-shadow-8 contains 2,316 clean pair cases, zero inherited decisions, zero known third-party products, zero known topical/non-oral products, and 74 explicit catalog gaps for Spring Valley anchors without a positive-price Search observation. Minimum product-evidence coverage selects 883 pair cases that collectively expose all 1,020 products with unresolved hard evidence. Under the owner-approved $50 aggregate ceiling, 366 unique cases completed gpt-5.6-terra evidence review for $41.7666525 recorded usage. They expose 499 products and yield 610 source-attributable image proposals eligible for human verification. The semantic audit found zero hard guardrail failures and zero certifiable AI relationship proposals. The remaining 521 products and every unverified proposal remain unresolved. No AI output automatically changes certification or reporting.",
+          text: "Product Pack 1.3.0 accounts for the governed Spring Valley catalog against all nine configured competitors while explicitly excluding two cataloged topical skin-oil products. Product compatibility and price-comparison basis are separate governed decisions: active ingredient/formula, strength/unit when applicable, dosage form, release profile, and audience must establish a valid relationship before package or normalized-unit pricing is considered. Package price requires equivalent known package counts. Normalized-unit price requires known positive denominators on both sides, may compare different counts, and can never create or rescue a relationship. New advisory reviews use gpt-5.6-luna for lower cost. Every comparable draft must state package price, normalized unit price, or both; the server verifies the proposal against deterministic edge evidence and binds it into the bulk confirmation checksum. No AI output automatically changes certification or reporting.",
         },
         {
           kind: "callout",
@@ -1617,6 +1617,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-25",
+              "Implemented and regression testing in progress; production deployment pending",
+              "Vitamin matching separates product compatibility from package and normalized-unit price bases and moves new AI reviews to gpt-5.6-luna.",
+              "Product Pack 1.3.0 requires known positive package counts before normalized-unit analysis. Prompt 1.1.0 first evaluates ingredient/formula, strength, form, release, and audience without price, then identifies package price, normalized unit price, or both. The API rejects a comparable draft whose proposed basis is absent or unsupported and binds valid bases into human bulk certification. Luna pricing is pinned at the current public $0.20/M input and $1.20/M output rates. Deterministic evidence remains authoritative; normalized unit pricing never creates a match and AI never auto-certifies.",
+            ],
             [
               "2026-08-24",
               "Implemented and regression-tested; deployment and replacement shadow pending",

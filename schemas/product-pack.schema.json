@@ -506,6 +506,19 @@
             "items": { "type": "string", "minLength": 1 }
           }
         },
+        "price_basis_known_requirements": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": ["exact_package", "normalized_unit", "random_weight_unit"]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
         "minimum_equivalent_coverage": {
           "type": "number",
           "minimum": 0,

@@ -51,7 +51,7 @@ def test_deployable_product_pack_catalog_contains_valid_immutable_versions() -> 
         "1.1.0",
         "1.2.0",
         "1.2.3",
-        "1.2.9",
+        "1.3.0",
         "1.6.0",
     }
     assert next(pack for pack in versions if pack.id == "fresh_ground_beef").version == "1.2.0"
