@@ -98,6 +98,8 @@ def test_product_packs_load_in_required_expansion_order() -> None:
         "barriere Energy Boost Vitamin B12 Patch - 36ct",
         "Vitamin C Brightening Eye Treatment Cream, 0.5 oz",
         "Cold Pressed Vitamin C Juice Beverage, 64 fl oz",
+        "Spring Valley Skin Oil with Vitamin E for Skin Health, 24,000 IU, 3 fl oz",
+        "Spring Valley Vitamin E Oil with Keratin for Skin Care, 12000 IU, 2 fl oz",
     ],
 )
 def test_vitamin_pack_excludes_proven_non_oral_search_noise(
