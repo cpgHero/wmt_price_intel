@@ -17,6 +17,7 @@
   --success-soft: rgba(22, 130, 75, 0.12);
   --warning-soft: rgba(211, 139, 15, 0.14);
   --danger-soft: rgba(185, 52, 52, 0.12);
+  --red-soft: var(--danger-soft);
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
   --topbar: rgba(255, 255, 255, 0.88);
   font-family:
@@ -1005,6 +1006,7 @@
   --success-soft: rgba(109, 222, 158, 0.12);
   --warning-soft: rgba(242, 184, 75, 0.12);
   --danger-soft: rgba(255, 134, 134, 0.12);
+  --red-soft: var(--danger-soft);
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   --topbar: rgba(15, 15, 17, 0.9);
 }
@@ -4683,7 +4685,9 @@ tbody tr:last-child td {
 .cert-attribute-claim {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: 0.7fr 1.5fr 0.45fr;
+  grid-template-columns:
+    minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.35fr)
+    minmax(90px, 0.4fr);
 }
 .cert-attribute-claim > div {
   background: var(--card);
@@ -4701,9 +4705,42 @@ tbody tr:last-child td {
   text-transform: uppercase;
 }
 .cert-attribute-claim strong {
+  display: grid;
+  gap: 0.16rem;
   font-size: 0.68rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+.cert-attribute-claim strong small {
+  color: var(--muted);
+  font-size: 0.52rem;
+  font-weight: 600;
+}
+.cert-attribute-relationship {
+  background: var(--card);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+}
+.cert-attribute-relationship b {
+  color: var(--ink);
+  margin-right: 0.25rem;
+}
+.cert-attribute-relationship.conflicts_with_existing {
+  background: var(--danger-soft);
+  border-left-color: var(--red);
+}
+.cert-attribute-relationship.refines_existing {
+  background: var(--warning-soft);
+  border-left-color: var(--amber);
+}
+.cert-attribute-relationship.corroborates_existing {
+  background: var(--green-soft);
+  border-left-color: var(--success);
 }
 .cert-attribute-counterpart,
 .cert-attribute-ineligible,

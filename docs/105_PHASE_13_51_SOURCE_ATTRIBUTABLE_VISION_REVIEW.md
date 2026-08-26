@@ -14,7 +14,7 @@ a structured proposal even when label images were available.
 
 ## Governed correction
 
-Prompt `matching_v2_evidence_review@1.3.0` and its request-specific Structured Output schema now:
+Prompt `matching_v2_evidence_review@1.4.0` and its request-specific Structured Output schema now:
 
 - allow attribute proposals only when at least one retained product image is in the request;
 - allow only attributes defined by the active Product Pack certification policy;
@@ -22,17 +22,18 @@ Prompt `matching_v2_evidence_review@1.3.0` and its request-specific Structured O
 - exclude Product Pack-declared unknown enum values;
 - require `evidence_source=image`, an exact URL from the images sent to the model, and non-empty
   visible label text;
-- bind each allowed image URL to the exact listing side and only the governed attributes whose
-  value is actually missing or declared unknown on that side;
-- treat a conflict between two known product values as comparison evidence—not permission to
-  rewrite either value; and
+- bind each allowed image URL to the exact listing side and only governed attributes whose value
+  is missing, declared unknown, or held by a reviewable lower-authority source on that side;
+- allow exact-label corroboration, refinement, or contradiction to enter the administrator
+  evidence-dispute lane while keeping governed/manual/human-verified sources locked; and
 - set the proposal limit to zero when images are absent or unavailable.
 
 Post-response validation independently rejects structured proposals, inactive attributes,
 uncited images, missing visible evidence, ambiguous cross-listing image references, and attempts
-to replace an already resolved attribute. The API reconciliation lane repeats the resolved-value
-check, which also makes pre-1.3.0 drafts fail closed. Search and PDP facts remain deterministic
-governed inputs; AI cannot re-label them as new evidence.
+to replace a locked governed attribute. The API reconciliation lane independently classifies
+completion, corroboration, refinement, and conflict. Search and PDP facts remain deterministic
+governed inputs; only an explicit human decision may replace their lower-authority derived value,
+and raw evidence is never rewritten.
 
 ## Trust boundary
 

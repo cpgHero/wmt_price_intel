@@ -13,7 +13,16 @@ The server—not the browser—reconstructs every candidate attribute proposal f
 3. the cited image URL is attached to exactly one side of the immutable pair;
 4. the proposal quotes visible label text;
 5. confidence is at least 0.85; and
-6. the value normalizes under the Product Pack's declared number, enum, string, or array contract.
+6. the value normalizes under the Product Pack's declared number, enum, string, or array contract;
+   and
+7. a value-changing proposal does not target a Product Pack/configured constant, governed brand
+   decision, manual override, or previously human-verified value.
+
+Phase 13.52 replaces the former non-null-value shortcut with explicit `fills_unknown`,
+`corroborates_existing`, `refines_existing`, and `conflicts_with_existing` relationships.
+Corroboration requires no decision. Refinements and corrections to lower-authority Search/PDP
+extraction require an identified administrator and preserve the superseded value/source in the
+derived view.
 
 The proposal checksum binds the case checksum, AI task ID, AI output checksum, active Product Pack policy checksum, listing side and identity, attribute, raw and normalized values, source image, visible text, confidence, and eligibility reasons.
 

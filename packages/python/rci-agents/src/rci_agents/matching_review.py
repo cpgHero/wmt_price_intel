@@ -139,8 +139,31 @@ def _attribute_value_is_unknown(value: object, definition: JsonObject) -> bool:
     return _canonical(value) in {_canonical(unknown) for unknown in unknown_values}
 
 
-def _missing_attribute_targets(case_document: JsonObject) -> dict[str, set[str]]:
-    """Return only listing-side attributes whose governed value is unresolved."""
+_LOCKED_ATTRIBUTE_SOURCE_MARKERS = (
+    "configured_constant",
+    "exact_alias",
+    "exact_canonical",
+    "governed_override",
+    "human_verified",
+    "manual_override",
+    "product_pack_override",
+    "retailer_pack",
+)
+
+
+def _attribute_source_is_locked(source: object) -> bool:
+    rendered = str(source or "").strip().casefold()
+    return any(marker in rendered for marker in _LOCKED_ATTRIBUTE_SOURCE_MARKERS)
+
+
+def _reviewable_attribute_targets(case_document: JsonObject) -> dict[str, set[str]]:
+    """Return attributes image evidence may complete, refine, or dispute.
+
+    Source-bound image evidence may challenge deterministic Search/PDP extraction,
+    but never a Product Pack override, governed brand decision, manual override, or
+    previously human-verified value. The server classifies the relationship and a
+    person remains responsible for every value-changing decision.
+    """
 
     certification_policy = case_document.get("certification_policy")
     certification_policy = certification_policy if isinstance(certification_policy, dict) else {}
@@ -159,13 +182,16 @@ def _missing_attribute_targets(case_document: JsonObject) -> dict[str, set[str]]
         if not attribute or not isinstance(definition, dict):
             continue
         for side in targets:
-            if _attribute_value_is_unknown(row.get(f"{side}_value"), definition):
+            source = row.get(f"{side}_source")
+            if _attribute_value_is_unknown(
+                row.get(f"{side}_value"), definition
+            ) or not _attribute_source_is_locked(source):
                 targets[side].add(attribute)
     return targets
 
 
 def _listing_vision_urls(case_document: JsonObject) -> dict[str, list[str]]:
-    targets = _missing_attribute_targets(case_document)
+    targets = _reviewable_attribute_targets(case_document)
     result: dict[str, list[str]] = {"benchmark": [], "competitor": []}
     for side in result:
         if not targets[side]:
@@ -224,7 +250,7 @@ def _result_schema(image_urls: list[str], case_document: JsonObject) -> JsonObje
         "visible_text",
         "source_image_url",
     ]
-    targets = _missing_attribute_targets(case_document)
+    targets = _reviewable_attribute_targets(case_document)
     listing_urls = _listing_vision_urls(case_document)
     ambiguous_urls = set(listing_urls["benchmark"]) & set(listing_urls["competitor"])
     sent_urls = set(image_urls)
@@ -394,6 +420,8 @@ class OpenAIMatchingReviewProvider:
                                 "image_proposals_require_exact_source_url": True,
                                 "image_proposals_require_visible_text": True,
                                 "structured_attribute_proposals_permitted": False,
+                                "known_low_authority_values_may_be_disputed": True,
+                                "governed_or_human_verified_values_are_locked": True,
                             },
                             "case": case_document,
                         }
@@ -488,7 +516,7 @@ class OpenAIMatchingReviewProvider:
 
 
 def _vision_image_urls(case_document: JsonObject) -> list[str]:
-    if not any(_missing_attribute_targets(case_document).values()):
+    if not any(_reviewable_attribute_targets(case_document).values()):
         return []
     # Secondary PDP images commonly contain the package side/back label and are
     # often more useful than the hero image for governed package attributes.
@@ -543,7 +571,7 @@ def _validate_matching_review_result(
     active_attributes = (
         set(attribute_definitions) if isinstance(attribute_definitions, dict) else set()
     )
-    targets = _missing_attribute_targets(case_document)
+    targets = _reviewable_attribute_targets(case_document)
     listing_urls = _listing_vision_urls(case_document)
     ambiguous_urls = set(listing_urls["benchmark"]) & set(listing_urls["competitor"])
     allowed_proposals = {
@@ -564,7 +592,8 @@ def _validate_matching_review_result(
             raise ValueError("image evidence must cite visible evidence and an input image")
         if (row.get("attribute"), row.get("source_image_url")) not in allowed_proposals:
             raise ValueError(
-                "image evidence may only resolve a missing attribute on the cited listing"
+                "image evidence may only complete or dispute a reviewable attribute "
+                "on the cited listing"
             )
 
 

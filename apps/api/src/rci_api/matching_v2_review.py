@@ -50,6 +50,13 @@ AIReviewSelectionMode = Literal["all_cases", "product_evidence_coverage"]
 AttributeEvidenceBatchScope = Literal["latest_lineage", "all_lineages"]
 AttributeEvidenceEligibility = Literal["all", "eligible", "ineligible"]
 AttributeEvidenceDecisionStatus = Literal["all", "undecided", "verified", "rejected"]
+AttributeEvidenceRelationship = Literal[
+    "fills_unknown",
+    "corroborates_existing",
+    "refines_existing",
+    "conflicts_with_existing",
+    "invalid",
+]
 _MAX_AI_RETRY_ROUNDS = 4
 _MAX_AI_REVIEW_BATCH_CASES = 1_500
 _AI_RETRY_BLOCKED_MESSAGE = "does not match governed input or prompt"
@@ -656,10 +663,17 @@ def _listing_image_urls(listing: Any) -> set[str]:
     return images
 
 
-def _attribute_value_is_unresolved(value: Any, definition: Mapping[str, Any]) -> bool:
-    """Treat only an absent/declared-unknown value as open to AI image reconciliation."""
+def _attribute_value_is_unresolved(
+    value: Any,
+    definition: Mapping[str, Any],
+    *,
+    source: str | None = None,
+) -> bool:
+    """Treat an absent, declared-unknown, or default-only value as unresolved."""
 
     if value is None or value == "" or value == []:
+        return True
+    if str(source or "").strip().casefold() in {"unresolved", "product_pack_default"}:
         return True
     unknown_values = list(definition.get("unknown_values") or [])
     if isinstance(value, str):
@@ -671,6 +685,74 @@ def _attribute_value_is_unresolved(value: Any, definition: Mapping[str, Any]) ->
             for unknown in unknown_values
         )
     return _canonical(value) in {_canonical(unknown) for unknown in unknown_values}
+
+
+_LOCKED_ATTRIBUTE_SOURCE_MARKERS = (
+    "configured_constant",
+    "exact_alias",
+    "exact_canonical",
+    "governed_override",
+    "human_verified",
+    "manual_override",
+    "product_pack_override",
+    "retailer_pack",
+)
+_ATTRIBUTE_COMPARISON_STOP_WORDS = {"and", "plus", "with"}
+
+
+def _attribute_source_is_locked(source: Any) -> bool:
+    rendered = str(source or "").strip().casefold()
+    return any(marker in rendered for marker in _LOCKED_ATTRIBUTE_SOURCE_MARKERS)
+
+
+def _attribute_comparison_tokens(value: Any) -> set[str]:
+    values = value if isinstance(value, list) else [value]
+    tokens: set[str] = set()
+    for item in values:
+        tokens.update(
+            token
+            for token in re.findall(r"[a-z0-9]+", str(item).casefold())
+            if token not in _ATTRIBUTE_COMPARISON_STOP_WORDS
+        )
+    return tokens
+
+
+def _attribute_evidence_relationship(
+    *,
+    attribute: str,
+    current_value: Any,
+    current_source: Any,
+    proposed_value: Any,
+    definition: Mapping[str, Any],
+    policy: Mapping[str, Any],
+) -> AttributeEvidenceRelationship:
+    """Classify source-bound label evidence without equating non-null with correct."""
+
+    if _attribute_value_is_unresolved(
+        current_value,
+        definition,
+        source=str(current_source or ""),
+    ):
+        return "fills_unknown"
+    try:
+        normalized_current = _normalize_reconciled_attribute(attribute, current_value, policy)
+    except ValueError:
+        return "conflicts_with_existing"
+    data_type = str(definition.get("data_type") or "string")
+    if data_type == "number":
+        return (
+            "corroborates_existing"
+            if float(normalized_current) == float(proposed_value)
+            else "conflicts_with_existing"
+        )
+    if data_type in {"string", "enum", "array"}:
+        current_tokens = _attribute_comparison_tokens(normalized_current)
+        proposed_tokens = _attribute_comparison_tokens(proposed_value)
+        if current_tokens == proposed_tokens:
+            return "corroborates_existing"
+        if current_tokens and current_tokens < proposed_tokens:
+            return "refines_existing"
+    return "conflicts_with_existing"
 
 
 def _normalize_reconciled_attribute(attribute: str, value: Any, policy: Mapping[str, Any]) -> Any:
@@ -763,19 +845,19 @@ def _reconciliation_proposals(
             if side and isinstance(evidence_row, Mapping)
             else None
         )
-        if (
-            side
-            and isinstance(evidence_row, Mapping)
-            and not _attribute_value_is_unresolved(current_value, definition)
-        ):
-            reasons.append("attribute_value_already_resolved")
-        elif side and not isinstance(evidence_row, Mapping):
+        current_source = (
+            evidence_row.get(f"{side}_source")
+            if side and isinstance(evidence_row, Mapping)
+            else None
+        )
+        if side and not isinstance(evidence_row, Mapping):
             reasons.append("attribute_not_present_in_governed_edge")
         if not visible_text:
             reasons.append("visible_label_text_required")
         if confidence < 0.85:
             reasons.append("confidence_below_85_percent")
         normalized_value: Any = None
+        relationship: AttributeEvidenceRelationship = "invalid"
         if not reasons:
             try:
                 normalized_value = _normalize_reconciled_attribute(
@@ -788,6 +870,22 @@ def _reconciliation_proposals(
                 }
                 if _canonical(normalized_value) in unknown_values:
                     reasons.append("declared_unknown_value_cannot_resolve_evidence")
+                else:
+                    relationship = _attribute_evidence_relationship(
+                        attribute=attribute,
+                        current_value=current_value,
+                        current_source=current_source,
+                        proposed_value=normalized_value,
+                        definition=definition,
+                        policy=policy,
+                    )
+                    if relationship == "corroborates_existing":
+                        reasons.append("proposal_corroborates_current_value")
+                    elif relationship in {
+                        "refines_existing",
+                        "conflicts_with_existing",
+                    } and _attribute_source_is_locked(current_source):
+                        reasons.append("current_value_has_locked_governed_authority")
             except ValueError as exc:
                 reasons.append(f"normalization_failed:{exc}")
         listing = case.get(f"{side}_listing") if side else None
@@ -811,6 +909,20 @@ def _reconciliation_proposals(
             "ineligibility_reasons": reasons,
         }
         descriptor["proposal_checksum"] = _checksum(descriptor)
+        descriptor.update(
+            {
+                "current_value": current_value,
+                "current_source": current_source,
+                "evidence_relationship": relationship,
+                "decision_effect": {
+                    "fills_unknown": "fill_missing_value",
+                    "corroborates_existing": "no_change",
+                    "refines_existing": "replace_with_verified_refinement",
+                    "conflicts_with_existing": "replace_with_verified_correction",
+                    "invalid": "no_change",
+                }[relationship],
+            }
+        )
         output_rows.append(descriptor)
     return output_rows
 
@@ -851,6 +963,10 @@ def _apply_attribute_reconciliation(
 
     document = dict(case)
     proposals = _reconciliation_proposals(document, policy)
+    attribute_definitions = policy.get("attribute_definitions")
+    attribute_definitions = (
+        attribute_definitions if isinstance(attribute_definitions, Mapping) else {}
+    )
     latest_by_proposal: dict[str, Mapping[str, Any]] = {}
     for decision_row in decisions:
         checksum = str(decision_row.get("proposal_checksum") or "")
@@ -900,10 +1016,6 @@ def _apply_attribute_reconciliation(
         listing_id = str(source_proposal.get("listing_id") or "")
         reuse_side = listing_sides.get(listing_id)
         attribute = str(source_proposal.get("attribute") or "")
-        attribute_definitions = policy.get("attribute_definitions")
-        attribute_definitions = (
-            attribute_definitions if isinstance(attribute_definitions, Mapping) else {}
-        )
         if (
             reuse_side is None
             or not source_proposal.get("eligible")
@@ -952,6 +1064,36 @@ def _apply_attribute_reconciliation(
     for (_, attribute), proposal in resolved.items():
         row = by_attribute.setdefault(attribute, {"attribute": attribute})
         side = str(proposal["listing_role"])
+        current_value = row.get(f"{side}_value")
+        current_source = row.get(f"{side}_source")
+        definition = attribute_definitions.get(attribute)
+        definition = definition if isinstance(definition, Mapping) else {}
+        target_relationship = _attribute_evidence_relationship(
+            attribute=attribute,
+            current_value=current_value,
+            current_source=current_source,
+            proposed_value=proposal["normalized_value"],
+            definition=definition,
+            policy=policy,
+        )
+        if target_relationship in {
+            "refines_existing",
+            "conflicts_with_existing",
+        } and _attribute_source_is_locked(current_source):
+            conflicts.append(
+                {
+                    "listing_role": side,
+                    "attribute": attribute,
+                    "reason": "verified_evidence_conflicts_with_locked_current_value",
+                    "proposal_checksums": [proposal["proposal_checksum"]],
+                }
+            )
+            continue
+        if target_relationship == "corroborates_existing":
+            continue
+        row[f"{side}_superseded_value"] = current_value
+        row[f"{side}_superseded_source"] = current_source
+        row[f"{side}_reconciliation_relationship"] = target_relationship
         row[f"{side}_value"] = proposal["normalized_value"]
         row[f"{side}_source"] = "human_verified_ai_vision"
         row[f"{side}_reconciliation_decision_id"] = proposal["decision"].get("id")
@@ -1382,6 +1524,19 @@ def _attribute_evidence_proposal_index(
         rows = [row for row in rows if row["ai_draft"]["root_batch_id"] == selected_root_batch_id]
 
     summary_rows = list(rows)
+    relationship_counts = {
+        relationship: sum(
+            str(row.get("evidence_relationship") or "invalid") == relationship
+            for row in summary_rows
+        )
+        for relationship in (
+            "fills_unknown",
+            "corroborates_existing",
+            "refines_existing",
+            "conflicts_with_existing",
+            "invalid",
+        )
+    }
     summary = {
         "proposal_count": len(summary_rows),
         "distinct_claim_count": len(
@@ -1401,6 +1556,7 @@ def _attribute_evidence_proposal_index(
         "rejected_proposal_count": sum(
             row["decision_status"] == "rejected" for row in summary_rows
         ),
+        "relationship_counts": relationship_counts,
     }
     if eligibility == "eligible":
         rows = [row for row in rows if row.get("eligible")]

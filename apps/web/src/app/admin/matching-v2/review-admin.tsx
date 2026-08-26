@@ -359,6 +359,19 @@ interface AttributeEvidenceProposal {
   attribute: string;
   raw_value: unknown;
   normalized_value: unknown;
+  current_value: unknown;
+  current_source: string | null;
+  evidence_relationship:
+    | "fills_unknown"
+    | "corroborates_existing"
+    | "refines_existing"
+    | "conflicts_with_existing"
+    | "invalid";
+  decision_effect:
+    | "fill_missing_value"
+    | "no_change"
+    | "replace_with_verified_refinement"
+    | "replace_with_verified_correction";
   confidence: number;
   visible_text: string | null;
   source_image_url: string | null;
@@ -410,6 +423,10 @@ interface AttributeEvidenceProposalView {
     undecided_proposal_count: number;
     verified_proposal_count: number;
     rejected_proposal_count: number;
+    relationship_counts: Record<
+      AttributeEvidenceProposal["evidence_relationship"],
+      number
+    >;
   };
   selected_proposal_count: number;
   offset: number;
@@ -514,6 +531,27 @@ function label(value: string | null | undefined) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function evidenceRelationshipLabel(
+  relationship: AttributeEvidenceProposal["evidence_relationship"],
+) {
+  return {
+    fills_unknown: "Completes missing evidence",
+    corroborates_existing: "Corroborates current evidence",
+    refines_existing: "Adds material detail",
+    conflicts_with_existing: "Conflicts with current evidence",
+    invalid: "Invalid advisory claim",
+  }[relationship];
+}
+
+function evidenceApplyLabel(
+  relationship: AttributeEvidenceProposal["evidence_relationship"],
+) {
+  if (relationship === "conflicts_with_existing")
+    return "Verify correction & apply";
+  if (relationship === "refines_existing") return "Verify refinement & apply";
+  return "Verify & apply";
 }
 
 function bulkCandidateVerdict(
@@ -1845,8 +1883,8 @@ export function MatchingV2ReviewAdmin({
                       setAttributeOffset(0);
                     }}
                   >
-                    <option value="eligible">Eligible only</option>
-                    <option value="ineligible">Ineligible lineage</option>
+                    <option value="eligible">Actionable proposals</option>
+                    <option value="ineligible">Advisory / no action</option>
                     <option value="all">All proposals</option>
                   </select>
                 </label>
@@ -1883,18 +1921,18 @@ export function MatchingV2ReviewAdmin({
                       </small>
                     </article>
                     <article className="eligible">
-                      <span>Eligible</span>
+                      <span>Actionable</span>
                       <strong>
                         {attributeEvidenceView.summary.eligible_proposal_count.toLocaleString()}
                       </strong>
-                      <small>Missing or declared-unknown values only</small>
+                      <small>Missing, refined, or disputed evidence</small>
                     </article>
                     <article className="ineligible">
-                      <span>Retained but ineligible</span>
+                      <span>Advisory / no action</span>
                       <strong>
                         {attributeEvidenceView.summary.ineligible_proposal_count.toLocaleString()}
                       </strong>
-                      <small>Visible for lineage; cannot be applied</small>
+                      <small>Corroborating, invalid, or authority-locked</small>
                     </article>
                     <article>
                       <span>Awaiting review</span>
@@ -1977,13 +2015,27 @@ export function MatchingV2ReviewAdmin({
                                 {proposal.decision_status === "undecided"
                                   ? proposal.eligible
                                     ? "Awaiting verification"
-                                    : "Not eligible"
+                                    : proposal.evidence_relationship ===
+                                        "corroborates_existing"
+                                      ? "No action needed"
+                                      : "Not actionable"
                                   : label(proposal.decision_status)}
                               </span>
                             </header>
                             <div className="cert-attribute-claim">
                               <div>
-                                <span>{label(proposal.attribute)}</span>
+                                <span>Current {label(proposal.attribute)}</span>
+                                <strong>
+                                  {evidenceValue(proposal.current_value)}
+                                  <small>
+                                    {proposal.current_source
+                                      ? `Source: ${label(proposal.current_source)}`
+                                      : "Source unresolved"}
+                                  </small>
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Label evidence proposes</span>
                                 <strong>
                                   {evidenceValue(proposal.normalized_value)}
                                 </strong>
@@ -2001,6 +2053,25 @@ export function MatchingV2ReviewAdmin({
                                 </strong>
                               </div>
                             </div>
+                            <p
+                              className={`cert-attribute-relationship ${proposal.evidence_relationship}`}
+                            >
+                              <b>
+                                {evidenceRelationshipLabel(
+                                  proposal.evidence_relationship,
+                                )}
+                              </b>
+                              {proposal.evidence_relationship ===
+                              "conflicts_with_existing"
+                                ? " The current value is preserved unless an administrator verifies this exact cited correction."
+                                : proposal.evidence_relationship ===
+                                    "refines_existing"
+                                  ? " Verification will replace the lower-authority value with the more complete label value."
+                                  : proposal.evidence_relationship ===
+                                      "corroborates_existing"
+                                    ? " The label agrees with governed evidence, so no replacement or review is required."
+                                    : " Verification affects only the derived certification view and preserves raw evidence."}
+                            </p>
                             <p className="cert-attribute-counterpart">
                               Surfaced while comparing with{" "}
                               <b>{label(proposal.counterpart.retailer_id)}</b>:{" "}
@@ -2059,7 +2130,10 @@ export function MatchingV2ReviewAdmin({
                             </div>
                             {!proposal.eligible ? (
                               <p className="cert-attribute-ineligible">
-                                Cannot apply:{" "}
+                                {proposal.evidence_relationship ===
+                                "corroborates_existing"
+                                  ? "No action required: "
+                                  : "Not actionable: "}
                                 {proposal.ineligibility_reasons
                                   .map(label)
                                   .join("; ")}
@@ -2122,7 +2196,9 @@ export function MatchingV2ReviewAdmin({
                                       )
                                     }
                                   >
-                                    Verify & apply
+                                    {evidenceApplyLabel(
+                                      proposal.evidence_relationship,
+                                    )}
                                   </button>
                                 </div>
                               </div>

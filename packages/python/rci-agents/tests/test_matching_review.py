@@ -99,7 +99,9 @@ def _case(*, coverage: float = 0.5) -> dict[str, Any]:
                 {
                     "attribute": "fat_content",
                     "benchmark_value": "2%",
+                    "benchmark_source": "exact_canonical",
                     "competitor_value": None,
+                    "competitor_source": "unresolved",
                     "outcome": "unknown",
                 }
             ],
@@ -130,7 +132,7 @@ def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     prompt = load_matching_review_prompt(REPOSITORY_ROOT)
     instructions = prompt.instructions.casefold()
 
-    assert prompt.version == "1.3.0"
+    assert prompt.version == "1.4.0"
     assert "Product Pack attribute roles" in prompt.instructions
     assert "different or unknown brands do not independently prevent" in instructions
     assert "brand agreement never overrides" in instructions
@@ -143,7 +145,8 @@ def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     assert "never propose a tier absent" in instructions
     assert "inspect every supplied image" in instructions
     assert "do not emit a structured attribute proposal" in instructions
-    assert "never propose a replacement for a known value" in instructions
+    assert "identify an exact-label contradiction" in instructions
+    assert "governed brand decision" in instructions
 
 
 async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None:
@@ -181,13 +184,17 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
             {
                 "attribute": "package_count",
                 "benchmark_value": 1,
+                "benchmark_source": "exact_canonical",
                 "competitor_value": None,
+                "competitor_source": "unresolved",
                 "outcome": "unknown",
             },
             {
                 "attribute": "certifications",
                 "benchmark_value": ["USDA"],
+                "benchmark_source": "exact_canonical",
                 "competitor_value": None,
+                "competitor_source": "unresolved",
                 "outcome": "unknown",
             },
         ]
@@ -232,6 +239,8 @@ async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None
         "image_proposals_require_exact_source_url": True,
         "image_proposals_require_visible_text": True,
         "structured_attribute_proposals_permitted": False,
+        "known_low_authority_values_may_be_disputed": True,
+        "governed_or_human_verified_values_are_locked": True,
     }
     proposal_variants = result_schema["properties"]["attribute_proposals"]["items"]["anyOf"]
     assert all(
@@ -382,7 +391,11 @@ async def test_matching_review_schema_disallows_image_claims_without_input_image
     )
     case_document = _case(coverage=1)
     case_document["edge"]["attribute_evidence"][0].update(
-        {"competitor_value": "2%", "outcome": "match"}
+        {
+            "competitor_value": "2%",
+            "competitor_source": "product_pack_override",
+            "outcome": "match",
+        }
     )
 
     await provider.generate(
@@ -486,7 +499,7 @@ async def test_matching_review_rejects_uncited_image_claim() -> None:
         )
 
 
-async def test_matching_review_rejects_image_rewrite_of_known_listing_value() -> None:
+async def test_matching_review_allows_image_dispute_of_lower_authority_value() -> None:
     endpoint = FakeResponsesEndpoint(
         {
             "verdict_proposal": "insufficient_evidence",
@@ -516,7 +529,13 @@ async def test_matching_review_rejects_image_rewrite_of_known_listing_value() ->
     )
 
     case = _case()
-    case["edge"]["attribute_evidence"][0].update({"competitor_value": "2%", "outcome": "match"})
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": "2%",
+            "competitor_source": "search",
+            "outcome": "match",
+        }
+    )
     case["edge"]["attribute_evidence"].append(
         {
             "attribute": "package_count",
@@ -525,7 +544,53 @@ async def test_matching_review_rejects_image_rewrite_of_known_listing_value() ->
             "outcome": "unknown",
         }
     )
-    with pytest.raises(ValueError, match="only resolve a missing attribute"):
+    response = await provider.generate(
+        load_matching_review_prompt(REPOSITORY_ROOT),
+        case,
+        model_id="gpt-5.6-luna",
+    )
+
+    assert response.result["attribute_proposals"][0]["value"] == "Whole"
+
+
+async def test_matching_review_rejects_image_dispute_of_locked_value() -> None:
+    endpoint = FakeResponsesEndpoint(
+        {
+            "verdict_proposal": "insufficient_evidence",
+            "tier_proposal": None,
+            "comparison_basis_proposal": [],
+            "rationale": "The draft attempts to replace governed evidence.",
+            "attribute_proposals": [
+                {
+                    "attribute": "fat_content",
+                    "value": "Whole",
+                    "evidence_source": "image",
+                    "confidence": 0.99,
+                    "visible_text": "Whole Milk",
+                    "source_image_url": "https://example.com/aldi.jpg",
+                }
+            ],
+            "conflicts": [],
+            "requires_human_review": True,
+        }
+    )
+    provider = OpenAIMatchingReviewProvider(
+        api_key="test-key",
+        timeout_seconds=10,
+        max_output_tokens=1000,
+        max_request_cost_usd=1,
+        client=SimpleNamespace(responses=endpoint),
+    )
+    case = _case()
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": "2%",
+            "competitor_source": "product_pack_override",
+            "outcome": "match",
+        }
+    )
+
+    with pytest.raises(ValueError, match="input image"):
         await provider.generate(
             load_matching_review_prompt(REPOSITORY_ROOT),
             case,

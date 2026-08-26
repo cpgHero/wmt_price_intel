@@ -392,6 +392,13 @@ test("reviews eligible image evidence by retry lineage before match certificatio
             undecided_proposal_count: 67,
             verified_proposal_count: 0,
             rejected_proposal_count: 0,
+            relationship_counts: {
+              fills_unknown: 29,
+              corroborates_existing: 38,
+              refines_existing: 0,
+              conflicts_with_existing: 0,
+              invalid: 0,
+            },
           },
           selected_proposal_count: 29,
           offset: 0,
@@ -407,6 +414,10 @@ test("reviews eligible image evidence by retry lineage before match certificatio
               attribute: "strength",
               raw_value: "10 mg",
               normalized_value: 10,
+              current_value: null,
+              current_source: "unresolved",
+              evidence_relationship: "fills_unknown",
+              decision_effect: "fill_missing_value",
               confidence: 0.99,
               visible_text: "Vitamin D3 10 mg",
               source_image_url: "https://images.example/target-label.jpg",
@@ -486,13 +497,13 @@ test("reviews eligible image evidence by retry lineage before match certificatio
   await expect(
     evidenceWorkspace
       .getByRole("article")
-      .filter({ hasText: /^Eligible/ })
+      .filter({ hasText: /^Actionable/ })
       .getByText("29", { exact: true }),
   ).toBeVisible();
   await expect(
     evidenceWorkspace
       .getByRole("article")
-      .filter({ hasText: /^Retained but ineligible/ })
+      .filter({ hasText: /^Advisory \/ no action/ })
       .getByText("38", { exact: true }),
   ).toBeVisible();
   await expect(evidenceWorkspace).toContainText("25 cases · 29 eligible");

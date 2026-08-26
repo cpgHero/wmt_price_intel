@@ -236,6 +236,13 @@ def test_attribute_evidence_index_groups_retries_under_the_root_batch() -> None:
         "undecided_proposal_count": 2,
         "verified_proposal_count": 0,
         "rejected_proposal_count": 0,
+        "relationship_counts": {
+            "fills_unknown": 0,
+            "corroborates_existing": 0,
+            "refines_existing": 0,
+            "conflicts_with_existing": 0,
+            "invalid": 2,
+        },
     }
     assert view["selected_proposal_count"] == 1
     assert [row["case_id"] for row in view["proposals"]] == ["a-case"]
@@ -368,14 +375,126 @@ def test_declared_unknown_ai_value_cannot_resolve_governed_evidence() -> None:
     assert "declared_unknown_value_cannot_resolve_evidence" in proposal["ineligibility_reasons"]
 
 
-def test_image_proposal_cannot_replace_an_already_resolved_attribute_value() -> None:
+def test_image_proposal_surfaces_a_conflict_with_lower_authority_evidence() -> None:
     case = _reconciliation_case()
-    case["edge"]["attribute_evidence"][0].update({"competitor_value": 10, "outcome": "conflict"})
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": 10,
+            "competitor_source": "search",
+            "outcome": "conflict",
+        }
+    )
+
+    proposal = _reconciliation_proposals(case, _reconciliation_policy())[0]
+
+    assert proposal["eligible"] is True
+    assert proposal["current_value"] == 10
+    assert proposal["current_source"] == "search"
+    assert proposal["evidence_relationship"] == "conflicts_with_existing"
+    assert proposal["decision_effect"] == "replace_with_verified_correction"
+
+    decision = {
+        "id": "00000000-0000-0000-0000-000000000088",
+        "proposal_checksum": proposal["proposal_checksum"],
+        "decision": "verified",
+        "reviewer_id": "owner@cpghero.com",
+        "rationale": "The cited label visibly corrects the Search extraction.",
+    }
+    reconciled = _apply_attribute_reconciliation(
+        case,
+        _reconciliation_policy(),
+        [decision],
+    )
+    evidence = reconciled["edge"]["attribute_evidence"][0]
+    assert evidence["competitor_value"] == 5
+    assert evidence["competitor_source"] == "human_verified_ai_vision"
+    assert evidence["competitor_superseded_value"] == 10
+    assert evidence["competitor_superseded_source"] == "search"
+    assert evidence["competitor_reconciliation_relationship"] == "conflicts_with_existing"
+
+
+def test_image_proposal_that_corroborates_current_value_requires_no_action() -> None:
+    case = _reconciliation_case()
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": 5,
+            "competitor_source": "pdp",
+            "outcome": "match",
+        }
+    )
 
     proposal = _reconciliation_proposals(case, _reconciliation_policy())[0]
 
     assert proposal["eligible"] is False
-    assert "attribute_value_already_resolved" in proposal["ineligibility_reasons"]
+    assert proposal["evidence_relationship"] == "corroborates_existing"
+    assert proposal["decision_effect"] == "no_change"
+    assert proposal["ineligibility_reasons"] == ["proposal_corroborates_current_value"]
+
+
+def test_default_value_with_unresolved_source_remains_fillable() -> None:
+    case = _reconciliation_case()
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": 10,
+            "competitor_source": "product_pack_default",
+            "outcome": "unknown",
+        }
+    )
+
+    proposal = _reconciliation_proposals(case, _reconciliation_policy())[0]
+
+    assert proposal["eligible"] is True
+    assert proposal["evidence_relationship"] == "fills_unknown"
+
+
+def test_image_proposal_cannot_replace_locked_governed_evidence() -> None:
+    case = _reconciliation_case()
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "competitor_value": 10,
+            "competitor_source": "product_pack_override",
+            "outcome": "conflict",
+        }
+    )
+
+    proposal = _reconciliation_proposals(case, _reconciliation_policy())[0]
+
+    assert proposal["eligible"] is False
+    assert proposal["evidence_relationship"] == "conflicts_with_existing"
+    assert proposal["ineligibility_reasons"] == ["current_value_has_locked_governed_authority"]
+
+
+def test_image_proposal_can_refine_lower_authority_compound_text() -> None:
+    case = _reconciliation_case()
+    case["edge"]["attribute_evidence"][0].update(
+        {
+            "attribute": "active_ingredient",
+            "competitor_value": "fish_oil",
+            "competitor_source": "search",
+            "outcome": "match",
+        }
+    )
+    case["ai_draft"]["output_document"]["result"]["attribute_proposals"][0].update(
+        {
+            "attribute": "active_ingredient",
+            "value": "fish oil and krill oil",
+            "visible_text": "Fish Oil & Antarctic Krill Oil",
+        }
+    )
+    policy = _reconciliation_policy()
+    policy["attribute_definitions"] = {
+        "active_ingredient": {"data_type": "string", "allowed_values": []}
+    }
+    policy["comparison_rules"] = {"active_ingredient": {}}
+    policy["attribute_roles"] = {"active_ingredient": "hard_blocker"}
+    policy["hard_blocker_attributes"] = ["active_ingredient"]
+    policy["hard_blocker_unknown_is_blocking"] = {"active_ingredient": True}
+
+    proposal = _reconciliation_proposals(case, policy)[0]
+
+    assert proposal["eligible"] is True
+    assert proposal["evidence_relationship"] == "refines_existing"
+    assert proposal["decision_effect"] == "replace_with_verified_refinement"
 
 
 def test_verified_evidence_recomputes_engine_tier_and_price_basis_from_active_pack() -> None:
