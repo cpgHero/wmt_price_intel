@@ -1620,9 +1620,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-25",
-              "Implemented and focused regression-tested; production differential audit pending",
+              "Production deployed and differential audit passed",
               "Attribute evidence reconciliation now distinguishes completion, corroboration, refinement, and conflict instead of treating every non-empty value as resolved.",
-              "The 29 administrator decisions remain checksum-bound. Corroborating label claims require no action; source-attributable refinements and corrections to lower-authority Search/PDP extraction are explicitly reviewable and retain superseded evidence. Product Pack overrides, governed brand decisions, manual overrides, and prior human verification remain locked. Prompt 1.4.0 may surface exact-label discrepancies but cannot apply them. No MetricsCart or OpenAI call is part of this change.",
+              "Commit 7f731ba deployed successfully to Railway and GitHub Actions run 32918348483 passed Python, TypeScript, 15 browser tests, migrations, contracts, and all four container builds. The read-only production audit reconciled 67 proposals and 65 distinct claims: 31 missing-value completions, 29 corroborations, two refinements, and five conflicts. All 29 administrator decisions retained their checksum binding (28 verified and one rejected); the 29 corroborations require no action, while nine previously hidden lower-authority completions/refinements/corrections are now reviewable. Governed and human-verified sources remain locked. No MetricsCart or OpenAI call was made.",
             ],
             [
               "2026-08-25",

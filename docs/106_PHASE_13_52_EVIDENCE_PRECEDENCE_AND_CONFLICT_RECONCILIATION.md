@@ -73,3 +73,20 @@ vitamin brands in matching or reconciliation code.
   another paid AI run or match certification.
 
 No MetricsCart or OpenAI call is required to implement or validate this phase.
+
+## Production verification
+
+Commit `7f731ba` deployed successfully to the Railway web, API, worker, and scheduler services.
+GitHub Actions run `32918348483` passed Python, TypeScript, all 15 browser tests, migrations,
+contracts, and all four container builds. The local full Python suite passed 746 tests with 16
+environment-dependent integrations skipped.
+
+The read-only production differential audit reconciled the original pilot to 67 proposals and 65
+distinct claims. All 29 administrator decisions retained their original checksum binding: 28
+remain verified and one remains rejected. The corrected relationship distribution is 31 missing
+values, 29 corroborations, two refinements, and five conflicts. The 29 corroborations now require
+no action. Nine previously hidden source-attributable proposals are actionable: two missing-value
+completions, two refinements, and five corrections to lower-authority Search/PDP extraction. No
+locked governed source was exposed for replacement.
+
+No MetricsCart or OpenAI call was made during implementation or the production audit.
