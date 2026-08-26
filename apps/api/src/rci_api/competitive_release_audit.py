@@ -441,9 +441,7 @@ def audit_competitive_portfolio_set(
                         parent_total=_integer(cohort.get(field)),
                     )
             if requires_cohort_lineage:
-                audit_weighted_average(
-                    relationships, cohort, cohort_path, "cohort relationship"
-                )
+                audit_weighted_average(relationships, cohort, cohort_path, "cohort relationship")
         cohort_relationships_by_retailer: dict[str, int] = {}
         for cohort in cohorts:
             retailer_id = str(cohort.get("competitor_id") or "")

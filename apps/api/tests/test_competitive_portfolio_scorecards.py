@@ -285,9 +285,7 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
         {"relationship_id": "relationship-1", **summary},
         {
             "relationship_id": "relationship-2",
-            **_portfolio_summary(
-                [{"status": "losing", "competitor_minus_benchmark": -5.0}]
-            ),
+            **_portfolio_summary([{"status": "losing", "competitor_minus_benchmark": -5.0}]),
         },
     ]
     cohort = _cohort_summary(
@@ -342,9 +340,7 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
     assert cohort["scored_product_locations"] == 1
     assert cohort["average_gap"] == 0.2
     assert cohort["benchmark_median"] == 3.0
-    assert [row["relationship_id"] for row in cohort["product_relationships"]] == [
-        "relationship-1"
-    ]
+    assert [row["relationship_id"] for row in cohort["product_relationships"]] == ["relationship-1"]
 
 
 def test_portfolio_scorecard_contract_accepts_radius_native_projection() -> None:
