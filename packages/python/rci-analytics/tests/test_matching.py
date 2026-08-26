@@ -292,6 +292,34 @@ def test_governed_relationship_applies_to_every_eligible_profile() -> None:
     assert any(match.attributes.get("_match_origin") == "user_confirmed" for match in matches)
 
 
+def test_governed_confirmation_scores_certified_pair_with_radius_evidence() -> None:
+    offers, engine = _classified()
+    rule = ProductMatchRule(
+        competitor_id="aldi_us",
+        profile_id="aldi_10mi",
+        benchmark_product_id="w-1",
+        competitor_product_id="a-1",
+        decision="confirmed",
+        scope_mode="observed_benchmark_product_footprint",
+        comparison_family_key="certified-radius-pair",
+    )
+
+    matches = engine.compare_governed(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="aldi_10mi",
+        rules=[rule],
+        allow_automatic=False,
+    )
+
+    assert len(matches) == 1
+    assert matches[0].distance_miles == pytest.approx(0)
+    assert matches[0].attributes["_match_origin"] == "user_confirmed"
+    assert matches[0].attributes["_comparison_family_key"] == "certified-radius-pair"
+    assert matches[0].attributes["_location_scope_key"] == "walmart_us|10001|store-1"
+
+
 def test_governed_rejection_removes_only_the_rejected_pair() -> None:
     offers, engine = _classified()
 

@@ -875,22 +875,34 @@ class ComparisonEngine:
             automatic.append(match)
 
         profile = self.pack.profile(profile_id)
-        if confirmed and profile["geography"] != "exact_zip":
-            raise ValueError("confirmed product matches currently require exact-ZIP geography")
         governed = [
             match
             for rule in confirmed
             if rule.relationship_role == "primary"
-            for match in self._confirmed_exact_location_matches(
-                offers,
-                benchmark_id=benchmark_id,
-                competitor_id=competitor_id,
-                profile=profile,
-                benchmark_product_id=rule.benchmark_product_id,
-                competitor_product_id=rule.competitor_product_id,
-                scope_keys=rule_scopes[id(rule)],
-                scope_mode=rule.scope_mode,
-                comparison_family_key=rule.comparison_family_key,
+            for match in (
+                self._confirmed_radius_matches(
+                    offers,
+                    benchmark_id=benchmark_id,
+                    competitor_id=competitor_id,
+                    profile=profile,
+                    benchmark_product_id=rule.benchmark_product_id,
+                    competitor_product_id=rule.competitor_product_id,
+                    scope_keys=rule_scopes[id(rule)],
+                    scope_mode=rule.scope_mode,
+                    comparison_family_key=rule.comparison_family_key,
+                )
+                if profile["geography"] == "radius"
+                else self._confirmed_exact_location_matches(
+                    offers,
+                    benchmark_id=benchmark_id,
+                    competitor_id=competitor_id,
+                    profile=profile,
+                    benchmark_product_id=rule.benchmark_product_id,
+                    competitor_product_id=rule.competitor_product_id,
+                    scope_keys=rule_scopes[id(rule)],
+                    scope_mode=rule.scope_mode,
+                    comparison_family_key=rule.comparison_family_key,
+                )
             )
         ]
         return sorted(
@@ -1104,6 +1116,70 @@ class ComparisonEngine:
             for scope_key in sorted(benchmark)
             if scope_key in scope_keys and str(benchmark[scope_key][0].offer.zipcode) in competitor
         ]
+
+    def _confirmed_radius_matches(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        benchmark_id: str,
+        competitor_id: str,
+        profile: JsonObject,
+        benchmark_product_id: str,
+        competitor_product_id: str,
+        scope_keys: set[str],
+        scope_mode: str,
+        comparison_family_key: str,
+    ) -> list[MatchRecord]:
+        """Score one certified product pair across nearby observed stores.
+
+        Certification supplies product identity; Search coordinates and prices supply
+        the store-radius evidence. The rule's benchmark footprint remains the scope
+        authority, so an unrelated observation can never expand a certified pair.
+        """
+
+        pair_offers = [
+            item
+            for item in offers
+            if (
+                item.offer.retailer_id == benchmark_id
+                and item.offer.retailer_product_id == benchmark_product_id
+            )
+            or (
+                item.offer.retailer_id == competitor_id
+                and item.offer.retailer_product_id == competitor_product_id
+            )
+        ]
+        offer_index = {item.offer.offer_id: item for item in pair_offers}
+        matches: list[MatchRecord] = []
+        for match in self._radius_matches(
+            pair_offers,
+            benchmark_id,
+            competitor_id,
+            profile,
+        ):
+            benchmark = offer_index.get(match.benchmark_offer_id)
+            if benchmark is None:
+                continue
+            scope_key = location_scope_key(benchmark.offer)
+            if scope_key not in scope_keys:
+                continue
+            matches.append(
+                replace(
+                    match,
+                    attributes={
+                        **match.attributes,
+                        "_match_origin": "user_confirmed",
+                        "_scope_mode": scope_mode,
+                        "_location_scope_key": scope_key,
+                        "_comparison_family_key": (
+                            comparison_family_key
+                            if comparison_family_key != "legacy"
+                            else f"profile:{profile['id']}"
+                        ),
+                    },
+                )
+            )
+        return matches
 
     def _selected_product_by_location(
         self,

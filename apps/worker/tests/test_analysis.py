@@ -78,11 +78,16 @@ def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None
 @pytest.mark.parametrize(
     ("product_pack_id", "allowed_tier", "expected_profiles"),
     [
-        ("fresh_strawberries", "exact_specification", ("strict", "unit_price")),
+        (
+            "fresh_strawberries",
+            "exact_specification",
+            ("strict", "unit_price", "aldi_10mi"),
+        ),
         ("fresh_ground_beef", "equivalent_product", ("unit_price",)),
+        ("vitamins_supplements", "equivalent_product", ("compatible_spec",)),
     ],
 )
-def test_matching_v2_certified_rules_use_exact_location_profiles_only(
+def test_matching_v2_certified_rules_use_location_comparable_profiles(
     product_pack_id: str,
     allowed_tier: str,
     expected_profiles: tuple[str, ...],

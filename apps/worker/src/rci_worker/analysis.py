@@ -99,14 +99,14 @@ def matching_v2_gold_set_rules(
 ) -> list[ProductMatchRule]:
     """Translate certified labels into generic, scope-aware comparison rules."""
 
-    exact_location_profiles = tuple(
+    location_profiles = tuple(
         dict(profile)
         for profile in pack.matching_profiles
-        if str(profile.get("geography") or "") == "exact_zip"
+        if str(profile.get("geography") or "") in {"exact_zip", "radius"}
     )
-    if not exact_location_profiles:
+    if not location_profiles:
         raise ValueError(
-            f"Product Pack {pack.id!r} has no exact-location profile for certified reporting"
+            f"Product Pack {pack.id!r} has no location-comparable profile for certified reporting"
         )
     engine = ComparisonEngine(pack)
     exact_tiers = {"exact_item", "exact_specification"}
@@ -121,7 +121,7 @@ def matching_v2_gold_set_rules(
         allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
         eligible_profiles = tuple(
             str(profile["id"])
-            for profile in exact_location_profiles
+            for profile in location_profiles
             if not label["expected_comparable"]
             or engine.comparison_metric(str(profile["id"])) != "package_price"
             or bool(allowed_tiers & exact_tiers)
@@ -171,7 +171,7 @@ def scope_matching_v2_rules_to_brand_profiles(
     profile_index = {
         str(profile["id"]): dict(profile)
         for profile in profiles
-        if str(profile.get("geography") or "") == "exact_zip"
+        if str(profile.get("geography") or "") in {"exact_zip", "radius"}
     }
     offers_by_product: dict[tuple[str, str], list[Any]] = defaultdict(list)
     for classified in offers:
@@ -267,7 +267,7 @@ def scope_matching_v2_rules_to_brand_profiles(
                 )
             if not eligible_profiles:
                 raise ValueError(
-                    "certified comparable relationship is not eligible for any exact-location "
+                    "certified comparable relationship is not eligible for any location-comparable "
                     f"Product Pack profile: {benchmark_retailer}:{rule.benchmark_product_id} "
                     f"vs {rule.competitor_id}:{rule.competitor_product_id}"
                 )
@@ -300,7 +300,7 @@ def matching_v2_gold_set_presentation(
     profile_index = {
         str(profile["id"]): dict(profile)
         for profile in profiles
-        if str(profile.get("geography") or "") == "exact_zip"
+        if str(profile.get("geography") or "") in {"exact_zip", "radius"}
     }
     offers_by_product: dict[tuple[str, str], list[Any]] = defaultdict(list)
     benchmark_footprints: dict[str, set[str]] = defaultdict(set)
@@ -1433,7 +1433,8 @@ class AnalysisProcessor:
             str(value)
             for value in decision_rules["profile_priority"]
             if any(
-                str(profile["id"]) == str(value) and str(profile["geography"]) == "exact_zip"
+                str(profile["id"]) == str(value)
+                and str(profile["geography"]) in {"exact_zip", "radius"}
                 for profile in selected_profiles
             )
         ]
@@ -1461,7 +1462,7 @@ class AnalysisProcessor:
                         profile_id=profile_id,
                     )
                 )
-                if str(profile["geography"]) == "exact_zip":
+                if str(profile["geography"]) in {"exact_zip", "radius"}:
                     candidate_matches.extend(ungoverned_by_profile[profile_id])
             resolution = resolve_one_to_one_relationships(
                 relationship_offers,
@@ -1500,11 +1501,11 @@ class AnalysisProcessor:
                 evidence_ref = f"evidence.matches.{competitor}.{profile_id}"
                 geography = str(profile["geography"])
                 comparison_metric = matches[0].comparison_metric
-                if geography == "exact_zip":
+                if geography in {"exact_zip", "radius"}:
                     review_matches.extend(matches)
                 if (
                     not mapped_competitor
-                    and geography == "exact_zip"
+                    and geography in {"exact_zip", "radius"}
                     and comparison_metric == "package_price"
                 ):
                     map_matches.extend(matches)
