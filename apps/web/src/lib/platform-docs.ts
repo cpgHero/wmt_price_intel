@@ -83,10 +83,10 @@ const lastVerified = "August 26, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.62",
+  version: "1.3.63",
   lastVerified,
   baseline:
-    "Production implementation through guarded Vitamin evidence reconciliation and match certification, with Product Pack 1.3.1 release-profile correction pending release validation",
+    "Production implementation through guarded Vitamin evidence reconciliation and automated match certification under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1620,9 +1620,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-26",
-              "Implemented; Product Pack correction in release validation",
+              "Production deployed and automation complete",
               "Vitamin evidence and match review gained governed queue-wide automation, and the ordinary release-profile blocker was corrected.",
-              "Production reconciled 1,415 safe attribute claims across 837 products, completed 1,938 evidence-aware Luna reviews with zero task failures, and checksum-bound 372 defensible final decisions: two comparable and 370 not comparable due to known hard-blocker conflicts. Product Pack 1.3.1 keeps known special-release conflicts blocking, treats unlabeled ordinary release as nonblocking, and separates package-count compatibility from package/unit price-basis eligibility. Remaining insufficient or contradictory cases stay unresolved; reporting was not replayed.",
+              "Production reconciled 1,415 safe attribute claims across 837 products, completed 1,938 evidence-aware Luna reviews with zero failures, and first committed 372 defensible decisions: two comparable and 370 not comparable due to known hard-blocker conflicts. Product Pack 1.3.1 then corrected ordinary-release and package-count semantics. A fresh 1,920-case Luna pass completed with zero failures for $13.4568006; the checksum-bound gate committed 472 additional comparables and withheld one low-confidence case, 1,165 insufficient-evidence cases, and 282 AI-only rejections. The queue now contains 480 approved, 388 rejected, and 1,448 system-deferred cases. No approved case is release-blocked or lacks observed Search evidence. Reporting was not replayed.",
             ],
             [
               "2026-08-26",
