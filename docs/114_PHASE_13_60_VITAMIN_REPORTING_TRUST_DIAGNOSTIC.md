@@ -67,9 +67,9 @@ This was reproduced in production with the Target vitamin-E cohort: the row repo
 product pairs and two scored product-locations, while the drawer reports zero included
 relationships.
 
-## Trust assessment
+## Pre-repair trust assessment
 
-The current vitamin publication is **not decision-ready for these affected cells**:
+Before this repair, the vitamin publication was **not decision-ready for these affected cells**:
 
 - BJ's, Meijer, and Sam's Club require clearer radius-boundary disclosure, not match replacement.
 - Costco and Walgreens require governed package-count reconciliation and deterministic
@@ -128,3 +128,37 @@ web tests must pass before deployment. Production rollout then rebuilds all exac
 5. the complete six-document semantic audit has zero release-blocking errors.
 
 No MetricsCart, PDP, or OpenAI call is required for the repair or replay.
+
+## Production certification
+
+Production was rematerialized on 2026-08-26 from the retained certified release after API, web,
+worker, and scheduler deployment. All six exact/compatible 1-, 3-, and 5-mile documents now use
+Competitive Portfolio contract `1.3.0`. The production semantic reconciliation found zero cohort
+lineage-count mismatches and zero additive outcome-rollup mismatches.
+
+At the compatible-specification 5-mile boundary, the formerly blank physical-retailer cells now
+contain the following scored benchmark product-location evidence:
+
+| Retailer | Certified relationships | Scored product-locations |
+| --- | ---: | ---: |
+| Meijer | 102 | 32 |
+| Sam's Club | 34 | 16 |
+| BJ's Wholesale Club | 26 | 13 |
+| Walgreens | 11 | 3 |
+| Costco | 1 | 1 |
+
+BJ's, Meijer, Sam's Club, and Walgreens remain honest zeros at the 3-mile boundary because their
+nearest collected competitor evidence is outside three miles. Costco now scores one relationship
+at three miles after PDP-backed recovery of its explicit 180-count package quantity.
+
+Browser verification opened the formerly empty Target 180 mg vitamin-E cohort at compatible
+specification / five miles. The row and drawer both contain six governed relationships: two have
+selected local price evidence and four remain visible as certified relationships without local
+evidence inside the selected radius. This is the intended distinction between match identity and
+local price eligibility.
+
+GitHub Actions run `33016471925` passed the complete Python, TypeScript, browser, contract,
+migration-cycle, and container-build workflow. Railway API deployment
+`9e8e2852-50b6-43f2-897c-707f1dc73bb5`, web deployment
+`ac124c7b-e1e4-4f5a-b896-ced35cc8a880`, and worker deployment
+`b2a63c56-8b25-4e63-9274-8acd4d21ac68` succeeded. No paid provider call was made.
