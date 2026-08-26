@@ -5600,24 +5600,7 @@ class PostgresMatchingV2ReviewRepository:
                                    review_case.external_case_id,
                                    review_case.case_document,
                                    review_case.case_checksum,
-                                   review_queue.product_pack_id,
-                                   (
-                                     SELECT current_decision.verdict
-                                     FROM (
-                                       SELECT submission.verdict, submission.created_at,
-                                              submission.id
-                                       FROM matching_v2_review_submission submission
-                                       WHERE submission.review_case_id = review_case.id
-                                       UNION ALL
-                                       SELECT adjudication.verdict, adjudication.created_at,
-                                              adjudication.id
-                                       FROM matching_v2_adjudication adjudication
-                                       WHERE adjudication.review_case_id = review_case.id
-                                     ) current_decision
-                                     ORDER BY current_decision.created_at DESC,
-                                              current_decision.id DESC
-                                     LIMIT 1
-                                   ) AS current_verdict
+                                   review_queue.product_pack_id
                             FROM matching_v2_review_case review_case
                             JOIN matching_v2_review_queue review_queue
                               ON review_queue.id = review_case.review_queue_id
@@ -5641,10 +5624,11 @@ class PostgresMatchingV2ReviewRepository:
                     text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
                     {"case_id": str(row["review_case_id"])},
                 )
-                if row["current_verdict"] in {"comparable", "not_comparable"}:
-                    raise ValueError(
-                        "attribute evidence must be reconciled before final match certification"
-                    )
+
+            # Product-attribute evidence is an independent, append-only fact stream.
+            # A case may already have a match verdict, but reconciling its evidence must
+            # neither reopen nor mutate that verdict. Downstream matching/reporting only
+            # changes after a separately governed recomputation and publication.
 
             existing_decisions = set(
                 (

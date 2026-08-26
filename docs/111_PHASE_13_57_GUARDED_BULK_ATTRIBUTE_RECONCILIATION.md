@@ -39,6 +39,11 @@ decided proposals, and inserts the complete decision population in one Postgres 
 failure rolls back the entire action. Every append-only evidence decision retains the policy,
 confirmation checksum, selected source proposal, image, visible text, and complete claim context.
 
+Product evidence may be reconciled after a case received a match verdict because the two records
+have independent authority. The evidence decision does not reopen, replace, or silently change the
+certified relationship. Any effect on matching or reporting requires a later, separately governed
+recomputation and publication.
+
 Raw Search, PDP, product images, AI responses, and review queues are immutable. The action updates
 derived governed evidence only. It does not certify a product relationship, trigger reanalysis, or
 publish reporting. Weak, conflicting, or value-changing claims remain unresolved and are not a
