@@ -235,7 +235,11 @@ class OfferClassifier:
             category=self.pack.name,
         )
         resolution_source: str = resolution.resolution_method
-        if resolution.status != "resolved":
+        # A present structured brand is stronger identity evidence than an unrelated
+        # word in the product title. Title discovery is therefore a missing-value
+        # fallback only; an unresolved retailer/PDP brand remains unresolved until
+        # the governed foundation or an explicit review decision covers it.
+        if resolution.status != "resolved" and observed is None:
             title_resolution = self._brand_resolver.resolve_from_text(
                 offer.retailer_id,
                 evidence_text,

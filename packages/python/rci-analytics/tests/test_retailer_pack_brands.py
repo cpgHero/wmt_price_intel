@@ -157,3 +157,46 @@ def test_certified_product_pack_can_fill_missing_retailer_foundation_coverage() 
     assert len(matches) == 1
     assert matches[0].benchmark_offer_id == "walmart_us:w-1"
     assert matches[0].competitor_offer_id == "amazon_us_same_day:m-1"
+
+
+def test_present_unresolved_brand_is_not_replaced_by_unrelated_title_brand() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    classified = classifier.classify(
+        _offer(
+            "amazon_us_same_day",
+            "black-seed-oil",
+            "GuruNanda",
+            "GuruNanda Black Seed Oil with Vitamin D3, K2 & E",
+            "18.99",
+        )
+    )
+
+    assert classified.attributes["_brand_governance"]["status"] == "unresolved"
+    assert classified.attributes["_brand_governance"]["observed_brand"] == "GuruNanda"
+    assert classified.attributes["brand"] == "GuruNanda"
+
+
+def test_missing_brand_can_still_use_unambiguous_title_fallback() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offer = _offer(
+        "amazon_us_same_day",
+        "nature-made-c",
+        "",
+        "Nature Made Vitamin C 500 mg, 100 Tablets",
+        "9.99",
+    )
+    offer = replace(offer, brand=None)
+
+    classified = classifier.classify(offer)
+
+    assert classified.attributes["_brand_governance"]["canonical_brand_name"] == "Nature Made"
+    assert classified.attributes["_brand_governance"]["role"] == "national"
