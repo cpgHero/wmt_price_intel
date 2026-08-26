@@ -6,12 +6,7 @@
   "status": "active",
   "identity": {
     "canonical_retailer_id": "aldi_us",
-    "aliases": [
-      "aldi",
-      "aldi.us",
-      "new_aldi",
-      "ALDI"
-    ]
+    "aliases": ["aldi", "aldi.us", "new_aldi", "ALDI"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -43,11 +38,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",

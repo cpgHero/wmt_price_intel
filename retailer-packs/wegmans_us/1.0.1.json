@@ -6,10 +6,7 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "wegmans_us",
-    "aliases": [
-      "wegmans",
-      "wegmans.com"
-    ]
+    "aliases": ["wegmans", "wegmans.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -37,11 +34,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",

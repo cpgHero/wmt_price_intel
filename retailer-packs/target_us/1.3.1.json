@@ -6,10 +6,7 @@
   "status": "needs_verification",
   "identity": {
     "canonical_retailer_id": "target_us",
-    "aliases": [
-      "target",
-      "target.com"
-    ]
+    "aliases": ["target", "target.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -41,11 +38,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -67,10 +60,7 @@
     "mode": "first_party_only",
     "source": "pdp_seller",
     "allow_when_missing": true,
-    "allowed_first_party_sellers": [
-      "Target",
-      "Target.com"
-    ],
+    "allowed_first_party_sellers": ["Target", "Target.com"],
     "non_first_party_behavior": "exclude_as_marketplace_noise",
     "notes": [
       "Target seller aliases must be validated against live PDP evidence before activating Target collection.",

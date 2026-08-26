@@ -6,11 +6,7 @@
   "status": "active",
   "identity": {
     "canonical_retailer_id": "walmart_us",
-    "aliases": [
-      "walmart",
-      "walmart.com",
-      "Walmart (US)"
-    ]
+    "aliases": ["walmart", "walmart.com", "Walmart (US)"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -42,11 +38,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -67,10 +59,7 @@
     "mode": "first_party_only",
     "source": "pdp_seller",
     "allow_when_missing": true,
-    "allowed_first_party_sellers": [
-      "Walmart",
-      "Walmart.com"
-    ],
+    "allowed_first_party_sellers": ["Walmart", "Walmart.com"],
     "non_first_party_behavior": "exclude_as_marketplace_noise",
     "notes": [
       "Known marketplace sellers other than Walmart or Walmart.com are excluded before matching and reporting.",

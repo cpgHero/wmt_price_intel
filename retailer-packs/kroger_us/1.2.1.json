@@ -6,19 +6,14 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "kroger_us",
-    "aliases": [
-      "kroger",
-      "kroger.com"
-    ]
+    "aliases": ["kroger", "kroger.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
     "availability_authority": "search_location_observation",
     "location_dimension": "store_zip",
     "physical_store_reporting": true,
-    "notes": [
-      "Store IDs may contain leading zeroes and always remain strings."
-    ]
+    "notes": ["Store IDs may contain leading zeroes and always remain strings."]
   },
   "brand_foundation": {
     "id": "cpg_brand_foundation",
@@ -40,11 +35,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",

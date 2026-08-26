@@ -6,11 +6,7 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "cvs_us",
-    "aliases": [
-      "cvs",
-      "cvs.com",
-      "cvs pharmacy"
-    ]
+    "aliases": ["cvs", "cvs.com", "cvs pharmacy"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -38,11 +34,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -54,10 +46,7 @@
     "verified_private_labels": [
       {
         "brand_name": "CVS Health",
-        "aliases": [
-          "CVS",
-          "CVS Pharmacy"
-        ],
+        "aliases": ["CVS", "CVS Pharmacy"],
         "category_tags": "vitamins;supplements;health_wellness",
         "evidence_notes": "CVS retailer-owned health brand verified for exact retailer-scoped resolution."
       }

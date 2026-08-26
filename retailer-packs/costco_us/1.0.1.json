@@ -6,10 +6,7 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "costco_us",
-    "aliases": [
-      "costco",
-      "costco.com"
-    ]
+    "aliases": ["costco", "costco.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -37,11 +34,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -53,9 +46,7 @@
     "verified_private_labels": [
       {
         "brand_name": "Kirkland Signature",
-        "aliases": [
-          "Kirkland"
-        ],
+        "aliases": ["Kirkland"],
         "category_tags": "vitamins;supplements;health_wellness",
         "evidence_notes": "Costco retailer-owned private label verified for exact retailer-scoped resolution."
       }

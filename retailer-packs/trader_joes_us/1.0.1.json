@@ -6,11 +6,7 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "trader_joes_us",
-    "aliases": [
-      "trader joe's",
-      "trader joes",
-      "traderjoes.com"
-    ]
+    "aliases": ["trader joe's", "trader joes", "traderjoes.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -38,11 +34,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",

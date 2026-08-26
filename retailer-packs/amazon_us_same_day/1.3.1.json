@@ -6,11 +6,7 @@
   "status": "active",
   "identity": {
     "canonical_retailer_id": "amazon_us_same_day",
-    "aliases": [
-      "amazon",
-      "amazon.com",
-      "Amazon (US)"
-    ]
+    "aliases": ["amazon", "amazon.com", "Amazon (US)"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -42,11 +38,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -58,9 +50,7 @@
     "verified_private_labels": [
       {
         "brand_name": "Amazon Elements",
-        "aliases": [
-          "Amazon Elements"
-        ],
+        "aliases": ["Amazon Elements"],
         "category_tags": "vitamins;supplements;health_wellness",
         "evidence_notes": "Governed retailer-owned brand lane for exact title/PDP resolution; brand never overrides specification compatibility."
       }

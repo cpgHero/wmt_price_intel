@@ -6,11 +6,7 @@
   "status": "catalogued",
   "identity": {
     "canonical_retailer_id": "bjs_us",
-    "aliases": [
-      "bj's wholesale club",
-      "bjs",
-      "bjs.com"
-    ]
+    "aliases": ["bj's wholesale club", "bjs", "bjs.com"]
   },
   "observation_semantics": {
     "price_authority": "search_location_observation",
@@ -38,11 +34,7 @@
       "eligible_class",
       "retailer_owned"
     ],
-    "eligible_statuses": [
-      "Active",
-      "Transitioning",
-      "Seasonal"
-    ],
+    "eligible_statuses": ["Active", "Transitioning", "Seasonal"],
     "eligible_classes": [
       "private_label_owned",
       "private_label_exclusive",
@@ -54,19 +46,13 @@
     "verified_private_labels": [
       {
         "brand_name": "Berkley Jensen",
-        "aliases": [
-          "BJ's Berkley Jensen",
-          "BJs Berkley Jensen"
-        ],
+        "aliases": ["BJ's Berkley Jensen", "BJs Berkley Jensen"],
         "category_tags": "vitamins;supplements;health_wellness",
         "evidence_notes": "BJ's retailer-owned private label verified for exact retailer-scoped resolution."
       },
       {
         "brand_name": "Wellsley Farms",
-        "aliases": [
-          "BJ's Wellsley Farms",
-          "BJs Wellsley Farms"
-        ],
+        "aliases": ["BJ's Wellsley Farms", "BJs Wellsley Farms"],
         "category_tags": "grocery;health_wellness",
         "evidence_notes": "BJ's retailer-owned private label verified for exact retailer-scoped resolution."
       }
