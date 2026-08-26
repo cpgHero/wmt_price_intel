@@ -332,15 +332,15 @@ class BrandFoundationLoader:
                 raise ContractError(f"alias references unknown brand {canonical_brand_id!r}")
             if retailer_by_brand[canonical_brand_id] != retailer_id:
                 raise ContractError(f"alias crosses retailer context {alias_id!r}")
-            key = (
+            alias_key = (
                 retailer_id,
                 str(alias["alias_normalized"]),
                 normalize_brand_name(str(alias.get("category_context") or "")),
             )
-            existing = aliases.get(key)
+            existing = aliases.get(alias_key)
             if existing is not None and existing != canonical_brand_id:
-                raise ContractError(f"ambiguous exact alias {key!r}")
-            aliases[key] = canonical_brand_id
+                raise ContractError(f"ambiguous exact alias {alias_key!r}")
+            aliases[alias_key] = canonical_brand_id
         for conflict in document.get("alias_conflicts", []):
             key = (str(conflict["retailer_id"]), str(conflict["alias_normalized"]))
             if any(alias_key[:2] == key for alias_key in aliases):
