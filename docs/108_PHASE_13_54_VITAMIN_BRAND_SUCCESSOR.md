@@ -35,7 +35,9 @@ successor product pair. Carry-forward is allowed only when all of these remain u
 The source image must still be present on both the predecessor and successor version of the same
 listing. The original proposal document remains immutable. The successor decision preserves the
 reviewer and verdict, adds an explicit carry-forward rationale, and supersedes the predecessor
-decision. If one selected decision fails any check, the complete queue insert rolls back.
+decision. A claim that no longer reconciles is not copied and remains available through its
+immutable predecessor history; the import result identifies its proposal checksum. A global
+Product Pack identity, version, or queue-policy mismatch aborts the complete import.
 
 ## Authority and cost boundary
 

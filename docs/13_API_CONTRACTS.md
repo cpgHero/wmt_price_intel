@@ -83,10 +83,13 @@ carry-forward and requires an explicit predecessor. It copies only the latest hu
 proposal when the listing identity, attribute, current value and source, Product Pack version and
 policy, AI output checksum, cited image, visible evidence, and original proposal checksum remain
 identical; the new immutable decision supersedes the predecessor decision. A mismatch aborts the
-entire queue import. Scope-only mode
-requires the predecessor and certified-decision fields and is deliberately fail-closed: the successor Product Pack must add
-hard scope exclusions without removing any, while every other Product Pack and matching-policy
-field remains identical after version references are ignored. Each finalized predecessor listing
+decision carry-forward for that claim and leaves its complete predecessor history intact; the
+import response reports every skipped proposal checksum. Global Product Pack or queue-policy
+incompatibility still aborts the entire import. Scope-only mode
+requires the predecessor and certified-decision fields and is deliberately fail-closed: the
+successor Product Pack must add hard scope exclusions without removing any, while every other
+Product Pack and matching-policy field remains identical after version references are ignored.
+Each finalized predecessor listing
 pair must also retain identical governed evidence, proposal, and attributes; only revision-derived
 IDs and additive PDP image references may differ. Compatible comparable and not-comparable
 decisions retain their reviewer, rationale, evidence, and supersession provenance. Unresolved cases

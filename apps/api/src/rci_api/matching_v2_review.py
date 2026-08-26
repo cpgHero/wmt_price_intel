@@ -2439,6 +2439,7 @@ class PostgresMatchingV2ReviewRepository:
                 successor_pairs[pair] = (case_id, case)
             carried_forward_count = 0
             carried_forward_attribute_decision_count = 0
+            skipped_attribute_decision_checksums: list[str] = []
             if carry_forward_certified:
                 if successor_of_version is None:
                     raise ValueError(
@@ -2458,14 +2459,15 @@ class PostgresMatchingV2ReviewRepository:
                     raise ValueError(
                         "carry_forward_attribute_evidence requires an explicit predecessor version"
                     )
-                carried_forward_attribute_decision_count = (
-                    await self._carry_forward_attribute_evidence_decisions(
-                        connection,
-                        organization_id=organization_id,
-                        queue=queue,
-                        predecessor_version=successor_of_version,
-                        successor_pairs=successor_pairs,
-                    )
+                (
+                    carried_forward_attribute_decision_count,
+                    skipped_attribute_decision_checksums,
+                ) = await self._carry_forward_attribute_evidence_decisions(
+                    connection,
+                    organization_id=organization_id,
+                    queue=queue,
+                    predecessor_version=successor_of_version,
+                    successor_pairs=successor_pairs,
                 )
         return {
             "id": review_queue_id,
@@ -2476,6 +2478,8 @@ class PostgresMatchingV2ReviewRepository:
             "case_count": len(queue["cases"]),
             "carried_forward_count": carried_forward_count,
             "carried_forward_attribute_decision_count": (carried_forward_attribute_decision_count),
+            "skipped_attribute_decision_count": len(skipped_attribute_decision_checksums),
+            "skipped_attribute_decision_checksums": skipped_attribute_decision_checksums,
             "pending_case_count": len(queue["cases"]) - carried_forward_count,
             "successor_of_version": successor_of_version,
             "scope_only_pack_revision": scope_only_pack_revision,
@@ -2942,7 +2946,7 @@ class PostgresMatchingV2ReviewRepository:
         queue: Mapping[str, Any],
         predecessor_version: str,
         successor_pairs: Mapping[tuple[str, str], tuple[str, Mapping[str, Any]]],
-    ) -> int:
+    ) -> tuple[int, list[str]]:
         """Carry only source-identical human evidence decisions into a successor queue."""
 
         predecessor = (
@@ -2978,6 +2982,14 @@ class PostgresMatchingV2ReviewRepository:
             raise ValueError(
                 "attribute evidence decisions cannot cross Product Pack or policy revisions"
             )
+        active_policy = _active_certification_policy(str(queue["product_pack"]["id"]))
+        if str(active_policy.get("product_pack_version") or "") != str(
+            queue["product_pack"]["version"]
+        ):
+            raise ValueError(
+                "attribute evidence succession requires the active Product Pack version"
+            )
+        attribute_policy_checksum = str(active_policy.get("policy_checksum") or "")
         rows = (
             await connection.execute(
                 text(
@@ -3008,6 +3020,7 @@ class PostgresMatchingV2ReviewRepository:
             )
         ).mappings()
         carried = 0
+        skipped: list[str] = []
         for row in rows:
             predecessor_case = dict(row["case_document"])
             pair = (
@@ -3016,10 +3029,8 @@ class PostgresMatchingV2ReviewRepository:
             )
             successor = successor_pairs.get(pair)
             if successor is None:
-                raise ValueError(
-                    "an attribute-evidence predecessor pair is absent from the successor queue: "
-                    f"{pair!r}"
-                )
+                skipped.append(str(row["proposal_checksum"]))
+                continue
             successor_case_id, successor_case = successor
             proposal = row["proposal_document"]
             if not isinstance(
@@ -3028,14 +3039,11 @@ class PostgresMatchingV2ReviewRepository:
                 proposal=proposal,
                 predecessor_case=predecessor_case,
                 successor_case=successor_case,
-                policy_checksum=str(queue["policy_checksum"]),
+                policy_checksum=attribute_policy_checksum,
                 ai_output_checksum=str(row["output_checksum"] or ""),
             ):
-                raise ValueError(
-                    "an attribute evidence decision can only carry across identical listing, "
-                    "attribute, Product Pack, AI output, and image evidence: "
-                    f"{row['proposal_checksum']}"
-                )
+                skipped.append(str(row["proposal_checksum"]))
+                continue
             predecessor_decision_id = str(row["decision_id"])
             carry_note = (
                 f"\n\nCarried forward from immutable queue version {predecessor_version}; "
@@ -3088,7 +3096,7 @@ class PostgresMatchingV2ReviewRepository:
                 },
             )
             carried += 1
-        return carried
+        return carried, skipped
 
     async def queue_view(
         self,
