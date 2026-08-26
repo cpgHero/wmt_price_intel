@@ -83,10 +83,10 @@ const lastVerified = "August 26, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.61",
+  version: "1.3.62",
   lastVerified,
   baseline:
-    "Production implementation through guarded bulk Matching v2 PDP/image attribute-evidence reconciliation, built on the Phase 13.30 five-category certified baseline",
+    "Production implementation through guarded Vitamin evidence reconciliation and match certification, with Product Pack 1.3.1 release-profile correction pending release validation",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1620,9 +1620,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-26",
-              "Implemented and release validation in progress",
+              "Implemented; Product Pack correction in release validation",
+              "Vitamin evidence and match review gained governed queue-wide automation, and the ordinary release-profile blocker was corrected.",
+              "Production reconciled 1,415 safe attribute claims across 837 products, completed 1,938 evidence-aware Luna reviews with zero task failures, and checksum-bound 372 defensible final decisions: two comparable and 370 not comparable due to known hard-blocker conflicts. Product Pack 1.3.1 keeps known special-release conflicts blocking, treats unlabeled ordinary release as nonblocking, and separates package-count compatibility from package/unit price-basis eligibility. Remaining insufficient or contradictory cases stay unresolved; reporting was not replayed.",
+            ],
+            [
+              "2026-08-26",
+              "Deployed and production-verified",
               "Product evidence claims gained guarded one-action reconciliation for the complete safe-consensus population.",
-              "The deterministic policy admits only one-value claims that fill an unknown attribute, retain exact image and visible-text citations, and meet a 95% minimum confidence floor. Conflicts, refinements, corrections, and weaker evidence stay unresolved. The preview binds the queue, lineage, policy, claim membership, selected values, and proposals to one checksum; commit revalidates and inserts the complete population in one transaction. A production read-only profile identified 1,415 safe claims across 837 products and retained 465 weak or contradictory claims as exceptions. The action cannot certify matches, run analysis, or publish reporting, and makes no paid provider or AI call.",
+              "The deterministic policy admitted and committed 1,415 one-value claims across 837 products that fill an unknown attribute, retain exact image and visible-text citations, and meet a 95% minimum confidence floor. It retained 465 conflicting, value-changing, or weaker claims as exceptions. The preview bound the queue, lineage, policy, claim membership, selected values, and proposals to checksum cb206cd1e3fd82eafafa33960a3a638113875f5a58079b5da9e73e60beaf1b88; commit inserted the population atomically without changing a match or report. CI run 32974817009 and Railway deployment passed.",
             ],
             [
               "2026-08-26",

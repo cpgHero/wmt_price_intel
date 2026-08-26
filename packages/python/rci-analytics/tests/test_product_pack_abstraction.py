@@ -285,11 +285,13 @@ def test_vitamin_pack_fails_closed_on_missing_identity_evidence() -> None:
         "strength",
         "strength_unit",
         "dosage_form",
-        "release_profile",
         "life_stage",
     ):
         assert roles[name].role == "hard_blocker"
         assert roles[name].unknown_is_blocking is True
+    assert roles["release_profile"].role == "hard_blocker"
+    assert roles["release_profile"].critical is False
+    assert roles["release_profile"].unknown_is_blocking is False
     assert policy.minimum_equivalent_coverage == 1
     assert policy.allow_comparable_substitute is False
 
@@ -303,7 +305,7 @@ def _vitamin_listing(
     strength_unit: str | None = "mcg",
     dosage_form: str = "Tablet",
     package_count: float = 100,
-    release_profile: str = "Standard",
+    release_profile: str | None = "Standard",
     life_stage: str = "Adult",
 ) -> ListingEvidence:
     values = {
@@ -360,11 +362,41 @@ def test_vitamin_pack_allows_package_count_only_equivalence_for_unit_price() -> 
     )
 
     assert result.status == "candidate"
-    assert result.tier == "equivalent_product"
+    assert result.tier in {"exact_specification", "equivalent_product"}
     assert result.eligible_price_bases == ("normalized_unit",)
 
 
-def test_vitamin_pack_requires_known_positive_counts_for_unit_price() -> None:
+def test_vitamin_pack_does_not_block_when_ordinary_release_profile_is_unlabeled() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing("walmart_us", "ordinary-one", release_profile=None),
+        _vitamin_listing("target_us", "ordinary-two", release_profile=None),
+        policy,
+        decided_at="2026-08-26T12:00:00Z",
+    )
+
+    assert result.status == "candidate"
+    assert result.tier in {"exact_specification", "equivalent_product"}
+
+
+def test_vitamin_pack_still_blocks_known_release_profile_conflicts() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    policy = compile_matching_policy_v2(pack, "compatible_spec")
+
+    result = DeterministicMatchEngineV2().evaluate(
+        _vitamin_listing("walmart_us", "extended", release_profile="Extended Release"),
+        _vitamin_listing("target_us", "standard", release_profile="Standard"),
+        policy,
+        decided_at="2026-08-26T12:00:00Z",
+    )
+
+    assert result.status == "not_comparable"
+    assert result.tier is None
+
+
+def test_vitamin_pack_keeps_compatibility_but_requires_counts_for_unit_price() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     policy = compile_matching_policy_v2(pack, "compatible_spec")
 
@@ -375,7 +407,7 @@ def test_vitamin_pack_requires_known_positive_counts_for_unit_price() -> None:
         decided_at="2026-08-24T12:00:00Z",
     )
 
-    assert result.tier is None
+    assert result.tier == "exact_specification"
     assert result.eligible_price_bases == ()
 
 

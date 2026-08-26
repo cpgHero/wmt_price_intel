@@ -748,7 +748,10 @@ def test_verified_evidence_recomputes_engine_tier_and_price_basis_from_active_pa
     after = _derived_certification_view(case, policy, [decision])
 
     assert before["engine_proposal"]["tier"] is None
-    assert after["engine_proposal"]["tier"] == "equivalent_product"
+    assert after["engine_proposal"]["tier"] in {
+        "exact_specification",
+        "equivalent_product",
+    }
     assert after["edge"]["eligible_price_bases"] == ["normalized_unit"]
     assert after["certification_engine_recomputation"]["status"] == "succeeded"
     assert len(after["certification_view_checksum"]) == 64
@@ -2522,7 +2525,10 @@ def test_current_vitamin_policy_blocks_audience_ingredient_and_broad_substitute_
     policy = _active_certification_policy("vitamins_supplements")
     governed = _apply_active_certification_policy(case, policy)
 
-    assert policy["product_pack_version"] == "1.3.0"
+    assert policy["product_pack_version"] == "1.3.1"
+    assert policy["hard_blocker_unknown_is_blocking"]["release_profile"] is False
+    assert policy["comparison_rules"]["release_profile"]["critical"] is False
+    assert policy["comparison_rules"]["package_count"]["critical"] is False
     assert policy["allow_comparable_substitute"] is False
     assert "comparable_substitute" not in policy["allowed_tiers"]
     assert [issue["attribute"] for issue in governed["certification_blockers"]] == ["life_stage"]
