@@ -55,6 +55,7 @@ export type Cohort = Summary & {
   paired_median_gap: number | null;
   dominant_outcome: "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
   products: ProductSummary[];
+  product_relationships?: RelationshipSummary[];
   [k: string]: unknown;
 };
 export type AssortmentScorecard = Summary & {
@@ -82,7 +83,7 @@ export type AssortmentScorecard = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
-  schema_version: "1.1.0" | "1.2.0";
+  schema_version: "1.1.0" | "1.2.0" | "1.3.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;

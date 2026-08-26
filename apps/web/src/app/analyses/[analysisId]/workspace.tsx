@@ -593,28 +593,6 @@ function BlueprintAnalysisWorkspace({
     reportView.comparison_bases.find(
       (basis) => basis.profile_id === selectedLens,
     ) ?? null;
-  const selectedCohortBasis = selectedCohort
-    ? (reportView.comparison_bases.find(
-        (basis) => basis.profile_id === selectedCohort.profileId,
-      ) ?? null)
-    : null;
-  const selectedCohortProducts = useMemo(
-    () =>
-      selectedCohort
-        ? cohortProductSummaries(
-            selectedCohort,
-            reportView.match_candidates ?? [],
-            reportView.product_decisions ?? [],
-            reportView.assortment_analysis ?? null,
-          )
-        : [],
-    [
-      reportView.assortment_analysis,
-      reportView.match_candidates,
-      reportView.product_decisions,
-      selectedCohort,
-    ],
-  );
   const cohortPairEvidence = Object.fromEntries(
     comparableCohorts(cohortRecords).map((cohort) => {
       const products = cohortProductSummaries(
@@ -1093,13 +1071,13 @@ function BlueprintAnalysisWorkspace({
             {activeGroup === "overview" ? (
               <RadiusRetailerScorecardPanel
                 benchmark={reportView.retailer_scope.benchmark}
-                certifiedRelationshipCount={(
-                  reportView.match_relationships ?? []
-                ).filter(
-                  (relationship) =>
-                    selectedCompetitor === "all" ||
-                    relationship.competitor_id === selectedCompetitor,
-                ).length}
+                certifiedRelationshipCount={
+                  (reportView.match_relationships ?? []).filter(
+                    (relationship) =>
+                      selectedCompetitor === "all" ||
+                      relationship.competitor_id === selectedCompetitor,
+                  ).length
+                }
                 competitorId={selectedCompetitor}
                 radiusMiles={leadershipRadius}
                 onSelect={selectCompetitor}
@@ -1127,16 +1105,12 @@ function BlueprintAnalysisWorkspace({
               />
             ) : null}
             {activeGroup === "price-segments" && selectedCohort ? (
-              <IncludedProductsDrawer
+              <RadiusCohortProductsDrawer
                 key={selectedCohort.id}
                 benchmark={reportView.retailer_scope.benchmark}
-                cohort={{
-                  cohort: selectedCohort,
-                  comparisonBasis: selectedCohortBasis,
-                }}
-                products={selectedCohortProducts}
+                cohort={selectedCohort}
+                radiusMiles={leadershipRadius}
                 onClose={() => setSelectedCohort(null)}
-                onReviewMatch={reviewDecision}
               />
             ) : null}
             {activeGroup === "geography" && scopedPoints.length ? (
@@ -2226,10 +2200,11 @@ function RadiusRetailerScorecardPanel({
                     {certifiedRelationshipCount.toLocaleString()} certified
                     relationships;{" "}
                     {priceBasisEligibleRelationshipCount.toLocaleString()} are
-                    eligible for this comparison basis. {limitedRetailerCount.toLocaleString()}{" "}
-                    retailer{limitedRetailerCount === 1 ? " has" : "s have"}{" "}
-                    certified identities but no scorable product-location inside
-                    the selected radius.
+                    eligible for this comparison basis.{" "}
+                    {limitedRetailerCount.toLocaleString()} retailer
+                    {limitedRetailerCount === 1 ? " has" : "s have"} certified
+                    identities but no scorable product-location inside the
+                    selected radius.
                   </p>
                 </div>
                 <span className="portfolio-summary-context">
@@ -2616,6 +2591,201 @@ function RadiusRetailerScorecardPanel({
         </div>
       ) : null}
     </>
+  );
+}
+
+function RadiusCohortProductsDrawer({
+  benchmark,
+  cohort,
+  radiusMiles,
+  onClose,
+}: Readonly<{
+  benchmark: RetailerOption;
+  cohort: ComparableCohort;
+  radiusMiles: 1 | 3 | 5;
+  onClose: () => void;
+}>) {
+  const [query, setQuery] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(25);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  const filteredRelationships = useMemo(() => {
+    const token = query.trim().toLocaleLowerCase("en-US");
+    if (!token) return cohort.productRelationships;
+    return cohort.productRelationships.filter((relationship) =>
+      `${relationship.benchmark_product_name} ${relationship.benchmark_product_id} ${relationship.competitor_product_name} ${relationship.competitor_product_id} ${relationship.competitor_brand ?? ""}`
+        .toLocaleLowerCase("en-US")
+        .includes(token),
+    );
+  }, [cohort.productRelationships, query]);
+  return (
+    <div
+      className="evidence-drawer-backdrop scorecard-products-layer"
+      role="presentation"
+      onClick={onClose}
+    >
+      <aside
+        className="evidence-drawer scorecard-products-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="radius-cohort-products-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Radius-native cohort evidence</span>
+            <h2 id="radius-cohort-products-title">{cohort.segment}</h2>
+            <p>
+              Every certified {benchmark.name}–{cohort.competitor} relationship
+              governed by this Product Pack cohort is shown once. Search
+              supplies price and location; PDP enrichment supplies identity and
+              imagery.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close included products"
+          >
+            ×
+          </button>
+        </header>
+        <div className="radius-scorecard-product-summary">
+          <span>
+            <small>Governed relationships</small>
+            <strong>
+              {cohort.productRelationships.length.toLocaleString()}
+            </strong>
+          </span>
+          <span>
+            <small>Scored product-locations</small>
+            <strong>{cohort.matches.toLocaleString()}</strong>
+          </span>
+          <span>
+            <small>Observed benchmark product-locations</small>
+            <strong>{cohort.matchedGeographies.toLocaleString()}</strong>
+          </span>
+          <span>
+            <small>Local comparison rule</small>
+            <strong>
+              {radiusMiles} mile{radiusMiles === 1 ? "" : "s"}
+            </strong>
+          </span>
+        </div>
+        <label className="radius-scorecard-product-search">
+          <span>Find either retailer&apos;s product by name, ID, or brand</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisibleLimit(25);
+            }}
+            placeholder={`Search ${benchmark.name} or ${cohort.competitor} products`}
+          />
+        </label>
+        <div className="radius-scorecard-product-list">
+          {filteredRelationships.slice(0, visibleLimit).map((relationship) => (
+            <article key={relationship.relationship_id}>
+              <div className="radius-scorecard-product-pair">
+                <div className="radius-scorecard-product-identity">
+                  <span className="radius-scorecard-product-image">
+                    {relationship.benchmark_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={relationship.benchmark_image_url} alt="" />
+                    ) : (
+                      <b>{relationship.benchmark_product_name.slice(0, 1)}</b>
+                    )}
+                  </span>
+                  <div>
+                    <small>{benchmark.name}</small>
+                    <strong>{relationship.benchmark_product_name}</strong>
+                    <span>Product ID {relationship.benchmark_product_id}</span>
+                  </div>
+                </div>
+                <span className="radius-scorecard-product-versus">vs.</span>
+                <div className="radius-scorecard-product-identity">
+                  <span className="radius-scorecard-product-image">
+                    {relationship.competitor_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={relationship.competitor_image_url} alt="" />
+                    ) : (
+                      <b>{relationship.competitor_product_name.slice(0, 1)}</b>
+                    )}
+                  </span>
+                  <div>
+                    <small>{relationship.competitor_name}</small>
+                    <strong>{relationship.competitor_product_name}</strong>
+                    <span>Product ID {relationship.competitor_product_id}</span>
+                    <span>
+                      {relationship.competitor_brand ?? "Brand unclassified"} ·{" "}
+                      {displayLabel(relationship.competitor_brand_type)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="radius-scorecard-product-evidence">
+                <small>
+                  {relationship.profile_label} · {relationship.comparison_unit}
+                </small>
+                <dl>
+                  <div>
+                    <dt>Selected local evidence</dt>
+                    <dd>
+                      {relationship.scored_product_locations.toLocaleString()}{" "}
+                      product-locations
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{benchmark.name} lower</dt>
+                    <dd>
+                      {formatScorecardRate(relationship.benchmark_lower_rate)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Average local position</dt>
+                    <dd>
+                      {scorecardPositionCopy(
+                        relationship.average_gap,
+                        benchmark.name,
+                        cohort.competitor,
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                {!relationship.scored_product_locations ? (
+                  <p>
+                    Certified relationship; no selected local comparison
+                    evidence exists inside the current {radiusMiles}-mile scope.
+                  </p>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {!filteredRelationships.length ? (
+            <p className="scorecard-products-empty">
+              {query
+                ? "No included relationship matches this search."
+                : "No radius-native relationship lineage is available for this cohort."}
+            </p>
+          ) : null}
+        </div>
+        {visibleLimit < filteredRelationships.length ? (
+          <button
+            className="scorecard-products-more"
+            type="button"
+            onClick={() => setVisibleLimit((value) => value + 25)}
+          >
+            Show 25 more relationships
+          </button>
+        ) : null}
+      </aside>
+    </div>
   );
 }
 

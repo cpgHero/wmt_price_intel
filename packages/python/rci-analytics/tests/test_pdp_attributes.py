@@ -86,6 +86,99 @@ def test_pdp_completes_only_unresolved_attributes_and_preserves_search_price() -
     ]
 
 
+def test_nested_pdp_plural_count_recomputes_unit_price() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    offer = NormalizedOffer(
+        offer_id="costco-vitamin-c",
+        retailer_id="costco_us",
+        retailer_product_id="4000152601",
+        title="Nature Made Extra Strength Vitamin C 500 mg",
+        brand="Nature Made",
+        price=Decimal("20.99"),
+        currency="USD",
+        zipcode="43219",
+        store_number="1160",
+        latitude=None,
+        longitude=None,
+        in_stock=True,
+        product_url="https://example.com/vitamin-c",
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+
+    enriched = complete_attributes_from_pdp(
+        classifier.classify(offer),
+        {
+            "name": "Nature Made Extra Strength Vitamin C 500 mg, 180 Gummies",
+            "brand": "Nature Made",
+            "pdp": {
+                "description_short": "180 Count Value Size Bottle",
+                "description_full": "Adults chew two gummies daily.",
+                "specification": {"quantity": "180 Gummies"},
+                "physical_properties": {},
+                "variant_configuration": {},
+                "media": {"images": ["https://example.com/front.jpg"]},
+            },
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert enriched.attributes["package_count"] == 180
+    assert enriched.attributes["_attribute_provenance"]["package_count"] == "pdp"
+    assert enriched.metrics["price_per_item"] == Decimal("20.99") / Decimal("180")
+
+
+def test_day_supply_requires_explicit_one_unit_daily_directions() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    offer = NormalizedOffer(
+        offer_id="walgreens-b6",
+        retailer_id="walgreens_us",
+        retailer_product_id="300426792",
+        title="Walgreens Vitamin B6 100 mg Tablets",
+        brand="Walgreens",
+        price=Decimal("19.99"),
+        currency="USD",
+        zipcode="46060",
+        store_number="9129",
+        latitude=None,
+        longitude=None,
+        in_stock=True,
+        product_url="https://example.com/vitamin-b6",
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+    search = classifier.classify(offer)
+
+    one_daily = complete_attributes_from_pdp(
+        search,
+        {
+            "name": "Walgreens Vitamin B6 100 mg Tablets (300 days)",
+            "description": "For adults, take one (1) tablet daily with a meal.",
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+    two_daily = complete_attributes_from_pdp(
+        search,
+        {
+            "name": "Vitamin Gummies (90 days)",
+            "description": "Adults chew two gummies daily.",
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert one_daily.attributes["package_count"] == 300
+    assert one_daily.metrics["price_per_item"] == Decimal("19.99") / Decimal("300")
+    assert two_daily.attributes["package_count"] is None
+    assert two_daily.metrics["price_per_item"] is None
+
+
 def test_missing_claims_remain_unknown_and_pdp_can_resolve_them() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     classifier = OfferClassifier(pack)

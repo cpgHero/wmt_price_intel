@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import Any
 
@@ -47,6 +48,7 @@ def complete_attributes_from_pdp(
 
     if not classified.in_scope:
         return classified
+    context = _flatten_product_context(context)
     attributes = dict(classified.attributes)
     provenance = (
         dict(attributes.get("_attribute_provenance", {}))
@@ -80,7 +82,18 @@ def complete_attributes_from_pdp(
                     # must not label a national brand as the retailer's private label.
                     continue
                 current = attributes.get(name)
-                candidate = pdp_classified.attributes.get(name)
+                candidate = (
+                    classifier.observed_attribute(
+                        name,
+                        replace(
+                            classified.offer,
+                            title=_pdp_package_count_text(context, definition),
+                            product_url=None,
+                        ),
+                    )
+                    if name == "package_count" and _pdp_package_count_text(context, definition)
+                    else pdp_classified.attributes.get(name)
+                )
                 unknown_values = definition.get("unknown_values", [])
                 current_source = str(provenance.get(name) or "unresolved")
                 candidate_source = str(pdp_provenance.get(name) or "unresolved")
@@ -130,7 +143,7 @@ def complete_attributes_from_pdp(
                     provenance["brand"] = (
                         resolution_source if canonical_brand else "pdp_unclassified"
                     )
-            for name, value in pdp_classified.metrics.items():
+            for name, value in classifier.derived_metrics(classified.offer, attributes).items():
                 if metrics.get(name) is None and value is not None:
                     metrics[name] = value
     attributes["_attribute_provenance"] = provenance
@@ -189,6 +202,39 @@ def _pdp_evidence(context: JsonObject) -> JsonObject:
     return {name: context.get(name) for name in fields if context.get(name) not in (None, "")}
 
 
+def _flatten_product_context(context: JsonObject | None) -> JsonObject | None:
+    """Accept both publication highlights and the API's nested PDP context shape."""
+
+    if context is None:
+        return None
+    pdp = context.get("pdp")
+    if not isinstance(pdp, dict):
+        return context
+    media = pdp.get("media") if isinstance(pdp.get("media"), dict) else {}
+    flattened = dict(context)
+    flattened.update(
+        {
+            "description": " | ".join(
+                str(value)
+                for value in (pdp.get("description_short"), pdp.get("description_full"))
+                if value not in (None, "")
+            ),
+            "description_short": pdp.get("description_short"),
+            "description_full": pdp.get("description_full"),
+            "category_path": pdp.get("category_path"),
+            "identifiers": pdp.get("identifiers"),
+            "specification": pdp.get("specification"),
+            "physical_properties": pdp.get("physical_properties"),
+            "variant_configuration": pdp.get("variant_configuration"),
+            "item_condition": pdp.get("item_condition"),
+            "image_urls": media.get("images") if isinstance(media, dict) else [],
+            "pdp_source_field_inventory": pdp.get("source_field_inventory"),
+            "pdp_unmapped_source_fields": pdp.get("unmapped_source_fields"),
+        }
+    )
+    return flattened
+
+
 def _pdp_text(context: JsonObject) -> str:
     values: list[str] = []
     for name in ("name", "brand", "description"):
@@ -201,6 +247,69 @@ def _pdp_text(context: JsonObject) -> str:
     for name in ("specification", "physical_properties", "variant_configuration"):
         _flatten(context.get(name), values)
     return " | ".join(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+
+def _pdp_package_count_text(context: JsonObject, definition: JsonObject) -> str:
+    """Build a bounded package-identity surface that excludes dosage quantities."""
+
+    values: list[str] = []
+    daily_supply = _daily_supply_package_count_text(context)
+    if daily_supply:
+        values.append(daily_supply)
+    if context.get("name"):
+        values.append(str(context["name"]))
+    for name in ("specification", "physical_properties", "variant_configuration"):
+        _flatten(context.get(name), values)
+
+    canonical_units = {
+        str(unit).casefold()
+        for rule in definition.get("extraction_rules", [])
+        if str(rule.get("type")) == "measurement"
+        for unit in rule.get("units", {})
+    }
+    unit_aliases: set[str] = set(canonical_units)
+    for unit in canonical_units:
+        if len(unit) <= 2 or not unit.isalpha() or unit == "each":
+            continue
+        unit_aliases.add(f"{unit[:-1]}ies" if unit.endswith("y") else f"{unit}s")
+    if unit_aliases and context.get("description_short"):
+        unit_pattern = "|".join(
+            re.escape(value) for value in sorted(unit_aliases, key=lambda value: -len(value))
+        )
+        short_description = str(context["description_short"])
+        for match in re.finditer(
+            rf"(?<![\d.])\d+(?:\.\d+)?\s*(?:{unit_pattern})(?![a-z])",
+            short_description,
+            re.IGNORECASE,
+        ):
+            preceding = short_description[max(0, match.start() - 32) : match.start()]
+            if re.search(r"\b(?:take|chew|dissolve)\b", preceding, re.IGNORECASE):
+                continue
+            values.append(match.group(0))
+    return " | ".join(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+
+def _daily_supply_package_count_text(context: JsonObject) -> str | None:
+    """Derive count only when PDP evidence explicitly proves a one-unit daily dose.
+
+    A day supply alone is not a package count. The inference is allowed only when
+    the PDP name also states the day supply and the directions explicitly say one
+    tablet/capsule/softgel/gummy daily. This keeps the rule category-neutral and
+    blocks multi-unit daily regimens from being mispriced.
+    """
+
+    name = str(context.get("name") or "")
+    description = str(context.get("description") or "")
+    supply = re.search(r"\b(\d{1,5})\s*days?\b", name, re.IGNORECASE)
+    dose = re.search(
+        r"\b(?:take|dissolve|chew)\s+(?:one(?:\s*\(1\))?|1)\s+"
+        r"(tablet|capsule|softgel|gummy)\s+daily\b",
+        description,
+        re.IGNORECASE,
+    )
+    if supply is None or dose is None:
+        return None
+    return f"{supply.group(1)} {dose.group(1)}s"
 
 
 def _pdp_classification_raw(current: JsonObject, context: JsonObject) -> JsonObject:

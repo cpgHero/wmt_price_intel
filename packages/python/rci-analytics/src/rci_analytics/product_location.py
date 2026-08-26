@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, cast
 
+from rci_analytics.classification import OfferClassifier
 from rci_analytics.models import ClassifiedOffer, JsonObject
+from rci_analytics.pdp_attributes import complete_attributes_from_pdp
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
@@ -378,6 +380,7 @@ class ProductLocationProjector:
         self._brands = brand_resolver
         self._retailer_names = dict(retailer_names or {})
         self._sellers = seller_resolver
+        self._classifier = OfferClassifier(pack, brand_resolver)
 
     def build(
         self,
@@ -443,6 +446,13 @@ class ProductLocationProjector:
             reasons: list[str] = []
             product_key = f"{offer.retailer_id}:{offer.retailer_product_id}"
             product = context.get(product_key, {})
+            classified = complete_attributes_from_pdp(
+                classified,
+                product,
+                classifier=self._classifier,
+                pack=self._pack,
+                seller_resolver=None,
+            )
             observed_seller = (
                 str(product["seller"]).strip() or None
                 if product.get("seller") is not None

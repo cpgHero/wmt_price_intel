@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from rci_analytics import (
+    OfferClassifier,
     PriceMonitoringFilters,
     PriceMonitoringProjector,
     ProductLocationProjector,
@@ -235,6 +236,54 @@ def test_unknown_location_is_excluded_from_every_downstream_projection() -> None
     assert population.observations == ()
     assert dict(population.exclusion_counts) == {"missing_location_identity": 1}
     assert population.comparison_observations({"000123"}, "package_price") == {"000123": ()}
+
+
+def test_canonical_population_recovers_missing_unit_metric_from_pdp() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(pack)
+    offer = NormalizedOffer(
+        offer_id="costco-vitamin-c",
+        retailer_id="costco_us",
+        retailer_product_id="4000152601",
+        title="Nature Made Vitamin C 500 mg",
+        brand="Nature Made",
+        price=Decimal("20.99"),
+        currency="USD",
+        zipcode="43219",
+        store_number="1160",
+        latitude=40.0,
+        longitude=-83.0,
+        in_stock=True,
+        product_url="https://example.com/vitamin-c",
+        image_url=None,
+        collected_at="2026-08-25T12:00:00Z",
+        raw={},
+    )
+    projector = ProductLocationProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+        seller_resolver=GovernedSellerResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    population = projector.build(
+        [classifier.classify(offer)],
+        retailer_id="costco_us",
+        product_context={
+            "costco_us:4000152601": {
+                "name": "Nature Made Vitamin C 500 mg, 180 Gummies",
+                "brand": "Nature Made",
+                "seller": "costco.com",
+                "pdp": {
+                    "description_short": "180 count value bottle",
+                    "specification": {"quantity": "180 Gummies"},
+                },
+            }
+        },
+    )
+
+    rows = population.comparison_observations({"4000152601"}, "price_per_item")
+    assert len(rows["4000152601"]) == 1
+    assert rows["4000152601"][0].comparison_value == float(Decimal("20.99") / Decimal("180"))
 
 
 def test_canonical_population_orders_mixed_naive_and_aware_timestamps() -> None:

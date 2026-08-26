@@ -16,6 +16,28 @@ from rci_retailer_packs import GovernedBrandResolver
 _GENERIC_NAME_WORDS = {"fresh", "raw", "whole", "product", "products"}
 
 
+def _measurement_aliases(unit: str) -> tuple[str, ...]:
+    """Return conservative written-unit variants for deterministic extraction.
+
+    Product Packs declare canonical units. Retailer Search and PDP text commonly
+    pluralize written units (``tablet``/``tablets`` or ``gummy``/``gummies``).
+    Short abbreviations and invariant ``each`` remain exact so the engine does not
+    invent ambiguous measurement semantics.
+    """
+
+    if " " in unit or not unit.isalpha() or len(unit) <= 2 or unit == "each":
+        return (unit,)
+    if unit.endswith("y") and len(unit) > 2:
+        plural = f"{unit[:-1]}ies"
+    elif unit.endswith(("ch", "sh", "x", "z")):
+        plural = f"{unit}es"
+    elif unit.endswith("s"):
+        plural = unit
+    else:
+        plural = f"{unit}s"
+    return tuple(dict.fromkeys((unit, plural)))
+
+
 def _normalized_text(value: str) -> str:
     # Preserve decimal points so a source value such as ``2.25 lb`` cannot be
     # normalized into ``2 25 lb`` and then misread as a 25-pound package.
@@ -146,9 +168,14 @@ class OfferClassifier:
                         self._compile_term_list(rule.get("false_terms", [])),
                     )
                 elif rule_type == "measurement":
-                    units = {
+                    canonical_units = {
                         _normalized_text(str(key)): Decimal(str(value))
                         for key, value in rule["units"].items()
+                    }
+                    units = {
+                        alias: factor
+                        for unit, factor in canonical_units.items()
+                        for alias in _measurement_aliases(unit)
                     }
                     aliases = sorted(
                         units,
@@ -259,6 +286,15 @@ class OfferClassifier:
 
     def classify_many(self, offers: list[NormalizedOffer]) -> list[ClassifiedOffer]:
         return [self.classify(offer) for offer in offers]
+
+    def derived_metrics(
+        self,
+        offer: NormalizedOffer,
+        attributes: JsonObject,
+    ) -> dict[str, Decimal | None]:
+        """Recompute Product Pack metrics from reconciled, evidence-backed attributes."""
+
+        return self._metrics(offer, attributes)
 
     def _product_override(self, offer: NormalizedOffer) -> tuple[JsonObject, JsonObject | None]:
         retailer_overrides = self.pack.document.get("retailer_overrides", {})

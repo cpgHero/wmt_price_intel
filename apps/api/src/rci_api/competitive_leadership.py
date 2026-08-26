@@ -252,6 +252,7 @@ def _cohort_summary(
     segment_row: dict[str, Any],
     candidates: list[dict[str, Any]],
     product_views: dict[str, dict[str, Any]],
+    relationship_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     attributes = dict(segment_row.get("_segment_attributes") or {})
     dimensions = {_attribute_key(value) for value in segment_row.get("_segment_dimensions", [])}
@@ -264,6 +265,9 @@ def _cohort_summary(
             dimensions,
         )
     ]
+    included_relationship_ids = {
+        str(row.get("relationship_id") or row.get("id")) for row in included_candidates
+    }
     benchmark_product_ids = sorted(
         {str(row["benchmark_product_id"]) for row in included_candidates}
     )
@@ -272,6 +276,7 @@ def _cohort_summary(
         for product_id in benchmark_product_ids
         for outcome in product_views.get(product_id, {}).get("outcomes", [])
         if isinstance(outcome, dict)
+        and str(outcome.get("relationship_id") or "") in included_relationship_ids
     ]
     scored = [row for row in outcomes if row.get("status") != "unscored"]
     benchmark_values = [
@@ -294,7 +299,12 @@ def _cohort_summary(
     product_rows = []
     for product_id in benchmark_product_ids:
         view = product_views.get(product_id, {})
-        product_outcomes = [dict(row) for row in view.get("outcomes", []) if isinstance(row, dict)]
+        product_outcomes = [
+            dict(row)
+            for row in view.get("outcomes", [])
+            if isinstance(row, dict)
+            and str(row.get("relationship_id") or "") in included_relationship_ids
+        ]
         product_rows.append(
             {
                 "product_id": product_id,
@@ -354,6 +364,11 @@ def _cohort_summary(
         "paired_median_gap": round(median(gaps), 4) if gaps else None,
         "dominant_outcome": dominant_outcome,
         "products": product_rows,
+        "product_relationships": [
+            dict(row)
+            for row in relationship_rows
+            if str(row.get("relationship_id") or "") in included_relationship_ids
+        ],
     }
 
 
@@ -562,7 +577,7 @@ class CompetitiveProductLeadershipService:
                 profile_id=selected_profile,
                 radius_miles=radius_miles,
             )
-            if stored is not None and stored.get("schema_version") == "1.2.0":
+            if stored is not None and stored.get("schema_version") == "1.3.0":
                 if competitor_id != "all":
                     stored["filters"] = {
                         **dict(stored["filters"]),
@@ -910,6 +925,7 @@ class CompetitiveProductLeadershipService:
                     segment_row=row,
                     candidates=retailer_candidates,
                     product_views=product_views,
+                    relationship_rows=product_relationships,
                 )
                 for row in retailer_segments
             )
@@ -1028,7 +1044,7 @@ class CompetitiveProductLeadershipService:
             )
         )
         result = {
-            "schema_version": "1.2.0",
+            "schema_version": "1.3.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,

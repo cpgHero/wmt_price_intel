@@ -389,6 +389,7 @@ def audit_competitive_portfolio_set(
                 )
 
         cohorts = [row for row in document.get("cohorts", []) if isinstance(row, Mapping)]
+        requires_cohort_lineage = str(document.get("schema_version") or "") == "1.3.0"
         for cohort_index, cohort in enumerate(cohorts):
             cohort_path = f"{path}.cohorts[{cohort_index}]"
             audit_summary(cohort, cohort_path)
@@ -401,6 +402,47 @@ def audit_competitive_portfolio_set(
                     "cohort_product_count_mismatch",
                     "A cohort benchmark-product count must equal its product summaries.",
                     path=cohort_path,
+                )
+            relationships = [
+                row for row in cohort.get("product_relationships", []) if isinstance(row, Mapping)
+            ]
+            for relationship_index, relationship in enumerate(relationships):
+                audit_summary(
+                    relationship,
+                    f"{cohort_path}.product_relationships[{relationship_index}]",
+                )
+            if requires_cohort_lineage and len(
+                {str(row.get("relationship_id") or "") for row in relationships}
+            ) != _integer(cohort.get("relationships")):
+                finding(
+                    "error",
+                    "cohort_relationship_count_mismatch",
+                    "The cohort relationship count must equal its radius-native lineage rows.",
+                    path=cohort_path,
+                )
+            for field in (
+                "scored_product_locations",
+                "leader_product_locations",
+                "tied_product_locations",
+                "at_risk_product_locations",
+                "losing_product_locations",
+            ):
+                if not requires_cohort_lineage:
+                    continue
+                relationship_total = sum(_integer(row.get(field)) for row in relationships)
+                if relationship_total != _integer(cohort.get(field)):
+                    finding(
+                        "error",
+                        "cohort_relationship_rollup_mismatch",
+                        "Cohort relationship evidence must add exactly to the cohort scorecard.",
+                        path=cohort_path,
+                        field=field,
+                        relationship_total=relationship_total,
+                        parent_total=_integer(cohort.get(field)),
+                    )
+            if requires_cohort_lineage:
+                audit_weighted_average(
+                    relationships, cohort, cohort_path, "cohort relationship"
                 )
         cohort_relationships_by_retailer: dict[str, int] = {}
         for cohort in cohorts:

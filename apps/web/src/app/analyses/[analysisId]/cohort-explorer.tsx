@@ -168,6 +168,7 @@ export function ComparableCohortExplorer({
         competitorMedian: row.competitor_median,
         medianGap: row.paired_median_gap,
         outcome: row.dominant_outcome,
+        productRelationships: row.product_relationships ?? [],
       })),
     [radiusCohorts],
   );

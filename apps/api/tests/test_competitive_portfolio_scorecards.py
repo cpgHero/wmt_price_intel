@@ -11,6 +11,7 @@ from rci_api.competitive_leadership import (
     CompetitiveProductLeadershipService,
     _attributes_match,
     _candidate_segment_rows,
+    _cohort_summary,
     _portfolio_summary,
     _require_internal_materialization_token,
 )
@@ -278,6 +279,74 @@ def test_portfolio_summary_uses_product_location_grain() -> None:
     }
 
 
+def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() -> None:
+    summary = _portfolio_summary([{"status": "leader", "competitor_minus_benchmark": 0.2}])
+    relationship_rows = [
+        {"relationship_id": "relationship-1", **summary},
+        {
+            "relationship_id": "relationship-2",
+            **_portfolio_summary(
+                [{"status": "losing", "competitor_minus_benchmark": -5.0}]
+            ),
+        },
+    ]
+    cohort = _cohort_summary(
+        segment_row={
+            "_competitor_id": "target_us",
+            "_profile_id": "compatible",
+            "_segment_id": "vitamin-c",
+            "_segment_attributes": {"active_ingredient": "vitamin_c"},
+            "_segment_dimensions": ["active_ingredient"],
+            "competitor": "Target",
+            "segment": "Vitamin C",
+        },
+        candidates=[
+            {
+                "relationship_id": "relationship-1",
+                "benchmark_product_id": "w1",
+                "competitor_product_id": "t1",
+                "match_attributes": {"active_ingredient": "vitamin_c"},
+            },
+            {
+                "relationship_id": "relationship-2",
+                "benchmark_product_id": "w1",
+                "competitor_product_id": "t2",
+                "match_attributes": {"active_ingredient": "vitamin_e"},
+            },
+        ],
+        product_views={
+            "w1": {
+                "benchmark_product": {"name": "Spring Valley Vitamin C"},
+                "outcomes": [
+                    {
+                        "relationship_id": "relationship-1",
+                        "status": "leader",
+                        "competitor_minus_benchmark": 0.2,
+                        "benchmark": {"comparison_value": 3.0},
+                        "competitor": {"comparison_value": 3.2},
+                    },
+                    {
+                        "relationship_id": "relationship-2",
+                        "status": "losing",
+                        "competitor_minus_benchmark": -5.0,
+                        "benchmark": {"comparison_value": 8.0},
+                        "competitor": {"comparison_value": 3.0},
+                    },
+                ],
+            }
+        },
+        relationship_rows=relationship_rows,
+    )
+
+    assert cohort["relationships"] == 1
+    assert cohort["scored_product_locations"] == 1
+    assert cohort["average_gap"] == 0.2
+    assert cohort["benchmark_median"] == 3.0
+    assert [row["relationship_id"] for row in cohort["product_relationships"]] == [
+        "relationship-1"
+    ]
+
+
 def test_portfolio_scorecard_contract_accepts_radius_native_projection() -> None:
     summary = _portfolio_summary([{"status": "leader", "competitor_minus_benchmark": 0.2}])
     document = {
@@ -543,7 +612,7 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
-    assert result["schema_version"] == "1.2.0"
+    assert result["schema_version"] == "1.3.0"
     assert result["scorecards"][0]["relationships"] == 3
     assert result["scorecards"][0]["products"][0]["product_id"] == "w1"
     assert {row["product_id"] for row in result["scorecards"][0]["products"]} == {
@@ -559,6 +628,9 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert relationships[0]["competitor_product_name"] == "ALDI product one"
     assert result["cohorts"][0]["segment"] == "12 each · large"
     assert result["cohorts"][0]["relationships"] == 3
+    assert [
+        row["competitor_product_id"] for row in result["cohorts"][0]["product_relationships"]
+    ] == ["a1", "a2", "a3"]
     assert result["cohorts"][0]["scored_product_locations"] == 2
     assert result["cohorts"][0]["benchmark_median"] == 3.05
     assert result["cohorts"][0]["paired_median_gap"] == 0.05

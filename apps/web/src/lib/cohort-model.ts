@@ -1,4 +1,5 @@
 import type { JsonObject } from "./api";
+import type { CompetitivePortfolioScorecards } from "./api";
 
 export type CohortOutcome =
   "benchmark_lower" | "competitor_lower" | "parity" | "unavailable";
@@ -24,6 +25,9 @@ export interface ComparableCohort {
   competitorMedian: number | null;
   medianGap: number | null;
   outcome: CohortOutcome;
+  productRelationships: NonNullable<
+    CompetitivePortfolioScorecards["cohorts"][number]["product_relationships"]
+  >;
 }
 
 function numericValue(
@@ -118,6 +122,7 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
       "competitor - benchmark gap",
     ),
     outcome: outcomeValue(row._dominant_outcome ?? row["dominant outcome"]),
+    productRelationships: [],
   };
 }
 
