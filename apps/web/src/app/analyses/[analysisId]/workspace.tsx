@@ -1093,6 +1093,13 @@ function BlueprintAnalysisWorkspace({
             {activeGroup === "overview" ? (
               <RadiusRetailerScorecardPanel
                 benchmark={reportView.retailer_scope.benchmark}
+                certifiedRelationshipCount={(
+                  reportView.match_relationships ?? []
+                ).filter(
+                  (relationship) =>
+                    selectedCompetitor === "all" ||
+                    relationship.competitor_id === selectedCompetitor,
+                ).length}
                 competitorId={selectedCompetitor}
                 radiusMiles={leadershipRadius}
                 onSelect={selectCompetitor}
@@ -2120,6 +2127,7 @@ type RadiusRetailerScorecard =
 
 function RadiusRetailerScorecardPanel({
   benchmark,
+  certifiedRelationshipCount,
   competitorId,
   radiusMiles,
   onSelect,
@@ -2127,6 +2135,7 @@ function RadiusRetailerScorecardPanel({
   error,
 }: Readonly<{
   benchmark: RetailerOption;
+  certifiedRelationshipCount: number;
   competitorId: string;
   radiusMiles: 1 | 3 | 5;
   onSelect: (retailerId: string) => void;
@@ -2163,7 +2172,7 @@ function RadiusRetailerScorecardPanel({
   const scoredScorecards = certifiedScorecards.filter(
     (scorecard) => scorecard.scored_product_locations > 0,
   );
-  const relationshipCount = certifiedScorecards.reduce(
+  const priceBasisEligibleRelationshipCount = certifiedScorecards.reduce(
     (total, scorecard) => total + scorecard.relationships,
     0,
   );
@@ -2213,9 +2222,11 @@ function RadiusRetailerScorecardPanel({
                   </h2>
                   <p>
                     This view keeps product certification separate from local
-                    price coverage. It includes all{" "}
-                    {relationshipCount.toLocaleString()} certified
-                    relationships; {limitedRetailerCount.toLocaleString()}{" "}
+                    price coverage. The governed identity ledger includes all{" "}
+                    {certifiedRelationshipCount.toLocaleString()} certified
+                    relationships;{" "}
+                    {priceBasisEligibleRelationshipCount.toLocaleString()} are
+                    eligible for this comparison basis. {limitedRetailerCount.toLocaleString()}{" "}
                     retailer{limitedRetailerCount === 1 ? " has" : "s have"}{" "}
                     certified identities but no scorable product-location inside
                     the selected radius.
@@ -2229,8 +2240,15 @@ function RadiusRetailerScorecardPanel({
               <div className="portfolio-summary-grid">
                 <article>
                   <small>Certified relationships</small>
-                  <strong>{relationshipCount.toLocaleString()}</strong>
+                  <strong>{certifiedRelationshipCount.toLocaleString()}</strong>
                   <span>Complete governed identity ledger</span>
+                </article>
+                <article>
+                  <small>Price-basis eligible</small>
+                  <strong>
+                    {priceBasisEligibleRelationshipCount.toLocaleString()}
+                  </strong>
+                  <span>Eligible under the selected comparison basis</span>
                 </article>
                 <article>
                   <small>Retailers represented</small>

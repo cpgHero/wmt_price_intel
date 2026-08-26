@@ -83,10 +83,10 @@ const lastVerified = "August 26, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.63",
+  version: "1.3.64",
   lastVerified,
   baseline:
-    "Production implementation through guarded Vitamin evidence reconciliation and automated match certification under Product Pack 1.3.1",
+    "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
   guides: [
     {
@@ -1618,6 +1618,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-26",
+              "Production reporting ready and trust-gated",
+              "Vitamins & Supplements was replayed from an immutable Matching v2 release containing only the 480 certified relationships.",
+              "The replay retained all 480 certified identities, excluded all 388 rejected and 1,448 insufficient-evidence relationships, and produced exactly 526 confirmed relationship-by-price-basis views: 48 relationships support package and normalized-unit price, 430 support normalized-unit price only, and two remain in identity and assortment lineage without unsupported price math. Six portfolio documents cover exact and compatible specification at 1, 3, and 5 miles. The semantic publication gate passed with zero errors and 68 explicit evidence-limit warnings. Result 5ea5b275-21f2-489e-b0f1-045ba43a14d0 is ready under publication checksum 93cd61595ee1267b776cd8c6ae874d463de182877b38e3241709546c46e20268. The source contains 23,716 retained Search rows; no MetricsCart or OpenAI call was made.",
+            ],
             [
               "2026-08-26",
               "Production deployed and automation complete",
