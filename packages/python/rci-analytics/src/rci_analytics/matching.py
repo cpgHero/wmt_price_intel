@@ -1073,21 +1073,17 @@ class ComparisonEngine:
         comparison_family_key: str,
     ) -> list[MatchRecord]:
         metric = self._comparison_metric(profile)
-        benchmark = self._selected_product_by_location(
+        benchmark = self._selected_certified_product_by_location(
             offers,
             retailer_id=benchmark_id,
             product_id=benchmark_product_id,
-            profile=profile,
             metric=metric,
-            role="benchmark",
         )
-        competitor = self._selected_product_by_zip(
+        competitor = self._selected_certified_product_by_zip(
             offers,
             retailer_id=competitor_id,
             product_id=competitor_product_id,
-            profile=profile,
             metric=metric,
-            role="competitor",
         )
         dimensions = tuple(str(value) for value in profile["dimensions"])
         return [
@@ -1137,37 +1133,69 @@ class ComparisonEngine:
         authority, so an unrelated observation can never expand a certified pair.
         """
 
-        pair_offers = [
-            item
-            for item in offers
-            if (
-                item.offer.retailer_id == benchmark_id
-                and item.offer.retailer_product_id == benchmark_product_id
-            )
-            or (
-                item.offer.retailer_id == competitor_id
-                and item.offer.retailer_product_id == competitor_product_id
-            )
-        ]
-        offer_index = {item.offer.offer_id: item for item in pair_offers}
+        metric = self._comparison_metric(profile)
+        dimensions = tuple(str(value) for value in profile["dimensions"])
+        benchmark = self._selected_certified_product_stores(
+            offers,
+            retailer_id=benchmark_id,
+            product_id=benchmark_product_id,
+            metric=metric,
+        )
+        competitors = self._selected_certified_product_stores(
+            offers,
+            retailer_id=competitor_id,
+            product_id=competitor_product_id,
+            metric=metric,
+        )
+        radius = float(profile["radius_miles"])
         matches: list[MatchRecord] = []
-        for match in self._radius_matches(
-            pair_offers,
-            benchmark_id,
-            competitor_id,
-            profile,
-        ):
-            benchmark = offer_index.get(match.benchmark_offer_id)
-            if benchmark is None:
-                continue
-            scope_key = location_scope_key(benchmark.offer)
+        for _benchmark_store, (benchmark_offer, benchmark_value) in sorted(benchmark.items()):
+            scope_key = location_scope_key(benchmark_offer.offer)
             if scope_key not in scope_keys:
                 continue
+            benchmark_latitude = benchmark_offer.offer.latitude
+            benchmark_longitude = benchmark_offer.offer.longitude
+            if benchmark_latitude is None or benchmark_longitude is None:
+                continue
+            nearby: list[tuple[Decimal, float, str, str, ClassifiedOffer]] = []
+            for competitor_store, (competitor_offer, competitor_value) in competitors.items():
+                competitor_latitude = competitor_offer.offer.latitude
+                competitor_longitude = competitor_offer.offer.longitude
+                if competitor_latitude is None or competitor_longitude is None:
+                    continue
+                distance = haversine_miles(
+                    benchmark_latitude,
+                    benchmark_longitude,
+                    competitor_latitude,
+                    competitor_longitude,
+                )
+                if distance <= radius:
+                    nearby.append(
+                        (
+                            competitor_value,
+                            distance,
+                            competitor_store,
+                            competitor_offer.offer.offer_id,
+                            competitor_offer,
+                        )
+                    )
+            if not nearby:
+                continue
+            competitor_value, distance, competitor_store, _offer_id, competitor_offer = min(nearby)
             matches.append(
-                replace(
-                    match,
-                    attributes={
-                        **match.attributes,
+                self._match(
+                    profile=profile,
+                    competitor_id=competitor_id,
+                    geography_key=self._proximity_key(competitor_store, benchmark_offer),
+                    benchmark=benchmark_offer,
+                    competitor=competitor_offer,
+                    dimensions=dimensions,
+                    metric=metric,
+                    benchmark_value=benchmark_value,
+                    competitor_value=competitor_value,
+                    distance_miles=distance,
+                    matched_attributes={
+                        **{name: benchmark_offer.attributes.get(name) for name in dimensions},
                         "_match_origin": "user_confirmed",
                         "_scope_mode": scope_mode,
                         "_location_scope_key": scope_key,
@@ -1181,15 +1209,42 @@ class ComparisonEngine:
             )
         return matches
 
-    def _selected_product_by_location(
+    def _selected_certified_product_stores(
         self,
         offers: list[ClassifiedOffer],
         *,
         retailer_id: str,
         product_id: str,
-        profile: JsonObject,
         metric: str,
-        role: str,
+    ) -> dict[str, tuple[ClassifiedOffer, Decimal]]:
+        selected: dict[str, tuple[ClassifiedOffer, Decimal]] = {}
+        for item in offers:
+            value = self._metric_value(item, metric)
+            if (
+                not item.in_scope
+                or item.offer.retailer_id != retailer_id
+                or item.offer.retailer_product_id != product_id
+                or value is None
+            ):
+                continue
+            store_key = item.offer.store_number or item.offer.zipcode
+            if store_key is None:
+                continue
+            previous = selected.get(store_key)
+            if previous is None or (value, item.offer.offer_id) < (
+                previous[1],
+                previous[0].offer.offer_id,
+            ):
+                selected[store_key] = (item, value)
+        return selected
+
+    def _selected_certified_product_by_location(
+        self,
+        offers: list[ClassifiedOffer],
+        *,
+        retailer_id: str,
+        product_id: str,
+        metric: str,
     ) -> dict[str, tuple[ClassifiedOffer, Decimal]]:
         selected: dict[str, tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
@@ -1199,8 +1254,6 @@ class ComparisonEngine:
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
-                or not self._available_for_matching(item, profile)
-                or not self._satisfies_constraints(item, profile, role)
                 or value is None
             ):
                 continue
@@ -1213,15 +1266,13 @@ class ComparisonEngine:
                 selected[key] = (item, value)
         return selected
 
-    def _selected_product_by_zip(
+    def _selected_certified_product_by_zip(
         self,
         offers: list[ClassifiedOffer],
         *,
         retailer_id: str,
         product_id: str,
-        profile: JsonObject,
         metric: str,
-        role: str,
     ) -> dict[str, tuple[ClassifiedOffer, Decimal]]:
         selected: dict[str, tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
@@ -1231,8 +1282,6 @@ class ComparisonEngine:
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
-                or not self._available_for_matching(item, profile)
-                or not self._satisfies_constraints(item, profile, role)
                 or value is None
             ):
                 continue

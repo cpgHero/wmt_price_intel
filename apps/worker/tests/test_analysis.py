@@ -175,6 +175,72 @@ def test_matching_v2_package_price_rejects_explicit_multipack_mismatch() -> None
     assert scoped[0].eligible_profile_ids == ("unit_price",)
 
 
+def test_matching_v2_certified_price_basis_is_not_rejected_by_search_reclassification() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    engine = ComparisonEngine(pack)
+
+    def offer(retailer_id: str, product_id: str, package_count: int) -> ClassifiedOffer:
+        return ClassifiedOffer(
+            offer=NormalizedOffer(
+                offer_id=f"{retailer_id}:{product_id}:offer",
+                retailer_id=retailer_id,
+                retailer_product_id=product_id,
+                title="Vitamin B12 Quick Dissolve",
+                brand="Spring Valley" if retailer_id == "walmart_us" else "up&up",
+                price=Decimal("9.00"),
+                currency="USD",
+                zipcode="72712",
+                store_number="100",
+                latitude=36.37,
+                longitude=-94.21,
+                in_stock=True,
+                product_url=None,
+                image_url=None,
+                collected_at="2026-08-20T12:00:00+00:00",
+                raw={},
+            ),
+            in_scope=True,
+            scope_reason=None,
+            attributes={
+                "active_ingredient": "vitamin_b12",
+                "strength": 5000,
+                "strength_unit": "mcg",
+                "dosage_form": "quick_dissolve_tablet",
+                "package_count": package_count,
+                "release_profile": "immediate_release",
+                "life_stage": "adult",
+                "brand": "Spring Valley" if retailer_id == "walmart_us" else "up&up",
+            },
+            metrics={"price_per_item": Decimal("0.03")},
+            review_reasons=(),
+        )
+
+    rule = ProductMatchRule(
+        competitor_id="target_us",
+        profile_id="compatible_spec",
+        benchmark_product_id="787374421",
+        competitor_product_id="50282227",
+        decision="confirmed",
+        eligible_profile_ids=("compatible_spec",),
+        scope_definition={
+            "certified_allowed_tiers": ["equivalent_product"],
+            "certified_price_bases": ["normalized_unit"],
+        },
+    )
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [
+            offer("walmart_us", "787374421", 300),
+            offer("target_us", "50282227", 120),
+        ],
+        [rule],
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("compatible_spec",)
+
+
 def test_matching_v2_certified_banana_pair_honors_role_specific_profile_constraints() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas")
     engine = ComparisonEngine(pack)

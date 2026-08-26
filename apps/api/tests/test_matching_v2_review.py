@@ -1602,6 +1602,7 @@ async def test_gold_set_preserves_final_insufficient_evidence_as_audited_exclusi
                 "evidence_refs": ["artifact://certified"],
                 "review_submissions": [],
                 "final_decision": certified_decision,
+                "edge": {"eligible_price_bases": ["normalized_unit"]},
             },
             {
                 "case_id": "case-insufficient",
@@ -1625,6 +1626,7 @@ async def test_gold_set_preserves_final_insufficient_evidence_as_audited_exclusi
     gold_set = await service.gold_set("egg-queue")
 
     assert len(gold_set["labels"]) == 1
+    assert gold_set["labels"][0]["eligible_price_bases"] == ["normalized_unit"]
     assert gold_set["exclusions"] == [
         {
             "case_id": "case-insufficient",

@@ -119,12 +119,23 @@ def matching_v2_gold_set_rules(
         _, benchmark_product_id = benchmark_listing.split(":", 1)
         competitor_id, competitor_product_id = competitor_listing.split(":", 1)
         allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
+        certified_price_bases = {str(value) for value in label.get("eligible_price_bases", [])}
+
         eligible_profiles = tuple(
             str(profile["id"])
             for profile in location_profiles
             if not label["expected_comparable"]
-            or engine.comparison_metric(str(profile["id"])) != "package_price"
-            or bool(allowed_tiers & exact_tiers)
+            or (
+                (
+                    "exact_package"
+                    if engine.comparison_metric(str(profile["id"])) == "package_price"
+                    else "normalized_unit"
+                )
+                in certified_price_bases
+                if certified_price_bases
+                else engine.comparison_metric(str(profile["id"])) != "package_price"
+                or bool(allowed_tiers & exact_tiers)
+            )
         )
         if label["expected_comparable"] and not eligible_profiles:
             raise ValueError(
@@ -134,6 +145,7 @@ def matching_v2_gold_set_rules(
         profile_id = eligible_profiles[0]
         scope_definition: dict[str, Any] = {
             "certified_allowed_tiers": sorted(allowed_tiers),
+            "certified_price_bases": sorted(certified_price_bases),
         }
         rules.append(
             ProductMatchRule(
@@ -162,10 +174,10 @@ def scope_matching_v2_rules_to_brand_profiles(
 ) -> list[ProductMatchRule]:
     """Segment certified relationships into truthful Product Pack reporting views.
 
-    Certification remains authoritative for comparability. Confirmed pairs enter
-    only profiles whose brand policy, price basis, package count, and exact-tier
-    hard attributes their governed evidence satisfies. A rejected relationship
-    remains rejected across every profile.
+    Certification remains authoritative for comparability and price-basis
+    eligibility. This step only segments confirmed pairs into governed brand
+    views. Current Search classification must not silently overturn certified
+    identity evidence; Search remains authoritative for price and location facts.
     """
 
     profile_index = {
@@ -228,6 +240,13 @@ def scope_matching_v2_rules_to_brand_profiles(
         else:
             benchmark = representative(benchmark_retailer, rule.benchmark_product_id)
             competitor = representative(rule.competitor_id, rule.competitor_product_id)
+            certified_price_bases = {
+                str(value)
+                for value in (rule.scope_definition or {}).get(
+                    "certified_price_bases",
+                    [],
+                )
+            }
             allowed_tiers = {
                 str(value)
                 for value in (rule.scope_definition or {}).get(
@@ -258,11 +277,19 @@ def scope_matching_v2_rules_to_brand_profiles(
                 eligible_profiles = tuple(
                     profile_id
                     for profile_id in current_profiles
-                    if engine.governed_profile_eligible(
-                        benchmark,
-                        competitor,
-                        profile_id=profile_id,
-                        enforce_exact_specification=exact_only,
+                    if (
+                        engine.governed_profile_brand_eligible(
+                            benchmark,
+                            competitor,
+                            profile_id=profile_id,
+                        )
+                        if certified_price_bases
+                        else engine.governed_profile_eligible(
+                            benchmark,
+                            competitor,
+                            profile_id=profile_id,
+                            enforce_exact_specification=exact_only,
+                        )
                     )
                 )
             if not eligible_profiles:

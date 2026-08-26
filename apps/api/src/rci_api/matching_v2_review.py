@@ -7329,6 +7329,11 @@ class MatchingV2ReviewService:
                     "competitor_listing_id": case["competitor_listing_id"],
                     "expected_comparable": decision["verdict"] == "comparable",
                     "allowed_tiers": list(decision["allowed_tiers"]),
+                    "eligible_price_bases": (
+                        list(case.get("edge", {}).get("eligible_price_bases") or [])
+                        if decision["verdict"] == "comparable"
+                        else []
+                    ),
                     "critical": case["critical"],
                     "stratum": case["stratum"],
                     "review_status": ("adjudicated" if legacy_adjudication else "single_reviewed"),
