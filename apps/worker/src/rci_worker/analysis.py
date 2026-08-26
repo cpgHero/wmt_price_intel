@@ -260,16 +260,23 @@ def scope_matching_v2_rules_to_brand_profiles(
             }
             if benchmark is None or competitor is None:
                 # Certification governs the relationship even when one listing has no
-                # current Search observation. Retain it only in generic profiles; it
-                # cannot create a scored price fact until both observed offers exist.
+                # current Search observation. A price-basis-certified relationship
+                # remains in brand-neutral views but cannot create a scored price fact
+                # until both observed offers exist. Legacy releases retain the older
+                # conservative constraint behavior.
                 eligible_profiles = tuple(
                     profile_id
                     for profile_id in current_profiles
-                    if not any(
-                        profile_index[profile_id].get(name)
-                        for name in (
-                            "benchmark_attribute_constraints",
-                            "competitor_attribute_constraints",
+                    if (
+                        str(profile_index[profile_id].get("brand_policy") or "ignore_brand")
+                        == "ignore_brand"
+                        if certified_price_bases
+                        else not any(
+                            profile_index[profile_id].get(name)
+                            for name in (
+                                "benchmark_attribute_constraints",
+                                "competitor_attribute_constraints",
+                            )
                         )
                     )
                 )

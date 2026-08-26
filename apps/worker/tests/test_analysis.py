@@ -112,6 +112,32 @@ def test_matching_v2_certified_rules_use_location_comparable_profiles(
     assert rules[0].eligible_profile_ids == expected_profiles
 
 
+def test_matching_v2_certified_rules_preserve_explicit_price_basis() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    release = {
+        "document": {
+            "labels": [
+                {
+                    "case_id": "case-unit-only",
+                    "benchmark_listing_id": "walmart_us:787374421",
+                    "competitor_listing_id": "target_us:50282227",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["exact_specification"],
+                    "eligible_price_bases": ["normalized_unit"],
+                }
+            ]
+        }
+    }
+
+    rules = matching_v2_gold_set_rules(release, pack)
+
+    assert rules[0].eligible_profile_ids == ("compatible_spec",)
+    assert rules[0].scope_definition == {
+        "certified_allowed_tiers": ["exact_specification"],
+        "certified_price_bases": ["normalized_unit"],
+    }
+
+
 def test_matching_v2_package_price_rejects_explicit_multipack_mismatch() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
     engine = ComparisonEngine(pack)
@@ -232,6 +258,33 @@ def test_matching_v2_certified_price_basis_is_not_rejected_by_search_reclassific
             offer("walmart_us", "787374421", 300),
             offer("target_us", "50282227", 120),
         ],
+        [rule],
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=engine,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("compatible_spec",)
+
+
+def test_matching_v2_certified_price_basis_retains_unobserved_brand_neutral_pair() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    engine = ComparisonEngine(pack)
+    rule = ProductMatchRule(
+        competitor_id="target_us",
+        profile_id="compatible_spec",
+        benchmark_product_id="787374421",
+        competitor_product_id="50282227",
+        decision="confirmed",
+        eligible_profile_ids=("compatible_spec",),
+        scope_definition={
+            "certified_allowed_tiers": ["equivalent_product"],
+            "certified_price_bases": ["normalized_unit"],
+        },
+    )
+
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [],
         [rule],
         benchmark_retailer="walmart_us",
         profiles=pack.matching_profiles,
