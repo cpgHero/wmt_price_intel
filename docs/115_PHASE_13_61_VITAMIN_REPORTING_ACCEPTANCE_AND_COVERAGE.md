@@ -1,6 +1,6 @@
 # Phase 13.61 — Vitamin Reporting Acceptance and Coverage
 
-Status: implemented and locally trust-gated; production deployment and live acceptance pending
+Status: deployed, rematerialized, and production-verified
 
 Date: 2026-08-26
 
@@ -75,12 +75,26 @@ Existing product, relationship, cohort, assortment, rate, weighted-gap, ordering
 | Assortment Scorecards | Observed assortment + certified identities + portfolio outcome | Identity/whitespace and local price coverage remain distinct and drillable. |
 | Competitive History | Compatible dated publications | Remains non-decisional until at least two certified comparable snapshots exist. |
 
-## Local verification
+## Production acceptance
 
-- 51 targeted Python contract, service, and semantic-release tests pass.
+- Analysis: `vitamins_supplements-aee8a9d6-33e5-4bac-903c-2570d869db52-match-v2-71792d31`.
+- Six Competitive Portfolio `1.4.0` documents were atomically rematerialized: Exact Specification and Compatible Specification at 1, 3, and 5 miles. The internal semantic release gate completed before storage and queued zero provider calls.
+- The live Compatible Specification / 5-mile view accounts for 322 source products, 320 governed in scope, and 246 observed in-scope Walmart products for every competitor.
+- The live Target ledger returns 322 rows and 322 unique product IDs: 39 locally scored, 207 without a certified Target relationship, 74 not observed in the retained Walmart Search evidence, and two governed exclusions. Its status partition equals the source catalog exactly.
+- Compatible Specification / 5-mile scored product-locations are Target 39, Meijer 32, Amazon Same Day 31, Kroger 27, CVS 18, Sam's Club 16, BJ's 13, Walgreens 3, and Costco 1. Walgreens also exposes seven certified/eligible products without local competitor evidence instead of collapsing them into an unexplained zero.
+- Exact Specification / 5-mile remains intentionally narrower: 39 scored product-locations across nine scorecards. Retailers with no exact-spec evidence remain explicit zeroes rather than borrowing compatible-spec evidence.
+- The deployed report opens at Compatible Specification / 5 miles. All nine reporting workspaces render without load errors. The all-retailer Assortment state gives an explicit selection instruction; the Target-scoped view then renders its full scorecard with 246 Walmart products, 796 Target products, and 117 admitted compatible relationships.
+- Railway deployments carrying the release: API `0fa0d4fe-c3ec-40f4-85de-0af73c8c5d2e`, web `7b41f5a3-4a0a-4313-94eb-ff88a54dc815`, worker `65569e67-6021-4df1-a1de-3c08b1c6a806`, and scheduler `1e22fafa-06a1-42b6-9c9e-665f626e1cd9`.
+
+## Verification gates
+
+- 773 Python tests pass; 16 environment- or fixture-dependent integration/golden tests skip with their documented prerequisites.
+- 17 focused portfolio and semantic-release tests pass.
 - 73 web unit tests pass.
 - Web TypeScript and ESLint checks pass.
 - Python Ruff format and lint checks pass.
+- Mypy passes across 151 Python source files.
 - Generated TypeScript contracts include Competitive Portfolio `1.4.0`, the coverage contract, and comparison-basis radius metadata.
+- GitHub Actions run `33021321217` passes contracts, formatting, linting, type checking, migrations, the complete Python and TypeScript suites, production builds for all services, and all 15 Playwright browser tests.
 
-Production IDs, exact live funnel counts, browser acceptance, CI run, and Railway deployment identifiers will be appended only after those checks complete.
+No Search, PDP, MetricsCart, or AI call was made, and no certification decision, immutable source, or historical report was deleted or rewritten.
