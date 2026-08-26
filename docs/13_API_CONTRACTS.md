@@ -119,6 +119,20 @@ unselected conflicts are rejected. Rejection applies to the complete claim, not 
 pair observation. This route updates derived governed evidence only: it does not mutate raw Search,
 PDP, or AI evidence; certify a match; run analysis; or publish reporting.
 
+`POST /api/v1/matching-v2/review-queues/{queue_id}/attribute-evidence-claims/bulk-preview`
+projects the complete current safe-consensus population for a named AI lineage scope. A claim is
+eligible only when it awaits review, contains exactly one normalized value, fills an unknown rather
+than changing an existing governed value, has at least 95% confidence across its observations, and
+retains both the exact source image and visible label text. The response includes policy and
+confirmation checksums, product/attribute/retailer counts, exclusion reasons, and a bounded sample.
+
+`POST /api/v1/matching-v2/review-queues/{queue_id}/attribute-evidence-claims/bulk-commit`
+requires an administrator identity and the exact current preview checksum. It recomputes the full
+population, stops on stale or newly decided evidence, and persists every accepted claim in one
+Postgres transaction. Every append-only decision retains the batch policy and confirmation
+checksum. Conflicts, low-confidence evidence, refinements, and corrections remain unresolved. The
+operation does not certify matches, start analysis, or publish reporting.
+
 ## Automation
 
 - `GET /collection-schedules`

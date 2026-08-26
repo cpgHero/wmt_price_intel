@@ -331,6 +331,7 @@ test("reviews consolidated product evidence claims before match certification", 
   page,
 }) => {
   let evidenceDecision: Record<string, unknown> | null = null;
+  let bulkEvidenceDecision: Record<string, unknown> | null = null;
   await page.route("**/api/admin/session", async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -340,6 +341,76 @@ test("reviews consolidated product evidence claims before match certification", 
   await page.route("**/api/admin/matching-v2/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (
+      request.method() === "POST" &&
+      url.pathname.endsWith("/attribute-evidence-claims/bulk-preview")
+    ) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          queue_id: queue.queue_id,
+          queue_version: queue.version,
+          policy: {
+            id: "guarded_consensus_attribute_reconciliation",
+            version: "1.0.0",
+            minimum_confidence: 0.95,
+            required_relationship: "fills_unknown",
+            checksum: "f".repeat(64),
+            human_confirmation_required: true,
+            automatically_certifies_matches: false,
+            automatically_changes_reporting: false,
+          },
+          eligible_claim_count: 1415,
+          eligible_product_count: 837,
+          affected_case_count: 1016,
+          excluded_claim_count: 465,
+          eligible_by_attribute: [
+            { attribute: "package_count", claim_count: 444 },
+            { attribute: "strength", claim_count: 145 },
+          ],
+          eligible_by_retailer: [
+            { retailer_id: "target_us", claim_count: 115 },
+          ],
+          exclusion_summary: [
+            {
+              reason_code: "conflicting_values",
+              reason: "The evidence proposes more than one normalized value.",
+              claim_count: 127,
+            },
+          ],
+          sample_eligible_claims: [
+            {
+              claim_checksum: "c".repeat(64),
+              retailer_id: "target_us",
+              retailer_product_id: "target-d3",
+              product_title: "Target Vitamin D3",
+              attribute: "strength",
+              selected_value: 10,
+              minimum_confidence: 0.99,
+              affected_case_count: 12,
+            },
+          ],
+          confirmation_checksum: "a".repeat(64),
+        }),
+      });
+      return;
+    }
+    if (
+      request.method() === "POST" &&
+      url.pathname.endsWith("/attribute-evidence-claims/bulk-commit")
+    ) {
+      bulkEvidenceDecision = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          verified_claim_count: 1415,
+          eligible_product_count: 837,
+          excluded_claim_count: 465,
+        }),
+      });
+      return;
+    }
     if (
       request.method() === "POST" &&
       url.pathname.includes("/attribute-evidence-claims/") &&
@@ -514,6 +585,28 @@ test("reviews consolidated product evidence claims before match certification", 
   await page
     .getByRole("textbox", { name: "Current reviewer identity" })
     .fill("owner@cpghero.com");
+  await evidenceWorkspace
+    .getByRole("button", { name: "Auto-reconcile safe claims" })
+    .click();
+  await expect(
+    evidenceWorkspace.getByRole("region", {
+      name: "Safe evidence reconciliation preview",
+    }),
+  ).toContainText("1,415 claims can be reconciled safely");
+  await evidenceWorkspace
+    .getByRole("button", { name: "Confirm 1,415 safe claims" })
+    .click();
+  await expect(
+    page.getByText(
+      "1,415 safe evidence claims across 837 products were reconciled in one governed action. 465 weak or contradictory claims remain unresolved; no match was certified and reporting was not changed.",
+    ),
+  ).toBeVisible();
+  expect(bulkEvidenceDecision).toEqual({
+    reviewer_id: "owner@cpghero.com",
+    confirmation_checksum: "a".repeat(64),
+    batch_scope: "all_lineages",
+    root_batch_id: null,
+  });
   await evidenceWorkspace
     .getByRole("textbox", {
       name: "Product-level evidence decision note",

@@ -4530,6 +4530,149 @@ tbody tr:last-child td {
   letter-spacing: 0.075em;
   text-transform: uppercase;
 }
+.cert-attribute-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.55rem;
+}
+.cert-attribute-bulk-preview {
+  background: linear-gradient(145deg, var(--green-soft), var(--card) 62%);
+  border: 1px solid color-mix(in srgb, var(--success) 38%, var(--line));
+  border-radius: 14px;
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+.cert-attribute-bulk-preview > header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+.cert-attribute-bulk-preview h4,
+.cert-attribute-bulk-preview p {
+  margin: 0;
+}
+.cert-attribute-bulk-preview h4 {
+  font-size: 1rem;
+  margin: 0.15rem 0 0.3rem;
+}
+.cert-attribute-bulk-preview header small,
+.cert-attribute-bulk-preview header p,
+.cert-attribute-bulk-preview header code {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+.cert-attribute-bulk-preview header small {
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cert-attribute-bulk-preview header code {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.cert-attribute-bulk-metrics {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.cert-attribute-bulk-metrics article {
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.72rem;
+}
+.cert-attribute-bulk-metrics span {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.cert-attribute-bulk-metrics strong {
+  font-size: 1.25rem;
+}
+.cert-attribute-bulk-breakdown {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cert-attribute-bulk-breakdown > div {
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--soft-line);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+.cert-attribute-bulk-breakdown > div > strong {
+  font-size: 0.68rem;
+}
+.cert-attribute-bulk-breakdown ul {
+  display: grid;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+}
+.cert-attribute-bulk-breakdown li {
+  align-items: start;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.6rem;
+  gap: 0.7rem;
+  justify-content: space-between;
+  line-height: 1.4;
+}
+.cert-attribute-bulk-preview details {
+  border-top: 1px solid var(--soft-line);
+  padding-top: 0.65rem;
+}
+.cert-attribute-bulk-preview summary {
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+.cert-attribute-bulk-sample {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.7rem;
+}
+.cert-attribute-bulk-sample article {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 9px;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+.cert-attribute-bulk-sample small,
+.cert-attribute-bulk-sample span {
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+.cert-attribute-bulk-sample strong {
+  font-size: 0.66rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cert-attribute-bulk-preview > footer {
+  align-items: center;
+  border-top: 1px solid var(--soft-line);
+  display: flex;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
+}
+.cert-attribute-bulk-preview > footer p {
+  color: var(--muted);
+  flex: 1;
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
 .cert-attribute-filters {
   background: var(--surface-alt);
   border: 1px solid var(--soft-line);
@@ -5748,8 +5891,13 @@ tbody tr:last-child td {
   }
   .cert-workspace-switch,
   .cert-attribute-index-header,
+  .cert-attribute-bulk-preview > header,
+  .cert-attribute-bulk-preview > footer,
   .cert-attribute-links {
     align-items: stretch;
+    flex-direction: column;
+  }
+  .cert-attribute-header-actions {
     flex-direction: column;
   }
   .cert-workspace-switch button {
@@ -5757,6 +5905,9 @@ tbody tr:last-child td {
   }
   .cert-attribute-filters,
   .cert-attribute-metrics,
+  .cert-attribute-bulk-metrics,
+  .cert-attribute-bulk-breakdown,
+  .cert-attribute-bulk-sample,
   .cert-attribute-claim,
   .cert-attribute-card {
     grid-template-columns: 1fr;

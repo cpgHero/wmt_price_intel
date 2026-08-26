@@ -477,6 +477,46 @@ interface AttributeEvidenceClaimView {
   claims: AttributeEvidenceClaim[];
 }
 
+interface AttributeEvidenceBulkPreview {
+  queue_id: string;
+  queue_version: string;
+  policy: {
+    id: string;
+    version: string;
+    minimum_confidence: number;
+    required_relationship: "fills_unknown";
+    checksum: string;
+    human_confirmation_required: true;
+    automatically_certifies_matches: false;
+    automatically_changes_reporting: false;
+  };
+  eligible_claim_count: number;
+  eligible_product_count: number;
+  affected_case_count: number;
+  excluded_claim_count: number;
+  eligible_by_attribute: Array<{ attribute: string; claim_count: number }>;
+  eligible_by_retailer: Array<{
+    retailer_id: string;
+    claim_count: number;
+  }>;
+  exclusion_summary: Array<{
+    reason_code: string;
+    reason: string;
+    claim_count: number;
+  }>;
+  sample_eligible_claims: Array<{
+    claim_checksum: string;
+    retailer_id: string;
+    retailer_product_id: string;
+    product_title: string | null;
+    attribute: string;
+    selected_value: unknown;
+    minimum_confidence: number;
+    affected_case_count: number;
+  }>;
+  confirmation_checksum: string | null;
+}
+
 interface GoldSetReplayResult {
   gold_set_release_id: string;
   gold_set_checksum: string;
@@ -755,6 +795,8 @@ export function MatchingV2ReviewAdmin({
   >({});
   const [attributeOffset, setAttributeOffset] = useState(0);
   const [attributeLoading, setAttributeLoading] = useState(false);
+  const [attributeBulkPreview, setAttributeBulkPreview] =
+    useState<AttributeEvidenceBulkPreview | null>(null);
   const [reviewerId, setReviewerId] = useState("");
   const [replaySourceAnalysisId, setReplaySourceAnalysisId] = useState("");
   const [replayResult, setReplayResult] = useState<GoldSetReplayResult | null>(
@@ -1372,6 +1414,80 @@ export function MatchingV2ReviewAdmin({
     }
   }
 
+  async function previewSafeAttributeReconciliation() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const preview = await jsonRequest<AttributeEvidenceBulkPreview>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/attribute-evidence-claims/bulk-preview`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            batch_scope:
+              attributeBatchRoot === "all" ? "all_lineages" : "latest_lineage",
+            root_batch_id:
+              attributeBatchRoot === "all" || attributeBatchRoot === "latest"
+                ? null
+                : attributeBatchRoot,
+          }),
+        },
+      );
+      setAttributeBulkPreview(preview);
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitSafeAttributeReconciliation() {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before confirming guarded reconciliation.",
+      );
+      reviewerInputRef.current?.focus();
+      return;
+    }
+    if (!attributeBulkPreview?.confirmation_checksum) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await jsonRequest<{
+        verified_claim_count: number;
+        eligible_product_count: number;
+        excluded_claim_count: number;
+      }>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/attribute-evidence-claims/bulk-commit`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reviewer_id: reviewerId.trim(),
+            confirmation_checksum: attributeBulkPreview.confirmation_checksum,
+            batch_scope:
+              attributeBatchRoot === "all" ? "all_lineages" : "latest_lineage",
+            root_batch_id:
+              attributeBatchRoot === "all" || attributeBatchRoot === "latest"
+                ? null
+                : attributeBatchRoot,
+          }),
+        },
+      );
+      setAttributeBulkPreview(null);
+      setAttributeClaimStatus("all");
+      setAttributeOffset(0);
+      setNotice(
+        `${result.verified_claim_count.toLocaleString()} safe evidence claims across ${result.eligible_product_count.toLocaleString()} products were reconciled in one governed action. ${result.excluded_claim_count.toLocaleString()} weak or contradictory claims remain unresolved; no match was certified and reporting was not changed.`,
+      );
+      await Promise.all([loadQueue(), loadAttributeEvidence()]);
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function requestAIReview(reviewCase: ReviewCase) {
     if (!reviewerId.trim()) {
       setError("Enter your reviewer identity before requesting an AI draft.");
@@ -1953,18 +2069,161 @@ export function MatchingV2ReviewAdmin({
                     until you select the value proven by the cited images.
                   </p>
                 </div>
-                <button
-                  className="button secondary"
-                  type="button"
-                  disabled={attributeLoading}
-                  aria-busy={attributeLoading}
-                  onClick={() =>
-                    void loadAttributeEvidence().catch(handleError)
-                  }
-                >
-                  {attributeLoading ? "Refreshing…" : "Refresh claims"}
-                </button>
+                <div className="cert-attribute-header-actions">
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={busy || attributeLoading}
+                    aria-busy={busy}
+                    onClick={() => void previewSafeAttributeReconciliation()}
+                  >
+                    {busy ? "Assessing…" : "Auto-reconcile safe claims"}
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={attributeLoading}
+                    aria-busy={attributeLoading}
+                    onClick={() =>
+                      void loadAttributeEvidence().catch(handleError)
+                    }
+                  >
+                    {attributeLoading ? "Refreshing…" : "Refresh claims"}
+                  </button>
+                </div>
               </header>
+
+              {attributeBulkPreview ? (
+                <section
+                  className="cert-attribute-bulk-preview"
+                  aria-label="Safe evidence reconciliation preview"
+                >
+                  <header>
+                    <div>
+                      <small>Guarded automation preview</small>
+                      <h4>
+                        {attributeBulkPreview.eligible_claim_count.toLocaleString()}{" "}
+                        claims can be reconciled safely
+                      </h4>
+                      <p>
+                        These claims cover{" "}
+                        {attributeBulkPreview.eligible_product_count.toLocaleString()}{" "}
+                        products. Every accepted claim has one consistent value,
+                        at least{" "}
+                        {Math.round(
+                          attributeBulkPreview.policy.minimum_confidence * 100,
+                        )}
+                        % confidence, and an exact source image with visible
+                        label text. Existing governed values are never
+                        overwritten.
+                      </p>
+                    </div>
+                    <code>
+                      {attributeBulkPreview.policy.id} v
+                      {attributeBulkPreview.policy.version}
+                    </code>
+                  </header>
+                  <div className="cert-attribute-bulk-metrics">
+                    <article>
+                      <span>Safe claims</span>
+                      <strong>
+                        {attributeBulkPreview.eligible_claim_count.toLocaleString()}
+                      </strong>
+                    </article>
+                    <article>
+                      <span>Products helped</span>
+                      <strong>
+                        {attributeBulkPreview.eligible_product_count.toLocaleString()}
+                      </strong>
+                    </article>
+                    <article>
+                      <span>Exceptions retained</span>
+                      <strong>
+                        {attributeBulkPreview.excluded_claim_count.toLocaleString()}
+                      </strong>
+                    </article>
+                  </div>
+                  <div className="cert-attribute-bulk-breakdown">
+                    <div>
+                      <strong>Safe claims by attribute</strong>
+                      <ul>
+                        {attributeBulkPreview.eligible_by_attribute.map(
+                          (entry) => (
+                            <li key={entry.attribute}>
+                              <span>{label(entry.attribute)}</span>
+                              <b>{entry.claim_count.toLocaleString()}</b>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Why exceptions remain unresolved</strong>
+                      <ul>
+                        {attributeBulkPreview.exclusion_summary.map((entry) => (
+                          <li key={entry.reason_code}>
+                            <span>{entry.reason}</span>
+                            <b>{entry.claim_count.toLocaleString()}</b>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <details>
+                    <summary>Review a 25-claim sample</summary>
+                    <div className="cert-attribute-bulk-sample">
+                      {attributeBulkPreview.sample_eligible_claims.map(
+                        (claim) => (
+                          <article key={claim.claim_checksum}>
+                            <small>
+                              {label(claim.retailer_id)} ·{" "}
+                              {label(claim.attribute)} ·{" "}
+                              {Math.round(claim.minimum_confidence * 100)}%
+                            </small>
+                            <strong>
+                              {claim.product_title || claim.retailer_product_id}
+                            </strong>
+                            <span>{evidenceValue(claim.selected_value)}</span>
+                          </article>
+                        ),
+                      )}
+                    </div>
+                  </details>
+                  <footer>
+                    <p>
+                      One confirmation records an append-only decision for the
+                      complete safe population. Contradictions and attempted
+                      refinements stay unresolved. This does not certify product
+                      matches or publish reporting.
+                    </p>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setAttributeBulkPreview(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={
+                        busy ||
+                        !attributeBulkPreview.eligible_claim_count ||
+                        !attributeBulkPreview.confirmation_checksum
+                      }
+                      aria-busy={busy}
+                      onClick={() => void commitSafeAttributeReconciliation()}
+                    >
+                      {busy
+                        ? "Reconciling…"
+                        : "Confirm " +
+                          attributeBulkPreview.eligible_claim_count.toLocaleString() +
+                          " safe claims"}
+                    </button>
+                  </footer>
+                </section>
+              ) : null}
 
               <div className="cert-attribute-filters">
                 <label>

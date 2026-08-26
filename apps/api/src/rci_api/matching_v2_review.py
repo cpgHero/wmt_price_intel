@@ -1848,6 +1848,184 @@ def _attribute_evidence_claim_index(
     }
 
 
+_ATTRIBUTE_EVIDENCE_BULK_POLICY: dict[str, Any] = {
+    "id": "guarded_consensus_attribute_reconciliation",
+    "version": "1.0.0",
+    "decision": "verified",
+    "minimum_confidence": 0.95,
+    "required_relationship": "fills_unknown",
+    "requires_single_normalized_value": True,
+    "requires_source_image": True,
+    "requires_visible_label_text": True,
+    "maximum_claims": 5_000,
+}
+
+_ATTRIBUTE_EVIDENCE_BULK_REASONS = {
+    "already_finalized": "The claim already has a final decision.",
+    "conflicting_values": "The evidence proposes more than one normalized value.",
+    "not_consensus": "The claim does not contain exactly one evidence value.",
+    "changes_existing_value": "The proposal would refine or contradict an existing value.",
+    "confidence_below_policy": "At least one source observation is below 95% confidence.",
+    "missing_source_citation": "A source image or visible label excerpt is missing.",
+    "batch_limit": "The governed batch limit was reached.",
+}
+
+
+def _attribute_evidence_bulk_policy() -> dict[str, Any]:
+    return {
+        **_ATTRIBUTE_EVIDENCE_BULK_POLICY,
+        "checksum": _checksum(_ATTRIBUTE_EVIDENCE_BULK_POLICY),
+        "human_confirmation_required": True,
+        "automatically_certifies_matches": False,
+        "automatically_changes_reporting": False,
+    }
+
+
+def _attribute_evidence_bulk_assessment(claim: Mapping[str, Any]) -> dict[str, Any]:
+    reason_codes: list[str] = []
+    variants = claim.get("variants")
+    variants = variants if isinstance(variants, list) else []
+    status_value = str(claim.get("status") or "")
+    if status_value != "awaiting_review":
+        reason_codes.append(
+            "conflicting_values" if status_value == "conflict" else "already_finalized"
+        )
+    if len(variants) != 1:
+        reason_codes.append("not_consensus")
+    variant = variants[0] if len(variants) == 1 and isinstance(variants[0], Mapping) else {}
+    if variant:
+        relationships = {
+            str(value) for value in variant.get("evidence_relationships") or [] if value
+        }
+        if relationships != {_ATTRIBUTE_EVIDENCE_BULK_POLICY["required_relationship"]}:
+            reason_codes.append("changes_existing_value")
+        if float(variant.get("minimum_confidence") or 0) < float(
+            _ATTRIBUTE_EVIDENCE_BULK_POLICY["minimum_confidence"]
+        ):
+            reason_codes.append("confidence_below_policy")
+        citations = variant.get("citations")
+        citations = citations if isinstance(citations, list) else []
+        if not citations or any(
+            not isinstance(citation, Mapping)
+            or not str(citation.get("source_image_url") or "").strip()
+            or not str(citation.get("visible_text") or "").strip()
+            for citation in citations
+        ):
+            reason_codes.append("missing_source_citation")
+    reason_codes = list(dict.fromkeys(reason_codes))
+    listing = claim.get("listing")
+    listing = listing if isinstance(listing, Mapping) else {}
+    return {
+        "eligible": not reason_codes,
+        "reason_codes": reason_codes,
+        "reasons": [_ATTRIBUTE_EVIDENCE_BULK_REASONS[code] for code in reason_codes],
+        "claim_checksum": str(claim.get("claim_checksum") or ""),
+        "listing_id": str(claim.get("listing_id") or ""),
+        "retailer_id": str(listing.get("retailer_id") or ""),
+        "retailer_product_id": str(listing.get("retailer_product_id") or ""),
+        "product_title": listing.get("title"),
+        "attribute": str(claim.get("attribute") or ""),
+        "selected_value": variant.get("value"),
+        "selected_value_checksum": variant.get("value_checksum"),
+        "representative_case_id": str(variant.get("representative_case_id") or ""),
+        "representative_proposal_checksum": str(
+            variant.get("representative_proposal_checksum") or ""
+        ),
+        "minimum_confidence": float(variant.get("minimum_confidence") or 0),
+        "affected_case_count": int(claim.get("affected_case_count") or 0),
+    }
+
+
+def _attribute_evidence_bulk_preview_document(
+    claim_view: Mapping[str, Any],
+) -> dict[str, Any]:
+    queue = claim_view.get("queue")
+    queue = queue if isinstance(queue, Mapping) else {}
+    assessments = [
+        _attribute_evidence_bulk_assessment(claim)
+        for claim in claim_view.get("claims") or []
+        if isinstance(claim, Mapping)
+    ]
+    eligible = [row for row in assessments if row["eligible"]]
+    maximum = int(_ATTRIBUTE_EVIDENCE_BULK_POLICY["maximum_claims"])
+    for row in eligible[maximum:]:
+        row["eligible"] = False
+        row["reason_codes"].append("batch_limit")
+        row["reasons"].append(_ATTRIBUTE_EVIDENCE_BULK_REASONS["batch_limit"])
+    eligible = eligible[:maximum]
+    excluded = [row for row in assessments if not row["eligible"]]
+    reason_counts: dict[str, int] = defaultdict(int)
+    for row in excluded:
+        for reason_code in row["reason_codes"]:
+            reason_counts[reason_code] += 1
+    attribute_counts: dict[str, int] = defaultdict(int)
+    retailer_counts: dict[str, int] = defaultdict(int)
+    for row in eligible:
+        attribute_counts[row["attribute"]] += 1
+        retailer_counts[row["retailer_id"]] += 1
+    policy = _attribute_evidence_bulk_policy()
+    confirmation_checksum = (
+        _checksum(
+            {
+                "schema_version": "1.0.0-attribute-evidence-bulk-confirmation",
+                "queue_id": str(queue.get("queue_id") or ""),
+                "queue_version": str(queue.get("version") or ""),
+                "batch_scope": claim_view.get("batch_scope"),
+                "selected_root_batch_id": claim_view.get("selected_root_batch_id"),
+                "policy_checksum": policy["checksum"],
+                "claims": [
+                    {
+                        key: row[key]
+                        for key in (
+                            "claim_checksum",
+                            "selected_value_checksum",
+                            "representative_case_id",
+                            "representative_proposal_checksum",
+                        )
+                    }
+                    for row in sorted(eligible, key=lambda value: value["claim_checksum"])
+                ],
+            }
+        )
+        if eligible
+        else None
+    )
+    return {
+        "schema_version": "1.0.0-attribute-evidence-bulk-preview",
+        "queue_id": str(queue.get("queue_id") or ""),
+        "queue_version": str(queue.get("version") or ""),
+        "batch_scope": claim_view.get("batch_scope"),
+        "selected_root_batch_id": claim_view.get("selected_root_batch_id"),
+        "policy": policy,
+        "eligible_claim_count": len(eligible),
+        "eligible_product_count": len({row["listing_id"] for row in eligible}),
+        "affected_case_count": len({row["representative_case_id"] for row in eligible}),
+        "excluded_claim_count": len(excluded),
+        "eligible_by_attribute": [
+            {"attribute": name, "claim_count": count}
+            for name, count in sorted(attribute_counts.items())
+        ],
+        "eligible_by_retailer": [
+            {"retailer_id": name, "claim_count": count}
+            for name, count in sorted(retailer_counts.items())
+        ],
+        "exclusion_summary": [
+            {
+                "reason_code": code,
+                "reason": _ATTRIBUTE_EVIDENCE_BULK_REASONS[code],
+                "claim_count": count,
+            }
+            for code, count in sorted(reason_counts.items())
+        ],
+        "eligible_claims": eligible,
+        "sample_eligible_claims": eligible[:25],
+        "confirmation_checksum": confirmation_checksum,
+        "human_confirmation_required": True,
+        "automatically_certifies_matches": False,
+        "automatically_changes_reporting": False,
+    }
+
+
 def _certification_evidence_refs(
     document: Mapping[str, Any], submitted_refs: Sequence[str]
 ) -> list[str]:
@@ -1939,6 +2117,24 @@ class AttributeEvidenceClaimDecisionRequest(BaseModel):
         if self.batch_scope == "all_lineages" and self.root_batch_id is not None:
             raise ValueError("root_batch_id requires latest_lineage scope")
         return self
+
+
+class AttributeEvidenceBulkPreviewRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    batch_scope: AttributeEvidenceBatchScope = "all_lineages"
+    root_batch_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_claim_scope(self) -> AttributeEvidenceBulkPreviewRequest:
+        if self.batch_scope == "all_lineages" and self.root_batch_id is not None:
+            raise ValueError("root_batch_id requires latest_lineage scope")
+        return self
+
+
+class AttributeEvidenceBulkCommitRequest(AttributeEvidenceBulkPreviewRequest):
+    reviewer_id: str = Field(min_length=1, max_length=200)
+    confirmation_checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class AdjudicationRequest(BaseModel):
@@ -2490,6 +2686,24 @@ class MatchingV2ReviewRepository(Protocol):
         *,
         decision_checksum: str,
     ) -> dict[str, Any]: ...
+
+    async def decide_attribute_evidence_bulk(
+        self,
+        external_queue_id: str,
+        decisions: Sequence[Mapping[str, Any]],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+        policy: Mapping[str, Any],
+    ) -> dict[str, Any]: ...
+
+    async def attribute_evidence_bulk_status(
+        self,
+        external_queue_id: str,
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any] | None: ...
 
     async def adjudicate(
         self,
@@ -5358,6 +5572,266 @@ class PostgresMatchingV2ReviewRepository:
             "raw_evidence_mutated": False,
         }
 
+    async def decide_attribute_evidence_bulk(
+        self,
+        external_queue_id: str,
+        decisions: Sequence[Mapping[str, Any]],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+        policy: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically persist one guarded decision for every eligible product claim."""
+
+        if not decisions:
+            raise ValueError("bulk attribute reconciliation has no eligible claims")
+        external_case_ids = sorted({str(row["case_id"]) for row in decisions})
+        decision_checksums = [str(row["decision_checksum"]) for row in decisions]
+        proposal_checksums = [
+            str(cast(Mapping[str, Any], row["payload"])["proposal_checksum"]) for row in decisions
+        ]
+        async with self._engine.begin() as connection:
+            rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT review_case.id::text AS review_case_id,
+                                   review_case.external_case_id,
+                                   review_case.case_document,
+                                   review_case.case_checksum,
+                                   review_queue.product_pack_id,
+                                   (
+                                     SELECT current_decision.verdict
+                                     FROM (
+                                       SELECT submission.verdict, submission.created_at,
+                                              submission.id
+                                       FROM matching_v2_review_submission submission
+                                       WHERE submission.review_case_id = review_case.id
+                                       UNION ALL
+                                       SELECT adjudication.verdict, adjudication.created_at,
+                                              adjudication.id
+                                       FROM matching_v2_adjudication adjudication
+                                       WHERE adjudication.review_case_id = review_case.id
+                                     ) current_decision
+                                     ORDER BY current_decision.created_at DESC,
+                                              current_decision.id DESC
+                                     LIMIT 1
+                                   ) AS current_verdict
+                            FROM matching_v2_review_case review_case
+                            JOIN matching_v2_review_queue review_queue
+                              ON review_queue.id = review_case.review_queue_id
+                            WHERE review_queue.external_queue_id = :queue_id
+                              AND review_case.external_case_id = ANY(CAST(:case_ids AS text[]))
+                            ORDER BY review_case.id
+                            """
+                        ),
+                        {"queue_id": external_queue_id, "case_ids": external_case_ids},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) != len(external_case_ids):
+                found = {str(row["external_case_id"]) for row in rows}
+                missing = sorted(set(external_case_ids) - found)
+                raise ValueError(f"bulk reconciliation cases were not found: {missing}")
+            for row in rows:
+                await connection.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtextextended(:case_id, 0))"),
+                    {"case_id": str(row["review_case_id"])},
+                )
+                if row["current_verdict"] in {"comparable", "not_comparable"}:
+                    raise ValueError(
+                        "attribute evidence must be reconciled before final match certification"
+                    )
+
+            existing_decisions = set(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT decision_checksum
+                            FROM matching_v2_attribute_evidence_decision
+                            WHERE decision_checksum = ANY(CAST(:checksums AS text[]))
+                            """
+                        ),
+                        {"checksums": decision_checksums},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if len(existing_decisions) == len(decisions):
+                return {
+                    "queue_id": external_queue_id,
+                    "verified_claim_count": len(decisions),
+                    "confirmation_checksum": confirmation_checksum,
+                    "idempotent_replay": True,
+                    "raw_evidence_mutated": False,
+                }
+            if existing_decisions:
+                raise ValueError("bulk reconciliation encountered a partially applied batch")
+            prior_proposals = set(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT proposal_checksum
+                            FROM matching_v2_attribute_evidence_decision
+                            WHERE proposal_checksum = ANY(CAST(:checksums AS text[]))
+                            """
+                        ),
+                        {"checksums": proposal_checksums},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if prior_proposals:
+                raise ValueError(
+                    "bulk reconciliation preview is stale; one or more claims were decided"
+                )
+
+            rows_by_external_id = {str(row["external_case_id"]): row for row in rows}
+            ai_rows = await self._ai_draft_rows(
+                connection, [str(row["review_case_id"]) for row in rows]
+            )
+            ai_by_case_id = {str(row["review_case_id"]): dict(row) for row in ai_rows}
+            insert_values: list[dict[str, Any]] = []
+            for prepared in decisions:
+                external_case_id = str(prepared["case_id"])
+                row = rows_by_external_id[external_case_id]
+                ai = ai_by_case_id.get(str(row["review_case_id"]))
+                if ai is None:
+                    raise ValueError(
+                        f"case {external_case_id!r} has no current AI evidence proposal"
+                    )
+                ai_draft = {
+                    key: (value.isoformat() if hasattr(value, "isoformat") else value)
+                    for key, value in ai.items()
+                    if key != "review_case_id"
+                }
+                document = {
+                    **dict(row["case_document"]),
+                    "case_checksum": str(row["case_checksum"]),
+                    "ai_draft": ai_draft,
+                }
+                certification_policy = _active_certification_policy(str(row["product_pack_id"]))
+                payload = cast(Mapping[str, Any], prepared["payload"])
+                proposal = next(
+                    (
+                        value
+                        for value in _reconciliation_proposals(document, certification_policy)
+                        if value["proposal_checksum"] == payload["proposal_checksum"]
+                    ),
+                    None,
+                )
+                if proposal is None or not proposal["eligible"]:
+                    raise ValueError(
+                        "bulk reconciliation preview is stale or no longer source-eligible"
+                    )
+                proposal_document = {
+                    **proposal,
+                    "claim_decision": payload["claim_decision"],
+                    "bulk_reconciliation": {
+                        "schema_version": "1.0.0-guarded-bulk-attribute-reconciliation",
+                        "confirmation_checksum": confirmation_checksum,
+                        "policy": dict(policy),
+                        "administrator_confirmed": True,
+                    },
+                }
+                insert_values.append(
+                    {
+                        "case_id": str(row["review_case_id"]),
+                        "ai_task_id": proposal["ai_task_id"],
+                        "proposal_checksum": proposal["proposal_checksum"],
+                        "proposal_document": _canonical(proposal_document),
+                        "decision": "verified",
+                        "reviewer_id": reviewer_id,
+                        "rationale": payload["rationale"],
+                        "decision_checksum": prepared["decision_checksum"],
+                    }
+                )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO matching_v2_attribute_evidence_decision (
+                      review_case_id, ai_review_task_id, proposal_checksum,
+                      proposal_document, decision, reviewer_id, rationale,
+                      decision_checksum, supersedes_decision_id
+                    ) VALUES (
+                      CAST(:case_id AS uuid), CAST(:ai_task_id AS uuid),
+                      :proposal_checksum, CAST(:proposal_document AS jsonb),
+                      :decision, :reviewer_id, :rationale, :decision_checksum, NULL
+                    )
+                    """
+                ),
+                insert_values,
+            )
+        return {
+            "queue_id": external_queue_id,
+            "verified_claim_count": len(decisions),
+            "confirmation_checksum": confirmation_checksum,
+            "idempotent_replay": False,
+            "raw_evidence_mutated": False,
+        }
+
+    async def attribute_evidence_bulk_status(
+        self,
+        external_queue_id: str,
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any] | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT COUNT(*)::integer AS verified_claim_count,
+                                   COUNT(DISTINCT decision.proposal_document
+                                     -> 'claim_decision' ->> 'listing_id')::integer
+                                     AS eligible_product_count,
+                                   MIN(decision.created_at) AS created_at
+                            FROM matching_v2_attribute_evidence_decision decision
+                            JOIN matching_v2_review_case review_case
+                              ON review_case.id = decision.review_case_id
+                            JOIN matching_v2_review_queue review_queue
+                              ON review_queue.id = review_case.review_queue_id
+                            WHERE review_queue.external_queue_id = :queue_id
+                              AND decision.reviewer_id = :reviewer_id
+                              AND decision.decision = 'verified'
+                              AND decision.proposal_document
+                                    -> 'bulk_reconciliation'
+                                    ->> 'confirmation_checksum' = :confirmation_checksum
+                            """
+                        ),
+                        {
+                            "queue_id": external_queue_id,
+                            "reviewer_id": reviewer_id,
+                            "confirmation_checksum": confirmation_checksum,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        count = int(row["verified_claim_count"] or 0)
+        if not count:
+            return None
+        created_at = row["created_at"]
+        return {
+            "queue_id": external_queue_id,
+            "verified_claim_count": count,
+            "eligible_product_count": int(row["eligible_product_count"] or 0),
+            "confirmation_checksum": confirmation_checksum,
+            "created_at": created_at.isoformat() if created_at else None,
+            "idempotent_replay": True,
+            "raw_evidence_mutated": False,
+        }
+
     async def submit_review(
         self,
         external_queue_id: str,
@@ -6409,6 +6883,138 @@ class MatchingV2ReviewService:
             "automatically_certified_matches": 0,
         }
 
+    async def preview_attribute_evidence_bulk(
+        self,
+        external_queue_id: str,
+        request: AttributeEvidenceBulkPreviewRequest,
+    ) -> dict[str, Any]:
+        await self._assert_queue_not_quarantined(external_queue_id)
+        view = await self.attribute_evidence_claims(
+            external_queue_id,
+            competitor_retailer_id=None,
+            batch_scope=request.batch_scope,
+            root_batch_id=request.root_batch_id,
+            status_filter="all",
+            attribute_filter=None,
+            offset=0,
+            limit=100_000,
+        )
+        return _attribute_evidence_bulk_preview_document(view)
+
+    async def commit_attribute_evidence_bulk(
+        self,
+        external_queue_id: str,
+        request: AttributeEvidenceBulkCommitRequest,
+    ) -> dict[str, Any]:
+        """Apply the complete current safe-consensus population in one transaction."""
+
+        await self._assert_queue_not_quarantined(external_queue_id)
+        scope = AttributeEvidenceBulkPreviewRequest(
+            batch_scope=request.batch_scope,
+            root_batch_id=request.root_batch_id,
+        )
+        view = await self.attribute_evidence_claims(
+            external_queue_id,
+            competitor_retailer_id=None,
+            batch_scope=scope.batch_scope,
+            root_batch_id=scope.root_batch_id,
+            status_filter="all",
+            attribute_filter=None,
+            offset=0,
+            limit=100_000,
+        )
+        preview = _attribute_evidence_bulk_preview_document(view)
+        current_checksum = str(preview.get("confirmation_checksum") or "")
+        if not current_checksum or not secrets.compare_digest(
+            current_checksum, request.confirmation_checksum
+        ):
+            existing = await self._repository.attribute_evidence_bulk_status(
+                external_queue_id,
+                reviewer_id=request.reviewer_id,
+                confirmation_checksum=request.confirmation_checksum,
+            )
+            if existing is not None:
+                return {
+                    **existing,
+                    "excluded_claim_count": preview["excluded_claim_count"],
+                    "exclusion_summary": preview["exclusion_summary"],
+                    "automatically_certified_matches": 0,
+                    "automatically_changes_reporting": False,
+                }
+            raise ValueError(
+                "bulk attribute-evidence preview is stale; assess the safe claims again"
+            )
+        claims_by_checksum = {
+            str(claim.get("claim_checksum") or ""): claim
+            for claim in view.get("claims") or []
+            if isinstance(claim, Mapping)
+        }
+        prepared: list[dict[str, Any]] = []
+        policy = cast(Mapping[str, Any], preview["policy"])
+        rationale = (
+            "Administrator confirmed the complete safe-consensus population under "
+            f"{policy['id']} v{policy['version']}. Every claim has one normalized value, "
+            "fills only an unknown governed attribute, meets the confidence floor, and "
+            "retains an exact source image plus visible label excerpt."
+        )
+        for candidate in preview["eligible_claims"]:
+            claim = claims_by_checksum[str(candidate["claim_checksum"])]
+            variant = cast(Mapping[str, Any], cast(list[Any], claim["variants"])[0])
+            claim_context = {
+                "schema_version": "1.1.0-product-attribute-claim-decision",
+                "claim_checksum": candidate["claim_checksum"],
+                "listing_id": str(claim.get("listing_id") or ""),
+                "attribute": str(claim.get("attribute") or ""),
+                "decision_scope": "complete_product_attribute_claim",
+                "selected_value": variant.get("value"),
+                "selected_value_checksum": variant.get("value_checksum"),
+                "proposal_checksums": list(claim.get("proposal_checksums") or []),
+                "variant_count": 1,
+                "affected_case_count": int(claim.get("affected_case_count") or 0),
+                "bulk_confirmation_checksum": request.confirmation_checksum,
+                "bulk_policy_checksum": policy["checksum"],
+            }
+            payload = {
+                "reviewer_id": request.reviewer_id,
+                "proposal_checksum": candidate["representative_proposal_checksum"],
+                "decision": "verified",
+                "rationale": rationale,
+                "supersedes_decision_id": None,
+                "claim_decision": claim_context,
+            }
+            case_id = str(candidate["representative_case_id"])
+            prepared.append(
+                {
+                    "case_id": case_id,
+                    "claim_checksum": candidate["claim_checksum"],
+                    "payload": payload,
+                    "decision_checksum": _checksum(
+                        {
+                            "schema_version": "1.0.0-guarded-bulk-attribute-decision",
+                            "queue_id": external_queue_id,
+                            "case_id": case_id,
+                            "confirmation_checksum": request.confirmation_checksum,
+                            **payload,
+                        }
+                    ),
+                }
+            )
+        result = await self._repository.decide_attribute_evidence_bulk(
+            external_queue_id,
+            prepared,
+            reviewer_id=request.reviewer_id,
+            confirmation_checksum=request.confirmation_checksum,
+            policy=policy,
+        )
+        return {
+            **result,
+            "eligible_product_count": preview["eligible_product_count"],
+            "excluded_claim_count": preview["excluded_claim_count"],
+            "exclusion_summary": preview["exclusion_summary"],
+            "automatically_certified_matches": 0,
+            "automatically_changes_reporting": False,
+        }
+
     async def _assert_queue_not_quarantined(self, external_queue_id: str) -> None:
         if not any(
             str(entry.get("queue_id") or "") == external_queue_id
@@ -7001,6 +7607,41 @@ async def list_matching_v2_attribute_evidence_claims(
             offset=offset,
             limit=limit,
         )
+    except (KeyError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/attribute-evidence-claims/bulk-preview",
+)
+async def preview_matching_v2_attribute_evidence_bulk(
+    queue_id: str,
+    request: Request,
+    body: AttributeEvidenceBulkPreviewRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.preview_attribute_evidence_bulk(queue_id, body)
+    except (KeyError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/attribute-evidence-claims/bulk-commit",
+    status_code=status.HTTP_201_CREATED,
+)
+async def commit_matching_v2_attribute_evidence_bulk(
+    queue_id: str,
+    request: Request,
+    body: AttributeEvidenceBulkCommitRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.commit_attribute_evidence_bulk(queue_id, body)
     except (KeyError, ValueError) as exc:
         raise _http_error(exc) from exc
 

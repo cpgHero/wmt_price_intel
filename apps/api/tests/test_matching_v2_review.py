@@ -19,6 +19,8 @@ from rci_api.matching_v2_review import (
     AIReviewBatchRequest,
     AIReviewDraftRequest,
     AIReviewRetryRequest,
+    AttributeEvidenceBulkCommitRequest,
+    AttributeEvidenceBulkPreviewRequest,
     AttributeEvidenceClaimDecisionRequest,
     AttributeEvidenceDecisionRequest,
     GoldSetReplayRequest,
@@ -30,6 +32,7 @@ from rci_api.matching_v2_review import (
     _apply_active_certification_policy,
     _apply_attribute_reconciliation,
     _apply_observed_location_sidecar,
+    _attribute_evidence_bulk_preview_document,
     _attribute_evidence_claim_index,
     _attribute_evidence_proposal_index,
     _bulk_ai_certification_eligibility,
@@ -356,6 +359,74 @@ def test_attribute_evidence_claim_index_collapses_pair_duplicates_and_flags_conf
     )
     assert verified["selected_claim_count"] == 1
     assert verified["claims"][0]["status"] == "verified"
+
+
+def test_attribute_evidence_bulk_preview_admits_only_source_bound_unknown_consensus() -> None:
+    safe_claim = {
+        "claim_checksum": "a" * 64,
+        "listing_id": "target_us:item-safe",
+        "attribute": "strength",
+        "status": "awaiting_review",
+        "affected_case_count": 9,
+        "listing": {
+            "retailer_id": "target_us",
+            "retailer_product_id": "item-safe",
+            "title": "Vitamin D3",
+        },
+        "variants": [
+            {
+                "value": 25,
+                "value_checksum": "b" * 64,
+                "minimum_confidence": 0.98,
+                "evidence_relationships": ["fills_unknown"],
+                "representative_case_id": "case-safe",
+                "representative_proposal_checksum": "c" * 64,
+                "citations": [
+                    {
+                        "source_image_url": "https://images.example/label.jpg",
+                        "visible_text": "Vitamin D3 25 mcg",
+                    }
+                ],
+            }
+        ],
+    }
+    conflicting = {
+        **safe_claim,
+        "claim_checksum": "d" * 64,
+        "listing_id": "target_us:item-conflict",
+        "status": "conflict",
+        "variants": [
+            safe_claim["variants"][0],
+            {**safe_claim["variants"][0], "value": 50, "value_checksum": "e" * 64},
+        ],
+    }
+    overwrite = {
+        **safe_claim,
+        "claim_checksum": "f" * 64,
+        "listing_id": "target_us:item-overwrite",
+        "variants": [
+            {
+                **safe_claim["variants"][0],
+                "evidence_relationships": ["refines_existing"],
+            }
+        ],
+    }
+    preview = _attribute_evidence_bulk_preview_document(
+        {
+            "queue": {"queue_id": "vitamin-queue", "version": "1.0.0"},
+            "batch_scope": "all_lineages",
+            "selected_root_batch_id": None,
+            "claims": [safe_claim, conflicting, overwrite],
+        }
+    )
+
+    assert preview["eligible_claim_count"] == 1
+    assert preview["eligible_product_count"] == 1
+    assert preview["eligible_claims"][0]["claim_checksum"] == "a" * 64
+    assert len(preview["confirmation_checksum"]) == 64
+    reasons = {row["reason_code"]: row["claim_count"] for row in preview["exclusion_summary"]}
+    assert reasons["conflicting_values"] == 1
+    assert reasons["changes_existing_value"] == 1
 
 
 def test_ai_review_requires_both_search_observed_footprints() -> None:
@@ -1239,6 +1310,60 @@ class ReviewRepository:
         self.attribute_decisions.append(record)
         return record
 
+    async def decide_attribute_evidence_bulk(
+        self,
+        external_queue_id: str,
+        decisions: Sequence[Mapping[str, Any]],
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+        policy: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        for decision in decisions:
+            self.attribute_decisions.append(
+                {
+                    "queue_id": external_queue_id,
+                    **dict(decision),
+                    "reviewer_id": reviewer_id,
+                    "confirmation_checksum": confirmation_checksum,
+                    "policy": dict(policy),
+                }
+            )
+        return {
+            "queue_id": external_queue_id,
+            "verified_claim_count": len(decisions),
+            "confirmation_checksum": confirmation_checksum,
+            "idempotent_replay": False,
+            "raw_evidence_mutated": False,
+        }
+
+    async def attribute_evidence_bulk_status(
+        self,
+        external_queue_id: str,
+        *,
+        reviewer_id: str,
+        confirmation_checksum: str,
+    ) -> dict[str, Any] | None:
+        matching = [
+            row
+            for row in self.attribute_decisions
+            if row.get("queue_id") == external_queue_id
+            and row.get("reviewer_id") == reviewer_id
+            and row.get("confirmation_checksum") == confirmation_checksum
+        ]
+        if not matching:
+            return None
+        return {
+            "queue_id": external_queue_id,
+            "verified_claim_count": len(matching),
+            "eligible_product_count": len(
+                {row["payload"]["claim_decision"]["listing_id"] for row in matching}
+            ),
+            "confirmation_checksum": confirmation_checksum,
+            "idempotent_replay": True,
+            "raw_evidence_mutated": False,
+        }
+
     async def adjudicate(
         self,
         external_queue_id: str,
@@ -1895,6 +2020,95 @@ async def test_product_attribute_claim_decision_is_stale_safe_and_product_scoped
         proposal_checksum,
         "b" * 64,
     ]
+
+
+async def test_bulk_attribute_reconciliation_is_checksum_bound_and_one_action(
+    monkeypatch: Any,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    claim = {
+        "claim_checksum": "a" * 64,
+        "listing_id": "target_us:item-one",
+        "attribute": "strength",
+        "proposal_checksums": ["c" * 64],
+        "status": "awaiting_review",
+        "affected_case_count": 11,
+        "listing": {
+            "retailer_id": "target_us",
+            "retailer_product_id": "item-one",
+            "title": "Vitamin D3",
+        },
+        "variants": [
+            {
+                "value": 25,
+                "value_checksum": "b" * 64,
+                "minimum_confidence": 0.99,
+                "evidence_relationships": ["fills_unknown"],
+                "representative_case_id": "case-one",
+                "representative_proposal_checksum": "c" * 64,
+                "citations": [
+                    {
+                        "source_image_url": "https://images.example/d3.jpg",
+                        "visible_text": "Vitamin D3 25 mcg",
+                    }
+                ],
+            }
+        ],
+    }
+
+    async def claims(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        current_claim = json.loads(json.dumps(claim))
+        if repository.attribute_decisions:
+            current_claim["status"] = "verified"
+        return {
+            "queue": {"queue_id": "vitamin-queue", "version": "ten"},
+            "batch_scope": "all_lineages",
+            "selected_root_batch_id": None,
+            "claims": [current_claim],
+        }
+
+    monkeypatch.setattr(service, "attribute_evidence_claims", claims)
+    preview = await service.preview_attribute_evidence_bulk(
+        "vitamin-queue", AttributeEvidenceBulkPreviewRequest()
+    )
+    assert preview["eligible_claim_count"] == 1
+    result = await service.commit_attribute_evidence_bulk(
+        "vitamin-queue",
+        AttributeEvidenceBulkCommitRequest(
+            reviewer_id="owner@cpghero.com",
+            confirmation_checksum=preview["confirmation_checksum"],
+        ),
+    )
+
+    assert result["verified_claim_count"] == 1
+    assert result["automatically_certified_matches"] == 0
+    assert len(repository.attribute_decisions) == 1
+    stored = repository.attribute_decisions[0]
+    assert (
+        stored["payload"]["claim_decision"]["bulk_confirmation_checksum"]
+        == (preview["confirmation_checksum"])
+    )
+
+    replay = await service.commit_attribute_evidence_bulk(
+        "vitamin-queue",
+        AttributeEvidenceBulkCommitRequest(
+            reviewer_id="owner@cpghero.com",
+            confirmation_checksum=preview["confirmation_checksum"],
+        ),
+    )
+    assert replay["idempotent_replay"] is True
+    assert replay["verified_claim_count"] == 1
+    assert len(repository.attribute_decisions) == 1
+
+    with pytest.raises(ValueError, match="preview is stale"):
+        await service.commit_attribute_evidence_bulk(
+            "vitamin-queue",
+            AttributeEvidenceBulkCommitRequest(
+                reviewer_id="owner@cpghero.com",
+                confirmation_checksum="f" * 64,
+            ),
+        )
 
 
 async def test_review_service_preserves_large_integers_from_raw_queue_json() -> None:
