@@ -95,8 +95,41 @@ package/ingredient/life-stage matching requirement.
 ## Verification
 
 - Brand Foundation and all Retailer Pack schemas validate.
-- 94 focused brand, PDP, Product Location, Price Monitoring, and Matching v2 tests pass.
+- 96 focused brand, PDP, Product Location, Price Monitoring, and Matching v2 tests pass.
 - TypeScript contract generation is current and its contract tests pass.
-- Production deployment must precede regeneration of the vitamin successor queue; existing human
-  decisions remain historical evidence and are carried only when their governed lineage remains
-  compatible.
+- Full Python mypy, Ruff, TypeScript formatting/lint/type/tests/build, and browser tests pass in
+  GitHub Actions run `32924132919`.
+
+## Production shadow audit
+
+Production commit `afa1ecd` rebuilt a read-only successor shadow from the exact accepted Search
+lineage: Fishers coverage recovery `016e05c8-119b-4580-be1d-e7609fdd3621`, Walmart exact-title
+recovery `a1cc0bcc-6416-4f21-952c-ba2d2d4311ac`, and Sacramento exact-title recovery
+`9b3ac7b6-8c10-433d-ada0-e0f29ccd7aee`. It used 23,716 Search rows and 2,324 retained PDP
+snapshots. No MetricsCart or OpenAI request was made.
+
+The candidate boundary is unchanged from predecessor queue
+`2026.08.25-spring-valley-luna-shadow-9`:
+
+- 2,316 cases and 1,440 distinct products;
+- zero product-pair identities added or removed;
+- all nine configured competitor retailers retained;
+- 74 configured Walmart products retained as explicit catalog gaps;
+- zero critical quality findings; and
+- zero admitted products with known third-party seller status.
+
+Governed brand verification improves from 468 of 1,440 products to 1,246 of 1,440 products
+(86.53%). The audit includes explicit precedence sentinels: Nature Made resolves as a national
+brand, Amazon Basics resolves as Amazon private label, and a GuruNanda black-seed-oil PDP remains
+GuruNanda/unclassified rather than being falsely relabeled as the unrelated brand Seed.
+
+The accepted shadow is archived at
+`s3://artifacts-usb-pmrd1jcxsy9/matching-v2/shadows/vitamins_supplements/2026.08.25-spring-valley-brand-shadow-10.tar.gz`.
+It is 21,804,680 bytes with SHA-256
+`d0bcd1d38dc459248531e9223077a336a580868939892437fb543a31aff25388`.
+
+The shadow is deliberately not imported as the active queue yet. The current queue contains
+human attribute-evidence decisions. Replacing it without a checksum-bound successor carry-forward
+would discard completed review work. The next operational change must carry only decisions whose
+listing identity, attribute, normalized value, source image, proposal checksum, Product Pack
+policy, and raw evidence remain compatible; incompatible decisions must remain historical only.
