@@ -119,6 +119,7 @@ def matching_v2_gold_set_rules(
         _, benchmark_product_id = benchmark_listing.split(":", 1)
         competitor_id, competitor_product_id = competitor_listing.split(":", 1)
         allowed_tiers = {str(value) for value in label.get("allowed_tiers", [])}
+        has_certified_price_basis = "eligible_price_bases" in label
         certified_price_bases = {str(value) for value in label.get("eligible_price_bases", [])}
 
         eligible_profiles = tuple(
@@ -127,25 +128,33 @@ def matching_v2_gold_set_rules(
             if not label["expected_comparable"]
             or (
                 (
-                    "exact_package"
-                    if engine.comparison_metric(str(profile["id"])) == "package_price"
-                    else "normalized_unit"
+                    (
+                        "exact_package"
+                        if engine.comparison_metric(str(profile["id"])) == "package_price"
+                        else "normalized_unit"
+                    )
+                    in certified_price_bases
                 )
-                in certified_price_bases
-                if certified_price_bases
+                if has_certified_price_basis
                 else engine.comparison_metric(str(profile["id"])) != "package_price"
                 or bool(allowed_tiers & exact_tiers)
             )
         )
         if label["expected_comparable"] and not eligible_profiles:
-            raise ValueError(
-                "certified comparable relationship is not eligible for any configured price "
-                f"basis: {benchmark_listing} vs {competitor_listing}"
-            )
+            if not has_certified_price_basis:
+                raise ValueError(
+                    "certified comparable relationship is not eligible for any configured price "
+                    f"basis: {benchmark_listing} vs {competitor_listing}"
+                )
+            # A relationship can be certified as comparable while its evidence does
+            # not support package or normalized-unit math. Retain its identity and
+            # assortment lineage without assigning any scoring profile.
+            eligible_profiles = ("certified_no_price_basis",)
         profile_id = eligible_profiles[0]
         scope_definition: dict[str, Any] = {
             "certified_allowed_tiers": sorted(allowed_tiers),
             "certified_price_bases": sorted(certified_price_bases),
+            "certified_price_basis_authority": has_certified_price_basis,
         }
         rules.append(
             ProductMatchRule(
@@ -230,6 +239,14 @@ def scope_matching_v2_rules_to_brand_profiles(
 
     scoped: list[ProductMatchRule] = []
     for rule in rules:
+        scope_definition = rule.scope_definition or {}
+        if (
+            rule.decision == "confirmed"
+            and bool(scope_definition.get("certified_price_basis_authority"))
+            and not scope_definition.get("certified_price_bases")
+        ):
+            scoped.append(rule)
+            continue
         current_profiles = tuple(
             profile_id
             for profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
@@ -383,8 +400,6 @@ def matching_v2_gold_set_presentation(
             for profile_id in (rule.eligible_profile_ids or (rule.profile_id,))
             if profile_id in profile_index
         )
-        if not eligible_profiles:
-            continue
         seed = "|".join(
             (
                 rule.competitor_id,

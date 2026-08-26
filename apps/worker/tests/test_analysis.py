@@ -135,7 +135,46 @@ def test_matching_v2_certified_rules_preserve_explicit_price_basis() -> None:
     assert rules[0].scope_definition == {
         "certified_allowed_tiers": ["exact_specification"],
         "certified_price_bases": ["normalized_unit"],
+        "certified_price_basis_authority": True,
     }
+
+
+def test_matching_v2_certified_relationship_without_price_basis_is_retained_without_math() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    release = {
+        "document": {
+            "labels": [
+                {
+                    "case_id": "case-no-price-basis",
+                    "benchmark_listing_id": "walmart_us:w-1",
+                    "competitor_listing_id": "walgreens_us:x-1",
+                    "expected_comparable": True,
+                    "allowed_tiers": ["equivalent_product"],
+                    "eligible_price_bases": [],
+                }
+            ]
+        }
+    }
+
+    rules = matching_v2_gold_set_rules(release, pack)
+    scoped = scope_matching_v2_rules_to_brand_profiles(
+        [],
+        rules,
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+        engine=ComparisonEngine(pack),
+    )
+    relationships, candidates = matching_v2_gold_set_presentation(
+        [],
+        scoped,
+        benchmark_retailer="walmart_us",
+        profiles=pack.matching_profiles,
+    )
+
+    assert scoped[0].eligible_profile_ids == ("certified_no_price_basis",)
+    assert len(relationships) == 1
+    assert relationships[0]["eligible_profile_ids"] == []
+    assert candidates == []
 
 
 def test_matching_v2_package_price_rejects_explicit_multipack_mismatch() -> None:
