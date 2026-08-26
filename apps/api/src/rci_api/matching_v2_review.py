@@ -50,6 +50,7 @@ AIReviewSelectionMode = Literal["all_cases", "product_evidence_coverage"]
 AttributeEvidenceBatchScope = Literal["latest_lineage", "all_lineages"]
 AttributeEvidenceEligibility = Literal["all", "eligible", "ineligible"]
 AttributeEvidenceDecisionStatus = Literal["all", "undecided", "verified", "rejected"]
+AttributeEvidenceClaimStatus = Literal["all", "awaiting_review", "conflict", "verified", "rejected"]
 AttributeEvidenceRelationship = Literal[
     "fills_unknown",
     "corroborates_existing",
@@ -1593,6 +1594,260 @@ def _attribute_evidence_proposal_index(
     }
 
 
+def _attribute_evidence_claim_index(
+    queue_view: Mapping[str, Any],
+    *,
+    batch_scope: AttributeEvidenceBatchScope,
+    root_batch_id: str | None,
+    status_filter: AttributeEvidenceClaimStatus,
+    attribute_filter: str | None,
+    offset: int,
+    limit: int,
+) -> dict[str, Any]:
+    """Collapse pair-level AI proposals into one governed product-attribute claim.
+
+    Repeated proposals from different comparison pairs are context, not independent proof. The
+    claim checksum binds the complete current proposal population so an administrator cannot act
+    on a stale or partially loaded claim. Existing source-bound decisions remain immutable.
+    """
+
+    proposal_view = _attribute_evidence_proposal_index(
+        queue_view,
+        batch_scope=batch_scope,
+        root_batch_id=root_batch_id,
+        eligibility="all",
+        decision_status="all",
+        offset=0,
+        limit=100_000,
+    )
+    queue = proposal_view.get("queue")
+    queue = queue if isinstance(queue, Mapping) else {}
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for raw in proposal_view.get("proposals") or []:
+        if not isinstance(raw, Mapping) or not raw.get("eligible"):
+            continue
+        listing_id = str(raw.get("listing_id") or "")
+        attribute = str(raw.get("attribute") or "")
+        if listing_id and attribute:
+            grouped[(listing_id, attribute)].append(dict(raw))
+
+    claims: list[dict[str, Any]] = []
+    attribute_counts: dict[str, int] = defaultdict(int)
+    for (listing_id, attribute), proposal_rows in grouped.items():
+        proposal_checksums = sorted(
+            {str(row.get("proposal_checksum") or "") for row in proposal_rows}
+        )
+        claim_descriptor = {
+            "schema_version": "1.0.0-product-attribute-claim",
+            "queue_id": str(queue.get("queue_id") or ""),
+            "queue_version": str(queue.get("version") or ""),
+            "batch_scope": batch_scope,
+            "selected_root_batch_id": proposal_view.get("selected_root_batch_id"),
+            "listing_id": listing_id,
+            "attribute": attribute,
+            "proposal_checksums": proposal_checksums,
+        }
+        claim_checksum = _checksum(claim_descriptor)
+        variants_by_value: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        current_evidence: dict[str, dict[str, Any]] = {}
+        counterpart_products: dict[str, dict[str, Any]] = {}
+        for row in proposal_rows:
+            variants_by_value[_canonical(row.get("normalized_value"))].append(row)
+            current_key = _canonical(
+                {"value": row.get("current_value"), "source": row.get("current_source")}
+            )
+            current_evidence[current_key] = {
+                "value": row.get("current_value"),
+                "source": row.get("current_source"),
+            }
+            counterpart = row.get("counterpart")
+            if isinstance(counterpart, Mapping):
+                counterpart_id = str(counterpart.get("listing_id") or "")
+                if counterpart_id:
+                    counterpart_products[counterpart_id] = dict(counterpart)
+
+        variants: list[dict[str, Any]] = []
+        verified_values: set[str] = set()
+        claim_rejected = False
+        claim_decision: Mapping[str, Any] | None = None
+        for value_key, variant_rows in variants_by_value.items():
+            ordered = sorted(
+                variant_rows,
+                key=lambda row: (
+                    -float(row.get("confidence") or 0),
+                    str(row.get("proposal_checksum") or ""),
+                ),
+            )
+            citations: dict[tuple[str, str], dict[str, Any]] = {}
+            for row in ordered:
+                citation_key = (
+                    str(row.get("source_image_url") or ""),
+                    str(row.get("visible_text") or ""),
+                )
+                citations[citation_key] = {
+                    "source_image_url": row.get("source_image_url"),
+                    "visible_text": row.get("visible_text"),
+                    "confidence": float(row.get("confidence") or 0),
+                    "case_id": str(row.get("case_id") or ""),
+                    "proposal_checksum": str(row.get("proposal_checksum") or ""),
+                    "counterpart_retailer_id": str(row.get("competitor_retailer_id") or ""),
+                }
+                decision = row.get("decision")
+                if not isinstance(decision, Mapping):
+                    continue
+                if decision.get("decision") == "verified":
+                    verified_values.add(value_key)
+                    claim_decision = decision
+                proposal_document = decision.get("proposal_document")
+                stored_claim = (
+                    proposal_document.get("claim_decision")
+                    if isinstance(proposal_document, Mapping)
+                    else None
+                )
+                if (
+                    decision.get("decision") == "rejected"
+                    and isinstance(stored_claim, Mapping)
+                    and stored_claim.get("claim_checksum") == claim_checksum
+                ):
+                    claim_rejected = True
+                    claim_decision = decision
+            variants.append(
+                {
+                    "value": ordered[0].get("normalized_value"),
+                    "value_checksum": _checksum(
+                        {
+                            "claim_checksum": claim_checksum,
+                            "normalized_value": ordered[0].get("normalized_value"),
+                        }
+                    ),
+                    "proposal_count": len(ordered),
+                    "case_count": len({str(row.get("case_id") or "") for row in ordered}),
+                    "minimum_confidence": min(float(row.get("confidence") or 0) for row in ordered),
+                    "maximum_confidence": max(float(row.get("confidence") or 0) for row in ordered),
+                    "evidence_relationships": sorted(
+                        {str(row.get("evidence_relationship") or "invalid") for row in ordered}
+                    ),
+                    "representative_case_id": str(ordered[0].get("case_id") or ""),
+                    "representative_proposal_checksum": str(
+                        ordered[0].get("proposal_checksum") or ""
+                    ),
+                    "citations": sorted(
+                        citations.values(),
+                        key=lambda citation: (
+                            -float(citation["confidence"]),
+                            str(citation["source_image_url"] or ""),
+                        ),
+                    ),
+                }
+            )
+
+        if len(verified_values) > 1:
+            claim_status: AttributeEvidenceClaimStatus = "conflict"
+            status_reason = (
+                "Multiple human-verified values conflict; certification remains blocked."
+            )
+        elif len(verified_values) == 1:
+            claim_status = "verified"
+            status_reason = "One human-verified value governs this product attribute."
+        elif claim_rejected:
+            claim_status = "rejected"
+            status_reason = "The complete current product-attribute claim was rejected."
+        elif len(variants) > 1:
+            claim_status = "conflict"
+            status_reason = (
+                "AI evidence proposes multiple values; an administrator must select one."
+            )
+        else:
+            claim_status = "awaiting_review"
+            status_reason = "A source-attributable product claim awaits administrator review."
+
+        variants.sort(
+            key=lambda variant: (
+                -int(variant["case_count"]),
+                -float(variant["maximum_confidence"]),
+                str(variant["value_checksum"]),
+            )
+        )
+        listing = proposal_rows[0].get("listing")
+        listing = dict(listing) if isinstance(listing, Mapping) else {}
+        attribute_counts[attribute] += 1
+        claims.append(
+            {
+                **claim_descriptor,
+                "claim_checksum": claim_checksum,
+                "status": claim_status,
+                "status_reason": status_reason,
+                "listing": listing,
+                "current_evidence": sorted(
+                    current_evidence.values(),
+                    key=lambda evidence: _canonical(evidence),
+                ),
+                "proposal_count": len(proposal_rows),
+                "affected_case_count": len(
+                    {str(row.get("case_id") or "") for row in proposal_rows}
+                ),
+                "counterpart_product_count": len(counterpart_products),
+                "counterpart_retailers": sorted(
+                    {
+                        str(product.get("retailer_id") or "")
+                        for product in counterpart_products.values()
+                        if product.get("retailer_id")
+                    }
+                ),
+                "variants": variants,
+                "decision": dict(claim_decision) if claim_decision else None,
+                "raw_evidence_mutated": False,
+            }
+        )
+
+    summary_claims = list(claims)
+    summary = {
+        "claim_count": len(summary_claims),
+        "proposal_count": sum(int(claim["proposal_count"]) for claim in summary_claims),
+        "awaiting_review_count": sum(
+            claim["status"] == "awaiting_review" for claim in summary_claims
+        ),
+        "conflict_count": sum(claim["status"] == "conflict" for claim in summary_claims),
+        "verified_count": sum(claim["status"] == "verified" for claim in summary_claims),
+        "rejected_count": sum(claim["status"] == "rejected" for claim in summary_claims),
+        "affected_product_count": len({str(claim["listing_id"]) for claim in summary_claims}),
+    }
+    if attribute_filter:
+        claims = [claim for claim in claims if claim["attribute"] == attribute_filter]
+    if status_filter != "all":
+        claims = [claim for claim in claims if claim["status"] == status_filter]
+    status_order = {"conflict": 0, "awaiting_review": 1, "verified": 2, "rejected": 3}
+    claims.sort(
+        key=lambda claim: (
+            status_order[str(claim["status"])],
+            -int(claim["listing"].get("observed_location_count") or 0),
+            str(claim["listing"].get("retailer_id") or ""),
+            str(claim["attribute"]),
+            str(claim["listing_id"]),
+        )
+    )
+    return {
+        "schema_version": "1.0.0-product-attribute-claim-index",
+        "authoritative": False,
+        "human_verification_required": True,
+        "raw_evidence_mutated": False,
+        "queue": dict(queue),
+        "batch_scope": batch_scope,
+        "selected_root_batch_id": proposal_view.get("selected_root_batch_id"),
+        "batch_lineages": proposal_view.get("batch_lineages") or [],
+        "filters": {"status": status_filter, "attribute": attribute_filter},
+        "summary": summary,
+        "attributes": [
+            {"attribute": name, "claim_count": count}
+            for name, count in sorted(attribute_counts.items())
+        ],
+        "selected_claim_count": len(claims),
+        "offset": offset,
+        "limit": limit,
+        "claims": claims[offset : offset + limit],
+    }
+
+
 def _certification_evidence_refs(
     document: Mapping[str, Any], submitted_refs: Sequence[str]
 ) -> list[str]:
@@ -1664,6 +1919,26 @@ class AttributeEvidenceDecisionRequest(BaseModel):
     decision: Literal["verified", "rejected"]
     rationale: str = Field(min_length=1, max_length=2_000)
     supersedes_decision_id: str | None = None
+
+
+class AttributeEvidenceClaimDecisionRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reviewer_id: str = Field(min_length=1, max_length=200)
+    claim_checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
+    decision: Literal["verified", "rejected"]
+    rationale: str = Field(min_length=1, max_length=2_000)
+    selected_proposal_checksum: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    batch_scope: AttributeEvidenceBatchScope = "all_lineages"
+    root_batch_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_claim_scope(self) -> AttributeEvidenceClaimDecisionRequest:
+        if self.batch_scope == "latest_lineage" and self.root_batch_id is None:
+            return self
+        if self.batch_scope == "all_lineages" and self.root_batch_id is not None:
+            raise ValueError("root_batch_id requires latest_lineage scope")
+        return self
 
 
 class AdjudicationRequest(BaseModel):
@@ -5051,7 +5326,16 @@ class PostgresMatchingV2ReviewRepository:
                             "case_id": case_id,
                             "ai_task_id": proposal["ai_task_id"],
                             "proposal_checksum": proposal["proposal_checksum"],
-                            "proposal_document": _canonical(proposal),
+                            "proposal_document": _canonical(
+                                {
+                                    **proposal,
+                                    **(
+                                        {"claim_decision": decision["claim_decision"]}
+                                        if isinstance(decision.get("claim_decision"), Mapping)
+                                        else {}
+                                    ),
+                                }
+                            ),
                             "decision": decision["decision"],
                             "reviewer_id": decision["reviewer_id"],
                             "rationale": decision["rationale"],
@@ -5986,6 +6270,145 @@ class MatchingV2ReviewService:
             limit=limit,
         )
 
+    async def attribute_evidence_claims(
+        self,
+        external_queue_id: str,
+        *,
+        competitor_retailer_id: str | None,
+        batch_scope: AttributeEvidenceBatchScope,
+        root_batch_id: str | None,
+        status_filter: AttributeEvidenceClaimStatus,
+        attribute_filter: str | None,
+        offset: int,
+        limit: int,
+    ) -> dict[str, Any]:
+        queue_view = await self.queue_view(
+            external_queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+            benchmark_product_id=None,
+            competitor_product_id=None,
+            stratum=None,
+            review_status=None,
+            offset=0,
+            limit=100_000,
+        )
+        return _attribute_evidence_claim_index(
+            queue_view,
+            batch_scope=batch_scope,
+            root_batch_id=root_batch_id,
+            status_filter=status_filter,
+            attribute_filter=attribute_filter,
+            offset=offset,
+            limit=limit,
+        )
+
+    async def decide_attribute_evidence_claim(
+        self,
+        external_queue_id: str,
+        request: AttributeEvidenceClaimDecisionRequest,
+    ) -> dict[str, Any]:
+        """Persist one checksum-bound decision for a complete product-attribute claim."""
+
+        await self._assert_queue_not_quarantined(external_queue_id)
+        view = await self.attribute_evidence_claims(
+            external_queue_id,
+            competitor_retailer_id=None,
+            batch_scope=request.batch_scope,
+            root_batch_id=request.root_batch_id,
+            status_filter="all",
+            attribute_filter=None,
+            offset=0,
+            limit=100_000,
+        )
+        claim = next(
+            (
+                row
+                for row in view.get("claims") or []
+                if isinstance(row, Mapping) and row.get("claim_checksum") == request.claim_checksum
+            ),
+            None,
+        )
+        if claim is None:
+            raise ValueError(
+                "the product-attribute claim is stale or outside the current AI evidence scope"
+            )
+        variants = claim.get("variants")
+        variants = variants if isinstance(variants, list) else []
+        selected_variant: Mapping[str, Any] | None = None
+        if request.selected_proposal_checksum:
+            selected_variant = next(
+                (
+                    variant
+                    for variant in variants
+                    if isinstance(variant, Mapping)
+                    and variant.get("representative_proposal_checksum")
+                    == request.selected_proposal_checksum
+                ),
+                None,
+            )
+            if selected_variant is None:
+                raise ValueError("the selected value is not part of this checksum-bound claim")
+        elif len(variants) == 1:
+            selected_variant = variants[0] if isinstance(variants[0], Mapping) else None
+        elif request.decision == "verified":
+            raise ValueError("select one evidence value before verifying a conflicting claim")
+        elif variants:
+            selected_variant = variants[0] if isinstance(variants[0], Mapping) else None
+        if selected_variant is None:
+            raise ValueError("the claim has no eligible source-bound evidence variant")
+
+        representative_case_id = str(selected_variant.get("representative_case_id") or "")
+        representative_checksum = str(
+            selected_variant.get("representative_proposal_checksum") or ""
+        )
+        if not representative_case_id or len(representative_checksum) != 64:
+            raise ValueError("the claim lacks a valid representative proposal")
+        claim_context = {
+            "schema_version": "1.0.0-product-attribute-claim-decision",
+            "claim_checksum": request.claim_checksum,
+            "listing_id": str(claim.get("listing_id") or ""),
+            "attribute": str(claim.get("attribute") or ""),
+            "decision_scope": "complete_product_attribute_claim",
+            "selected_value": selected_variant.get("value"),
+            "selected_value_checksum": selected_variant.get("value_checksum"),
+            "proposal_checksums": list(claim.get("proposal_checksums") or []),
+            "variant_count": len(variants),
+            "affected_case_count": int(claim.get("affected_case_count") or 0),
+        }
+        payload = {
+            "reviewer_id": request.reviewer_id,
+            "proposal_checksum": representative_checksum,
+            "decision": request.decision,
+            "rationale": request.rationale,
+            "supersedes_decision_id": None,
+            "claim_decision": claim_context,
+        }
+        decision_checksum = _checksum(
+            {
+                "schema_version": "1.0.0-product-attribute-claim-decision",
+                "queue_id": external_queue_id,
+                "case_id": representative_case_id,
+                **payload,
+            }
+        )
+        result = await self._repository.decide_attribute_evidence(
+            external_queue_id,
+            representative_case_id,
+            payload,
+            decision_checksum=decision_checksum,
+        )
+        return {
+            **result,
+            "claim_checksum": request.claim_checksum,
+            "claim_status": request.decision,
+            "listing_id": claim_context["listing_id"],
+            "attribute": claim_context["attribute"],
+            "selected_value": claim_context["selected_value"],
+            "affected_case_count": claim_context["affected_case_count"],
+            "raw_evidence_mutated": False,
+            "automatically_certified_matches": 0,
+        }
+
     async def _assert_queue_not_quarantined(self, external_queue_id: str) -> None:
         if not any(
             str(entry.get("queue_id") or "") == external_queue_id
@@ -6549,6 +6972,57 @@ async def list_matching_v2_attribute_evidence_proposals(
             limit=limit,
         )
     except KeyError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/review-queues/{queue_id}/attribute-evidence-claims")
+async def list_matching_v2_attribute_evidence_claims(
+    queue_id: str,
+    request: Request,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+    competitor_retailer_id: str | None = Query(default=None),
+    batch_scope: Annotated[AttributeEvidenceBatchScope, Query()] = "all_lineages",
+    root_batch_id: str | None = Query(default=None),
+    claim_status: Annotated[AttributeEvidenceClaimStatus, Query()] = "awaiting_review",
+    attribute: str | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    try:
+        return await service.attribute_evidence_claims(
+            queue_id,
+            competitor_retailer_id=competitor_retailer_id,
+            batch_scope=batch_scope,
+            root_batch_id=root_batch_id,
+            status_filter=claim_status,
+            attribute_filter=attribute,
+            offset=offset,
+            limit=limit,
+        )
+    except (KeyError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/review-queues/{queue_id}/attribute-evidence-claims/{claim_checksum}/decisions",
+    status_code=status.HTTP_201_CREATED,
+)
+async def decide_matching_v2_attribute_evidence_claim(
+    queue_id: str,
+    claim_checksum: str,
+    request: Request,
+    body: AttributeEvidenceClaimDecisionRequest,
+    service: MatchingV2ReviewServiceDependency,
+    x_rci_admin_token: AdminToken = None,
+) -> dict[str, Any]:
+    _require_review_access(request, x_rci_admin_token)
+    if body.claim_checksum != claim_checksum:
+        raise HTTPException(status_code=422, detail="claim checksum path and body differ")
+    try:
+        return await service.decide_attribute_evidence_claim(queue_id, body)
+    except (KeyError, ValueError) as exc:
         raise _http_error(exc) from exc
 
 

@@ -327,7 +327,7 @@ test("prepares and confirms every eligible case in the retailer-scoped queue", a
   ).toBeVisible();
 });
 
-test("reviews eligible image evidence by retry lineage before match certification", async ({
+test("reviews consolidated product evidence claims before match certification", async ({
   page,
 }) => {
   let evidenceDecision: Record<string, unknown> | null = null;
@@ -342,15 +342,17 @@ test("reviews eligible image evidence by retry lineage before match certificatio
     const url = new URL(request.url());
     if (
       request.method() === "POST" &&
-      url.pathname.endsWith("/attribute-evidence-decisions")
+      url.pathname.includes("/attribute-evidence-claims/") &&
+      url.pathname.endsWith("/decisions")
     ) {
       evidenceDecision = request.postDataJSON() as Record<string, unknown>;
       await route.fulfill({
         status: 201,
         contentType: "application/json",
         body: JSON.stringify({
-          decision: "verified",
-          checksum: "a".repeat(64),
+          claim_status: "verified",
+          affected_case_count: 12,
+          selected_value: 10,
         }),
       });
       return;
@@ -362,13 +364,14 @@ test("reviews eligible image evidence by retry lineage before match certificatio
       });
       return;
     }
-    if (url.pathname.endsWith("/attribute-evidence-proposals")) {
+    if (url.pathname.endsWith("/attribute-evidence-claims")) {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           authoritative: false,
           human_verification_required: true,
-          selected_root_batch_id: "pilot-root-batch",
+          raw_evidence_mutated: false,
+          selected_root_batch_id: null,
           batch_lineages: [
             {
               root_batch_id: "pilot-root-batch",
@@ -385,45 +388,27 @@ test("reviews eligible image evidence by retry lineage before match certificatio
             },
           ],
           summary: {
+            claim_count: 65,
             proposal_count: 67,
-            distinct_claim_count: 65,
-            eligible_proposal_count: 29,
-            ineligible_proposal_count: 38,
-            undecided_proposal_count: 67,
-            verified_proposal_count: 0,
-            rejected_proposal_count: 0,
-            relationship_counts: {
-              fills_unknown: 29,
-              corroborates_existing: 38,
-              refines_existing: 0,
-              conflicts_with_existing: 0,
-              invalid: 0,
-            },
+            awaiting_review_count: 64,
+            conflict_count: 1,
+            verified_count: 0,
+            rejected_count: 0,
+            affected_product_count: 42,
           },
-          selected_proposal_count: 29,
+          attributes: [{ attribute: "strength", claim_count: 18 }],
+          selected_claim_count: 65,
           offset: 0,
           limit: 50,
-          proposals: [
+          claims: [
             {
-              proposal_checksum: "b".repeat(64),
-              case_id: "case-evidence-pilot",
-              case_review_status: "pending",
-              competitor_retailer_id: "target_us",
-              listing_role: "competitor",
+              claim_checksum: "c".repeat(64),
               listing_id: "target:vitamin-one",
               attribute: "strength",
-              raw_value: "10 mg",
-              normalized_value: 10,
-              current_value: null,
-              current_source: "unresolved",
-              evidence_relationship: "fills_unknown",
-              decision_effect: "fill_missing_value",
-              confidence: 0.99,
-              visible_text: "Vitamin D3 10 mg",
-              source_image_url: "https://images.example/target-label.jpg",
-              eligible: true,
-              ineligibility_reasons: [],
-              decision_status: "undecided",
+              proposal_checksums: ["b".repeat(64), "d".repeat(64)],
+              status: "awaiting_review",
+              status_reason:
+                "A source-attributable product claim awaits administrator review.",
               decision: null,
               listing: {
                 listing_id: "target:vitamin-one",
@@ -435,21 +420,36 @@ test("reviews eligible image evidence by retry lineage before match certificatio
                 product_url: "https://target.example/vitamin-one",
                 observed_location_count: 3,
               },
-              counterpart: {
-                listing_id: "walmart:vitamin-one",
-                retailer_id: "walmart_us",
-                retailer_product_id: "walmart-vitamin-one",
-                title: "Spring Valley Vitamin D3",
-                brand: "Spring Valley",
-                image_url: null,
-              },
-              ai_draft: {
-                id: "pilot-task",
-                batch_id: "pilot-retry-batch",
-                root_batch_id: "pilot-root-batch",
-                model_id: "gpt-5.6-luna",
-                completed_at: "2026-08-25T16:30:00Z",
-              },
+              current_evidence: [{ value: null, source: "unresolved" }],
+              proposal_count: 2,
+              affected_case_count: 12,
+              counterpart_product_count: 8,
+              counterpart_retailers: ["walmart_us"],
+              variants: [
+                {
+                  value: 10,
+                  value_checksum: "e".repeat(64),
+                  proposal_count: 2,
+                  case_count: 12,
+                  minimum_confidence: 0.97,
+                  maximum_confidence: 0.99,
+                  evidence_relationships: ["fills_unknown"],
+                  representative_case_id: "case-evidence-pilot",
+                  representative_proposal_checksum: "b".repeat(64),
+                  citations: [
+                    {
+                      source_image_url:
+                        "https://images.example/target-label.jpg",
+                      visible_text: "Vitamin D3 10 mg",
+                      confidence: 0.99,
+                      case_id: "case-evidence-pilot",
+                      proposal_checksum: "b".repeat(64),
+                      counterpart_retailer_id: "target_us",
+                    },
+                  ],
+                },
+              ],
+              raw_evidence_mutated: false,
             },
           ],
         }),
@@ -483,53 +483,58 @@ test("reviews eligible image evidence by retry lineage before match certificatio
 
   await page.goto("/admin/matching-v2");
   await page
-    .getByRole("button", { name: "Attribute evidence proposals", exact: true })
+    .getByRole("button", { name: "Product evidence claims", exact: true })
     .click();
   const evidenceWorkspace = page.getByRole("region", {
-    name: "Attribute Evidence Proposals",
+    name: "Product Evidence Claims",
   });
   await expect(
     evidenceWorkspace
       .getByRole("article")
-      .filter({ hasText: /^All image proposals/ })
-      .getByText("67", { exact: true }),
+      .filter({ hasText: /^Product attributes/ })
+      .getByText("65", { exact: true }),
   ).toBeVisible();
   await expect(
     evidenceWorkspace
       .getByRole("article")
-      .filter({ hasText: /^Actionable/ })
-      .getByText("29", { exact: true }),
+      .filter({ hasText: /^Awaiting review/ })
+      .getByText("64", { exact: true }),
   ).toBeVisible();
   await expect(
     evidenceWorkspace
       .getByRole("article")
-      .filter({ hasText: /^Advisory \/ no action/ })
-      .getByText("38", { exact: true }),
+      .filter({ hasText: /^Conflicting claims/ })
+      .getByText("1", { exact: true }),
   ).toBeVisible();
   await expect(evidenceWorkspace).toContainText("25 cases · 29 eligible");
   await expect(evidenceWorkspace).toContainText("Target Vitamin D3");
   await expect(evidenceWorkspace).toContainText("Vitamin D3 10 mg");
+  await expect(evidenceWorkspace).toContainText("12 affected pairs");
 
   await page
     .getByRole("textbox", { name: "Current reviewer identity" })
     .fill("owner@cpghero.com");
   await evidenceWorkspace
-    .getByRole("textbox", { name: "Verification note" })
-    .fill("The exact cited label visibly states Vitamin D3 10 mg.");
+    .getByRole("textbox", {
+      name: "Product-level evidence decision note",
+    })
+    .fill("The complete cited label evidence states Vitamin D3 10 mg.");
   await evidenceWorkspace
-    .getByRole("button", { name: "Verify & apply" })
+    .getByRole("button", { name: "Verify selected value" })
     .click();
   await expect(
     page.getByText(
-      "The image evidence was verified and applied to the derived certification view. Raw PDP and queue evidence remain unchanged.",
+      "Product evidence verified once and made available to 12 affected match cases. Match certification and reporting remain unchanged.",
     ),
   ).toBeVisible();
   expect(evidenceDecision).toEqual({
     reviewer_id: "owner@cpghero.com",
-    proposal_checksum: "b".repeat(64),
+    claim_checksum: "c".repeat(64),
     decision: "verified",
-    rationale: "The exact cited label visibly states Vitamin D3 10 mg.",
-    supersedes_decision_id: null,
+    rationale: "The complete cited label evidence states Vitamin D3 10 mg.",
+    selected_proposal_checksum: "b".repeat(64),
+    batch_scope: "all_lineages",
+    root_batch_id: null,
   });
 });
 

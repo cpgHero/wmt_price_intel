@@ -102,6 +102,23 @@ first-party seller policy, and fails closed when Search-derived observed-locatio
 missing. `POST .../ai-drafts` accepts the confirmed unique IDs (1–1,500) and creates one durable,
 idempotent, non-authoritative batch; it never certifies a relationship.
 
+`GET /api/v1/matching-v2/review-queues/{queue_id}/attribute-evidence-claims` is the product-level
+administrator work queue for AI image evidence. It collapses eligible pair-level proposals into one
+claim per retailer listing and Product Pack attribute, while retaining every distinct cited image,
+visible label excerpt, proposed value, confidence, affected match-case count, and counterpart
+retailer as context. It accepts `batch_scope=latest_lineage|all_lineages`, optional
+`root_batch_id`, `attribute`, `claim_status=all|awaiting_review|conflict|verified|rejected`,
+`offset`, and `limit`. Repeated pair proposals are not counted as independent evidence. Multiple
+proposed normalized values fail closed as a conflict.
+
+`POST /api/v1/matching-v2/review-queues/{queue_id}/attribute-evidence-claims/{claim_checksum}/decisions`
+records one append-only administrator decision for the product-attribute claim. Verification binds
+the selected source proposal, complete claim membership, queue and Product Pack versions, cited
+image, visible evidence, selected normalized value, and current claim checksum. Stale checksums and
+unselected conflicts are rejected. Rejection applies to the complete claim, not just one repeated
+pair observation. This route updates derived governed evidence only: it does not mutate raw Search,
+PDP, or AI evidence; certify a match; run analysis; or publish reporting.
+
 ## Automation
 
 - `GET /collection-schedules`

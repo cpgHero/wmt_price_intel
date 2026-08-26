@@ -4742,6 +4742,94 @@ tbody tr:last-child td {
   background: var(--green-soft);
   border-left-color: var(--success);
 }
+.cert-attribute-relationship.conflict {
+  background: var(--danger-soft);
+  border-left-color: var(--red);
+}
+.cert-attribute-relationship.verified {
+  background: var(--green-soft);
+  border-left-color: var(--success);
+}
+.cert-claim-variants {
+  display: grid;
+  gap: 0.6rem;
+}
+.cert-claim-variant {
+  background: var(--card);
+  border: 1px solid var(--soft-line);
+  border-radius: 11px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.7rem;
+}
+.cert-claim-variant.selected {
+  border-color: color-mix(in srgb, var(--blue) 70%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.cert-claim-variant-title {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(90px, 0.25fr) minmax(0, 1fr);
+}
+.cert-claim-variant-title input {
+  accent-color: var(--blue);
+}
+.cert-claim-variant-title strong {
+  font-size: 0.78rem;
+}
+.cert-claim-variant-title small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.4;
+}
+.cert-claim-citations {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.cert-claim-citations > a {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 9px;
+  color: var(--ink);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 58px minmax(0, 1fr);
+  min-width: 0;
+  padding: 0.45rem;
+  text-decoration: none;
+}
+.cert-claim-citations > a > span {
+  align-items: center;
+  background: white;
+  border-radius: 7px;
+  display: flex;
+  height: 58px;
+  justify-content: center;
+  overflow: hidden;
+  width: 58px;
+}
+.cert-claim-citations img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+.cert-claim-citations > a > small {
+  display: grid;
+  font-size: 0.56rem;
+  gap: 0.25rem;
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cert-claim-citations em {
+  color: var(--muted);
+  font-size: 0.52rem;
+  font-style: normal;
+}
 .cert-attribute-counterpart,
 .cert-attribute-ineligible,
 .cert-attribute-decision-form p {
@@ -6128,7 +6216,8 @@ tbody tr:last-child td {
   color: var(--success);
 }
 .cert-evidence-decision.rejected,
-.cert-evidence-decision.ineligible {
+.cert-evidence-decision.ineligible,
+.cert-evidence-decision.conflict {
   background: var(--red-soft);
   color: var(--red);
 }

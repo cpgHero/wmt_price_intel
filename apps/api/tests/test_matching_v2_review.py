@@ -19,6 +19,7 @@ from rci_api.matching_v2_review import (
     AIReviewBatchRequest,
     AIReviewDraftRequest,
     AIReviewRetryRequest,
+    AttributeEvidenceClaimDecisionRequest,
     AttributeEvidenceDecisionRequest,
     GoldSetReplayRequest,
     ImportReviewQueueRequest,
@@ -29,6 +30,7 @@ from rci_api.matching_v2_review import (
     _apply_active_certification_policy,
     _apply_attribute_reconciliation,
     _apply_observed_location_sidecar,
+    _attribute_evidence_claim_index,
     _attribute_evidence_proposal_index,
     _bulk_ai_certification_eligibility,
     _bulk_preview_document,
@@ -248,6 +250,112 @@ def test_attribute_evidence_index_groups_retries_under_the_root_batch() -> None:
     assert [row["case_id"] for row in view["proposals"]] == ["a-case"]
     assert view["batch_lineages"][0]["case_count"] == 2
     assert view["batch_lineages"][0]["batch_ids"] == ["retry-batch", "root-batch"]
+
+
+def test_attribute_evidence_claim_index_collapses_pair_duplicates_and_flags_conflicts() -> None:
+    def evidence_case(case_id: str, benchmark_id: str, value: int, image: str) -> dict[str, Any]:
+        proposal_checksum = hashlib.sha256(case_id.encode()).hexdigest()
+        return {
+            "case_id": case_id,
+            "review_status": "pending",
+            "competitor_retailer_id": "target_us",
+            "benchmark_listing": {
+                "listing_id": f"walmart:{benchmark_id}",
+                "retailer_id": "walmart_us",
+                "retailer_product_id": benchmark_id,
+                "title": f"Spring Valley {benchmark_id}",
+            },
+            "competitor_listing": {
+                "listing_id": "target:shared-product",
+                "retailer_id": "target_us",
+                "retailer_product_id": "shared-product",
+                "title": "Target shared product",
+                "brand": "up & up",
+                "observed_location_count": 42,
+            },
+            "ai_draft": {
+                "id": f"task-{case_id}",
+                "batch_id": "batch-one",
+                "root_batch_id": "batch-one",
+                "status": "succeeded",
+                "model_id": "gpt-5.6-luna",
+                "completed_at": "2026-08-26T01:00:00Z",
+            },
+            "attribute_evidence_reconciliation": {
+                "proposals": [
+                    {
+                        "proposal_checksum": proposal_checksum,
+                        "listing_role": "competitor",
+                        "listing_id": "target:shared-product",
+                        "attribute": "strength",
+                        "normalized_value": value,
+                        "current_value": None,
+                        "current_source": "unresolved",
+                        "evidence_relationship": "fills_unknown",
+                        "confidence": 0.97,
+                        "visible_text": f"Vitamin D {value} mcg",
+                        "source_image_url": image,
+                        "eligible": True,
+                        "ineligibility_reasons": [],
+                        "decision": None,
+                    }
+                ]
+            },
+        }
+
+    queue_view = {
+        "queue": {"queue_id": "vitamins", "version": "ten"},
+        "cases": [
+            evidence_case("case-one", "one", 25, "https://images.example/front.jpg"),
+            evidence_case("case-two", "two", 25, "https://images.example/back.jpg"),
+            evidence_case("case-three", "three", 50, "https://images.example/side.jpg"),
+        ],
+    }
+    view = _attribute_evidence_claim_index(
+        queue_view,
+        batch_scope="all_lineages",
+        root_batch_id=None,
+        status_filter="all",
+        attribute_filter=None,
+        offset=0,
+        limit=50,
+    )
+
+    assert view["summary"] == {
+        "claim_count": 1,
+        "proposal_count": 3,
+        "awaiting_review_count": 0,
+        "conflict_count": 1,
+        "verified_count": 0,
+        "rejected_count": 0,
+        "affected_product_count": 1,
+    }
+    claim = view["claims"][0]
+    assert claim["status"] == "conflict"
+    assert claim["affected_case_count"] == 3
+    assert claim["counterpart_product_count"] == 3
+    assert len(claim["variants"]) == 2
+    assert claim["variants"][0]["value"] == 25
+    assert claim["variants"][0]["case_count"] == 2
+    assert len(claim["variants"][0]["citations"]) == 2
+
+    queue_view["cases"][0]["attribute_evidence_reconciliation"]["proposals"][0]["decision"] = {
+        "id": "decision-one",
+        "decision": "verified",
+        "reviewer_id": "owner@cpghero.com",
+        "rationale": "The two cited package panels clearly state 25 mcg.",
+    }
+    verified = _attribute_evidence_claim_index(
+        queue_view,
+        batch_scope="all_lineages",
+        root_batch_id=None,
+        status_filter="verified",
+        attribute_filter="strength",
+        offset=0,
+        limit=50,
+    )
+    assert verified["selected_claim_count"] == 1
+    assert verified["claims"][0]["status"] == "verified"
 
 
 def test_ai_review_requires_both_search_observed_footprints() -> None:
@@ -1734,6 +1842,59 @@ async def test_attribute_evidence_decision_service_is_checksum_bound() -> None:
     assert result["decision"] == "verified"
     assert len(result["checksum"]) == 64
     assert repository.attribute_decisions[0]["proposal_checksum"] == "a" * 64
+
+
+async def test_product_attribute_claim_decision_is_stale_safe_and_product_scoped(
+    monkeypatch: Any,
+) -> None:
+    repository = ReviewRepository()
+    service = MatchingV2ReviewService(repository, REPOSITORY_ROOT)
+    claim_checksum = "c" * 64
+    proposal_checksum = "a" * 64
+
+    async def claims(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "claims": [
+                {
+                    "claim_checksum": claim_checksum,
+                    "listing_id": "target:shared-product",
+                    "attribute": "strength",
+                    "proposal_checksums": [proposal_checksum, "b" * 64],
+                    "affected_case_count": 12,
+                    "variants": [
+                        {
+                            "value": 25,
+                            "value_checksum": "d" * 64,
+                            "representative_case_id": "case-one",
+                            "representative_proposal_checksum": proposal_checksum,
+                        }
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(service, "attribute_evidence_claims", claims)
+    result = await service.decide_attribute_evidence_claim(
+        "vitamin-queue",
+        AttributeEvidenceClaimDecisionRequest(
+            reviewer_id="owner@cpghero.com",
+            claim_checksum=claim_checksum,
+            decision="verified",
+            rationale="The cited label panels consistently state 25 mcg.",
+            selected_proposal_checksum=proposal_checksum,
+        ),
+    )
+
+    assert result["claim_checksum"] == claim_checksum
+    assert result["affected_case_count"] == 12
+    assert result["automatically_certified_matches"] == 0
+    persisted = repository.attribute_decisions[0]
+    assert persisted["case_id"] == "case-one"
+    assert persisted["claim_decision"]["decision_scope"] == ("complete_product_attribute_claim")
+    assert persisted["claim_decision"]["proposal_checksums"] == [
+        proposal_checksum,
+        "b" * 64,
+    ]
 
 
 async def test_review_service_preserves_large_integers_from_raw_queue_json() -> None:

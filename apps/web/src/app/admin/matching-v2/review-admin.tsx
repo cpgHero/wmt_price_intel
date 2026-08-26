@@ -334,10 +334,6 @@ interface QueueView {
   quarantine?: QueueQuarantine | null;
 }
 
-type AttributeEvidenceEligibility = "all" | "eligible" | "ineligible";
-type AttributeEvidenceDecisionStatus =
-  "all" | "undecided" | "verified" | "rejected";
-
 interface AttributeEvidenceProduct {
   listing_id: string;
   retailer_id: string;
@@ -384,6 +380,7 @@ interface AttributeEvidenceProposal {
     reviewer_id: string;
     rationale: string;
     created_at: string;
+    proposal_checksum?: string;
   };
   listing: AttributeEvidenceProduct;
   counterpart: AttributeEvidenceProduct;
@@ -410,28 +407,74 @@ interface AttributeEvidenceLineage {
   latest_activity_at: string;
 }
 
-interface AttributeEvidenceProposalView {
+type AttributeEvidenceClaimStatus =
+  "all" | "awaiting_review" | "conflict" | "verified" | "rejected";
+
+interface AttributeEvidenceClaimVariant {
+  value: unknown;
+  value_checksum: string;
+  proposal_count: number;
+  case_count: number;
+  minimum_confidence: number;
+  maximum_confidence: number;
+  evidence_relationships: AttributeEvidenceProposal["evidence_relationship"][];
+  representative_case_id: string;
+  representative_proposal_checksum: string;
+  citations: Array<{
+    source_image_url: string | null;
+    visible_text: string | null;
+    confidence: number;
+    case_id: string;
+    proposal_checksum: string;
+    counterpart_retailer_id: string;
+  }>;
+}
+
+interface AttributeEvidenceClaim {
+  claim_checksum: string;
+  listing_id: string;
+  attribute: string;
+  proposal_checksums: string[];
+  status: Exclude<AttributeEvidenceClaimStatus, "all">;
+  status_reason: string;
+  listing: AttributeEvidenceProduct;
+  current_evidence: Array<{ value: unknown; source: string | null }>;
+  proposal_count: number;
+  affected_case_count: number;
+  counterpart_product_count: number;
+  counterpart_retailers: string[];
+  variants: AttributeEvidenceClaimVariant[];
+  decision: null | {
+    id: string;
+    decision: "verified" | "rejected";
+    reviewer_id: string;
+    rationale: string;
+    created_at: string;
+    proposal_checksum?: string;
+  };
+  raw_evidence_mutated: false;
+}
+
+interface AttributeEvidenceClaimView {
   authoritative: false;
   human_verification_required: true;
+  raw_evidence_mutated: false;
   selected_root_batch_id: string | null;
   batch_lineages: AttributeEvidenceLineage[];
   summary: {
+    claim_count: number;
     proposal_count: number;
-    distinct_claim_count: number;
-    eligible_proposal_count: number;
-    ineligible_proposal_count: number;
-    undecided_proposal_count: number;
-    verified_proposal_count: number;
-    rejected_proposal_count: number;
-    relationship_counts: Record<
-      AttributeEvidenceProposal["evidence_relationship"],
-      number
-    >;
+    awaiting_review_count: number;
+    conflict_count: number;
+    verified_count: number;
+    rejected_count: number;
+    affected_product_count: number;
   };
-  selected_proposal_count: number;
+  attributes: Array<{ attribute: string; claim_count: number }>;
+  selected_claim_count: number;
   offset: number;
   limit: number;
-  proposals: AttributeEvidenceProposal[];
+  claims: AttributeEvidenceClaim[];
 }
 
 interface GoldSetReplayResult {
@@ -702,12 +745,14 @@ export function MatchingV2ReviewAdmin({
     "certification" | "attribute-evidence"
   >("certification");
   const [attributeEvidenceView, setAttributeEvidenceView] =
-    useState<AttributeEvidenceProposalView | null>(null);
-  const [attributeBatchRoot, setAttributeBatchRoot] = useState("latest");
-  const [attributeEligibility, setAttributeEligibility] =
-    useState<AttributeEvidenceEligibility>("eligible");
-  const [attributeDecisionStatus, setAttributeDecisionStatus] =
-    useState<AttributeEvidenceDecisionStatus>("undecided");
+    useState<AttributeEvidenceClaimView | null>(null);
+  const [attributeBatchRoot, setAttributeBatchRoot] = useState("all");
+  const [attributeClaimStatus, setAttributeClaimStatus] =
+    useState<AttributeEvidenceClaimStatus>("all");
+  const [attributeFilter, setAttributeFilter] = useState("all");
+  const [selectedClaimVariants, setSelectedClaimVariants] = useState<
+    Record<string, string>
+  >({});
   const [attributeOffset, setAttributeOffset] = useState(0);
   const [attributeLoading, setAttributeLoading] = useState(false);
   const [reviewerId, setReviewerId] = useState("");
@@ -852,8 +897,7 @@ export function MatchingV2ReviewAdmin({
     if (!selectedQueueId) return;
     setAttributeLoading(true);
     const query = new URLSearchParams({
-      eligibility: attributeEligibility,
-      decision_status: attributeDecisionStatus,
+      claim_status: attributeClaimStatus,
       offset: String(attributeOffset),
       limit: String(PAGE_SIZE),
       batch_scope:
@@ -865,18 +909,31 @@ export function MatchingV2ReviewAdmin({
     if (competitorFilter !== "all") {
       query.set("competitor_retailer_id", competitorFilter);
     }
+    if (attributeFilter !== "all") {
+      query.set("attribute", attributeFilter);
+    }
     try {
-      const response = await jsonRequest<AttributeEvidenceProposalView>(
-        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}/attribute-evidence-proposals?${query}`,
+      const response = await jsonRequest<AttributeEvidenceClaimView>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId)}/attribute-evidence-claims?${query}`,
       );
       setAttributeEvidenceView(response);
+      setSelectedClaimVariants((current) => {
+        const next = { ...current };
+        for (const claim of response.claims) {
+          next[claim.claim_checksum] ??=
+            claim.decision?.proposal_checksum ??
+            claim.variants[0]?.representative_proposal_checksum ??
+            "";
+        }
+        return next;
+      });
     } finally {
       setAttributeLoading(false);
     }
   }, [
     attributeBatchRoot,
-    attributeDecisionStatus,
-    attributeEligibility,
+    attributeClaimStatus,
+    attributeFilter,
     attributeOffset,
     competitorFilter,
     selectedQueueId,
@@ -1245,6 +1302,69 @@ export function MatchingV2ReviewAdmin({
       if (workspaceView === "attribute-evidence") {
         await loadAttributeEvidence();
       }
+    } catch (cause) {
+      handleError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decideAttributeClaim(
+    claim: AttributeEvidenceClaim,
+    decision: "verified" | "rejected",
+  ) {
+    if (!reviewerId.trim()) {
+      setError(
+        "Enter your reviewer identity before reconciling product evidence.",
+      );
+      return;
+    }
+    const rationale = evidenceRationales[claim.claim_checksum]?.trim();
+    if (!rationale) {
+      setError(
+        "Record why the complete product-level evidence is valid or invalid before deciding.",
+      );
+      return;
+    }
+    const selectedProposalChecksum =
+      selectedClaimVariants[claim.claim_checksum] ??
+      claim.variants[0]?.representative_proposal_checksum;
+    if (decision === "verified" && !selectedProposalChecksum) {
+      setError("Select the supported attribute value to verify.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await jsonRequest<{
+        affected_case_count: number;
+        selected_value: unknown;
+      }>(
+        `/api/admin/matching-v2/review-queues/${encodeURIComponent(selectedQueueId ?? "")}/attribute-evidence-claims/${claim.claim_checksum}/decisions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reviewer_id: reviewerId.trim(),
+            claim_checksum: claim.claim_checksum,
+            decision,
+            rationale,
+            selected_proposal_checksum: selectedProposalChecksum ?? null,
+            batch_scope:
+              attributeBatchRoot === "all" ? "all_lineages" : "latest_lineage",
+            root_batch_id:
+              attributeBatchRoot === "all" || attributeBatchRoot === "latest"
+                ? null
+                : attributeBatchRoot,
+          }),
+        },
+      );
+      setNotice(
+        decision === "verified"
+          ? `Product evidence verified once and made available to ${result.affected_case_count.toLocaleString()} affected match cases. Match certification and reporting remain unchanged.`
+          : `The complete current product-attribute claim was rejected and retained in audit history. Match certification and reporting remain unchanged.`,
+      );
+      await Promise.all([loadQueue(), loadAttributeEvidence()]);
     } catch (cause) {
       handleError(cause);
     } finally {
@@ -1811,7 +1931,7 @@ export function MatchingV2ReviewAdmin({
               }
               onClick={() => setWorkspaceView("attribute-evidence")}
             >
-              Attribute evidence proposals
+              Product evidence claims
             </button>
           </nav>
 
@@ -1822,15 +1942,15 @@ export function MatchingV2ReviewAdmin({
             >
               <header className="cert-attribute-index-header">
                 <div>
-                  <small>Source-attributable label review</small>
+                  <small>Product-level source reconciliation</small>
                   <h3 id="cert-attribute-index-title">
-                    Attribute Evidence Proposals
+                    Product Evidence Claims
                   </h3>
                   <p>
-                    Review image-derived attribute claims independently from the
-                    match decision. Verification updates only the derived
-                    certification view; immutable Search, PDP, AI, and queue
-                    evidence remains unchanged.
+                    Review each product attribute once across every affected
+                    pair. Repeated AI observations are supporting context, not
+                    independent proof. Conflicting values remain fail-closed
+                    until you select the value proven by the cited images.
                   </p>
                 </div>
                 <button
@@ -1842,7 +1962,7 @@ export function MatchingV2ReviewAdmin({
                     void loadAttributeEvidence().catch(handleError)
                   }
                 >
-                  {attributeLoading ? "Refreshing…" : "Refresh evidence"}
+                  {attributeLoading ? "Refreshing…" : "Refresh claims"}
                 </button>
               </header>
 
@@ -1856,8 +1976,8 @@ export function MatchingV2ReviewAdmin({
                       setAttributeOffset(0);
                     }}
                   >
-                    <option value="latest">Latest retry lineage</option>
-                    <option value="all">All latest case drafts</option>
+                    <option value="all">All current AI review batches</option>
+                    <option value="latest">Latest retry lineage only</option>
                     {(attributeEvidenceView?.batch_lineages ?? []).map(
                       (lineage) => (
                         <option
@@ -1873,36 +1993,38 @@ export function MatchingV2ReviewAdmin({
                   </select>
                 </label>
                 <label>
-                  <span>Eligibility</span>
+                  <span>Claim status</span>
                   <select
-                    value={attributeEligibility}
+                    value={attributeClaimStatus}
                     onChange={(event) => {
-                      setAttributeEligibility(
-                        event.target.value as AttributeEvidenceEligibility,
+                      setAttributeClaimStatus(
+                        event.target.value as AttributeEvidenceClaimStatus,
                       );
                       setAttributeOffset(0);
                     }}
                   >
-                    <option value="eligible">Actionable proposals</option>
-                    <option value="ineligible">Advisory / no action</option>
-                    <option value="all">All proposals</option>
+                    <option value="awaiting_review">Awaiting review</option>
+                    <option value="conflict">Conflicting values</option>
+                    <option value="verified">Verified</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="all">All claims</option>
                   </select>
                 </label>
                 <label>
-                  <span>Human decision</span>
+                  <span>Product attribute</span>
                   <select
-                    value={attributeDecisionStatus}
+                    value={attributeFilter}
                     onChange={(event) => {
-                      setAttributeDecisionStatus(
-                        event.target.value as AttributeEvidenceDecisionStatus,
-                      );
+                      setAttributeFilter(event.target.value);
                       setAttributeOffset(0);
                     }}
                   >
-                    <option value="undecided">Awaiting review</option>
-                    <option value="verified">Verified</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="all">All decisions</option>
+                    <option value="all">All attributes</option>
+                    {(attributeEvidenceView?.attributes ?? []).map((entry) => (
+                      <option value={entry.attribute} key={entry.attribute}>
+                        {label(entry.attribute)} · {entry.claim_count}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -1911,46 +2033,47 @@ export function MatchingV2ReviewAdmin({
                 <>
                   <div className="cert-attribute-metrics">
                     <article>
-                      <span>All image proposals</span>
+                      <span>Product attributes</span>
                       <strong>
-                        {attributeEvidenceView.summary.proposal_count.toLocaleString()}
+                        {attributeEvidenceView.summary.claim_count.toLocaleString()}
                       </strong>
                       <small>
-                        {attributeEvidenceView.summary.distinct_claim_count.toLocaleString()}{" "}
-                        distinct product attributes
+                        {attributeEvidenceView.summary.affected_product_count.toLocaleString()}{" "}
+                        distinct products
                       </small>
                     </article>
                     <article className="eligible">
-                      <span>Actionable</span>
-                      <strong>
-                        {attributeEvidenceView.summary.eligible_proposal_count.toLocaleString()}
-                      </strong>
-                      <small>Missing, refined, or disputed evidence</small>
-                    </article>
-                    <article className="ineligible">
-                      <span>Advisory / no action</span>
-                      <strong>
-                        {attributeEvidenceView.summary.ineligible_proposal_count.toLocaleString()}
-                      </strong>
-                      <small>Corroborating, invalid, or authority-locked</small>
-                    </article>
-                    <article>
                       <span>Awaiting review</span>
                       <strong>
-                        {attributeEvidenceView.summary.undecided_proposal_count.toLocaleString()}
+                        {attributeEvidenceView.summary.awaiting_review_count.toLocaleString()}
                       </strong>
+                      <small>One consistent value proposed</small>
+                    </article>
+                    <article className="ineligible">
+                      <span>Conflicting claims</span>
+                      <strong>
+                        {attributeEvidenceView.summary.conflict_count.toLocaleString()}
+                      </strong>
+                      <small>Multiple values; fail-closed</small>
                     </article>
                     <article>
                       <span>Verified</span>
                       <strong>
-                        {attributeEvidenceView.summary.verified_proposal_count.toLocaleString()}
+                        {attributeEvidenceView.summary.verified_count.toLocaleString()}
                       </strong>
                     </article>
                     <article>
                       <span>Rejected</span>
                       <strong>
-                        {attributeEvidenceView.summary.rejected_proposal_count.toLocaleString()}
+                        {attributeEvidenceView.summary.rejected_count.toLocaleString()}
                       </strong>
+                    </article>
+                    <article>
+                      <span>Pair-level observations</span>
+                      <strong>
+                        {attributeEvidenceView.summary.proposal_count.toLocaleString()}
+                      </strong>
+                      <small>Collapsed; not counted as independent proof</small>
                     </article>
                   </div>
 
@@ -1964,133 +2087,203 @@ export function MatchingV2ReviewAdmin({
                     </span>
                     <span>
                       Showing{" "}
-                      {attributeEvidenceView.selected_proposal_count.toLocaleString()}{" "}
-                      matching proposals
+                      {attributeEvidenceView.selected_claim_count.toLocaleString()}{" "}
+                      product-level claims
                     </span>
-                    <span>No match or report changes occur here</span>
+                    <span>Decisions update derived evidence only</span>
                   </div>
 
                   {attributeLoading ? (
                     <div className="builder-loading" role="status">
-                      Loading governed evidence proposals…
+                      Consolidating product-level evidence claims…
                     </div>
-                  ) : attributeEvidenceView.proposals.length ? (
+                  ) : attributeEvidenceView.claims.length ? (
                     <div className="cert-attribute-list">
-                      {attributeEvidenceView.proposals.map((proposal) => (
+                      {attributeEvidenceView.claims.map((claim) => (
                         <article
                           className="cert-attribute-card"
-                          key={`${proposal.case_id}:${proposal.proposal_checksum}`}
+                          key={claim.claim_checksum}
                         >
                           <div className="cert-attribute-image">
-                            {proposal.source_image_url ? (
+                            {claim.listing.image_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
-                                src={proposal.source_image_url}
-                                alt={`Cited label evidence for ${proposal.listing.title ?? proposal.listing.retailer_product_id}`}
+                                src={claim.listing.image_url}
+                                alt={claim.listing.title ?? "Product image"}
                               />
                             ) : (
-                              <b>No cited image</b>
+                              <b>No product image</b>
                             )}
                           </div>
                           <div className="cert-attribute-content">
                             <header>
                               <div>
                                 <small>
-                                  {label(proposal.listing.retailer_id)} ·{" "}
-                                  {label(proposal.listing_role)} product
+                                  {label(claim.listing.retailer_id)} ·{" "}
+                                  {label(claim.attribute)}
                                 </small>
-                                <h4>{proposal.listing.title}</h4>
+                                <h4>{claim.listing.title}</h4>
                                 <span>
-                                  {proposal.listing.brand || "Brand unresolved"}{" "}
-                                  · ID {proposal.listing.retailer_product_id}
-                                  {proposal.listing.observed_location_count !==
+                                  {claim.listing.brand || "Brand unresolved"} ·
+                                  ID {claim.listing.retailer_product_id}
+                                  {claim.listing.observed_location_count !==
                                   undefined
-                                    ? ` · ${proposal.listing.observed_location_count.toLocaleString()} observed`
+                                    ? ` · ${claim.listing.observed_location_count.toLocaleString()} observed`
                                     : ""}
                                 </span>
                               </div>
                               <span
-                                className={`cert-evidence-decision ${proposal.decision_status === "undecided" ? (proposal.eligible ? "pending" : "ineligible") : proposal.decision_status}`}
+                                className={`cert-evidence-decision ${claim.status === "awaiting_review" ? "pending" : claim.status}`}
                               >
-                                {proposal.decision_status === "undecided"
-                                  ? proposal.eligible
-                                    ? "Awaiting verification"
-                                    : proposal.evidence_relationship ===
-                                        "corroborates_existing"
-                                      ? "No action needed"
-                                      : "Not actionable"
-                                  : label(proposal.decision_status)}
+                                {label(claim.status)}
                               </span>
                             </header>
                             <div className="cert-attribute-claim">
                               <div>
-                                <span>Current {label(proposal.attribute)}</span>
+                                <span>Current governed evidence</span>
                                 <strong>
-                                  {evidenceValue(proposal.current_value)}
+                                  {claim.current_evidence.map((evidence) => (
+                                    <small
+                                      key={`${evidenceValue(evidence.value)}:${evidence.source ?? "unknown"}`}
+                                    >
+                                      {evidenceValue(evidence.value)} ·{" "}
+                                      {evidence.source
+                                        ? label(evidence.source)
+                                        : "source unresolved"}
+                                    </small>
+                                  ))}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Affected match cases</span>
+                                <strong>
+                                  {claim.affected_case_count.toLocaleString()}
                                   <small>
-                                    {proposal.current_source
-                                      ? `Source: ${label(proposal.current_source)}`
-                                      : "Source unresolved"}
+                                    {claim.counterpart_product_count.toLocaleString()}{" "}
+                                    distinct counterpart products
                                   </small>
                                 </strong>
                               </div>
                               <div>
-                                <span>Label evidence proposes</span>
+                                <span>Retailer context</span>
                                 <strong>
-                                  {evidenceValue(proposal.normalized_value)}
+                                  {claim.counterpart_retailers
+                                    .map(label)
+                                    .join(", ") || "No retailer context"}
                                 </strong>
                               </div>
                               <div>
-                                <span>Visible label text</span>
+                                <span>Proposed values</span>
                                 <strong>
-                                  {proposal.visible_text || "Not supplied"}
-                                </strong>
-                              </div>
-                              <div>
-                                <span>Confidence</span>
-                                <strong>
-                                  {Math.round(proposal.confidence * 100)}%
+                                  {claim.variants.length}
+                                  <small>
+                                    {claim.proposal_count.toLocaleString()}{" "}
+                                    pair-level observations
+                                  </small>
                                 </strong>
                               </div>
                             </div>
                             <p
-                              className={`cert-attribute-relationship ${proposal.evidence_relationship}`}
+                              className={`cert-attribute-relationship ${claim.status}`}
                             >
-                              <b>
-                                {evidenceRelationshipLabel(
-                                  proposal.evidence_relationship,
-                                )}
-                              </b>
-                              {proposal.evidence_relationship ===
-                              "conflicts_with_existing"
-                                ? " The current value is preserved unless an administrator verifies this exact cited correction."
-                                : proposal.evidence_relationship ===
-                                    "refines_existing"
-                                  ? " Verification will replace the lower-authority value with the more complete label value."
-                                  : proposal.evidence_relationship ===
-                                      "corroborates_existing"
-                                    ? " The label agrees with governed evidence, so no replacement or review is required."
-                                    : " Verification affects only the derived certification view and preserves raw evidence."}
+                              <b>{label(claim.status)}</b>
+                              {claim.status_reason}
                             </p>
-                            <p className="cert-attribute-counterpart">
-                              Surfaced while comparing with{" "}
-                              <b>{label(proposal.counterpart.retailer_id)}</b>:{" "}
-                              {proposal.counterpart.title ||
-                                proposal.counterpart.retailer_product_id}
-                            </p>
-                            <div className="cert-attribute-links">
-                              {proposal.source_image_url ? (
-                                <a
-                                  href={proposal.source_image_url}
-                                  target="_blank"
-                                  rel="noreferrer"
+                            <div className="cert-claim-variants">
+                              {claim.variants.map((variant) => (
+                                <label
+                                  className={`cert-claim-variant ${selectedClaimVariants[claim.claim_checksum] === variant.representative_proposal_checksum ? "selected" : ""}`}
+                                  key={variant.value_checksum}
                                 >
-                                  Open exact cited image
-                                </a>
-                              ) : null}
-                              {proposal.listing.product_url ? (
+                                  <span className="cert-claim-variant-title">
+                                    <input
+                                      type="radio"
+                                      name={`claim-${claim.claim_checksum}`}
+                                      value={
+                                        variant.representative_proposal_checksum
+                                      }
+                                      checked={
+                                        selectedClaimVariants[
+                                          claim.claim_checksum
+                                        ] ===
+                                        variant.representative_proposal_checksum
+                                      }
+                                      disabled={
+                                        claim.status === "verified" ||
+                                        claim.status === "rejected"
+                                      }
+                                      onChange={() =>
+                                        setSelectedClaimVariants((current) => ({
+                                          ...current,
+                                          [claim.claim_checksum]:
+                                            variant.representative_proposal_checksum,
+                                        }))
+                                      }
+                                    />
+                                    <strong>
+                                      {evidenceValue(variant.value)}
+                                    </strong>
+                                    <small>
+                                      {variant.case_count.toLocaleString()}{" "}
+                                      affected pairs ·{" "}
+                                      {variant.citations.length.toLocaleString()}{" "}
+                                      distinct citations ·{" "}
+                                      {Math.round(
+                                        variant.minimum_confidence * 100,
+                                      )}
+                                      –
+                                      {Math.round(
+                                        variant.maximum_confidence * 100,
+                                      )}
+                                      % confidence
+                                    </small>
+                                  </span>
+                                  <span className="cert-claim-citations">
+                                    {variant.citations.map((citation) => (
+                                      <a
+                                        href={
+                                          citation.source_image_url ?? undefined
+                                        }
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        key={`${citation.proposal_checksum}:${citation.source_image_url ?? "none"}`}
+                                      >
+                                        <span>
+                                          {citation.source_image_url ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                              src={citation.source_image_url}
+                                              alt="Cited product label"
+                                            />
+                                          ) : (
+                                            <b>No image</b>
+                                          )}
+                                        </span>
+                                        <small>
+                                          “
+                                          {citation.visible_text ||
+                                            "No visible text"}
+                                          ”
+                                          <em>
+                                            {Math.round(
+                                              citation.confidence * 100,
+                                            )}
+                                            % ·{" "}
+                                            {label(
+                                              citation.counterpart_retailer_id,
+                                            )}
+                                          </em>
+                                        </small>
+                                      </a>
+                                    ))}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="cert-attribute-links">
+                              {claim.listing.product_url ? (
                                 <a
-                                  href={proposal.listing.product_url}
+                                  href={claim.listing.product_url}
                                   target="_blank"
                                   rel="noreferrer"
                                 >
@@ -2107,66 +2300,56 @@ export function MatchingV2ReviewAdmin({
                                   const parameters = new URLSearchParams(
                                     window.location.search,
                                   );
+                                  parameters.delete("benchmark_product");
+                                  parameters.delete("competitor_product");
                                   parameters.set(
-                                    "benchmark_product",
-                                    proposal.listing_role === "benchmark"
-                                      ? proposal.listing.retailer_product_id
-                                      : proposal.counterpart
-                                          .retailer_product_id,
-                                  );
-                                  parameters.set(
-                                    "competitor_product",
-                                    proposal.listing_role === "competitor"
-                                      ? proposal.listing.retailer_product_id
-                                      : proposal.counterpart
-                                          .retailer_product_id,
+                                    claim.listing.retailer_id === "walmart_us"
+                                      ? "benchmark_product"
+                                      : "competitor_product",
+                                    claim.listing.retailer_product_id,
                                   );
                                   window.location.search =
                                     parameters.toString();
                                 }}
                               >
-                                Open full match evidence
+                                Open affected match cases
                               </button>
                             </div>
-                            {!proposal.eligible ? (
-                              <p className="cert-attribute-ineligible">
-                                {proposal.evidence_relationship ===
-                                "corroborates_existing"
-                                  ? "No action required: "
-                                  : "Not actionable: "}
-                                {proposal.ineligibility_reasons
-                                  .map(label)
-                                  .join("; ")}
-                              </p>
+                            {claim.status === "verified" ||
+                            claim.status === "rejected" ? (
+                              <div className="cert-attribute-decision-form">
+                                <p>
+                                  <b>
+                                    {label(claim.status)} by{" "}
+                                    {claim.decision?.reviewer_id ||
+                                      "identified administrator"}
+                                  </b>
+                                  {claim.decision?.rationale ||
+                                    "The immutable product-level decision is retained in audit history."}
+                                </p>
+                              </div>
                             ) : (
                               <div className="cert-attribute-decision-form">
-                                {proposal.decision ? (
-                                  <p>
-                                    <b>
-                                      {label(proposal.decision.decision)} by{" "}
-                                      {proposal.decision.reviewer_id}
-                                    </b>
-                                    {proposal.decision.rationale}
-                                  </p>
-                                ) : null}
                                 <label>
-                                  <span>Verification note</span>
+                                  <span>
+                                    Product-level evidence decision note
+                                  </span>
                                   <textarea
                                     value={
                                       evidenceRationales[
-                                        proposal.proposal_checksum
+                                        claim.claim_checksum
                                       ] ??
-                                      proposal.decision?.rationale ??
+                                      claim.decision?.rationale ??
                                       ""
                                     }
                                     onChange={(event) =>
                                       setEvidenceRationales((current) => ({
                                         ...current,
-                                        [proposal.proposal_checksum]:
+                                        [claim.claim_checksum]:
                                           event.target.value,
                                       }))
                                     }
-                                    placeholder="State exactly what the cited label proves or why it is unreliable."
+                                    placeholder="Explain what the complete cited evidence proves, or why the product-level claim is unreliable."
                                   />
                                 </label>
                                 <div>
@@ -2175,30 +2358,26 @@ export function MatchingV2ReviewAdmin({
                                     type="button"
                                     disabled={busy}
                                     onClick={() =>
-                                      void decideAttributeEvidence(
-                                        proposal.case_id,
-                                        proposal,
+                                      void decideAttributeClaim(
+                                        claim,
                                         "rejected",
                                       )
                                     }
                                   >
-                                    Reject evidence
+                                    Reject complete claim
                                   </button>
                                   <button
                                     className="button"
                                     type="button"
                                     disabled={busy}
                                     onClick={() =>
-                                      void decideAttributeEvidence(
-                                        proposal.case_id,
-                                        proposal,
+                                      void decideAttributeClaim(
+                                        claim,
                                         "verified",
                                       )
                                     }
                                   >
-                                    {evidenceApplyLabel(
-                                      proposal.evidence_relationship,
-                                    )}
+                                    Verify selected value
                                   </button>
                                 </div>
                               </div>
@@ -2209,18 +2388,18 @@ export function MatchingV2ReviewAdmin({
                     </div>
                   ) : (
                     <div className="cert-empty">
-                      <h4>No proposals match these filters</h4>
+                      <h4>No product evidence claims match these filters</h4>
                       <p>
-                        Change the eligibility, decision, retailer, or batch
-                        lineage filter. No evidence has been deleted.
+                        Change the claim status, attribute, retailer, or batch
+                        scope. No evidence has been deleted.
                       </p>
                     </div>
                   )}
 
-                  {attributeEvidenceView.selected_proposal_count > PAGE_SIZE ? (
+                  {attributeEvidenceView.selected_claim_count > PAGE_SIZE ? (
                     <nav
                       className="cert-pagination"
-                      aria-label="Attribute evidence proposal pages"
+                      aria-label="Product evidence claim pages"
                     >
                       <button
                         className="button secondary"
@@ -2232,16 +2411,16 @@ export function MatchingV2ReviewAdmin({
                           )
                         }
                       >
-                        Previous proposals
+                        Previous claims
                       </button>
                       <span>
                         {attributeOffset + 1}–
                         {Math.min(
                           attributeOffset + PAGE_SIZE,
-                          attributeEvidenceView.selected_proposal_count,
+                          attributeEvidenceView.selected_claim_count,
                         )}{" "}
                         of{" "}
-                        {attributeEvidenceView.selected_proposal_count.toLocaleString()}
+                        {attributeEvidenceView.selected_claim_count.toLocaleString()}
                       </span>
                       <button
                         className="button secondary"
@@ -2249,20 +2428,20 @@ export function MatchingV2ReviewAdmin({
                         disabled={
                           attributeLoading ||
                           attributeOffset + PAGE_SIZE >=
-                            attributeEvidenceView.selected_proposal_count
+                            attributeEvidenceView.selected_claim_count
                         }
                         onClick={() =>
                           setAttributeOffset((current) => current + PAGE_SIZE)
                         }
                       >
-                        Next proposals
+                        Next claims
                       </button>
                     </nav>
                   ) : null}
                 </>
               ) : (
                 <div className="builder-loading" role="status">
-                  Loading governed evidence proposals…
+                  Loading product-level evidence claims…
                 </div>
               )}
             </section>
