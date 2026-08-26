@@ -10,6 +10,7 @@ import {
   cohortProductSummaries,
   comparisonBasisDescription,
   defaultComparisonBasisId,
+  defaultComparisonRadiusMiles,
   eligibleLeadershipProducts,
   compactMetricName,
   formatMetric,
@@ -211,6 +212,24 @@ describe("report presentation", () => {
       ]),
     ).toBe("compatible");
     expect(defaultComparisonBasisId(bases, [])).toBe("strict");
+  });
+
+  it("uses the Product Pack radius as the initial report radius", () => {
+    const bases: ComparisonBasis[] = [
+      {
+        profile_id: "compatible",
+        label: "Compatible",
+        geography: "radius",
+        radius_miles: 5,
+        comparison_metric: "price_per_item",
+        price_unit: "USD/item",
+        package_basis: "normalized_unit",
+        availability_policy: "search_presence",
+        population_basis: "relationship_resolved_products",
+      },
+    ];
+    expect(defaultComparisonRadiusMiles(bases, "compatible")).toBe(5);
+    expect(defaultComparisonRadiusMiles(bases, "missing")).toBe(3);
   });
 
   it("limits product-led views to products eligible in the selected basis", () => {

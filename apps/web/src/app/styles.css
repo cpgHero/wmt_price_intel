@@ -13021,6 +13021,123 @@ tbody tr:last-child td {
   font-weight: 650;
   text-decoration: none;
 }
+.retailer-scorecard-evidence > .coverage-trace-button {
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+.coverage-evidence-drawer {
+  max-width: min(1120px, 94vw);
+  width: min(1120px, 94vw);
+}
+.coverage-funnel-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 1rem 0;
+}
+.coverage-funnel-grid article {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+}
+.coverage-funnel-grid small,
+.coverage-disposition-controls span,
+.coverage-product-list dt {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+.coverage-funnel-grid strong {
+  font-size: 1.05rem;
+}
+.coverage-disposition-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(190px, 0.6fr) minmax(260px, 1fr) auto auto;
+  margin-bottom: 0.8rem;
+}
+.coverage-disposition-controls label {
+  display: grid;
+  gap: 0.3rem;
+}
+.coverage-disposition-controls input,
+.coverage-disposition-controls select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  min-height: 40px;
+  padding: 0 0.65rem;
+}
+.coverage-disposition-controls > b {
+  font-size: 0.68rem;
+  padding-bottom: 0.7rem;
+}
+.coverage-disposition-controls > button {
+  background: var(--ink);
+  border: 0;
+  border-radius: 9px;
+  color: var(--card);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 0.8rem;
+}
+.coverage-product-list {
+  display: grid;
+  gap: 0.45rem;
+}
+.coverage-product-list > article {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: 58px minmax(220px, 1fr) minmax(420px, 1.2fr);
+  padding: 0.65rem;
+}
+.coverage-product-list > article > div:not(.radius-scorecard-product-image) {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.coverage-product-list strong {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.coverage-product-list span,
+.coverage-product-list small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+.coverage-product-list small {
+  color: var(--green);
+  font-weight: 800;
+}
+.coverage-product-list dl {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+.coverage-product-list dl div {
+  display: grid;
+  gap: 0.18rem;
+}
+.coverage-product-list dd {
+  font-size: 0.68rem;
+  font-weight: 800;
+  margin: 0;
+}
 .retailer-share-bars {
   display: grid;
   gap: 0.3rem;

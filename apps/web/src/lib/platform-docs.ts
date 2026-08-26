@@ -1547,7 +1547,7 @@ export const platformDocumentation: PlatformDocumentation = {
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
             "The active Vitamin Brand Foundation resolves and verifies 1,246 of 1,440 distinct queue listings (86.53%). The remaining 194 unresolved brands stay explicitly unknown; the platform does not infer brand authority from weak or ambiguous text.",
-            "Vitamins & Supplements reporting is published from the immutable 480-relationship Matching v2 release. The 388 rejected and 1,448 insufficient-evidence cases remain outside price reporting. A current trust repair adds radius-native cohort relationship lineage and reconciles missing normalized-unit denominators from already-retained PDP evidence; production replay remains pending until its semantic and browser acceptance gates pass. AI remains advisory and no report relationship changes automatically.",
+            "Vitamins & Supplements reporting is published from the immutable 480-relationship Matching v2 release. The 388 rejected and 1,448 insufficient-evidence cases remain outside price reporting. Competitive Portfolio 1.4.0 adds a complete benchmark-catalog evidence funnel and on-demand product disposition ledger; production deployment and live acceptance are pending. AI remains advisory and no report relationship changes automatically.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1620,6 +1620,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-26",
+              "Implemented and locally trust-gated; production acceptance pending",
+              "Vitamin Competitive Intelligence gained complete catalog-to-score evidence lineage and Product Pack-controlled default radius.",
+              "Every retailer scorecard now separates the governed benchmark catalog, observed Walmart products, certified identities, selected price-basis products, locally scored products, and final scored product-locations. A mutually exclusive five-state ledger accounts for every catalog product and downloads as CSV without inflating all six pre-materialized documents. Competitive Portfolio 1.4.0 blocks missing or internally inconsistent funnels and radius drift before publication. The UI no longer hard-codes three miles; radius-based Product Packs supply the initial 1/3/5-mile context. Local targeted gates passed with no Search, PDP, or AI call and no certification, source, report, or archive mutation.",
+            ],
             [
               "2026-08-26",
               "Deployed, rematerialized, and production-verified",

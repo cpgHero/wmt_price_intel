@@ -366,6 +366,79 @@ def audit_competitive_portfolio_set(
                     "Relationships must be ordered by scored evidence and product identity.",
                     path=scorecard_path,
                 )
+            if str(document.get("schema_version") or "") == "1.4.0":
+                funnel = scorecard.get("evidence_funnel")
+                if not isinstance(funnel, Mapping):
+                    finding(
+                        "error",
+                        "evidence_funnel_missing",
+                        "Schema 1.4 scorecards require an explicit "
+                        "benchmark-catalog evidence funnel.",
+                        path=scorecard_path,
+                    )
+                else:
+                    catalog_count = _integer(funnel.get("catalog_products"))
+                    in_scope_count = _integer(funnel.get("in_scope_catalog_products"))
+                    observed_count = _integer(funnel.get("observed_catalog_products"))
+                    certified_count = _integer(funnel.get("certified_identity_products"))
+                    selected_count = _integer(funnel.get("selected_price_basis_products"))
+                    locally_scored_count = _integer(funnel.get("locally_scored_products"))
+                    if in_scope_count > catalog_count:
+                        finding(
+                            "error",
+                            "in_scope_catalog_overcount",
+                            "The governed in-scope catalog cannot exceed the source catalog.",
+                            path=scorecard_path,
+                        )
+                    if observed_count > in_scope_count:
+                        finding(
+                            "error",
+                            "observed_catalog_overcount",
+                            "Observed benchmark products cannot exceed the governed "
+                            "in-scope catalog.",
+                            path=scorecard_path,
+                        )
+                    if selected_count > certified_count:
+                        finding(
+                            "error",
+                            "selected_basis_overcount",
+                            "Selected-basis products cannot exceed certified identity products.",
+                            path=scorecard_path,
+                        )
+                    if locally_scored_count > min(observed_count, selected_count):
+                        finding(
+                            "error",
+                            "locally_scored_product_overcount",
+                            "Locally scored products require both observation and "
+                            "selected-basis evidence.",
+                            path=scorecard_path,
+                        )
+                    if _integer(funnel.get("scored_product_locations")) != _integer(
+                        scorecard.get("scored_product_locations")
+                    ):
+                        finding(
+                            "error",
+                            "funnel_scored_location_mismatch",
+                            "The evidence funnel and scorecard must share one "
+                            "scored product-location total.",
+                            path=scorecard_path,
+                        )
+                    statuses = funnel.get("status_counts")
+                    status_total = (
+                        sum(_integer(value) for value in statuses.values())
+                        if isinstance(statuses, Mapping)
+                        else -1
+                    )
+                    if status_total != catalog_count:
+                        finding(
+                            "error",
+                            "coverage_status_partition_mismatch",
+                            "Coverage statuses must form a complete, mutually exclusive "
+                            "catalog partition.",
+                            path=scorecard_path,
+                            catalog_products=catalog_count,
+                            status_total=status_total,
+                        )
             if _integer(scorecard.get("relationships")) == 0:
                 finding(
                     "warning",
@@ -389,7 +462,10 @@ def audit_competitive_portfolio_set(
                 )
 
         cohorts = [row for row in document.get("cohorts", []) if isinstance(row, Mapping)]
-        requires_cohort_lineage = str(document.get("schema_version") or "") == "1.3.0"
+        requires_cohort_lineage = str(document.get("schema_version") or "") in {
+            "1.3.0",
+            "1.4.0",
+        }
         for cohort_index, cohort in enumerate(cohorts):
             cohort_path = f"{path}.cohorts[{cohort_index}]"
             audit_summary(cohort, cohort_path)
@@ -574,6 +650,42 @@ def audit_competitive_portfolio_set(
                         field=field,
                         values=values,
                     )
+            funnel_rows = [
+                row.get("evidence_funnel")
+                for _, row in rows
+                if isinstance(row.get("evidence_funnel"), Mapping)
+            ]
+            for field in (
+                "catalog_products",
+                "in_scope_catalog_products",
+                "observed_catalog_products",
+                "certified_identity_products",
+                "selected_price_basis_products",
+            ):
+                values = [_integer(funnel.get(field)) for funnel in funnel_rows]
+                if values and len(set(values)) > 1:
+                    finding(
+                        "error",
+                        "radius_funnel_scope_drift",
+                        "Changing radius must not change catalog, observation, certification, "
+                        "or price-basis product counts.",
+                        profile=profile,
+                        retailer_id=retailer_id,
+                        field=field,
+                        values=values,
+                    )
+            locally_scored_values = [
+                _integer(funnel.get("locally_scored_products")) for funnel in funnel_rows
+            ]
+            if any(right < left for left, right in pairwise(locally_scored_values)):
+                finding(
+                    "error",
+                    "radius_locally_scored_product_regression",
+                    "A wider physical-store radius cannot remove locally scored products.",
+                    profile=profile,
+                    retailer_id=retailer_id,
+                    values=locally_scored_values,
+                )
             scored_values = [_integer(row.get("scored_product_locations")) for _, row in rows]
             unscored_values = [_integer(row.get("unscored_product_locations")) for _, row in rows]
             if any(right < left for left, right in pairwise(scored_values)):

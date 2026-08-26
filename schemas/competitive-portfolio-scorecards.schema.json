@@ -16,7 +16,7 @@
     "assortment_scorecards"
   ],
   "properties": {
-    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0"] },
+    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0", "1.4.0"] },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -183,6 +183,7 @@
             "benchmark_products": { "type": "integer", "minimum": 0 },
             "competitor_products": { "type": "integer", "minimum": 0 },
             "relationships": { "type": "integer", "minimum": 0 },
+            "evidence_funnel": { "$ref": "#/$defs/evidenceFunnel" },
             "products": {
               "type": "array",
               "items": { "$ref": "#/$defs/productSummary" }
@@ -194,6 +195,49 @@
           }
         }
       ]
+    },
+    "evidenceFunnel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_products",
+        "in_scope_catalog_products",
+        "observed_catalog_products",
+        "certified_identity_products",
+        "selected_price_basis_products",
+        "locally_scored_products",
+        "scored_product_locations",
+        "status_counts"
+      ],
+      "properties": {
+        "catalog_products": { "type": "integer", "minimum": 0 },
+        "in_scope_catalog_products": { "type": "integer", "minimum": 0 },
+        "observed_catalog_products": { "type": "integer", "minimum": 0 },
+        "certified_identity_products": { "type": "integer", "minimum": 0 },
+        "selected_price_basis_products": { "type": "integer", "minimum": 0 },
+        "locally_scored_products": { "type": "integer", "minimum": 0 },
+        "scored_product_locations": { "type": "integer", "minimum": 0 },
+        "status_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "benchmark_not_observed",
+            "no_certified_relationship",
+            "no_selected_price_basis",
+            "no_local_competitor_evidence",
+            "scored",
+            "governed_out_of_scope"
+          ],
+          "properties": {
+            "benchmark_not_observed": { "type": "integer", "minimum": 0 },
+            "no_certified_relationship": { "type": "integer", "minimum": 0 },
+            "no_selected_price_basis": { "type": "integer", "minimum": 0 },
+            "no_local_competitor_evidence": { "type": "integer", "minimum": 0 },
+            "scored": { "type": "integer", "minimum": 0 },
+            "governed_out_of_scope": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
     },
     "cohort": {
       "unevaluatedProperties": false,

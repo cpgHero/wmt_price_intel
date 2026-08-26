@@ -126,6 +126,7 @@ export interface ComparisonBasis {
   profile_id: string;
   label: string;
   geography: string;
+  radius_miles?: 1 | 3 | 5 | null;
   comparison_metric: string;
   price_unit: string;
   package_basis: "exact_package" | "normalized_unit" | "configured_interval";

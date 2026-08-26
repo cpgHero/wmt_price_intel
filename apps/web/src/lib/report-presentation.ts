@@ -115,6 +115,19 @@ export function defaultComparisonBasisId(
   );
 }
 
+export function defaultComparisonRadiusMiles(
+  bases: ComparisonBasis[],
+  profileId: string,
+  fallback: 1 | 3 | 5 = 3,
+): 1 | 3 | 5 {
+  const configured = bases.find(
+    (basis) => basis.profile_id === profileId,
+  )?.radius_miles;
+  return configured === 1 || configured === 3 || configured === 5
+    ? configured
+    : fallback;
+}
+
 export interface LeadershipProductOption {
   id: string;
   name: string;

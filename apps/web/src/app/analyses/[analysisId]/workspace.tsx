@@ -26,6 +26,7 @@ import type {
   AssortmentBrand,
   AssortmentProduct,
   CompetitivePortfolioScorecards,
+  CompetitiveProductCoverage,
   JsonObject,
   MapPoint,
   ProductDecision,
@@ -45,10 +46,15 @@ import {
   displayValue,
 } from "@/lib/presentation";
 import {
+  competitiveProductCoverageCsv,
+  competitiveProductCoverageFilename,
+} from "@/lib/evidence-csv";
+import {
   comparisonBasisDescription,
   cohortProductSummaries,
   compactMetricName,
   defaultComparisonBasisId,
+  defaultComparisonRadiusMiles,
   eligibleLeadershipProducts,
   formatMapValueLabel,
   formatPriceForBasis,
@@ -280,6 +286,10 @@ function BlueprintAnalysisWorkspace({
     reportView.match_relationships ?? [],
   );
   const [selectedLens, setSelectedLens] = useState(preferredBasis);
+  const configuredDefaultRadius = defaultComparisonRadiusMiles(
+    reportView.comparison_bases,
+    preferredBasis,
+  );
   const [selectedCohort, setSelectedCohort] = useState<ComparableCohort | null>(
     null,
   );
@@ -307,7 +317,9 @@ function BlueprintAnalysisWorkspace({
   const [selectedLeadershipProduct, setSelectedLeadershipProduct] = useState<
     string | null
   >(leadershipProductOptions[0]?.id ?? null);
-  const [leadershipRadius, setLeadershipRadius] = useState<1 | 3 | 5>(3);
+  const [leadershipRadius, setLeadershipRadius] = useState<1 | 3 | 5>(
+    configuredDefaultRadius,
+  );
   const [leadershipState, setLeadershipState] = useState<string | null>(null);
   const [leadershipCity, setLeadershipCity] = useState<string | null>(null);
   const [leadershipStateOptions, setLeadershipStateOptions] = useState<
@@ -350,14 +362,14 @@ function BlueprintAnalysisWorkspace({
         parameters.delete("leadership");
       }
       const requestedLens = parameters.get("lens");
-      setSelectedLens(
+      const nextLens =
         requestedLens &&
-          reportView.comparison_bases.some(
-            (basis) => basis.profile_id === requestedLens,
-          )
+        reportView.comparison_bases.some(
+          (basis) => basis.profile_id === requestedLens,
+        )
           ? requestedLens
-          : preferredBasis,
-      );
+          : preferredBasis;
+      setSelectedLens(nextLens);
       const requestedProduct = parameters.get("product");
       const nextLeadershipProduct =
         requestedProduct &&
@@ -385,7 +397,10 @@ function BlueprintAnalysisWorkspace({
         normalizedUrl.search = parameters.toString();
         window.history.replaceState(window.history.state, "", normalizedUrl);
       }
-      const requestedRadius = Number(parameters.get("radius") ?? 3);
+      const requestedRadius = Number(
+        parameters.get("radius") ??
+          defaultComparisonRadiusMiles(reportView.comparison_bases, nextLens),
+      );
       setLeadershipRadius(
         requestedRadius === 1 || requestedRadius === 5 ? requestedRadius : 3,
       );
@@ -755,7 +770,7 @@ function BlueprintAnalysisWorkspace({
                         : "Broader local trade area.",
                 })),
                 queryParameter: "radius",
-                defaultValue: "3",
+                defaultValue: String(configuredDefaultRadius),
                 selectedValue: String(leadershipRadius),
               },
             ]
@@ -959,6 +974,7 @@ function BlueprintAnalysisWorkspace({
     reportView.match_governance,
     reportView.product_pack.id,
     certificationCoverage,
+    configuredDefaultRadius,
     selectedCertificationCoverage,
     reportedRelationshipCount,
     reportView.retailer_scope.benchmark.name,
@@ -1070,6 +1086,7 @@ function BlueprintAnalysisWorkspace({
           <>
             {activeGroup === "overview" ? (
               <RadiusRetailerScorecardPanel
+                analysisId={analysis.analysis_id}
                 benchmark={reportView.retailer_scope.benchmark}
                 certifiedRelationshipCount={
                   (reportView.match_relationships ?? []).filter(
@@ -2100,6 +2117,7 @@ type RadiusRetailerScorecard =
   CompetitivePortfolioScorecards["scorecards"][number];
 
 function RadiusRetailerScorecardPanel({
+  analysisId,
   benchmark,
   certifiedRelationshipCount,
   competitorId,
@@ -2108,6 +2126,7 @@ function RadiusRetailerScorecardPanel({
   portfolio,
   error,
 }: Readonly<{
+  analysisId: string;
   benchmark: RetailerOption;
   certifiedRelationshipCount: number;
   competitorId: string;
@@ -2121,6 +2140,15 @@ function RadiusRetailerScorecardPanel({
   );
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(25);
+  const [coverageSelection, setCoverageSelection] =
+    useState<RadiusRetailerScorecard | null>(null);
+  const [coverage, setCoverage] = useState<CompetitiveProductCoverage | null>(
+    null,
+  );
+  const [coverageError, setCoverageError] = useState("");
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageStatus, setCoverageStatus] = useState("all");
+  const [coverageQuery, setCoverageQuery] = useState("");
   useEffect(() => {
     if (!selected) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2129,6 +2157,50 @@ function RadiusRetailerScorecardPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selected]);
+  useEffect(() => {
+    if (!coverageSelection || !portfolio) return;
+    const controller = new AbortController();
+    const parameters = new URLSearchParams({
+      competitor: coverageSelection.competitor_id,
+      profile: portfolio.filters.profile_id,
+      radius_miles: String(radiusMiles),
+    });
+    fetch(
+      `/api/analyses/${encodeURIComponent(analysisId)}/competitive-product-coverage?${parameters.toString()}`,
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as
+          CompetitiveProductCoverage | { error?: string };
+        if (!response.ok || !("products" in body)) {
+          throw new Error(
+            "error" in body && body.error
+              ? body.error
+              : `Coverage evidence returned ${response.status}`,
+          );
+        }
+        setCoverage(body);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setCoverageError(
+          cause instanceof Error
+            ? cause.message
+            : "Coverage evidence is unavailable.",
+        );
+      })
+      .finally(() => setCoverageLoading(false));
+    return () => controller.abort();
+  }, [analysisId, coverageSelection, portfolio, radiusMiles]);
+  useEffect(() => {
+    if (!coverageSelection) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCoverageSelection(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [coverageSelection]);
   const filteredRelationships = useMemo(() => {
     if (!selected) return [];
     const token = query.trim().toLocaleLowerCase("en-US");
@@ -2140,6 +2212,17 @@ function RadiusRetailerScorecardPanel({
         .includes(token),
     );
   }, [query, selected]);
+  const filteredCoverageProducts = useMemo(() => {
+    const token = coverageQuery.trim().toLocaleLowerCase("en-US");
+    return (coverage?.products ?? []).filter(
+      (product) =>
+        (coverageStatus === "all" || product.status === coverageStatus) &&
+        (!token ||
+          `${product.product_name} ${product.product_id}`
+            .toLocaleLowerCase("en-US")
+            .includes(token)),
+    );
+  }, [coverage, coverageQuery, coverageStatus]);
   const certifiedScorecards =
     portfolio?.scorecards.filter((scorecard) => scorecard.relationships > 0) ??
     [];
@@ -2310,6 +2393,23 @@ function RadiusRetailerScorecardPanel({
                           scorecard.competitor_products
                         ).toLocaleString()}{" "}
                         included products
+                      </button>
+                      <button
+                        type="button"
+                        className="coverage-trace-button"
+                        onClick={() => {
+                          setCoverageStatus("all");
+                          setCoverageQuery("");
+                          setCoverage(null);
+                          setCoverageError("");
+                          setCoverageLoading(true);
+                          setCoverageSelection(scorecard);
+                        }}
+                      >
+                        Trace all{" "}
+                        {scorecard.evidence_funnel?.catalog_products.toLocaleString() ??
+                          scorecard.benchmark_products.toLocaleString()}{" "}
+                        catalog products
                       </button>
                     </div>
                     <div className="retailer-share-bars">
@@ -2586,6 +2686,185 @@ function RadiusRetailerScorecardPanel({
                 Show more relationships ·{" "}
                 {filteredRelationships.length - visibleLimit} remaining
               </button>
+            ) : null}
+          </aside>
+        </div>
+      ) : null}
+      {coverageSelection ? (
+        <div
+          className="evidence-drawer-backdrop scorecard-products-layer"
+          role="presentation"
+          onClick={() => setCoverageSelection(null)}
+        >
+          <aside
+            className="evidence-drawer coverage-evidence-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="coverage-evidence-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span className="eyebrow">Complete denominator lineage</span>
+                <h2 id="coverage-evidence-title">
+                  {benchmark.name} catalog coverage vs.{" "}
+                  {coverageSelection.competitor}
+                </h2>
+                <p>
+                  Every governed benchmark catalog product appears exactly once.
+                  The disposition explains where it exits the current comparison
+                  basis and {radiusMiles}-mile evidence scope.
+                </p>
+              </div>
+              <button type="button" onClick={() => setCoverageSelection(null)}>
+                ×
+              </button>
+            </header>
+            {coverageLoading ? (
+              <div className="empty-inline" role="status">
+                Building the complete catalog lineage…
+              </div>
+            ) : null}
+            {coverageError ? (
+              <div className="empty-inline error" role="alert">
+                {coverageError}
+              </div>
+            ) : null}
+            {coverage ? (
+              <>
+                <div className="coverage-funnel-grid">
+                  {[
+                    ["Source catalog", coverage.evidence_funnel.catalog_products],
+                    [
+                      "Governed in scope",
+                      coverage.evidence_funnel.in_scope_catalog_products,
+                    ],
+                    [
+                      "Observed",
+                      coverage.evidence_funnel.observed_catalog_products,
+                    ],
+                    [
+                      "Certified",
+                      coverage.evidence_funnel.certified_identity_products,
+                    ],
+                    [
+                      "Price-basis eligible",
+                      coverage.evidence_funnel.selected_price_basis_products,
+                    ],
+                    [
+                      "Locally scored",
+                      coverage.evidence_funnel.locally_scored_products,
+                    ],
+                  ].map(([label, value]) => (
+                    <article key={String(label)}>
+                      <small>{label}</small>
+                      <strong>{Number(value).toLocaleString()}</strong>
+                    </article>
+                  ))}
+                </div>
+                <div className="coverage-disposition-controls">
+                  <label>
+                    <span>Disposition</span>
+                    <select
+                      value={coverageStatus}
+                      onChange={(event) =>
+                        setCoverageStatus(event.target.value)
+                      }
+                    >
+                      <option value="all">All catalog products</option>
+                      <option value="scored">Locally scored</option>
+                      <option value="no_local_competitor_evidence">
+                        No local competitor evidence
+                      </option>
+                      <option value="no_selected_price_basis">
+                        No selected price basis
+                      </option>
+                      <option value="no_certified_relationship">
+                        No certified relationship
+                      </option>
+                      <option value="benchmark_not_observed">
+                        Benchmark not observed
+                      </option>
+                      <option value="governed_out_of_scope">
+                        Governed out of scope
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Find product</span>
+                    <input
+                      type="search"
+                      value={coverageQuery}
+                      onChange={(event) => setCoverageQuery(event.target.value)}
+                      placeholder="Product name or ID"
+                    />
+                  </label>
+                  <b>
+                    {filteredCoverageProducts.length.toLocaleString()} products
+                  </b>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const blob = new Blob(
+                        [competitiveProductCoverageCsv(coverage)],
+                        { type: "text/csv;charset=utf-8" },
+                      );
+                      const link = document.createElement("a");
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.download =
+                        competitiveProductCoverageFilename(coverage);
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download complete CSV
+                  </button>
+                </div>
+                <div className="coverage-product-list">
+                  {filteredCoverageProducts.map((product) => (
+                    <article key={product.product_id}>
+                      <span className="radius-scorecard-product-image">
+                        {product.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={product.image_url} alt="" />
+                        ) : (
+                          <b>{product.product_name.slice(0, 1)}</b>
+                        )}
+                      </span>
+                      <div>
+                        <strong>{product.product_name}</strong>
+                        <span>Product ID {product.product_id}</span>
+                        <small>{displayLabel(product.status)}</small>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>Observed stores</dt>
+                          <dd>{product.observed_locations.toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>Certified pairs</dt>
+                          <dd>
+                            {product.certified_relationships.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Basis-eligible pairs</dt>
+                          <dd>
+                            {product.selected_price_basis_relationships.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Scored product-locations</dt>
+                          <dd>
+                            {product.scored_product_locations.toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              </>
             ) : null}
           </aside>
         </div>

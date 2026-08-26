@@ -6,6 +6,7 @@ export type Scorecard = Summary & {
   benchmark_products: number;
   competitor_products: number;
   relationships: number;
+  evidence_funnel?: EvidenceFunnel;
   products: ProductSummary[];
   product_relationships?: RelationshipSummary[];
   [k: string]: unknown;
@@ -83,7 +84,7 @@ export type AssortmentScorecard = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
-  schema_version: "1.1.0" | "1.2.0" | "1.3.0";
+  schema_version: "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -122,4 +123,21 @@ export interface Summary {
   parity_rate: number | null;
   average_gap: number | null;
   [k: string]: unknown;
+}
+export interface EvidenceFunnel {
+  catalog_products: number;
+  in_scope_catalog_products: number;
+  observed_catalog_products: number;
+  certified_identity_products: number;
+  selected_price_basis_products: number;
+  locally_scored_products: number;
+  scored_product_locations: number;
+  status_counts: {
+    benchmark_not_observed: number;
+    no_certified_relationship: number;
+    no_selected_price_basis: number;
+    no_local_competitor_evidence: number;
+    scored: number;
+    governed_out_of_scope: number;
+  };
 }

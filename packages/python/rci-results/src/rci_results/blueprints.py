@@ -453,6 +453,12 @@ class ReportProjector:
                     "geography": str(
                         mode.get("geography") or profile.get("geography") or "unknown"
                     ),
+                    "radius_miles": (
+                        int(profile["radius_miles"])
+                        if profile.get("geography") == "radius"
+                        and profile.get("radius_miles") in {1, 3, 5}
+                        else None
+                    ),
                     "comparison_metric": comparison_metric,
                     "price_unit": price_unit,
                     "package_basis": package_basis,

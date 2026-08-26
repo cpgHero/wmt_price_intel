@@ -12,6 +12,7 @@ from rci_api.competitive_leadership import (
     _attributes_match,
     _candidate_segment_rows,
     _cohort_summary,
+    _coverage_rows,
     _portfolio_summary,
     _require_internal_materialization_token,
 )
@@ -276,6 +277,79 @@ def test_portfolio_summary_uses_product_location_grain() -> None:
         "competitor_lower_rate": 0.5,
         "parity_rate": 0.0,
         "average_gap": 0.05,
+    }
+
+
+def test_coverage_rows_partition_the_complete_catalog_once() -> None:
+    funnel, products = _coverage_rows(
+        catalog={
+            **{product_id: {} for product_id in ("p1", "p2", "p3", "p4", "p5")},
+            "p6": {"scope": "exclude"},
+        },
+        observed_products={
+            product_id: {"product_id": product_id, "observed_locations": 3}
+            for product_id in ("p1", "p2", "p3", "p4")
+        },
+        identity_candidates=[
+            {
+                "relationship_id": "r1",
+                "benchmark_product_id": "p1",
+                "competitor_product_id": "c1",
+            },
+            {
+                "relationship_id": "r2",
+                "benchmark_product_id": "p2",
+                "competitor_product_id": "c2",
+            },
+            {
+                "relationship_id": "r3",
+                "benchmark_product_id": "p3",
+                "competitor_product_id": "c3",
+            },
+        ],
+        selected_candidates=[
+            {
+                "relationship_id": "r1",
+                "benchmark_product_id": "p1",
+                "competitor_product_id": "c1",
+            },
+            {
+                "relationship_id": "r2",
+                "benchmark_product_id": "p2",
+                "competitor_product_id": "c2",
+            },
+        ],
+        product_summaries=[
+            {"product_id": "p1", "scored_product_locations": 2},
+            {"product_id": "p2", "scored_product_locations": 0},
+        ],
+    )
+
+    assert funnel == {
+        "catalog_products": 6,
+        "in_scope_catalog_products": 5,
+        "observed_catalog_products": 4,
+        "certified_identity_products": 3,
+        "selected_price_basis_products": 2,
+        "locally_scored_products": 1,
+        "scored_product_locations": 2,
+        "status_counts": {
+            "benchmark_not_observed": 1,
+            "no_certified_relationship": 1,
+            "no_selected_price_basis": 1,
+            "no_local_competitor_evidence": 1,
+            "scored": 1,
+            "governed_out_of_scope": 1,
+        },
+    }
+    assert len(products) == 6
+    assert {row["product_id"] for row in products} == {
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "p5",
+        "p6",
     }
 
 
@@ -608,8 +682,25 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
-    assert result["schema_version"] == "1.3.0"
+    assert result["schema_version"] == "1.4.0"
     assert result["scorecards"][0]["relationships"] == 3
+    assert result["scorecards"][0]["evidence_funnel"] == {
+        "catalog_products": 2,
+        "in_scope_catalog_products": 2,
+        "observed_catalog_products": 1,
+        "certified_identity_products": 2,
+        "selected_price_basis_products": 2,
+        "locally_scored_products": 1,
+        "scored_product_locations": 2,
+        "status_counts": {
+            "benchmark_not_observed": 1,
+            "no_certified_relationship": 0,
+            "no_selected_price_basis": 0,
+            "no_local_competitor_evidence": 0,
+            "scored": 1,
+            "governed_out_of_scope": 0,
+        },
+    }
     assert result["scorecards"][0]["products"][0]["product_id"] == "w1"
     assert {row["product_id"] for row in result["scorecards"][0]["products"]} == {
         "w1",
@@ -640,4 +731,17 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert prices.requests == [
         ("aldi_us", "package_price", ("a1", "a2", "a3")),
         ("walmart_us", "package_price", ("w1", "w2")),
+    ]
+
+    coverage = await service.product_coverage_view(
+        "analysis-1",
+        competitor_id="aldi_us",
+        profile_id="compatible",
+        radius_miles=3,
+    )
+    assert coverage["schema_version"] == "1.0.0"
+    assert coverage["evidence_funnel"] == result["scorecards"][0]["evidence_funnel"]
+    assert [(row["product_id"], row["status"]) for row in coverage["products"]] == [
+        ("w1", "scored"),
+        ("w2", "benchmark_not_observed"),
     ]

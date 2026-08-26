@@ -67,6 +67,23 @@ def _document(profile: str, radius: int, scored: int) -> dict[str, Any]:
         "benchmark_products": 1,
         "competitor_products": 1,
         "relationships": 1,
+        "evidence_funnel": {
+            "catalog_products": 1,
+            "in_scope_catalog_products": 1,
+            "observed_catalog_products": 1,
+            "certified_identity_products": 1,
+            "selected_price_basis_products": 1,
+            "locally_scored_products": 1 if scored else 0,
+            "scored_product_locations": scored,
+            "status_counts": {
+                "benchmark_not_observed": 0,
+                "no_certified_relationship": 0,
+                "no_selected_price_basis": 0,
+                "no_local_competitor_evidence": 0 if scored else 1,
+                "scored": 1 if scored else 0,
+                "governed_out_of_scope": 0,
+            },
+        },
         **scorecard_summary,
         "products": [product],
         "product_relationships": [relationship],
@@ -89,7 +106,7 @@ def _document(profile: str, radius: int, scored: int) -> dict[str, Any]:
         **scorecard_summary,
     }
     return {
-        "schema_version": "1.2.0",
+        "schema_version": "1.4.0",
         "analysis_id": "egg-release",
         "generated_at": "2026-08-20T12:00:00+00:00",
         "benchmark_retailer": {"id": "walmart_us", "name": "Walmart (US)"},
@@ -193,3 +210,16 @@ def test_competitive_release_audit_rejects_incomplete_materialization_matrix() -
 
     assert audit["status"] == "failed"
     assert any(row["code"] == "materialization_matrix_incomplete" for row in audit["findings"])
+
+
+def test_competitive_release_audit_rejects_incomplete_catalog_partition() -> None:
+    documents = _complete_set()
+    documents[0]["scorecards"][0]["evidence_funnel"]["status_counts"]["scored"] = 0
+
+    audit = audit_competitive_portfolio_set(
+        documents,
+        expected_profiles=("compatible", "strict"),
+    )
+
+    assert audit["status"] == "failed"
+    assert any(row["code"] == "coverage_status_partition_mismatch" for row in audit["findings"])

@@ -247,6 +247,160 @@ def _assortment_products(assortment: Any, retailer_id: str) -> list[dict[str, An
     return []
 
 
+def _relationship_key(row: dict[str, Any]) -> str:
+    return str(
+        row.get("relationship_id")
+        or row.get("id")
+        or "|".join(
+            (
+                str(row.get("competitor") or ""),
+                str(row.get("benchmark_product_id") or ""),
+                str(row.get("competitor_product_id") or ""),
+            )
+        )
+    )
+
+
+def _coverage_rows(
+    *,
+    catalog: dict[str, dict[str, Any]],
+    observed_products: dict[str, dict[str, Any]],
+    identity_candidates: list[dict[str, Any]],
+    selected_candidates: list[dict[str, Any]],
+    product_summaries: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Build a mutually-exclusive denominator ledger for one competitor.
+
+    Identity certification, price-basis eligibility, and local scoring are
+    deliberately separate stages. This prevents a zero local score from being
+    misread as a missing match and makes the complete benchmark catalog the
+    authoritative denominator when the Product Pack supplies one.
+    """
+
+    identity_by_product: dict[str, set[str]] = {}
+    selected_by_product: dict[str, set[str]] = {}
+    selected_competitors_by_product: dict[str, set[str]] = {}
+    candidate_names: dict[str, str] = {}
+    candidate_images: dict[str, Any] = {}
+    for row in identity_candidates:
+        product_id = str(row.get("benchmark_product_id") or "")
+        if not product_id:
+            continue
+        identity_by_product.setdefault(product_id, set()).add(_relationship_key(row))
+        if row.get("benchmark_product_name"):
+            candidate_names.setdefault(product_id, str(row["benchmark_product_name"]))
+        if row.get("benchmark_image_url"):
+            candidate_images.setdefault(product_id, row["benchmark_image_url"])
+    for row in selected_candidates:
+        product_id = str(row.get("benchmark_product_id") or "")
+        if not product_id:
+            continue
+        selected_by_product.setdefault(product_id, set()).add(_relationship_key(row))
+        competitor_product_id = str(row.get("competitor_product_id") or "")
+        if competitor_product_id:
+            selected_competitors_by_product.setdefault(product_id, set()).add(competitor_product_id)
+
+    scored_by_product = {
+        str(row.get("product_id")): int(row.get("scored_product_locations") or 0)
+        for row in product_summaries
+        if row.get("product_id")
+    }
+    product_ids = sorted(catalog)
+    in_scope_product_ids = {
+        product_id
+        for product_id, product in catalog.items()
+        if str(product.get("scope") or "include") != "exclude"
+    }
+    rows: list[dict[str, Any]] = []
+    status_counts = Counter()
+    for product_id in product_ids:
+        observed = observed_products.get(product_id, {})
+        observed_locations = int(observed.get("observed_locations") or 0)
+        certified_relationships = len(identity_by_product.get(product_id, set()))
+        selected_relationships = len(selected_by_product.get(product_id, set()))
+        scored_locations = scored_by_product.get(product_id, 0)
+        if product_id not in in_scope_product_ids:
+            status = "governed_out_of_scope"
+        elif observed_locations == 0:
+            status = "benchmark_not_observed"
+        elif certified_relationships == 0:
+            status = "no_certified_relationship"
+        elif selected_relationships == 0:
+            status = "no_selected_price_basis"
+        elif scored_locations == 0:
+            status = "no_local_competitor_evidence"
+        else:
+            status = "scored"
+        status_counts[status] += 1
+        catalog_row = catalog.get(product_id, {})
+        rows.append(
+            {
+                "product_id": product_id,
+                "product_name": str(
+                    observed.get("name")
+                    or candidate_names.get(product_id)
+                    or catalog_row.get("name")
+                    or f"Catalog product {product_id}"
+                ),
+                "image_url": observed.get("image_url")
+                or candidate_images.get(product_id)
+                or catalog_row.get("image_url"),
+                "observed_locations": observed_locations,
+                "status": status,
+                "certified_relationships": certified_relationships,
+                "selected_price_basis_relationships": selected_relationships,
+                "selected_competitor_products": len(
+                    selected_competitors_by_product.get(product_id, set())
+                ),
+                "scored_product_locations": scored_locations,
+            }
+        )
+    status_order = {
+        "scored": 0,
+        "no_local_competitor_evidence": 1,
+        "no_selected_price_basis": 2,
+        "no_certified_relationship": 3,
+        "benchmark_not_observed": 4,
+        "governed_out_of_scope": 5,
+    }
+    rows.sort(
+        key=lambda row: (
+            status_order[str(row["status"])],
+            -int(row["observed_locations"]),
+            str(row["product_name"]).casefold(),
+        )
+    )
+    funnel = {
+        "catalog_products": len(product_ids),
+        "in_scope_catalog_products": len(in_scope_product_ids),
+        "observed_catalog_products": sum(
+            1
+            for product_id in in_scope_product_ids
+            if int(observed_products.get(product_id, {}).get("observed_locations") or 0) > 0
+        ),
+        "certified_identity_products": len(in_scope_product_ids & set(identity_by_product)),
+        "selected_price_basis_products": len(in_scope_product_ids & set(selected_by_product)),
+        "locally_scored_products": sum(
+            1 for product_id in in_scope_product_ids if scored_by_product.get(product_id, 0) > 0
+        ),
+        "scored_product_locations": sum(
+            scored_by_product.get(product_id, 0) for product_id in in_scope_product_ids
+        ),
+        "status_counts": {
+            key: int(status_counts[key])
+            for key in (
+                "benchmark_not_observed",
+                "no_certified_relationship",
+                "no_selected_price_basis",
+                "no_local_competitor_evidence",
+                "scored",
+                "governed_out_of_scope",
+            )
+        },
+    }
+    return funnel, rows
+
+
 def _cohort_summary(
     *,
     segment_row: dict[str, Any],
@@ -510,6 +664,64 @@ class CompetitiveProductLeadershipService:
             self._analysis_context_cache[analysis_id] = context
             return context
 
+    async def _benchmark_catalog(
+        self,
+        analysis: Any,
+        report: dict[str, Any],
+        benchmark_retailer_id: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return the governed benchmark universe, falling back transparently.
+
+        An allowlisted Product Pack catalog is authoritative. Categories that
+        do not configure one retain the union of observed and certified
+        benchmark products so the generic engine stays category-neutral.
+        """
+
+        if self._packs is not None:
+            pack = await self._packs.load(
+                str(analysis.product_pack_id),
+                str(analysis.product_pack_version),
+            )
+            override = pack.document.get("retailer_overrides", {}).get(benchmark_retailer_id, {})
+            products = override.get("products", {}) if isinstance(override, dict) else {}
+            if isinstance(products, dict) and products:
+                return {
+                    str(product_id): {
+                        "name": str(product.get("name") or "") if isinstance(product, dict) else "",
+                        "image_url": (
+                            product.get("image_url") if isinstance(product, dict) else None
+                        ),
+                        "scope": (
+                            str(product.get("scope") or "include")
+                            if isinstance(product, dict)
+                            else "include"
+                        ),
+                    }
+                    for product_id, product in products.items()
+                }
+
+        assortment = report.get("assortment_analysis")
+        observed = _assortment_products(assortment, benchmark_retailer_id)
+        catalog = {
+            str(row["product_id"]): {
+                "name": str(row.get("name") or row["product_id"]),
+                "image_url": row.get("image_url"),
+            }
+            for row in observed
+            if row.get("product_id")
+        }
+        for row in _active_candidate_rows(report):
+            product_id = str(row.get("benchmark_product_id") or "")
+            if product_id:
+                catalog.setdefault(
+                    product_id,
+                    {
+                        "name": str(row.get("benchmark_product_name") or product_id),
+                        "image_url": row.get("benchmark_image_url"),
+                    },
+                )
+        return catalog
+
     async def portfolio_view(
         self,
         analysis_id: str,
@@ -544,7 +756,7 @@ class CompetitiveProductLeadershipService:
         if cached is not None and not refresh:
             return cached
 
-        _analysis, report = await self._analysis_context(analysis_id)
+        analysis, report = await self._analysis_context(analysis_id)
         benchmark = dict(report["retailer_scope"]["benchmark"])
         configured_competitors = [dict(row) for row in report["retailer_scope"]["competitors"]]
         competitor_name_index = {str(row["id"]): str(row["name"]) for row in configured_competitors}
@@ -577,7 +789,7 @@ class CompetitiveProductLeadershipService:
                 profile_id=selected_profile,
                 radius_miles=radius_miles,
             )
-            if stored is not None and stored.get("schema_version") == "1.3.0":
+            if stored is not None and stored.get("schema_version") == "1.4.0":
                 if competitor_id != "all":
                     stored["filters"] = {
                         **dict(stored["filters"]),
@@ -607,11 +819,13 @@ class CompetitiveProductLeadershipService:
                 self._portfolio_cache[cache_key] = stored
                 return stored
 
-        candidates = [
+        active_candidates = [
             row
             for row in _active_candidate_rows(report)
-            if str(row.get("profile_id")) == selected_profile
-            and (competitor_id == "all" or str(row.get("competitor")) == competitor_id)
+            if competitor_id == "all" or str(row.get("competitor")) == competitor_id
+        ]
+        candidates = [
+            row for row in active_candidates if str(row.get("profile_id")) == selected_profile
         ]
         selected_basis = basis_index.get(selected_profile, {})
         observation_requests: dict[tuple[str, str], set[str]] = {}
@@ -706,14 +920,27 @@ class CompetitiveProductLeadershipService:
             assortment.get("comparisons", []) if isinstance(assortment, dict) else []
         )
         benchmark_assortment_products = _assortment_products(assortment, str(benchmark["id"]))
+        benchmark_observed_index = {
+            str(row["product_id"]): row
+            for row in benchmark_assortment_products
+            if row.get("product_id")
+        }
         benchmark_observed_ids = {
             str(row.get("product_id"))
             for row in benchmark_assortment_products
             if row.get("product_id")
         }
+        benchmark_catalog = await self._benchmark_catalog(
+            analysis,
+            report,
+            str(benchmark["id"]),
+        )
         for competitor in visible_competitors:
             retailer_id = str(competitor["id"])
             retailer_candidates = grouped_candidates.get(retailer_id, [])
+            retailer_identity_candidates = [
+                row for row in active_candidates if str(row.get("competitor")) == retailer_id
+            ]
             benchmark_product_ids = sorted(
                 {
                     str(row.get("benchmark_product_id"))
@@ -905,6 +1132,13 @@ class CompetitiveProductLeadershipService:
                     str(row["competitor_product_name"]).casefold(),
                 )
             )
+            evidence_funnel, _coverage_products = _coverage_rows(
+                catalog=benchmark_catalog,
+                observed_products=benchmark_observed_index,
+                identity_candidates=retailer_identity_candidates,
+                selected_candidates=retailer_candidates,
+                product_summaries=products,
+            )
             scorecards.append(
                 {
                     "competitor_id": retailer_id,
@@ -912,6 +1146,7 @@ class CompetitiveProductLeadershipService:
                     "benchmark_products": len(benchmark_product_ids),
                     "competitor_products": len(competitor_product_ids),
                     "relationships": len(relationship_ids),
+                    "evidence_funnel": evidence_funnel,
                     **_portfolio_summary(outcomes),
                     "products": products,
                     "product_relationships": product_relationships,
@@ -1044,7 +1279,7 @@ class CompetitiveProductLeadershipService:
             )
         )
         result = {
-            "schema_version": "1.3.0",
+            "schema_version": "1.4.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,
@@ -1087,6 +1322,86 @@ class CompetitiveProductLeadershipService:
             if len(self._portfolio_cache) >= 32:
                 self._portfolio_cache.pop(next(iter(self._portfolio_cache)))
             self._portfolio_cache[cache_key] = result
+        return result
+
+    async def product_coverage_view(
+        self,
+        analysis_id: str,
+        *,
+        competitor_id: str,
+        profile_id: str | None,
+        radius_miles: Literal[1, 3, 5],
+    ) -> dict[str, Any]:
+        """Explain every benchmark catalog product's reporting disposition."""
+
+        if competitor_id == "all":
+            raise ValueError("product coverage requires one competitor")
+        analysis, report = await self._analysis_context(analysis_id)
+        portfolio = await self.portfolio_view(
+            analysis_id,
+            competitor_id=competitor_id,
+            profile_id=profile_id,
+            radius_miles=radius_miles,
+            state=None,
+            city=None,
+        )
+        scorecard = next(
+            (
+                dict(row)
+                for row in portfolio.get("scorecards", [])
+                if str(row.get("competitor_id")) == competitor_id
+            ),
+            None,
+        )
+        if scorecard is None:
+            raise LookupError("the selected competitor has no reporting scorecard")
+        benchmark = dict(portfolio["benchmark_retailer"])
+        assortment = report.get("assortment_analysis")
+        observed_products = {
+            str(row["product_id"]): row
+            for row in _assortment_products(assortment, str(benchmark["id"]))
+            if row.get("product_id")
+        }
+        catalog = await self._benchmark_catalog(
+            analysis,
+            report,
+            str(benchmark["id"]),
+        )
+        active = [
+            row
+            for row in _active_candidate_rows(report)
+            if str(row.get("competitor")) == competitor_id
+        ]
+        selected_profile = str(portfolio["filters"]["profile_id"])
+        selected = [row for row in active if str(row.get("profile_id")) == selected_profile]
+        funnel, products = _coverage_rows(
+            catalog=catalog,
+            observed_products=observed_products,
+            identity_candidates=active,
+            selected_candidates=selected,
+            product_summaries=[
+                dict(row) for row in scorecard.get("products", []) if isinstance(row, dict)
+            ],
+        )
+        result = {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "benchmark_retailer": benchmark,
+            "competitor": {
+                "id": competitor_id,
+                "name": str(scorecard["competitor"]),
+            },
+            "profile_id": selected_profile,
+            "radius_miles": radius_miles,
+            "evidence_funnel": funnel,
+            "products": products,
+        }
+        validate_instance(
+            self._root,
+            "competitive-product-coverage.schema.json",
+            result,
+            label=f"competitive-product-coverage:{analysis_id}:{competitor_id}",
+        )
         return result
 
     async def pre_materialize_portfolios(
@@ -1484,6 +1799,33 @@ async def competitive_portfolio_scorecards_view(
             radius_miles=cast(Literal[1, 3, 5], radius_miles),
             state=state_filter,
             city=city,
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+
+@router.get("/analyses/{analysis_id}/competitive-product-coverage")
+async def competitive_product_coverage_view(
+    analysis_id: str,
+    service: ServiceDependency,
+    competitor: str,
+    profile: str | None = None,
+    radius_miles: int = Query(default=3, ge=1, le=5),
+) -> dict[str, Any]:
+    try:
+        if radius_miles not in {1, 3, 5}:
+            raise ValueError("competitive radius must be 1, 3, or 5 miles")
+        return await service.product_coverage_view(
+            analysis_id,
+            competitor_id=competitor,
+            profile_id=profile,
+            radius_miles=cast(Literal[1, 3, 5], radius_miles),
         )
     except AnalysisNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
