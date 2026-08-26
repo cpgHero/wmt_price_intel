@@ -355,6 +355,50 @@ def test_pdp_can_complete_unresolved_governed_brand_without_changing_search_fact
     assert enriched.attributes["_brand_governance"]["strict_private_label"] is True
 
 
+def test_pdp_structured_brand_supersedes_unrelated_title_fallback() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
+    classifier = OfferClassifier(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offer = NormalizedOffer(
+        offer_id="amazon-black-seed-oil",
+        retailer_id="amazon_us_same_day",
+        retailer_product_id="B0C7NC3WNM",
+        title="GuruNanda Black Seed Oil with Vitamin D3, K2 & E",
+        brand=None,
+        price=Decimal("18.99"),
+        currency="USD",
+        zipcode="72712",
+        store_number=None,
+        latitude=36.37,
+        longitude=-94.2,
+        in_stock=True,
+        product_url=None,
+        image_url=None,
+        collected_at=None,
+        raw={},
+    )
+    search_classified = classifier.classify(offer)
+    assert search_classified.attributes["brand"] == "Seed"
+    assert search_classified.attributes["_attribute_provenance"]["brand"] == "retailer_pack_title"
+
+    enriched = complete_attributes_from_pdp(
+        search_classified,
+        {
+            "name": offer.title,
+            "brand": "GuruNanda",
+        },
+        classifier=classifier,
+        pack=pack,
+    )
+
+    assert enriched.attributes["brand"] == "GuruNanda"
+    assert enriched.attributes["_attribute_provenance"]["brand"] == "pdp_unclassified"
+    assert enriched.attributes["_brand_governance"]["status"] == "unresolved"
+    assert enriched.attributes["_brand_governance"]["observed_brand"] == "GuruNanda"
+
+
 def test_pdp_seller_policy_excludes_known_third_party_but_retains_missing() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
     classifier = OfferClassifier(pack, GovernedBrandResolver.from_repository(REPOSITORY_ROOT))

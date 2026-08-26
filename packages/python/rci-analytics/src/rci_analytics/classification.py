@@ -235,17 +235,24 @@ class OfferClassifier:
             category=self.pack.name,
         )
         resolution_source: str = resolution.resolution_method
-        # A present structured brand is stronger identity evidence than an unrelated
-        # word in the product title. Title discovery is therefore a missing-value
-        # fallback only; an unresolved retailer/PDP brand remains unresolved until
-        # the governed foundation or an explicit review decision covers it.
-        if resolution.status != "resolved" and observed is None:
+        if resolution.status != "resolved":
             title_resolution = self._brand_resolver.resolve_from_text(
                 offer.retailer_id,
                 evidence_text,
                 category=self.pack.name,
             )
-            if title_resolution.status == "resolved":
+            canonical_in_observed = False
+            if observed and title_resolution.canonical_brand_name:
+                observed_text = f" {_normalized_text(observed)} "
+                canonical_text = f" {_normalized_text(title_resolution.canonical_brand_name)} "
+                canonical_in_observed = canonical_text in observed_text
+            # A present structured brand is stronger identity evidence than an
+            # unrelated word in the product title. A title result may refine that
+            # field only when the governed canonical name is explicitly contained
+            # in it (for example, "Nature Made Nutritional Products").
+            if title_resolution.status == "resolved" and (
+                observed is None or canonical_in_observed
+            ):
                 resolution = title_resolution
                 resolution_source = "retailer_pack_title"
         return resolution.to_record(), resolution.canonical_brand_name, resolution_source

@@ -106,6 +106,10 @@ def complete_attributes_from_pdp(
                 isinstance(current_brand_governance, dict)
                 and current_brand_governance.get("status") == "resolved"
             )
+            current_brand_source = str(provenance.get("brand") or "unresolved")
+            current_brand_authoritative = (
+                current_brand_resolved and current_brand_source != "retailer_pack_title"
+            )
             pdp_brand = str(context.get("brand") or "").strip()
             pdp_name = str(context.get("name") or "").strip()
             brand_evidence = classifier.resolve_brand_evidence(
@@ -113,7 +117,7 @@ def complete_attributes_from_pdp(
                 observed_brand=pdp_brand or None,
                 evidence_text=" | ".join(value for value in (pdp_name, pdp_brand) if value),
             )
-            if not current_brand_resolved and (pdp_brand or brand_evidence is not None):
+            if not current_brand_authoritative and (pdp_brand or brand_evidence is not None):
                 # PDP may complete product identity, but not Search price or placement.
                 canonical_brand: str | None = None
                 resolution_source = "pdp"
