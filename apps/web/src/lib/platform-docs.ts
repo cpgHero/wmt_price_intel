@@ -661,7 +661,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Review current authoritative relationships",
               detail:
-                "Match Certification is the authoritative relationship surface. Attribute evidence proposals groups the latest AI batch and retry lineage into actionable evidence and retained advisory claims. The server distinguishes a missing-value completion, corroboration, material refinement, and conflict. An identified administrator may verify or reject a source-bound refinement/correction to lower-authority Search/PDP extraction; Product Pack overrides, governed brand decisions, manual overrides, and previously verified evidence stay locked. Then inspect the complete product evidence and approve or reject the relationship once. Reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
+                "Match Certification is the authoritative relationship surface. Attribute evidence proposals groups the latest AI batch and retry lineage into actionable evidence and retained advisory claims. The server distinguishes a missing-value completion, corroboration, material refinement, and conflict. An identified administrator may verify or reject a source-bound refinement/correction to lower-authority Search/PDP extraction; Product Pack overrides, governed brand decisions, manual overrides, and previously verified evidence stay locked. A versioned successor queue may preserve those human attribute decisions only through the independent fail-closed succession gate: Product Pack policy, listing, attribute, current value/source, AI output, cited image, visible evidence, and proposal checksum must remain identical, or the entire import rolls back. Then inspect the complete product evidence and approve or reject the relationship once. Reopen a final decision only by explicitly flagging it. Reporting replay remains explicit.",
             },
             {
               title: "Independently certify Matching v2",
@@ -1618,6 +1618,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-25",
+              "Implemented and regression-tested; production successor audit pending",
+              "Matching v2 gained independent checksum-bound carry-forward for human attribute-evidence decisions.",
+              "A successor queue can preserve completed evidence review without treating it as a final product match. Every carried decision must retain the exact Product Pack and policy, listing identity, attribute, current value and source, normalized proposal, originating AI output, cited image, visible evidence, and proposal checksum. The copy supersedes the immutable predecessor decision; one incompatibility rolls back the complete import. AI drafts and match verdicts are not inferred or auto-carried by this lane, and import starts no paid call or reporting replay. The focused API suite passes 81 tests.",
+            ],
             [
               "2026-08-25",
               "Production deployed and differential audit passed",

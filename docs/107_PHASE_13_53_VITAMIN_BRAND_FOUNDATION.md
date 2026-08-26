@@ -128,8 +128,9 @@ The accepted shadow is archived at
 It is 21,804,680 bytes with SHA-256
 `d0bcd1d38dc459248531e9223077a336a580868939892437fb543a31aff25388`.
 
-The shadow is deliberately not imported as the active queue yet. The current queue contains
-human attribute-evidence decisions. Replacing it without a checksum-bound successor carry-forward
-would discard completed review work. The next operational change must carry only decisions whose
+The original production checkpoint deliberately did not import the shadow as the active queue.
+The current queue contained human attribute-evidence decisions, and replacing it without a
+checksum-bound successor carry-forward would have discarded completed review work. Phase 13.54
+adds that independent fail-closed succession lane. It carries only decisions whose
 listing identity, attribute, normalized value, source image, proposal checksum, Product Pack
 policy, and raw evidence remain compatible; incompatible decisions must remain historical only.

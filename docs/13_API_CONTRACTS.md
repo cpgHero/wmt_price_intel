@@ -77,8 +77,14 @@ Protected Matching v2 certification routes are documented in
 administrator token; every queue response remains `authoritative=false`.
 
 `POST /api/v1/matching-v2/review-queues/import` accepts the optional immutable-successor fields
-`successor_of_version`, `carry_forward_certified`, and `scope_only_pack_revision`. Scope-only mode
-requires both other fields and is deliberately fail-closed: the successor Product Pack must add
+`successor_of_version`, `carry_forward_certified`, `carry_forward_attribute_evidence`, and
+`scope_only_pack_revision`. Attribute-evidence carry-forward is independent of final match-decision
+carry-forward and requires an explicit predecessor. It copies only the latest human decision for a
+proposal when the listing identity, attribute, current value and source, Product Pack version and
+policy, AI output checksum, cited image, visible evidence, and original proposal checksum remain
+identical; the new immutable decision supersedes the predecessor decision. A mismatch aborts the
+entire queue import. Scope-only mode
+requires the predecessor and certified-decision fields and is deliberately fail-closed: the successor Product Pack must add
 hard scope exclusions without removing any, while every other Product Pack and matching-policy
 field remains identical after version references are ignored. Each finalized predecessor listing
 pair must also retain identical governed evidence, proposal, and attributes; only revision-derived

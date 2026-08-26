@@ -1629,12 +1629,17 @@ class ImportReviewQueueRequest(BaseModel):
     queue_json: str | None = Field(default=None, min_length=2)
     successor_of_version: str | None = Field(default=None, min_length=1, max_length=50)
     carry_forward_certified: bool = False
+    carry_forward_attribute_evidence: bool = False
     scope_only_pack_revision: bool = False
 
     @model_validator(mode="after")
     def validate_successor_options(self) -> ImportReviewQueueRequest:
         if self.carry_forward_certified and self.successor_of_version is None:
             raise ValueError("carry_forward_certified requires an explicit successor_of_version")
+        if self.carry_forward_attribute_evidence and self.successor_of_version is None:
+            raise ValueError(
+                "carry_forward_attribute_evidence requires an explicit successor_of_version"
+            )
         if self.scope_only_pack_revision and not self.carry_forward_certified:
             raise ValueError("scope_only_pack_revision requires carry_forward_certified")
         return self
@@ -2176,6 +2181,7 @@ class MatchingV2ReviewRepository(Protocol):
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        carry_forward_attribute_evidence: bool = False,
         scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]: ...
 
@@ -2345,6 +2351,7 @@ class PostgresMatchingV2ReviewRepository:
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        carry_forward_attribute_evidence: bool = False,
         scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]:
         async with self._engine.begin() as connection:
@@ -2431,6 +2438,7 @@ class PostgresMatchingV2ReviewRepository:
                     raise ValueError(f"successor queue contains duplicate listing pair {pair!r}")
                 successor_pairs[pair] = (case_id, case)
             carried_forward_count = 0
+            carried_forward_attribute_decision_count = 0
             if carry_forward_certified:
                 if successor_of_version is None:
                     raise ValueError(
@@ -2445,6 +2453,20 @@ class PostgresMatchingV2ReviewRepository:
                     successor_pairs=successor_pairs,
                     scope_only_pack_revision=scope_only_pack_revision,
                 )
+            if carry_forward_attribute_evidence:
+                if successor_of_version is None:
+                    raise ValueError(
+                        "carry_forward_attribute_evidence requires an explicit predecessor version"
+                    )
+                carried_forward_attribute_decision_count = (
+                    await self._carry_forward_attribute_evidence_decisions(
+                        connection,
+                        organization_id=organization_id,
+                        queue=queue,
+                        predecessor_version=successor_of_version,
+                        successor_pairs=successor_pairs,
+                    )
+                )
         return {
             "id": review_queue_id,
             "queue_id": queue["queue_id"],
@@ -2453,6 +2475,7 @@ class PostgresMatchingV2ReviewRepository:
             "imported": True,
             "case_count": len(queue["cases"]),
             "carried_forward_count": carried_forward_count,
+            "carried_forward_attribute_decision_count": (carried_forward_attribute_decision_count),
             "pending_case_count": len(queue["cases"]) - carried_forward_count,
             "successor_of_version": successor_of_version,
             "scope_only_pack_revision": scope_only_pack_revision,
@@ -2544,6 +2567,108 @@ class PostgresMatchingV2ReviewRepository:
             if not old_images.issubset(new_images):
                 return False
         return True
+
+    _ATTRIBUTE_PROPOSAL_CHECKSUM_FIELDS = (
+        "proposal_index",
+        "ai_task_id",
+        "ai_output_checksum",
+        "case_checksum",
+        "policy_checksum",
+        "listing_role",
+        "listing_id",
+        "attribute",
+        "raw_value",
+        "normalized_value",
+        "evidence_source",
+        "confidence",
+        "visible_text",
+        "source_image_url",
+        "eligible",
+        "ineligibility_reasons",
+    )
+
+    @classmethod
+    def _attribute_proposal_checksum_is_valid(cls, proposal: Mapping[str, Any]) -> bool:
+        expected = str(proposal.get("proposal_checksum") or "")
+        payload = {field: proposal.get(field) for field in cls._ATTRIBUTE_PROPOSAL_CHECKSUM_FIELDS}
+        return len(expected) == 64 and _checksum(payload) == expected
+
+    @staticmethod
+    def _attribute_row(case: Mapping[str, Any], attribute: str) -> Mapping[str, Any] | None:
+        edge = case.get("edge")
+        rows = edge.get("attribute_evidence") if isinstance(edge, Mapping) else None
+        return next(
+            (
+                row
+                for row in rows or []
+                if isinstance(row, Mapping) and str(row.get("attribute") or "") == attribute
+            ),
+            None,
+        )
+
+    @classmethod
+    def _attribute_evidence_successor_is_compatible(
+        cls,
+        *,
+        proposal: Mapping[str, Any],
+        predecessor_case: Mapping[str, Any],
+        successor_case: Mapping[str, Any],
+        policy_checksum: str,
+        ai_output_checksum: str,
+    ) -> bool:
+        """Allow brand-only queue enrichment without weakening image-evidence lineage."""
+
+        if (
+            proposal.get("eligible") is not True
+            or proposal.get("evidence_source") != "image"
+            or str(proposal.get("policy_checksum") or "") != policy_checksum
+            or str(proposal.get("ai_output_checksum") or "") != ai_output_checksum
+            or not cls._attribute_proposal_checksum_is_valid(proposal)
+        ):
+            return False
+        role = str(proposal.get("listing_role") or "")
+        attribute = str(proposal.get("attribute") or "")
+        if role not in {"benchmark", "competitor"} or not attribute:
+            return False
+        predecessor_listing = predecessor_case.get(f"{role}_listing")
+        successor_listing = successor_case.get(f"{role}_listing")
+        if not isinstance(predecessor_listing, Mapping) or not isinstance(
+            successor_listing, Mapping
+        ):
+            return False
+        listing_id = str(proposal.get("listing_id") or "")
+        predecessor_listing_id = str(
+            predecessor_listing.get("listing_id")
+            or predecessor_case.get(f"{role}_listing_id")
+            or ""
+        )
+        successor_listing_id = str(
+            successor_listing.get("listing_id") or successor_case.get(f"{role}_listing_id") or ""
+        )
+        if (
+            not listing_id
+            or listing_id != predecessor_listing_id
+            or listing_id != successor_listing_id
+        ):
+            return False
+        source_image = str(proposal.get("source_image_url") or "")
+        if (
+            not source_image
+            or source_image not in cls._collect_image_evidence(predecessor_listing)
+            or source_image not in cls._collect_image_evidence(successor_listing)
+        ):
+            return False
+        predecessor_row = cls._attribute_row(predecessor_case, attribute)
+        successor_row = cls._attribute_row(successor_case, attribute)
+        if predecessor_row is None or successor_row is None:
+            return False
+        value_key = f"{role}_value"
+        source_key = f"{role}_source"
+        return _canonical(predecessor_row.get(value_key)) == _canonical(
+            proposal.get("current_value")
+        ) == _canonical(successor_row.get(value_key)) and str(
+            predecessor_row.get(source_key) or ""
+        ) == str(proposal.get("current_source") or "") == str(successor_row.get(source_key) or "")
 
     @staticmethod
     def _scope_only_pack_revision_is_compatible(
@@ -2803,6 +2928,163 @@ class PostgresMatchingV2ReviewRepository:
                     "evidence_refs": _canonical(evidence_refs),
                     "submission_checksum": _checksum(submission_document),
                     "supersedes_submission_id": predecessor_submission_id,
+                },
+            )
+            carried += 1
+        return carried
+
+    @classmethod
+    async def _carry_forward_attribute_evidence_decisions(
+        cls,
+        connection: AsyncConnection,
+        *,
+        organization_id: str,
+        queue: Mapping[str, Any],
+        predecessor_version: str,
+        successor_pairs: Mapping[tuple[str, str], tuple[str, Mapping[str, Any]]],
+    ) -> int:
+        """Carry only source-identical human evidence decisions into a successor queue."""
+
+        predecessor = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT id::text, product_pack_id, product_pack_version,
+                               policy_checksum
+                        FROM matching_v2_review_queue
+                        WHERE organization_id = CAST(:organization_id AS uuid)
+                          AND external_queue_id = :queue_id
+                          AND version = :version
+                        """
+                    ),
+                    {
+                        "organization_id": organization_id,
+                        "queue_id": queue["queue_id"],
+                        "version": predecessor_version,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if predecessor is None:
+            raise ValueError("the declared predecessor review queue was not found")
+        if (
+            str(predecessor["product_pack_id"]) != str(queue["product_pack"]["id"])
+            or str(predecessor["product_pack_version"]) != str(queue["product_pack"]["version"])
+            or str(predecessor["policy_checksum"]) != str(queue["policy_checksum"])
+        ):
+            raise ValueError(
+                "attribute evidence decisions cannot cross Product Pack or policy revisions"
+            )
+        rows = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (decision.proposal_checksum)
+                           review_case.external_case_id,
+                           review_case.case_document,
+                           decision.id::text AS decision_id,
+                           decision.ai_review_task_id::text AS ai_review_task_id,
+                           decision.proposal_checksum,
+                           decision.proposal_document,
+                           decision.decision,
+                           decision.reviewer_id,
+                           decision.rationale,
+                           task.output_checksum
+                    FROM matching_v2_attribute_evidence_decision decision
+                    JOIN matching_v2_review_case review_case
+                      ON review_case.id = decision.review_case_id
+                    JOIN matching_v2_ai_review_task task
+                      ON task.id = decision.ai_review_task_id
+                    WHERE review_case.review_queue_id = CAST(:queue_id AS uuid)
+                    ORDER BY decision.proposal_checksum,
+                             decision.created_at DESC,
+                             decision.id DESC
+                    """
+                ),
+                {"queue_id": predecessor["id"]},
+            )
+        ).mappings()
+        carried = 0
+        for row in rows:
+            predecessor_case = dict(row["case_document"])
+            pair = (
+                str(predecessor_case.get("benchmark_listing_id") or ""),
+                str(predecessor_case.get("competitor_listing_id") or ""),
+            )
+            successor = successor_pairs.get(pair)
+            if successor is None:
+                raise ValueError(
+                    "an attribute-evidence predecessor pair is absent from the successor queue: "
+                    f"{pair!r}"
+                )
+            successor_case_id, successor_case = successor
+            proposal = row["proposal_document"]
+            if not isinstance(
+                proposal, Mapping
+            ) or not cls._attribute_evidence_successor_is_compatible(
+                proposal=proposal,
+                predecessor_case=predecessor_case,
+                successor_case=successor_case,
+                policy_checksum=str(queue["policy_checksum"]),
+                ai_output_checksum=str(row["output_checksum"] or ""),
+            ):
+                raise ValueError(
+                    "an attribute evidence decision can only carry across identical listing, "
+                    "attribute, Product Pack, AI output, and image evidence: "
+                    f"{row['proposal_checksum']}"
+                )
+            predecessor_decision_id = str(row["decision_id"])
+            carry_note = (
+                f"\n\nCarried forward from immutable queue version {predecessor_version}; "
+                "the listing, attribute value, Product Pack policy, AI output, cited image, "
+                "visible evidence, and proposal checksum are unchanged."
+            )
+            rationale = str(row["rationale"])
+            rationale = f"{rationale[: max(0, 2_000 - len(carry_note))]}{carry_note}"
+            external_case_id = str(successor_case.get("case_id") or "")
+            decision_document = {
+                "reviewer_id": str(row["reviewer_id"]),
+                "proposal_checksum": str(row["proposal_checksum"]),
+                "decision": str(row["decision"]),
+                "rationale": rationale,
+                "supersedes_decision_id": predecessor_decision_id,
+            }
+            decision_checksum = _checksum(
+                {
+                    "schema_version": "1.0.0-attribute-evidence-decision",
+                    "queue_id": queue["queue_id"],
+                    "case_id": external_case_id,
+                    **decision_document,
+                }
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO matching_v2_attribute_evidence_decision (
+                      review_case_id, ai_review_task_id, proposal_checksum,
+                      proposal_document, decision, reviewer_id, rationale,
+                      decision_checksum, supersedes_decision_id
+                    ) VALUES (
+                      CAST(:case_id AS uuid), CAST(:ai_task_id AS uuid),
+                      :proposal_checksum, CAST(:proposal_document AS jsonb),
+                      :decision, :reviewer_id, :rationale, :decision_checksum,
+                      CAST(:supersedes_decision_id AS uuid)
+                    )
+                    """
+                ),
+                {
+                    "case_id": successor_case_id,
+                    "ai_task_id": row["ai_review_task_id"],
+                    "proposal_checksum": row["proposal_checksum"],
+                    "proposal_document": _canonical(proposal),
+                    "decision": row["decision"],
+                    "reviewer_id": row["reviewer_id"],
+                    "rationale": rationale,
+                    "decision_checksum": decision_checksum,
+                    "supersedes_decision_id": predecessor_decision_id,
                 },
             )
             carried += 1
@@ -5617,6 +5899,7 @@ class MatchingV2ReviewService:
             imported_by=request.imported_by,
             successor_of_version=request.successor_of_version,
             carry_forward_certified=request.carry_forward_certified,
+            carry_forward_attribute_evidence=request.carry_forward_attribute_evidence,
             scope_only_pack_revision=request.scope_only_pack_revision,
         )
 

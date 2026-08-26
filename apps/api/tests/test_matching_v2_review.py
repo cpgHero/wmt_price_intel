@@ -1066,6 +1066,7 @@ class ReviewRepository:
         imported_by: str,
         successor_of_version: str | None = None,
         carry_forward_certified: bool = False,
+        carry_forward_attribute_evidence: bool = False,
         scope_only_pack_revision: bool = False,
     ) -> dict[str, Any]:
         self.imported = {
@@ -1074,6 +1075,7 @@ class ReviewRepository:
             "imported_by": imported_by,
             "successor_of_version": successor_of_version,
             "carry_forward_certified": carry_forward_certified,
+            "carry_forward_attribute_evidence": carry_forward_attribute_evidence,
             "scope_only_pack_revision": scope_only_pack_revision,
         }
         return {"queue_id": queue["queue_id"], "imported": True, "case_count": 1}
@@ -1472,6 +1474,7 @@ async def test_review_service_passes_governed_successor_options() -> None:
             queue=_queue(),
             successor_of_version="1.0.0",
             carry_forward_certified=True,
+            carry_forward_attribute_evidence=True,
             scope_only_pack_revision=True,
         )
     )
@@ -1479,6 +1482,7 @@ async def test_review_service_passes_governed_successor_options() -> None:
     assert repository.imported is not None
     assert repository.imported["successor_of_version"] == "1.0.0"
     assert repository.imported["carry_forward_certified"] is True
+    assert repository.imported["carry_forward_attribute_evidence"] is True
     assert repository.imported["scope_only_pack_revision"] is True
 
 
@@ -1500,6 +1504,16 @@ def test_scope_only_successor_requires_certified_carry_forward() -> None:
             queue=_queue(),
             successor_of_version="1.0.0",
             scope_only_pack_revision=True,
+        )
+
+
+def test_attribute_evidence_successor_requires_explicit_predecessor() -> None:
+    with pytest.raises(ValueError, match="carry_forward_attribute_evidence"):
+        ImportReviewQueueRequest(
+            organization_id="00000000-0000-0000-0000-000000000001",
+            imported_by="review-admin",
+            queue=_queue(),
+            carry_forward_attribute_evidence=True,
         )
 
 
@@ -1533,6 +1547,85 @@ def test_successor_compatibility_ignores_only_additive_image_arrays() -> None:
         },
     }
     assert not PostgresMatchingV2ReviewRepository._image_evidence_is_additive(predecessor, replaced)
+
+
+def test_attribute_evidence_successor_allows_only_identical_source_bound_claim() -> None:
+    repository = PostgresMatchingV2ReviewRepository
+    policy_checksum = "a" * 64
+    proposal = {
+        "proposal_index": 0,
+        "ai_task_id": "task-1",
+        "ai_output_checksum": "b" * 64,
+        "case_checksum": "c" * 64,
+        "policy_checksum": policy_checksum,
+        "listing_role": "competitor",
+        "listing_id": "target_us:123",
+        "attribute": "active_ingredient",
+        "raw_value": "Vitamin D3",
+        "normalized_value": "vitamin d3",
+        "evidence_source": "image",
+        "confidence": 0.97,
+        "visible_text": "Vitamin D3 50 mcg",
+        "source_image_url": "https://images.example/label.jpg",
+        "eligible": True,
+        "ineligibility_reasons": [],
+    }
+    proposal["proposal_checksum"] = hashlib.sha256(
+        json.dumps(
+            proposal,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    proposal.update(
+        {
+            "current_value": "unknown",
+            "current_source": "pdp_derived",
+            "evidence_relationship": "fills_unknown",
+            "decision_effect": "fill_missing_value",
+        }
+    )
+    predecessor = {
+        "benchmark_listing_id": "walmart_us:1",
+        "competitor_listing_id": "target_us:123",
+        "benchmark_listing": {"listing_id": "walmart_us:1", "image_url": "walmart.jpg"},
+        "competitor_listing": {
+            "listing_id": "target_us:123",
+            "image_urls": ["https://images.example/label.jpg"],
+        },
+        "edge": {
+            "attribute_evidence": [
+                {
+                    "attribute": "active_ingredient",
+                    "competitor_value": "unknown",
+                    "competitor_source": "pdp_derived",
+                }
+            ]
+        },
+    }
+    successor = json.loads(json.dumps(predecessor))
+    successor["competitor_listing"]["brand"] = "up&up"
+    successor["competitor_listing"]["brand_type"] = "private_label"
+
+    compatible = repository._attribute_evidence_successor_is_compatible
+    arguments = {
+        "proposal": proposal,
+        "predecessor_case": predecessor,
+        "successor_case": successor,
+        "policy_checksum": policy_checksum,
+        "ai_output_checksum": "b" * 64,
+    }
+    assert compatible(**arguments)
+
+    wrong_value = json.loads(json.dumps(successor))
+    wrong_value["edge"]["attribute_evidence"][0]["competitor_value"] = "vitamin d2"
+    assert not compatible(**{**arguments, "successor_case": wrong_value})
+    missing_image = json.loads(json.dumps(successor))
+    missing_image["competitor_listing"]["image_urls"] = []
+    assert not compatible(**{**arguments, "successor_case": missing_image})
+    changed_policy = {**arguments, "policy_checksum": "d" * 64}
+    assert not compatible(**changed_policy)
 
 
 def test_scope_only_pack_compatibility_requires_strictly_additive_exclusions() -> None:
