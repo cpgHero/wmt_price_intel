@@ -1620,9 +1620,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-25",
-              "Implemented and regression-tested; production successor audit pending",
+              "Production deployed; successor import and trust audit passed",
               "Matching v2 gained independent checksum-bound carry-forward for human attribute-evidence decisions.",
-              "A successor queue can preserve completed evidence review without treating it as a final product match. Every carried decision must retain the exact Product Pack and policy, listing identity, attribute, current value and source, normalized proposal, originating AI output, cited image, visible evidence, and proposal checksum. The copy supersedes the immutable predecessor decision. A claim-level incompatibility is reported and retained only in predecessor history; a global Product Pack or queue-policy mismatch rolls the complete import back. AI drafts and match verdicts are not inferred or auto-carried by this lane, and import starts no paid call or reporting replay. The focused API suite passes 81 tests.",
+              "Commit 0f5fb16 and GitHub Actions run 32927089584 passed Python, TypeScript, 15 browser tests, migrations, contracts, and all four container builds before Railway deployment. Production successor 2026.08.25-spring-valley-brand-shadow-10 contains all 2,316 immutable cases. It carried 28 exact source-bound administrator evidence decisions, each with explicit predecessor lineage, and safely omitted one image-derived brand decision superseded by stronger governed foundation evidence. All 2,316 certification recomputations succeeded with zero reconciliation conflicts or duplicate proposal checksums; the decisions are reused across 72 cases and 118 product-evidence applications. Governed brand verification covers 1,246 of 1,440 distinct listings (86.53%). The queue has zero final match decisions and remains non-authoritative until Match Certification, gold-set release, and governed replay. No MetricsCart or OpenAI call was made.",
             ],
             [
               "2026-08-25",

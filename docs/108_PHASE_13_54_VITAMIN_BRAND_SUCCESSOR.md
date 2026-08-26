@@ -23,7 +23,8 @@ An administrator must name the exact predecessor queue. Inside the same transact
 the immutable successor, every latest attribute-evidence decision is reconciled against its
 successor product pair. Carry-forward is allowed only when all of these remain unchanged:
 
-- Product Pack identity, version, and certification-policy checksum;
+- Product Pack identity and version, queue engine-policy checksum, and the proposal's active
+  Product Pack policy checksum;
 - benchmark and competitor listing identities;
 - Product Pack attribute and listing side;
 - current attribute value and its evidence source;
@@ -54,4 +55,28 @@ image, AI, review, or reporting history.
   checksums, and missing product pairs fail closed.
 - The focused Matching v2 API suite passes before deployment.
 
-Production import and reporting outcomes are appended only after their checks complete.
+## Production outcome
+
+GitHub Actions run `32927089584` passed the full Python, TypeScript, browser, migration,
+contract, and four-service container suite for commit `0f5fb16`. Railway deployed the corrected
+API successfully before the successor was imported.
+
+The production import created immutable queue version
+`2026.08.25-spring-valley-brand-shadow-10` with checksum
+`885109979739dcbe6ea74bfcecbbab7fd63ab92183a8ada618a7967191032cca`:
+
+- all 2,316 candidate cases were imported and remain pending;
+- 28 source-identical administrator attribute-evidence decisions were carried, and every new
+  decision supersedes its immutable predecessor;
+- one prior image-derived brand decision was not carried because the governed Vitamin Brand
+  Foundation now supplies a stronger current brand value and source;
+- no final product-match decision or AI recommendation was carried;
+- all 2,316 certification-engine recomputations succeeded;
+- no reconciliation conflict or duplicate proposal checksum was found;
+- the 28 governed decisions were reused across 72 cases and 118 product-evidence applications;
+- 1,246 of 1,440 distinct listings have governed verified brands (86.53%); and
+- no MetricsCart or OpenAI call was made.
+
+The queue is intentionally not report-authoritative: it contains zero final match decisions, and
+2,307 cases currently fail at least one certification release requirement. Match Certification,
+gold-set release, and governed reporting replay remain separate future steps.
