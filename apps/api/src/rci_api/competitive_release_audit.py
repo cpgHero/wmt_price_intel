@@ -650,11 +650,11 @@ def audit_competitive_portfolio_set(
                         field=field,
                         values=values,
                     )
-            funnel_rows = [
-                row.get("evidence_funnel")
-                for _, row in rows
-                if isinstance(row.get("evidence_funnel"), Mapping)
-            ]
+            funnel_rows: list[Mapping[str, Any]] = []
+            for _, row in rows:
+                funnel = row.get("evidence_funnel")
+                if isinstance(funnel, Mapping):
+                    funnel_rows.append(funnel)
             for field in (
                 "catalog_products",
                 "in_scope_catalog_products",

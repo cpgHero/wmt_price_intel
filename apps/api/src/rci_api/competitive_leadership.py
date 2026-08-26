@@ -312,7 +312,7 @@ def _coverage_rows(
         if str(product.get("scope") or "include") != "exclude"
     }
     rows: list[dict[str, Any]] = []
-    status_counts = Counter()
+    status_counts: Counter[str] = Counter()
     for product_id in product_ids:
         observed = observed_products.get(product_id, {})
         observed_locations = int(observed.get("observed_locations") or 0)
