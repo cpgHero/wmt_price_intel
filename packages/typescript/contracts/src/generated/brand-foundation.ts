@@ -103,7 +103,7 @@ export interface ExternalBrand {
   brand_name: string;
   brand_name_normalized: string;
   brand_bucket: "Regional" | "National";
-  brand_class: "regional_brand" | "national_brand";
+  brand_class: "regional_brand" | "national_brand" | "specialty_natural_national" | "digital_first_national";
   owner_or_marketer: string;
   ownership_relationship: string;
   brand_family: string;
@@ -124,6 +124,7 @@ export interface ExternalBrand {
   source_url: string;
   last_verified_at: string | null;
   notes: string | null;
+  category_context?: string | null;
 }
 export interface RetailerPresence {
   brand_id: string;

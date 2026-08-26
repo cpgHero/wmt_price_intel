@@ -13,6 +13,12 @@
       "name": "CPGHero Brand Universe Foundation",
       "version": "2.0.0",
       "file": "cpg_brand_foundation/2.0.0.json"
+    },
+    {
+      "id": "cpg_brand_foundation",
+      "name": "CPGHero Cross-Category Brand Universe Foundation",
+      "version": "2.1.0",
+      "file": "cpg_brand_foundation/2.1.0.json"
     }
   ]
 }

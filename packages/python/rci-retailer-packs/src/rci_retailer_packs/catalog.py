@@ -86,6 +86,8 @@ class BrandResolution:
     home_state: str | None
     primary_category: str | None
     category_tags: str | None
+    owner_or_marketer: str | None
+    category_context: str | None
     is_priority_brand: bool
     foundation_id: str
     foundation_version: str
@@ -116,6 +118,8 @@ class BrandResolution:
             "home_state": self.home_state,
             "primary_category": self.primary_category,
             "category_tags": self.category_tags,
+            "owner_or_marketer": self.owner_or_marketer,
+            "category_context": self.category_context,
             "is_priority_brand": self.is_priority_brand,
             "foundation": {
                 "id": self.foundation_id,
@@ -278,16 +282,18 @@ class BrandFoundationLoader:
             brand_ids.add(brand_id)
             retailer_names.add(key)
             retailer_by_brand[brand_id] = str(brand["retailer_id"])
-        external_names: set[str] = set()
+        external_names: set[tuple[str, str]] = set()
         for brand in document.get("external_brands", []):
             brand_id = str(brand["brand_id"])
             normalized = str(brand["brand_name_normalized"])
+            category_context = normalize_brand_name(str(brand.get("category_context") or ""))
+            canonical_key = (normalized, category_context)
             if brand_id in brand_ids:
                 raise ContractError(f"duplicate brand ID {brand_id!r}")
-            if normalized in external_names:
-                raise ContractError(f"duplicate global canonical brand {normalized!r}")
+            if canonical_key in external_names:
+                raise ContractError(f"duplicate global canonical brand {canonical_key!r}")
             brand_ids.add(brand_id)
-            external_names.add(normalized)
+            external_names.add(canonical_key)
             retailer_by_brand[brand_id] = "__global__"
         external_ids = {str(brand["brand_id"]) for brand in document.get("external_brands", [])}
         priority_ids = [str(value) for value in document.get("priority_brand_ids", [])]
@@ -314,7 +320,7 @@ class BrandFoundationLoader:
                     f"external brand {brand['brand_id']!r} references unknown source {source_id!r}"
                 )
         alias_ids: set[str] = set()
-        aliases: dict[tuple[str, str], str] = {}
+        aliases: dict[tuple[str, str, str], str] = {}
         for alias in document["aliases"]:
             alias_id = str(alias["alias_id"])
             if alias_id in alias_ids:
@@ -326,14 +332,18 @@ class BrandFoundationLoader:
                 raise ContractError(f"alias references unknown brand {canonical_brand_id!r}")
             if retailer_by_brand[canonical_brand_id] != retailer_id:
                 raise ContractError(f"alias crosses retailer context {alias_id!r}")
-            key = (retailer_id, str(alias["alias_normalized"]))
+            key = (
+                retailer_id,
+                str(alias["alias_normalized"]),
+                normalize_brand_name(str(alias.get("category_context") or "")),
+            )
             existing = aliases.get(key)
             if existing is not None and existing != canonical_brand_id:
                 raise ContractError(f"ambiguous exact alias {key!r}")
             aliases[key] = canonical_brand_id
         for conflict in document.get("alias_conflicts", []):
             key = (str(conflict["retailer_id"]), str(conflict["alias_normalized"]))
-            if key in aliases:
+            if any(alias_key[:2] == key for alias_key in aliases):
                 raise ContractError(f"quarantined alias conflict remains resolvable {key!r}")
             candidate_ids = {str(value) for value in conflict["candidate_brand_ids"]}
             unknown_candidates = sorted(candidate_ids - brand_ids)
@@ -367,18 +377,19 @@ class GovernedBrandResolver:
             (str(row["retailer_id"]), str(row["brand_name_normalized"])): dict(row)
             for row in foundation.document["brands"]
         }
-        self._global_canonical = {
-            str(row["brand_name_normalized"]): dict(row)
-            for row in foundation.document.get("external_brands", [])
-        }
-        self._aliases: dict[tuple[str, str], JsonObject] = {}
+        self._global_canonical: dict[str, list[JsonObject]] = {}
+        for row in foundation.document.get("external_brands", []):
+            self._global_canonical.setdefault(str(row["brand_name_normalized"]), []).append(
+                dict(row)
+            )
+        self._aliases: dict[tuple[str, str], list[JsonObject]] = {}
         for row in foundation.document["aliases"]:
             key = (str(row["retailer_id"]), str(row["alias_normalized"]))
-            self._aliases.setdefault(key, dict(row))
-        self._global_aliases: dict[str, JsonObject] = {}
+            self._aliases.setdefault(key, []).append(dict(row))
+        self._global_aliases: dict[str, list[JsonObject]] = {}
         for row in foundation.document.get("aliases", []):
             if str(row["retailer_id"]) == "__global__":
-                self._global_aliases.setdefault(str(row["alias_normalized"]), dict(row))
+                self._global_aliases.setdefault(str(row["alias_normalized"]), []).append(dict(row))
         self._register_retailer_pack_private_labels()
         self._alias_conflicts = {
             (str(row["retailer_id"]), str(row["alias_normalized"])): tuple(
@@ -440,15 +451,19 @@ class GovernedBrandResolver:
                 for alias_name in brand.get("aliases", []):
                     alias_normalized = normalize_brand_name(str(alias_name))
                     alias_key = (retailer_id, alias_normalized)
-                    existing = self._aliases.get(alias_key)
-                    if existing is not None and str(existing["canonical_brand_id"]) != brand_id:
+                    existing = self._aliases.get(alias_key, [])
+                    if existing and {str(value["canonical_brand_id"]) for value in existing} != {
+                        brand_id
+                    }:
                         raise ContractError(f"ambiguous Retailer Pack brand alias {alias_key!r}")
-                    self._aliases[alias_key] = {
-                        "retailer_id": retailer_id,
-                        "alias_normalized": alias_normalized,
-                        "canonical_brand_id": brand_id,
-                        "status": "Active",
-                    }
+                    self._aliases.setdefault(alias_key, []).append(
+                        {
+                            "retailer_id": retailer_id,
+                            "alias_normalized": alias_normalized,
+                            "canonical_brand_id": brand_id,
+                            "status": "Active",
+                        }
+                    )
 
     @classmethod
     def from_repository(
@@ -501,15 +516,17 @@ class GovernedBrandResolver:
         method: Literal["exact_canonical", "exact_alias", "legacy_alias"] = "exact_canonical"
         alias: JsonObject | None = None
         if row is None:
-            alias = self._aliases.get((retailer_id, normalized))
+            alias = self._select_scoped(
+                self._aliases.get((retailer_id, normalized), []), category=category
+            )
             if alias is not None:
                 row = self._brands_by_id[str(alias["canonical_brand_id"])]
                 method = "legacy_alias" if str(alias["status"]) == "Legacy" else "exact_alias"
         if row is None:
-            row = self._global_canonical.get(normalized)
+            row = self._select_scoped(self._global_canonical.get(normalized, []), category=category)
         if row is None:
-            alias = self._global_aliases.get(normalized)
-            if alias is not None and self._category_alias_allowed(alias, category):
+            alias = self._select_scoped(self._global_aliases.get(normalized, []), category=category)
+            if alias is not None:
                 row = self._brands_by_id[str(alias["canonical_brand_id"])]
                 method = "legacy_alias" if str(alias["status"]) == "Legacy" else "exact_alias"
         if override is not None:
@@ -605,9 +622,15 @@ class GovernedBrandResolver:
             for (candidate_retailer_id, _), row in self._canonical.items()
             if candidate_retailer_id == retailer_id
         ]
-        candidates.extend(self._global_canonical.values())
+        candidates.extend(
+            row
+            for rows in self._global_canonical.values()
+            for row in rows
+            if self._category_row_allowed(row, category)
+        )
+        unique_candidates = {str(row["brand_id"]): row for row in candidates}
         scored: list[BrandCandidateSuggestion] = []
-        for row in candidates:
+        for row in unique_candidates.values():
             score, rationale = self._candidate_score(
                 normalized,
                 str(row["brand_name_normalized"]),
@@ -768,6 +791,44 @@ class GovernedBrandResolver:
         observed = normalize_brand_name(category)
         return any(value in observed or observed in value for value in expected)
 
+    @staticmethod
+    def _category_row_allowed(row: JsonObject, category: str | None) -> bool:
+        context = str(row.get("category_context") or "").strip()
+        if not context:
+            return True
+        if not category:
+            return False
+        expected = normalize_brand_name(context)
+        observed = normalize_brand_name(category)
+        return (
+            expected in observed
+            or observed in expected
+            or bool(set(expected.split("_")) & set(observed.split("_")))
+        )
+
+    def _select_scoped(
+        self,
+        rows: list[JsonObject],
+        *,
+        category: str | None,
+    ) -> JsonObject | None:
+        allowed = [
+            row
+            for row in rows
+            if self._category_row_allowed(row, category)
+            and self._category_alias_allowed(row, category)
+        ]
+        if not allowed:
+            return None
+        scoped = [row for row in allowed if str(row.get("category_context") or "").strip()]
+        candidates = scoped or allowed
+        canonical_ids = {
+            str(row.get("canonical_brand_id") or row["brand_id"]) for row in candidates
+        }
+        if len(canonical_ids) != 1:
+            return None
+        return candidates[0]
+
     def provenance(self, retailer_ids: list[str]) -> list[JsonObject]:
         rows = [
             {
@@ -847,6 +908,12 @@ class GovernedBrandResolver:
                 str(row["primary_category"]) if row.get("primary_category") else None
             ),
             category_tags=str(row["category_tags"]) if row.get("category_tags") else None,
+            owner_or_marketer=(
+                str(row["owner_or_marketer"]) if row.get("owner_or_marketer") else None
+            ),
+            category_context=(
+                str(row["category_context"]) if row.get("category_context") else None
+            ),
             is_priority_brand=bool(row.get("is_priority_brand", False)),
             foundation_id=self.foundation.id,
             foundation_version=self.foundation.version,
@@ -927,6 +994,8 @@ class GovernedBrandResolver:
             home_state=None,
             primary_category=None,
             category_tags=None,
+            owner_or_marketer=None,
+            category_context=None,
             is_priority_brand=False,
             foundation_id=self.foundation.id,
             foundation_version=self.foundation.version,

@@ -166,7 +166,7 @@ def test_structured_pdp_fields_complete_product_pack_raw_attribute_sources() -> 
     assert enriched.attributes["_attribute_provenance"]["active_ingredient"] == "search"
 
 
-def test_pdp_category_breadcrumb_cannot_misclassify_national_brand_as_private_label() -> None:
+def test_pdp_category_breadcrumb_resolves_national_brand_without_private_label_inference() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("vitamins_supplements")
     classifier = OfferClassifier(pack, GovernedBrandResolver.from_repository(REPOSITORY_ROOT))
     offer = NormalizedOffer(
@@ -200,9 +200,10 @@ def test_pdp_category_breadcrumb_cannot_misclassify_national_brand_as_private_la
         pack=pack,
     )
 
-    assert enriched.attributes["brand"] == "Nature Made Nutritional Products"
-    assert enriched.attributes["_brand_governance"]["status"] == "unresolved"
-    assert enriched.attributes["_brand_governance"]["canonical_brand_name"] is None
+    assert enriched.attributes["brand"] == "Nature Made"
+    assert enriched.attributes["_brand_governance"]["status"] == "resolved"
+    assert enriched.attributes["_brand_governance"]["canonical_brand_name"] == "Nature Made"
+    assert enriched.attributes["_brand_governance"]["role"] == "national"
 
 
 def test_vitamin_formulation_terms_do_not_collapse_to_one_shared_minor_ingredient() -> None:

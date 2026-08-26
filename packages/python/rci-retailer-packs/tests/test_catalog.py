@@ -72,6 +72,28 @@ def test_brand_universe_v2_reconciles_governed_private_and_external_sources() ->
     ]
 
 
+def test_brand_universe_v2_1_adds_governed_vitamin_identity_without_presence_inference() -> None:
+    foundation = BrandFoundationLoader(REPOSITORY_ROOT).load("cpg_brand_foundation", "2.1.0")
+
+    assert len(foundation.document["brands"]) == 246
+    assert len(foundation.document["external_brands"]) == 620
+    assert len(foundation.document["aliases"]) == 183
+    assert len(foundation.document["retailer_presence"]) == 620
+    assert len(foundation.document["source_registry"]) == 209
+    nature_made = next(
+        row
+        for row in foundation.document["external_brands"]
+        if row["brand_id"] == "national__nature_made"
+    )
+    assert nature_made["category_context"] == "Vitamins & Supplements"
+    assert nature_made["brand_class"] == "national_brand"
+    assert "actual assortment" in next(
+        row["presence_rule"]
+        for row in foundation.document["retailer_presence"]
+        if row["brand_id"] == "national__nature_made"
+    )
+
+
 def test_brand_normalization_matches_governed_possessive_and_ampersand_keys() -> None:
     assert normalize_brand_name("Sam's Choice") == "sams_choice"
     assert normalize_brand_name("Good & Gather") == "good_and_gather"
@@ -142,34 +164,96 @@ def test_exact_title_fallback_recovers_one_unambiguous_governed_brand() -> None:
     assert ambiguous.status == "unresolved"
 
 
-def test_retailer_pack_private_labels_close_versioned_coverage_gaps() -> None:
+def test_vitamin_foundation_closes_governed_private_label_coverage_gaps() -> None:
     resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
 
     expected = {
-        "amazon_us_same_day": "Amazon Elements",
-        "bjs_us": "Berkley Jensen",
-        "costco_us": "Kirkland Signature",
-        "cvs_us": "CVS Health",
-        "meijer_us": "Meijer",
-        "sams_club_us": "Member's Mark",
-        "walgreens_us": "Walgreens Free & Pure",
+        "amazon_us_same_day": ("Amazon Elements", "amazon__amazon_elements"),
+        "bjs_us": ("Berkley Jensen", "bjs__berkley_jensen"),
+        "costco_us": ("Kirkland Signature", "costco__kirkland_signature"),
+        "cvs_us": ("CVS Health", "cvs__cvs_health"),
+        "meijer_us": ("Meijer", "meijer__meijer"),
+        "sams_club_us": ("Member's Mark", "sams_club__member_s_mark"),
+        "walgreens_us": ("Walgreens Free & Pure", "walgreens__walgreens_free_and_pure"),
     }
-    for retailer_id, brand_name in expected.items():
+    for retailer_id, (brand_name, canonical_id) in expected.items():
         resolution = resolver.resolve(retailer_id, brand_name, category="Vitamins & Supplements")
         assert resolution.status == "resolved"
         assert resolution.strict_private_label is True
         assert resolution.role == "private_label"
-        assert resolution.canonical_brand_id == (
-            f"retailer_pack__{retailer_id}__{normalize_brand_name(brand_name)}"
+        assert resolution.canonical_brand_id == canonical_id
+
+
+def test_category_scoped_external_brand_collision_resolves_safely() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+
+    vitamin = resolver.resolve("walmart_us", "Swanson", category="Vitamins & Supplements")
+    pantry = resolver.resolve("walmart_us", "Swanson", category="Pantry Soup")
+    nature_made_without_category = resolver.resolve("walmart_us", "Nature Made")
+
+    assert vitamin.canonical_brand_id == "national__swanson_health_products"
+    assert vitamin.brand_class == "digital_first_national"
+    assert vitamin.owner_or_marketer == "Swanson Health Products"
+    assert vitamin.category_context == "Vitamins & Supplements"
+    assert pantry.canonical_brand_id == "national__swanson"
+    assert nature_made_without_category.status == "unresolved"
+
+
+def test_every_imported_vitamin_brand_and_alias_resolves_in_governed_context() -> None:
+    resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
+    foundation = resolver.foundation.document
+
+    vitamin_private = [
+        row for row in foundation["brands"] if "Vitamins" in str(row.get("department_scope") or "")
+    ]
+    vitamin_external = [
+        row
+        for row in foundation["external_brands"]
+        if row.get("category_context") == "Vitamins & Supplements"
+    ]
+    vitamin_aliases = [
+        row for row in foundation["aliases"] if str(row["alias_id"]).startswith("alias__vitamins__")
+    ]
+
+    for row in vitamin_private:
+        resolution = resolver.resolve(
+            str(row["retailer_id"]),
+            str(row["brand_name"]),
+            category="Vitamins & Supplements",
         )
+        assert resolution.canonical_brand_id == row["brand_id"]
+    for row in vitamin_external:
+        resolution = resolver.resolve(
+            "walmart_us",
+            str(row["brand_name"]),
+            category="Vitamins & Supplements",
+        )
+        assert resolution.canonical_brand_id == row["brand_id"]
+        assert resolution.role == "national"
+    for row in vitamin_aliases:
+        retailer_id = str(row["retailer_id"])
+        resolution = resolver.resolve(
+            "walmart_us" if retailer_id == "__global__" else retailer_id,
+            str(row["alias_name"]),
+            category="Vitamins & Supplements",
+        )
+        assert resolution.canonical_brand_id == row["canonical_brand_id"]
 
 
 def test_retailer_pack_private_labels_remain_retailer_scoped() -> None:
     resolver = GovernedBrandResolver.from_repository(REPOSITORY_ROOT)
 
-    assert resolver.resolve("costco_us", "Kirkland").strict_private_label is True
+    assert (
+        resolver.resolve(
+            "costco_us", "Kirkland", category="Vitamins & Supplements"
+        ).strict_private_label
+        is True
+    )
     assert resolver.resolve("walmart_us", "Kirkland").status == "unresolved"
-    assert resolver.resolve("cvs_us", "CVS").canonical_brand_name == "CVS Health"
+    assert (
+        resolver.resolve("cvs_us", "CVS", category="Vitamins & Supplements").canonical_brand_name
+        == "CVS Health"
+    )
 
 
 def test_acquired_brand_is_not_strict_private_label() -> None:

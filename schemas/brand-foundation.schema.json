@@ -257,7 +257,14 @@
         "brand_name": { "type": "string", "minLength": 1 },
         "brand_name_normalized": { "type": "string", "minLength": 1 },
         "brand_bucket": { "enum": ["Regional", "National"] },
-        "brand_class": { "enum": ["regional_brand", "national_brand"] },
+        "brand_class": {
+          "enum": [
+            "regional_brand",
+            "national_brand",
+            "specialty_natural_national",
+            "digital_first_national"
+          ]
+        },
         "owner_or_marketer": { "type": "string", "minLength": 1 },
         "ownership_relationship": { "type": "string", "minLength": 1 },
         "brand_family": { "type": "string" },
@@ -277,7 +284,8 @@
         "source_type": { "type": "string", "minLength": 1 },
         "source_url": { "type": "string", "format": "uri" },
         "last_verified_at": { "type": ["string", "null"], "format": "date" },
-        "notes": { "type": ["string", "null"] }
+        "notes": { "type": ["string", "null"] },
+        "category_context": { "type": ["string", "null"], "minLength": 1 }
       }
     },
     "retailerPresence": {

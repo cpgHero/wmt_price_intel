@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0.0",
+  "id": "cvs_us",
+  "display_name": "CVS",
+  "version": "1.0.1",
+  "status": "catalogued",
+  "identity": {
+    "canonical_retailer_id": "cvs_us",
+    "aliases": [
+      "cvs",
+      "cvs.com",
+      "cvs pharmacy"
+    ]
+  },
+  "observation_semantics": {
+    "price_authority": "search_location_observation",
+    "availability_authority": "search_location_observation",
+    "location_dimension": "store_zip",
+    "physical_store_reporting": true
+  },
+  "brand_foundation": {
+    "id": "cpg_brand_foundation",
+    "version": "2.1.0"
+  },
+  "brand_policy": {
+    "resolution_order": [
+      "retailer_context",
+      "retailer_exact_canonical",
+      "retailer_exact_alias",
+      "global_exact_canonical",
+      "global_exact_alias",
+      "unresolved"
+    ],
+    "strict_private_label_requires": [
+      "in_private_label_matching",
+      "approved_review",
+      "eligible_status",
+      "eligible_class",
+      "retailer_owned"
+    ],
+    "eligible_statuses": [
+      "Active",
+      "Transitioning",
+      "Seasonal"
+    ],
+    "eligible_classes": [
+      "private_label_owned",
+      "private_label_exclusive",
+      "retailer_banner_brand",
+      "sub_brand"
+    ],
+    "unknown_behavior": "queue_candidate_never_auto_approve",
+    "fuzzy_behavior": "suggestion_only_within_retailer",
+    "verified_private_labels": [
+      {
+        "brand_name": "CVS Health",
+        "aliases": [
+          "CVS",
+          "CVS Pharmacy"
+        ],
+        "category_tags": "vitamins;supplements;health_wellness",
+        "evidence_notes": "CVS retailer-owned health brand verified for exact retailer-scoped resolution."
+      }
+    ]
+  },
+  "enrichment_policy": {
+    "identity_scope": "unique_admitted_products",
+    "default_contexts_per_product": 1,
+    "price_variant_context_policy": "additional_observed_context_on_price_difference",
+    "search_fields_are_immutable": true,
+    "default_cache_ttl_days": 30
+  },
+  "matching_boundary": {
+    "brand_role": "candidate_generation_only",
+    "requires_product_pack_compatibility": true
+  }
+}
