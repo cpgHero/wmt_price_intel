@@ -2734,7 +2734,10 @@ function RadiusRetailerScorecardPanel({
               <>
                 <div className="coverage-funnel-grid">
                   {[
-                    ["Source catalog", coverage.evidence_funnel.catalog_products],
+                    [
+                      "Source catalog",
+                      coverage.evidence_funnel.catalog_products,
+                    ],
                     [
                       "Governed in scope",
                       coverage.evidence_funnel.in_scope_catalog_products,
