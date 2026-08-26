@@ -79,7 +79,7 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 25, 2026";
+const lastVerified = "August 26, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -1544,8 +1544,8 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           items: [
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
-            "The current vitamin queue still has incomplete governed brand coverage: 296 of 1,440 distinct products lack a resolved brand, including 32 of 149 products whose title visibly contains Nature Made. The reconciliation repair does not guess these brands. The forthcoming vitamins brand foundation must be imported and validated, then a successor queue must be regenerated so exact canonical/alias and unambiguous title resolution run before further AI or certification.",
-            "Production vitamin reporting remains blocked on human reconciliation and certification. Product Pack 1.3.0 shadow queue 2026.08.25-spring-valley-luna-shadow-9 preserves the accepted 2,316 pair identities with zero added or removed pairs, zero observed-location failures, zero price-basis invariant failures, and no known third-party seller leakage. Its first 18-case Luna batch failed closed before inference at $0.00 because strict Structured Outputs rejected an unsupported uniqueItems keyword. The fixed, lineage-linked retry completed 18 of 18 for $0.1312886: 10 insufficient-evidence, two not-comparable, and six comparable proposals. The audit exposed tier disagreement as an overly permissive bulk warning, so policy 1.6.0 now binds AI output to the deterministic tier and eligible price bases and blocks missing, rejected, or disagreeing engine authority. A subsequent untouched live-provider case with no deterministic tier or price basis succeeded for $0.0023444 and correctly returned insufficient evidence, null tier, and no comparison basis; image retrieval fell back to structured evidence. None were certified or published. Earlier Product Pack 1.2.9 evidence remains preserved: 366 unique cases cost $41.7666525, exposed 499 of 1,020 products with unresolved hard evidence, and generated 610 source-attributable image proposals eligible for human verification, with zero certifiable AI relationship proposals.",
+            "The active Vitamin Brand Foundation resolves and verifies 1,246 of 1,440 distinct queue listings (86.53%). The remaining 194 unresolved brands stay explicitly unknown; the platform does not infer brand authority from weak or ambiguous text.",
+            "Production vitamin reporting remains blocked on human evidence reconciliation and relationship certification. Product Pack 1.3.0 successor queue 2026.08.25-spring-valley-brand-shadow-10 preserves all 2,316 accepted pair identities and contains zero final match decisions. Owner-approved gpt-5.6-luna review completed all 2,316 cases in two immutable batches with zero task failures for $16.7772558. Results are six comparable, 549 not comparable, and 1,761 insufficient evidence. Only 25 relationship recommendations currently satisfy the deterministic bulk-certification boundary. The model returned 12,853 source-attributable image proposals: 8,899 merely corroborate existing evidence and require no action; 3,953 are review-eligible across 1,880 distinct product-attribute claims. Of those distinct eligible claims, 1,753 converge on one value and 127 conflict across repeated observations. AI remains advisory: none of these proposals or relationships was automatically verified, certified, released, or published.",
             "Egg Search evidence has material critical-attribute gaps; targeted PDP/label/vision evidence and human certification are required.",
             "Kroger Product Details uses the provider-catalog /kroger/pdp/zipcode/ route verified by a controlled HTTP 200 preflight on August 17.",
             "Reviewer identity is manually entered inside the protected admin session; individual accounts, verified identity, and RBAC are not yet implemented.",
@@ -1618,6 +1618,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-26",
+              "Production AI review complete; evidence reconciliation and certification pending",
+              "The brand-enhanced Vitamin queue completed a bounded full-population gpt-5.6-luna review under an owner-approved $50 cap.",
+              "Two immutable batches processed all 2,316 cases with zero failures for $16.7772558. A preflight bounded batch one at $46.878656 under an all-images/all-output-token assumption; after its actual $9.8828092 cost reconciled, the remaining 816 cases had a $25.529446 conservative exposure and completed for $6.8944466. Worker capacity temporarily scaled from one to 16 replicas and returned to one after completion; durable leases prevented duplicate claims. Results are six comparable, 549 not comparable, and 1,761 insufficient evidence. The trust audit found no comparable recommendation with an incompatible governed attribute, but only 25 cases currently pass bulk-certification policy. Image review produced 12,853 proposals: 8,899 corroborations, 3,431 missing-value completions, 247 refinements, 275 conflicts, and one invalid proposal. The 3,953 eligible proposals collapse to 1,880 distinct claims: 1,753 single-value consensus claims and 127 conflicts. Nothing was auto-verified, certified, released, or published.",
+            ],
             [
               "2026-08-25",
               "Production deployed; successor import and trust audit passed",
