@@ -314,6 +314,18 @@ def _coverage_rows(
         for product_id, product in catalog.items()
         if str(product.get("scope") or "include") != "exclude"
     }
+    observed_product_ids = {
+        product_id
+        for product_id in in_scope_product_ids
+        if int(observed_products.get(product_id, {}).get("observed_locations") or 0) > 0
+    }
+    certified_product_ids = observed_product_ids & set(identity_by_product)
+    selected_product_ids = certified_product_ids & set(selected_by_product)
+    locally_scored_product_ids = {
+        product_id
+        for product_id in selected_product_ids
+        if scored_by_product.get(product_id, 0) > 0
+    }
     rows: list[dict[str, Any]] = []
     status_counts: Counter[str] = Counter()
     for product_id in product_ids:
@@ -376,18 +388,12 @@ def _coverage_rows(
     funnel = {
         "catalog_products": len(product_ids),
         "in_scope_catalog_products": len(in_scope_product_ids),
-        "observed_catalog_products": sum(
-            1
-            for product_id in in_scope_product_ids
-            if int(observed_products.get(product_id, {}).get("observed_locations") or 0) > 0
-        ),
-        "certified_identity_products": len(in_scope_product_ids & set(identity_by_product)),
-        "selected_price_basis_products": len(in_scope_product_ids & set(selected_by_product)),
-        "locally_scored_products": sum(
-            1 for product_id in in_scope_product_ids if scored_by_product.get(product_id, 0) > 0
-        ),
+        "observed_catalog_products": len(observed_product_ids),
+        "certified_identity_products": len(certified_product_ids),
+        "selected_price_basis_products": len(selected_product_ids),
+        "locally_scored_products": len(locally_scored_product_ids),
         "scored_product_locations": sum(
-            scored_by_product.get(product_id, 0) for product_id in in_scope_product_ids
+            scored_by_product.get(product_id, 0) for product_id in locally_scored_product_ids
         ),
         "status_counts": {
             key: int(status_counts[key])

@@ -756,8 +756,8 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
         "catalog_products": 2,
         "in_scope_catalog_products": 2,
         "observed_catalog_products": 1,
-        "certified_identity_products": 2,
-        "selected_price_basis_products": 2,
+        "certified_identity_products": 1,
+        "selected_price_basis_products": 1,
         "locally_scored_products": 1,
         "scored_product_locations": 2,
         "status_counts": {
