@@ -1622,6 +1622,12 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-27",
+              "Production incident remediated and verified",
+              "Web analytical reads no longer report a false API outage when a healthy cold request exceeds five seconds.",
+              "The API and database remained healthy; production logs showed valid analytical reads occasionally completing after roughly seven seconds while the web server canceled every GET at five seconds. The bounded server-read window is now 20 seconds. Web health returned HTTP 200 with API dependency ok, the report library returned all six active reports, and ten warm internal list reads completed in 89–168 ms. No data, metric, report, provider call, or AI state changed.",
+            ],
+            [
+              "2026-08-27",
               "Deployed, rematerialized, and production-verified",
               "Decision-quality certification now covers every active Competitive Intelligence publication.",
               "Vitamins, Milk, Strawberries, Eggs, Bananas, and Ground Beef expose all 204 required retailer × basis × radius contexts across 48 documents with zero blocking semantic errors. The gate verifies nested catalog-to-local-evidence funnels, coverage math, stable identity across radius, monotonic physical-store evidence, and constant delivery-ZIP service-area evidence. Shared repairs bind selective observation reads to the immutable governed artifact generation and keep unobserved certified relationships in the complete ledger without inflating observed funnels. Strawberries and Ground Beef are ready; Vitamins, Milk, Eggs, and Bananas are shareable with their explicit evidence caveats. The complete local suite passed 778 Python and 74 TypeScript tests plus all 91 normative contracts; GitHub Actions runs 33040753435, 33041986464, and 33042654180 passed. No provider, PDP, AI, certification, source-evidence, or audit-lineage change occurred.",

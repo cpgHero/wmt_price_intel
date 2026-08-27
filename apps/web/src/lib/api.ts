@@ -740,9 +740,14 @@ export interface ApiResult<T> {
   error: string | null;
 }
 
+// Production analytical reads can legitimately take longer than five seconds
+// while a cold materialized payload is loaded. Keep the request bounded, but do
+// not turn a slow, healthy API response into a false outage in the UI.
+export const DEFAULT_API_GET_TIMEOUT_MS = 20_000;
+
 export async function getApi<T>(
   path: string,
-  timeoutMs = 5_000,
+  timeoutMs = DEFAULT_API_GET_TIMEOUT_MS,
 ): Promise<ApiResult<T>> {
   const { apiInternalUrl } = loadServerConfig();
   try {
