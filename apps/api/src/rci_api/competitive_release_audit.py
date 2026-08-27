@@ -578,13 +578,13 @@ def audit_competitive_portfolio_set(
                                     actual=actual,
                                     expected=expected,
                                 )
-                    if selected_count != _integer(scorecard.get("benchmark_products")):
+                    if selected_count > _integer(scorecard.get("benchmark_products")):
                         finding(
                             "error",
-                            "selected_basis_product_mismatch",
+                            "selected_basis_product_overcount",
                             (
-                                "Selected-basis products must equal the scorecard's "
-                                "distinct benchmark products."
+                                "Observed selected-basis products cannot exceed the scorecard's "
+                                "complete certified relationship product set."
                             ),
                             path=scorecard_path,
                             selected_basis_products=selected_count,

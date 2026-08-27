@@ -182,6 +182,44 @@ def test_competitive_release_audit_discloses_empty_cohort_layer() -> None:
     )
 
 
+def test_competitive_release_audit_retains_unobserved_certified_products() -> None:
+    documents = [_document("compatible", radius, 1) for radius in (1, 3, 5)]
+    for document in documents:
+        scorecard = document["scorecards"][0]
+        scorecard["benchmark_products"] = 2
+        scorecard["competitor_products"] = 2
+        scorecard["relationships"] = 2
+        scorecard["evidence_funnel"]["catalog_products"] = 2
+        scorecard["evidence_funnel"]["in_scope_catalog_products"] = 2
+        scorecard["evidence_funnel"]["status_counts"]["benchmark_not_observed"] = 1
+        scorecard["products"].append(
+            {
+                "product_id": "w2",
+                "product_name": "Unobserved Walmart eggs",
+                "image_url": None,
+                "relationships": 1,
+                **_summary(benchmark=0, scored=0),
+            }
+        )
+        scorecard["product_relationships"].append(
+            {
+                **scorecard["product_relationships"][0],
+                "relationship_id": "relationship-2",
+                "benchmark_product_id": "w2",
+                "benchmark_product_name": "Unobserved Walmart eggs",
+                "competitor_product_id": "a2",
+                "competitor_product_name": "ALDI eggs two",
+                **_summary(benchmark=0, scored=0),
+            }
+        )
+        document["assortment_scorecards"][0]["relationships"] = 2
+
+    audit = audit_competitive_portfolio_set(documents, expected_profiles=("compatible",))
+
+    assert audit["status"] == "passed"
+    assert audit["error_count"] == 0
+
+
 def test_competitive_release_audit_fails_rates_rollups_and_radius_regression() -> None:
     documents = deepcopy(_complete_set())
     documents[1]["scorecards"][0]["coverage_rate"] = 0.25
