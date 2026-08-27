@@ -1,6 +1,6 @@
 # Phase 13.62 — Vitamin Reporting Decision-Quality Certification
 
-Status: implemented and locally certified; production deployment pending
+Status: deployed, rematerialized, and production-verified
 
 Date: 2026-08-26
 
@@ -85,14 +85,26 @@ All 478 Compatible Specification relationship rows use `price_per_item` in
 `USD/package`. Exact relationship identities are a subset of Compatible
 Specification identities at every radius.
 
-## Verification required before completion
+## Verification
 
-- focused audit, portfolio, API, and UI tests;
-- generated-contract and schema checks;
-- full Python and web test/static/build gates;
-- Railway deployment and public endpoint verification;
-- visual verification of context-aware Decision Readiness; and
-- rematerialization or governed publication-job audit refresh using retained
-  data only.
+- 777 Python tests pass; 16 environment- or fixture-dependent tests skip with
+  their documented prerequisites.
+- 21 focused release-audit and portfolio service tests pass.
+- 73 web unit tests and all 15 Playwright acceptance tests pass.
+- Contracts, formatting, Ruff, ESLint, TypeScript, mypy across 151 Python source
+  files, migrations, production builds, and all four container builds pass.
+- GitHub Actions run `33035290829` passes for commit `9be8a04`.
+- Railway deployments are web `533cb00c-b8db-40da-978e-da4146f61918`, API
+  `d12d7642-45c2-4539-817b-da7dbb1c8d02`, worker
+  `50ad6ef2-9868-4d89-a156-e910e1726096`, and scheduler
+  `faad40a2-4dfd-4aa3-8e03-14ba67ef01f4`.
+- Production rematerialized all six portfolio documents from retained evidence
+  and reported `provider_calls_queued: 0`.
+- The public decision-quality endpoint returns a passing 54-of-54 matrix with
+  the expected 28/17/9 state partition.
+- Browser acceptance verified all three visible states: `Local price evidence
+  ready`, `Local evidence limited`, and `No eligible relationship`. The latter
+  explicitly explains that the zero is governed rather than missing data.
 
-No provider or AI spend is authorized or required for this phase.
+No provider or AI call was made and no match, source evidence, or historical
+report was changed or deleted.

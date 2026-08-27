@@ -1622,9 +1622,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-26",
-              "Implemented and locally certified; production deployment pending",
+              "Deployed, rematerialized, and production-verified",
               "Vitamin reporting gained a decision-quality context matrix and stricter semantic publication gate.",
-              "All 54 retailer × basis × radius contexts are explicit: 28 scored, 17 local-evidence limited, and nine without a selected-basis relationship. The gate now blocks identity replacement, product-to-relationship outcome drift, incorrect funnel transitions, denominator drift, mixed price bases, and non-monotonic radius evidence. The six retained Vitamin documents pass with zero blocking errors and 65 disclosed warnings. Competitive Intelligence Decision Readiness and Report Publishing administration expose the same context states. No Search, PDP, AI, certification, or source-evidence change occurred.",
+              "All 54 retailer × basis × radius contexts are explicit: 28 scored, 17 local-evidence limited, and nine without a selected-basis relationship. The gate now blocks identity replacement, product-to-relationship outcome drift, incorrect funnel transitions, denominator drift, mixed price bases, and non-monotonic radius evidence. Production rematerialized the six retained Vitamin documents with zero provider calls and the public audit passes with zero blocking errors and 65 disclosed warnings. Competitive Intelligence Decision Readiness visibly distinguishes scored, limited, and governed-zero contexts. Commit 9be8a04 and GitHub Actions run 33035290829 passed the full release gate. No Search, PDP, AI, certification, source-evidence, or historical-report change occurred.",
             ],
             [
               "2026-08-26",
