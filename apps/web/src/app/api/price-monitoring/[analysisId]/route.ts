@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getApi, type PriceMonitoringView } from "@/lib/api";
+import { compactPriceMonitoringCatalog } from "@/lib/price-monitoring-catalog";
 
 export async function GET(
   request: Request,
@@ -18,7 +19,7 @@ export async function GET(
       { status: response.status },
     );
   }
-  return NextResponse.json(response.data, {
+  return NextResponse.json(compactPriceMonitoringCatalog(response.data), {
     headers: {
       "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
     },

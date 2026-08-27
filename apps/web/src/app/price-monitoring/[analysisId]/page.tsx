@@ -6,6 +6,7 @@ import {
   type AnalysisRecord,
   type PriceMonitoringView,
 } from "@/lib/api";
+import { compactPriceMonitoringCatalog } from "@/lib/price-monitoring-catalog";
 
 import { PriceMonitoringWorkspace } from "./workspace";
 
@@ -84,7 +85,7 @@ export default async function PriceMonitoringDetailPage({
     <main className="price-monitoring-page">
       <PriceMonitoringWorkspace
         initialTab={query.tab}
-        initialView={viewResponse.data}
+        initialView={compactPriceMonitoringCatalog(viewResponse.data)}
       />
     </main>
   );
