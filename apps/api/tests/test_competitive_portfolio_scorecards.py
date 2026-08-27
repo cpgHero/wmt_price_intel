@@ -429,6 +429,7 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
         },
     ]
     cohort = _cohort_summary(
+        competitor_name="Target",
         segment_row={
             "_competitor_id": "target_us",
             "_profile_id": "compatible",
@@ -477,6 +478,7 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
     )
 
     assert cohort["relationships"] == 1
+    assert cohort["competitor"] == "Target"
     assert cohort["scored_product_locations"] == 1
     assert cohort["average_gap"] == 0.2
     assert cohort["benchmark_median"] == 3.0

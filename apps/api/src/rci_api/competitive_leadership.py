@@ -407,6 +407,7 @@ def _coverage_rows(
 def _cohort_summary(
     *,
     segment_row: dict[str, Any],
+    competitor_name: str,
     candidates: list[dict[str, Any]],
     product_views: dict[str, dict[str, Any]],
     relationship_rows: list[dict[str, Any]],
@@ -503,7 +504,10 @@ def _cohort_summary(
             f"{segment_row.get('_segment_id')}"
         ),
         "competitor_id": str(segment_row.get("_competitor_id")),
-        "competitor": str(segment_row.get("competitor") or "Competitor"),
+        # Segment rows are persisted analytical evidence and may retain a
+        # canonical retailer id.  The portfolio read model owns presentation,
+        # so keep every cohort aligned with the governed retailer display name.
+        "competitor": competitor_name,
         "profile_id": str(segment_row.get("_profile_id")),
         "segment_id": str(segment_row.get("_segment_id")),
         "segment": str(segment_row.get("segment") or "Comparable cohort"),
@@ -1177,6 +1181,7 @@ class CompetitiveProductLeadershipService:
             cohorts.extend(
                 _cohort_summary(
                     segment_row=row,
+                    competitor_name=competitor_name_index.get(retailer_id, retailer_id),
                     candidates=retailer_candidates,
                     product_views=product_views,
                     relationship_rows=product_relationships,

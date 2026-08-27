@@ -417,9 +417,9 @@ export function ComparableCohortExplorer({
             <p>
               Each row summarizes certified one-to-one product relationships at
               observed benchmark product-store grain. Physical competitor
-              evidence must fall within {radiusMiles} mile
-              {radiusMiles === 1 ? "" : "s"}; service-area retailers use the
-              same delivery ZIP.
+              evidence must fall within
+              {` ${radiusMiles} mile${radiusMiles === 1 ? "" : "s"}`};
+              service-area retailers use the same delivery ZIP.
             </p>
           </div>
           <button type="button" onClick={onReviewMatches}>

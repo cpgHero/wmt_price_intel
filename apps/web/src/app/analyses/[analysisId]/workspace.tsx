@@ -93,6 +93,18 @@ function brandTypeSummary(
   products: ScorecardProductSummary[],
   side: "benchmark" | "competitor",
 ) {
+  return brandTypesSummary(
+    products.map((product) =>
+      side === "benchmark"
+        ? product.benchmark_brand_type
+        : product.competitor_brand_type,
+    ),
+  );
+}
+
+function brandTypesSummary(
+  brandTypes: Array<"private_label" | "regional" | "national" | "unclassified">,
+) {
   const labels = {
     private_label: "private label",
     regional: "regional",
@@ -100,11 +112,7 @@ function brandTypeSummary(
     unclassified: "unclassified",
   } as const;
   const counts = new Map<string, number>();
-  for (const product of products) {
-    const brandType =
-      side === "benchmark"
-        ? product.benchmark_brand_type
-        : product.competitor_brand_type;
+  for (const brandType of brandTypes) {
     counts.set(brandType, (counts.get(brandType) ?? 0) + 1);
   }
   return (["private_label", "regional", "national", "unclassified"] as const)
@@ -663,6 +671,41 @@ function BlueprintAnalysisWorkspace({
       ];
     }),
   );
+  const assortmentBrandTypes = new Map(
+    (reportView.assortment_analysis?.retailers ?? []).flatMap((retailer) =>
+      (retailer.products ?? []).map(
+        (product) =>
+          [
+            `${retailer.retailer}::${product.product_id}`,
+            product.brand_type ?? "unclassified",
+          ] as const,
+      ),
+    ),
+  );
+  for (const cohort of radiusPortfolio?.cohorts ?? []) {
+    const relationships = cohort.product_relationships ?? [];
+    cohortPairEvidence[cohort.id] = {
+      pairCount: relationships.length,
+      benchmarkBrandTypes:
+        brandTypesSummary(
+          relationships.map(
+            (relationship) =>
+              assortmentBrandTypes.get(
+                `${reportView.retailer_scope.benchmark.id}::${relationship.benchmark_product_id}`,
+              ) ?? "unclassified",
+          ),
+        ) || "brand type unresolved",
+      competitorBrandTypes:
+        brandTypesSummary(
+          relationships.map(
+            (relationship) =>
+              assortmentBrandTypes.get(
+                `${cohort.competitor_id}::${relationship.competitor_product_id}`,
+              ) ?? relationship.competitor_brand_type,
+          ),
+        ) || "brand type unresolved",
+    };
+  }
   const openCohortRecord = (record: JsonObject) => {
     const cohort = comparableCohort(record);
     if (cohort) setSelectedCohort(cohort);
@@ -1397,8 +1440,8 @@ function AssortmentProductList({
               </small>
               <strong>{product.name}</strong>
               <em>
-                Seen at {product.observed_locations.toLocaleString()} locations
-                · {product.observed_zipcodes.toLocaleString()} ZIPs
+                Seen at {product.observed_locations.toLocaleString()} store
+                {product.observed_locations === 1 ? "" : "s"}
               </em>
               {showProductFootprintLink && analysisId && retailerId ? (
                 <Link
