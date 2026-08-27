@@ -2010,9 +2010,7 @@ function ProductCatalog({
               aria-busy={isExpanding}
               disabled={isExpanding}
               onClick={() =>
-                startExpanding(() =>
-                  setVisibleCount((current) => current + 40),
-                )
+                startExpanding(() => setVisibleCount((current) => current + 40))
               }
               type="button"
             >
