@@ -787,14 +787,20 @@ function BlueprintAnalysisWorkspace({
       ) ?? [],
     [decisionQuality, leadershipRadius, selectedCompetitor, selectedLens],
   );
-  const scoredDecisionContexts = selectedDecisionContexts.filter(
-    (context) => context.evidence_state === "scored",
-  );
-  const limitedDecisionContexts = selectedDecisionContexts.filter(
-    (context) => context.evidence_state === "local_evidence_limited",
-  );
-  const emptyDecisionContexts = selectedDecisionContexts.filter(
-    (context) => context.evidence_state === "no_selected_basis_relationship",
+  const decisionContextCounts = useMemo(
+    () => ({
+      scored: selectedDecisionContexts.filter(
+        (context) => context.evidence_state === "scored",
+      ).length,
+      limited: selectedDecisionContexts.filter(
+        (context) => context.evidence_state === "local_evidence_limited",
+      ).length,
+      empty: selectedDecisionContexts.filter(
+        (context) =>
+          context.evidence_state === "no_selected_basis_relationship",
+      ).length,
+    }),
+    [selectedDecisionContexts],
   );
   const selectedDecisionContext =
     selectedCompetitor === "all" ? null : (selectedDecisionContexts[0] ?? null);
@@ -813,7 +819,7 @@ function BlueprintAnalysisWorkspace({
             : selectedDecisionContext?.evidence_state ===
                 "no_selected_basis_relationship"
               ? "No eligible relationship"
-              : `${scoredDecisionContexts.length} of ${selectedDecisionContexts.length} retailers scored`
+              : `${decisionContextCounts.scored} of ${selectedDecisionContexts.length} retailers scored`
       : readiness.status === "ready"
         ? "Ready for decision use"
         : readiness.status === "review_required"
@@ -978,7 +984,7 @@ function BlueprintAnalysisWorkspace({
           value: readinessLabel,
           tone:
             decisionQuality?.status === "passed" &&
-            scoredDecisionContexts.length > 0
+            decisionContextCounts.scored > 0
               ? "ready"
               : "attention",
           facts: [
@@ -990,15 +996,15 @@ function BlueprintAnalysisWorkspace({
                   },
                   {
                     label: "Current contexts scored",
-                    value: `${scoredDecisionContexts.length.toLocaleString()} of ${selectedDecisionContexts.length.toLocaleString()}`,
+                    value: `${decisionContextCounts.scored.toLocaleString()} of ${selectedDecisionContexts.length.toLocaleString()}`,
                   },
                   {
                     label: "Local-evidence limitations",
-                    value: limitedDecisionContexts.length.toLocaleString(),
+                    value: decisionContextCounts.limited.toLocaleString(),
                   },
                   {
                     label: "No selected-basis relationship",
-                    value: emptyDecisionContexts.length.toLocaleString(),
+                    value: decisionContextCounts.empty.toLocaleString(),
                   },
                   ...(selectedDecisionContext
                     ? [
@@ -1168,9 +1174,7 @@ function BlueprintAnalysisWorkspace({
     decisionQuality,
     decisionQualityError,
     selectedDecisionContexts,
-    scoredDecisionContexts,
-    limitedDecisionContexts,
-    emptyDecisionContexts,
+    decisionContextCounts,
     selectedDecisionContext,
     reportedRelationshipCount,
     reportView.retailer_scope.benchmark.name,
