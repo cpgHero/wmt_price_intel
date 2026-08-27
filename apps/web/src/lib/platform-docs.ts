@@ -1621,6 +1621,12 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
             [
+              "2026-08-27",
+              "Deployed, rematerialized, and production-verified",
+              "Decision-quality certification now covers every active Competitive Intelligence publication.",
+              "Vitamins, Milk, Strawberries, Eggs, Bananas, and Ground Beef expose all 204 required retailer × basis × radius contexts across 48 documents with zero blocking semantic errors. The gate verifies nested catalog-to-local-evidence funnels, coverage math, stable identity across radius, monotonic physical-store evidence, and constant delivery-ZIP service-area evidence. Shared repairs bind selective observation reads to the immutable governed artifact generation and keep unobserved certified relationships in the complete ledger without inflating observed funnels. Strawberries and Ground Beef are ready; Vitamins, Milk, Eggs, and Bananas are shareable with their explicit evidence caveats. The complete local suite passed 778 Python and 74 TypeScript tests plus all 91 normative contracts; GitHub Actions runs 33040753435, 33041986464, and 33042654180 passed. No provider, PDP, AI, certification, source-evidence, or audit-lineage change occurred.",
+            ],
+            [
               "2026-08-26",
               "Deployed, rematerialized, and production-verified",
               "Vitamin reporting gained a decision-quality context matrix and stricter semantic publication gate.",
