@@ -124,7 +124,7 @@
       "location_dimension": "store_zip",
       "location_collection_policy": {
         "eligible_statuses": ["active"],
-        "store_number_pattern": "^[0-9]{3}-[0-9]{3}$"
+        "store_number_pattern": "^[0-9]+$"
       },
       "required_params": [
         "keyword",

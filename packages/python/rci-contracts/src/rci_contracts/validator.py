@@ -185,9 +185,9 @@ def _validate_json_parseability(root: Path) -> int:
 def _validate_location_profile(root: Path) -> None:
     profile_path = root / "fixtures" / "location_master" / "locations.profile.json"
     profile = _load_json(profile_path)
-    expected_counts = {"Walmart": 4683, "ALDI": 2627, "Target": 2148}
-    if profile.get("rows") != 157806:
-        raise ContractError(f"{profile_path}: expected 157806 rows")
+    expected_counts = {"Walmart": 4683, "ALDI": 2687, "Target": 2148}
+    if profile.get("rows") != 157866:
+        raise ContractError(f"{profile_path}: expected 157866 rows")
     retailers = profile.get("relevant_retailers", {})
     for retailer, expected in expected_counts.items():
         actual = retailers.get(retailer, {}).get("locations")

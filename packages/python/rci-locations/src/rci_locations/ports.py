@@ -29,6 +29,10 @@ class LocationRepository(Protocol):
         self, import_id: str, locations: Sequence[LocationRecord]
     ) -> None: ...
 
+    async def retire_missing_locations(
+        self, import_id: str, retailer_ids: Sequence[str]
+    ) -> None: ...
+
     async def update_import_progress(
         self,
         import_id: str,

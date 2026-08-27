@@ -23,6 +23,7 @@ class InMemoryLocationRepository:
         self.retailers: dict[str, RetailerDefinition] = {}
         self.aliases: dict[tuple[str, str], str] = {}
         self.locations: dict[tuple[str, str, str, str], LocationRecord] = {}
+        self.location_import_ids: dict[tuple[str, str, str, str], str] = {}
         self.imports: dict[str, ImportState] = {}
 
     async def begin_import(self, source_path: str, source_sha256: str) -> str:
@@ -57,9 +58,23 @@ class InMemoryLocationRepository:
         import_id: str,
         locations: Sequence[LocationRecord],
     ) -> None:
-        del import_id
         for location in locations:
             self.locations[location.identity] = location
+            self.location_import_ids[location.identity] = import_id
+
+    async def retire_missing_locations(self, import_id: str, retailer_ids: Sequence[str]) -> None:
+        authoritative = set(retailer_ids)
+        for identity, location in list(self.locations.items()):
+            if (
+                location.retailer_id in authoritative
+                and self.location_import_ids.get(identity) != import_id
+            ):
+                self.locations[identity] = replace(
+                    location,
+                    status="superseded",
+                    collection_eligible=False,
+                    collection_eligibility_reason="superseded_by_authoritative_import",
+                )
 
     async def complete_import(self, summary: ImportSummary) -> None:
         state = self.imports[summary.import_id]

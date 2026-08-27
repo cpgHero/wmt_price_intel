@@ -28,16 +28,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("config/retailer-catalog.json"),
     )
     parser.add_argument("--batch-size", type=int, default=1_000)
+    parser.add_argument(
+        "--authoritative-retailer",
+        action="append",
+        default=[],
+        help=(
+            "Retailer ID whose existing locations absent from this import should be retained "
+            "for audit but marked superseded and collection-ineligible. Repeat as needed."
+        ),
+    )
     return parser
 
 
-async def run_import(source: Path, catalog_path: Path, batch_size: int) -> int:
+async def run_import(
+    source: Path,
+    catalog_path: Path,
+    batch_size: int,
+    authoritative_retailers: set[str] | None = None,
+) -> int:
     database = DatabaseProbe(AppSettings.from_env().database_url)
     try:
         repository = PostgresLocationRepository(database.engine)
         catalog = RetailerCatalog.from_path(catalog_path.resolve())
         summary = await LocationImporter(repository, catalog, batch_size=batch_size).import_file(
-            source
+            source,
+            authoritative_retailer_ids=authoritative_retailers,
         )
         print(json.dumps(asdict(summary), indent=2, sort_keys=True))
     finally:
@@ -47,4 +62,11 @@ async def run_import(source: Path, catalog_path: Path, batch_size: int) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return asyncio.run(run_import(args.source, args.catalog, args.batch_size))
+    return asyncio.run(
+        run_import(
+            args.source,
+            args.catalog,
+            args.batch_size,
+            set(args.authoritative_retailer),
+        )
+    )

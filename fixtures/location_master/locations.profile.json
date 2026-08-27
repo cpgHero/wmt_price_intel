@@ -1,9 +1,9 @@
 {
   "source_file": "locations.csv",
-  "rows": 157806,
+  "rows": 157866,
   "providers": 83,
   "status_counts": {
-    "active": 157806
+    "active": 157866
   },
   "columns": [
     "id",
@@ -40,11 +40,11 @@
       }
     },
     "ALDI": {
-      "locations": 2627,
-      "unique_store_numbers": 2627,
-      "normalized_unique_zips": 2499,
+      "locations": 2687,
+      "unique_store_numbers": 2687,
+      "normalized_unique_zips": 2550,
       "countries": {
-        "USA": 2627
+        "USA": 2687
       }
     },
     "kroger": {
@@ -234,6 +234,16 @@
       }
     },
     {
+      "provider": "ALDI",
+      "rows": 2687,
+      "unique_store_numbers": 2687,
+      "raw_unique_zips": 2550,
+      "normalized_unique_zips": 2550,
+      "countries": {
+        "USA": 2687
+      }
+    },
+    {
       "provider": "kroger",
       "rows": 2668,
       "unique_store_numbers": 2668,
@@ -242,16 +252,6 @@
       "countries": {
         "USA": 2667,
         "": 1
-      }
-    },
-    {
-      "provider": "ALDI",
-      "rows": 2627,
-      "unique_store_numbers": 2627,
-      "raw_unique_zips": 2500,
-      "normalized_unique_zips": 2499,
-      "countries": {
-        "USA": 2627
       }
     },
     {

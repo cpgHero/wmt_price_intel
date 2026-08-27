@@ -12,10 +12,10 @@
     },
     {
       "retailer_id": "aldi_us",
-      "location_units": 2627,
+      "location_units": 2687,
       "credits_per_page": 2,
-      "estimated_pages": 2627,
-      "estimated_credits": 5254
+      "estimated_pages": 2687,
+      "estimated_credits": 5374
     },
     {
       "retailer_id": "amazon_us_same_day",
@@ -25,7 +25,7 @@
       "estimated_credits": 8380
     }
   ],
-  "estimated_total_pages": 11500,
-  "estimated_total_credits": 18317,
+  "estimated_total_pages": 11560,
+  "estimated_total_credits": 18437,
   "note": "Actual billable credits can be lower only when pagination stops before configured maximum; MetricsCart bills 2xx and 404 response pages while successful-page counts remain 2xx-only."
 }

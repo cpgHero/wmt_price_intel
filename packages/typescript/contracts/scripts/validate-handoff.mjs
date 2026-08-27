@@ -456,9 +456,9 @@ const profile = await loadJson(
   "location_master",
   "locations.profile.json",
 );
-if (profile.rows !== 157806) {
+if (profile.rows !== 157866) {
   throw new Error(
-    `location profile: expected 157806 rows, found ${profile.rows}`,
+    `location profile: expected 157866 rows, found ${profile.rows}`,
   );
 }
 

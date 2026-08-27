@@ -72,7 +72,7 @@ async def test_strawberry_cost_estimate_matches_supplied_contract() -> None:
         assert actual.estimated_credits == retailer["estimated_credits"]
     assert plan.estimate.estimated_total_pages == expected["estimated_total_pages"]
     assert plan.estimate.estimated_total_credits == expected["estimated_total_credits"]
-    assert len(plan.initial_tasks) == 11500
+    assert len(plan.initial_tasks) == expected["estimated_total_pages"]
     preflight = [task for task in plan.initial_tasks if task.is_preflight]
     assert len(preflight) == 5
     assert {task.retailer_id for task in preflight} == {"aldi_us"}

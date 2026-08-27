@@ -18,7 +18,7 @@ ALDI_LOCATION_SOURCE = (
     / "fixtures"
     / "location_master"
     / "retailer_updates"
-    / "aldi-locations-2026-08-22.csv"
+    / "aldi-locations-2026-08-27.csv"
 )
 
 
@@ -92,7 +92,7 @@ def test_provider_safe_store_identifiers_are_collection_eligible() -> None:
     catalog = RetailerCatalog.from_path(CATALOG_PATH)
     walmart, _ = transform_row(_row(), catalog)
     aldi, _ = transform_row(
-        _row(Provider="ALDI", Store_No="463-048", Zip_Code="44906"),
+        _row(Provider="ALDI", Store_No="24469", Zip_Code="44906"),
         catalog,
     )
 
@@ -100,6 +100,13 @@ def test_provider_safe_store_identifiers_are_collection_eligible() -> None:
     assert walmart.collection_eligibility_reason is None
     assert aldi.collection_eligible
     assert aldi.collection_eligibility_reason is None
+
+    legacy_aldi, _ = transform_row(
+        _row(Provider="ALDI", Store_No="463-048", Zip_Code="44906"),
+        catalog,
+    )
+    assert not legacy_aldi.collection_eligible
+    assert legacy_aldi.collection_eligibility_reason == "store_number_not_provider_safe"
 
     for provider, expected_retailer in (
         ("BJS", "bjs_us"),
@@ -189,16 +196,16 @@ async def test_complete_supplied_location_master_is_country_scoped() -> None:
 
     summary = await importer.import_file(LOCATION_SOURCE)
 
-    assert summary.total_rows == 157806
-    assert summary.imported_rows == 157806
+    assert summary.total_rows == 157866
+    assert summary.imported_rows == 157866
     assert summary.skipped_rows == 0
     assert repository.retailer_counts["walmart_us"] == 4683
-    assert repository.retailer_counts["aldi_us"] == 2627
+    assert repository.retailer_counts["aldi_us"] == 2687
     assert repository.retailer_counts["target_us"] == 2023
     assert repository.retailer_counts["target__au"] == 124
     assert repository.retailer_counts["target__unknown"] == 1
     assert repository.collection_eligible_counts["walmart_us"] == 4683
-    assert repository.collection_eligible_counts["aldi_us"] == 2627
+    assert repository.collection_eligible_counts["aldi_us"] == 2687
     assert repository.collection_eligible_counts["albertsons_us"] == 376
     assert repository.collection_eligible_counts["wegmans_us"] == 114
     assert repository.collection_eligible_counts["target_us"] == 2023
@@ -229,25 +236,80 @@ def test_current_aldi_roster_is_complete_and_matches_canonical_master() -> None:
         if row["Provider"] == "ALDI" and row["Country"] == "USA"
     }
 
-    assert len(roster) == len(canonical) == 2627
-    assert len({row["Store_No"] for row in roster}) == 2627
+    assert len(roster) == len(canonical) == 2687
+    assert len({row["Store_No"] for row in roster}) == 2687
+    assert len({row["mc_location_id"] for row in roster}) == 2687
     assert {row["Status"] for row in roster} == {"active"}
     assert {row["Country"] for row in roster} == {"USA"}
     assert all(row["mc_location_id"] for row in roster)
 
     for row in roster:
         location, _ = transform_row(row, catalog)
-        assert canonical[row["Store_No"]] == row
+        assert all(canonical[row["Store_No"]][column] == value for column, value in row.items())
         assert location.retailer_id == "aldi_us"
         assert location.zipcode is not None and len(location.zipcode) == 5
+        assert location.store_number.isdigit()
 
-    refreshed = canonical["460-006"]
-    assert refreshed["Zip_Code"] == "08520"
-    assert refreshed["mc_location_id"] == "2014417"
+    refreshed = canonical["24469"]
+    assert refreshed["Zip_Code"] == "44906"
+    assert refreshed["mc_location_id"] == "2379393"
 
 
 def test_current_aldi_roster_preserves_control_diagnostic_pairs() -> None:
     roster = {row["Store_No"]: row for row in read_rows(ALDI_LOCATION_SOURCE)}
 
-    assert roster["463-048"]["Zip_Code"] == "44906"
-    assert roster["479-098"]["Zip_Code"] == "93215"
+    assert roster["24469"]["Zip_Code"] == "44906"
+    assert roster["24681"]["Zip_Code"] == "93215"
+
+
+async def test_authoritative_import_retires_prior_retailer_identifiers(tmp_path: Path) -> None:
+    prior_source = tmp_path / "prior.csv"
+    refreshed_source = tmp_path / "refreshed.csv"
+    _write_source(
+        prior_source,
+        [
+            _row(
+                id="prior-aldi",
+                Provider="ALDI",
+                Store_No="463-048",
+                Zip_Code="44906",
+            ),
+            _row(id="walmart", Provider="Walmart", Store_No="100", Zip_Code="72712"),
+        ],
+    )
+    _write_source(
+        refreshed_source,
+        [
+            _row(
+                id="new-aldi",
+                Provider="ALDI",
+                Store_No="24469",
+                Zip_Code="44906",
+            )
+        ],
+    )
+    repository = InMemoryLocationRepository()
+    importer = LocationImporter(repository, RetailerCatalog.from_path(CATALOG_PATH))
+
+    await importer.import_file(prior_source)
+    await importer.import_file(
+        refreshed_source,
+        authoritative_retailer_ids={"aldi_us"},
+    )
+
+    prior = next(
+        location for location in repository.locations.values() if location.store_number == "463-048"
+    )
+    current = next(
+        location for location in repository.locations.values() if location.store_number == "24469"
+    )
+    walmart = next(
+        location
+        for location in repository.locations.values()
+        if location.retailer_id == "walmart_us"
+    )
+    assert prior.status == "superseded"
+    assert not prior.collection_eligible
+    assert prior.collection_eligibility_reason == "superseded_by_authoritative_import"
+    assert current.collection_eligible
+    assert walmart.collection_eligible

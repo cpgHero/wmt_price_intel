@@ -17,9 +17,7 @@ from rci_locations.normalization import (
 )
 from rci_locations.ports import LocationRepository
 
-EXPECTED_COLUMNS = {
-    "id",
-    "created_at",
+REQUIRED_COLUMNS = {
     "Store_No",
     "Name",
     "Latitude",
@@ -29,12 +27,17 @@ EXPECTED_COLUMNS = {
     "City",
     "State",
     "Zip_Code",
-    "County",
-    "Phone",
     "Provider",
     "Status",
     "Country",
     "mc_location_id",
+}
+
+EXPECTED_COLUMNS = REQUIRED_COLUMNS | {
+    "id",
+    "created_at",
+    "County",
+    "Phone",
 }
 
 
@@ -97,7 +100,7 @@ def read_rows(source: Path) -> Iterator[dict[str, str]]:
     with source.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         columns = set(reader.fieldnames or [])
-        missing = EXPECTED_COLUMNS - columns
+        missing = REQUIRED_COLUMNS - columns
         if missing:
             raise ValueError(f"location source is missing columns: {sorted(missing)}")
         for row in reader:
@@ -118,7 +121,12 @@ class LocationImporter:
         self._catalog = catalog
         self._batch_size = batch_size
 
-    async def import_file(self, source: Path) -> ImportSummary:
+    async def import_file(
+        self,
+        source: Path,
+        *,
+        authoritative_retailer_ids: set[str] | None = None,
+    ) -> ImportSummary:
         resolved_source = source.resolve()
         checksum = source_sha256(resolved_source)
         import_id = await self._repository.begin_import(str(resolved_source), checksum)
@@ -158,6 +166,24 @@ class LocationImporter:
             if batch:
                 await self._repository.upsert_locations(import_id, batch)
                 imported_rows += len(batch)
+
+            authoritative_retailers = authoritative_retailer_ids or set()
+            if authoritative_retailers:
+                missing_retailers = authoritative_retailers - seeded_retailers
+                if missing_retailers:
+                    raise ValueError(
+                        "authoritative import is missing requested retailers: "
+                        f"{sorted(missing_retailers)}"
+                    )
+                if skipped_rows:
+                    raise ValueError(
+                        "authoritative import cannot retire prior locations when source rows "
+                        f"were skipped: {skipped_rows}"
+                    )
+                await self._repository.retire_missing_locations(
+                    import_id,
+                    sorted(authoritative_retailers),
+                )
 
             await self._repository.update_import_progress(
                 import_id,

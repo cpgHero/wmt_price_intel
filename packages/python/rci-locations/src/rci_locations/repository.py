@@ -160,6 +160,26 @@ class PostgresLocationRepository:
             "raw_row": json.dumps(item.raw_row, ensure_ascii=False, separators=(",", ":")),
         }
 
+    async def retire_missing_locations(self, import_id: str, retailer_ids: Sequence[str]) -> None:
+        if not retailer_ids:
+            return
+        statement = text(
+            """
+            UPDATE retailer_location
+            SET status = 'superseded',
+                collection_eligible = false,
+                collection_eligibility_reason = 'superseded_by_authoritative_import',
+                imported_at = now()
+            WHERE retailer_id = ANY(CAST(:retailer_ids AS text[]))
+              AND last_import_id IS DISTINCT FROM CAST(:import_id AS uuid)
+            """
+        )
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                statement,
+                {"import_id": import_id, "retailer_ids": list(retailer_ids)},
+            )
+
     async def complete_import(self, summary: ImportSummary) -> None:
         statement = text(
             """

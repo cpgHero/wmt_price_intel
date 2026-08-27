@@ -162,14 +162,14 @@ for p in sorted((ROOT / "agent-prompts").glob("*.json")):
 # Fixture presence and known location-profile checks.
 prof = load_json("fixtures/location_master/locations.profile.json")
 checks = [
-    (prof["rows"] == 157806, "location row count"),
+    (prof["rows"] == 157866, "location row count"),
     (prof["providers"] == 83, "provider count"),
     (prof["relevant_retailers"]["Walmart"]["locations"] == 4683, "Walmart location count"),
     (
         prof["relevant_retailers"]["Walmart"]["normalized_unique_zips"] == 4190,
         "Walmart normalized ZIP count",
     ),
-    (prof["relevant_retailers"]["ALDI"]["locations"] == 2627, "ALDI location count"),
+    (prof["relevant_retailers"]["ALDI"]["locations"] == 2687, "ALDI location count"),
 ]
 for passed, label in checks:
     print(("OK" if passed else "ERROR"), label)

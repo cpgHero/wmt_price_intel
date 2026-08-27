@@ -83,7 +83,7 @@ const lastVerified = "August 26, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.64",
+  version: "1.3.65",
   lastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1620,6 +1620,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-27",
+              "Implemented and locally verified; production import pending",
+              "The current ALDI location roster moves to MetricsCart's new numeric Store IDs with authoritative replacement safeguards.",
+              "The checksummed source contains 2,687 unique active USA Store IDs and MetricsCart location IDs across 41 states or districts and 2,550 normalized ZIPs. The catalog now admits numeric ALDI Store IDs and rejects legacy district-style IDs. Importing with the explicit authoritative-retailer option retains superseded rows for audit while excluding them from new collection planning; it refuses retirement if the retailer is absent or any source row is skipped. The canonical fixture grows by 60 ALDI locations to 157,866 total rows. No Search, PDP, or AI call was made, and prior 404 remediation is not claimed until a separate controlled provider preflight passes.",
+            ],
             [
               "2026-08-27",
               "Production incident remediated and verified",
