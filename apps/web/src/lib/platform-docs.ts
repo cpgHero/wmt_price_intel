@@ -79,11 +79,11 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 26, 2026";
+const lastVerified = "August 27, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.65",
+  version: "1.3.66",
   lastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1620,6 +1620,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-27",
+              "Production incident remediated and interaction-verified",
+              "Competitive and Price Intelligence browser responsiveness is now a release-critical production gate.",
+              "Large report projections and context counts are stable across tab changes; duplicate portfolio requests are removed; same-origin navigation has visible pending feedback. Catalog-only Price Intelligence responses omit unused full PDP and location-gap detail while product workspaces retain complete evidence, and catalog rows render progressively in groups of 40. The largest current catalog API response fell from 2,541,246 to 747,734 bytes and its page from 3,307,221 to 927,606 bytes. All nine Competitive Intelligence tabs, the Competitive View and Store Radius drawers, the included-products drawer, the largest Price Intelligence catalog, and a full product workspace were exercised live without console errors. Health and readiness plus the primary route libraries returned HTTP 200. No Search, PDP, AI, certification, metric, report evidence, or audit lineage changed.",
+            ],
             [
               "2026-08-27",
               "Deployed, imported, and production-verified",
