@@ -1649,6 +1649,7 @@ function ProductCatalog({
   const [brandName, setBrandName] = useState("all");
   const [brandType, setBrandType] = useState("all");
   const [seller, setSeller] = useState("all");
+  const [visibleCount, setVisibleCount] = useState(80);
   const brandNames = useMemo(
     () =>
       Array.from(
@@ -1711,12 +1712,14 @@ function ProductCatalog({
     brandName !== "all" ||
     brandType !== "all" ||
     selectedSeller !== "all";
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
 
   function clearFilters() {
     setSearch("");
     setBrandName("all");
     setBrandType("all");
     setSeller("all");
+    setVisibleCount(80);
   }
 
   return (
@@ -1735,7 +1738,10 @@ function ProductCatalog({
         <label className="pi-catalog-search">
           <span>Search products</span>
           <input
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setVisibleCount(80);
+            }}
             placeholder="Search name, product ID, brand, or seller"
             type="search"
             value={search}
@@ -1745,7 +1751,10 @@ function ProductCatalog({
           <span>Brand name</span>
           <select
             aria-label="Filter by brand name"
-            onChange={(event) => setBrandName(event.target.value)}
+            onChange={(event) => {
+              setBrandName(event.target.value);
+              setVisibleCount(80);
+            }}
             value={brandName}
           >
             <option value="all">All brands</option>
@@ -1760,7 +1769,10 @@ function ProductCatalog({
           <span>Brand type</span>
           <select
             aria-label="Filter by brand type"
-            onChange={(event) => setBrandType(event.target.value)}
+            onChange={(event) => {
+              setBrandType(event.target.value);
+              setVisibleCount(80);
+            }}
             value={brandType}
           >
             <option value="all">All brand types</option>
@@ -1776,7 +1788,10 @@ function ProductCatalog({
           <select
             aria-label="Filter by PDP seller"
             disabled={!sellers.length}
-            onChange={(event) => setSeller(event.target.value)}
+            onChange={(event) => {
+              setSeller(event.target.value);
+              setVisibleCount(80);
+            }}
             value={selectedSeller}
           >
             <option value="all">
@@ -1821,7 +1836,7 @@ function ProductCatalog({
           <span role="columnheader">Workspace</span>
         </div>
         <div className="pi-product-table-body" role="rowgroup">
-          {filteredProducts.map((product) => {
+          {visibleProducts.map((product) => {
             const stats = product.price_stats;
             const typicalPrice = stats.modal_price ?? stats.observation_median;
             const unitPrice = product.unit_price;
@@ -1984,6 +1999,20 @@ function ProductCatalog({
             </div>
           ) : null}
         </div>
+        {visibleProducts.length < filteredProducts.length ? (
+          <div className="pi-product-table-more">
+            <span>
+              Showing {count(visibleProducts.length)} of{" "}
+              {count(filteredProducts.length)} matching products
+            </span>
+            <button
+              onClick={() => setVisibleCount((current) => current + 80)}
+              type="button"
+            >
+              Load 80 more products
+            </button>
+          </div>
+        ) : null}
       </div>
       <p className="pi-catalog-grain-note">
         Observed and not-observed counts use distinct retailer store IDs from
@@ -2373,6 +2402,7 @@ export function PriceMonitoringWorkspace({
           />
         ) : (
           <ProductCatalog
+            key={view.retailer.id}
             loading={loading}
             onOpenProduct={openCatalogProduct}
             view={view}
@@ -2489,6 +2519,7 @@ export function PriceMonitoringWorkspace({
 
       {tab === "home" ? (
         <ProductCatalog
+          key={`${view.retailer.id}:${view.filters.product_id ?? "catalog"}`}
           loading={loading}
           onOpenProduct={openCatalogProduct}
           view={view}

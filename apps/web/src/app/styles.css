@@ -7562,6 +7562,27 @@ tbody tr:last-child td {
   display: grid;
   gap: 0.5rem;
 }
+.pi-product-table-more {
+  align-items: center;
+  background: color-mix(in srgb, var(--card) 94%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.62rem;
+  justify-content: space-between;
+  padding: 0.65rem 0.8rem;
+}
+.pi-product-table-more button {
+  background: var(--green);
+  border: 0;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 0.48rem 0.7rem;
+}
 .pi-product-row {
   align-items: stretch;
   background: var(--card);
