@@ -29,6 +29,21 @@ RATE_FIELDS = (
     "competitor_lower_rate",
     "parity_rate",
 )
+SCORED_RELATIONSHIP_FIELDS = (
+    "scored_product_locations",
+    "leader_product_locations",
+    "tied_product_locations",
+    "at_risk_product_locations",
+    "losing_product_locations",
+)
+COVERAGE_STATUS_FIELDS = (
+    "governed_out_of_scope",
+    "benchmark_not_observed",
+    "no_certified_relationship",
+    "no_selected_price_basis",
+    "no_local_competitor_evidence",
+    "scored",
+)
 
 
 def _integer(value: Any) -> int:
@@ -69,6 +84,7 @@ def audit_competitive_portfolio_set(
     """
 
     findings: list[dict[str, Any]] = []
+    contexts: list[dict[str, Any]] = []
 
     def finding(
         severity: str,
@@ -223,6 +239,13 @@ def audit_competitive_portfolio_set(
     analysis_ids: set[str] = set()
     benchmark_ids: set[str] = set()
     competitor_sets: dict[tuple[str, int], set[str]] = {}
+    benchmark_scope_values: dict[str, set[int]] = {
+        "catalog_products": set(),
+        "in_scope_catalog_products": set(),
+        "observed_catalog_products": set(),
+    }
+    certified_scope_values: dict[str, set[int]] = {}
+    profile_basis_values: dict[str, set[tuple[str, str]]] = {}
     for document_index, document in enumerate(documents):
         path = f"documents[{document_index}]"
         filters = document.get("filters")
@@ -271,6 +294,13 @@ def audit_competitive_portfolio_set(
             )
         scorecards = [row for row in document.get("scorecards", []) if isinstance(row, Mapping)]
         competitor_sets[key] = {str(row.get("competitor_id") or "") for row in scorecards}
+        if len(competitor_sets[key]) != len(scorecards):
+            finding(
+                "error",
+                "duplicate_retailer_scorecard",
+                "A competitor retailer may occur only once in a materialized context.",
+                path=path,
+            )
         scorecard_order = sorted(
             scorecards,
             key=lambda row: (
@@ -289,11 +319,26 @@ def audit_competitive_portfolio_set(
         for scorecard_index, scorecard in enumerate(scorecards):
             scorecard_path = f"{path}.scorecards[{scorecard_index}]"
             retailer_id = str(scorecard.get("competitor_id") or "")
+            if not retailer_id:
+                finding(
+                    "error",
+                    "competitor_identity_missing",
+                    "Every scorecard requires a governed competitor retailer identity.",
+                    path=scorecard_path,
+                )
             scorecards_by_retailer[retailer_id] = scorecard
             audit_summary(scorecard, scorecard_path)
             products = scorecard.get("products")
             audit_product_rows(products, scorecard, scorecard_path)
             product_rows = [row for row in products or [] if isinstance(row, Mapping)]
+            product_ids = [str(row.get("product_id") or "") for row in product_rows]
+            if "" in product_ids or len(product_ids) != len(set(product_ids)):
+                finding(
+                    "error",
+                    "product_identity_not_unique",
+                    "Included benchmark products require unique, non-empty identities.",
+                    path=scorecard_path,
+                )
             if len(product_rows) != _integer(scorecard.get("benchmark_products")):
                 finding(
                     "error",
@@ -306,18 +351,86 @@ def audit_competitive_portfolio_set(
                 for row in scorecard.get("product_relationships", [])
                 if isinstance(row, Mapping)
             ]
+            relationship_ids = [str(row.get("relationship_id") or "") for row in relationships]
+            if "" in relationship_ids or len(relationship_ids) != len(set(relationship_ids)):
+                finding(
+                    "error",
+                    "relationship_identity_not_unique",
+                    "Included relationships require unique, non-empty identities.",
+                    path=scorecard_path,
+                )
+            relationships_by_product: dict[str, list[Mapping[str, Any]]] = {}
             for relationship_index, relationship in enumerate(relationships):
+                relationship_path = f"{scorecard_path}.product_relationships[{relationship_index}]"
                 audit_summary(
                     relationship,
-                    f"{scorecard_path}.product_relationships[{relationship_index}]",
+                    relationship_path,
                 )
-            for field in (
-                "scored_product_locations",
-                "leader_product_locations",
-                "tied_product_locations",
-                "at_risk_product_locations",
-                "losing_product_locations",
-            ):
+                benchmark_product_id = str(relationship.get("benchmark_product_id") or "")
+                relationships_by_product.setdefault(benchmark_product_id, []).append(relationship)
+                if benchmark_product_id not in set(product_ids):
+                    finding(
+                        "error",
+                        "relationship_product_orphan",
+                        "Every relationship must reference an included benchmark product.",
+                        path=relationship_path,
+                        benchmark_product_id=benchmark_product_id,
+                    )
+                if str(relationship.get("competitor_id") or "") != retailer_id:
+                    finding(
+                        "error",
+                        "relationship_retailer_mismatch",
+                        "Relationship retailer identity must equal its scorecard retailer.",
+                        path=relationship_path,
+                    )
+                if str(relationship.get("profile_id") or "") != profile:
+                    finding(
+                        "error",
+                        "relationship_profile_mismatch",
+                        "Relationship comparison basis must equal its materialized context.",
+                        path=relationship_path,
+                    )
+                profile_basis_values.setdefault(profile, set()).add(
+                    (
+                        str(relationship.get("comparison_metric") or ""),
+                        str(relationship.get("comparison_unit") or ""),
+                    )
+                )
+            for product in product_rows:
+                product_id = str(product.get("product_id") or "")
+                product_relationships = relationships_by_product.get(product_id, [])
+                relationship_count = len(
+                    {str(row.get("relationship_id") or "") for row in product_relationships}
+                )
+                if relationship_count != _integer(product.get("relationships")):
+                    finding(
+                        "error",
+                        "product_relationship_count_mismatch",
+                        "Each included product must state its exact relationship count.",
+                        path=scorecard_path,
+                        product_id=product_id,
+                        actual=product.get("relationships"),
+                        expected=relationship_count,
+                    )
+                for field in SCORED_RELATIONSHIP_FIELDS:
+                    relationship_total = sum(
+                        _integer(row.get(field)) for row in product_relationships
+                    )
+                    if relationship_total != _integer(product.get(field)):
+                        finding(
+                            "error",
+                            "product_relationship_rollup_mismatch",
+                            (
+                                "A product's scored outcomes must reconcile to its "
+                                "relationship lineage."
+                            ),
+                            path=scorecard_path,
+                            product_id=product_id,
+                            field=field,
+                            relationship_total=relationship_total,
+                            product_total=_integer(product.get(field)),
+                        )
+            for field in SCORED_RELATIONSHIP_FIELDS:
                 relationship_total = sum(_integer(row.get(field)) for row in relationships)
                 if relationship_total != _integer(scorecard.get(field)):
                     finding(
@@ -333,9 +446,7 @@ def audit_competitive_portfolio_set(
             audit_weighted_average(
                 relationships, scorecard, scorecard_path, "certified relationship"
             )
-            if len({str(row.get("relationship_id") or "") for row in relationships}) != _integer(
-                scorecard.get("relationships")
-            ):
+            if len(set(relationship_ids)) != _integer(scorecard.get("relationships")):
                 finding(
                     "error",
                     "relationship_count_mismatch",
@@ -383,6 +494,9 @@ def audit_competitive_portfolio_set(
                     certified_count = _integer(funnel.get("certified_identity_products"))
                     selected_count = _integer(funnel.get("selected_price_basis_products"))
                     locally_scored_count = _integer(funnel.get("locally_scored_products"))
+                    for field in benchmark_scope_values:
+                        benchmark_scope_values[field].add(_integer(funnel.get(field)))
+                    certified_scope_values.setdefault(retailer_id, set()).add(certified_count)
                     if in_scope_count > catalog_count:
                         finding(
                             "error",
@@ -439,6 +553,97 @@ def audit_competitive_portfolio_set(
                             catalog_products=catalog_count,
                             status_total=status_total,
                         )
+                    if isinstance(statuses, Mapping):
+                        expected_statuses = {
+                            "governed_out_of_scope": catalog_count - in_scope_count,
+                            "benchmark_not_observed": in_scope_count - observed_count,
+                            "no_certified_relationship": observed_count - certified_count,
+                            "no_selected_price_basis": certified_count - selected_count,
+                            "no_local_competitor_evidence": (selected_count - locally_scored_count),
+                            "scored": locally_scored_count,
+                        }
+                        for status_field in COVERAGE_STATUS_FIELDS:
+                            actual = _integer(statuses.get(status_field))
+                            expected = expected_statuses[status_field]
+                            if actual != expected:
+                                finding(
+                                    "error",
+                                    "coverage_status_semantic_mismatch",
+                                    (
+                                        "Each coverage disposition must reconcile to its "
+                                        "evidence-funnel transition."
+                                    ),
+                                    path=scorecard_path,
+                                    status=status_field,
+                                    actual=actual,
+                                    expected=expected,
+                                )
+                    if selected_count != _integer(scorecard.get("benchmark_products")):
+                        finding(
+                            "error",
+                            "selected_basis_product_mismatch",
+                            (
+                                "Selected-basis products must equal the scorecard's "
+                                "distinct benchmark products."
+                            ),
+                            path=scorecard_path,
+                            selected_basis_products=selected_count,
+                            benchmark_products=_integer(scorecard.get("benchmark_products")),
+                        )
+                    scored_products = sum(
+                        _integer(row.get("scored_product_locations")) > 0 for row in product_rows
+                    )
+                    if locally_scored_count != scored_products:
+                        finding(
+                            "error",
+                            "locally_scored_product_mismatch",
+                            (
+                                "Locally scored products must equal included products with "
+                                "scored location evidence."
+                            ),
+                            path=scorecard_path,
+                            funnel_total=locally_scored_count,
+                            product_total=scored_products,
+                        )
+                    evidence_state = (
+                        "scored"
+                        if _integer(scorecard.get("scored_product_locations"))
+                        else (
+                            "local_evidence_limited"
+                            if _integer(scorecard.get("relationships"))
+                            else "no_selected_basis_relationship"
+                        )
+                    )
+                    context_basis = sorted(profile_basis_values.get(profile, set()))
+                    contexts.append(
+                        {
+                            "profile_id": profile,
+                            "radius_miles": radius,
+                            "competitor_id": retailer_id,
+                            "competitor": str(scorecard.get("competitor") or retailer_id),
+                            "evidence_state": evidence_state,
+                            "comparison_metric": (
+                                context_basis[0][0] if len(context_basis) == 1 else None
+                            ),
+                            "comparison_unit": (
+                                context_basis[0][1] if len(context_basis) == 1 else None
+                            ),
+                            "catalog_products": catalog_count,
+                            "in_scope_catalog_products": in_scope_count,
+                            "observed_catalog_products": observed_count,
+                            "certified_identity_products": certified_count,
+                            "selected_price_basis_products": selected_count,
+                            "locally_scored_products": locally_scored_count,
+                            "relationships": _integer(scorecard.get("relationships")),
+                            "benchmark_product_locations": _integer(
+                                scorecard.get("benchmark_product_locations")
+                            ),
+                            "scored_product_locations": _integer(
+                                scorecard.get("scored_product_locations")
+                            ),
+                            "coverage_rate": scorecard.get("coverage_rate"),
+                        }
+                    )
             if _integer(scorecard.get("relationships")) == 0:
                 finding(
                     "warning",
@@ -617,6 +822,47 @@ def audit_competitive_portfolio_set(
             "retailer_scope_drift",
             "Every materialization must contain the same configured competitor set.",
         )
+    for field, scope_values in benchmark_scope_values.items():
+        if len(scope_values) > 1:
+            finding(
+                "error",
+                "benchmark_scope_drift",
+                (
+                    "Catalog and benchmark observation denominators must be identical "
+                    "across all retailers, bases, and radii."
+                ),
+                field=field,
+                values=sorted(scope_values),
+            )
+    for retailer_id, certified_values in certified_scope_values.items():
+        if len(certified_values) > 1:
+            finding(
+                "error",
+                "certified_identity_scope_drift",
+                "Certified identity products are basis- and radius-independent for one retailer.",
+                retailer_id=retailer_id,
+                values=sorted(certified_values),
+            )
+    for profile, price_basis_values in profile_basis_values.items():
+        if len(price_basis_values) > 1 or any(
+            not metric or not unit for metric, unit in price_basis_values
+        ):
+            finding(
+                "error",
+                "profile_price_basis_drift",
+                (
+                    "One comparison basis must use one non-empty price metric and unit "
+                    "across every retailer and radius."
+                ),
+                profile=profile,
+                values=sorted(price_basis_values),
+            )
+        elif len(price_basis_values) == 1:
+            metric, unit = next(iter(price_basis_values))
+            for context in contexts:
+                if context["profile_id"] == profile:
+                    context["comparison_metric"] = metric
+                    context["comparison_unit"] = unit
 
     for profile in profiles:
         profile_documents = [
@@ -638,8 +884,8 @@ def audit_competitive_portfolio_set(
                 "relationships",
             )
             for field in stable_fields:
-                values = [_integer(row.get(field)) for _, row in rows]
-                if len(set(values)) > 1:
+                stable_values = [_integer(row.get(field)) for _, row in rows]
+                if len(set(stable_values)) > 1:
                     finding(
                         "error",
                         "radius_scope_drift",
@@ -648,7 +894,37 @@ def audit_competitive_portfolio_set(
                         profile=profile,
                         retailer_id=retailer_id,
                         field=field,
-                        values=values,
+                        values=stable_values,
+                    )
+            identity_fields = {
+                "benchmark_products": lambda row: {
+                    str(product.get("product_id") or "")
+                    for product in row.get("products", [])
+                    if isinstance(product, Mapping)
+                },
+                "competitor_products": lambda row: {
+                    str(relationship.get("competitor_product_id") or "")
+                    for relationship in row.get("product_relationships", [])
+                    if isinstance(relationship, Mapping)
+                },
+                "relationships": lambda row: {
+                    str(relationship.get("relationship_id") or "")
+                    for relationship in row.get("product_relationships", [])
+                    if isinstance(relationship, Mapping)
+                },
+            }
+            for field, identity_set in identity_fields.items():
+                identity_values = [identity_set(row) for _, row in rows]
+                if identity_values and any(
+                    value != identity_values[0] for value in identity_values[1:]
+                ):
+                    finding(
+                        "error",
+                        "radius_identity_scope_drift",
+                        "Changing radius must not replace product or relationship identities.",
+                        profile=profile,
+                        retailer_id=retailer_id,
+                        field=field,
                     )
             funnel_rows: list[Mapping[str, Any]] = []
             for _, row in rows:
@@ -662,8 +938,8 @@ def audit_competitive_portfolio_set(
                 "certified_identity_products",
                 "selected_price_basis_products",
             ):
-                values = [_integer(funnel.get(field)) for funnel in funnel_rows]
-                if values and len(set(values)) > 1:
+                funnel_values = [_integer(funnel.get(field)) for funnel in funnel_rows]
+                if funnel_values and len(set(funnel_values)) > 1:
                     finding(
                         "error",
                         "radius_funnel_scope_drift",
@@ -672,7 +948,7 @@ def audit_competitive_portfolio_set(
                         profile=profile,
                         retailer_id=retailer_id,
                         field=field,
-                        values=values,
+                        values=funnel_values,
                     )
             locally_scored_values = [
                 _integer(funnel.get("locally_scored_products")) for funnel in funnel_rows
@@ -706,16 +982,77 @@ def audit_competitive_portfolio_set(
                     retailer_id=retailer_id,
                     values=unscored_values,
                 )
+            status_rows: list[Mapping[str, Any]] = []
+            for funnel in funnel_rows:
+                status_counts = funnel.get("status_counts")
+                if isinstance(status_counts, Mapping):
+                    status_rows.append(status_counts)
+            no_local_values = [
+                _integer(statuses.get("no_local_competitor_evidence")) for statuses in status_rows
+            ]
+            scored_product_values = [_integer(statuses.get("scored")) for statuses in status_rows]
+            if any(right > left for left, right in pairwise(no_local_values)):
+                finding(
+                    "error",
+                    "radius_local_evidence_gap_growth",
+                    (
+                        "A wider physical-store radius cannot create more selected "
+                        "products without local evidence."
+                    ),
+                    profile=profile,
+                    retailer_id=retailer_id,
+                    values=no_local_values,
+                )
+            if any(right < left for left, right in pairwise(scored_product_values)):
+                finding(
+                    "error",
+                    "radius_scored_product_regression",
+                    "A wider physical-store radius cannot remove scored products.",
+                    profile=profile,
+                    retailer_id=retailer_id,
+                    values=scored_product_values,
+                )
 
     errors = sum(row["severity"] == "error" for row in findings)
     warnings = sum(row["severity"] == "warning" for row in findings)
+    contexts.sort(
+        key=lambda row: (
+            str(row["profile_id"]),
+            int(row["radius_miles"]),
+            str(row["competitor"]).casefold(),
+        )
+    )
+    retailer_count = len(scope_sets[0]) if scope_sets else 0
+    expected_context_count = len(profiles) * len(radii) * retailer_count
+    if len(contexts) != expected_context_count:
+        finding(
+            "error",
+            "decision_context_matrix_incomplete",
+            "Every configured profile, radius, and retailer requires one decision-quality context.",
+            expected=expected_context_count,
+            actual=len(contexts),
+        )
+        errors += 1
+    state_counts = {
+        state: sum(row["evidence_state"] == state for row in contexts)
+        for state in (
+            "scored",
+            "local_evidence_limited",
+            "no_selected_basis_relationship",
+        )
+    }
     return {
-        "schema_version": "1.0.0-competitive-release-audit",
+        "schema_version": "1.1.0-competitive-decision-quality-audit",
         "status": "passed" if errors == 0 else "failed",
         "analysis_id": next(iter(analysis_ids), None),
         "document_count": len(documents),
         "profiles": profiles,
         "radii": radii,
+        "retailer_count": retailer_count,
+        "expected_context_count": expected_context_count,
+        "context_count": len(contexts),
+        "context_state_counts": state_counts,
+        "contexts": contexts,
         "error_count": errors,
         "warning_count": warnings,
         "findings": findings,

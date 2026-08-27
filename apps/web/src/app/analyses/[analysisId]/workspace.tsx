@@ -26,6 +26,7 @@ import type {
   AssortmentBrand,
   AssortmentProduct,
   CompetitivePortfolioScorecards,
+  CompetitiveDecisionQuality,
   CompetitiveProductCoverage,
   JsonObject,
   MapPoint,
@@ -333,6 +334,40 @@ function BlueprintAnalysisWorkspace({
     portfolio: CompetitivePortfolioScorecards | null;
     error: string;
   }>({ query: "", portfolio: null, error: "" });
+  const [decisionQuality, setDecisionQuality] =
+    useState<CompetitiveDecisionQuality | null>(null);
+  const [decisionQualityError, setDecisionQualityError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(
+      `/api/analyses/${encodeURIComponent(analysis.analysis_id)}/competitive-decision-quality`,
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as
+          CompetitiveDecisionQuality | { error?: string };
+        if (!response.ok || !("contexts" in body)) {
+          throw new Error(
+            "error" in body && body.error
+              ? body.error
+              : `Decision-quality audit returned ${response.status}`,
+          );
+        }
+        setDecisionQuality(body);
+        setDecisionQualityError("");
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setDecisionQuality(null);
+        setDecisionQualityError(
+          cause instanceof Error
+            ? cause.message
+            : "Decision-quality audit is unavailable.",
+        );
+      });
+    return () => controller.abort();
+  }, [analysis.analysis_id]);
   useEffect(() => {
     const applyLocation = () => {
       const parameters = new URL(window.location.href).searchParams;
@@ -689,13 +724,45 @@ function BlueprintAnalysisWorkspace({
           eligibleProfiles.includes(selectedLens)))
     );
   }).length;
+  const selectedDecisionContexts = useMemo(
+    () =>
+      decisionQuality?.contexts.filter(
+        (context) =>
+          context.profile_id === selectedLens &&
+          context.radius_miles === leadershipRadius &&
+          (selectedCompetitor === "all" ||
+            context.competitor_id === selectedCompetitor),
+      ) ?? [],
+    [decisionQuality, leadershipRadius, selectedCompetitor, selectedLens],
+  );
+  const scoredDecisionContexts = selectedDecisionContexts.filter(
+    (context) => context.evidence_state === "scored",
+  );
+  const limitedDecisionContexts = selectedDecisionContexts.filter(
+    (context) => context.evidence_state === "local_evidence_limited",
+  );
+  const emptyDecisionContexts = selectedDecisionContexts.filter(
+    (context) => context.evidence_state === "no_selected_basis_relationship",
+  );
+  const selectedDecisionContext =
+    selectedCompetitor === "all" ? null : (selectedDecisionContexts[0] ?? null);
   const contextDefinition = useMemo<ApplicationContextDefinition>(() => {
     const selectedRetailerName =
       competitorOptions.find(
         (competitor) => competitor.id === selectedCompetitor,
       )?.name ?? null;
-    const readinessLabel =
-      readiness.status === "ready"
+    const readinessLabel = decisionQuality
+      ? decisionQuality.status === "failed"
+        ? "Publication audit failed"
+        : selectedDecisionContext?.evidence_state === "scored"
+          ? "Local price evidence ready"
+          : selectedDecisionContext?.evidence_state === "local_evidence_limited"
+            ? "Local evidence limited"
+            : selectedDecisionContext?.evidence_state ===
+                "no_selected_basis_relationship"
+              ? "No eligible relationship"
+              : `${scoredDecisionContexts.length} of ${selectedDecisionContexts.length} retailers scored`
+      : readiness.status === "ready"
         ? "Ready for decision use"
         : readiness.status === "review_required"
           ? "Match review required"
@@ -855,10 +922,58 @@ function BlueprintAnalysisWorkspace({
           label: "Decision Readiness",
           title: readinessLabel,
           description:
-            "Readiness is calculated from deterministic evidence and match-governance checks. It is context, not a user-selectable status.",
+            "Readiness requires certified product identity, eligibility for the selected comparison basis, and local store evidence for the current retailer, basis, and radius. It is not a user-selectable status.",
           value: readinessLabel,
-          tone: readiness.status === "ready" ? "ready" : "attention",
+          tone:
+            decisionQuality?.status === "passed" &&
+            scoredDecisionContexts.length > 0
+              ? "ready"
+              : "attention",
           facts: [
+            ...(decisionQuality
+              ? [
+                  {
+                    label: "Certified context matrix",
+                    value: `${decisionQuality.context_count.toLocaleString()} of ${decisionQuality.expected_context_count.toLocaleString()}`,
+                  },
+                  {
+                    label: "Current contexts scored",
+                    value: `${scoredDecisionContexts.length.toLocaleString()} of ${selectedDecisionContexts.length.toLocaleString()}`,
+                  },
+                  {
+                    label: "Local-evidence limitations",
+                    value: limitedDecisionContexts.length.toLocaleString(),
+                  },
+                  {
+                    label: "No selected-basis relationship",
+                    value: emptyDecisionContexts.length.toLocaleString(),
+                  },
+                  ...(selectedDecisionContext
+                    ? [
+                        {
+                          label: "Certified products",
+                          value:
+                            selectedDecisionContext.certified_identity_products.toLocaleString(),
+                        },
+                        {
+                          label: "Selected-basis products",
+                          value:
+                            selectedDecisionContext.selected_price_basis_products.toLocaleString(),
+                        },
+                        {
+                          label: "Locally scored products",
+                          value:
+                            selectedDecisionContext.locally_scored_products.toLocaleString(),
+                        },
+                        {
+                          label: "Scored product-locations",
+                          value:
+                            selectedDecisionContext.scored_product_locations.toLocaleString(),
+                        },
+                      ]
+                    : []),
+                ]
+              : []),
             {
               label: "Reported relationships",
               value: reportedRelationshipCount.toLocaleString(),
@@ -944,6 +1059,28 @@ function BlueprintAnalysisWorkspace({
             },
           ],
           messages: [
+            ...(decisionQualityError ? [decisionQualityError] : []),
+            ...(decisionQuality?.status === "failed"
+              ? [
+                  `${decisionQuality.error_count.toLocaleString()} blocking semantic audit errors prevent trusted use.`,
+                ]
+              : decisionQuality
+                ? [
+                    `The semantic publication audit passed across all ${decisionQuality.context_count.toLocaleString()} retailer × comparison-basis × radius contexts.`,
+                  ]
+                : []),
+            ...(selectedDecisionContext?.evidence_state ===
+            "local_evidence_limited"
+              ? [
+                  "Certified products exist for this comparison basis, but no geographically eligible product-location evidence is available at the selected radius.",
+                ]
+              : []),
+            ...(selectedDecisionContext?.evidence_state ===
+            "no_selected_basis_relationship"
+              ? [
+                  "This is an explicit governed zero: no certified relationship is eligible for the selected comparison basis. It is not missing report data.",
+                ]
+              : []),
             ...readiness.blocking_reasons.map((reason) => reason.message),
             ...readiness.warnings.map((warning) => warning.message),
           ],
@@ -976,6 +1113,13 @@ function BlueprintAnalysisWorkspace({
     certificationCoverage,
     configuredDefaultRadius,
     selectedCertificationCoverage,
+    decisionQuality,
+    decisionQualityError,
+    selectedDecisionContexts,
+    scoredDecisionContexts,
+    limitedDecisionContexts,
+    emptyDecisionContexts,
+    selectedDecisionContext,
     reportedRelationshipCount,
     reportView.retailer_scope.benchmark.name,
     preferredBasis,

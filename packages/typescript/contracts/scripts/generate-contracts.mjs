@@ -34,6 +34,10 @@ const contracts = [
     "competitive-portfolio-scorecards.ts",
   ],
   [
+    "competitive-decision-quality.schema.json",
+    "competitive-decision-quality.ts",
+  ],
+  [
     "competitive-product-coverage.schema.json",
     "competitive-product-coverage.ts",
   ],

@@ -23,7 +23,10 @@ from rci_analytics import (
     certify_competitive_product_leadership,
 )
 from rci_api.analyses import get_analysis_service
-from rci_api.competitive_release_audit import require_competitive_portfolio_set
+from rci_api.competitive_release_audit import (
+    audit_competitive_portfolio_set,
+    require_competitive_portfolio_set,
+)
 from rci_api.price_monitoring import PriceMonitoringService, get_price_monitoring_service
 from rci_contracts import validate_instance
 from rci_product_packs import PostgresProductPackCatalog
@@ -555,6 +558,22 @@ class PostgresCompetitiveLeadershipRepository:
                 },
             )
         return dict(document) if isinstance(document, dict) else None
+
+    async def materializations(self, analysis_id: str) -> list[dict[str, Any]]:
+        """Load the complete immutable basis-by-radius publication set."""
+
+        statement = text(
+            """
+            SELECT materialization.document
+            FROM competitive_portfolio_materialization materialization
+            JOIN analysis_result result ON result.id = materialization.analysis_result_id
+            WHERE result.analysis_id = :analysis_id
+            ORDER BY materialization.profile_id, materialization.radius_miles
+            """
+        )
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(statement, {"analysis_id": analysis_id})).scalars()
+            return [dict(row) for row in rows if isinstance(row, dict)]
 
     async def store_materialization(
         self,
@@ -1404,6 +1423,34 @@ class CompetitiveProductLeadershipService:
         )
         return result
 
+    async def decision_quality_view(self, analysis_id: str) -> dict[str, Any]:
+        """Return the publication's complete profile-by-radius-by-retailer audit."""
+
+        if self._repository is None:
+            raise LookupError("competitive decision quality requires stored materializations")
+        _analysis, report = await self._analysis_context(analysis_id)
+        profiles = sorted(
+            {
+                str(row["profile_id"])
+                for row in report.get("comparison_bases", [])
+                if isinstance(row, dict) and row.get("profile_id")
+            }
+        )
+        documents = await self._repository.materializations(analysis_id)
+        if not documents:
+            raise LookupError("competitive decision quality has not been materialized")
+        result = audit_competitive_portfolio_set(
+            documents,
+            expected_profiles=profiles,
+        )
+        validate_instance(
+            self._root,
+            "competitive-decision-quality.schema.json",
+            result,
+            label=f"competitive-decision-quality:{analysis_id}",
+        )
+        return result
+
     async def pre_materialize_portfolios(
         self, analysis_id: str, *, refresh: bool = False
     ) -> list[dict[str, Any]]:
@@ -1835,6 +1882,19 @@ async def competitive_product_coverage_view(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+
+
+@router.get("/analyses/{analysis_id}/competitive-decision-quality")
+async def competitive_decision_quality_view(
+    analysis_id: str,
+    service: ServiceDependency,
+) -> dict[str, Any]:
+    try:
+        return await service.decision_quality_view(analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/analyses/{analysis_id}/competitive-product-leadership")

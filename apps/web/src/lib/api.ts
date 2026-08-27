@@ -6,6 +6,7 @@ import type {
   RetailCompetitiveIntelligenceCollectionGeographyResolution,
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
   RetailCompetitiveIntelligenceCompetitivePortfolioScorecards,
+  RetailCompetitiveIntelligenceCompetitiveDecisionQuality,
   RetailCompetitiveIntelligenceCompetitiveProductCoverage,
   RetailCompetitiveIntelligenceCompetitiveProductLeadership,
   RetailCompetitiveIntelligenceProductMatchReview,
@@ -29,6 +30,8 @@ export type CompetitiveProductLeadership =
   RetailCompetitiveIntelligenceCompetitiveProductLeadership;
 export type CompetitivePortfolioScorecards =
   RetailCompetitiveIntelligenceCompetitivePortfolioScorecards;
+export type CompetitiveDecisionQuality =
+  RetailCompetitiveIntelligenceCompetitiveDecisionQuality;
 export type CompetitiveProductCoverage =
   RetailCompetitiveIntelligenceCompetitiveProductCoverage;
 

@@ -143,7 +143,19 @@ def test_competitive_release_audit_reconciles_complete_radius_matrix() -> None:
     )
 
     assert audit["status"] == "passed"
+    assert audit["schema_version"] == "1.1.0-competitive-decision-quality-audit"
     assert audit["document_count"] == 6
+    assert audit["context_count"] == audit["expected_context_count"] == 6
+    assert audit["context_state_counts"] == {
+        "scored": 6,
+        "local_evidence_limited": 0,
+        "no_selected_basis_relationship": 0,
+    }
+    assert {
+        (row["profile_id"], row["radius_miles"], row["competitor_id"]) for row in audit["contexts"]
+    } == {
+        (profile, radius, "aldi_us") for profile in ("compatible", "strict") for radius in (1, 3, 5)
+    }
     assert audit["error_count"] == 0
     assert audit["warning_count"] == 6
     assert {row["code"] for row in audit["findings"] if row["severity"] == "warning"} == {
@@ -223,3 +235,49 @@ def test_competitive_release_audit_rejects_incomplete_catalog_partition() -> Non
 
     assert audit["status"] == "failed"
     assert any(row["code"] == "coverage_status_partition_mismatch" for row in audit["findings"])
+
+
+def test_competitive_release_audit_rejects_semantically_wrong_funnel_transition() -> None:
+    documents = _complete_set()
+    statuses = documents[0]["scorecards"][0]["evidence_funnel"]["status_counts"]
+    statuses["benchmark_not_observed"] = 1
+    statuses["governed_out_of_scope"] = -1
+
+    audit = audit_competitive_portfolio_set(
+        documents,
+        expected_profiles=("compatible", "strict"),
+    )
+
+    assert audit["status"] == "failed"
+    assert any(row["code"] == "coverage_status_semantic_mismatch" for row in audit["findings"])
+
+
+def test_competitive_release_audit_rejects_identity_replacement_with_stable_counts() -> None:
+    documents = _complete_set()
+    documents[1]["scorecards"][0]["product_relationships"][0]["relationship_id"] = (
+        "replacement-relationship"
+    )
+
+    audit = audit_competitive_portfolio_set(
+        documents,
+        expected_profiles=("compatible", "strict"),
+    )
+
+    assert audit["status"] == "failed"
+    assert any(row["code"] == "radius_identity_scope_drift" for row in audit["findings"])
+
+
+def test_competitive_release_audit_rejects_relationship_context_misalignment() -> None:
+    documents = _complete_set()
+    relationship = documents[0]["scorecards"][0]["product_relationships"][0]
+    relationship["competitor_id"] = "wrong_retailer"
+    relationship["profile_id"] = "wrong_profile"
+
+    audit = audit_competitive_portfolio_set(
+        documents,
+        expected_profiles=("compatible", "strict"),
+    )
+
+    codes = {row["code"] for row in audit["findings"] if row["severity"] == "error"}
+    assert "relationship_retailer_mismatch" in codes
+    assert "relationship_profile_mismatch" in codes

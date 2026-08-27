@@ -222,6 +222,72 @@ async def test_portfolio_materialization_does_not_publish_before_set_audit() -> 
 
 
 @pytest.mark.asyncio
+async def test_decision_quality_view_audits_complete_stored_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            return SimpleNamespace(analysis_id=analysis_id)
+
+        async def report_view(self, analysis_id: str) -> dict:
+            return {
+                "analysis_id": analysis_id,
+                "comparison_bases": [
+                    {"profile_id": "compatible_spec"},
+                    {"profile_id": "exact_spec"},
+                ],
+            }
+
+    class Repository:
+        async def materializations(self, analysis_id: str) -> list[dict]:
+            assert analysis_id == "analysis-1"
+            return [{"stored": "document"}]
+
+    captured: dict[str, object] = {}
+
+    def audit(documents: list[dict], *, expected_profiles: list[str]) -> dict:
+        captured["documents"] = documents
+        captured["profiles"] = expected_profiles
+        return {
+            "schema_version": "1.1.0-competitive-decision-quality-audit",
+            "status": "passed",
+            "analysis_id": "analysis-1",
+            "document_count": 1,
+            "profiles": ["compatible_spec", "exact_spec"],
+            "radii": [1, 3, 5],
+            "retailer_count": 0,
+            "expected_context_count": 0,
+            "context_count": 0,
+            "context_state_counts": {
+                "scored": 0,
+                "local_evidence_limited": 0,
+                "no_selected_basis_relationship": 0,
+            },
+            "contexts": [],
+            "error_count": 0,
+            "warning_count": 0,
+            "findings": [],
+        }
+
+    monkeypatch.setattr("rci_api.competitive_leadership.audit_competitive_portfolio_set", audit)
+    service = CompetitiveProductLeadershipService(
+        repository_root=REPOSITORY_ROOT,
+        analyses=Analyses(),  # type: ignore[arg-type]
+        price_monitoring=None,  # type: ignore[arg-type]
+        product_packs=None,  # type: ignore[arg-type]
+        repository=Repository(),  # type: ignore[arg-type]
+    )
+
+    result = await service.decision_quality_view("analysis-1")
+
+    assert result["status"] == "passed"
+    assert captured == {
+        "documents": [{"stored": "document"}],
+        "profiles": ["compatible_spec", "exact_spec"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_analysis_context_is_loaded_once_for_concurrent_product_groups() -> None:
     class Analyses:
         def __init__(self) -> None:

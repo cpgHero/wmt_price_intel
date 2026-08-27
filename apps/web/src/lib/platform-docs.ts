@@ -1340,7 +1340,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "4. Run the semantic trust gate",
               detail:
-                "The gate reconciles required document coverage, retailer and profile scope, product and relationship rollups, outcome partitions, denominators, rates, weighted gaps, product order, assortment agreement, geography policy, and monotonic 1/3/5-mile evidence behavior. Warnings disclose honest evidence limitations; errors block publication.",
+                "The gate reconciles the complete retailer × comparison-basis × 1/3/5-mile context matrix, stable product and relationship identities, exact evidence-funnel transitions, product-to-relationship rollups, price units, outcome partitions, denominators, rates, weighted gaps, product order, assortment agreement, geography policy, and monotonic radius behavior. Warnings disclose honest evidence limitations; errors block publication.",
             },
             {
               title: "5. Activate atomically",
@@ -1620,6 +1620,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-26",
+              "Implemented and locally certified; production deployment pending",
+              "Vitamin reporting gained a decision-quality context matrix and stricter semantic publication gate.",
+              "All 54 retailer × basis × radius contexts are explicit: 28 scored, 17 local-evidence limited, and nine without a selected-basis relationship. The gate now blocks identity replacement, product-to-relationship outcome drift, incorrect funnel transitions, denominator drift, mixed price bases, and non-monotonic radius evidence. The six retained Vitamin documents pass with zero blocking errors and 65 disclosed warnings. Competitive Intelligence Decision Readiness and Report Publishing administration expose the same context states. No Search, PDP, AI, certification, or source-evidence change occurred.",
+            ],
             [
               "2026-08-26",
               "Deployed, rematerialized, and production-verified",

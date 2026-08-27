@@ -8,12 +8,32 @@ interface AdminSession {
   authenticated: boolean;
   configured: boolean;
 }
+interface DecisionContext {
+  profile_id: string;
+  radius_miles: 1 | 3 | 5;
+  competitor_id: string;
+  competitor: string;
+  evidence_state:
+    "scored" | "local_evidence_limited" | "no_selected_basis_relationship";
+  certified_identity_products: number;
+  selected_price_basis_products: number;
+  locally_scored_products: number;
+  scored_product_locations: number;
+}
 interface AuditDocument {
   status?: string;
   error_count?: number;
   warning_count?: number;
   price_architecture_document_count?: number;
   competitive_portfolio_document_count?: number;
+  expected_context_count?: number;
+  context_count?: number;
+  context_state_counts?: {
+    scored: number;
+    local_evidence_limited: number;
+    no_selected_basis_relationship: number;
+  };
+  contexts?: DecisionContext[];
 }
 interface PublishingJob {
   id: string;
@@ -106,7 +126,70 @@ function JobCard({
               {audit.competitive_portfolio_document_count ?? 0} competitive
               views
             </span>
+            {audit.expected_context_count !== undefined ? (
+              <span>
+                {audit.context_count ?? 0} of {audit.expected_context_count}{" "}
+                retailer × basis × radius contexts
+              </span>
+            ) : null}
           </div>
+          {audit.context_state_counts ? (
+            <div className={styles.contextSummary}>
+              <span>
+                <b>{audit.context_state_counts.scored}</b> scored
+              </span>
+              <span>
+                <b>{audit.context_state_counts.local_evidence_limited}</b>{" "}
+                local-evidence limited
+              </span>
+              <span>
+                <b>
+                  {audit.context_state_counts.no_selected_basis_relationship}
+                </b>{" "}
+                without selected-basis relationships
+              </span>
+            </div>
+          ) : null}
+          {audit.contexts?.length ? (
+            <div className={styles.contextTableWrap}>
+              <table className={styles.contextTable}>
+                <thead>
+                  <tr>
+                    <th>Retailer</th>
+                    <th>Basis</th>
+                    <th>Radius</th>
+                    <th>Evidence state</th>
+                    <th>Certified</th>
+                    <th>Basis eligible</th>
+                    <th>Locally scored</th>
+                    <th>Scored locations</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.contexts.map((context) => (
+                    <tr
+                      key={`${context.profile_id}-${context.radius_miles}-${context.competitor_id}`}
+                    >
+                      <td>{context.competitor}</td>
+                      <td>{context.profile_id.replaceAll("_", " ")}</td>
+                      <td>{context.radius_miles} mi</td>
+                      <td>
+                        <span
+                          className={`${styles.contextState} ${styles[context.evidence_state] ?? ""}`}
+                        >
+                          {context.evidence_state.replaceAll("_", " ")}
+                        </span>
+                      </td>
+                      <td>{context.certified_identity_products}</td>
+                      <td>{context.selected_price_basis_products}</td>
+                      <td>{context.locally_scored_products}</td>
+                      <td>{context.scored_product_locations}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </details>
       ) : null}
       {job.status === "blocked" || job.status === "retry_wait" ? (

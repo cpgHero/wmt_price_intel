@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/competitive-decision-quality.schema.json",
+  "title": "RetailCompetitiveIntelligenceCompetitiveDecisionQuality",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "analysis_id",
+    "document_count",
+    "profiles",
+    "radii",
+    "retailer_count",
+    "expected_context_count",
+    "context_count",
+    "context_state_counts",
+    "contexts",
+    "error_count",
+    "warning_count",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1.0-competitive-decision-quality-audit" },
+    "status": { "enum": ["passed", "failed"] },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "document_count": { "type": "integer", "minimum": 0 },
+    "profiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "radii": {
+      "type": "array",
+      "items": { "enum": [1, 3, 5] },
+      "uniqueItems": true
+    },
+    "retailer_count": { "type": "integer", "minimum": 0 },
+    "expected_context_count": { "type": "integer", "minimum": 0 },
+    "context_count": { "type": "integer", "minimum": 0 },
+    "context_state_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scored",
+        "local_evidence_limited",
+        "no_selected_basis_relationship"
+      ],
+      "properties": {
+        "scored": { "type": "integer", "minimum": 0 },
+        "local_evidence_limited": { "type": "integer", "minimum": 0 },
+        "no_selected_basis_relationship": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "contexts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/context" }
+    },
+    "error_count": { "type": "integer", "minimum": 0 },
+    "warning_count": { "type": "integer", "minimum": 0 },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "radius_miles",
+        "competitor_id",
+        "competitor",
+        "evidence_state",
+        "comparison_metric",
+        "comparison_unit",
+        "catalog_products",
+        "in_scope_catalog_products",
+        "observed_catalog_products",
+        "certified_identity_products",
+        "selected_price_basis_products",
+        "locally_scored_products",
+        "relationships",
+        "benchmark_product_locations",
+        "scored_product_locations",
+        "coverage_rate"
+      ],
+      "properties": {
+        "profile_id": { "type": "string", "minLength": 1 },
+        "radius_miles": { "enum": [1, 3, 5] },
+        "competitor_id": { "type": "string", "minLength": 1 },
+        "competitor": { "type": "string", "minLength": 1 },
+        "evidence_state": {
+          "enum": [
+            "scored",
+            "local_evidence_limited",
+            "no_selected_basis_relationship"
+          ]
+        },
+        "comparison_metric": { "type": ["string", "null"] },
+        "comparison_unit": { "type": ["string", "null"] },
+        "catalog_products": { "type": "integer", "minimum": 0 },
+        "in_scope_catalog_products": { "type": "integer", "minimum": 0 },
+        "observed_catalog_products": { "type": "integer", "minimum": 0 },
+        "certified_identity_products": { "type": "integer", "minimum": 0 },
+        "selected_price_basis_products": { "type": "integer", "minimum": 0 },
+        "locally_scored_products": { "type": "integer", "minimum": 0 },
+        "relationships": { "type": "integer", "minimum": 0 },
+        "benchmark_product_locations": { "type": "integer", "minimum": 0 },
+        "scored_product_locations": { "type": "integer", "minimum": 0 },
+        "coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message", "context"],
+      "properties": {
+        "severity": { "enum": ["error", "warning"] },
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "context": { "type": "object" }
+      }
+    }
+  }
+}
