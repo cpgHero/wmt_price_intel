@@ -7785,6 +7785,68 @@ tbody tr:last-child td {
 .pi-loading-grid i:nth-child(2n) {
   animation-delay: 180ms;
 }
+
+.application-loading {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1.5rem;
+}
+
+.application-loading-heading {
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.application-loading-heading > span {
+  animation: pi-route-spin 780ms linear infinite;
+  border: 3px solid color-mix(in srgb, var(--green) 22%, transparent);
+  border-radius: 50%;
+  border-top-color: var(--green);
+  flex: 0 0 30px;
+  height: 30px;
+  width: 30px;
+}
+
+.application-loading-heading h1 {
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  margin: 0.12rem 0 0.2rem;
+}
+
+.application-loading-heading p:last-child {
+  color: var(--muted);
+  margin: 0;
+}
+
+.application-loading-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.application-loading-grid i {
+  animation: pi-loading-pulse 1.3s ease-in-out infinite alternate;
+  background: linear-gradient(100deg, var(--surface-alt), var(--card));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: block;
+  height: 145px;
+}
+
+.application-loading-grid i:nth-child(2n) {
+  animation-delay: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application-loading-heading > span,
+  .application-loading-grid i {
+    animation: none;
+  }
+}
 @keyframes pi-loading-pulse {
   from {
     opacity: 0.52;

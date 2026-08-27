@@ -14,11 +14,7 @@ import {
 } from "@/app/components/application-context";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
-import {
-  comparableCohort,
-  comparableCohorts,
-  type ComparableCohort,
-} from "@/lib/cohort-model";
+import { comparableCohort, type ComparableCohort } from "@/lib/cohort-model";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -52,7 +48,6 @@ import {
 } from "@/lib/evidence-csv";
 import {
   comparisonBasisDescription,
-  cohortProductSummaries,
   compactMetricName,
   defaultComparisonBasisId,
   defaultComparisonRadiusMiles,
@@ -88,19 +83,6 @@ const tabs = [
 ] as const;
 
 type Tab = (typeof tabs)[number];
-
-function brandTypeSummary(
-  products: ScorecardProductSummary[],
-  side: "benchmark" | "competitor",
-) {
-  return brandTypesSummary(
-    products.map((product) =>
-      side === "benchmark"
-        ? product.benchmark_brand_type
-        : product.competitor_brand_type,
-    ),
-  );
-}
 
 function brandTypesSummary(
   brandTypes: Array<"private_label" | "regional" | "national" | "unclassified">,
@@ -583,8 +565,6 @@ function BlueprintAnalysisWorkspace({
   const radiusPortfolioError =
     portfolioResult.query === portfolioRequestKey ? portfolioResult.error : "";
   useEffect(() => {
-    if (!["overview", "price-segments", "assortment"].includes(activeGroup))
-      return;
     const controller = new AbortController();
     fetch(portfolioRequestKey, { signal: controller.signal })
       .then(async (response) => {
@@ -616,130 +596,156 @@ function BlueprintAnalysisWorkspace({
         });
       });
     return () => controller.abort();
-  }, [activeGroup, portfolioRequestKey]);
-  const scopedSections = groupedSections.map((group) => ({
-    ...group,
-    sections: group.sections.map((section) => ({
-      ...section,
-      records: scopeReportRows(
-        section,
-        selectedRetailer,
-        reportView.retailer_scope.benchmark,
-        selectedLens,
-      ),
-      evidence_sets: scopeEvidenceRows(
-        section.evidence_sets,
-        selectedRetailer,
-        competitorOptions,
-      ),
-    })),
-  }));
-  const selectedGroup = scopedSections.find(
-    (group) => group.id === activeGroup,
+  }, [portfolioRequestKey]);
+  const scopedSections = useMemo(
+    () =>
+      groupedSections.map((group) => ({
+        ...group,
+        sections: group.sections.map((section) => ({
+          ...section,
+          records: scopeReportRows(
+            section,
+            selectedRetailer,
+            reportView.retailer_scope.benchmark,
+            selectedLens,
+          ),
+          evidence_sets: scopeEvidenceRows(
+            section.evidence_sets,
+            selectedRetailer,
+            competitorOptions,
+          ),
+        })),
+      })),
+    [
+      competitorOptions,
+      groupedSections,
+      reportView.retailer_scope.benchmark,
+      selectedLens,
+      selectedRetailer,
+    ],
   );
-  const cohortRecords =
-    selectedGroup?.sections
-      .filter(
-        (section) =>
-          section.kind === "price_position" ||
-          section.kind === "segment_analysis",
-      )
-      .flatMap((section) => section.records) ?? [];
+  const selectedGroup = useMemo(
+    () => scopedSections.find((group) => group.id === activeGroup),
+    [activeGroup, scopedSections],
+  );
   const publication = reportView.publication;
   const recommendedCharts = reportView.product_pack.recommended_charts ?? [];
   const selectedBasis =
     reportView.comparison_bases.find(
       (basis) => basis.profile_id === selectedLens,
     ) ?? null;
-  const cohortPairEvidence = Object.fromEntries(
-    comparableCohorts(cohortRecords).map((cohort) => {
-      const products = cohortProductSummaries(
-        cohort,
-        reportView.match_candidates ?? [],
-        reportView.product_decisions ?? [],
-        reportView.assortment_analysis ?? null,
-      );
-      return [
-        cohort.id,
-        {
-          pairCount: products.length,
-          benchmarkBrandTypes:
-            brandTypeSummary(products, "benchmark") || "brand type unresolved",
-          competitorBrandTypes:
-            brandTypeSummary(products, "competitor") || "brand type unresolved",
-        },
-      ];
-    }),
-  );
-  const assortmentBrandTypes = new Map(
-    (reportView.assortment_analysis?.retailers ?? []).flatMap((retailer) =>
-      (retailer.products ?? []).map(
-        (product) =>
-          [
-            `${retailer.retailer}::${product.product_id}`,
-            product.brand_type ?? "unclassified",
-          ] as const,
+  const assortmentBrandTypes = useMemo(
+    () =>
+      new Map(
+        (reportView.assortment_analysis?.retailers ?? []).flatMap((retailer) =>
+          (retailer.products ?? []).map(
+            (product) =>
+              [
+                `${retailer.retailer}::${product.product_id}`,
+                product.brand_type ?? "unclassified",
+              ] as const,
+          ),
+        ),
       ),
-    ),
+    [reportView.assortment_analysis],
   );
-  for (const cohort of radiusPortfolio?.cohorts ?? []) {
-    const relationships = cohort.product_relationships ?? [];
-    cohortPairEvidence[cohort.id] = {
-      pairCount: relationships.length,
-      benchmarkBrandTypes:
-        brandTypesSummary(
-          relationships.map(
-            (relationship) =>
-              assortmentBrandTypes.get(
-                `${reportView.retailer_scope.benchmark.id}::${relationship.benchmark_product_id}`,
-              ) ?? "unclassified",
-          ),
-        ) || "brand type unresolved",
-      competitorBrandTypes:
-        brandTypesSummary(
-          relationships.map(
-            (relationship) =>
-              assortmentBrandTypes.get(
-                `${cohort.competitor_id}::${relationship.competitor_product_id}`,
-              ) ?? relationship.competitor_brand_type,
-          ),
-        ) || "brand type unresolved",
-    };
-  }
+  const cohortPairEvidence = useMemo(
+    () =>
+      Object.fromEntries(
+        (radiusPortfolio?.cohorts ?? []).map((cohort) => {
+          const relationships = cohort.product_relationships ?? [];
+          return [
+            cohort.id,
+            {
+              pairCount: relationships.length,
+              benchmarkBrandTypes:
+                brandTypesSummary(
+                  relationships.map(
+                    (relationship) =>
+                      assortmentBrandTypes.get(
+                        `${reportView.retailer_scope.benchmark.id}::${relationship.benchmark_product_id}`,
+                      ) ?? "unclassified",
+                  ),
+                ) || "brand type unresolved",
+              competitorBrandTypes:
+                brandTypesSummary(
+                  relationships.map(
+                    (relationship) =>
+                      assortmentBrandTypes.get(
+                        `${cohort.competitor_id}::${relationship.competitor_product_id}`,
+                      ) ?? relationship.competitor_brand_type,
+                  ),
+                ) || "brand type unresolved",
+            },
+          ];
+        }),
+      ),
+    [
+      assortmentBrandTypes,
+      radiusPortfolio?.cohorts,
+      reportView.retailer_scope.benchmark.id,
+    ],
+  );
   const openCohortRecord = (record: JsonObject) => {
     const cohort = comparableCohort(record);
     if (cohort) setSelectedCohort(cohort);
   };
-  const scopedDecisions = scopeRetailerRows(
-    reportView.product_decisions ?? [],
-    selectedRetailer,
-    (row) => row.competitor,
-  ).filter(
-    (row) =>
-      !selectedLens || !row.profile_id || row.profile_id === selectedLens,
+  const scopedDecisions = useMemo(
+    () =>
+      scopeRetailerRows(
+        reportView.product_decisions ?? [],
+        selectedRetailer,
+        (row) => row.competitor,
+      ).filter(
+        (row) =>
+          !selectedLens || !row.profile_id || row.profile_id === selectedLens,
+      ),
+    [reportView.product_decisions, selectedLens, selectedRetailer],
   );
-  const scopedPoints = scopeRetailerRows(
-    reportView.map_points ?? [],
-    selectedRetailer,
-    (row) => row.competitor,
-  ).filter(
-    (row) =>
-      !selectedLens || !row.profile_id || row.profile_id === selectedLens,
+  const scopedPoints = useMemo(
+    () =>
+      scopeRetailerRows(
+        reportView.map_points ?? [],
+        selectedRetailer,
+        (row) => row.competitor,
+      ).filter(
+        (row) =>
+          !selectedLens || !row.profile_id || row.profile_id === selectedLens,
+      ),
+    [reportView.map_points, selectedLens, selectedRetailer],
   );
-  const scopedHighlights = scopeReferenceAndRetailerRows(
-    reportView.product_highlights ?? [],
-    selectedRetailer,
-    reportView.retailer_scope.benchmark,
-    (row) => row.retailer,
+  const scopedHighlights = useMemo(
+    () =>
+      scopeReferenceAndRetailerRows(
+        reportView.product_highlights ?? [],
+        selectedRetailer,
+        reportView.retailer_scope.benchmark,
+        (row) => row.retailer,
+      ),
+    [
+      reportView.product_highlights,
+      reportView.retailer_scope.benchmark,
+      selectedRetailer,
+    ],
   );
-  const scopedQuality = scopeReferenceAndRetailerRows(
-    reportView.quality_observations ?? [],
-    selectedRetailer,
-    reportView.retailer_scope.benchmark,
-    (row) => row.retailer,
+  const scopedQuality = useMemo(
+    () =>
+      scopeReferenceAndRetailerRows(
+        reportView.quality_observations ?? [],
+        selectedRetailer,
+        reportView.retailer_scope.benchmark,
+        (row) => row.retailer,
+      ),
+    [
+      reportView.quality_observations,
+      reportView.retailer_scope.benchmark,
+      selectedRetailer,
+    ],
   );
-  const primaryComparisons = primaryComparisonRows(
-    scopedSections.flatMap((group) => group.sections),
+  const primaryComparisons = useMemo(
+    () =>
+      primaryComparisonRows(scopedSections.flatMap((group) => group.sections)),
+    [scopedSections],
   );
   const visibleStatus =
     reportView.report_readiness.status === "review_required"
@@ -755,18 +761,21 @@ function BlueprintAnalysisWorkspace({
       : (certificationCoverage?.retailers?.find(
           (retailer) => retailer.competitor_retailer_id === selectedCompetitor,
         ) ?? null);
-  const reportedRelationshipCount = (
-    reportView.match_relationships ?? []
-  ).filter((relationship) => {
-    const competitorId = relationship.competitor_id;
-    const eligibleProfiles = relationship.eligible_profile_ids;
-    return (
-      (selectedCompetitor === "all" || competitorId === selectedCompetitor) &&
-      (!selectedLens ||
-        (Array.isArray(eligibleProfiles) &&
-          eligibleProfiles.includes(selectedLens)))
-    );
-  }).length;
+  const reportedRelationshipCount = useMemo(
+    () =>
+      (reportView.match_relationships ?? []).filter((relationship) => {
+        const competitorId = relationship.competitor_id;
+        const eligibleProfiles = relationship.eligible_profile_ids;
+        return (
+          (selectedCompetitor === "all" ||
+            competitorId === selectedCompetitor) &&
+          (!selectedLens ||
+            (Array.isArray(eligibleProfiles) &&
+              eligibleProfiles.includes(selectedLens)))
+        );
+      }).length,
+    [reportView.match_relationships, selectedCompetitor, selectedLens],
+  );
   const selectedDecisionContexts = useMemo(
     () =>
       decisionQuality?.contexts.filter(

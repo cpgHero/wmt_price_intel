@@ -278,6 +278,43 @@
   padding: 0 2rem 5rem;
 }
 
+.navigationProgress {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.48rem 0.72rem;
+  pointer-events: none;
+  position: fixed;
+  right: 1.25rem;
+  top: 74px;
+  z-index: 70;
+}
+
+.navigationProgress span {
+  animation: navigation-spin 720ms linear infinite;
+  border: 2px solid color-mix(in srgb, var(--green) 24%, transparent);
+  border-radius: 50%;
+  border-top-color: var(--green);
+  height: 16px;
+  width: 16px;
+}
+
+.navigationProgress strong {
+  color: var(--ink);
+  font-size: 0.64rem;
+  letter-spacing: 0.01em;
+}
+
+@keyframes navigation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .pageShell > div {
   outline: none;
 }
@@ -407,5 +444,9 @@
   .skipLink,
   .brandCopy {
     transition: none;
+  }
+
+  .navigationProgress span {
+    animation: none;
   }
 }

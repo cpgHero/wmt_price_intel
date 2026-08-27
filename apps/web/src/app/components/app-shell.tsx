@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   useEffect,
   useId,
@@ -98,10 +99,19 @@ export function AppShell({
     () => false,
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingPathname, setPendingPathname] = useState<string | null>(null);
+  const navigationPending =
+    pendingPathname !== null && pendingPathname !== pathname;
   const mobileNavigationId = useId();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mobileSidebarRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!navigationPending) return;
+    const timer = window.setTimeout(() => setPendingPathname(null), 30_000);
+    return () => window.clearTimeout(timer);
+  }, [navigationPending]);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -155,8 +165,34 @@ export function AppShell({
     if (restoreFocus) menuButtonRef.current?.focus();
   }
 
+  function flagRouteNavigation(event: ReactMouseEvent<HTMLDivElement>) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest<HTMLAnchorElement>("a[href]");
+    if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
+    const destination = new URL(anchor.href, window.location.href);
+    if (
+      destination.origin !== window.location.origin ||
+      destination.pathname === window.location.pathname
+    )
+      return;
+    setPendingPathname(destination.pathname);
+  }
+
   return (
-    <div className={`${styles.frame} ${compact ? "shell-compact" : ""}`}>
+    <div
+      className={`${styles.frame} ${compact ? "shell-compact" : ""}`}
+      onClickCapture={flagRouteNavigation}
+    >
       <a className={styles.skipLink} href="#main-content">
         Skip to main content
       </a>
@@ -215,6 +251,12 @@ export function AppShell({
             <ThemeToggle />
           </div>
         </header>
+        {navigationPending ? (
+          <div className={styles.navigationProgress} role="status">
+            <span aria-hidden="true" />
+            <strong>Loading page…</strong>
+          </div>
+        ) : null}
         <div className={styles.pageShell}>
           <div id="main-content" tabIndex={-1}>
             {children}
