@@ -7588,6 +7588,8 @@ tbody tr:last-child td {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
+  contain-intrinsic-size: auto 80px;
+  content-visibility: auto;
   padding: 0.65rem 0.75rem;
   transition:
     border-color 140ms ease,

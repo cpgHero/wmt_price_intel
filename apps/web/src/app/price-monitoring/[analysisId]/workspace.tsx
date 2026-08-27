@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
@@ -1649,7 +1649,8 @@ function ProductCatalog({
   const [brandName, setBrandName] = useState("all");
   const [brandType, setBrandType] = useState("all");
   const [seller, setSeller] = useState("all");
-  const [visibleCount, setVisibleCount] = useState(80);
+  const [visibleCount, setVisibleCount] = useState(40);
+  const [isExpanding, startExpanding] = useTransition();
   const brandNames = useMemo(
     () =>
       Array.from(
@@ -1719,7 +1720,7 @@ function ProductCatalog({
     setBrandName("all");
     setBrandType("all");
     setSeller("all");
-    setVisibleCount(80);
+    setVisibleCount(40);
   }
 
   return (
@@ -1740,7 +1741,7 @@ function ProductCatalog({
           <input
             onChange={(event) => {
               setSearch(event.target.value);
-              setVisibleCount(80);
+              setVisibleCount(40);
             }}
             placeholder="Search name, product ID, brand, or seller"
             type="search"
@@ -1753,7 +1754,7 @@ function ProductCatalog({
             aria-label="Filter by brand name"
             onChange={(event) => {
               setBrandName(event.target.value);
-              setVisibleCount(80);
+              setVisibleCount(40);
             }}
             value={brandName}
           >
@@ -1771,7 +1772,7 @@ function ProductCatalog({
             aria-label="Filter by brand type"
             onChange={(event) => {
               setBrandType(event.target.value);
-              setVisibleCount(80);
+              setVisibleCount(40);
             }}
             value={brandType}
           >
@@ -1790,7 +1791,7 @@ function ProductCatalog({
             disabled={!sellers.length}
             onChange={(event) => {
               setSeller(event.target.value);
-              setVisibleCount(80);
+              setVisibleCount(40);
             }}
             value={selectedSeller}
           >
@@ -2006,10 +2007,16 @@ function ProductCatalog({
               {count(filteredProducts.length)} matching products
             </span>
             <button
-              onClick={() => setVisibleCount((current) => current + 80)}
+              aria-busy={isExpanding}
+              disabled={isExpanding}
+              onClick={() =>
+                startExpanding(() =>
+                  setVisibleCount((current) => current + 40),
+                )
+              }
               type="button"
             >
-              Load 80 more products
+              {isExpanding ? "Loading products…" : "Load 40 more products"}
             </button>
           </div>
         ) : null}
