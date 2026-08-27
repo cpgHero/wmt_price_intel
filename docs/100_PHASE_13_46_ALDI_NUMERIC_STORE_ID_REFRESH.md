@@ -72,5 +72,12 @@ preventing both identifier generations from entering a new collection estimate.
 - The authoritative replacement regression proves that the legacy ALDI ID is retained but retired,
   the numeric replacement is eligible, and a Walmart control remains eligible.
 - Ruff formatting/lint and repository-wide Python type checking pass.
-- Production deployment/import verification and any paid provider preflight are recorded after
-  execution; they are not implied by this implementation record.
+- Commit `9a73da8` deployed successfully to all four Railway application services. GitHub Actions
+  run `33107649907` passed the complete Python, TypeScript, browser, migration, contract, and
+  service-container release gate.
+- Production import `f7182e06-1a40-498d-b6d8-4b5b4e651cab` imported all 2,687 rows with zero
+  skips and the expected source checksum. Post-import reconciliation found 2,687 eligible numeric
+  ALDI IDs, zero eligible legacy hyphenated IDs, 2,687 unique eligible provider location IDs, 2,550
+  eligible ZIPs, and all 2,627 prior IDs preserved as superseded.
+- No paid provider preflight is implied by this import verification. Search/PDP callability remains
+  a separate fact that should be tested under an explicit bounded scope.

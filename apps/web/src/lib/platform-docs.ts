@@ -1622,9 +1622,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-27",
-              "Implemented and locally verified; production import pending",
+              "Deployed, imported, and production-verified",
               "The current ALDI location roster moves to MetricsCart's new numeric Store IDs with authoritative replacement safeguards.",
-              "The checksummed source contains 2,687 unique active USA Store IDs and MetricsCart location IDs across 41 states or districts and 2,550 normalized ZIPs. The catalog now admits numeric ALDI Store IDs and rejects legacy district-style IDs. Importing with the explicit authoritative-retailer option retains superseded rows for audit while excluding them from new collection planning; it refuses retirement if the retailer is absent or any source row is skipped. The canonical fixture grows by 60 ALDI locations to 157,866 total rows. No Search, PDP, or AI call was made, and prior 404 remediation is not claimed until a separate controlled provider preflight passes.",
+              "The checksummed source contains 2,687 unique active USA Store IDs and MetricsCart location IDs across 41 states or districts and 2,550 normalized ZIPs. The catalog now admits numeric ALDI Store IDs and rejects legacy district-style IDs. Import f7182e06-1a40-498d-b6d8-4b5b4e651cab loaded all 2,687 rows with zero skips; post-import reconciliation found 2,687 eligible numeric IDs, zero eligible legacy IDs, and all 2,627 former IDs preserved as superseded. The canonical fixture grows by 60 ALDI locations to 157,866 total rows. Commit 9a73da8, all four Railway services, and CI run 33107649907 passed. No Search, PDP, or AI call was made, and prior 404 remediation is not claimed until a separate controlled provider preflight passes.",
             ],
             [
               "2026-08-27",
