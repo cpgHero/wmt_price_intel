@@ -199,7 +199,10 @@ class S3ParquetReader:
             region_name=os.getenv("OBJECT_STORAGE_REGION") or None,
             aws_access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY_ID") or None,
             aws_secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY") or None,
-            config=Config(s3={"addressing_style": "path" if force_path else "virtual"}),
+            config=Config(
+                max_pool_connections=int(os.getenv("OBJECT_STORAGE_MAX_POOL_CONNECTIONS", "64")),
+                s3={"addressing_style": "path" if force_path else "virtual"},
+            ),
         )
         return cls(bucket=bucket, client=client)
 
@@ -1370,6 +1373,10 @@ class PriceMonitoringService:
                     raise LookupError(
                         f"classified Search evidence for {retailer_id!r} is unavailable"
                     )
+                artifacts = select_evidence_artifacts(
+                    artifacts,
+                    _classified_evidence_set(result, retailer_id),
+                )
                 row_groups, location_context, product_context, projector = await asyncio.gather(
                     asyncio.gather(
                         *(

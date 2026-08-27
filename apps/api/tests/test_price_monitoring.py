@@ -117,6 +117,9 @@ async def test_parquet_reader_projects_governed_columns_and_inserts_optional_col
 
 
 async def test_product_observation_batch_reads_only_requested_products_once() -> None:
+    historical_artifact = _artifact("historical", 0, 2, "2026-08-16T00:00:00Z")
+    governed_artifact = _artifact("governed", 0, 2, "2026-08-17T00:00:00Z")
+
     class Analyses:
         async def get(self, analysis_id: str) -> object:
             assert analysis_id == "analysis-1"
@@ -128,19 +131,19 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
                 result={
                     "benchmark_retailer": "walmart_us",
                     "competitors": ["aldi_us"],
+                    "evidence_sets": [
+                        {
+                            "evidence_set_id": "evidence.classified.aldi_us",
+                            **_evidence([governed_artifact]),
+                        }
+                    ],
                 },
             )
 
     class Repository:
         async def artifacts(self, collection_run_id: str, retailer_id: str) -> list[object]:
             assert (collection_run_id, retailer_id) == ("run-1", "aldi_us")
-            return [
-                ClassifiedArtifact(
-                    storage_uri="s3://artifacts/aldi.parquet",
-                    checksum="a" * 64,
-                    row_count=2,
-                )
-            ]
+            return [historical_artifact, governed_artifact]
 
         async def location_context(
             self, collection_run_id: str, retailer_id: str
@@ -204,7 +207,7 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
             retailer_id: str,
             product_ids: list[str],
         ) -> list[dict[str, object]]:
-            assert artifact is not None
+            assert artifact == governed_artifact
             assert retailer_id == "aldi_us"
             assert product_ids == ["a-1", "a-2"]
             self.calls += 1
