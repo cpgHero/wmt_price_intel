@@ -1336,7 +1336,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "3. Stage deterministic read models",
               detail:
-                "The worker stages one compact Price Intelligence catalog per configured retailer, the three default Price Architecture matrices, and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Retailer catalogs use bounded three-way concurrency. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
+                "The worker stages one compact Price Intelligence catalog per configured retailer, the three default Price Architecture matrices, and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Retailer catalogs build one at a time to protect interactive API readiness. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
             },
             {
               title: "4. Run the semantic trust gate",
@@ -1625,7 +1625,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-27",
               "Implemented; production verification pending",
               "Price Intelligence catalogs moved into durable trust-gated publication with server-side paging and filters.",
-              "Every configured retailer gains a checksummed compact catalog staged and atomically activated with the report. Home requests 40 products at a time and filters by search, brand, brand type, and PDP seller without hydrating the entire catalog; full product/location/PDP evidence loads only after product selection. Bounded three-retailer materialization shortens publication without unbounded memory pressure. Migration 0048_price_catalog is reversible, and an internal zero-provider-call backfill supports active reports. No Search, PDP, AI, certification, metric, source authority, or audit-lineage behavior changes.",
+              "Every configured retailer gains a checksummed compact catalog staged and atomically activated with the report. Home requests 40 products at a time and filters by search, brand, brand type, and PDP seller without hydrating the entire catalog; full product/location/PDP evidence loads only after product selection. Production backfill proved that three concurrent cold catalogs can degrade readiness, so the governed worker and operational backfill run one at a time. Migration 0048_price_catalog is reversible, and an internal zero-provider-call backfill supports active reports. No Search, PDP, AI, certification, metric, source authority, or audit-lineage behavior changes.",
             ],
             [
               "2026-08-27",

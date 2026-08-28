@@ -20,7 +20,8 @@ reporting denominator changes in this phase.
 ## Durable publication flow
 
 1. The publication planner derives the exact configured retailer set from the pending AnalysisResult.
-2. The leased worker builds catalogs in bounded batches of three independent retailers.
+2. The leased worker builds one retailer catalog at a time so publication cannot impair interactive
+   API readiness.
 3. Each catalog is validated against the normative Price Monitoring view contract and staged with a
    deterministic checksum.
 4. The publication gate blocks activation when any configured retailer catalog is absent.

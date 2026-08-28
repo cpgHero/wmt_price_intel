@@ -253,16 +253,11 @@ class ReportMaterializationWorker:
                 for retailer_id in plan.get("catalog_retailers", [])
                 if f"price_catalog:{retailer_id}" not in completed
             ]
-            # Retailer catalogs are independent immutable projections. A small
-            # bounded fan-out materially shortens publication without allowing
-            # a 14-retailer report to saturate API memory or object storage.
-            for start in range(0, len(pending_catalogs), 3):
-                await asyncio.gather(
-                    *(
-                        self._client.price_catalog(job.id, retailer_id)
-                        for retailer_id in pending_catalogs[start : start + 3]
-                    )
-                )
+            # Catalog projection is CPU- and memory-intensive even though it is
+            # off the event loop. Keep one active build per report so background
+            # publication cannot impair interactive API readiness.
+            for retailer_id in pending_catalogs:
+                await self._client.price_catalog(job.id, retailer_id)
             for scope in plan.get("portfolio_scopes", []):
                 completed_key = f"competitive_portfolio:{scope}"
                 if completed_key in completed:
