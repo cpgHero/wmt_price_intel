@@ -33,6 +33,15 @@ export interface ComparableCohort {
   >;
 }
 
+export interface CohortPricePresentation {
+  primaryValue: number | null;
+  primaryUnitLabel: string;
+  secondaryValue: number | null;
+  secondaryUnitLabel: string | null;
+  canonicalValue: number | null;
+  canonicalUnitLabel: string;
+}
+
 function numericValue(
   row: JsonObject,
   rawKey: string,
@@ -156,6 +165,85 @@ export function cohortPackageEquivalent(
   return {
     value: value * (volume / 128),
     label: `per ${volume.toLocaleString("en-US", { maximumFractionDigits: 2 })} fl oz`,
+  };
+}
+
+function positiveAttributeNumber(
+  attributes: Record<string, unknown>,
+  key: string,
+) {
+  const value = Number(attributes[key]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function quantityLabel(value: number) {
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+/**
+ * Selects a human-readable price basis without changing the governed metric.
+ * A fixed-volume cohort leads with its comparable package price. Mixed-volume
+ * cohorts lead with fluid-ounce pricing. The canonical value remains available
+ * for audit/export lineage.
+ */
+export function cohortPricePresentation(
+  value: number | null,
+  comparisonMetric: string,
+  comparisonUnit: string,
+  attributes: Record<string, unknown>,
+): CohortPricePresentation {
+  const canonicalUnitLabel = cohortUnitLabel(comparisonUnit);
+  if (value === null || !Number.isFinite(value)) {
+    return {
+      primaryValue: null,
+      primaryUnitLabel: canonicalUnitLabel,
+      secondaryValue: null,
+      secondaryUnitLabel: null,
+      canonicalValue: null,
+      canonicalUnitLabel,
+    };
+  }
+
+  const normalizedMetric = comparisonMetric.trim().toLowerCase();
+  const normalizedUnit = comparisonUnit.trim().toLowerCase();
+  const isPerGallon =
+    normalizedMetric === "price_per_gallon" || normalizedUnit === "usd/gallon";
+  const isPerFluidOunce =
+    normalizedMetric === "price_per_fluid_ounce" ||
+    normalizedMetric === "price_per_fl_oz" ||
+    normalizedUnit === "usd/fl_oz" ||
+    normalizedUnit === "usd/fl oz";
+
+  if (isPerGallon || isPerFluidOunce) {
+    const perFluidOunce = isPerGallon ? value / 128 : value;
+    const volumeOunces = positiveAttributeNumber(attributes, "volume_oz");
+    if (volumeOunces !== null) {
+      return {
+        primaryValue: perFluidOunce * volumeOunces,
+        primaryUnitLabel: `per ${quantityLabel(volumeOunces)} fl oz package`,
+        secondaryValue: perFluidOunce,
+        secondaryUnitLabel: "per fl oz",
+        canonicalValue: value,
+        canonicalUnitLabel,
+      };
+    }
+    return {
+      primaryValue: perFluidOunce,
+      primaryUnitLabel: "per fl oz",
+      secondaryValue: null,
+      secondaryUnitLabel: null,
+      canonicalValue: value,
+      canonicalUnitLabel,
+    };
+  }
+
+  return {
+    primaryValue: value,
+    primaryUnitLabel: canonicalUnitLabel,
+    secondaryValue: null,
+    secondaryUnitLabel: null,
+    canonicalValue: value,
+    canonicalUnitLabel,
   };
 }
 

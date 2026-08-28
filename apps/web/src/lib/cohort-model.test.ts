@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cohortPackageEquivalent,
+  cohortPricePresentation,
   cohortUnitLabel,
   comparableCohort,
   comparableCohorts,
@@ -147,5 +148,54 @@ describe("comparable cohort presentation model", () => {
     expect(
       cohortPackageEquivalent(7.7, "price_per_gallon", { volume_oz: 64 }),
     ).toEqual({ value: 3.85, label: "per 64 fl oz" });
+  });
+
+  it("leads with package price for a fixed-volume cohort", () => {
+    expect(
+      cohortPricePresentation(11.92, "price_per_gallon", "USD/gallon", {
+        volume_oz: 64,
+      }),
+    ).toEqual({
+      primaryValue: 5.96,
+      primaryUnitLabel: "per 64 fl oz package",
+      secondaryValue: 0.093125,
+      secondaryUnitLabel: "per fl oz",
+      canonicalValue: 11.92,
+      canonicalUnitLabel: "per gallon",
+    });
+
+    expect(
+      cohortPricePresentation(-4.14, "price_per_gallon", "USD/gallon", {
+        volume_oz: 64,
+      }).primaryValue,
+    ).toBe(-2.07);
+  });
+
+  it("leads with fluid-ounce price when a cohort mixes package volumes", () => {
+    expect(
+      cohortPricePresentation(11.92, "price_per_gallon", "USD/gallon", {}),
+    ).toEqual({
+      primaryValue: 0.093125,
+      primaryUnitLabel: "per fl oz",
+      secondaryValue: null,
+      secondaryUnitLabel: null,
+      canonicalValue: 11.92,
+      canonicalUnitLabel: "per gallon",
+    });
+  });
+
+  it("does not alter non-volume comparison bases", () => {
+    expect(
+      cohortPricePresentation(4.25, "price_per_package", "USD/package", {
+        volume_oz: 64,
+      }),
+    ).toEqual({
+      primaryValue: 4.25,
+      primaryUnitLabel: "per package",
+      secondaryValue: null,
+      secondaryUnitLabel: null,
+      canonicalValue: 4.25,
+      canonicalUnitLabel: "per package",
+    });
   });
 });

@@ -14,7 +14,11 @@ import {
 } from "@/app/components/application-context";
 import { ComparableCohortExplorer } from "./cohort-explorer";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
-import { comparableCohort, type ComparableCohort } from "@/lib/cohort-model";
+import {
+  comparableCohort,
+  cohortPricePresentation,
+  type ComparableCohort,
+} from "@/lib/cohort-model";
 import type {
   AnalysisRecord,
   AnalysisReportView,
@@ -3201,6 +3205,12 @@ function RadiusCohortProductsDrawer({
         .includes(token),
     );
   }, [cohort.productRelationships, query]);
+  const pricePresentation = cohortPricePresentation(
+    cohort.benchmarkMedian,
+    cohort.comparisonMetric,
+    cohort.comparisonUnit,
+    cohort.attributes,
+  );
   return (
     <div
       className="evidence-drawer-backdrop scorecard-products-layer"
@@ -3256,13 +3266,24 @@ function RadiusCohortProductsDrawer({
           </span>
           <span>
             <small>Displayed price basis</small>
-            <strong>{displayLabel(cohort.comparisonUnit)}</strong>
+            <strong>{pricePresentation.primaryUnitLabel}</strong>
           </span>
         </div>
         <p className="cohort-drawer-definition">
           Cohort medians are observation-weighted across scored benchmark
-          product-locations on the {displayLabel(cohort.comparisonUnit)} basis.
-          They are not package shelf-price medians.
+          product-locations.{" "}
+          {pricePresentation.secondaryUnitLabel ? (
+            <>
+              Because every cohort member has the same governed package size,
+              the {pricePresentation.primaryUnitLabel.replace("per ", "")}{" "}
+              equivalent is displayed first and{" "}
+              {pricePresentation.secondaryUnitLabel} is secondary context. The
+              canonical audit lineage remains{" "}
+              {displayLabel(cohort.comparisonUnit)}.
+            </>
+          ) : (
+            <>Displayed on the {pricePresentation.primaryUnitLabel} basis.</>
+          )}
         </p>
         <label className="radius-scorecard-product-search">
           <span>Find either retailer&apos;s product by name, ID, or brand</span>

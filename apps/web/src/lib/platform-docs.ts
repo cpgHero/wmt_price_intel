@@ -79,7 +79,7 @@ export const platformDocGroups: ReadonlyArray<{
   { id: "reference", label: "Reference" },
 ];
 
-const lastVerified = "August 27, 2026";
+const lastVerified = "August 28, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -766,6 +766,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "For physical retailers, radius-native scorecards rebuild certified product relationships at product × observed Walmart store grain and require the competitor store to be within the selected 1, 3, or 5 mile radius. Service-area retailers remain explicitly same-delivery-ZIP because they do not expose a comparable physical store footprint.",
             "Cohort Scorecards aggregate those same certified product-location outcomes by Product Pack segment; cohort membership never creates a new match. Assortment Scorecards keep global assortment breadth separate while applying the selected radius to local comparable coverage.",
             "Current Cohort Scorecard drawers read the exact radius-native relationship lineage materialized with each cohort. A cohort's displayed counts, rates, medians, gaps, product rows, and drill-down relationships are release-gated to the same relationship IDs; legacy exact-location candidates cannot populate or empty the drawer.",
+            "Cohort price presentation follows the governed package signature. When every member has one fixed fluid-ounce size, the observation-weighted package-equivalent median is primary and price per fluid ounce is secondary. When package volumes differ, price per fluid ounce is primary. The canonical normalized metric remains available in export and audit lineage; presentation never changes eligibility, price outcomes, or stored calculations.",
             "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search price, availability, sponsorship, or location. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
             "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
@@ -1621,6 +1622,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-28",
+              "Implemented and regression-verified",
+              "Fixed-volume Cohort Scorecards lead with the shopper-visible package basis instead of a gallon equivalent.",
+              "The ALDI 64 fl oz whole-organic Milk cohort now presents Walmart $5.96 and ALDI $3.85 per 64 fl oz package, with $0.0931 and $0.0602 per fl oz as secondary context. Its paired median difference displays as ALDI $2.07 per 64 fl oz package lower. Mixed-volume fluid cohorts lead with per-fluid-ounce values. Canonical USD/gallon values remain unchanged in audit/export lineage, and all non-volume metrics retain their prior presentation. The change is a pure deterministic browser projection over already-loaded cohort values: it adds no API request, database read, materialization, provider call, or AI call.",
+            ],
             [
               "2026-08-27",
               "Deployed and production-verified; schema backfill performance-gated",
