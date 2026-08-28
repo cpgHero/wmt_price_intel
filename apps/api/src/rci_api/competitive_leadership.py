@@ -35,6 +35,40 @@ from rci_results.service import AnalysisNotFoundError
 
 router = APIRouter(prefix="/api/v1", tags=["competitive-product-leadership"])
 
+PortfolioProjection = Literal["full", "scorecards", "cohorts", "assortment"]
+
+
+def _project_portfolio_document(
+    document: dict[str, Any], projection: PortfolioProjection
+) -> dict[str, Any]:
+    """Return only the evidence required by the active report workspace.
+
+    The stored document remains the complete, audit-ready authority. Interactive
+    report tabs use smaller projections so a context change does not repeatedly
+    transfer and parse drawer-level product evidence that is not visible.
+    """
+
+    if projection == "full":
+        return document
+
+    scorecards = []
+    for source in document.get("scorecards", []):
+        if not isinstance(source, dict):
+            continue
+        row = dict(source)
+        row["products"] = []
+        row.pop("product_relationships", None)
+        scorecards.append(row)
+
+    return {
+        **document,
+        "scorecards": scorecards,
+        "cohorts": (list(document.get("cohorts", [])) if projection == "cohorts" else []),
+        "assortment_scorecards": (
+            list(document.get("assortment_scorecards", [])) if projection == "assortment" else []
+        ),
+    }
+
 
 def _unit(comparison_metric: str) -> str:
     if comparison_metric == "package_price":
@@ -1846,11 +1880,12 @@ async def competitive_portfolio_scorecards_view(
     radius_miles: int = Query(default=3, ge=1, le=5),
     state_filter: str | None = Query(default=None, alias="state"),
     city: str | None = None,
+    view: PortfolioProjection = "full",
 ) -> dict[str, Any]:
     try:
         if radius_miles not in {1, 3, 5}:
             raise ValueError("competitive radius must be 1, 3, or 5 miles")
-        return await service.portfolio_view(
+        document = await service.portfolio_view(
             analysis_id,
             competitor_id=competitor,
             profile_id=profile,
@@ -1858,6 +1893,7 @@ async def competitive_portfolio_scorecards_view(
             state=state_filter,
             city=city,
         )
+        return _project_portfolio_document(document, view)
     except AnalysisNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except LookupError as exc:

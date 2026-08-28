@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  competitivePortfolioProjection,
   leadershipTab,
   leadershipTabs,
   legacyLeadershipTab,
@@ -32,5 +33,13 @@ describe("competitive report leadership navigation", () => {
     expect(legacyLeadershipTab("exceptions").id).toBe("store-comparisons");
     expect(legacyLeadershipTab("unsupported").id).toBe("competitive-footprint");
     expect(legacyLeadershipTab(null).id).toBe("competitive-footprint");
+  });
+
+  it("requests radius portfolio evidence only for the active consumer", () => {
+    expect(competitivePortfolioProjection("overview")).toBe("scorecards");
+    expect(competitivePortfolioProjection("price-segments")).toBe("cohorts");
+    expect(competitivePortfolioProjection("assortment")).toBe("assortment");
+    expect(competitivePortfolioProjection("competitive-footprint")).toBeNull();
+    expect(competitivePortfolioProjection("products")).toBeNull();
   });
 });

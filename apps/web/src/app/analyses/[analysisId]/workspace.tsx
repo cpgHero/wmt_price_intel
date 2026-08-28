@@ -64,6 +64,7 @@ import {
   type ScorecardProductSummary,
 } from "@/lib/report-presentation";
 import {
+  competitivePortfolioProjection,
   leadershipTab,
   leadershipTabs,
   legacyLeadershipTab,
@@ -324,6 +325,7 @@ function BlueprintAnalysisWorkspace({
     portfolio: CompetitivePortfolioScorecards | null;
     error: string;
   }>({ query: "", portfolio: null, error: "" });
+  const [portfolioRetry, setPortfolioRetry] = useState(0);
   const [decisionQuality, setDecisionQuality] =
     useState<CompetitiveDecisionQuality | null>(null);
   const [decisionQualityError, setDecisionQualityError] = useState("");
@@ -545,27 +547,40 @@ function BlueprintAnalysisWorkspace({
     if (leadershipState) parameters.set("state", leadershipState);
     if (leadershipState && leadershipCity)
       parameters.set("city", leadershipCity);
+    const view = competitivePortfolioProjection(activeGroup);
+    if (view) parameters.set("view", view);
     return parameters.toString();
   }, [
+    activeGroup,
     leadershipCity,
     leadershipRadius,
     leadershipState,
     selectedCompetitor,
     selectedLens,
   ]);
-  const portfolioRequestKey =
-    "/api/analyses/" +
-    encodeURIComponent(analysis.analysis_id) +
-    "/competitive-portfolio-scorecards?" +
-    portfolioQuery;
+  const needsPortfolio = competitivePortfolioProjection(activeGroup) !== null;
+  const portfolioRequestKey = needsPortfolio
+    ? "/api/analyses/" +
+      encodeURIComponent(analysis.analysis_id) +
+      "/competitive-portfolio-scorecards?" +
+      portfolioQuery
+    : null;
   const radiusPortfolio =
-    portfolioResult.query === portfolioRequestKey
+    portfolioRequestKey && portfolioResult.query === portfolioRequestKey
       ? portfolioResult.portfolio
       : null;
   const radiusPortfolioError =
-    portfolioResult.query === portfolioRequestKey ? portfolioResult.error : "";
+    portfolioRequestKey && portfolioResult.query === portfolioRequestKey
+      ? portfolioResult.error
+      : "";
   useEffect(() => {
+    if (!portfolioRequestKey) return;
     const controller = new AbortController();
+    let requestTimedOut = false;
+    const timeout = window.setTimeout(() => {
+      requestTimedOut = true;
+      controller.abort();
+    }, 20_000);
     fetch(portfolioRequestKey, { signal: controller.signal })
       .then(async (response) => {
         const body = (await response.json().catch(() => ({}))) as
@@ -584,19 +599,29 @@ function BlueprintAnalysisWorkspace({
         });
       })
       .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === "AbortError")
+        if (
+          !requestTimedOut &&
+          cause instanceof DOMException &&
+          cause.name === "AbortError"
+        )
           return;
         setPortfolioResult({
           query: portfolioRequestKey,
           portfolio: null,
           error:
             cause instanceof Error
-              ? cause.message
+              ? requestTimedOut
+                ? "Scorecards took too long to load. Retry the request."
+                : cause.message
               : "Radius reporting is unavailable.",
         });
-      });
-    return () => controller.abort();
-  }, [portfolioRequestKey]);
+      })
+      .finally(() => window.clearTimeout(timeout));
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [portfolioRequestKey, portfolioRetry]);
   const scopedSections = useMemo(
     () =>
       groupedSections.map((group) => ({
@@ -1300,6 +1325,10 @@ function BlueprintAnalysisWorkspace({
                 onSelect={selectCompetitor}
                 portfolio={radiusPortfolio}
                 error={radiusPortfolioError}
+                onRetry={() => {
+                  setPortfolioResult({ query: "", portfolio: null, error: "" });
+                  setPortfolioRetry((value) => value + 1);
+                }}
               />
             ) : null}
             {activeGroup === "price-segments" ? (
@@ -2325,6 +2354,7 @@ function RadiusRetailerScorecardPanel({
   onSelect,
   portfolio,
   error,
+  onRetry,
 }: Readonly<{
   analysisId: string;
   benchmark: RetailerOption;
@@ -2334,12 +2364,15 @@ function RadiusRetailerScorecardPanel({
   onSelect: (retailerId: string) => void;
   portfolio: CompetitivePortfolioScorecards | null;
   error: string;
+  onRetry: () => void;
 }>) {
   const [selected, setSelected] = useState<RadiusRetailerScorecard | null>(
     null,
   );
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(25);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [coverageSelection, setCoverageSelection] =
     useState<RadiusRetailerScorecard | null>(null);
   const [coverage, setCoverage] = useState<CompetitiveProductCoverage | null>(
@@ -2349,6 +2382,54 @@ function RadiusRetailerScorecardPanel({
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [coverageStatus, setCoverageStatus] = useState("all");
   const [coverageQuery, setCoverageQuery] = useState("");
+  const loadScorecardDetails = useCallback(
+    (scorecard: RadiusRetailerScorecard) => {
+      if (!portfolio) return;
+      const controller = new AbortController();
+      const parameters = new URLSearchParams({
+        competitor: scorecard.competitor_id,
+        profile: portfolio.filters.profile_id,
+        radius_miles: String(radiusMiles),
+        view: "full",
+      });
+      setQuery("");
+      setVisibleLimit(25);
+      setDetailError("");
+      setDetailLoading(true);
+      setSelected(scorecard);
+      fetch(
+        `/api/analyses/${encodeURIComponent(analysisId)}/competitive-portfolio-scorecards?${parameters.toString()}`,
+        { signal: controller.signal },
+      )
+        .then(async (response) => {
+          const body = (await response.json().catch(() => ({}))) as
+            CompetitivePortfolioScorecards | { error?: string };
+          if (!response.ok || !("scorecards" in body)) {
+            throw new Error(
+              "error" in body && body.error
+                ? body.error
+                : `Product evidence returned ${response.status}`,
+            );
+          }
+          const detail = body.scorecards.find(
+            (row) => row.competitor_id === scorecard.competitor_id,
+          );
+          if (!detail) throw new Error("Product evidence was not found.");
+          setSelected(detail);
+        })
+        .catch((cause: unknown) => {
+          if (cause instanceof DOMException && cause.name === "AbortError")
+            return;
+          setDetailError(
+            cause instanceof Error
+              ? cause.message
+              : "Product evidence is unavailable.",
+          );
+        })
+        .finally(() => setDetailLoading(false));
+    },
+    [analysisId, portfolio, radiusMiles],
+  );
   useEffect(() => {
     if (!selected) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2462,7 +2543,10 @@ function RadiusRetailerScorecardPanel({
         ) : null}
         {error ? (
           <div className="empty-inline error" role="alert">
-            {error}
+            <span>{error}</span>{" "}
+            <button type="button" onClick={onRetry}>
+              Retry scorecards
+            </button>
           </div>
         ) : null}
         {portfolio ? (
@@ -2580,12 +2664,8 @@ function RadiusRetailerScorecardPanel({
                       </small>
                       <button
                         type="button"
-                        disabled={!scorecard.product_relationships?.length}
-                        onClick={() => {
-                          setQuery("");
-                          setVisibleLimit(25);
-                          setSelected(scorecard);
-                        }}
+                        disabled={!scorecard.relationships}
+                        onClick={() => loadScorecardDetails(scorecard)}
                       >
                         View{" "}
                         {(
@@ -2735,6 +2815,16 @@ function RadiusRetailerScorecardPanel({
                 ×
               </button>
             </header>
+            {detailLoading ? (
+              <div className="empty-inline" role="status">
+                Loading included product evidence…
+              </div>
+            ) : null}
+            {detailError ? (
+              <div className="empty-inline error" role="alert">
+                {detailError}
+              </div>
+            ) : null}
             <div className="radius-scorecard-product-summary">
               <span>
                 <small>Included products</small>

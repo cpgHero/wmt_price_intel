@@ -7,6 +7,18 @@ export interface ProductLeadershipTab {
   view: ProductLeadershipViewName;
 }
 
+export type CompetitivePortfolioProjection =
+  "scorecards" | "cohorts" | "assortment";
+
+export function competitivePortfolioProjection(
+  groupId: string,
+): CompetitivePortfolioProjection | null {
+  if (groupId === "overview") return "scorecards";
+  if (groupId === "price-segments") return "cohorts";
+  if (groupId === "assortment") return "assortment";
+  return null;
+}
+
 export const leadershipTabs: readonly ProductLeadershipTab[] = [
   {
     id: "competitive-footprint",

@@ -14,11 +14,46 @@ from rci_api.competitive_leadership import (
     _cohort_summary,
     _coverage_rows,
     _portfolio_summary,
+    _project_portfolio_document,
     _require_internal_materialization_token,
 )
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_portfolio_projection_keeps_summary_and_defers_inactive_evidence() -> None:
+    document = {
+        "analysis_id": "analysis-1",
+        "scorecards": [
+            {
+                "competitor_id": "aldi_us",
+                "relationships": 2,
+                "products": [{"product_id": "w1"}],
+                "product_relationships": [{"relationship_id": "r1"}],
+            }
+        ],
+        "cohorts": [{"id": "c1", "product_relationships": [{"relationship_id": "r1"}]}],
+        "assortment_scorecards": [{"competitor_id": "aldi_us", "products": []}],
+    }
+
+    scorecards = _project_portfolio_document(document, "scorecards")
+    assert scorecards["scorecards"][0]["relationships"] == 2
+    assert scorecards["scorecards"][0]["products"] == []
+    assert "product_relationships" not in scorecards["scorecards"][0]
+    assert scorecards["cohorts"] == []
+    assert scorecards["assortment_scorecards"] == []
+
+    cohorts = _project_portfolio_document(document, "cohorts")
+    assert cohorts["cohorts"] == document["cohorts"]
+    assert cohorts["assortment_scorecards"] == []
+
+    assortment = _project_portfolio_document(document, "assortment")
+    assert assortment["cohorts"] == []
+    assert assortment["assortment_scorecards"] == document["assortment_scorecards"]
+
+    assert _project_portfolio_document(document, "full") is document
+    assert document["scorecards"][0]["products"] == [{"product_id": "w1"}]
 
 
 def test_certified_candidate_creates_cohort_without_legacy_price_segment() -> None:
