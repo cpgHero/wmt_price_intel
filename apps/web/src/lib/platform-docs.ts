@@ -83,7 +83,7 @@ const lastVerified = "August 27, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.66",
+  version: "1.3.67",
   lastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1620,6 +1620,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-27",
+              "Implemented and incident-verified",
+              "Price Intelligence cold projections no longer block API health and unrelated reads.",
+              "A large cold Price Intelligence catalog projection previously ran CPU-heavy product-location preparation and schema validation on the FastAPI event-loop thread. The process remained marked running while health checks and small analysis reads timed out, causing the web application to report that the API was unavailable. The affected API instance was recoverably replaced, restoring web readiness. Product-offer normalization, canonical population construction, full catalog projection, evidence export projection, and map projection now run in worker threads while deterministic output and caches remain unchanged. A regression test proves a blocked projection does not block the API event loop. No Search, PDP, AI, certification, metric, report evidence, database, or audit-lineage data changed.",
+            ],
             [
               "2026-08-27",
               "Production incident remediated and interaction-verified",

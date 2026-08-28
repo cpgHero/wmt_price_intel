@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import threading
+import time
 from io import BytesIO
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -19,6 +22,54 @@ from rci_api.price_monitoring import (
     get_price_monitoring_service,
     select_evidence_artifacts,
 )
+
+
+async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch: object) -> None:
+    service = object.__new__(PriceMonitoringService)
+    service._view_cache = {}
+    service._root = Path(__file__).resolve().parents[3]
+    prepared = SimpleNamespace(
+        analysis=SimpleNamespace(analysis_id="analysis-1"),
+        product_context_revision="revision-1",
+    )
+    started = threading.Event()
+    release = threading.Event()
+
+    async def prepare(
+        _service: PriceMonitoringService,
+        _analysis_id: str,
+        _retailer_id: str,
+    ) -> object:
+        return prepared
+
+    def project(
+        _service: PriceMonitoringService,
+        _prepared: object,
+        _filters: PriceMonitoringFilters,
+        **_limits: object,
+    ) -> dict[str, object]:
+        started.set()
+        assert release.wait(timeout=2)
+        return {"schema_version": "test"}
+
+    monkeypatch.setattr("rci_api.price_monitoring.validate_instance", lambda *_args, **_kw: None)  # type: ignore[union-attr]
+    service._prepare = MethodType(prepare, service)  # type: ignore[method-assign]
+    service._project = MethodType(project, service)  # type: ignore[method-assign]
+
+    view_task = asyncio.create_task(
+        service.view("analysis-1", PriceMonitoringFilters(retailer_id="walmart_us"))
+    )
+    deadline = time.monotonic() + 1
+    while not started.is_set() and time.monotonic() < deadline:
+        await asyncio.sleep(0.005)
+    assert started.is_set()
+
+    heartbeat_started = time.monotonic()
+    await asyncio.sleep(0.02)
+    assert time.monotonic() - heartbeat_started < 0.2
+
+    release.set()
+    assert await view_task == {"schema_version": "test"}
 
 
 def _artifact(artifact_id: str, partition: int, rows: int, created_at: str) -> ClassifiedArtifact:

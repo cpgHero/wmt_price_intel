@@ -857,6 +857,15 @@ class PriceMonitoringService:
                 retailer_id,
                 product_ids,
             )
+            population = await asyncio.to_thread(
+                cached.projector.canonical_population,
+                cached.offers,
+                retailer_id=retailer_id,
+                location_index=cached.location_index,
+                eligible_location_index=cached.eligible_location_index,
+                product_context=product_context,
+                retailer_options=cached.retailer_options,
+            )
             refreshed = PreparedPriceMonitoringData(
                 analysis=cached.analysis,
                 projector=cached.projector,
@@ -869,14 +878,7 @@ class PriceMonitoringService:
                 product_context=product_context,
                 product_context_revision=revision,
                 retailer_options=cached.retailer_options,
-                population=cached.projector.canonical_population(
-                    cached.offers,
-                    retailer_id=retailer_id,
-                    location_index=cached.location_index,
-                    eligible_location_index=cached.eligible_location_index,
-                    product_context=product_context,
-                    retailer_options=cached.retailer_options,
-                ),
+                population=population,
             )
             self._prepared_cache[cache_key] = refreshed
             return refreshed
@@ -904,7 +906,9 @@ class PriceMonitoringService:
             records: list[dict[str, Any]] = []
             for artifact in artifacts:
                 records.extend(await self._reader.read(artifact))
-            offers = tuple(classified_offer_from_record(record) for record in records)
+            offers = await asyncio.to_thread(
+                lambda: tuple(classified_offer_from_record(record) for record in records)
+            )
             product_ids = sorted(
                 {
                     offer.offer.retailer_product_id
@@ -928,6 +932,15 @@ class PriceMonitoringService:
                 product_ids,
             )
             projector = await self._projector_for_analysis(analysis, benchmark)
+            population = await asyncio.to_thread(
+                projector.canonical_population,
+                offers,
+                retailer_id=retailer_id,
+                location_index=location_index,
+                eligible_location_index=eligible_location_index,
+                product_context=product_context,
+                retailer_options=retailer_options,
+            )
             prepared = PreparedPriceMonitoringData(
                 analysis=analysis,
                 projector=projector,
@@ -943,14 +956,7 @@ class PriceMonitoringService:
                 product_context=product_context,
                 product_context_revision=product_context_revision,
                 retailer_options=retailer_options,
-                population=projector.canonical_population(
-                    offers,
-                    retailer_id=retailer_id,
-                    location_index=location_index,
-                    eligible_location_index=eligible_location_index,
-                    product_context=product_context,
-                    retailer_options=retailer_options,
-                ),
+                population=population,
             )
             # A cross-retailer architecture request commonly prepares 14+ sources.
             # Retaining fewer entries caused every subsequent matrix view to churn
@@ -1006,17 +1012,25 @@ class PriceMonitoringService:
         cached = self._view_cache.get(cache_key)
         if cached is not None:
             return cached
-        view = self._project(
-            prepared,
-            filters,
-            product_location_limit=200 if filters.product_id else 0,
-        )
-        validate_instance(
-            self._root,
-            "price-monitoring-view.schema.json",
-            view,
-            label=f"price-monitoring:{prepared.analysis.analysis_id}:{filters.retailer_id}",
-        )
+
+        def project_and_validate() -> dict[str, Any]:
+            projected = self._project(
+                prepared,
+                filters,
+                product_location_limit=200 if filters.product_id else 0,
+            )
+            validate_instance(
+                self._root,
+                "price-monitoring-view.schema.json",
+                projected,
+                label=(f"price-monitoring:{prepared.analysis.analysis_id}:{filters.retailer_id}"),
+            )
+            return projected
+
+        # Building a large product-location catalog is CPU-heavy. Running it on
+        # the event-loop thread can make even /health/ready and small analysis
+        # reads time out, which presents a healthy process as an API outage.
+        view = await asyncio.to_thread(project_and_validate)
         if len(self._view_cache) >= 96:
             self._view_cache.pop(next(iter(self._view_cache)))
         self._view_cache[cache_key] = view
@@ -1423,7 +1437,8 @@ class PriceMonitoringService:
         if not filters.product_id:
             raise ValueError("a product_id is required for evidence export")
         prepared = await self._prepare(analysis_id, filters.retailer_id)
-        view = self._project(
+        view = await asyncio.to_thread(
+            self._project,
             prepared,
             filters,
             location_limit=None,
@@ -1482,7 +1497,8 @@ class PriceMonitoringService:
             return cached
 
         prepared = await self._prepare(analysis_id, filters.retailer_id)
-        view = self._project(
+        view = await asyncio.to_thread(
+            self._project,
             prepared,
             filters,
             location_limit=None,
