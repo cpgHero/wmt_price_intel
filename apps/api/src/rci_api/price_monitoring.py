@@ -416,9 +416,7 @@ class PostgresPriceMonitoringRepository:
                     "analysis_id": analysis_id,
                     "retailer_id": retailer_id,
                     "source_revision": source_revision,
-                    "document": json.dumps(
-                        document, ensure_ascii=False, separators=(",", ":")
-                    ),
+                    "document": json.dumps(document, ensure_ascii=False, separators=(",", ":")),
                 },
             )
             if materialization_id is None:
@@ -1164,9 +1162,7 @@ class PriceMonitoringService:
         publish: bool = True,
     ) -> dict[str, Any]:
         if not refresh:
-            stored = await self._repository.catalog_materialization(
-                analysis_id, retailer_id
-            )
+            stored = await self._repository.catalog_materialization(analysis_id, retailer_id)
             if stored is not None:
                 return stored
         full_view = await self.view(
@@ -1209,24 +1205,19 @@ class PriceMonitoringService:
         offset: int = 0,
         limit: int = 40,
     ) -> dict[str, Any]:
-        document = await self._repository.catalog_materialization(
-            analysis_id, retailer_id
-        )
+        document = await self._repository.catalog_materialization(analysis_id, retailer_id)
         if document is None:
             raise LookupError(
                 "The Price Intelligence catalog has not been materialized for this report."
             )
-        all_products = [
-            dict(row) for row in document.get("products", []) if isinstance(row, dict)
-        ]
+        all_products = [dict(row) for row in document.get("products", []) if isinstance(row, dict)]
         normalized_query = (query or "").strip().casefold()
         normalized_brand = (brand or "").strip()
         normalized_seller = (seller or "").strip()
 
         def included(product: dict[str, Any]) -> bool:
             searchable = " ".join(
-                str(product.get(field) or "")
-                for field in ("name", "product_id", "brand", "seller")
+                str(product.get(field) or "") for field in ("name", "product_id", "brand", "seller")
             ).casefold()
             return bool(
                 (not normalized_query or normalized_query in searchable)
@@ -1246,19 +1237,11 @@ class PriceMonitoringService:
         page = filtered[offset : offset + limit]
         page_view = {**document, "products": page}
         brands = sorted(
-            {
-                str(product["brand"])
-                for product in all_products
-                if product.get("brand")
-            },
+            {str(product["brand"]) for product in all_products if product.get("brand")},
             key=str.casefold,
         )
         sellers = sorted(
-            {
-                str(product["seller"])
-                for product in all_products
-                if product.get("seller")
-            },
+            {str(product["seller"]) for product in all_products if product.get("seller")},
             key=str.casefold,
         )
         brand_types = sorted(

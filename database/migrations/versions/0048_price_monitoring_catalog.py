@@ -60,8 +60,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "report_materialization_stage_kind_ck",
         "report_materialization_stage",
-        "document_kind IN ('price_architecture', 'price_catalog', "
-        "'competitive_portfolio')",
+        "document_kind IN ('price_architecture', 'price_catalog', 'competitive_portfolio')",
     )
 
 
