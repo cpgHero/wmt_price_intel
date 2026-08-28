@@ -22,6 +22,29 @@ import { loadServerConfig } from "./config";
 export type JsonObject = Record<string, unknown>;
 export type PriceMonitoringView =
   RetailCompetitiveIntelligencePriceMonitoringView;
+export interface PriceMonitoringCatalogPage {
+  schema_version: "1.0.0-price-monitoring-catalog-page";
+  view: PriceMonitoringView;
+  pagination: {
+    offset: number;
+    limit: number;
+    returned: number;
+    filtered_total: number;
+    total: number;
+    has_more: boolean;
+  };
+  filters: {
+    query: string;
+    brand_type: string;
+    brand: string | null;
+    seller: string | null;
+  };
+  facets: {
+    brands: string[];
+    brand_types: string[];
+    sellers: string[];
+  };
+}
 export type PriceMonitoringMap =
   RetailCompetitiveIntelligencePriceMonitoringMap;
 export type PriceArchitectureMatrix =

@@ -25,6 +25,67 @@ from rci_api.price_monitoring import (
 )
 
 
+async def test_materialized_catalog_is_filtered_sorted_and_paged() -> None:
+    class Repository:
+        async def catalog_materialization(
+            self, analysis_id: str, retailer_id: str
+        ) -> dict[str, object]:
+            assert (analysis_id, retailer_id) == ("analysis-1", "walmart_us")
+            return {
+                "analysis_id": analysis_id,
+                "products": [
+                    {
+                        "product_id": "2",
+                        "name": "Nature Made Adult Multivitamin",
+                        "brand": "Nature Made",
+                        "brand_type": "national",
+                        "seller": "Walmart.com",
+                        "presence": {"observed_locations": 12},
+                    },
+                    {
+                        "product_id": "1",
+                        "name": "Spring Valley Adult Multivitamin",
+                        "brand": "Spring Valley",
+                        "brand_type": "private_label",
+                        "seller": "Walmart.com",
+                        "presence": {"observed_locations": 41},
+                    },
+                    {
+                        "product_id": "3",
+                        "name": "Spring Valley Vitamin C",
+                        "brand": "Spring Valley",
+                        "brand_type": "private_label",
+                        "seller": None,
+                        "presence": {"observed_locations": 30},
+                    },
+                ],
+            }
+
+    service = object.__new__(PriceMonitoringService)
+    service._repository = Repository()
+    page = await service.catalog_page(
+        "analysis-1",
+        "walmart_us",
+        query="spring valley",
+        brand_type="private_label",
+        seller="Walmart.com",
+        offset=0,
+        limit=1,
+    )
+
+    assert page["pagination"] == {
+        "offset": 0,
+        "limit": 1,
+        "returned": 1,
+        "filtered_total": 1,
+        "total": 3,
+        "has_more": False,
+    }
+    assert [row["product_id"] for row in page["view"]["products"]] == ["1"]
+    assert page["facets"]["brands"] == ["Nature Made", "Spring Valley"]
+    assert page["facets"]["sellers"] == ["Walmart.com"]
+
+
 async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch: object) -> None:
     service = object.__new__(PriceMonitoringService)
     service._view_cache = {}

@@ -55,3 +55,7 @@ planning to use only active, provider-safe store identifiers.
 `0046_retailer_gates` makes availability decisions durable per retailer, releases healthy retailer
 work independently, stops an unrecoverable retailer sample early, and records mixed run outcomes as
 partial without discarding task or billing evidence.
+`0048_price_catalog` adds one compact Price Intelligence retailer catalog per immutable
+AnalysisResult. Catalogs join the leased report-publication staging and atomic activation flow,
+support server-side product search/facets/paging, and remain derived, reversible, and free of paid
+provider or AI work.

@@ -4,6 +4,7 @@ import { EmptyState } from "@/app/components/empty-state";
 import {
   getApi,
   type AnalysisRecord,
+  type PriceMonitoringCatalogPage,
   type PriceMonitoringView,
 } from "@/lib/api";
 import { compactPriceMonitoringCatalog } from "@/lib/price-monitoring-catalog";
@@ -64,10 +65,25 @@ export default async function PriceMonitoringDetailPage({
   ] as const) {
     if (query[key]) request.set(key, String(query[key]));
   }
-  const viewResponse = await getApi<PriceMonitoringView>(
-    `/api/v1/analyses/${encodeURIComponent(analysisId)}/price-monitoring?${request.toString()}`,
-    120_000,
-  );
+  const useCatalog =
+    !query.product_id && !query.state && !query.city && !query.zipcode;
+  const catalogRequest = new URLSearchParams({
+    retailer: defaultRetailer,
+    limit: "40",
+  });
+  if (query.brand_type) catalogRequest.set("brand_type", query.brand_type);
+  const catalogResponse = useCatalog
+    ? await getApi<PriceMonitoringCatalogPage>(
+        `/api/v1/analyses/${encodeURIComponent(analysisId)}/price-monitoring/catalog?${catalogRequest.toString()}`,
+        10_000,
+      )
+    : null;
+  const viewResponse = catalogResponse?.data
+    ? { ...catalogResponse, data: catalogResponse.data.view }
+    : await getApi<PriceMonitoringView>(
+        `/api/v1/analyses/${encodeURIComponent(analysisId)}/price-monitoring?${request.toString()}`,
+        120_000,
+      );
   if (!viewResponse.data) {
     return (
       <main>
@@ -84,8 +100,13 @@ export default async function PriceMonitoringDetailPage({
   return (
     <main className="price-monitoring-page">
       <PriceMonitoringWorkspace
+        initialCatalog={catalogResponse?.data ?? undefined}
         initialTab={query.tab}
-        initialView={compactPriceMonitoringCatalog(viewResponse.data)}
+        initialView={
+          catalogResponse?.data
+            ? viewResponse.data
+            : compactPriceMonitoringCatalog(viewResponse.data)
+        }
       />
     </main>
   );

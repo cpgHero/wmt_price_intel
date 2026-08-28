@@ -48,6 +48,17 @@ Prefix: `/api/v1`.
   products remain labeled, and every returned product includes its retailer product ID and distinct
   observed-location count. Parameter-scoped results are persisted by migration `0042`; default
   modes are pre-materialized by both API and worker publication paths.
+- `GET /analyses/{id}/price-monitoring/catalog` returns the active publication-time Price
+  Intelligence retailer catalog as schema `1.0.0-price-monitoring-catalog-page`. Required scope is
+  `retailer`; optional filters are `q`, `brand_type`, exact `brand`, exact `seller`, `offset`, and
+  `limit` (1–100). The envelope returns one contract-valid compact Price Monitoring view, facets,
+  and exact total/filtered/returned/has-more pagination. Rows sort by distinct observed retailer
+  locations descending, then product name and ID. The endpoint never builds a catalog on demand;
+  missing materialization returns `404` so a trusted predecessor can remain active.
+- `POST /internal/analyses/{id}/price-monitoring/catalog/materialize?retailer=...` requires the
+  internal service token and backfills one active report catalog from retained evidence without a
+  provider or AI call. Normal publication stages each retailer through the leased report job and
+  atomically installs all catalogs only after the publication gate passes.
 
 ### Matching Architecture v2 shadow contracts
 

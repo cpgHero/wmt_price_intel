@@ -83,7 +83,7 @@ const lastVerified = "August 27, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.67",
+  version: "1.3.68",
   lastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -768,6 +768,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Current Cohort Scorecard drawers read the exact radius-native relationship lineage materialized with each cohort. A cohort's displayed counts, rates, medians, gaps, product rows, and drill-down relationships are release-gated to the same relationship IDs; legacy exact-location candidates cannot populate or empty the drawer.",
             "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search price, availability, sponsorship, or location. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
+            "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no admissible store observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
@@ -1335,7 +1336,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "3. Stage deterministic read models",
               detail:
-                "The worker stages the three default Price Architecture matrices and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
+                "The worker stages one compact Price Intelligence catalog per configured retailer, the three default Price Architecture matrices, and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Retailer catalogs use bounded three-way concurrency. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
             },
             {
               title: "4. Run the semantic trust gate",
@@ -1620,6 +1621,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-27",
+              "Implemented; production verification pending",
+              "Price Intelligence catalogs moved into durable trust-gated publication with server-side paging and filters.",
+              "Every configured retailer gains a checksummed compact catalog staged and atomically activated with the report. Home requests 40 products at a time and filters by search, brand, brand type, and PDP seller without hydrating the entire catalog; full product/location/PDP evidence loads only after product selection. Bounded three-retailer materialization shortens publication without unbounded memory pressure. Migration 0048_price_catalog is reversible, and an internal zero-provider-call backfill supports active reports. No Search, PDP, AI, certification, metric, source authority, or audit-lineage behavior changes.",
+            ],
             [
               "2026-08-27",
               "Implemented and incident-verified",

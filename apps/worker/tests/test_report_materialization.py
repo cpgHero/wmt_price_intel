@@ -39,17 +39,22 @@ class FakeClient:
                 "fixed_range:0.50",
                 "fixed_range:1.00",
             ],
+            "catalog_retailers": ["walmart_us", "aldi_us"],
             "portfolio_scopes": ["strict:1", "strict:3", "strict:5"],
             "completed_scopes": [
                 "price_architecture:benchmark_anchored:0.50",
                 "price_architecture:fixed_range:0.50",
                 "price_architecture:fixed_range:1.00",
+                "price_catalog:walmart_us",
                 "competitive_portfolio:strict:1",
             ],
         }
 
     async def price_architecture(self, job_id: str) -> None:
         self.calls.append("price")
+
+    async def price_catalog(self, job_id: str, retailer_id: str) -> None:
+        self.calls.append(f"catalog:{retailer_id}")
 
     async def portfolio(self, job_id: str, profile_id: str, radius_miles: int) -> None:
         self.calls.append(f"portfolio:{profile_id}:{radius_miles}")
@@ -82,6 +87,7 @@ async def test_worker_resumes_completed_scopes_and_finalizes() -> None:
     assert await worker.run_once() == 1
     assert client.calls == [
         "prepare",
+        "catalog:aldi_us",
         "portfolio:strict:3",
         "portfolio:strict:5",
         "finalize",

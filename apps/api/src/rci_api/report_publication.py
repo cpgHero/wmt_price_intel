@@ -34,6 +34,10 @@ class PortfolioScopeRequest(BaseModel):
     radius_miles: int = Field(ge=1, le=5)
 
 
+class CatalogScopeRequest(BaseModel):
+    retailer_id: str = Field(min_length=1)
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
@@ -220,10 +224,21 @@ async def prepare_report_materialization(
             status_code=status.HTTP_409_CONFLICT,
             detail="No governed comparison basis is available for publication.",
         )
+    catalog_retailers = sorted(
+        {
+            str(retailer_id)
+            for retailer_id in [
+                report.get("benchmark_retailer"),
+                *list(report.get("competitors") or []),
+            ]
+            if retailer_id
+        }
+    )
     plan = {
         "schema_version": "1.0.0-report-materialization-plan",
         "analysis_id": str(job["analysis_id"]),
         "price_scopes": [f"{mode}:{increment:.2f}" for mode, increment in PRICE_SCOPES],
+        "catalog_retailers": catalog_retailers,
         "portfolio_scopes": [f"{profile}:{radius}" for profile in profiles for radius in (1, 3, 5)],
         "profiles": profiles,
         "radii": [1, 3, 5],
@@ -244,7 +259,12 @@ async def prepare_report_materialization(
                 )
             ).scalars()
         }
-        total = len(plan["price_scopes"]) + len(plan["portfolio_scopes"]) + 1
+        total = (
+            len(plan["price_scopes"])
+            + len(plan["catalog_retailers"])
+            + len(plan["portfolio_scopes"])
+            + 1
+        )
         updated = await connection.execute(
             text(
                 """
@@ -298,6 +318,38 @@ async def stage_price_architecture(
         worker_id=str(x_rci_worker_id),
     )
     return {"status": "staged", "matrix_count": len(documents), "progress_current": completed}
+
+
+@router.post("/internal/report-materialization-jobs/{job_id}/price-catalog")
+async def stage_price_catalog(
+    job_id: str,
+    scope: CatalogScopeRequest,
+    request: Request,
+    x_rci_internal_token: Annotated[str | None, Header(alias="X-RCI-Internal-Token")] = None,
+    x_rci_worker_id: Annotated[str | None, Header(alias="X-RCI-Worker-ID")] = None,
+) -> dict[str, Any]:
+    _require_internal_token(x_rci_internal_token)
+    job = await _require_lease(request, job_id, x_rci_worker_id)
+    document = await get_price_monitoring_service(request).materialize_catalog(
+        str(job["analysis_id"]),
+        scope.retailer_id,
+        refresh=True,
+        publish=False,
+    )
+    completed = await _stage_documents(
+        request,
+        job_id,
+        kind="price_catalog",
+        documents=[(scope.retailer_id, document)],
+        stage=f"price_catalog:{scope.retailer_id}",
+        worker_id=str(x_rci_worker_id),
+    )
+    return {
+        "status": "staged",
+        "retailer_id": scope.retailer_id,
+        "product_count": len(document.get("products", [])),
+        "progress_current": completed,
+    }
 
 
 @router.post("/internal/report-materialization-jobs/{job_id}/competitive-portfolio")
@@ -365,10 +417,13 @@ async def finalize_report_materialization(
             ).mappings()
         ]
     price_rows = [row for row in staged if row["document_kind"] == "price_architecture"]
+    catalog_rows = [row for row in staged if row["document_kind"] == "price_catalog"]
     portfolio_rows = [row for row in staged if row["document_kind"] == "competitive_portfolio"]
     expected_price = set(plan.get("price_scopes", []))
+    expected_catalogs = set(plan.get("catalog_retailers", []))
     expected_portfolio = set(plan.get("portfolio_scopes", []))
     actual_price = {str(row["scope_key"]) for row in price_rows}
+    actual_catalogs = {str(row["scope_key"]) for row in catalog_rows}
     actual_portfolio = {str(row["scope_key"]) for row in portfolio_rows}
     portfolio_audit = audit_competitive_portfolio_set(
         [dict(row["document"]) for row in portfolio_rows],
@@ -384,6 +439,18 @@ async def finalize_report_materialization(
                 "context": {
                     "expected": sorted(expected_price),
                     "actual": sorted(actual_price),
+                },
+            }
+        )
+    if actual_catalogs != expected_catalogs:
+        gate_findings.append(
+            {
+                "severity": "error",
+                "code": "price_monitoring_catalog_incomplete",
+                "message": "Every configured retailer requires a Price Intelligence catalog.",
+                "context": {
+                    "expected": sorted(expected_catalogs),
+                    "actual": sorted(actual_catalogs),
                 },
             }
         )
@@ -406,6 +473,7 @@ async def finalize_report_materialization(
         "schema_version": "1.0.0-report-publication-trust-gate",
         "status": "passed" if error_count == 0 else "failed",
         "price_architecture_document_count": len(price_rows),
+        "price_monitoring_catalog_document_count": len(catalog_rows),
         "competitive_portfolio_document_count": len(portfolio_rows),
         "error_count": error_count,
         "warning_count": warning_count,
@@ -462,6 +530,29 @@ async def finalize_report_materialization(
                 detail="The report-materialization lease expired before publication.",
             )
         analysis_result_id = str(locked["analysis_result_id"])
+        for row in catalog_rows:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO price_monitoring_catalog_materialization (
+                      analysis_result_id, retailer_id, source_revision, document
+                    ) VALUES (
+                      CAST(:analysis_result_id AS uuid), :retailer_id,
+                      :source_revision, CAST(:document AS jsonb)
+                    )
+                    ON CONFLICT ON CONSTRAINT price_monitoring_catalog_materialization_scope_uq
+                    DO UPDATE SET source_revision = EXCLUDED.source_revision,
+                                  document = EXCLUDED.document,
+                                  materialized_at = now()
+                    """
+                ),
+                {
+                    "analysis_result_id": analysis_result_id,
+                    "retailer_id": str(row["scope_key"]),
+                    "source_revision": str(row["checksum"]),
+                    "document": _json(dict(row["document"])),
+                },
+            )
         for row in price_rows:
             document = dict(row["document"])
             filters = dict(document.get("filters") or {})

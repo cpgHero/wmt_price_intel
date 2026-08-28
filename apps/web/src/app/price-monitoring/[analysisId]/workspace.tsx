@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { feature } from "topojson-client";
 import statesTopologySource from "us-atlas/states-10m.json";
@@ -9,7 +16,11 @@ import {
   type ApplicationContextDefinition,
   useApplicationContextDefinition,
 } from "@/app/components/application-context";
-import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
+import type {
+  PriceMonitoringCatalogPage,
+  PriceMonitoringMap,
+  PriceMonitoringView,
+} from "@/lib/api";
 import { displayDate } from "@/lib/presentation";
 
 import { EvidenceRetailMap as InteractiveEvidenceRetailMap } from "./evidence-retail-map";
@@ -1634,25 +1645,47 @@ function FootprintModal({
 
 function ProductCatalog({
   view,
+  catalog,
+  onCatalogQuery,
   onOpenProduct,
   loading,
 }: Readonly<{
   view: PriceMonitoringView;
+  catalog?: PriceMonitoringCatalogPage;
   loading: boolean;
+  onCatalogQuery?: (
+    filters: {
+      query: string;
+      brand: string;
+      brandType: string;
+      seller: string;
+    },
+    append: boolean,
+  ) => void;
   onOpenProduct: (
     productId: string,
     tab: TabId,
     evidenceMode?: MapMode,
   ) => void;
 }>) {
-  const [search, setSearch] = useState("");
-  const [brandName, setBrandName] = useState("all");
-  const [brandType, setBrandType] = useState("all");
-  const [seller, setSeller] = useState("all");
+  const [search, setSearch] = useState(catalog?.filters.query ?? "");
+  const [brandName, setBrandName] = useState(catalog?.filters.brand ?? "all");
+  const [brandType, setBrandType] = useState(
+    catalog?.filters.brand_type ?? "all",
+  );
+  const [seller, setSeller] = useState(catalog?.filters.seller ?? "all");
   const [visibleCount, setVisibleCount] = useState(40);
   const [isExpanding, startExpanding] = useTransition();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
   const brandNames = useMemo(
     () =>
+      catalog?.facets.brands ??
       Array.from(
         new Set(
           view.products
@@ -1660,19 +1693,21 @@ function ProductCatalog({
             .filter((value): value is string => Boolean(value)),
         ),
       ).sort((left, right) => left.localeCompare(right)),
-    [view.products],
+    [catalog?.facets.brands, view.products],
   );
   const brandTypes = useMemo(
     () =>
+      catalog?.facets.brand_types ??
       Array.from(
         new Set(view.products.map((product) => product.brand_type)),
       ).sort((left, right) =>
         brandLabels[left].localeCompare(brandLabels[right]),
       ),
-    [view.products],
+    [catalog?.facets.brand_types, view.products],
   );
   const sellers = useMemo(
     () =>
+      catalog?.facets.sellers ??
       Array.from(
         new Set(
           view.products
@@ -1680,7 +1715,7 @@ function ProductCatalog({
             .filter((value): value is string => Boolean(value)),
         ),
       ).sort((left, right) => left.localeCompare(right)),
-    [view.products],
+    [catalog?.facets.sellers, view.products],
   );
   const enrichedProducts = useMemo(
     () => view.products.filter((product) => product.pdp.enriched).length,
@@ -1689,6 +1724,7 @@ function ProductCatalog({
   const selectedSeller =
     seller === "all" || sellers.includes(seller) ? seller : "all";
   const filteredProducts = useMemo(() => {
+    if (catalog) return view.products;
     const query = search.trim().toLocaleLowerCase();
     return view.products.filter((product) => {
       const searchable = [
@@ -1707,13 +1743,39 @@ function ProductCatalog({
         (selectedSeller === "all" || product.seller === selectedSeller)
       );
     });
-  }, [brandName, brandType, search, selectedSeller, view.products]);
+  }, [brandName, brandType, catalog, search, selectedSeller, view.products]);
   const filtersActive =
     Boolean(search.trim()) ||
     brandName !== "all" ||
     brandType !== "all" ||
     selectedSeller !== "all";
-  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  const visibleProducts = catalog
+    ? filteredProducts
+    : filteredProducts.slice(0, visibleCount);
+  const filteredTotal =
+    catalog?.pagination.filtered_total ?? filteredProducts.length;
+  const totalProducts = catalog?.pagination.total ?? view.products.length;
+
+  function requestCatalog(
+    next: Partial<{
+      query: string;
+      brand: string;
+      brandType: string;
+      seller: string;
+    }>,
+    append = false,
+  ) {
+    if (!onCatalogQuery) return;
+    onCatalogQuery(
+      {
+        query: next.query ?? search,
+        brand: next.brand ?? brandName,
+        brandType: next.brandType ?? brandType,
+        seller: next.seller ?? selectedSeller,
+      },
+      append,
+    );
+  }
 
   function clearFilters() {
     setSearch("");
@@ -1721,6 +1783,10 @@ function ProductCatalog({
     setBrandType("all");
     setSeller("all");
     setVisibleCount(40);
+    requestCatalog(
+      { query: "", brand: "all", brandType: "all", seller: "all" },
+      false,
+    );
   }
 
   return (
@@ -1740,8 +1806,14 @@ function ProductCatalog({
           <span>Search products</span>
           <input
             onChange={(event) => {
-              setSearch(event.target.value);
+              const nextSearch = event.target.value;
+              setSearch(nextSearch);
               setVisibleCount(40);
+              if (searchTimer.current) clearTimeout(searchTimer.current);
+              searchTimer.current = setTimeout(
+                () => requestCatalog({ query: nextSearch }),
+                250,
+              );
             }}
             placeholder="Search name, product ID, brand, or seller"
             type="search"
@@ -1755,6 +1827,7 @@ function ProductCatalog({
             onChange={(event) => {
               setBrandName(event.target.value);
               setVisibleCount(40);
+              requestCatalog({ brand: event.target.value });
             }}
             value={brandName}
           >
@@ -1773,6 +1846,7 @@ function ProductCatalog({
             onChange={(event) => {
               setBrandType(event.target.value);
               setVisibleCount(40);
+              requestCatalog({ brandType: event.target.value });
             }}
             value={brandType}
           >
@@ -1792,6 +1866,7 @@ function ProductCatalog({
             onChange={(event) => {
               setSeller(event.target.value);
               setVisibleCount(40);
+              requestCatalog({ seller: event.target.value });
             }}
             value={selectedSeller}
           >
@@ -1811,7 +1886,7 @@ function ProductCatalog({
         </label>
         <div className="pi-catalog-filter-status" aria-live="polite">
           <strong>
-            {count(filteredProducts.length)} of {count(view.products.length)}
+            {count(filteredTotal)} of {count(totalProducts)}
           </strong>
           <span>products</span>
           <button
@@ -2000,21 +2075,27 @@ function ProductCatalog({
             </div>
           ) : null}
         </div>
-        {visibleProducts.length < filteredProducts.length ? (
+        {(catalog?.pagination.has_more ??
+        visibleProducts.length < filteredProducts.length) ? (
           <div className="pi-product-table-more">
             <span>
-              Showing {count(visibleProducts.length)} of{" "}
-              {count(filteredProducts.length)} matching products
+              Showing {count(visibleProducts.length)} of {count(filteredTotal)}{" "}
+              matching products
             </span>
             <button
-              aria-busy={isExpanding}
-              disabled={isExpanding}
+              aria-busy={isExpanding || loading}
+              disabled={isExpanding || loading}
               onClick={() =>
-                startExpanding(() => setVisibleCount((current) => current + 40))
+                startExpanding(() => {
+                  if (catalog) requestCatalog({}, true);
+                  else setVisibleCount((current) => current + 40);
+                })
               }
               type="button"
             >
-              {isExpanding ? "Loading products…" : "Load 40 more products"}
+              {isExpanding || loading
+                ? "Loading products…"
+                : "Load 40 more products"}
             </button>
           </div>
         ) : null}
@@ -2030,9 +2111,15 @@ function ProductCatalog({
 
 export function PriceMonitoringWorkspace({
   initialView,
+  initialCatalog,
   initialTab,
-}: Readonly<{ initialView: PriceMonitoringView; initialTab?: string }>) {
+}: Readonly<{
+  initialView: PriceMonitoringView;
+  initialCatalog?: PriceMonitoringCatalogPage;
+  initialTab?: string;
+}>) {
   const [view, setView] = useState(initialView);
+  const [catalog, setCatalog] = useState(initialCatalog);
   const [tab, setTab] = useState<TabId>(
     normalizeTab(
       initialTab ?? (initialView.filters.product_id ? undefined : "home"),
@@ -2051,6 +2138,7 @@ export function PriceMonitoringWorkspace({
   const [storeReviewMode, setStoreReviewMode] =
     useState<StoreReviewMode>("price");
   const viewCache = useRef(new Map<string, PriceMonitoringView>());
+  const catalogCache = useRef(new Map<string, PriceMonitoringCatalogPage>());
   const pendingEvidence = useRef<{
     productId: string;
     mode: MapMode;
@@ -2074,6 +2162,21 @@ export function PriceMonitoringWorkspace({
         requestParameters.set("retailer", initialView.retailer.id);
       }
       const cacheKey = requestParameters.toString();
+      const useCatalog =
+        !requestParameters.has("product_id") &&
+        !requestParameters.has("state") &&
+        !requestParameters.has("city") &&
+        !requestParameters.has("zipcode");
+      const cachedCatalog = useCatalog
+        ? catalogCache.current.get(cacheKey)
+        : undefined;
+      if (cachedCatalog) {
+        setCatalog(cachedCatalog);
+        setView(cachedCatalog.view);
+        setLoading(false);
+        setError(null);
+        return () => {};
+      }
       const cachedView = viewCache.current.get(cacheKey);
       if (cachedView) {
         setView(cachedView);
@@ -2084,15 +2187,27 @@ export function PriceMonitoringWorkspace({
       const controller = new AbortController();
       setLoading(true);
       setError(null);
+      if (useCatalog) requestParameters.set("limit", "40");
       fetch(
-        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}?${requestParameters.toString()}`,
+        `/api/price-monitoring/${encodeURIComponent(initialView.analysis_id)}${
+          useCatalog ? "/catalog" : ""
+        }?${requestParameters.toString()}`,
         { signal: controller.signal },
       )
         .then(async (response) => {
           if (!response.ok)
             throw new Error(`Price view returned ${response.status}`);
+          if (useCatalog) {
+            const nextCatalog =
+              (await response.json()) as PriceMonitoringCatalogPage;
+            catalogCache.current.set(cacheKey, nextCatalog);
+            setCatalog(nextCatalog);
+            setView(nextCatalog.view);
+            return;
+          }
           const nextView = (await response.json()) as PriceMonitoringView;
           viewCache.current.set(cacheKey, nextView);
+          setCatalog(undefined);
           setView(nextView);
         })
         .catch((reason: unknown) => {
@@ -2122,6 +2237,9 @@ export function PriceMonitoringWorkspace({
       initialParameters.set("retailer", initialView.retailer.id);
     }
     viewCache.current.set(initialParameters.toString(), initialView);
+    if (initialCatalog) {
+      catalogCache.current.set(initialParameters.toString(), initialCatalog);
+    }
     let cancel = () => {};
     const listener = () => {
       cancel();
@@ -2132,7 +2250,7 @@ export function PriceMonitoringWorkspace({
       cancel();
       window.removeEventListener("popstate", listener);
     };
-  }, [initialView]);
+  }, [initialCatalog, initialView]);
 
   useEffect(() => {
     const pending = pendingEvidence.current;
@@ -2160,6 +2278,66 @@ export function PriceMonitoringWorkspace({
     setLocationEvidenceMode(null);
     updateQuery({ product_id: productId, tab: nextTab });
   }
+
+  const loadCatalogPage = useCallback(
+    async (
+      filters: {
+        query: string;
+        brand: string;
+        brandType: string;
+        seller: string;
+      },
+      append: boolean,
+    ) => {
+      const request = new URLSearchParams({
+        retailer: view.retailer.id,
+        limit: "40",
+        offset: append
+          ? String(
+              (catalog?.pagination.offset ?? 0) +
+                (catalog?.pagination.returned ?? 0),
+            )
+          : "0",
+      });
+      if (filters.query.trim()) request.set("q", filters.query.trim());
+      if (filters.brand !== "all") request.set("brand", filters.brand);
+      if (filters.brandType !== "all")
+        request.set("brand_type", filters.brandType);
+      if (filters.seller !== "all") request.set("seller", filters.seller);
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `/api/price-monitoring/${encodeURIComponent(view.analysis_id)}/catalog?${request.toString()}`,
+        );
+        if (!response.ok)
+          throw new Error(`Product catalog returned ${response.status}`);
+        const nextCatalog =
+          (await response.json()) as PriceMonitoringCatalogPage;
+        setView((current) => ({
+          ...nextCatalog.view,
+          products: append
+            ? [...current.products, ...nextCatalog.view.products]
+            : nextCatalog.view.products,
+        }));
+        setCatalog(nextCatalog);
+      } catch (reason: unknown) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The product catalog could not be refreshed.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      catalog?.pagination.offset,
+      catalog?.pagination.returned,
+      view.analysis_id,
+      view.retailer.id,
+    ],
+  );
 
   const contextDefinition = useMemo<ApplicationContextDefinition>(
     () => ({
@@ -2524,8 +2702,10 @@ export function PriceMonitoringWorkspace({
 
       {tab === "home" ? (
         <ProductCatalog
+          catalog={catalog}
           key={`${view.retailer.id}:${view.filters.product_id ?? "catalog"}`}
           loading={loading}
+          onCatalogQuery={loadCatalogPage}
           onOpenProduct={openCatalogProduct}
           view={view}
         />

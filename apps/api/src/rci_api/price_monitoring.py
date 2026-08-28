@@ -154,6 +154,45 @@ def select_evidence_artifacts(
     return next(iter(matches.values()))
 
 
+def compact_price_monitoring_catalog(view: dict[str, Any]) -> dict[str, Any]:
+    """Remove product-workspace evidence from a retailer catalog read model."""
+
+    compact = dict(view)
+    gaps = dict(compact.get("distribution_gaps") or {})
+    gap_display = dict(gaps.get("location_display") or {})
+    gap_total = int(gap_display.get("total") or 0)
+    gaps.update(
+        {
+            "geographies": [],
+            "locations": [],
+            "location_display": {
+                **gap_display,
+                "returned": 0,
+                "sampled": gap_total > 0,
+            },
+        }
+    )
+    compact["distribution_gaps"] = gaps
+    compact["geographies"] = []
+    compact["locations"] = []
+    compact["price_histogram"] = []
+    compact["exceptions"] = []
+    compact["products"] = [
+        {
+            **dict(product),
+            "pdp": {
+                "enriched": bool(dict(product.get("pdp") or {}).get("enriched")),
+                "authority": dict(dict(product.get("pdp") or {}).get("authority") or {}),
+            },
+            "price_histogram": [],
+            "sample_locations": [],
+        }
+        for product in compact.get("products", [])
+        if isinstance(product, dict)
+    ]
+    return compact
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedPriceMonitoringData:
     analysis: Any
@@ -324,6 +363,66 @@ class S3ParquetReader:
 class PostgresPriceMonitoringRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def catalog_materialization(
+        self, analysis_id: str, retailer_id: str
+    ) -> dict[str, Any] | None:
+        statement = text(
+            """
+            SELECT materialization.document
+            FROM price_monitoring_catalog_materialization materialization
+            JOIN analysis_result result
+              ON result.id = materialization.analysis_result_id
+            WHERE result.analysis_id = :analysis_id
+              AND materialization.retailer_id = :retailer_id
+              AND result.reporting_status = 'ready'
+              AND result.archived_at IS NULL
+            """
+        )
+        async with self._engine.connect() as connection:
+            document = await connection.scalar(
+                statement,
+                {"analysis_id": analysis_id, "retailer_id": retailer_id},
+            )
+        return dict(document) if isinstance(document, dict) else None
+
+    async def store_catalog_materialization(
+        self,
+        analysis_id: str,
+        *,
+        retailer_id: str,
+        source_revision: str,
+        document: dict[str, Any],
+    ) -> None:
+        statement = text(
+            """
+            INSERT INTO price_monitoring_catalog_materialization (
+              analysis_result_id, retailer_id, source_revision, document
+            )
+            SELECT id, :retailer_id, :source_revision, CAST(:document AS jsonb)
+            FROM analysis_result
+            WHERE analysis_id = :analysis_id
+            ON CONFLICT ON CONSTRAINT price_monitoring_catalog_materialization_scope_uq
+            DO UPDATE SET source_revision = EXCLUDED.source_revision,
+                          document = EXCLUDED.document,
+                          materialized_at = now()
+            RETURNING id
+            """
+        )
+        async with self._engine.begin() as connection:
+            materialization_id = await connection.scalar(
+                statement,
+                {
+                    "analysis_id": analysis_id,
+                    "retailer_id": retailer_id,
+                    "source_revision": source_revision,
+                    "document": json.dumps(
+                        document, ensure_ascii=False, separators=(",", ":")
+                    ),
+                },
+            )
+            if materialization_id is None:
+                raise LookupError(f"analysis {analysis_id!r} was not found")
 
     async def architecture_materialization(
         self,
@@ -1056,6 +1155,139 @@ class PriceMonitoringService:
         # join the same task and the completed result remains cached.
         return await asyncio.shield(task)
 
+    async def materialize_catalog(
+        self,
+        analysis_id: str,
+        retailer_id: str,
+        *,
+        refresh: bool = False,
+        publish: bool = True,
+    ) -> dict[str, Any]:
+        if not refresh:
+            stored = await self._repository.catalog_materialization(
+                analysis_id, retailer_id
+            )
+            if stored is not None:
+                return stored
+        full_view = await self.view(
+            analysis_id,
+            PriceMonitoringFilters(retailer_id=retailer_id),
+        )
+        document = compact_price_monitoring_catalog(full_view)
+        validate_instance(
+            self._root,
+            "price-monitoring-view.schema.json",
+            document,
+            label=f"price-monitoring-catalog:{analysis_id}:{retailer_id}",
+        )
+        if publish:
+            source_revision = hashlib.sha256(
+                json.dumps(
+                    document,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+            await self._repository.store_catalog_materialization(
+                analysis_id,
+                retailer_id=retailer_id,
+                source_revision=source_revision,
+                document=document,
+            )
+        return document
+
+    async def catalog_page(
+        self,
+        analysis_id: str,
+        retailer_id: str,
+        *,
+        query: str | None = None,
+        brand_type: BrandFilter = "all",
+        brand: str | None = None,
+        seller: str | None = None,
+        offset: int = 0,
+        limit: int = 40,
+    ) -> dict[str, Any]:
+        document = await self._repository.catalog_materialization(
+            analysis_id, retailer_id
+        )
+        if document is None:
+            raise LookupError(
+                "The Price Intelligence catalog has not been materialized for this report."
+            )
+        all_products = [
+            dict(row) for row in document.get("products", []) if isinstance(row, dict)
+        ]
+        normalized_query = (query or "").strip().casefold()
+        normalized_brand = (brand or "").strip()
+        normalized_seller = (seller or "").strip()
+
+        def included(product: dict[str, Any]) -> bool:
+            searchable = " ".join(
+                str(product.get(field) or "")
+                for field in ("name", "product_id", "brand", "seller")
+            ).casefold()
+            return bool(
+                (not normalized_query or normalized_query in searchable)
+                and (brand_type == "all" or product.get("brand_type") == brand_type)
+                and (not normalized_brand or product.get("brand") == normalized_brand)
+                and (not normalized_seller or product.get("seller") == normalized_seller)
+            )
+
+        filtered = [product for product in all_products if included(product)]
+        filtered.sort(
+            key=lambda product: (
+                -int(dict(product.get("presence") or {}).get("observed_locations") or 0),
+                str(product.get("name") or "").casefold(),
+                str(product.get("product_id") or ""),
+            )
+        )
+        page = filtered[offset : offset + limit]
+        page_view = {**document, "products": page}
+        brands = sorted(
+            {
+                str(product["brand"])
+                for product in all_products
+                if product.get("brand")
+            },
+            key=str.casefold,
+        )
+        sellers = sorted(
+            {
+                str(product["seller"])
+                for product in all_products
+                if product.get("seller")
+            },
+            key=str.casefold,
+        )
+        brand_types = sorted(
+            {str(product.get("brand_type") or "unclassified") for product in all_products}
+        )
+        return {
+            "schema_version": "1.0.0-price-monitoring-catalog-page",
+            "view": page_view,
+            "pagination": {
+                "offset": offset,
+                "limit": limit,
+                "returned": len(page),
+                "filtered_total": len(filtered),
+                "total": len(all_products),
+                "has_more": offset + len(page) < len(filtered),
+            },
+            "filters": {
+                "query": query or "",
+                "brand_type": brand_type,
+                "brand": normalized_brand or None,
+                "seller": normalized_seller or None,
+            },
+            "facets": {
+                "brands": brands,
+                "brand_types": brand_types,
+                "sellers": sellers,
+            },
+        }
+
     @staticmethod
     def _architecture_retailer_input(
         prepared: PreparedPriceMonitoringData,
@@ -1720,6 +1952,68 @@ async def price_monitoring_view(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/analyses/{analysis_id}/price-monitoring/catalog")
+async def price_monitoring_catalog(
+    analysis_id: str,
+    service: ServiceDependency,
+    retailer: str = Query(min_length=1),
+    query: str | None = Query(default=None, alias="q", max_length=200),
+    brand_type: BrandFilter = "all",
+    brand: str | None = Query(default=None, max_length=200),
+    seller: str | None = Query(default=None, max_length=200),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=40, ge=1, le=100),
+) -> dict[str, Any]:
+    try:
+        return await service.catalog_page(
+            analysis_id,
+            retailer,
+            query=query,
+            brand_type=brand_type,
+            brand=brand,
+            seller=seller,
+            offset=offset,
+            limit=limit,
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/internal/analyses/{analysis_id}/price-monitoring/catalog/materialize")
+async def materialize_price_monitoring_catalog(
+    analysis_id: str,
+    service: ServiceDependency,
+    retailer: str = Query(min_length=1),
+    x_rci_internal_token: Annotated[str | None, Header(alias="X-RCI-Internal-Token")] = None,
+) -> dict[str, Any]:
+    _require_internal_materialization_token(x_rci_internal_token)
+    try:
+        document = await service.materialize_catalog(
+            analysis_id,
+            retailer,
+            refresh=True,
+            publish=True,
+        )
+        return {
+            "analysis_id": analysis_id,
+            "retailer_id": retailer,
+            "status": "materialized",
+            "product_count": len(document.get("products", [])),
+            "provider_calls_queued": 0,
+        }
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
