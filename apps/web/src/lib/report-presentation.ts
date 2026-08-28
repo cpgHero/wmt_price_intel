@@ -83,12 +83,16 @@ export function comparisonBasisDescription(
 
 export function comparisonBasisLabel(basis?: ComparisonBasis | null) {
   if (!basis) return "Configured comparison basis";
+  return comparisonProfileLabel(basis.profile_id, basis.label);
+}
+
+export function comparisonProfileLabel(profileId: string, label: string) {
   // Historical publications called the ignore-brand profile "brand-aware"
   // even though brand does not determine eligibility. Preserve the governed
   // profile id while making the user-facing scope truthful.
-  if (basis.profile_id === "all_brand")
+  if (profileId === "all_brand")
     return "Specification-equivalent (brand-neutral)";
-  return basis.label;
+  return label;
 }
 
 export function defaultComparisonBasisId(

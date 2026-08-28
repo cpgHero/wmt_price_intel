@@ -1623,9 +1623,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-27",
-              "Implemented; production verification pending",
+              "Deployed and production-verified; schema backfill performance-gated",
               "Cohort medians state their normalized unit, product-location grain, package equivalent, and brand-neutral scope, with stronger publication gates.",
-              "The reported ALDI 64 fl oz whole-organic cohort reconciles exactly to 7,218 certified scored product-locations: Walmart $11.92/gallon, ALDI $7.70/gallon, and a -$4.14/gallon paired median difference—approximately $5.96 versus $3.85 per 64 fl oz. UI labels no longer imply shelf-package medians, all_brand is presented as brand-neutral, and brand summaries count distinct products. Portfolio schema 1.5 and the semantic release gate reject duplicate cohorts, mixed bases, missing medians, and broken rollups. No Search price, certification, match attribute, radius rule, or price formula changes.",
+              "The reported ALDI 64 fl oz whole-organic cohort reconciles exactly to 7,218 certified scored product-locations: Walmart $11.92/gallon, ALDI $7.70/gallon, and a -$4.14/gallon paired median difference—approximately $5.96 versus $3.85 per 64 fl oz. Live validation found exactly one cohort row, eight governed relationships, eight distinct Walmart products, and two distinct ALDI products. UI and drawer labels no longer imply shelf-package medians, all_brand is presented as brand-neutral, and brand summaries count distinct products. Portfolio schema 1.5 and the semantic release gate reject duplicate cohorts, mixed bases, missing medians, and broken rollups for new publications. A cross-publication preflight found zero such defects in all 48 current documents and 1,032 cohort rows. A synchronous historical schema refresh was stopped after it impaired readiness; the API was recoverably restarted and returned ready. Existing schema 1.4 documents were not overwritten and remain authoritative until the backfill can run without affecting API health. No Search price, certification, match attribute, radius rule, or price formula changes.",
             ],
             [
               "2026-08-27",

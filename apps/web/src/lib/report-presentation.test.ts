@@ -10,6 +10,7 @@ import {
   cohortProductSummaries,
   comparisonBasisDescription,
   comparisonBasisLabel,
+  comparisonProfileLabel,
   defaultComparisonBasisId,
   defaultComparisonRadiusMiles,
   eligibleLeadershipProducts,
@@ -193,6 +194,12 @@ describe("report presentation", () => {
         availability_policy: "search_presence",
         population_basis: "relationship_resolved_products",
       }),
+    ).toBe("Specification-equivalent (brand-neutral)");
+    expect(
+      comparisonProfileLabel(
+        "all_brand",
+        "Specification-equivalent (brand-aware)",
+      ),
     ).toBe("Specification-equivalent (brand-neutral)");
   });
 

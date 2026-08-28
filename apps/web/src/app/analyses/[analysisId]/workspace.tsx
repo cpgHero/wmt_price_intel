@@ -49,6 +49,7 @@ import {
 import {
   comparisonBasisDescription,
   comparisonBasisLabel,
+  comparisonProfileLabel,
   compactMetricName,
   defaultComparisonBasisId,
   defaultComparisonRadiusMiles,
@@ -3317,7 +3318,11 @@ function RadiusCohortProductsDrawer({
               </div>
               <div className="radius-scorecard-product-evidence">
                 <small>
-                  {relationship.profile_label} · {relationship.comparison_unit}
+                  {comparisonProfileLabel(
+                    relationship.profile_id,
+                    relationship.profile_label,
+                  )}{" "}
+                  · {relationship.comparison_unit}
                 </small>
                 <dl>
                   <div>

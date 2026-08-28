@@ -1,7 +1,7 @@
 # Phase 13.69 — Cohort Metric Semantics and Trust
 
 Date: 2026-08-27  
-Status: Implemented; production verification pending
+Status: Deployed and production-verified; schema 1.5 backfill deferred behind the durable performance gate
 
 ## Incident
 
@@ -85,3 +85,29 @@ validation around its publication.
   ALDI cohort scope.
 - Comparison-basis changes and included-product drawers remain responsive.
 
+## Production acceptance evidence
+
+- Commit `1831ae3` and GitHub Actions run `33141220031` passed Python,
+  TypeScript, contracts, formatting, lint, type checking, 15 browser tests,
+  reversible migrations, the production build, and all four service containers.
+- The live selected ALDI / brand-neutral / five-mile view contains exactly one
+  `64 fl oz · whole · organic · non-lactose-free` cohort row. It displays
+  `$11.92 per gallon` and approximately `$5.96 per 64 fl oz` for Walmart, and
+  `$7.70 per gallon` and approximately `$3.85 per 64 fl oz` for ALDI.
+- The live row reports eight governed relationships, eight distinct Walmart
+  products, two distinct ALDI products, and 7,218 scored product-locations. Its
+  drawer exposes all eight product pairs and explicitly identifies the
+  observation-weighted `USD/gallon` basis.
+- A 48-document / 1,032-cohort preflight of all six current publications found
+  zero duplicate identities, duplicate retailer/profile/segment scopes,
+  mixed-basis cohorts, or missing scored medians. Existing semantic release
+  audits remain error-free.
+
+The attempted all-publication schema 1.5 refresh exposed a separate operational
+boundary: synchronous full portfolio rebuilding can monopolize the API process.
+The refresh was stopped, the API was recoverably restarted, and readiness
+returned to `ready` with API dependency `ok`. Existing schema 1.4 documents were
+not overwritten and remain the live metric authority. New publications receive
+the schema 1.5 generation gates; historical backfill will run only after full
+portfolio calculation is moved behind the existing durable materialization
+worker without impairing API readiness.
