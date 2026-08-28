@@ -2585,8 +2585,10 @@ export function PriceMonitoringWorkspace({
           />
         ) : (
           <ProductCatalog
+            catalog={catalog}
             key={view.retailer.id}
             loading={loading}
+            onCatalogQuery={loadCatalogPage}
             onOpenProduct={openCatalogProduct}
             view={view}
           />
