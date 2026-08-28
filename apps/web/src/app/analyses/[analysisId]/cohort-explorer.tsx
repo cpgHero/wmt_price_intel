@@ -7,6 +7,8 @@ import {
   type ComparableCohort,
   type CohortOutcome,
   type CohortSort,
+  cohortPackageEquivalent,
+  cohortUnitLabel,
   sortComparableCohorts,
 } from "@/lib/cohort-model";
 
@@ -46,14 +48,16 @@ function gapCopy(
   gap: number | null,
   benchmarkName: string,
   competitorName: string,
+  comparisonUnit = "",
 ) {
   if (gap === null) return "Paired median difference unavailable";
   if (Math.abs(gap) < 0.005)
     return "The paired median price difference is $0.00";
   const amount = formatCurrency(Math.abs(gap));
+  const unit = comparisonUnit ? ` ${cohortUnitLabel(comparisonUnit)}` : "";
   return gap < 0
-    ? `${competitorName} is ${amount} lower at the paired median`
-    : `${benchmarkName} is ${amount} lower at the paired median`;
+    ? `${competitorName} is ${amount}${unit} lower at the paired median`
+    : `${benchmarkName} is ${amount}${unit} lower at the paired median`;
 }
 
 function escapeCsv(value: unknown) {
@@ -157,6 +161,16 @@ export function ComparableCohortExplorer({
         segmentId: row.segment_id,
         segment: row.segment,
         attributes: row.attributes,
+        comparisonMetric:
+          row.comparison_metric ??
+          row.product_relationships?.[0]?.comparison_metric ??
+          "",
+        comparisonUnit:
+          row.comparison_unit ??
+          row.product_relationships?.[0]?.comparison_unit ??
+          "",
+        medianGrain:
+          row.median_grain ?? "scored benchmark product-location observations",
         overall: false,
         pairCount: row.relationships,
         matches: row.scored_product_locations,
@@ -185,9 +199,23 @@ export function ComparableCohortExplorer({
   const visible = showAll ? filtered : filtered.slice(0, 12);
   const exportRows = filtered.map((cohort) => {
     const evidence = pairEvidence[cohort.id];
+    const unit = cohort.comparisonUnit || "configured price unit";
+    const benchmarkPackageEquivalent = cohortPackageEquivalent(
+      cohort.benchmarkMedian,
+      cohort.comparisonMetric,
+      cohort.attributes,
+    );
+    const competitorPackageEquivalent = cohortPackageEquivalent(
+      cohort.competitorMedian,
+      cohort.comparisonMetric,
+      cohort.attributes,
+    );
     return {
       Competitor: cohort.competitor,
       Cohort: cohort.segment,
+      "Comparison metric": cohort.comparisonMetric,
+      "Comparison unit": unit,
+      "Median observation grain": cohort.medianGrain,
       "Governed product pairs": cohort.pairCount,
       [`${benchmarkName} brand-type mix`]:
         evidence?.benchmarkBrandTypes ?? "unresolved",
@@ -199,9 +227,19 @@ export function ComparableCohortExplorer({
       [`${benchmarkName} lower rate`]: cohort.benchmarkLowerRate,
       "Competitor lower rate": cohort.competitorLowerRate,
       "Parity rate": cohort.parityRate,
-      [`${benchmarkName} median`]: cohort.benchmarkMedian,
-      "Competitor median": cohort.competitorMedian,
-      "Paired median difference": cohort.medianGap,
+      [`${benchmarkName} product-location median (${unit})`]:
+        cohort.benchmarkMedian,
+      [`${cohort.competitor} selected-local-price median (${unit})`]:
+        cohort.competitorMedian,
+      [`Paired median difference (${unit})`]: cohort.medianGap,
+      [`${benchmarkName} displayed-package equivalent`]:
+        benchmarkPackageEquivalent?.value ?? null,
+      [`${cohort.competitor} displayed-package equivalent`]:
+        competitorPackageEquivalent?.value ?? null,
+      "Displayed-package equivalent unit":
+        benchmarkPackageEquivalent?.label ??
+        competitorPackageEquivalent?.label ??
+        null,
     };
   });
   const dimensions = cohortDimensions.length
@@ -561,6 +599,7 @@ export function ComparableCohortExplorer({
                       cohort.medianGap,
                       benchmarkName,
                       cohort.competitor,
+                      cohort.comparisonUnit,
                     )}
                   </strong>
                   <small className={limited ? "limited" : "ready"}>
@@ -600,16 +639,55 @@ export function ComparableCohortExplorer({
                   </div>
                   <small>{formatRate(cohort.parityRate)} parity</small>
                 </div>
-                <dl className="cohort-medians">
-                  <div>
-                    <dt>{benchmarkName} median</dt>
-                    <dd>{formatCurrency(cohort.benchmarkMedian)}</dd>
-                  </div>
-                  <div>
-                    <dt>{cohort.competitor} median</dt>
-                    <dd>{formatCurrency(cohort.competitorMedian)}</dd>
-                  </div>
-                </dl>
+                <div className="cohort-median-column">
+                  <dl className="cohort-medians">
+                    <div>
+                      <dt>{benchmarkName} product-location median</dt>
+                      <dd>
+                        {formatCurrency(cohort.benchmarkMedian)}{" "}
+                        <small>{cohortUnitLabel(cohort.comparisonUnit)}</small>
+                      </dd>
+                      {(() => {
+                        const equivalent = cohortPackageEquivalent(
+                          cohort.benchmarkMedian,
+                          cohort.comparisonMetric,
+                          cohort.attributes,
+                        );
+                        return equivalent ? (
+                          <small>
+                            ≈ {formatCurrency(equivalent.value)}{" "}
+                            {equivalent.label}
+                          </small>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div>
+                      <dt>{cohort.competitor} selected-local-price median</dt>
+                      <dd>
+                        {formatCurrency(cohort.competitorMedian)}{" "}
+                        <small>{cohortUnitLabel(cohort.comparisonUnit)}</small>
+                      </dd>
+                      {(() => {
+                        const equivalent = cohortPackageEquivalent(
+                          cohort.competitorMedian,
+                          cohort.comparisonMetric,
+                          cohort.attributes,
+                        );
+                        return equivalent ? (
+                          <small>
+                            ≈ {formatCurrency(equivalent.value)}{" "}
+                            {equivalent.label}
+                          </small>
+                        ) : null;
+                      })()}
+                    </div>
+                  </dl>
+                  <small className="cohort-median-definition">
+                    Observation-weighted across{" "}
+                    {cohort.matches.toLocaleString()} scored product-locations;
+                    not a package shelf-price median.
+                  </small>
+                </div>
                 <span className="cohort-row-action">
                   View included products →
                 </span>

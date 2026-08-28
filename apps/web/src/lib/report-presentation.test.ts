@@ -9,6 +9,7 @@ import type {
 import {
   cohortProductSummaries,
   comparisonBasisDescription,
+  comparisonBasisLabel,
   defaultComparisonBasisId,
   defaultComparisonRadiusMiles,
   eligibleLeadershipProducts,
@@ -178,6 +179,21 @@ describe("report presentation", () => {
         "physical stores within 3 miles; service areas use delivery ZIP",
       ),
     ).toContain("physical stores within 3 miles");
+  });
+
+  it("labels the ignore-brand comparison basis as brand-neutral", () => {
+    expect(
+      comparisonBasisLabel({
+        profile_id: "all_brand",
+        label: "Specification-equivalent (brand-aware)",
+        geography: "exact_zip",
+        comparison_metric: "price_per_gallon",
+        price_unit: "USD/gallon",
+        package_basis: "normalized_unit",
+        availability_policy: "search_presence",
+        population_basis: "relationship_resolved_products",
+      }),
+    ).toBe("Specification-equivalent (brand-neutral)");
   });
 
   it("defaults portfolio reporting to the basis with the broadest certified coverage", () => {

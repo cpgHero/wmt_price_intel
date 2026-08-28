@@ -182,6 +182,49 @@ def test_competitive_release_audit_discloses_empty_cohort_layer() -> None:
     )
 
 
+def test_competitive_release_audit_rejects_duplicate_or_mixed_basis_cohorts() -> None:
+    documents = [_document("compatible", radius, 1) for radius in (1, 3, 5)]
+    for document in documents:
+        document["schema_version"] = "1.5.0"
+        scorecard = document["scorecards"][0]
+        relationship = deepcopy(scorecard["product_relationships"][0])
+        cohort = {
+            "id": "aldi_us:compatible:large-eggs",
+            "competitor_id": "aldi_us",
+            "competitor": "ALDI",
+            "profile_id": "compatible",
+            "segment_id": "large-eggs",
+            "segment": "12 each · large",
+            "attributes": {"count": 12, "size": "large"},
+            "comparison_metric": "package_price",
+            "comparison_unit": "USD/package",
+            "median_grain": "scored benchmark product-location observations",
+            "relationships": 1,
+            "benchmark_products": 1,
+            "competitor_products": 1,
+            "benchmark_median": 3.0,
+            "competitor_median": 3.25,
+            "paired_median_gap": 0.25,
+            "dominant_outcome": "benchmark_lower",
+            "products": [deepcopy(scorecard["products"][0])],
+            "product_relationships": [relationship],
+            **_summary(benchmark=2, scored=1),
+        }
+        document["cohorts"] = [cohort, deepcopy(cohort)]
+        document["cohorts"][1]["id"] = "duplicate-id-with-same-scope"
+        document["cohorts"][1]["product_relationships"][0]["comparison_unit"] = "USD/item"
+
+    audit = audit_competitive_portfolio_set(
+        documents,
+        expected_profiles=("compatible",),
+    )
+
+    assert audit["status"] == "failed"
+    codes = {row["code"] for row in audit["findings"] if row["severity"] == "error"}
+    assert "cohort_scope_not_unique" in codes
+    assert "cohort_comparison_basis_mismatch" in codes
+
+
 def test_competitive_release_audit_retains_unobserved_certified_products() -> None:
     documents = [_document("compatible", radius, 1) for radius in (1, 3, 5)]
     for document in documents:

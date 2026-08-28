@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cohortPackageEquivalent,
+  cohortUnitLabel,
   comparableCohort,
   comparableCohorts,
   sortComparableCohorts,
@@ -13,6 +15,9 @@ describe("comparable cohort presentation model", () => {
       _profile_id: "private_label",
       _segment_id: "gallon-whole",
       _segment_attributes: { volume_oz: 128, fat_type: "whole" },
+      comparison_metric: "price_per_gallon",
+      comparison_unit: "USD/gallon",
+      median_grain: "scored benchmark product-location observations",
       competitor: "ALDI",
       segment: "128 fl oz · whole · non-organic · non-lactose-free",
       _matches: 1500,
@@ -132,5 +137,15 @@ describe("comparable cohort presentation model", () => {
     expect(cohort?.benchmarkMedian).toBeNull();
     expect(cohort?.competitorMedian).toBeNull();
     expect(cohort?.medianGap).toBe(-0.37);
+  });
+
+  it("states the normalized unit and computes transparent package equivalents", () => {
+    expect(cohortUnitLabel("USD/gallon")).toBe("per gallon");
+    expect(
+      cohortPackageEquivalent(11.92, "price_per_gallon", { volume_oz: 64 }),
+    ).toEqual({ value: 5.96, label: "per 64 fl oz" });
+    expect(
+      cohortPackageEquivalent(7.7, "price_per_gallon", { volume_oz: 64 }),
+    ).toEqual({ value: 3.85, label: "per 64 fl oz" });
   });
 });

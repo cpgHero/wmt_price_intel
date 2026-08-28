@@ -71,7 +71,7 @@ export function comparisonBasisDescription(
 ) {
   if (!basis) return "Configured comparison basis";
   return [
-    basis.label,
+    comparisonBasisLabel(basis),
     displayLabel(basis.comparison_metric),
     priceUnitLabel(basis.price_unit),
     geographyLabel ?? displayLabel(basis.geography),
@@ -79,6 +79,16 @@ export function comparisonBasisDescription(
       ? "market-floor assortment view"
       : "resolved product relationships",
   ].join(" · ");
+}
+
+export function comparisonBasisLabel(basis?: ComparisonBasis | null) {
+  if (!basis) return "Configured comparison basis";
+  // Historical publications called the ignore-brand profile "brand-aware"
+  // even though brand does not determine eligibility. Preserve the governed
+  // profile id while making the user-facing scope truthful.
+  if (basis.profile_id === "all_brand")
+    return "Specification-equivalent (brand-neutral)";
+  return basis.label;
 }
 
 export function defaultComparisonBasisId(

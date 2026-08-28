@@ -494,6 +494,27 @@ def _cohort_summary(
         for row in scored
         if row.get("competitor_minus_benchmark") is not None
     ]
+    included_relationship_rows = [
+        dict(row)
+        for row in relationship_rows
+        if str(row.get("relationship_id") or "") in included_relationship_ids
+    ]
+    comparison_bases = {
+        (
+            str(row.get("comparison_metric") or ""),
+            str(row.get("comparison_unit") or ""),
+        )
+        for row in included_relationship_rows
+        if row.get("comparison_metric") and row.get("comparison_unit")
+    }
+    if len(comparison_bases) != 1:
+        raise RuntimeError(
+            "A cohort must have exactly one governed comparison metric and unit: "
+            f"{segment_row.get('_competitor_id')}:{segment_row.get('_profile_id')}:"
+            f"{segment_row.get('_segment_id')} has {sorted(comparison_bases)!r}"
+        )
+    comparison_metric, comparison_unit = next(iter(comparison_bases))
+
     product_rows = []
     for product_id in benchmark_product_ids:
         view = product_views.get(product_id, {})
@@ -538,7 +559,7 @@ def _cohort_summary(
         dominant_outcome = "parity"
     else:
         dominant_outcome = "unavailable"
-    return {
+    result = {
         "id": (
             f"{segment_row.get('_competitor_id')}:{segment_row.get('_profile_id')}:"
             f"{segment_row.get('_segment_id')}"
@@ -552,6 +573,9 @@ def _cohort_summary(
         "segment_id": str(segment_row.get("_segment_id")),
         "segment": str(segment_row.get("segment") or "Comparable cohort"),
         "attributes": attributes,
+        "comparison_metric": comparison_metric,
+        "comparison_unit": comparison_unit,
+        "median_grain": "scored benchmark product-location observations",
         "relationships": len(
             {str(row.get("relationship_id") or row.get("id")) for row in included_candidates}
         ),
@@ -565,12 +589,30 @@ def _cohort_summary(
         "paired_median_gap": round(median(gaps), 4) if gaps else None,
         "dominant_outcome": dominant_outcome,
         "products": product_rows,
-        "product_relationships": [
-            dict(row)
-            for row in relationship_rows
-            if str(row.get("relationship_id") or "") in included_relationship_ids
-        ],
+        "product_relationships": included_relationship_rows,
     }
+    # This is the last boundary where the complete scored observations and the
+    # displayed cohort summary coexist. Reconcile every displayed aggregate
+    # before the immutable portfolio can be stored or served.
+    expected_summary = _portfolio_summary(outcomes)
+    for field, expected in expected_summary.items():
+        if result.get(field) != expected:
+            raise RuntimeError(
+                f"Cohort metric reconciliation failed for {result['id']}:{field}; "
+                f"expected {expected!r}, received {result.get(field)!r}"
+            )
+    expected_medians = {
+        "benchmark_median": round(median(benchmark_values), 4) if benchmark_values else None,
+        "competitor_median": round(median(competitor_values), 4) if competitor_values else None,
+        "paired_median_gap": round(median(gaps), 4) if gaps else None,
+    }
+    for field, expected in expected_medians.items():
+        if result.get(field) != expected:
+            raise RuntimeError(
+                f"Cohort median reconciliation failed for {result['id']}:{field}; "
+                f"expected {expected!r}, received {result.get(field)!r}"
+            )
+    return result
 
 
 class PostgresCompetitiveLeadershipRepository:
@@ -1342,8 +1384,21 @@ class CompetitiveProductLeadershipService:
                 str(row["competitor"]).casefold(),
             )
         )
+        cohort_keys = [
+            (
+                str(row.get("competitor_id") or ""),
+                str(row.get("profile_id") or ""),
+                str(row.get("segment_id") or ""),
+            )
+            for row in cohorts
+        ]
+        if len(cohort_keys) != len(set(cohort_keys)):
+            duplicates = sorted(key for key, count in Counter(cohort_keys).items() if count > 1)
+            raise RuntimeError(
+                f"Competitive portfolio contains duplicate governed cohorts: {duplicates!r}"
+            )
         result = {
-            "schema_version": "1.4.0",
+            "schema_version": "1.5.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,

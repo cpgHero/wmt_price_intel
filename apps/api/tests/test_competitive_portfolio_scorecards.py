@@ -457,9 +457,16 @@ def test_coverage_rows_partition_the_complete_catalog_once() -> None:
 def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() -> None:
     summary = _portfolio_summary([{"status": "leader", "competitor_minus_benchmark": 0.2}])
     relationship_rows = [
-        {"relationship_id": "relationship-1", **summary},
+        {
+            "relationship_id": "relationship-1",
+            "comparison_metric": "package_price",
+            "comparison_unit": "USD/package",
+            **summary,
+        },
         {
             "relationship_id": "relationship-2",
+            "comparison_metric": "package_price",
+            "comparison_unit": "USD/package",
             **_portfolio_summary([{"status": "losing", "competitor_minus_benchmark": -5.0}]),
         },
     ]
@@ -785,7 +792,7 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
-    assert result["schema_version"] == "1.4.0"
+    assert result["schema_version"] == "1.5.0"
     assert result["scorecards"][0]["relationships"] == 3
     assert result["scorecards"][0]["evidence_funnel"] == {
         "catalog_products": 2,
@@ -817,6 +824,9 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert relationships[0]["benchmark_product_name"] == "Walmart product"
     assert relationships[0]["competitor_product_name"] == "ALDI product one"
     assert result["cohorts"][0]["segment"] == "12 each · large"
+    assert result["cohorts"][0]["comparison_metric"] == "package_price"
+    assert result["cohorts"][0]["comparison_unit"] == "USD/package"
+    assert result["cohorts"][0]["median_grain"] == "scored benchmark product-location observations"
     assert result["cohorts"][0]["relationships"] == 3
     assert [
         row["competitor_product_id"] for row in result["cohorts"][0]["product_relationships"]

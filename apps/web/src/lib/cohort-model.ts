@@ -14,6 +14,9 @@ export interface ComparableCohort {
   segmentId: string;
   segment: string;
   attributes: Record<string, unknown>;
+  comparisonMetric: string;
+  comparisonUnit: string;
+  medianGrain: string;
   overall: boolean;
   pairCount: number;
   matches: number;
@@ -91,6 +94,9 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
       attributes && typeof attributes === "object" && !Array.isArray(attributes)
         ? (attributes as Record<string, unknown>)
         : {},
+    comparisonMetric: String(row.comparison_metric ?? ""),
+    comparisonUnit: String(row.comparison_unit ?? ""),
+    medianGrain: String(row.median_grain ?? ""),
     overall:
       segmentId.toLocaleLowerCase("en-US") === "all" ||
       segment.toLocaleLowerCase("en-US") === "all comparable items",
@@ -123,6 +129,33 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     ),
     outcome: outcomeValue(row._dominant_outcome ?? row["dominant outcome"]),
     productRelationships: [],
+  };
+}
+
+export function cohortUnitLabel(comparisonUnit: string) {
+  const normalized = comparisonUnit.trim().toLowerCase();
+  if (normalized === "usd/package") return "per package";
+  if (normalized.startsWith("usd/"))
+    return `per ${normalized.slice("usd/".length)}`;
+  return comparisonUnit || "on the configured price basis";
+}
+
+export function cohortPackageEquivalent(
+  value: number | null,
+  comparisonMetric: string,
+  attributes: Record<string, unknown>,
+) {
+  if (value === null || !Number.isFinite(value)) return null;
+  const volume = Number(attributes.volume_oz);
+  if (
+    comparisonMetric !== "price_per_gallon" ||
+    !Number.isFinite(volume) ||
+    volume <= 0
+  )
+    return null;
+  return {
+    value: value * (volume / 128),
+    label: `per ${volume.toLocaleString("en-US", { maximumFractionDigits: 2 })} fl oz`,
   };
 }
 

@@ -16,7 +16,7 @@
     "assortment_scorecards"
   ],
   "properties": {
-    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0", "1.4.0"] },
+    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"] },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -270,6 +270,9 @@
             "segment_id": { "type": "string", "minLength": 1 },
             "segment": { "type": "string", "minLength": 1 },
             "attributes": { "type": "object" },
+            "comparison_metric": { "type": "string", "minLength": 1 },
+            "comparison_unit": { "type": "string", "minLength": 1 },
+            "median_grain": { "const": "scored benchmark product-location observations" },
             "relationships": { "type": "integer", "minimum": 0 },
             "benchmark_products": { "type": "integer", "minimum": 0 },
             "competitor_products": { "type": "integer", "minimum": 0 },

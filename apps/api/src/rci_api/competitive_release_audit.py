@@ -70,6 +70,14 @@ def _matches_number(actual: Any, expected: float | None, *, tolerance: float = 0
     return abs(float(actual) - expected) <= tolerance
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_positive_number(value: Any) -> bool:
+    return _is_number(value) and value > 0
+
+
 def audit_competitive_portfolio_set(
     documents: Sequence[Mapping[str, Any]],
     *,
@@ -670,7 +678,32 @@ def audit_competitive_portfolio_set(
         requires_cohort_lineage = str(document.get("schema_version") or "") in {
             "1.3.0",
             "1.4.0",
+            "1.5.0",
         }
+        requires_explicit_cohort_basis = str(document.get("schema_version") or "") == "1.5.0"
+        cohort_ids = [str(row.get("id") or "") for row in cohorts]
+        cohort_keys = [
+            (
+                str(row.get("competitor_id") or ""),
+                str(row.get("profile_id") or ""),
+                str(row.get("segment_id") or ""),
+            )
+            for row in cohorts
+        ]
+        if "" in cohort_ids or len(cohort_ids) != len(set(cohort_ids)):
+            finding(
+                "error",
+                "cohort_identity_not_unique",
+                "Cohort identities must be unique and non-empty within one context.",
+                path=path,
+            )
+        if len(cohort_keys) != len(set(cohort_keys)):
+            finding(
+                "error",
+                "cohort_scope_not_unique",
+                "A retailer, comparison basis, and governed segment may occur only once.",
+                path=path,
+            )
         for cohort_index, cohort in enumerate(cohorts):
             cohort_path = f"{path}.cohorts[{cohort_index}]"
             audit_summary(cohort, cohort_path)
@@ -687,6 +720,72 @@ def audit_competitive_portfolio_set(
             relationships = [
                 row for row in cohort.get("product_relationships", []) if isinstance(row, Mapping)
             ]
+            relationship_ids = [str(row.get("relationship_id") or "") for row in relationships]
+            if "" in relationship_ids or len(relationship_ids) != len(set(relationship_ids)):
+                finding(
+                    "error",
+                    "cohort_relationship_identity_not_unique",
+                    "Cohort lineage requires unique, non-empty relationship identities.",
+                    path=cohort_path,
+                )
+            relationship_bases = {
+                (
+                    str(row.get("comparison_metric") or ""),
+                    str(row.get("comparison_unit") or ""),
+                )
+                for row in relationships
+            }
+            if requires_explicit_cohort_basis and relationship_bases != {
+                (
+                    str(cohort.get("comparison_metric") or ""),
+                    str(cohort.get("comparison_unit") or ""),
+                )
+            }:
+                finding(
+                    "error",
+                    "cohort_comparison_basis_mismatch",
+                    "Every cohort relationship and displayed median must share one price basis.",
+                    path=cohort_path,
+                    relationship_bases=sorted(relationship_bases),
+                    cohort_basis=(
+                        str(cohort.get("comparison_metric") or ""),
+                        str(cohort.get("comparison_unit") or ""),
+                    ),
+                )
+            if requires_cohort_lineage and str(cohort.get("profile_id") or "") != profile:
+                finding(
+                    "error",
+                    "cohort_profile_mismatch",
+                    "A cohort comparison basis must equal its materialized context.",
+                    path=cohort_path,
+                    cohort_profile=cohort.get("profile_id"),
+                    context_profile=profile,
+                )
+            scored = _integer(cohort.get("scored_product_locations"))
+            median_fields = (
+                cohort.get("benchmark_median"),
+                cohort.get("competitor_median"),
+                cohort.get("paired_median_gap"),
+            )
+            if scored and (
+                not _is_positive_number(median_fields[0])
+                or not _is_positive_number(median_fields[1])
+                or not _is_number(median_fields[2])
+            ):
+                finding(
+                    "error",
+                    "cohort_median_missing",
+                    "Every scored cohort requires positive benchmark and competitor medians "
+                    "and a numeric paired median gap.",
+                    path=cohort_path,
+                )
+            if not scored and any(value is not None for value in median_fields):
+                finding(
+                    "error",
+                    "unscored_cohort_has_median",
+                    "A cohort without scored product-locations cannot display price medians.",
+                    path=cohort_path,
+                )
             for relationship_index, relationship in enumerate(relationships):
                 audit_summary(
                     relationship,

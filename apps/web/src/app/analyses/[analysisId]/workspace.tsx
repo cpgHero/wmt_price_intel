@@ -48,6 +48,7 @@ import {
 } from "@/lib/evidence-csv";
 import {
   comparisonBasisDescription,
+  comparisonBasisLabel,
   compactMetricName,
   defaultComparisonBasisId,
   defaultComparisonRadiusMiles,
@@ -679,28 +680,32 @@ function BlueprintAnalysisWorkspace({
       Object.fromEntries(
         (radiusPortfolio?.cohorts ?? []).map((cohort) => {
           const relationships = cohort.product_relationships ?? [];
+          const benchmarkProducts = new Map(
+            relationships.map((relationship) => [
+              relationship.benchmark_product_id,
+              assortmentBrandTypes.get(
+                `${reportView.retailer_scope.benchmark.id}::${relationship.benchmark_product_id}`,
+              ) ?? "unclassified",
+            ]),
+          );
+          const competitorProducts = new Map(
+            relationships.map((relationship) => [
+              relationship.competitor_product_id,
+              assortmentBrandTypes.get(
+                `${cohort.competitor_id}::${relationship.competitor_product_id}`,
+              ) ?? relationship.competitor_brand_type,
+            ]),
+          );
           return [
             cohort.id,
             {
               pairCount: relationships.length,
               benchmarkBrandTypes:
-                brandTypesSummary(
-                  relationships.map(
-                    (relationship) =>
-                      assortmentBrandTypes.get(
-                        `${reportView.retailer_scope.benchmark.id}::${relationship.benchmark_product_id}`,
-                      ) ?? "unclassified",
-                  ),
-                ) || "brand type unresolved",
+                brandTypesSummary([...benchmarkProducts.values()]) ||
+                "brand type unresolved",
               competitorBrandTypes:
-                brandTypesSummary(
-                  relationships.map(
-                    (relationship) =>
-                      assortmentBrandTypes.get(
-                        `${cohort.competitor_id}::${relationship.competitor_product_id}`,
-                      ) ?? relationship.competitor_brand_type,
-                  ),
-                ) || "brand type unresolved",
+                brandTypesSummary([...competitorProducts.values()]) ||
+                "brand type unresolved",
             },
           ];
         }),
@@ -885,10 +890,10 @@ function BlueprintAnalysisWorkspace({
           title: "Choose the governed comparison basis",
           description:
             "Change the deterministic eligibility, geography, and price unit used by the report. This selection is persisted in the URL.",
-          value: selectedBasis?.label ?? "Configured comparison basis",
+          value: comparisonBasisLabel(selectedBasis),
           options: reportView.comparison_bases.map((basis) => ({
             value: basis.profile_id,
-            label: `${basis.label}${basis.profile_id === preferredBasis ? " · default" : ""}`,
+            label: `${comparisonBasisLabel(basis)}${basis.profile_id === preferredBasis ? " · default" : ""}`,
             description: comparisonBasisDescription(
               basis,
               `physical stores within ${leadershipRadius} mile${leadershipRadius === 1 ? "" : "s"}; service areas use delivery ZIP`,
@@ -3248,7 +3253,16 @@ function RadiusCohortProductsDrawer({
               {radiusMiles} mile{radiusMiles === 1 ? "" : "s"}
             </strong>
           </span>
+          <span>
+            <small>Displayed price basis</small>
+            <strong>{displayLabel(cohort.comparisonUnit)}</strong>
+          </span>
         </div>
+        <p className="cohort-drawer-definition">
+          Cohort medians are observation-weighted across scored benchmark
+          product-locations on the {displayLabel(cohort.comparisonUnit)} basis.
+          They are not package shelf-price medians.
+        </p>
         <label className="radius-scorecard-product-search">
           <span>Find either retailer&apos;s product by name, ID, or brand</span>
           <input
