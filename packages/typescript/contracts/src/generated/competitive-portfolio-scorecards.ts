@@ -87,7 +87,7 @@ export type AssortmentScorecard = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitivePortfolioScorecards {
-  schema_version: "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0" | "1.5.0";
+  schema_version: "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0" | "1.5.0" | "1.6.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -115,6 +115,13 @@ export interface Summary {
   benchmark_product_locations: number;
   scored_product_locations: number;
   coverage_rate: number | null;
+  benchmark_observed_locations?: number;
+  benchmark_scored_locations?: number;
+  benchmark_unscored_locations?: number;
+  location_coverage_rate?: number | null;
+  competitor_contributing_locations?: number;
+  competitor_contributing_stores?: number;
+  competitor_contributing_service_areas?: number;
   leader_product_locations: number;
   tied_product_locations: number;
   at_risk_product_locations: number;

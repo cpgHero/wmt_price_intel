@@ -104,10 +104,44 @@ def _portfolio_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
     benchmark_lower = statuses["leader"] + statuses["at_risk"]
     competitor_lower = statuses["losing"]
     parity = statuses["tied"]
+    benchmark_locations = {
+        key for row in outcomes if (key := _location_identity(row.get("benchmark"))) is not None
+    }
+    scored_benchmark_locations = {
+        key for row in scored if (key := _location_identity(row.get("benchmark"))) is not None
+    }
+    competitor_locations = {
+        key for row in scored if (key := _location_identity(row.get("competitor"))) is not None
+    }
+    competitor_stores = {
+        key
+        for row in scored
+        if isinstance(row.get("competitor"), dict)
+        and str(row["competitor"].get("location_kind") or "store") != "service_area"
+        and (key := _location_identity(row.get("competitor"))) is not None
+    }
+    competitor_service_areas = {
+        key
+        for row in scored
+        if isinstance(row.get("competitor"), dict)
+        and str(row["competitor"].get("location_kind") or "store") == "service_area"
+        and (key := _location_identity(row.get("competitor"))) is not None
+    }
     return {
         "benchmark_product_locations": len(outcomes),
         "scored_product_locations": len(scored),
         "coverage_rate": round(len(scored) / len(outcomes), 4) if outcomes else None,
+        "benchmark_observed_locations": len(benchmark_locations),
+        "benchmark_scored_locations": len(scored_benchmark_locations),
+        "benchmark_unscored_locations": len(benchmark_locations - scored_benchmark_locations),
+        "location_coverage_rate": (
+            round(len(scored_benchmark_locations) / len(benchmark_locations), 4)
+            if benchmark_locations
+            else None
+        ),
+        "competitor_contributing_locations": len(competitor_locations),
+        "competitor_contributing_stores": len(competitor_stores),
+        "competitor_contributing_service_areas": len(competitor_service_areas),
         "leader_product_locations": statuses["leader"],
         "tied_product_locations": statuses["tied"],
         "at_risk_product_locations": statuses["at_risk"],
@@ -119,6 +153,36 @@ def _portfolio_summary(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
         "parity_rate": round(parity / len(scored), 4) if scored else None,
         "average_gap": round(sum(gaps) / len(gaps), 4) if gaps else None,
     }
+
+
+def _location_identity(value: Any) -> tuple[str, ...] | None:
+    """Return a product-independent identity for one store or service area.
+
+    Product scope keys intentionally include product identity and therefore
+    cannot be used for store coverage. Store IDs remain strings; service-area
+    retailers are deduplicated by delivery ZIP. Coordinate/name fallbacks keep
+    historical evidence usable without merging locations from different
+    retailers.
+    """
+
+    if not isinstance(value, dict):
+        return None
+    retailer_id = str(value.get("retailer_id") or "").strip()
+    location_kind = str(value.get("location_kind") or "store").strip()
+    store_number = str(value.get("store_number") or "").strip()
+    zipcode = str(value.get("zipcode") or "").strip()
+    if location_kind == "service_area" and zipcode:
+        return (retailer_id, "service_area", zipcode)
+    if store_number:
+        return (retailer_id, "store", store_number)
+    latitude = value.get("latitude")
+    longitude = value.get("longitude")
+    if latitude is not None and longitude is not None:
+        return (retailer_id, "coordinates", str(latitude), str(longitude))
+    store_name = str(value.get("store_name") or "").strip()
+    if store_name and zipcode:
+        return (retailer_id, "named_location", store_name.casefold(), zipcode)
+    return None
 
 
 def _normalized_attribute(value: Any) -> Any:
@@ -469,13 +533,28 @@ def _cohort_summary(
     benchmark_product_ids = sorted(
         {str(row["benchmark_product_id"]) for row in included_candidates}
     )
-    outcomes = [
-        dict(outcome)
-        for product_id in benchmark_product_ids
-        for outcome in product_views.get(product_id, {}).get("outcomes", [])
-        if isinstance(outcome, dict)
-        and str(outcome.get("relationship_id") or "") in included_relationship_ids
-    ]
+    outcomes = []
+    for product_id in benchmark_product_ids:
+        for source in product_views.get(product_id, {}).get("outcomes", []):
+            if not isinstance(source, dict):
+                continue
+            outcome = dict(source)
+            if str(outcome.get("relationship_id") or "") not in included_relationship_ids:
+                # Preserve the cohort's complete observed benchmark-store
+                # denominator. An offer selected through another cohort does
+                # not count as evidence for this cohort, but the Walmart store
+                # must remain visible as unscored here.
+                outcome.update(
+                    {
+                        "status": "unscored",
+                        "competitor": None,
+                        "relationship_id": None,
+                        "distance_miles": None,
+                        "competitor_minus_benchmark": None,
+                        "comparison_value_reduction_to_lead": None,
+                    }
+                )
+            outcomes.append(outcome)
     scored = [row for row in outcomes if row.get("status") != "unscored"]
     benchmark_values = [
         float(row["benchmark"]["comparison_value"])
@@ -518,12 +597,23 @@ def _cohort_summary(
     product_rows = []
     for product_id in benchmark_product_ids:
         view = product_views.get(product_id, {})
-        product_outcomes = [
-            dict(row)
-            for row in view.get("outcomes", [])
-            if isinstance(row, dict)
-            and str(row.get("relationship_id") or "") in included_relationship_ids
-        ]
+        product_outcomes = []
+        for source in view.get("outcomes", []):
+            if not isinstance(source, dict):
+                continue
+            outcome = dict(source)
+            if str(outcome.get("relationship_id") or "") not in included_relationship_ids:
+                outcome.update(
+                    {
+                        "status": "unscored",
+                        "competitor": None,
+                        "relationship_id": None,
+                        "distance_miles": None,
+                        "competitor_minus_benchmark": None,
+                        "comparison_value_reduction_to_lead": None,
+                    }
+                )
+            product_outcomes.append(outcome)
         product_rows.append(
             {
                 "product_id": product_id,
@@ -894,7 +984,7 @@ class CompetitiveProductLeadershipService:
                 profile_id=selected_profile,
                 radius_miles=radius_miles,
             )
-            if stored is not None and stored.get("schema_version") == "1.4.0":
+            if stored is not None and stored.get("schema_version") == "1.6.0":
                 if competitor_id != "all":
                     stored["filters"] = {
                         **dict(stored["filters"]),
@@ -1398,7 +1488,7 @@ class CompetitiveProductLeadershipService:
                 f"Competitive portfolio contains duplicate governed cohorts: {duplicates!r}"
             )
         result = {
-            "schema_version": "1.5.0",
+            "schema_version": "1.6.0",
             "analysis_id": analysis_id,
             "generated_at": str(report["generated_at"]),
             "benchmark_retailer": benchmark,

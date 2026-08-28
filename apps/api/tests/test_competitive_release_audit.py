@@ -128,6 +128,36 @@ def _document(profile: str, radius: int, scored: int) -> dict[str, Any]:
     }
 
 
+def test_schema_1_6_requires_and_reconciles_distinct_location_coverage() -> None:
+    document = _document("compatible", 3, 1)
+    document["schema_version"] = "1.6.0"
+
+    missing = audit_competitive_portfolio_set(
+        [document], expected_profiles=["compatible"], expected_radii=[3]
+    )
+    assert "location_coverage_summary_missing" in {row["code"] for row in missing["findings"]}
+
+    location_summary = {
+        "benchmark_observed_locations": 2,
+        "benchmark_scored_locations": 1,
+        "benchmark_unscored_locations": 1,
+        "location_coverage_rate": 0.5,
+        "competitor_contributing_locations": 1,
+        "competitor_contributing_stores": 1,
+        "competitor_contributing_service_areas": 0,
+    }
+    document["scorecards"][0].update(location_summary)
+    document["assortment_scorecards"][0].update(location_summary)
+    reconciled = audit_competitive_portfolio_set(
+        [document], expected_profiles=["compatible"], expected_radii=[3]
+    )
+
+    assert "location_coverage_summary_missing" not in {
+        row["code"] for row in reconciled["findings"]
+    }
+    assert "location_coverage_rate_mismatch" not in {row["code"] for row in reconciled["findings"]}
+
+
 def _complete_set() -> list[dict[str, Any]]:
     return [
         _document(profile, radius, {1: 1, 3: 2, 5: 2}[radius])

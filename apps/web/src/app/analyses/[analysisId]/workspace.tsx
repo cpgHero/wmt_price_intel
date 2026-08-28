@@ -1860,22 +1860,27 @@ function AssortmentAnalysisPanel({
                   same delivery ZIP.
                 </p>
                 <div className="assortment-coverage-row">
-                  <span>Comparable</span>
+                  <span>Benchmark stores covered</span>
                   <b>
                     <i
                       style={{
-                        width: `${Math.max(1, (local?.coverage_rate ?? 0) * 100)}%`,
+                        width: `${Math.max(1, (local?.location_coverage_rate ?? 0) * 100)}%`,
                       }}
                     />
                   </b>
                   <strong>
-                    {formatScorecardRate(local?.coverage_rate ?? null)}
+                    {formatScorecardRate(local?.location_coverage_rate ?? null)}
                   </strong>
                 </div>
                 <small className="assortment-lens-note">
-                  {(local?.scored_product_locations ?? 0).toLocaleString()} of{" "}
-                  {(local?.benchmark_product_locations ?? 0).toLocaleString()}{" "}
-                  observed benchmark product-locations were scored.
+                  {(local?.benchmark_scored_locations ?? 0).toLocaleString()} of{" "}
+                  {(local?.benchmark_observed_locations ?? 0).toLocaleString()}{" "}
+                  {benchmark.name} stores have at least one valid local
+                  comparison;{" "}
+                  {local
+                    ? contributingLocationCopy(local)
+                    : "no competitor locations supplied comparisons"}
+                  .
                 </small>
               </section>
               <section className="assortment-coverage-card">
@@ -1932,10 +1937,13 @@ function AssortmentAnalysisPanel({
                     {competitor.name} products in this comparison basis.
                   </li>
                   <li>
-                    {(local?.scored_product_locations ?? 0).toLocaleString()} of{" "}
-                    {(local?.benchmark_product_locations ?? 0).toLocaleString()}{" "}
-                    observed benchmark product-locations have eligible local
-                    evidence under the {radiusMiles}-mile rule.
+                    {(local?.benchmark_scored_locations ?? 0).toLocaleString()}{" "}
+                    of{" "}
+                    {(
+                      local?.benchmark_observed_locations ?? 0
+                    ).toLocaleString()}{" "}
+                    {benchmark.name} stores have at least one eligible local
+                    comparison under the {radiusMiles}-mile rule.
                   </li>
                   <li>
                     {unmatchedBenchmarkProducts.length.toLocaleString()}{" "}
@@ -2339,6 +2347,21 @@ function formatScorecardRate(value: number | null) {
   });
 }
 
+function contributingLocationCopy(scorecard: {
+  competitor_contributing_locations?: number;
+  competitor_contributing_service_areas?: number;
+  competitor_contributing_stores?: number;
+}) {
+  const stores = scorecard.competitor_contributing_stores ?? 0;
+  const serviceAreas = scorecard.competitor_contributing_service_areas ?? 0;
+  if (serviceAreas && !stores)
+    return `${serviceAreas.toLocaleString()} delivery ZIP${serviceAreas === 1 ? "" : "s"} supplied comparisons`;
+  if (stores && !serviceAreas)
+    return `${stores.toLocaleString()} competitor store${stores === 1 ? "" : "s"} supplied comparisons`;
+  const locations = scorecard.competitor_contributing_locations ?? 0;
+  return `${locations.toLocaleString()} competitor location${locations === 1 ? "" : "s"} supplied comparisons`;
+}
+
 function scorecardPositionCopy(
   gap: number | null,
   benchmarkName: string,
@@ -2524,10 +2547,6 @@ function RadiusRetailerScorecardPanel({
     (total, scorecard) => total + scorecard.relationships,
     0,
   );
-  const scoredLocationCount = scoredScorecards.reduce(
-    (total, scorecard) => total + scorecard.scored_product_locations,
-    0,
-  );
   const limitedRetailerCount =
     certifiedScorecards.length - scoredScorecards.length;
   return (
@@ -2608,11 +2627,11 @@ function RadiusRetailerScorecardPanel({
                   <span>With at least one certified relationship</span>
                 </article>
                 <article className="portfolio-summary-position">
-                  <small>Scored product-locations</small>
-                  <strong>{scoredLocationCount.toLocaleString()}</strong>
+                  <small>Retailers with store coverage</small>
+                  <strong>{scoredScorecards.length.toLocaleString()}</strong>
                   <span>
-                    Observed {benchmark.name} product-stores with eligible local
-                    evidence
+                    At least one {benchmark.name} store has a valid local
+                    comparison
                   </span>
                 </article>
                 <article>
@@ -2632,7 +2651,7 @@ function RadiusRetailerScorecardPanel({
             <div className="retailer-scorecard-table">
               <div className="retailer-scorecard-head" aria-hidden="true">
                 <span>Competitor and comparison context</span>
-                <span>Comparable evidence</span>
+                <span>Comparable store coverage</span>
                 <span>Lower-price share</span>
                 <span>Average local price position</span>
                 <span>Status</span>
@@ -2658,20 +2677,22 @@ function RadiusRetailerScorecardPanel({
                     </button>
                     <div className="retailer-scorecard-evidence">
                       <strong>
-                        {scorecard.scored_product_locations.toLocaleString()}
+                        {formatScorecardRate(
+                          scorecard.location_coverage_rate ?? null,
+                        )}
                       </strong>
                       <span>
+                        {(
+                          scorecard.benchmark_scored_locations ?? 0
+                        ).toLocaleString()}{" "}
                         of{" "}
-                        {scorecard.benchmark_product_locations.toLocaleString()}{" "}
-                        observed {benchmark.name} product-locations scored
+                        {(
+                          scorecard.benchmark_observed_locations ?? 0
+                        ).toLocaleString()}{" "}
+                        {benchmark.name} stores have at least one valid local
+                        comparison
                       </span>
-                      <small>
-                        {scorecard.relationships.toLocaleString()} relationships
-                        · {scorecard.benchmark_products.toLocaleString()}{" "}
-                        {benchmark.name} products ·{" "}
-                        {scorecard.competitor_products.toLocaleString()}{" "}
-                        competitor products
-                      </small>
+                      <small>{contributingLocationCopy(scorecard)}</small>
                       <button
                         type="button"
                         disabled={!scorecard.relationships}
@@ -2777,12 +2798,12 @@ function RadiusRetailerScorecardPanel({
                       className={`retailer-score-status ${scorecard.scored_product_locations ? "ready" : ""}`}
                     >
                       {scorecard.scored_product_locations
-                        ? "Comparable evidence"
+                        ? "Store coverage available"
                         : "No local overlap"}
                       <small>
                         {scorecard.scored_product_locations
-                          ? `${formatScorecardRate(scorecard.coverage_rate)} local coverage`
-                          : `No scored product-location within ${radiusMiles} miles`}
+                          ? `${formatScorecardRate(scorecard.location_coverage_rate ?? null)} of benchmark stores covered`
+                          : `No benchmark store has a valid comparison within ${radiusMiles} miles`}
                       </small>
                     </span>
                   </article>
@@ -2845,18 +2866,28 @@ function RadiusRetailerScorecardPanel({
                 </strong>
               </span>
               <span>
-                <small>Certified relationships</small>
-                <strong>{selected.relationships.toLocaleString()}</strong>
-              </span>
-              <span>
-                <small>Scored product-locations</small>
+                <small>{benchmark.name} stores covered</small>
                 <strong>
-                  {selected.scored_product_locations.toLocaleString()}
+                  {(selected.benchmark_scored_locations ?? 0).toLocaleString()}{" "}
+                  of{" "}
+                  {(
+                    selected.benchmark_observed_locations ?? 0
+                  ).toLocaleString()}
                 </strong>
               </span>
               <span>
-                <small>Local coverage</small>
-                <strong>{formatScorecardRate(selected.coverage_rate)}</strong>
+                <small>Competitor footprint used</small>
+                <strong>
+                  {(
+                    selected.competitor_contributing_locations ?? 0
+                  ).toLocaleString()}
+                </strong>
+              </span>
+              <span>
+                <small>Comparable store coverage</small>
+                <strong>
+                  {formatScorecardRate(selected.location_coverage_rate ?? null)}
+                </strong>
               </span>
             </div>
             <label className="radius-scorecard-product-search">
@@ -3245,18 +3276,21 @@ function RadiusCohortProductsDrawer({
         </header>
         <div className="radius-scorecard-product-summary">
           <span>
-            <small>Governed relationships</small>
+            <small>{benchmark.name} stores covered</small>
             <strong>
-              {cohort.productRelationships.length.toLocaleString()}
+              {cohort.benchmarkScoredLocations.toLocaleString()} of{" "}
+              {cohort.benchmarkObservedLocations.toLocaleString()}
             </strong>
           </span>
           <span>
-            <small>Scored product-locations</small>
-            <strong>{cohort.matches.toLocaleString()}</strong>
+            <small>Comparable store coverage</small>
+            <strong>{formatScorecardRate(cohort.locationCoverageRate)}</strong>
           </span>
           <span>
-            <small>Observed benchmark product-locations</small>
-            <strong>{cohort.matchedGeographies.toLocaleString()}</strong>
+            <small>Competitor footprint used</small>
+            <strong>
+              {cohort.competitorContributingLocations.toLocaleString()}
+            </strong>
           </span>
           <span>
             <small>Local comparison rule</small>
@@ -3270,8 +3304,7 @@ function RadiusCohortProductsDrawer({
           </span>
         </div>
         <p className="cohort-drawer-definition">
-          Cohort medians are observation-weighted across scored benchmark
-          product-locations.{" "}
+          Cohort medians are based on paired local product-price comparisons.{" "}
           {pricePresentation.secondaryUnitLabel ? (
             <>
               Because every cohort member has the same governed package size,

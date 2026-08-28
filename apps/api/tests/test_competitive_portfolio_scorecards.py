@@ -17,6 +17,7 @@ from rci_api.competitive_leadership import (
     _project_portfolio_document,
     _require_internal_materialization_token,
 )
+from rci_api.competitive_release_audit import audit_competitive_portfolio_set
 from rci_contracts import validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -355,12 +356,47 @@ async def test_analysis_context_is_loaded_once_for_concurrent_product_groups() -
     assert analyses.report_calls == 1
 
 
-def test_portfolio_summary_uses_product_location_grain() -> None:
+def test_portfolio_summary_keeps_product_outcomes_but_deduplicates_store_coverage() -> None:
     summary = _portfolio_summary(
         [
-            {"status": "leader", "competitor_minus_benchmark": 0.2},
-            {"status": "losing", "competitor_minus_benchmark": -0.1},
-            {"status": "unscored", "competitor_minus_benchmark": None},
+            {
+                "status": "leader",
+                "competitor_minus_benchmark": 0.2,
+                "benchmark": {
+                    "retailer_id": "walmart_us",
+                    "location_kind": "store",
+                    "store_number": "100",
+                },
+                "competitor": {
+                    "retailer_id": "aldi_us",
+                    "location_kind": "store",
+                    "store_number": "200",
+                },
+            },
+            {
+                "status": "losing",
+                "competitor_minus_benchmark": -0.1,
+                "benchmark": {
+                    "retailer_id": "walmart_us",
+                    "location_kind": "store",
+                    "store_number": "100",
+                },
+                "competitor": {
+                    "retailer_id": "aldi_us",
+                    "location_kind": "store",
+                    "store_number": "201",
+                },
+            },
+            {
+                "status": "unscored",
+                "competitor_minus_benchmark": None,
+                "benchmark": {
+                    "retailer_id": "walmart_us",
+                    "location_kind": "store",
+                    "store_number": "101",
+                },
+                "competitor": None,
+            },
         ]
     )
 
@@ -368,6 +404,13 @@ def test_portfolio_summary_uses_product_location_grain() -> None:
         "benchmark_product_locations": 3,
         "scored_product_locations": 2,
         "coverage_rate": 0.6667,
+        "benchmark_observed_locations": 2,
+        "benchmark_scored_locations": 1,
+        "benchmark_unscored_locations": 1,
+        "location_coverage_rate": 0.5,
+        "competitor_contributing_locations": 2,
+        "competitor_contributing_stores": 2,
+        "competitor_contributing_service_areas": 0,
         "leader_product_locations": 1,
         "tied_product_locations": 0,
         "at_risk_product_locations": 0,
@@ -379,6 +422,34 @@ def test_portfolio_summary_uses_product_location_grain() -> None:
         "parity_rate": 0.0,
         "average_gap": 0.05,
     }
+
+
+def test_portfolio_summary_counts_service_area_delivery_zips_separately() -> None:
+    summary = _portfolio_summary(
+        [
+            {
+                "status": "leader",
+                "competitor_minus_benchmark": 0.2,
+                "benchmark": {
+                    "retailer_id": "walmart_us",
+                    "location_kind": "store",
+                    "store_number": store_number,
+                },
+                "competitor": {
+                    "retailer_id": "amazon_same_day_us",
+                    "location_kind": "service_area",
+                    "zipcode": "90001",
+                },
+            }
+            for store_number in ("100", "101")
+        ]
+    )
+
+    assert summary["benchmark_observed_locations"] == 2
+    assert summary["benchmark_scored_locations"] == 2
+    assert summary["competitor_contributing_locations"] == 1
+    assert summary["competitor_contributing_stores"] == 0
+    assert summary["competitor_contributing_service_areas"] == 1
 
 
 def test_coverage_rows_partition_the_complete_catalog_once() -> None:
@@ -503,15 +574,35 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
                         "relationship_id": "relationship-1",
                         "status": "leader",
                         "competitor_minus_benchmark": 0.2,
-                        "benchmark": {"comparison_value": 3.0},
-                        "competitor": {"comparison_value": 3.2},
+                        "benchmark": {
+                            "comparison_value": 3.0,
+                            "retailer_id": "walmart_us",
+                            "location_kind": "store",
+                            "store_number": "100",
+                        },
+                        "competitor": {
+                            "comparison_value": 3.2,
+                            "retailer_id": "target_us",
+                            "location_kind": "store",
+                            "store_number": "200",
+                        },
                     },
                     {
                         "relationship_id": "relationship-2",
                         "status": "losing",
                         "competitor_minus_benchmark": -5.0,
-                        "benchmark": {"comparison_value": 8.0},
-                        "competitor": {"comparison_value": 3.0},
+                        "benchmark": {
+                            "comparison_value": 8.0,
+                            "retailer_id": "walmart_us",
+                            "location_kind": "store",
+                            "store_number": "101",
+                        },
+                        "competitor": {
+                            "comparison_value": 3.0,
+                            "retailer_id": "target_us",
+                            "location_kind": "store",
+                            "store_number": "201",
+                        },
                     },
                 ],
             }
@@ -522,6 +613,11 @@ def test_cohort_summary_filters_metrics_and_lineage_to_included_relationships() 
     assert cohort["relationships"] == 1
     assert cohort["competitor"] == "Target"
     assert cohort["scored_product_locations"] == 1
+    assert cohort["benchmark_product_locations"] == 2
+    assert cohort["benchmark_observed_locations"] == 2
+    assert cohort["benchmark_scored_locations"] == 1
+    assert cohort["location_coverage_rate"] == 0.5
+    assert cohort["competitor_contributing_stores"] == 1
     assert cohort["average_gap"] == 0.2
     assert cohort["benchmark_median"] == 3.0
     assert [row["relationship_id"] for row in cohort["product_relationships"]] == ["relationship-1"]
@@ -767,15 +863,35 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                     "relationship_id": "relationship-1",
                     "status": "leader",
                     "competitor_minus_benchmark": 0.2,
-                    "benchmark": {"comparison_value": 3.0},
-                    "competitor": {"comparison_value": 3.2},
+                    "benchmark": {
+                        "comparison_value": 3.0,
+                        "retailer_id": "walmart_us",
+                        "location_kind": "store",
+                        "store_number": "100",
+                    },
+                    "competitor": {
+                        "comparison_value": 3.2,
+                        "retailer_id": "aldi_us",
+                        "location_kind": "store",
+                        "store_number": "200",
+                    },
                 },
                 {
                     "relationship_id": "relationship-1",
                     "status": "losing",
                     "competitor_minus_benchmark": -0.1,
-                    "benchmark": {"comparison_value": 3.1},
-                    "competitor": {"comparison_value": 3.0},
+                    "benchmark": {
+                        "comparison_value": 3.1,
+                        "retailer_id": "walmart_us",
+                        "location_kind": "store",
+                        "store_number": "101",
+                    },
+                    "competitor": {
+                        "comparison_value": 3.0,
+                        "retailer_id": "aldi_us",
+                        "location_kind": "store",
+                        "store_number": "200",
+                    },
                 },
             ],
         }
@@ -783,7 +899,7 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     service.view = MethodType(view, service)  # type: ignore[method-assign]
     result = await service.portfolio_view(
         "analysis-1",
-        competitor_id="aldi_us",
+        competitor_id="all",
         profile_id="compatible",
         radius_miles=3,
         state=None,
@@ -792,7 +908,11 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
 
     assert result["filters"]["radius_miles"] == 3
     assert result["scorecards"][0]["scored_product_locations"] == 2
-    assert result["schema_version"] == "1.5.0"
+    assert result["schema_version"] == "1.6.0"
+    assert result["scorecards"][0]["benchmark_observed_locations"] == 2
+    assert result["scorecards"][0]["benchmark_scored_locations"] == 2
+    assert result["scorecards"][0]["location_coverage_rate"] == 1.0
+    assert result["scorecards"][0]["competitor_contributing_stores"] == 1
     assert result["scorecards"][0]["relationships"] == 3
     assert result["scorecards"][0]["evidence_funnel"] == {
         "catalog_products": 2,
@@ -841,6 +961,10 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
     assert assortment["competitor_whitespace_products"] == 0
     assert assortment["benchmark_match_coverage"] == 1.0
     assert result["assortment_scorecards"][0]["coverage_rate"] == 1.0
+    audit = audit_competitive_portfolio_set(
+        [result], expected_profiles=["compatible"], expected_radii=[3]
+    )
+    assert audit["error_count"] == 0, audit["findings"]
     assert prices.requests == [
         ("aldi_us", "package_price", ("a1", "a2", "a3")),
         ("walmart_us", "package_price", ("w1", "w2")),

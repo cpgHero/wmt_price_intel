@@ -46,6 +46,18 @@ function formatRate(value: number) {
   });
 }
 
+function contributingLocationLabel(
+  stores: number,
+  serviceAreas: number,
+  fallbackLocations: number,
+) {
+  if (serviceAreas && !stores)
+    return `${serviceAreas.toLocaleString()} delivery ZIP${serviceAreas === 1 ? "" : "s"}`;
+  if (stores && !serviceAreas)
+    return `${stores.toLocaleString()} competitor store${stores === 1 ? "" : "s"}`;
+  return `${fallbackLocations.toLocaleString()} competitor location${fallbackLocations === 1 ? "" : "s"}`;
+}
+
 function outcomeCopy(
   outcome: CohortOutcome,
   benchmarkName: string,
@@ -194,6 +206,15 @@ export function ComparableCohortExplorer({
         pairCount: row.relationships,
         matches: row.scored_product_locations,
         matchedGeographies: row.benchmark_product_locations,
+        benchmarkObservedLocations: row.benchmark_observed_locations ?? 0,
+        benchmarkScoredLocations: row.benchmark_scored_locations ?? 0,
+        benchmarkUnscoredLocations: row.benchmark_unscored_locations ?? 0,
+        locationCoverageRate: row.location_coverage_rate ?? null,
+        competitorContributingLocations:
+          row.competitor_contributing_locations ?? 0,
+        competitorContributingStores: row.competitor_contributing_stores ?? 0,
+        competitorContributingServiceAreas:
+          row.competitor_contributing_service_areas ?? 0,
         benchmarkLowerRate: row.benchmark_lower_rate ?? 0,
         competitorLowerRate: row.competitor_lower_rate ?? 0,
         parityRate: row.parity_rate ?? 0,
@@ -270,8 +291,14 @@ export function ComparableCohortExplorer({
       "Competitor brand-type mix":
         evidence?.competitorBrandTypes ?? "unresolved",
       "Paired observations": cohort.matches,
-      "Observed benchmark product-locations": cohort.matchedGeographies,
-      [`Scored product-locations within ${radiusMiles} miles`]: cohort.matches,
+      [`${benchmarkName} stores carrying the cohort`]:
+        cohort.benchmarkObservedLocations,
+      [`${benchmarkName} stores with a valid local comparison`]:
+        cohort.benchmarkScoredLocations,
+      "Comparable store coverage": cohort.locationCoverageRate,
+      "Contributing competitor stores": cohort.competitorContributingStores,
+      "Contributing competitor delivery ZIPs":
+        cohort.competitorContributingServiceAreas,
       [`${benchmarkName} lower rate`]: cohort.benchmarkLowerRate,
       "Competitor lower rate": cohort.competitorLowerRate,
       "Parity rate": cohort.parityRate,
@@ -295,14 +322,16 @@ export function ComparableCohortExplorer({
     : "Product Pack matching attributes";
   const pricePositionRows = (radiusScorecards ?? []).map((scorecard) => ({
     Competitor: scorecard.competitor,
-    "Certified relationships": scorecard.relationships,
-    [`${benchmarkName} products`]: scorecard.benchmark_products,
-    "Competitor products": scorecard.competitor_products,
-    "Observed benchmark product-locations":
-      scorecard.benchmark_product_locations,
-    [`Scored product-locations within ${radiusMiles} miles`]:
-      scorecard.scored_product_locations,
-    "Local coverage rate": scorecard.coverage_rate,
+    [`${benchmarkName} stores in scope`]:
+      scorecard.benchmark_observed_locations ?? 0,
+    [`${benchmarkName} stores with a valid local comparison`]:
+      scorecard.benchmark_scored_locations ?? 0,
+    "Comparable store coverage": scorecard.location_coverage_rate ?? null,
+    "Contributing competitor stores":
+      scorecard.competitor_contributing_stores ?? 0,
+    "Contributing competitor delivery ZIPs":
+      scorecard.competitor_contributing_service_areas ?? 0,
+    "Paired product-price comparisons": scorecard.scored_product_locations,
     [`${benchmarkName} lower rate`]: scorecard.benchmark_lower_rate,
     "Competitor lower rate": scorecard.competitor_lower_rate,
     "Parity rate": scorecard.parity_rate,
@@ -433,7 +462,7 @@ export function ComparableCohortExplorer({
           <div className="radius-price-position-head" aria-hidden="true">
             <span>Competitor</span>
             <span>Included products</span>
-            <span>Local evidence</span>
+            <span>Comparable store coverage</span>
             <span>Lower-price share</span>
             <span>Average position</span>
           </div>
@@ -458,11 +487,20 @@ export function ComparableCohortExplorer({
               </div>
               <div>
                 <strong>
-                  {scorecard.scored_product_locations.toLocaleString()} of{" "}
-                  {scorecard.benchmark_product_locations.toLocaleString()}
+                  {formatRate(scorecard.location_coverage_rate ?? 0)}
                 </strong>
                 <small>
-                  {formatRate(scorecard.coverage_rate ?? 0)} local coverage
+                  {(scorecard.benchmark_scored_locations ?? 0).toLocaleString()}{" "}
+                  of{" "}
+                  {(
+                    scorecard.benchmark_observed_locations ?? 0
+                  ).toLocaleString()}{" "}
+                  {benchmarkName} stores ·{" "}
+                  {contributingLocationLabel(
+                    scorecard.competitor_contributing_stores ?? 0,
+                    scorecard.competitor_contributing_service_areas ?? 0,
+                    scorecard.competitor_contributing_locations ?? 0,
+                  )}
                 </small>
               </div>
               <div>
@@ -633,9 +671,16 @@ export function ComparableCohortExplorer({
                   <span>{cohort.competitor}</span>
                   <h3>{cohort.segment}</h3>
                   <p>
-                    {cohort.matches.toLocaleString()} scored product-locations ·{" "}
-                    {cohort.matchedGeographies.toLocaleString()} observed
-                    benchmark product-locations
+                    {formatRate(cohort.locationCoverageRate ?? 0)} store
+                    coverage ·{" "}
+                    {cohort.benchmarkScoredLocations.toLocaleString()} of{" "}
+                    {cohort.benchmarkObservedLocations.toLocaleString()}{" "}
+                    {benchmarkName} stores ·{" "}
+                    {contributingLocationLabel(
+                      cohort.competitorContributingStores,
+                      cohort.competitorContributingServiceAreas,
+                      cohort.competitorContributingLocations,
+                    )}
                   </p>
                   <div className="cohort-pair-evidence">
                     <strong>
@@ -747,8 +792,8 @@ export function ComparableCohortExplorer({
                     </div>
                   </dl>
                   <small className="cohort-median-definition">
-                    Observation-weighted across{" "}
-                    {cohort.matches.toLocaleString()} scored product-locations.
+                    Based on {cohort.matches.toLocaleString()} paired local
+                    product-price comparisons.
                     {benchmarkPresentation.secondaryUnitLabel
                       ? ` The fixed ${benchmarkPresentation.primaryUnitLabel.replace("per ", "")} is shown first; ${benchmarkPresentation.secondaryUnitLabel} is secondary context.`
                       : ` Displayed ${benchmarkPresentation.primaryUnitLabel}.`}

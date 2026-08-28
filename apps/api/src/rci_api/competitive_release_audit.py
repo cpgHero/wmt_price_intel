@@ -29,6 +29,14 @@ RATE_FIELDS = (
     "competitor_lower_rate",
     "parity_rate",
 )
+LOCATION_COUNT_FIELDS = (
+    "benchmark_observed_locations",
+    "benchmark_scored_locations",
+    "benchmark_unscored_locations",
+    "competitor_contributing_locations",
+    "competitor_contributing_stores",
+    "competitor_contributing_service_areas",
+)
 SCORED_RELATIONSHIP_FIELDS = (
     "scored_product_locations",
     "leader_product_locations",
@@ -158,6 +166,92 @@ def audit_competitive_portfolio_set(
                     actual=row.get(field),
                     expected=expected[field],
                 )
+        if any(field in row for field in LOCATION_COUNT_FIELDS):
+            location_values = {field: _integer(row.get(field)) for field in LOCATION_COUNT_FIELDS}
+            observed_locations = location_values["benchmark_observed_locations"]
+            scored_locations = location_values["benchmark_scored_locations"]
+            unscored_locations = location_values["benchmark_unscored_locations"]
+            competitor_locations = location_values["competitor_contributing_locations"]
+            competitor_stores = location_values["competitor_contributing_stores"]
+            competitor_service_areas = location_values["competitor_contributing_service_areas"]
+            if _integer(row.get("benchmark_product_locations")) and not observed_locations:
+                finding(
+                    "error",
+                    "benchmark_location_identity_missing",
+                    (
+                        "Observed product evidence requires at least one identifiable "
+                        "benchmark location."
+                    ),
+                    path=path,
+                )
+            if _integer(row.get("scored_product_locations")) and (
+                not scored_locations or not competitor_locations
+            ):
+                finding(
+                    "error",
+                    "scored_location_identity_missing",
+                    (
+                        "Scored price evidence requires identifiable benchmark and "
+                        "competitor locations."
+                    ),
+                    path=path,
+                    benchmark_locations=scored_locations,
+                    competitor_locations=competitor_locations,
+                )
+            if observed_locations != scored_locations + unscored_locations:
+                finding(
+                    "error",
+                    "benchmark_location_denominator_mismatch",
+                    "Distinct benchmark locations must equal covered plus uncovered locations.",
+                    path=path,
+                    observed=observed_locations,
+                    covered=scored_locations,
+                    uncovered=unscored_locations,
+                )
+            if competitor_locations != competitor_stores + competitor_service_areas:
+                finding(
+                    "error",
+                    "competitor_location_partition_mismatch",
+                    (
+                        "Contributing competitor locations must partition into stores "
+                        "and service areas."
+                    ),
+                    path=path,
+                    locations=competitor_locations,
+                    stores=competitor_stores,
+                    service_areas=competitor_service_areas,
+                )
+            expected_location_rate = _expected_rate(scored_locations, observed_locations)
+            if not _matches_rate(row.get("location_coverage_rate"), expected_location_rate):
+                finding(
+                    "error",
+                    "location_coverage_rate_mismatch",
+                    (
+                        "Store coverage must use distinct covered benchmark locations "
+                        "as its numerator."
+                    ),
+                    path=path,
+                    actual=row.get("location_coverage_rate"),
+                    expected=expected_location_rate,
+                )
+
+    def require_location_summary(row: Mapping[str, Any], path: str) -> None:
+        missing = [
+            field
+            for field in (*LOCATION_COUNT_FIELDS, "location_coverage_rate")
+            if field not in row
+        ]
+        if missing:
+            finding(
+                "error",
+                "location_coverage_summary_missing",
+                (
+                    "Schema 1.6 scorecards require distinct benchmark and "
+                    "competitor location coverage."
+                ),
+                path=path,
+                missing=missing,
+            )
 
     def audit_product_rows(
         rows: Any,
@@ -256,6 +350,7 @@ def audit_competitive_portfolio_set(
     profile_basis_values: dict[str, set[tuple[str, str]]] = {}
     for document_index, document in enumerate(documents):
         path = f"documents[{document_index}]"
+        requires_location_summary = str(document.get("schema_version") or "") == "1.6.0"
         filters = document.get("filters")
         if not isinstance(filters, Mapping):
             finding("error", "filters_missing", "Portfolio filters are missing.", path=path)
@@ -335,6 +430,8 @@ def audit_competitive_portfolio_set(
                     path=scorecard_path,
                 )
             scorecards_by_retailer[retailer_id] = scorecard
+            if requires_location_summary:
+                require_location_summary(scorecard, scorecard_path)
             audit_summary(scorecard, scorecard_path)
             products = scorecard.get("products")
             audit_product_rows(products, scorecard, scorecard_path)
@@ -485,7 +582,11 @@ def audit_competitive_portfolio_set(
                     "Relationships must be ordered by scored evidence and product identity.",
                     path=scorecard_path,
                 )
-            if str(document.get("schema_version") or "") == "1.4.0":
+            if str(document.get("schema_version") or "") in {
+                "1.4.0",
+                "1.5.0",
+                "1.6.0",
+            }:
                 funnel = scorecard.get("evidence_funnel")
                 if not isinstance(funnel, Mapping):
                     finding(
@@ -679,8 +780,12 @@ def audit_competitive_portfolio_set(
             "1.3.0",
             "1.4.0",
             "1.5.0",
+            "1.6.0",
         }
-        requires_explicit_cohort_basis = str(document.get("schema_version") or "") == "1.5.0"
+        requires_explicit_cohort_basis = str(document.get("schema_version") or "") in {
+            "1.5.0",
+            "1.6.0",
+        }
         cohort_ids = [str(row.get("id") or "") for row in cohorts]
         cohort_keys = [
             (
@@ -706,6 +811,8 @@ def audit_competitive_portfolio_set(
             )
         for cohort_index, cohort in enumerate(cohorts):
             cohort_path = f"{path}.cohorts[{cohort_index}]"
+            if requires_location_summary:
+                require_location_summary(cohort, cohort_path)
             audit_summary(cohort, cohort_path)
             audit_product_rows(cohort.get("products"), cohort, cohort_path)
             if len(
@@ -868,6 +975,8 @@ def audit_competitive_portfolio_set(
             )
         for retailer_id, assortment_row in assortment_by_retailer.items():
             assortment_path = f"{path}.assortment_scorecards[{retailer_id}]"
+            if requires_location_summary:
+                require_location_summary(assortment_row, assortment_path)
             audit_summary(assortment_row, assortment_path)
             matching_scorecard = scorecards_by_retailer.get(retailer_id)
             if matching_scorecard is not None:
@@ -883,6 +992,19 @@ def audit_competitive_portfolio_set(
                             path=assortment_path,
                             field=field,
                         )
+                if requires_location_summary:
+                    for field in (*LOCATION_COUNT_FIELDS, "location_coverage_rate"):
+                        if assortment_row.get(field) != matching_scorecard.get(field):
+                            finding(
+                                "error",
+                                "assortment_location_summary_mismatch",
+                                (
+                                    "Assortment and price scorecards must share the same "
+                                    "distinct-location coverage."
+                                ),
+                                path=assortment_path,
+                                field=field,
+                            )
 
     if len(analysis_ids) != 1 or "" in analysis_ids:
         finding(

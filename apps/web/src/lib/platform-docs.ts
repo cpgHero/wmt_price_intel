@@ -756,7 +756,7 @@ export const platformDocumentation: PlatformDocumentation = {
           items: [
             "Calculate at product × location grain before rolling up to products, stores, cohorts, brands, markets, or retailers.",
             "Name every denominator: observed locations, eligible network locations, matched observations, scored benchmark stores, or another explicit governed population.",
-            "Count a benchmark store once in executive scorecards even when several product relationships contribute evidence.",
+            "Comparable Store Coverage is the share of distinct observed benchmark stores with at least one valid local competitor comparison under the selected retailer, comparison basis, period, geography, and radius. Count each benchmark store once even when several products contribute evidence; count each contributing competitor store once. Service-area retailers use distinct delivery ZIPs instead of stores.",
             "Keep package price and normalized unit price as distinct comparison bases; use a unit price only when package evidence supports it.",
             "Assign every unscored local context a reason such as no eligible match, no overlap, product not observed, stale/missing price, collection failure, incomplete attributes, or review required.",
             "Preserve retailer, Product Pack, relationship, geography, period, policy, evidence checksum, and freshness context with each result.",
@@ -1286,6 +1286,11 @@ export const platformDocumentation: PlatformDocumentation = {
                 "The portion of the intended comparison population with sufficient source, match, geography, freshness, and price evidence to score. Semantic, availability, and price coverage are separate.",
             },
             {
+              term: "Comparable store coverage",
+              definition:
+                "Distinct benchmark stores with at least one valid local competitor product comparison divided by distinct benchmark stores carrying an in-scope benchmark product. Multiple products at one store count once. Physical competitors report distinct contributing stores; service-area competitors report distinct delivery ZIPs.",
+            },
+            {
               term: "Whitespace / gap",
               definition:
                 "A locally relevant assortment need where one retailer has an admitted product and the other has no governed eligible equivalent. It is not inferred solely from a missing Search row.",
@@ -1622,6 +1627,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-28",
+              "Implemented and release-validated",
+              "Retailer and Cohort Scorecards use distinct-store comparison coverage instead of product-location volume as the primary coverage KPI.",
+              "Competitive Portfolio 1.6.0 deduplicates benchmark and competitor locations, preserves observed-but-unscored cohort stores in the denominator, labels Amazon-style service areas as delivery ZIPs, and keeps product-location evidence only for price-result lineage. The release audit reconciles location partitions, rates, and Retailer-to-Assortment consistency. No Search price, PDP evidence, certified relationship, AI decision, or lower-price outcome changed.",
+            ],
             [
               "2026-08-28",
               "Deployed and production-verified",

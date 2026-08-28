@@ -21,6 +21,13 @@ export interface ComparableCohort {
   pairCount: number;
   matches: number;
   matchedGeographies: number;
+  benchmarkObservedLocations: number;
+  benchmarkScoredLocations: number;
+  benchmarkUnscoredLocations: number;
+  locationCoverageRate: number | null;
+  competitorContributingLocations: number;
+  competitorContributingStores: number;
+  competitorContributingServiceAreas: number;
   benchmarkLowerRate: number;
   competitorLowerRate: number;
   parityRate: number;
@@ -113,6 +120,47 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     matches: numericValue(row, "_matches", "matches") ?? 0,
     matchedGeographies:
       numericValue(row, "_matched_geographies", "matched geographies") ?? 0,
+    benchmarkObservedLocations:
+      numericValue(
+        row,
+        "_benchmark_observed_locations",
+        "benchmark observed locations",
+      ) ?? 0,
+    benchmarkScoredLocations:
+      numericValue(
+        row,
+        "_benchmark_scored_locations",
+        "benchmark scored locations",
+      ) ?? 0,
+    benchmarkUnscoredLocations:
+      numericValue(
+        row,
+        "_benchmark_unscored_locations",
+        "benchmark unscored locations",
+      ) ?? 0,
+    locationCoverageRate: numericValue(
+      row,
+      "_location_coverage_rate",
+      "location coverage rate",
+    ),
+    competitorContributingLocations:
+      numericValue(
+        row,
+        "_competitor_contributing_locations",
+        "competitor contributing locations",
+      ) ?? 0,
+    competitorContributingStores:
+      numericValue(
+        row,
+        "_competitor_contributing_stores",
+        "competitor contributing stores",
+      ) ?? 0,
+    competitorContributingServiceAreas:
+      numericValue(
+        row,
+        "_competitor_contributing_service_areas",
+        "competitor contributing service areas",
+      ) ?? 0,
     benchmarkLowerRate:
       numericValue(row, "_benchmark_lower_rate", "benchmark lower") ?? 0,
     competitorLowerRate:

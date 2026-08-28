@@ -16,7 +16,7 @@
     "assortment_scorecards"
   ],
   "properties": {
-    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"] },
+    "schema_version": { "enum": ["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0"] },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
@@ -86,6 +86,13 @@
         "benchmark_product_locations": { "type": "integer", "minimum": 0 },
         "scored_product_locations": { "type": "integer", "minimum": 0 },
         "coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "benchmark_observed_locations": { "type": "integer", "minimum": 0 },
+        "benchmark_scored_locations": { "type": "integer", "minimum": 0 },
+        "benchmark_unscored_locations": { "type": "integer", "minimum": 0 },
+        "location_coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "competitor_contributing_locations": { "type": "integer", "minimum": 0 },
+        "competitor_contributing_stores": { "type": "integer", "minimum": 0 },
+        "competitor_contributing_service_areas": { "type": "integer", "minimum": 0 },
         "leader_product_locations": { "type": "integer", "minimum": 0 },
         "tied_product_locations": { "type": "integer", "minimum": 0 },
         "at_risk_product_locations": { "type": "integer", "minimum": 0 },
