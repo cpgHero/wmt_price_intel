@@ -17,8 +17,11 @@ A cold, large Price Intelligence request performed CPU-heavy offer normalization
 - Run canonical product-location population construction outside the API event loop.
 - Run Price Intelligence catalog projection and contract validation outside the API event loop.
 - Apply the same protection to full evidence-export and map projections.
+- Coalesce concurrent requests for the same cold catalog into one shared build.
+- Shield that build from a browser or web timeout so it can finish and populate the cache for the next request.
+- Convert decoded Parquet frames to Python records outside the API event loop.
 - Retain existing deterministic formulas, source authority, schema validation, and in-process caches.
-- Add a regression test that holds a projection open and proves an independent event-loop heartbeat remains responsive.
+- Add a regression test that holds a projection open, proves an independent event-loop heartbeat remains responsive, cancels the initiating request, and confirms the next request joins the same surviving build.
 
 ## Operational response
 

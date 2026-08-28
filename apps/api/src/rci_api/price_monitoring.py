@@ -223,8 +223,7 @@ class S3ParquetReader:
 
     async def _download(self, artifact: ClassifiedArtifact) -> list[dict[str, Any]]:
         body = await self._body(artifact)
-        frame = await asyncio.to_thread(self._decode, body)
-        return frame.to_dicts()
+        return await asyncio.to_thread(lambda: self._decode(body).to_dicts())
 
     async def read_products(
         self,
@@ -255,8 +254,7 @@ class S3ParquetReader:
                 .collect()
             )
 
-        frame = await asyncio.to_thread(decode_products)
-        return frame.to_dicts()
+        return await asyncio.to_thread(lambda: decode_products().to_dicts())
 
     async def _body(self, artifact: ClassifiedArtifact) -> bytes:
         cached = self._body_cache.get(artifact.checksum)
@@ -775,6 +773,7 @@ class PriceMonitoringService:
         self._projector_cache: dict[str, PriceMonitoringProjector] = {}
         self._projector_locks: dict[str, asyncio.Lock] = {}
         self._view_cache: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._view_tasks: dict[tuple[str, ...], asyncio.Task[dict[str, Any]]] = {}
         self._map_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._architecture_cache: dict[tuple[str, ...], dict[str, Any]] = {}
         self._product_observation_cache: dict[
@@ -1012,6 +1011,9 @@ class PriceMonitoringService:
         cached = self._view_cache.get(cache_key)
         if cached is not None:
             return cached
+        existing_task = self._view_tasks.get(cache_key)
+        if existing_task is not None:
+            return await asyncio.shield(existing_task)
 
         def project_and_validate() -> dict[str, Any]:
             projected = self._project(
@@ -1027,14 +1029,32 @@ class PriceMonitoringService:
             )
             return projected
 
-        # Building a large product-location catalog is CPU-heavy. Running it on
-        # the event-loop thread can make even /health/ready and small analysis
-        # reads time out, which presents a healthy process as an API outage.
-        view = await asyncio.to_thread(project_and_validate)
-        if len(self._view_cache) >= 96:
-            self._view_cache.pop(next(iter(self._view_cache)))
-        self._view_cache[cache_key] = view
-        return view
+        async def populate_cache() -> dict[str, Any]:
+            # Building a large product-location catalog is CPU-heavy. Running it
+            # on the event-loop thread can make even /health/ready and small
+            # analysis reads time out, which presents a healthy process as an
+            # API outage.
+            projected = await asyncio.to_thread(project_and_validate)
+            if len(self._view_cache) >= 96:
+                self._view_cache.pop(next(iter(self._view_cache)))
+            self._view_cache[cache_key] = projected
+            return projected
+
+        task = asyncio.create_task(populate_cache())
+        self._view_tasks[cache_key] = task
+
+        def discard(completed: asyncio.Task[dict[str, Any]]) -> None:
+            if self._view_tasks.get(cache_key) is completed:
+                self._view_tasks.pop(cache_key, None)
+            if not completed.cancelled():
+                # Retrieve a background exception even when the initiating HTTP
+                # client disconnected before the projection completed.
+                completed.exception()
+
+        task.add_done_callback(discard)
+        # Client timeouts must not cancel the shared cold build. Later requests
+        # join the same task and the completed result remains cached.
+        return await asyncio.shield(task)
 
     @staticmethod
     def _architecture_retailer_input(

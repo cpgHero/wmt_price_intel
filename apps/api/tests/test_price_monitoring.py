@@ -5,6 +5,7 @@ import hashlib
 import json
 import threading
 import time
+from contextlib import suppress
 from io import BytesIO
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -27,6 +28,7 @@ from rci_api.price_monitoring import (
 async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch: object) -> None:
     service = object.__new__(PriceMonitoringService)
     service._view_cache = {}
+    service._view_tasks = {}
     service._root = Path(__file__).resolve().parents[3]
     prepared = SimpleNamespace(
         analysis=SimpleNamespace(analysis_id="analysis-1"),
@@ -34,6 +36,7 @@ async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch:
     )
     started = threading.Event()
     release = threading.Event()
+    project_calls = 0
 
     async def prepare(
         _service: PriceMonitoringService,
@@ -48,6 +51,8 @@ async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch:
         _filters: PriceMonitoringFilters,
         **_limits: object,
     ) -> dict[str, object]:
+        nonlocal project_calls
+        project_calls += 1
         started.set()
         assert release.wait(timeout=2)
         return {"schema_version": "test"}
@@ -68,8 +73,20 @@ async def test_large_price_projection_does_not_block_api_event_loop(monkeypatch:
     await asyncio.sleep(0.02)
     assert time.monotonic() - heartbeat_started < 0.2
 
+    # A timed-out HTTP request must not abandon the expensive build or cause a
+    # later request to start the same projection again.
+    view_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await view_task
+    joined_task = asyncio.create_task(
+        service.view("analysis-1", PriceMonitoringFilters(retailer_id="walmart_us"))
+    )
+    await asyncio.sleep(0.02)
+    assert project_calls == 1
+
     release.set()
-    assert await view_task == {"schema_version": "test"}
+    assert await joined_task == {"schema_version": "test"}
+    assert service._view_cache
 
 
 def _artifact(artifact_id: str, partition: int, rows: int, created_at: str) -> ClassifiedArtifact:
