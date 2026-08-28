@@ -1,7 +1,7 @@
 # Phase 13.70 — Cohort Human Price Basis
 
 Date: 2026-08-28  
-Status: Implemented and regression-verified; production verification pending deployment
+Status: Deployed and production-verified
 
 ## Decision
 
@@ -59,5 +59,20 @@ competitor evidence, normalized calculations, or stored report artifacts.
 - Mixed-volume fluid cohorts have a per-fluid-ounce primary-basis regression.
 - Non-volume metrics have a no-change regression.
 - Web type checking and linting pass with the pinned Node and pnpm toolchain.
-- Full web tests, production build, deployment, live Milk verification, and
-  readiness verification remain required before this record is marked deployed.
+- All 81 web tests, lint, type checking, formatting, and the Next.js production
+  build passed locally with the pinned toolchain.
+- GitHub Actions run `33182901876` passed Python, contracts, reversible
+  migrations, TypeScript, all 15 browser tests, the production build, and all
+  four container builds.
+- Railway web deployment `057b530e-74b5-44a3-b4f1-4ff422ee0e94` succeeded.
+- The live ALDI / brand-neutral / five-mile Milk view contains exactly one
+  target cohort row. It displays `$5.96` and `$3.85 per 64 fl oz package`,
+  `$0.0931` and `$0.0602 per fl oz`, and an ALDI-lower paired median difference
+  of `$2.07 per 64 fl oz package`. It does not display the gallon-normalized
+  values as the primary price.
+- The live included-products drawer opened in 376 milliseconds, showed all
+  eight governed relationships, stated the package, per-fluid-ounce, and
+  canonical audit bases, and produced no browser warning or error.
+- Web readiness returned HTTP 200 with the API dependency ready in 0.229
+  seconds. The report route returned HTTP 200 with a 0.160-second response
+  start. No report rebuilding or materialization was triggered for acceptance.

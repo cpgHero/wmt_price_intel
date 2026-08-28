@@ -1624,9 +1624,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-28",
-              "Implemented and regression-verified",
+              "Deployed and production-verified",
               "Fixed-volume Cohort Scorecards lead with the shopper-visible package basis instead of a gallon equivalent.",
-              "The ALDI 64 fl oz whole-organic Milk cohort now presents Walmart $5.96 and ALDI $3.85 per 64 fl oz package, with $0.0931 and $0.0602 per fl oz as secondary context. Its paired median difference displays as ALDI $2.07 per 64 fl oz package lower. Mixed-volume fluid cohorts lead with per-fluid-ounce values. Canonical USD/gallon values remain unchanged in audit/export lineage, and all non-volume metrics retain their prior presentation. The change is a pure deterministic browser projection over already-loaded cohort values: it adds no API request, database read, materialization, provider call, or AI call.",
+              "The ALDI 64 fl oz whole-organic Milk cohort now presents Walmart $5.96 and ALDI $3.85 per 64 fl oz package, with $0.0931 and $0.0602 per fl oz as secondary context. Its paired median difference displays as ALDI $2.07 per 64 fl oz package lower. Live validation found exactly one matching cohort row, all eight governed relationships in the drawer, a 376 ms drawer open, and zero browser warnings or errors. Mixed-volume fluid cohorts lead with per-fluid-ounce values. Canonical USD/gallon values remain unchanged in audit/export lineage, and all non-volume metrics retain their prior presentation. The change is a pure deterministic browser projection over already-loaded cohort values: it adds no API request, database read, materialization, provider call, or AI call. CI run 33182901876 passed the full release gate and Railway web deployment 057b530e-74b5-44a3-b4f1-4ff422ee0e94 succeeded.",
             ],
             [
               "2026-08-27",
