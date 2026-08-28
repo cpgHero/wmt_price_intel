@@ -1,7 +1,7 @@
 # Phase 13.66 — API Cold-Path Resilience
 
 Date: 2026-08-27  
-Status: Implemented; production deployment pending
+Status: Deployed and production availability-verified
 
 ## Incident
 
@@ -36,10 +36,15 @@ When web `/health/ready` reports `api: unavailable`:
 
 This change affects execution scheduling only. It does not alter Search or PDP evidence, product scope, price calculations, first-party governance, match certification, report metrics, source artifacts, or audit history.
 
-## Verification required before completion
+## Production verification
 
-- Targeted API tests and formatting/lint gates pass.
-- GitHub release gates pass.
-- Railway API deployment succeeds.
-- Web `/health/ready` remains HTTP 200 during a cold large Price Intelligence request.
-- The Price Intelligence library, large catalog, and product workspace load successfully in production.
+- Thirteen targeted API tests passed, including event-loop responsiveness and disconnected-caller single-flight coverage.
+- GitHub Actions run `33130172564` passed Python, TypeScript, contract, migration, browser, production-build, and all four container gates.
+- Railway web deployment `f2ea0b54-f878-4f31-b658-ceeb75dc3e04` and API deployment `f7b28b84-0ee5-49ab-89db-cbb84c36f3d8` succeeded.
+- Web `/health/ready` remained HTTP 200 for every poll during concurrent cold Milk catalog requests, generally in 0.20–0.24 seconds.
+- After the shared build populated the cache, three complete Milk catalog requests returned in 0.46–0.78 seconds.
+- A live Chrome validation rendered all 649 products, filters, price/unit-price evidence, observed/not-observed store counts, and seller evidence with no console warnings or errors. The first product workspace opened successfully with its exact-product footprint.
+
+## Remaining performance boundary
+
+The largest catalog can still exceed the web request timeout when it must be rebuilt from raw retained evidence after an API deployment. The shared build now survives that timeout, does not make the API unavailable, and serves subsequent requests quickly, but the first caller can still see a temporary unavailable state. Phase 13.67 should persist the compact catalog during publication so no end-user request owns that cold computation.
