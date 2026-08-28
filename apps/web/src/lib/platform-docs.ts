@@ -1629,9 +1629,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-28",
-              "Implemented and release-validated",
+              "Deployed, backfilled, and production-verified",
               "Retailer and Cohort Scorecards use distinct-store comparison coverage instead of product-location volume as the primary coverage KPI.",
-              "Competitive Portfolio 1.6.0 deduplicates benchmark and competitor locations, preserves observed-but-unscored cohort stores in the denominator, labels Amazon-style service areas as delivery ZIPs, and keeps product-location evidence only for price-result lineage. The release audit reconciles location partitions, rates, and Retailer-to-Assortment consistency. No Search price, PDP evidence, certified relationship, AI decision, or lower-price outcome changed.",
+              "Competitive Portfolio 1.6.0 deduplicates benchmark and competitor locations, preserves observed-but-unscored cohort stores in the denominator, labels Amazon-style service areas as delivery ZIPs, and keeps product-location evidence only for price-result lineage. All 48 configured portfolio documents across the six active reports were rebuilt from retained evidence through a worker-safe sequential process and passed their complete basis-by-1/3/5-mile semantic gates. Live Milk validation reconciled ALDI at 2,273 of 4,574 distinct Walmart stores (49.69%) and 1,877 contributing ALDI stores at three miles; the scorecard API returned in 0.23 seconds, the five-mile control changed to 2,687 of 4,574 stores, service-area coverage remained same-ZIP, readiness stayed green during the worker rebuild, and the browser console was clean. Commit 2c8f81a and GitHub Actions run 33188271627 passed the full release gate; Railway API deployment 7ba061f7-514a-4126-b26f-49a48e693351 and web deployment 03fbec8b-ed3e-4f35-ac41-2cdef68d4acf succeeded. No Search price, PDP evidence, certified relationship, AI decision, or lower-price outcome changed.",
             ],
             [
               "2026-08-28",

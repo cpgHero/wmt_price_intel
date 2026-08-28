@@ -50,3 +50,18 @@ audit requires the fields and verifies:
 No Search data, PDP evidence, certified relationship, price outcome, or AI decision is changed
 by this phase. Existing portfolio materializations must be rebuilt from retained evidence before
 the new store-level metrics are published.
+
+## Production acceptance
+
+- Commit `2c8f81a` passed GitHub Actions run `33188271627`, including Python, TypeScript,
+  browser, contract, reversible-migration, production-build, and all four container gates.
+- Railway API deployment `7ba061f7-514a-4126-b26f-49a48e693351` and web deployment
+  `03fbec8b-ed3e-4f35-ac41-2cdef68d4acf` succeeded.
+- All 48 configured Competitive Portfolio documents across the six active reports were rebuilt
+  from retained evidence as schema `1.6.0` and passed their complete comparison-basis by
+  1/3/5-mile semantic gates.
+- The live Milk All Brand / ALDI / three-mile scorecard reconciled to 2,273 covered of 4,574
+  observed Walmart stores (49.69%) and 1,877 contributing ALDI stores. The materialized API
+  returned in 0.23 seconds.
+- Switching to five miles changed ALDI to 2,687 of 4,574 Walmart stores (58.75%); Amazon Same
+  Day retained same-ZIP service-area coverage as designed. The live browser console was clean.

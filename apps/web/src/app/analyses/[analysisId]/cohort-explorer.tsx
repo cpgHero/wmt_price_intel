@@ -390,10 +390,10 @@ export function ComparableCohortExplorer({
             <div>
               <h3>Price Position Table</h3>
               <p>
-                One retailer-level total across every eligible certified
-                product-location in the current competitor, comparison basis,
-                geography, and {radiusMiles}-mile radius. It answers: “Who is
-                lower overall, and how much evidence supports that conclusion?”
+                Counts each {benchmarkName} store once for coverage, then uses
+                the eligible paired product prices at those stores to explain
+                who is lower overall. The current competitor, comparison basis,
+                geography, and {radiusMiles}-mile radius govern both measures.
               </p>
             </div>
           </article>
@@ -422,10 +422,12 @@ export function ComparableCohortExplorer({
             <p className="eyebrow">Overall retailer position</p>
             <h2>Price Position Table</h2>
             <p>
-              Retailer-level outcomes at observed {benchmarkName} product-store
-              grain. Physical competitors must have eligible evidence within{" "}
-              {radiusMiles}
-              mile{radiusMiles === 1 ? "" : "s"}; service-area retailers use the
+              Store coverage counts each observed {benchmarkName} store once,
+              regardless of how many comparable products were found there.
+              Lower-price share and average position use the underlying paired
+              local product-price comparisons. Physical competitors must have
+              eligible evidence within {radiusMiles} mile
+              {radiusMiles === 1 ? "" : "s"}; service-area retailers use the
               same delivery ZIP.
             </p>
           </div>
@@ -539,9 +541,9 @@ export function ComparableCohortExplorer({
               Which product cohorts explain—or reverse—the overall position
             </h2>
             <p>
-              Each row summarizes certified one-to-one product relationships at
-              observed benchmark product-store grain. Physical competitor
-              evidence must fall within
+              Each row counts covered {benchmarkName} stores once, then uses
+              certified one-to-one product relationships to calculate its price
+              outcomes. Physical competitor evidence must fall within
               {` ${radiusMiles} mile${radiusMiles === 1 ? "" : "s"}`};
               service-area retailers use the same delivery ZIP.
             </p>
