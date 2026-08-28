@@ -1,7 +1,7 @@
 # Phase 13.68 — Competitive Context-Switch Resilience
 
 Date: 2026-08-27  
-Status: Implemented; production verification pending
+Status: Deployed and production-verified
 
 ## Incident
 
@@ -58,3 +58,22 @@ rendered by the active tab and never recompute analytical values in the browser.
   Scorecards, open included-product evidence, traverse another Competitive tab, and confirm a clean
   browser console.
 - A representative Price Intelligence catalog must still load after deployment.
+
+## Production acceptance
+
+- Railway API and web run commit `c396153`; health and readiness return HTTP 200 in about 0.2
+  seconds.
+- The Vitamins exact- and compatible-specification Retailer Scorecard projections are 8.5 KB and
+  8.6 KB, down from the 1.29 MB complete compatible document. Live reads completed in 0.9–1.4
+  seconds.
+- The visible top-bar comparison-basis switch replaced exact specification with compatible
+  specification in 2.36 seconds, updated the scorecard from six to nine scored retailers, updated
+  the URL, closed the context drawer, and left no Building state.
+- Target's complete included-product evidence loaded lazily in 4.51 seconds, rendered the first 25
+  governed relationship rows, and produced no error.
+- A clean isolated load rendered all 60 Vitamin cohort scorecards; the representative Milk Price
+  Intelligence catalog rendered 649 governed products. Neither page emitted a browser warning or
+  error.
+- CI run `33137061424` passed Python formatting, lint, mypy, migrations, the complete Python suite,
+  contracts, TypeScript formatting/lint/typecheck, 76 web unit tests, the production build, browser
+  tests, and all four service-container builds.

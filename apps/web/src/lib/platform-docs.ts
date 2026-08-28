@@ -1623,9 +1623,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-27",
-              "Implemented; production verification pending",
+              "Deployed and production-verified",
               "Competitive comparison-basis changes use demand-loaded, tab-specific scorecard projections with bounded recovery.",
-              "Retailer, cohort, and assortment tabs request only the evidence they render; other report tabs make no portfolio request. Included-product relationships load only after the user opens one retailer drawer. A 20-second browser bound and Retry scorecards action replace the indefinite Building state. The immutable full portfolio, certified relationships, radius metrics, semantic audit, Search/PDP evidence, and report lineage are unchanged.",
+              "Retailer, cohort, and assortment tabs request only the evidence they render; other report tabs make no portfolio request. Included-product relationships load only after the user opens one retailer drawer. A 20-second browser bound and Retry scorecards action replace the indefinite Building state. The live Vitamin scorecard basis switch completed in 2.36 seconds; its projected payload is 8.6 KB rather than the prior 1.29 MB complete document. Target evidence loaded on demand, all 60 Vitamin cohorts and the 649-product Milk catalog rendered, and both browser consoles were clean. CI run 33137061424 and Railway API/web commit c396153 passed. The immutable full portfolio, certified relationships, radius metrics, semantic audit, Search/PDP evidence, and report lineage are unchanged.",
             ],
             [
               "2026-08-27",
