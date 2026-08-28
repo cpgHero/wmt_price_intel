@@ -83,7 +83,7 @@ const lastVerified = "August 27, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.68",
+  version: "1.3.69",
   lastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1623,9 +1623,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-27",
-              "Implemented; production verification pending",
+              "Deployed, backfilled, and production-verified",
               "Price Intelligence catalogs moved into durable trust-gated publication with server-side paging and filters.",
-              "Every configured retailer gains a checksummed compact catalog staged and atomically activated with the report. Home requests 40 products at a time and filters by search, brand, brand type, and PDP seller without hydrating the entire catalog; full product/location/PDP evidence loads only after product selection. Production backfill proved that three concurrent cold catalogs can degrade readiness, so the governed worker and operational backfill run one at a time. Migration 0048_price_catalog is reversible, and an internal zero-provider-call backfill supports active reports. No Search, PDP, AI, certification, metric, source authority, or audit-lineage behavior changes.",
+              "Every configured retailer gains a checksummed compact catalog staged and atomically activated with the report. Home requests 40 products at a time and filters by search, brand, brand type, and PDP seller without hydrating the entire catalog; full product/location/PDP evidence loads only after product selection. Production backfill proved that three concurrent cold catalogs can degrade readiness, so the governed worker and operational backfill run one at a time. Migration 0048_price_catalog is reversible. The zero-provider-call backfill installed all 36 required catalogs across six active reports, including every configured Egg and Vitamin retailer. Warm paged reads returned in 0.44–0.51 seconds; Walmart Milk Home returned HTTP 200 in 0.65 seconds with a 0.22-second response start. Live validation confirmed Egg 40-of-172 paging and expansion, Milk 40-of-649 paging and regional-brand filtering, lazy full-product evidence, and a clean browser console. A production-only prop-wiring defect that initially hid pagination after 40 products was corrected in commit 3ea1fe0. CI runs 33133624891, 33133947107, and 33135131201 passed. No Search, PDP, AI, certification, metric, source authority, report lineage, or archived-report behavior changed.",
             ],
             [
               "2026-08-27",

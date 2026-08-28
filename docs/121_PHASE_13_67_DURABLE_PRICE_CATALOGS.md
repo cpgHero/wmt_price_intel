@@ -1,7 +1,7 @@
 # Phase 13.67 — Durable Price Intelligence Catalogs
 
 Date: 2026-08-27  
-Status: Implemented; production verification pending
+Status: Deployed, backfilled, and production-verified
 
 ## Outcome
 
@@ -60,5 +60,26 @@ lineage are unaffected.
 - live API readiness during backfill;
 - live Home initial response size/time, filter, load-more, product-open, and console verification.
 
-The production status in this record and Platform Docs must be updated only after deployment,
-backfill, and browser verification complete.
+## Production verification
+
+- Railway reached migration head `0048_price_catalog`; API, web, worker, scheduler, Postgres, and
+  readiness remained healthy after deployment.
+- The sequential zero-provider-call backfill installed all 36 required catalogs across the six
+  active reports. This includes all 14 Egg retailers, three retailers each for Ground Beef,
+  Bananas, Strawberries, and Milk, and ten Vitamin retailers.
+- The largest validated catalogs contain 831 Walgreens Vitamin products, 726 Meijer Vitamin
+  products, 719 Amazon Same Day Vitamin products, and 649 Walmart Milk products.
+- Warm paged catalog reads returned in 0.44–0.51 seconds in production. Walmart Milk Home returned
+  HTTP 200 in 0.65 seconds with a 0.22-second server response start; the 40-row catalog payload was
+  319 KB. The complete selected Ground Beef product workspace remained lazy and returned in 0.49
+  seconds.
+- Live browser verification confirmed Ground Beef search, full-product opening, Egg `40 of 172`
+  paging and expansion to `80 of 172`, Milk `40 of 649`, regional-brand filtering to `256 of 649`,
+  and a clean warning/error console.
+- Production validation found and corrected one integration defect where the unselected-product
+  Home path omitted the catalog pagination object. Commit `3ea1fe0` preserves total counts,
+  server-side filters, and load-more behavior on that path.
+- CI runs `33133624891`, `33133947107`, and `33135131201` passed. Production runs API commit
+  `63ccb02`, worker commit `f8b6907`, and web commit `3ea1fe0`.
+- No Search, PDP, AI, or other paid provider call was made. No source evidence, certification,
+  metric, denominator, publication lineage, or archived report was changed.
