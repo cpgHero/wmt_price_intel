@@ -52,7 +52,10 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
     name: "Search all platform docs",
   });
   await search.fill("paired median gap");
-  await expect(page.getByText("1 guide found")).toBeVisible();
+  await expect(page.getByText("2 guides found")).toBeVisible();
+  await page
+    .getByRole("button", { name: /Metric & evidence dictionary/ })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Metric & evidence dictionary" }),
   ).toBeVisible();
