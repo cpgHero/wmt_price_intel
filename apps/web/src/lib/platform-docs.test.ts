@@ -216,7 +216,9 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
     expect(text).toContain("operator-attested");
-    expect(text).toContain("daily and weekly railway volume backup schedules are active");
+    expect(text).toContain(
+      "daily and weekly railway volume backup schedules are active",
+    );
     expect(text).toContain("pitr remains disabled");
     expect(text).toContain("migration mismatch");
     expect(text).toContain("zero-credit canary");
