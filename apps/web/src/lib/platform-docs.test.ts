@@ -10,7 +10,10 @@ function allText(): string {
 
 function repositoryJson<T>(relativePath: string): T {
   return JSON.parse(
-    readFileSync(new URL(`../../../../${relativePath}`, import.meta.url), "utf8"),
+    readFileSync(
+      new URL(`../../../../${relativePath}`, import.meta.url),
+      "utf8",
+    ),
   ) as T;
 }
 
@@ -122,14 +125,18 @@ describe("platform owner and administrator documentation", () => {
       }>;
     }>("config/metricscart-endpoint-overrides.json");
     const runtimeOverrides = new Map(
-      overrides.overrides.map((entry) => [entry.retailer_id, entry.runtime_path]),
+      overrides.overrides.map((entry) => [
+        entry.retailer_id,
+        entry.runtime_path,
+      ]),
     );
     const pdpByRetailer = new Map(
       pdpCatalog.endpoints.map((entry) => [entry.retailer_id, entry]),
     );
     const searchTable = guide?.blocks.find(
       (block) =>
-        block.kind === "table" && block.title === "Enabled Search-by-ZIP adapters",
+        block.kind === "table" &&
+        block.title === "Enabled Search-by-ZIP adapters",
     );
     const pdpTable = guide?.blocks.find(
       (block) =>
@@ -185,9 +192,13 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("retailer pack");
     expect(text).toContain("multiple products at one store count once");
     expect(text).toContain("physical competitors count distinct stores");
-    expect(text).toContain("service-area retailers count distinct delivery zips");
+    expect(text).toContain(
+      "service-area retailers count distinct delivery zips",
+    );
     expect(text).toContain("selected 1, 3, or 5 miles");
     expect(text).toContain("not proof of out-of-stock or non-carriage");
-    expect(text).toContain("ai does not calculate or repair authoritative values");
+    expect(text).toContain(
+      "ai does not calculate or repair authoritative values",
+    );
   });
 });
