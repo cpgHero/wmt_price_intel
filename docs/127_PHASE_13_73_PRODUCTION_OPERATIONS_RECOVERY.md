@@ -34,6 +34,12 @@ The read-only workspace exposes:
 The endpoint never serializes arbitrary environment values, API keys, database/bucket credentials,
 or admin/session secrets. Provider billing remains financially authoritative.
 
+Service-specific settings are not inferred across Railway containers. In particular, an API-local
+`COLLECTION_PROVIDER` value is displayed only when the API service actually exposes it; otherwise
+the page says **Not exposed to API**. The worker remains independently fail-closed against
+`COLLECTION_PROVIDER=fake` in production. A durable service heartbeat would be required before this
+console could truthfully claim the worker's complete runtime configuration.
+
 ### Fail-closed operational state
 
 System Operations reports `blocked` when the database migration does not match the deployed

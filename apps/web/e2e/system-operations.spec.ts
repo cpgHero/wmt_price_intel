@@ -86,7 +86,7 @@ const snapshot = {
     provider_billing_is_authoritative: true,
   },
   controls: {
-    collection_provider: "metricscart",
+    collection_provider: null,
     product_detail_enrichment_enabled: true,
     analysis_pipeline_enabled: true,
     matching_ai_review_enabled: true,
@@ -150,6 +150,7 @@ test("renders live release, queue, spend, and recovery state", async ({
     page.getByRole("heading", { name: "Queue health" }),
   ).toBeVisible();
   await expect(page.getByText("$0.30")).toBeVisible();
+  await expect(page.getByText("Not exposed to API")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Backup and restore readiness" }),
   ).toBeVisible();

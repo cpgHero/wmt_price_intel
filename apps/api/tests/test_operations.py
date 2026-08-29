@@ -92,6 +92,7 @@ async def test_operations_snapshot_exposes_live_controls_without_secrets(monkeyp
     }
     assert document["spend_30d"]["metricscart_estimated_usd"] == 0.3
     assert document["spend_30d"]["ai_estimated_usd"] == 1.25
+    assert document["controls"]["collection_provider"] is None
     assert document["overall_state"] in {"healthy", "attention"}
     serialized = response.text
     assert "must-not-leak" not in serialized

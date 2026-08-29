@@ -348,7 +348,7 @@ async def _build_snapshot(
             "provider_billing_is_authoritative": True,
         },
         "controls": {
-            "collection_provider": os.getenv("COLLECTION_PROVIDER", "fake"),
+            "collection_provider": os.getenv("COLLECTION_PROVIDER") or None,
             "product_detail_enrichment_enabled": _enabled("PRODUCT_DETAIL_ENRICHMENT_ENABLED"),
             "analysis_pipeline_enabled": _enabled("ANALYSIS_PIPELINE_ENABLED", "true"),
             "matching_ai_review_enabled": _enabled("MATCHING_V2_AI_REVIEW_ENABLED"),

@@ -86,7 +86,7 @@ const productionOperationsLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.72",
+  version: "1.3.73",
   lastVerified: productionOperationsLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2865,6 +2865,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "Production truth-label correction",
+              "System Operations stopped inferring the worker collection provider from the API service's environment.",
+              "The live API service does not own COLLECTION_PROVIDER, while the worker is independently configured for metricscart. An absent API-local value now displays as Not exposed to API instead of the API code default fake. Queue, spend, provider, AI, Search, PDP, matching, and publication behavior are unchanged; a future service heartbeat is required before the console can claim worker runtime configuration directly.",
+            ],
             [
               "2026-08-29",
               "Implemented and release-tested",

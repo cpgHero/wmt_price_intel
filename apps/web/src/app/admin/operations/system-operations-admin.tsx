@@ -56,7 +56,7 @@ interface OperationsSnapshot {
     provider_billing_is_authoritative: boolean;
   };
   controls: {
-    collection_provider: string;
+    collection_provider: string | null;
     product_detail_enrichment_enabled: boolean;
     analysis_pipeline_enabled: boolean;
     matching_ai_review_enabled: boolean;
@@ -313,13 +313,16 @@ function OperationsWorkspace({
               </dd>
             </div>
             <div>
-              <dt>Collection provider</dt>
-              <dd>{snapshot.controls.collection_provider}</dd>
+              <dt>API-visible collection provider</dt>
+              <dd>
+                {snapshot.controls.collection_provider ?? "Not exposed to API"}
+              </dd>
             </div>
           </dl>
           <p className={styles.note}>
             Application estimates support reconciliation; MetricsCart and OpenAI
-            billing portals remain the financial authority.
+            billing portals remain the financial authority. Service-specific
+            worker settings are not inferred from the API environment.
           </p>
         </section>
         <section className={styles.panel}>
