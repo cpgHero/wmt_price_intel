@@ -86,7 +86,7 @@ const productionOperationsLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.74",
+  version: "1.3.75",
   lastVerified: productionOperationsLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2865,6 +2865,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "Implemented; production acceptance pending",
+              "Successful report activation now recoverably retires superseded blocked predecessors, and the default legacy Price read reuses the publication-bound compact catalog.",
+              "Blocked history, validation, jobs, source data, PDP evidence, certification, and audits remain intact after archival. Unfiltered default Price reads avoid duplicate cold Parquet projection; filtered and product-level drill-downs keep their detailed evidence path, and older reports without a catalog retain the live compatibility fallback. No provider, PDP, AI, collection, matching, metric, or geography behavior changed.",
+            ],
             [
               "2026-08-29",
               "Isolated restore passed; production attestations ready",

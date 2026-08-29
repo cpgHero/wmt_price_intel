@@ -621,7 +621,7 @@ async def finalize_report_materialization(
                         WHERE predecessor.analysis_run_id = predecessor_run.id
                           AND predecessor_run.product_pack_id = :product_pack_id
                           AND predecessor.id <> CAST(:analysis_result_id AS uuid)
-                          AND predecessor.reporting_status = 'ready'
+                          AND predecessor.reporting_status IN ('ready', 'blocked')
                           AND predecessor.archived_at IS NULL
                         RETURNING predecessor.id::text
                         """

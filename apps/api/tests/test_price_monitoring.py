@@ -402,6 +402,11 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
 
 async def test_price_monitoring_api_passes_governed_filters() -> None:
     class PriceService:
+        async def catalog_document(
+            self, analysis_id: str, retailer_id: str
+        ) -> dict[str, object] | None:
+            raise AssertionError("filtered views must not use the default catalog shortcut")
+
         async def view(self, analysis_id: str, filters: object) -> dict[str, object]:
             assert analysis_id == "analysis-1"
             assert filters.retailer_id == "walmart_us"
@@ -433,6 +438,66 @@ async def test_price_monitoring_api_passes_governed_filters() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"analysis_id": "analysis-1", "retailer": "walmart_us"}
+
+
+async def test_default_price_monitoring_api_uses_publication_catalog() -> None:
+    class PriceService:
+        async def catalog_document(
+            self, analysis_id: str, retailer_id: str
+        ) -> dict[str, object] | None:
+            assert (analysis_id, retailer_id) == ("analysis-1", "walmart_us")
+            return {
+                "schema_version": "1.0.0",
+                "analysis_id": analysis_id,
+                "products": [{"product_id": "123"}],
+            }
+
+        async def view(self, _analysis_id: str, _filters: object) -> dict[str, object]:
+            raise AssertionError("the default view must not rebuild classified Search evidence")
+
+    app = create_app()
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/analyses/analysis-1/price-monitoring",
+            params={"retailer": "walmart_us"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["products"] == [{"product_id": "123"}]
+
+
+async def test_default_price_monitoring_api_falls_back_when_catalog_is_absent() -> None:
+    class PriceService:
+        async def catalog_document(
+            self, analysis_id: str, retailer_id: str
+        ) -> dict[str, object] | None:
+            assert (analysis_id, retailer_id) == ("analysis-1", "walmart_us")
+            return None
+
+        async def view(self, analysis_id: str, filters: object) -> dict[str, object]:
+            assert analysis_id == "analysis-1"
+            assert filters.retailer_id == "walmart_us"
+            return {"analysis_id": analysis_id, "source": "live-fallback"}
+
+    app = create_app()
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/analyses/analysis-1/price-monitoring",
+            params={"retailer": "walmart_us"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"analysis_id": "analysis-1", "source": "live-fallback"}
 
 
 async def test_price_monitoring_api_rejects_unknown_brand_filter() -> None:

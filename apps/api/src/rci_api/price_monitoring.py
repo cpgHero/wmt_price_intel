@@ -1193,6 +1193,15 @@ class PriceMonitoringService:
             )
         return document
 
+    async def catalog_document(
+        self,
+        analysis_id: str,
+        retailer_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the publication-bound compact catalog without rebuilding evidence."""
+
+        return await self._repository.catalog_materialization(analysis_id, retailer_id)
+
     async def catalog_page(
         self,
         analysis_id: str,
@@ -1914,18 +1923,26 @@ async def price_monitoring_view(
     zipcode: str | None = None,
     product_id: str | None = None,
 ) -> dict[str, Any]:
+    filters = PriceMonitoringFilters(
+        retailer_id=retailer,
+        brand_type=brand_type,
+        state=state_filter,
+        city=city,
+        zipcode=zipcode,
+        product_id=product_id,
+    )
     try:
-        return await service.view(
-            analysis_id,
-            PriceMonitoringFilters(
-                retailer_id=retailer,
-                brand_type=brand_type,
-                state=state_filter,
-                city=city,
-                zipcode=zipcode,
-                product_id=product_id,
-            ),
-        )
+        if (
+            filters.brand_type == "all"
+            and filters.state is None
+            and filters.city is None
+            and filters.zipcode is None
+            and filters.product_id is None
+        ):
+            catalog = await service.catalog_document(analysis_id, retailer)
+            if catalog is not None:
+                return catalog
+        return await service.view(analysis_id, filters)
     except AnalysisNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except LookupError as exc:
