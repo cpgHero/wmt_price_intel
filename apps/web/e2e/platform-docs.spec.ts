@@ -39,7 +39,7 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Platform Owner & Administrator Guide" }),
   ).toBeVisible();
-  await expect(page.getByText("17 maintained guides")).toBeVisible();
+  await expect(page.getByText("18 maintained guides")).toBeVisible();
 
   await page
     .getByRole("button", { name: /Data lifecycle: collection to reporting/ })
@@ -58,5 +58,19 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByText("The median of competitor price minus benchmark price"),
+  ).toBeVisible();
+
+  await search.fill("product-image vision");
+  await expect(page.getByText("1 guide found")).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "AI integration & operating boundaries",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Current production AI inventory" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Human decision boundary" }),
   ).toBeVisible();
 });

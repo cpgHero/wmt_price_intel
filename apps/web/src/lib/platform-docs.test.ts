@@ -40,6 +40,7 @@ describe("platform owner and administrator documentation", () => {
   it("maintains valid tables, internal links, limitations, and change orders", () => {
     const ids = new Set(platformDocumentation.guides.map((guide) => guide.id));
     expect(ids).toContain("data-lifecycle");
+    expect(ids).toContain("ai-integration-map");
     expect(ids).toContain("limitations");
     expect(ids).toContain("change-orders");
 
@@ -64,5 +65,24 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(changeOrders).toBeDefined();
     expect(JSON.stringify(changeOrders)).toContain("2026-08-16");
+  });
+
+  it("documents every current AI lane and the deterministic authority boundary", () => {
+    const guide = platformDocumentation.guides.find(
+      (candidate) => candidate.id === "ai-integration-map",
+    );
+    const text = JSON.stringify(guide).toLocaleLowerCase();
+
+    expect(text).toContain("governed insight drafting");
+    expect(text).toContain("governed narrative drafting");
+    expect(text).toContain("matching v2 evidence review");
+    expect(text).toContain("product-image vision");
+    expect(text).toContain("gpt-5.6-sol");
+    expect(text).toContain("gpt-5.6-luna");
+    expect(text).toContain("store=false");
+    expect(text).toContain("openai_model_classification");
+    expect(text).toContain("deterministic analytics");
+    expect(text).toContain("human decision boundary");
+    expect(text).toContain("required maintenance whenever ai changes");
   });
 });

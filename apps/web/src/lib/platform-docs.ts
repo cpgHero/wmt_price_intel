@@ -80,11 +80,12 @@ export const platformDocGroups: ReadonlyArray<{
 ];
 
 const lastVerified = "August 28, 2026";
+const aiIntegrationLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.69",
-  lastVerified,
+  version: "1.3.70",
+  lastVerified: aiIntegrationLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -833,6 +834,290 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "attention",
           title: "Current reporting limitations",
           text: "The current governed Egg release contains one compatible snapshot, so Product History, price response, persistence, and stability remain unavailable. Basket, KVI, consumer price-image, elasticity, sales, margin, and ROI measures also lack governed source data. Primary app pages are the current reporting surface; export, shareable HTML, email, and workbook parity will be reintroduced after the main workspaces are finalized. The completed queue reconciles 185 certification cases: 183 comparable, one not comparable, and one final insufficient-evidence Kroger housing-method case. That final case remains an explicit audited exclusion rather than a match or unfinished review.",
+        },
+      ],
+    },
+    {
+      id: "ai-integration-map",
+      group: "governance",
+      title: "AI integration & operating boundaries",
+      summary:
+        "A complete map of where AI runs, what evidence it receives, what it may produce, and which decisions remain deterministic or human-controlled.",
+      audience: "Platform owner · Platform administrator · Engineering lead",
+      readingTime: "16 min",
+      lastVerified: aiIntegrationLastVerified,
+      status: "Current with limitations",
+      links: [
+        { href: "/admin/matching-v2", label: "Open Match Certification" },
+        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+        { href: "/data-quality", label: "Open Data Quality" },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "information",
+          title: "AI is a bounded assistant, not the analytics engine",
+          text: "The production application has three OpenAI-assisted lanes: governed insight drafting, governed narrative drafting, and administrator-requested Matching v2 evidence review. Product-image vision is a conditional input inside the matching-review lane rather than a separate autonomous process. AI may interpret supplied facts, draft prose, propose a match verdict, and propose source-bound image attributes. It cannot collect retailer data, decide source authority, calculate a metric, create a valid product relationship by price similarity, certify a match without an administrator, publish a report, or replace verified evidence.",
+        },
+        {
+          kind: "table",
+          title: "Current production AI inventory",
+          columns: [
+            "AI lane",
+            "Trigger and model",
+            "Governed input",
+            "Permitted output",
+            "Final authority",
+          ],
+          rows: [
+            [
+              "Insight drafting",
+              "Runs late in an eligible baseline analysis when AI_ENABLED and the definition's AI fallback are enabled. Current production model: gpt-5.6-sol.",
+              "Deterministic insight candidates, a bounded semantic brief, selected metric/evidence references, Product Pack context, and required caveats.",
+              "Clearer titles, summaries, and business implications for existing deterministic insight IDs. Numeric facts must use governed metric placeholders.",
+              "The deterministic result and critic. A rejected, unavailable, or over-budget response is discarded and deterministic insight remains.",
+            ],
+            [
+              "Narrative drafting",
+              "Runs after eligible analysis facts and any accepted insight draft exist. Current production model: gpt-5.6-sol.",
+              "Requested report sections, semantic brief, deterministic metrics, evidence-backed insights, recommendations, caveats, storylines, and at most eight admitted decision-product summaries.",
+              "Section headline, subtitle, two-to-five bullets, and a plain-language key point using only allowed metric, storyline, product, and evidence references.",
+              "Strict schema validation plus the deterministic narrative critic. Renderers only display the accepted projection and never recalculate analytics.",
+            ],
+            [
+              "Matching v2 evidence review",
+              "An identified administrator explicitly selects eligible cases or an eligible queue scope and confirms the disclosed paid exposure. Current production model: gpt-5.6-luna.",
+              "One checksum-bound pair case containing governed Search, PDP, brand, seller, Product Pack, deterministic tier/basis, attribute, conflict, and observed-location evidence.",
+              "An advisory comparable, not-comparable, or insufficient-evidence proposal; the deterministic tier and price bases when supported; rationale; conflicts; and eligible image-derived attribute proposals.",
+              "The Product Pack and deterministic engine constrain the output. Human review is mandatory; individual or guarded bulk certification requires an explicit administrator confirmation.",
+            ],
+            [
+              "Product-image vision",
+              "Conditional sub-mode of Matching v2 review only when an active Product Pack attribute is unresolved or comes from reviewable lower-authority extraction.",
+              "Primary and available secondary PDP images, interleaved across both products and bounded to six images per product, plus the same structured pair evidence.",
+              "A proposal for an active attribute only when it cites exact visible label text, the exact supplied image URL, and the listing shown by that image.",
+              "The server classifies completion, corroboration, refinement, or conflict. An administrator confirms any value-changing reconciliation; locked evidence cannot be overwritten.",
+            ],
+            [
+              "Narrative bake-off utility",
+              "Engineering-only command, outside the normal application workflow, requiring an explicit paid-call acknowledgement. It may make at most one insight and one narrative request.",
+              "A retained AnalysisResult and the same governed prompt/evidence packets used by the narrative pipeline.",
+              "A comparison artifact with model responses, usage, validation, and cost for benchmark evaluation.",
+              "Engineering review only. It does not activate a report, change evidence, or alter production matching.",
+            ],
+          ],
+        },
+        {
+          kind: "steps",
+          title: "Where AI appears in the end-to-end workflow",
+          items: [
+            {
+              title: "1. Collection and raw preservation — no AI",
+              detail:
+                "Retailer adapters, Search-by-ZIP calls, shared rate limits, paid-credit guards, immutable raw storage, and response normalization are deterministic. No retailer payload is sent to a model merely because it was collected.",
+            },
+            {
+              title:
+                "2. Qualification, PDP enrichment, and brands — no current AI decision",
+              detail:
+                "Product Pack rules qualify or reject Search products; Retailer Pack seller policy removes known third-party noise; MetricsCart PDP supplies identity context; governed brand foundations, aliases, and administrator decisions classify brands. OPENAI_MODEL_CLASSIFICATION exists only as a reserved environment-template field and has no runtime consumer.",
+            },
+            {
+              title:
+                "3. Candidate generation and deterministic evidence — no AI",
+              detail:
+                "The matcher creates high-recall candidates, applies hard blockers, computes attribute evidence, determines eligible tiers and price bases, and resolves geographic applicability without a model. Price is explicitly excluded from semantic match evidence.",
+            },
+            {
+              title: "4. Optional Matching v2 AI review",
+              detail:
+                "After candidates exist, an administrator may purchase advisory review. The model cannot widen the deterministic tier or price-basis boundary. Unknown hard blockers remain insufficient evidence, and known Product Pack conflicts remain not comparable.",
+              link: {
+                href: "/admin/matching-v2",
+                label: "Match Certification",
+              },
+            },
+            {
+              title: "5. Attribute-evidence reconciliation and certification",
+              detail:
+                "Source-bound image proposals are consolidated into product-level claims. Safe consensus may be prepared in bulk, but one checksum-bound administrator confirmation is still required. Relationship approval or rejection is also a human decision and does not automatically start reanalysis.",
+            },
+            {
+              title: "6. Deterministic analytics",
+              detail:
+                "Certified relationships, Search prices, store geography, package evidence, and Product Pack rules produce counts, medians, gaps, unit prices, cohorts, ladders, scorecards, maps, exceptions, and readiness checks. AI performs none of these calculations.",
+            },
+            {
+              title: "7. Optional governed insight and narrative",
+              detail:
+                "Only eligible baseline analyses enter the current automatic prose lane. Analyses pinned to a human match revision, brand revision, or Matching v2 gold-set release deliberately skip new AI generation; a governed replay never silently creates fresh prose or spend.",
+            },
+            {
+              title: "8. Publication and serving — no AI",
+              detail:
+                "The durable materialization worker builds Price Intelligence and Competitive Intelligence read models from retained evidence, runs semantic trust gates, and activates the report atomically. Context changes, exports, alerts, and page rendering consume deterministic materializations and do not call OpenAI.",
+            },
+          ],
+        },
+        {
+          kind: "table",
+          title: "Prompt and output contracts",
+          columns: ["Prompt", "Current version", "Strict guarantees"],
+          rows: [
+            [
+              "governed_insight",
+              "2.5.0",
+              "Selects supplied deterministic insight IDs only; preserves direction and references; numeric facts must come from allowed metric placeholders.",
+            ],
+            [
+              "governed_narrative",
+              "4.0.3",
+              "Returns every requested section once; uses only allowed metrics, evidence, storylines, and products; forbids unsupported numeric literals and prescriptive or ambiguous shorthand.",
+            ],
+            [
+              "matching_v2_evidence_review",
+              "1.4.0",
+              "Requires human review; cannot exceed deterministic tier or basis; separates compatibility from package/unit pricing; image claims require exact supplied source attribution.",
+            ],
+          ],
+        },
+        {
+          kind: "table",
+          title: "Current live controls and cost boundaries",
+          columns: [
+            "Control",
+            "Governed insight/narrative",
+            "Matching v2 review",
+          ],
+          rows: [
+            ["Model", "gpt-5.6-sol for both roles", "gpt-5.6-luna"],
+            [
+              "Reasoning and output",
+              "High reasoning; 12,000 maximum output tokens per request",
+              "Medium reasoning; 6,000 maximum output tokens per request",
+            ],
+            [
+              "Per-request ceiling",
+              "$3.00 conservative maximum per request",
+              "$0.35 conservative maximum per case",
+            ],
+            [
+              "Attempts and concurrency",
+              "At most two attempts through a leased, idempotent task",
+              "At most two automatic attempts; four cases process concurrently; up to four separately confirmed administrator retry rounds after terminal needs-attention failure",
+            ],
+            [
+              "Usage record",
+              "Input/output tokens, latency, estimated cost, prompt/model/input/output checksums, validation, and evidence references",
+              "Batch/case, prompt/model/input/output checksums, every attempt, input/output tokens, latency, estimated cost, warnings, safe error, and retry lineage",
+            ],
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "A request ceiling is not a project budget",
+          text: "The per-request cost guard blocks a request before it is sent when the conservative maximum exceeds policy. Matching v2 additionally discloses case count, per-case ceiling, and worst-case batch exposure before an administrator confirms paid work. OpenAI account/project limits remain the external financial backstop and provider billing remains authoritative. The application persists reported token usage and estimated cost whenever the provider returns usable usage metadata; missing usage is explicitly unknown rather than assumed to be zero.",
+        },
+        {
+          kind: "definitions",
+          title: "Durability, idempotency, and failure behavior",
+          items: [
+            {
+              term: "Governed prose task",
+              definition:
+                "Postgres identifies work by analysis run, role, prompt checksum, provider/model, and input checksum. A succeeded task is reused only after its envelope revalidates. Active work is leased; bounded failures become needs-review and the deterministic report remains usable.",
+            },
+            {
+              term: "Matching-review batch",
+              definition:
+                "One administrator request creates a durable batch and one task per case. Workers claim tasks with row locks and SKIP LOCKED semantics, retain progress across service restarts, and never merge tasks from different governed inputs.",
+            },
+            {
+              term: "Vision fallback",
+              definition:
+                "If OpenAI cannot retrieve a supplied image, the worker records a warning and retries that model request with structured evidence only. It cannot invent an image-derived claim in that fallback because the request-specific schema permits zero attribute proposals.",
+            },
+            {
+              term: "Deterministic fallback",
+              definition:
+                "If governed prose is unavailable, invalid, stale, over-budget, or outside its lease, the application retains deterministic insight/narrative. If matching review fails, the case remains unresolved or needs attention; no relationship changes.",
+            },
+          ],
+        },
+        {
+          kind: "list",
+          title: "Information sent to OpenAI",
+          items: [
+            "Governed prose receives a bounded semantic packet rather than raw collection files: up to 360 selected metrics, referenced evidence summaries, Product Pack/report context, caveats, storylines, and up to eight admitted decision-product summaries.",
+            "Matching review receives one candidate pair at a time with the current governed Search/PDP/brand/seller/attribute/policy evidence and observed-location summaries. It does not receive the MetricsCart or OpenAI API key.",
+            "When vision is eligible, requests may include public or provider-returned PDP image URLs already attached to the two listings. Images are used only to read product-label evidence under the active Product Pack.",
+            "Responses API requests set store=false. The application persists its own checksum-bound input/output audit, token usage, estimated cost, validation, and reviewer lineage in Postgres.",
+            "Secrets remain worker-side environment variables. They are never exposed to browser code, model prompts, reports, exported artifacts, or application logs.",
+          ],
+        },
+        {
+          kind: "table",
+          title: "Important processes that are not AI-powered today",
+          columns: ["Process", "Current authority"],
+          rows: [
+            [
+              "Retailer Search/PDP calls and payload mapping",
+              "Retailer adapters, provider catalogs, response contracts, and immutable raw evidence",
+            ],
+            [
+              "Noise removal, seller eligibility, and category admission",
+              "Retailer Packs and Product Packs",
+            ],
+            [
+              "Brand identity and private-label/regional/national classification",
+              "Governed brand foundations, deterministic alias/evidence rules, and Brand Workbench decisions",
+            ],
+            [
+              "Product Pack or Retailer Pack creation and activation",
+              "Administrator authoring, schema validation, certification suites, and immutable versions",
+            ],
+            [
+              "Candidate retrieval, hard blockers, tiers, cohorts, and local scope",
+              "Deterministic matching engine and Product Pack policy",
+            ],
+            [
+              "Prices, units, distances, counts, medians, rates, scorecards, ladders, maps, and history",
+              "Deterministic analytics over Search/PDP/location/certification evidence",
+            ],
+            [
+              "Publication audit, report activation, context filtering, export, schedules, and alerts",
+              "Durable queues, semantic gates, read-model services, and deterministic renderers/evaluators",
+            ],
+            [
+              "Live web research used during development",
+              "An engineering activity outside the deployed application's runtime; the application does not browse the web autonomously",
+            ],
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Human decision boundary",
+          text: "AI can reduce reading and drafting effort, but an administrator remains accountable for evidence reconciliation, final match certification, paid matching-review launch, retries, bulk acceptance, Product Pack/brand changes, reporting replay, and publication approval. Guarded bulk actions are not autonomous certification: the server first proves eligibility and binds an exact preview checksum, then an identified administrator confirms the immutable decisions.",
+        },
+        {
+          kind: "list",
+          title: "Required maintenance whenever AI changes",
+          items: [
+            "Update this guide and append a dated change order whenever a model, provider, prompt, prompt version, output schema, reasoning level, token limit, cost guard, concurrency, retry rule, input field, image policy, authority boundary, UI trigger, or fallback changes.",
+            "Update prompt and schema tests together; never edit a prompt without changing its version and checksum-governed lineage.",
+            "Re-run unsupported-number, reference-coverage, source-attribution, hard-blocker, human-review, cost-guard, idempotency, lease/retry, and deterministic-fallback tests.",
+            "Verify the production feature flags and non-secret model settings before marking the guide Current. Never document an environment-template placeholder as an implemented AI capability.",
+            "Record any paid acceptance run with the exact approval, task/batch scope, model, recorded usage/cost, outcome mix, and whether any human decision or report changed.",
+            "Keep planned AI—such as assisted brand classification or Product Pack drafting—explicitly labeled planned until a governed implementation, tests, audit lineage, and administrator surface exist.",
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Current limitations",
+          text: "There is no runtime AI for brand classification, Product Pack generation, Retailer Pack generation, collection planning, retailer payload normalization, quantitative analytics, publication gating, alert decisions, or autonomous web research. Governed prose is intentionally skipped on analyses pinned to human brand/match revisions or Matching v2 gold-set releases, so current certified replays may rely on deterministic copy or previously approved narrative rather than a fresh model call. Matching AI remains pair-scoped and advisory; evidence gaps still require better PDP/label evidence or human judgment.",
         },
       ],
     },
@@ -1627,6 +1912,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "Implemented, production-config verified, and release-tested",
+              "Platform Docs gained one maintained, end-to-end AI integration and operating-boundary guide.",
+              "The guide inventories governed insight drafting, governed narrative drafting, administrator-requested Matching v2 review, conditional product-image vision, and the engineering-only narrative bake-off. It names current prompt versions, production models, non-secret token/cost/concurrency controls, data sent to OpenAI, durable task/audit behavior, deterministic and human authority boundaries, explicit non-AI workflows, limitations, and the required maintenance checklist. Production worker flags/models were read without exposing credentials. This documentation-only change makes no OpenAI, MetricsCart, PDP, certification, metric, report-materialization, or source-data change.",
+            ],
             [
               "2026-08-28",
               "Deployed, backfilled, and production-verified",
