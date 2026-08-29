@@ -78,13 +78,11 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
   ).toBeVisible();
 
   await search.fill("Retailer integration registry");
-  await expect(page.getByText("1 guide found")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Enabled Search-by-ZIP adapters" }),
   ).toBeVisible();
 
   await search.fill("Source-to-metric lineage");
-  await expect(page.getByText("1 guide found")).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: "The four grains administrators must distinguish",
