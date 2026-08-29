@@ -2867,9 +2867,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-29",
-              "Implemented; production acceptance pending",
+              "App/bucket credentials rotated and production-verified",
+              "App-owned internal, administrator-bridge, and session-signing secrets plus Railway bucket credentials were rotated without exposing their values.",
+              "API, web, and worker were redeployed with synchronized values. Existing administrator sessions were intentionally invalidated; the administrator password is unchanged. Web/API readiness, protected web-to-API admin access, and a product-specific private-object evidence read passed. OpenAI, MetricsCart, administrator-password, and Postgres replacement remain coordinated owner/maintenance actions; PITR remains disabled until that stateful window.",
+            ],
+            [
+              "2026-08-29",
+              "Deployed and production-verified",
               "Successful report activation now recoverably retires superseded blocked predecessors, and the default legacy Price read reuses the publication-bound compact catalog.",
-              "Blocked history, validation, jobs, source data, PDP evidence, certification, and audits remain intact after archival. Unfiltered default Price reads avoid duplicate cold Parquet projection; filtered and product-level drill-downs keep their detailed evidence path, and older reports without a catalog retain the live compatibility fallback. No provider, PDP, AI, collection, matching, metric, or geography behavior changed.",
+              "The obsolete blocked Vitamin predecessor was recoverably archived with an explicit audit; active blocked reports/jobs are zero and System Operations is healthy. Its 246-product default Price payload returned in 0.91 seconds, while a product-specific evidence read continued to use the detailed path. CI run 33281048900 and Railway API/web deployments passed. No provider, PDP, AI, collection, matching, metric, or geography behavior changed.",
             ],
             [
               "2026-08-29",

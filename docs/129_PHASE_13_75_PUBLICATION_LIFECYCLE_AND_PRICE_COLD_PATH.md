@@ -1,7 +1,7 @@
 # Phase 13.75 — Publication Lifecycle and Price Cold-Path Reliability
 
-**Status:** implemented; production deployment and acceptance pending  
-**Provider/AI spend:** zero  
+**Status:** deployed and production-attested on 2026-08-29
+**Provider/AI spend:** zero
 **Authoritative data or matching changes:** none
 
 ## Objective
@@ -35,8 +35,16 @@ For an unfiltered default request only, the legacy endpoint now returns the stor
 ## Verification
 
 - Targeted Price API tests prove the default request uses the stored catalog, filtered requests bypass the shortcut, and an absent catalog uses the compatibility fallback.
-- The complete Price API test module passes.
-- Production acceptance must confirm the default endpoint is responsive on a cold service, the active ready Vitamin successor remains visible, the obsolete blocked predecessor is archived, and System Operations no longer counts that predecessor as active publication attention.
+- The complete local suite passed with 793 Python tests and 85 web tests; Python/web formatting, lint, typing, production build, browser tests, migrations, contracts, documentation coverage, and all four container builds passed in GitHub Actions run `33281048900`.
+- Railway API deployment `76510928-a410-4d39-8881-22002c7149f2` and web deployment `f5e12e6c-423a-4344-aa41-78e19bb29a91` succeeded on commit `81bccb4cd5f3c0d2c63dc70a6c246f9b3dbe8b6a`.
+- The default 246-product Vitamin Price payload returned HTTP 200 in 0.91 seconds. A product-specific evidence read returned HTTP 200 in 5.49 seconds after object-storage credential rotation.
+- The obsolete blocked Vitamin predecessor was recoverably archived at `2026-08-29T23:32:59Z`; an explicit audit event records the ready successor and release commit. Active blocked reports and active blocked materialization jobs both reconciled to zero, and System Operations returned `healthy`.
+
+## Coordinated secret rotation
+
+The release also rotated the app-owned API/worker internal service token, API/web administrator bridge token, and web session-signing secret. Existing administrator browser sessions were intentionally invalidated; the administrator password was not changed. Railway bucket S3 credentials were reset, synchronized to API and worker, and validated through a live product-specific evidence read. No secret value, credential payload, or reversible derivative is recorded in this phase document or Platform Docs.
+
+OpenAI and MetricsCart API keys, the administrator password, and Postgres credentials were not silently replaced because their authoritative replacements require provider/operator coordination. PITR remains disabled pending a named stateful maintenance window.
 
 ## Follow-up boundary
 
