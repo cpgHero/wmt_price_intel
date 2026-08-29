@@ -60,7 +60,7 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
     page.getByText("The median of competitor price minus benchmark price"),
   ).toBeVisible();
 
-  await search.fill("product-image vision");
+  await search.fill("AI integration & operating boundaries");
   await expect(page.getByText("1 guide found")).toBeVisible();
   await expect(
     page.getByRole("heading", {
