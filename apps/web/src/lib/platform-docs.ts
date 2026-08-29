@@ -81,11 +81,12 @@ export const platformDocGroups: ReadonlyArray<{
 
 const lastVerified = "August 28, 2026";
 const aiIntegrationLastVerified = "August 29, 2026";
+const integrationLineageLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.70",
-  lastVerified: aiIntegrationLastVerified,
+  version: "1.3.71",
+  lastVerified: integrationLineageLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -1487,6 +1488,310 @@ export const platformDocumentation: PlatformDocumentation = {
       ],
     },
     {
+      id: "retailer-integration-registry",
+      group: "reference",
+      title: "Retailer integration registry",
+      summary:
+        "The maintained Search, PDP, location, billing, seller, and runtime-contract inventory for every configured retailer.",
+      audience: "Platform owner · Platform administrator · Engineering",
+      readingTime: "14 min",
+      lastVerified: integrationLineageLastVerified,
+      status: "Current with limitations",
+      links: [
+        { href: "/collections/new", label: "Open collection setup" },
+        { href: "/data-quality", label: "Open Data Quality" },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Enabled is not the same as universally callable",
+          text: "Enabled means the catalogued adapter may be planned and executed. It does not promise that every retailer, category, store, ZIP, or page is currently available from MetricsCart. The immutable run-specific retailer preflight is the authority: each retailer passes, fails, or remains pending independently, and one failed retailer must not contaminate another retailer's plan.",
+        },
+        {
+          kind: "definitions",
+          title: "Shared provider contract",
+          items: [
+            {
+              term: "Authentication",
+              definition:
+                "MetricsCart requests use the server-side METRICSCART_API_KEY as x-api-key. The key must never enter browser JavaScript, report artifacts, logs, downloads, or documentation.",
+            },
+            {
+              term: "Search billing",
+              definition:
+                "The catalog treats HTTP 2xx and 404 pages as billable charge events. Credit cost varies by retailer. Estimates, approved ceilings, actual attempts, status, and credits remain auditable per task.",
+            },
+            {
+              term: "Shared rate limit",
+              definition:
+                "The provider documents 3 requests per second / 180 per minute per retailer and endpoint type. Production intentionally defaults Search to 2 per second / 108 per minute and PDP uses a shared account-wide permit plus a retailer permit, all coordinated in Postgres across replicas.",
+            },
+            {
+              term: "Physical-store context",
+              definition:
+                "The current location master supplies Store_No and normalized five-digit ZIP. Store and ZIP identifiers remain strings, including leading zeros. Target collection locations must be USA rows. ALDI's current authoritative roster uses numeric Store_No values; legacy hyphenated IDs are retained only for history.",
+            },
+            {
+              term: "Service-area context",
+              definition:
+                "Amazon Same Day is collected and compared by delivery ZIP, not a fabricated physical store. Its Search URL preserves the Same Day/Fresh service-area context.",
+            },
+          ],
+        },
+        {
+          kind: "table",
+          title: "Enabled Search-by-ZIP adapters",
+          columns: [
+            "Retailer",
+            "Retailer ID",
+            "Runtime Search path",
+            "Credits",
+            "Required request context",
+          ],
+          rows: [
+            ["Walmart (US)", "walmart_us", "/mc/walmart/search/zipcode/v2/", "1", "ZIP · store · page; keyword or URL; Best Match default"],
+            ["ALDI", "aldi_us", "/mc/new_aldi/serp/zipcode", "2", "Keyword · ZIP · numeric store · page"],
+            ["Amazon Same Day (US)", "amazon_us_same_day", "/mc/amazon/search/zipcode/", "2", "Same Day URL · ZIP · page; delivery-area grain"],
+            ["Albertsons", "albertsons_us", "/mc/albertsons/serp/zipcode", "2", "ZIP · store; keyword or URL"],
+            ["H-E-B", "heb_us", "/mc/heb/serp/zipcode/", "1", "Keyword · ZIP · store"],
+            ["Kroger", "kroger_us", "/mc/kroger/search/zipcode/", "3", "Keyword · ZIP · store · page; preserve leading-zero store IDs"],
+            ["Safeway", "safeway_us", "/mc/safeway/serp/zipcode/", "2", "Keyword · ZIP · store"],
+            ["Target", "target_us", "/mc/target/search/zipcode/", "4", "Keyword · ZIP · store · page; Relevance default"],
+            ["Giant Eagle", "giant_eagle_us", "/mc/gianteagle/serp/zipcode/", "2", "ZIP · store; keyword or URL"],
+            ["Meijer", "meijer_us", "/mc/meijer/serp/zipcode", "2", "ZIP · store · keyword"],
+            ["Sam's Club", "sams_club_us", "/mc/samsclub/serp/zipcode", "2", "Keyword · ZIP · store · page"],
+            ["ShopRite", "shoprite_us", "/mc/shoprite/serp/zipcode", "1", "ZIP · store · shopping type; pickup default"],
+            ["Trader Joe's", "trader_joes_us", "/mc/traderjoes/serp/zipcode/", "1", "Keyword · ZIP · store"],
+            ["Wegmans", "wegmans_us", "/mc/wegmans/serp/store/", "1", "Keyword · ZIP · store"],
+            ["BJ's Wholesale Club", "bjs_us", "/mc/bjs/serp/zipcode/", "1", "Keyword · ZIP · store"],
+            ["Costco", "costco_us", "/mc/costco/serp/zipcode/", "1", "ZIP · store · keyword"],
+            ["CVS", "cvs_us", "/mc/cvs/serp/zipcode/", "2", "Keyword · ZIP · store · page"],
+            ["Walgreens", "walgreens_us", "/mc/walgreens/serp/zipcode/", "1", "Keyword · page · ZIP · store"],
+          ],
+        },
+        {
+          kind: "table",
+          title: "PDP enrichment registry for enabled Search retailers",
+          columns: [
+            "Retailer",
+            "Runtime PDP path",
+            "Credits",
+            "Required request context",
+          ],
+          rows: [
+            ["Walmart (US)", "/mc/walmart/product/zipcode/", "2", "Product identity · ZIP · store · fulfillment type"],
+            ["ALDI", "/mc/new_aldi/pdp/zipcode/", "1", "Product identity · ZIP · store · fulfillment type"],
+            ["Amazon Same Day (US)", "/mc/amazon/pdp/zipcode/", "2", "Product identity; ZIP when available"],
+            ["Albertsons", "/mc/albertsons/pdp/zipcode", "3", "URL · ZIP · store"],
+            ["H-E-B", "/mc/heb/pdp/zipcode/", "1", "Product identity · ZIP · store"],
+            ["Kroger", "/kroger/pdp/zipcode/", "1", "Product identity · request context · fulfillment type; provider-catalog route"],
+            ["Safeway", "/mc/safeway/pdp/zipcode/", "3", "Product identity · ZIP · store"],
+            ["Target", "/mc/target/pdp/zipcode/", "3", "URL · ZIP · store · fulfillment type"],
+            ["Giant Eagle", "/mc/gianteagle/pdp/zipcode/", "2", "Product identity · ZIP · store"],
+            ["Meijer", "/mc/meijer/pdp/zipcode", "2", "Product identity · ZIP · store"],
+            ["Sam's Club", "/mc/samsclub/pdp/zipcode/", "2", "URL · ZIP · store · fulfillment type"],
+            ["ShopRite", "/mc/shoprite/pdp/zipcode/", "1", "Product identity · ZIP · store · shopping type"],
+            ["Trader Joe's", "/mc/traderjoes/pdp/zipcode/", "1", "Six-digit product ID · ZIP · store"],
+            ["Wegmans", "/mc/wegmans/pdp/zipcode", "1", "Product identity · ZIP · store"],
+            ["BJ's Wholesale Club", "/mc/bjs/pdp/zipcode/", "2", "Product identity · ZIP · store"],
+            ["Costco", "/mc/costco/pdp/zipcode", "4", "Product identity · ZIP · store · fulfillment type"],
+            ["CVS", "/mc/cvs/pdp/zipcode", "3", "URL · ZIP · store · fulfillment type"],
+            ["Walgreens", "/mc/walgreens/pdp/zipcode", "2", "Product ID · ZIP · store · pickup fulfillment"],
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "PDP collection is selective and cache-first",
+          text: "Search remains the store-specific package-price, observed-presence, sponsorship, and collection-time authority. PDP enrichment runs only for distinct admitted analysis products, reuses evidence that is fresh under the current 30-day policy, and normally selects one representative positive-price Search location per product. Another PDP context is justified only by contradictory identity evidence or a governed location/variant diagnostic. Paid-calls-enabled means the contract is eligible for planning—not that every product/location request will succeed.",
+        },
+        {
+          kind: "table",
+          title: "What the adapters preserve",
+          columns: ["Evidence", "Normalized use", "Authority boundary"],
+          rows: [
+            ["Search product", "Name, brand, retailer product ID, identifiers, URL, primary image, rating/review counts, result position, sponsorship", "Provider aliases map to canonical fields; raw_extra retains unmapped provider values"],
+            ["Search price", "Current, regular, discounted, currency, and positive-price observation", "Only Search may author local shelf price and observed presence"],
+            ["Search location", "Retailer location ID, store number, ZIP, coordinates, country", "Current geography is reconciled to the location master; immutable historical snapshots keep their original IDs"],
+            ["PDP identity", "Name, brand, descriptions, categories, specifications, physical properties, identifiers, URL, imagery/video", "May complete or corroborate identity and attributes; cannot overwrite Search price or location"],
+            ["PDP commerce", "Seller, offers, price fields, pickup/shipping context, availability, rating/review summaries", "Useful for first-party governance and diagnostics; local reporting price still comes from Search"],
+          ],
+        },
+        {
+          kind: "definitions",
+          title: "First-party seller governance",
+          items: [
+            {
+              term: "Known first party",
+              definition:
+                "Walmart, Target, and Amazon apply active Retailer Pack first-party policies with exact normalized seller aliases. Walmart accepts Walmart or Walmart.com; Target accepts Target or Target.com; Amazon uses its configured Amazon-owned retail aliases.",
+            },
+            {
+              term: "Known third party",
+              definition:
+                "A nonmatching known seller is excluded as marketplace noise before paid AI review, certification, and reporting. Seller text is never accepted through loose substring matching.",
+            },
+            {
+              term: "Missing seller",
+              definition:
+                "Where the active policy permits missing seller evidence, the listing remains eligible but explicitly seller-unverified. Missing never becomes affirmative first-party proof.",
+            },
+            {
+              term: "Retailer without an active seller policy",
+              definition:
+                "The listing is not seller-governed, not silently classified first party. New marketplace-prone retailers require an evidence-backed Retailer Pack policy before strict 1P claims are made.",
+            },
+          ],
+        },
+        {
+          kind: "list",
+          title: "Operational proof is scope-bound",
+          items: [
+            "Historical acceptance, a successful playground CURL, or one HTTP 200 proves only that exact retailer, request shape, product or keyword, store/ZIP, and time context.",
+            "HTTP 404 normally means the retailer page was unavailable in that request context and may still be billable; it is not automatically a bad location-master row.",
+            "Schema drift fails closed after the raw response is preserved. It does not become an empty product page or a false zero.",
+            "A failed retailer gate does not stop independently valid retailers unless the approved definition requires all-retailer completeness.",
+            "Walmart Mexico is catalogued but not enabled. Whole Foods Market currently has normalization/Retailer Pack support but no live Search adapter in this registry.",
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Required maintenance whenever a retailer contract changes",
+          text: "Update the Search catalog, PDP catalog or runtime override, Retailer Pack, fixtures, adapter tests, paid-credit estimate, location policy, this registry, and the change-order log together. Validate the exact request shape with a bounded preflight only when approved; never infer a production contract from an old sample file.",
+        },
+      ],
+    },
+    {
+      id: "source-metric-lineage",
+      group: "reference",
+      title: "Source-to-metric lineage",
+      summary:
+        "How raw Search, locations, PDP, brands, Product Packs, matches, and local geography become each trusted metric and drill-down.",
+      audience: "Platform owner · Platform administrator · Analyst · Engineering",
+      readingTime: "15 min",
+      lastVerified: integrationLineageLastVerified,
+      status: "Current",
+      links: [
+        { href: "/price-monitoring", label: "Open Price Intelligence" },
+        { href: "/analyses", label: "Open Competitive Intelligence" },
+        { href: "/data-quality", label: "Open Data Quality" },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Every number has a grain, denominator, and authority",
+          text: "A trusted metric is not just a formula. It names the atomic evidence, admissibility gates, comparison geography, price basis, denominator, exclusions, and drill-down path. Product-location rows, distinct stores, product relationships, and delivery ZIPs are different grains and must never be relabeled as one another.",
+        },
+        {
+          kind: "table",
+          title: "Authority chain",
+          columns: ["Stage", "Authoritative input", "What it contributes", "What it cannot do"],
+          rows: [
+            ["Raw collection", "Immutable MetricsCart Search response", "Original provider payload, request context, time, HTTP status, checksum, and credit event", "Cannot be rewritten after collection"],
+            ["Search normalization", "Versioned retailer catalog and aliases", "Canonical product, price, sponsorship, retailer, and product-location observation", "Cannot invent a missing required field or treat schema drift as zero results"],
+            ["Location resolution", "Frozen location-master snapshot", "Store identity, ZIP, city, state, country, coordinates, physical/service-area behavior", "Cannot prove a retailer page was callable or a missing product was out of stock"],
+            ["Category admission", "Pinned Product Pack", "In-scope/noise/review decision, category attributes, valid units, match tiers and comparison bases", "Cannot mutate an older result when pack rules change"],
+            ["Identity enrichment", "Fresh retained PDP evidence", "Names, descriptions, brand/seller, identifiers, package/specification facts, images, and source-bound evidence", "Cannot replace local Search price, observed presence, sponsorship, or collection time"],
+            ["Brand and seller governance", "Brand foundation, Brand Workbench, and Retailer Pack", "Canonical brand, aliases, private/regional/national role, first-party eligibility and explicit unknowns", "Cannot override a hard product-specification conflict"],
+            ["Relationship governance", "Deterministic matcher plus final Matching v2 certification", "Comparable/not-comparable decision, tier, eligible price basis, evidence, local applicability and immutable lineage", "Price similarity cannot create semantic comparability; AI advice alone is not certification"],
+            ["Analytics", "Canonical admitted observations plus governed relationships and geography", "Counts, medians, rates, gaps, cohorts, ladders, footprint outcomes, assortment and quality results", "AI and browser components do not calculate authoritative metrics"],
+            ["Publication", "Immutable AnalysisResult plus staged read models", "Fast, context-specific projections that passed semantic trust gates", "A partial or failed build cannot replace the current trusted report"],
+          ],
+        },
+        {
+          kind: "table",
+          title: "The four grains administrators must distinguish",
+          columns: ["Grain", "Example", "Where it is used", "Counting rule"],
+          rows: [
+            ["Product × retailer location", "One exact milk SKU observed at one Walmart store", "Price Intelligence; detailed price evidence; pair outcomes", "Latest admitted positive-price Search observation in the immutable run"],
+            ["Distinct benchmark store", "One Walmart store with one or more valid local ALDI comparisons", "Retailer and cohort comparable-store coverage", "Multiple products at one store count once"],
+            ["Governed product relationship", "One Walmart product certified comparable to one competitor product", "Included-product drawers, cohort membership, match summary and audit", "Count the immutable certified relationship once; distribution applicability is separate"],
+            ["Competitor location or service area", "One physical ALDI store within radius, or one Amazon delivery ZIP", "Contributing competitor footprint and local offer selection", "Physical competitors count distinct stores; service-area retailers count distinct delivery ZIPs"],
+          ],
+        },
+        {
+          kind: "table",
+          title: "Price Intelligence lineage",
+          columns: ["Reported measure", "Formula or rule", "Source and gate", "Important interpretation"],
+          rows: [
+            ["Observed location", "Distinct eligible retailer stores where the exact product has price > 0", "Search positive price + product admission + frozen location", "Observed/in-stock in this application; not PDP stock"],
+            ["Not observed", "Eligible planned stores minus observed exact-product stores", "Successful Search coverage + frozen planned geography", "A review signal, not proof of out-of-stock or non-carriage"],
+            ["Distribution", "Observed exact-product locations ÷ eligible retailer locations", "Distinct store grain", "A product seen in fewer stores may be regionally distributed, not unavailable where carried"],
+            ["Shelf/package price", "Positive Search price for the offered package", "Search price authority", "PDP price may diagnose identity but never substitutes for this value"],
+            ["Unit price", "Search package price ÷ unambiguous Product Pack quantity", "Search price + governed package fact", "Unavailable when the denominator or conversion is unknown or conflicting"],
+            ["Median price", "Median of admitted exact-product product-location prices", "Positive Search observations in the selected retailer/geography", "The UI must label package or normalized unit explicitly"],
+            ["Price range", "Minimum through maximum admitted exact-product price", "Same rows as the median", "Provides context for regional dispersion and outlier review"],
+            ["Sponsored share", "Observed rows with is_sponsored=true ÷ observed rows with sponsorship evidence", "Search is_sponsored authority", "Sponsorship is not promotion or rollback"],
+            ["IQR price exception", "Outside Q1 − 1.5×IQR or Q3 + 1.5×IQR; modal-tolerance fallback when IQR is zero", "Exact-product local Search prices + Product Pack tolerance", "An exception is a review priority, not automatic bad data"],
+          ],
+        },
+        {
+          kind: "table",
+          title: "Competitive Intelligence lineage",
+          columns: ["Reported measure", "Formula or rule", "Source and gate", "Important interpretation"],
+          rows: [
+            ["Eligible comparable relationship", "Final certified comparable pair admitted by the selected Product Pack profile and price basis", "Matching v2 certification + Product Pack", "Exact-spec and compatible-spec are governed lenses, not UI synonyms"],
+            ["Local comparable offer", "Eligible competitor product observed at the same delivery ZIP or physical store within selected 1, 3, or 5 miles", "Search observations + certified relationship + frozen coordinates", "Changing radius changes local evidence, never the product identity or certification"],
+            ["Comparable benchmark stores", "Distinct benchmark stores with at least one valid local competitor product comparison", "Local pair outcomes deduplicated by benchmark store", "Multiple products at one store count once"],
+            ["Comparable store coverage", "Comparable benchmark stores ÷ distinct benchmark stores carrying an in-scope benchmark product", "Distinct benchmark-store grain", "This is not product-location volume"],
+            ["Contributing competitor footprint", "Distinct physical competitor stores supplying a scored comparison; service-area retailers use distinct delivery ZIPs", "Selected-radius local evidence", "Do not compare a delivery ZIP count as though it were a physical-store count"],
+            ["Lower-price share", "Scored pairs where the named retailer is lower ÷ all scored pairs", "Same relationship, basis, radius, period and admissible price rows", "Display the benchmark-lower, competitor-lower, and parity partition together"],
+            ["Paired median gap", "Median of competitor price minus benchmark price across the same scored pairs", "Pair-outcome grain", "Positive means Walmart is lower; negative means the competitor is lower"],
+            ["Product leadership", "At each benchmark store, compare the benchmark product with the controlling lowest eligible local competitor offer", "Certified relationship + local Search evidence", "Leader, tied, at-risk, losing, and unscored are mutually exclusive"],
+            ["Price ladder", "Order governed comparable product prices within match group × geography × snapshot", "Matched local positive Search prices", "Unrelated category products may not be presented as substitutes"],
+            ["Cohort scorecard", "Roll up certified relationships sharing Product Pack-governed attributes and one price basis", "Cohort membership + pair outcomes", "Included-product drawers must reconcile to the relationships that produced the row"],
+            ["Whitespace / exclusivity", "Admitted local product with no governed eligible equivalent in the corresponding footprint", "Assortment observations + relationship ledger + geography", "A missing Search row alone does not prove whitespace"],
+          ],
+        },
+        {
+          kind: "steps",
+          title: "How to audit a displayed number",
+          items: [
+            {
+              title: "1. Freeze the visible context",
+              detail:
+                "Record analysis ID, retailer, Product Pack profile, package/unit price basis, 1/3/5-mile radius, state/city selection, and snapshot. A metric without its context is not reproducible.",
+            },
+            {
+              title: "2. Read its definition and grain",
+              detail:
+                "Confirm whether the value counts product-locations, distinct benchmark stores, distinct competitor stores or delivery ZIPs, relationships, products, or scored pairs.",
+            },
+            {
+              title: "3. Follow the drill-down",
+              detail:
+                "Use included products, relationship evidence, store comparisons, location drawers, or Data Quality to reach the exact governed members. Drawer counts must reconcile to the headline after applying the same context.",
+            },
+            {
+              title: "4. Reconcile the denominator and exclusions",
+              detail:
+                "Check non-observation, missing price, unit-conversion failure, seller exclusion, Product Pack noise, no certified relationship, no local competitor within radius, final insufficient evidence, and schema or freshness limitations separately.",
+            },
+            {
+              title: "5. Verify source lineage",
+              detail:
+                "Trace an atomic member to normalized Search evidence, request/store context, raw checksum, location snapshot, PDP/brand evidence where used, certification decision, and publication checksum. A renderer may format but not recompute it.",
+            },
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Unknown, zero, and unavailable are different",
+          text: "Zero means the governed denominator exists and the measured count is zero. Unavailable means the required evidence or denominator does not exist. Unknown means evidence exists but cannot support a safe classification. Unscored means the product/store remained in scope but no valid comparison outcome could be calculated. The UI, downloads, narrative, and alerts must preserve these distinctions.",
+        },
+        {
+          kind: "callout",
+          tone: "success",
+          title: "Required maintenance whenever a metric changes",
+          text: "A source, alias, formula, grain, denominator, exclusion, Product Pack basis, radius policy, label, drill-down, or semantic gate change must update this lineage guide, the metric dictionary, JSON contracts, deterministic tests, golden fixtures, presentation tests, and the change-order log in the same release. AI does not calculate or repair authoritative values.",
+        },
+      ],
+    },
+    {
       id: "metric-dictionary",
       group: "reference",
       title: "Metric & evidence dictionary",
@@ -1912,6 +2217,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "Implemented and release-tested",
+              "Platform Docs gained a catalog-backed Retailer Integration Registry and complete source-to-metric lineage guide.",
+              "The registry records all 18 enabled Search adapters, corresponding PDP runtime paths, per-call credits, required location/request context, provider limits, selective 30-day cache-first enrichment, seller governance, and the distinction between adapter enablement and run-specific callability. The lineage guide traces immutable Search, location, PDP, brand, seller, Product Pack, certification, geography, deterministic analytics, and publication evidence into Price and Competitive Intelligence metrics. Automated tests compare every enabled Search/PDP path with the maintained guide and protect distinct product-location, benchmark-store, competitor-store, relationship, and delivery-ZIP grains. This documentation-only change makes no MetricsCart, PDP, OpenAI, certification, metric, source-data, or report-publication change.",
+            ],
             [
               "2026-08-29",
               "Implemented, production-config verified, and release-tested",
@@ -2553,6 +2864,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Update the metric dictionary when a label, formula, grain, denominator, or source changes.",
             "Update limitations when a deferred capability becomes active—or a new honest boundary is discovered.",
             "Update service and security guidance when variables, credentials, limits, or deployment ownership changes.",
+            "Update the Retailer Integration Registry whenever a Search/PDP path, credit, required parameter, location rule, seller policy, runtime override, or enabled status changes.",
+            "Update Source-to-Metric Lineage whenever a source authority, normalized field, grain, denominator, formula, exclusion, comparison radius, label, or drill-down changes.",
             "Append a change-order row; do not silently replace history.",
           ],
         },

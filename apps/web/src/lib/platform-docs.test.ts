@@ -1,9 +1,17 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { platformDocGroups, platformDocumentation } from "./platform-docs";
 
 function allText(): string {
   return JSON.stringify(platformDocumentation).toLocaleLowerCase();
+}
+
+function repositoryJson<T>(relativePath: string): T {
+  return JSON.parse(
+    readFileSync(new URL(`../../../../${relativePath}`, import.meta.url), "utf8"),
+  ) as T;
 }
 
 describe("platform owner and administrator documentation", () => {
@@ -84,5 +92,102 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("deterministic analytics");
     expect(text).toContain("human decision boundary");
     expect(text).toContain("required maintenance whenever ai changes");
+  });
+
+  it("keeps the retailer integration registry synchronized with enabled catalogs", () => {
+    const guide = platformDocumentation.guides.find(
+      (candidate) => candidate.id === "retailer-integration-registry",
+    );
+    const text = JSON.stringify(guide).toLocaleLowerCase();
+    const searchCatalog = repositoryJson<{
+      retailers: Array<{
+        credits_per_successful_page: number;
+        display_name: string;
+        endpoint: string;
+        id: string;
+        status: string;
+      }>;
+    }>("config/retailer-catalog.json");
+    const pdpCatalog = repositoryJson<{
+      endpoints: Array<{
+        credits_per_successful_page: number;
+        path: string;
+        retailer_id: string;
+      }>;
+    }>("config/product-detail-catalog.json");
+    const overrides = repositoryJson<{
+      overrides: Array<{
+        retailer_id: string;
+        runtime_path: string;
+      }>;
+    }>("config/metricscart-endpoint-overrides.json");
+    const runtimeOverrides = new Map(
+      overrides.overrides.map((entry) => [entry.retailer_id, entry.runtime_path]),
+    );
+    const pdpByRetailer = new Map(
+      pdpCatalog.endpoints.map((entry) => [entry.retailer_id, entry]),
+    );
+    const searchTable = guide?.blocks.find(
+      (block) =>
+        block.kind === "table" && block.title === "Enabled Search-by-ZIP adapters",
+    );
+    const pdpTable = guide?.blocks.find(
+      (block) =>
+        block.kind === "table" &&
+        block.title === "PDP enrichment registry for enabled Search retailers",
+    );
+    expect(searchTable?.kind).toBe("table");
+    expect(pdpTable?.kind).toBe("table");
+
+    for (const retailer of searchCatalog.retailers.filter(
+      (entry) => entry.status === "enabled",
+    )) {
+      const pdp = pdpByRetailer.get(retailer.id);
+      expect(pdp).toBeDefined();
+      if (searchTable?.kind === "table") {
+        expect(searchTable.rows).toContainEqual(
+          expect.arrayContaining([
+            retailer.id,
+            retailer.endpoint,
+            String(retailer.credits_per_successful_page),
+          ]),
+        );
+      }
+      if (pdpTable?.kind === "table") {
+        expect(pdpTable.rows).toContainEqual(
+          expect.arrayContaining([
+            retailer.display_name,
+            runtimeOverrides.get(retailer.id) ?? pdp?.path ?? "",
+            String(pdp?.credits_per_successful_page),
+          ]),
+        );
+      }
+    }
+
+    expect(text).toContain("enabled is not the same as universally callable");
+    expect(text).toContain("run-specific retailer preflight");
+    expect(text).toContain("positive-price search location");
+    expect(text).toContain("30-day policy");
+    expect(text).toContain("known third party");
+    expect(text).toContain("missing seller");
+  });
+
+  it("documents source-to-metric authority, grain, and audit lineage", () => {
+    const guide = platformDocumentation.guides.find(
+      (candidate) => candidate.id === "source-metric-lineage",
+    );
+    const text = JSON.stringify(guide).toLocaleLowerCase();
+
+    expect(text).toContain("immutable metricscart search response");
+    expect(text).toContain("frozen location-master snapshot");
+    expect(text).toContain("fresh retained pdp evidence");
+    expect(text).toContain("pinned product pack");
+    expect(text).toContain("retailer pack");
+    expect(text).toContain("multiple products at one store count once");
+    expect(text).toContain("physical competitors count distinct stores");
+    expect(text).toContain("service-area retailers count distinct delivery zips");
+    expect(text).toContain("selected 1, 3, or 5 miles");
+    expect(text).toContain("not proof of out-of-stock or non-carriage");
+    expect(text).toContain("ai does not calculate or repair authoritative values");
   });
 });
