@@ -39,7 +39,7 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Platform Owner & Administrator Guide" }),
   ).toBeVisible();
-  await expect(page.getByText("20 maintained guides")).toBeVisible();
+  await expect(page.getByText("22 maintained guides")).toBeVisible();
 
   await page
     .getByRole("button", { name: /Data lifecycle: collection to reporting/ })
@@ -87,5 +87,15 @@ test("searches and navigates maintained platform guides", async ({ page }) => {
     page.getByRole("heading", {
       name: "The four grains administrators must distinguish",
     }),
+  ).toBeVisible();
+
+  await search.fill("Production incident response & recovery");
+  await expect(
+    page.getByRole("heading", { name: "Availability incident workflow" }),
+  ).toBeVisible();
+
+  await search.fill("Release manifest, canaries & change control");
+  await expect(
+    page.getByRole("heading", { name: "Live release manifest" }),
   ).toBeVisible();
 });

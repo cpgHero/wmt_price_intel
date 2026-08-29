@@ -43,6 +43,7 @@ COPY --chown=rci:rci schemas schemas
 COPY --chown=rci:rci scripts/build_live_matching_v2_queue.py scripts/build_live_matching_v2_queue.py
 COPY --chown=rci:rci scripts/audit_matching_v2_evidence_gaps.py scripts/audit_matching_v2_evidence_gaps.py
 COPY --chown=rci:rci scripts/plan_spring_valley_location_panel.py scripts/plan_spring_valley_location_panel.py
+COPY --chown=rci:rci scripts/verify_release_readiness.py scripts/verify_release_readiness.py
 RUN uv sync --frozen --no-dev --package rci-api
 
 EXPOSE 8000

@@ -9,6 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce owner/admin documentation coverage
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/check_platform_docs_coverage.py --base-ref "$BASE_REF"
+
   python:
     runs-on: ubuntu-24.04
     services:

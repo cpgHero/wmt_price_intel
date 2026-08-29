@@ -18,6 +18,7 @@ from rci_api.competitive_leadership import router as competitive_leadership_rout
 from rci_api.locations import router as location_router
 from rci_api.matching_v2 import router as matching_v2_router
 from rci_api.matching_v2_review import router as matching_v2_review_router
+from rci_api.operations import router as operations_router
 from rci_api.price_monitoring import router as price_monitoring_router
 from rci_api.product_packs import (
     router as product_pack_router,
@@ -70,6 +71,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(location_router)
     app.include_router(matching_v2_router)
     app.include_router(matching_v2_review_router)
+    app.include_router(operations_router)
     app.include_router(price_monitoring_router)
     app.include_router(product_pack_router)
     app.include_router(report_publication_router)

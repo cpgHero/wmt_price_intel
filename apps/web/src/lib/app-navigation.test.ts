@@ -23,6 +23,7 @@ describe("application navigation", () => {
       "/collections",
       "/automation",
       "/data-quality",
+      "/admin/operations",
       "/admin/docs",
       "/admin/matching-v2",
       "/workspace/brands",
@@ -51,6 +52,9 @@ describe("application navigation", () => {
       "Match Certification",
     );
     expect(activeNavigationItem("/admin/docs")?.label).toBe("Platform Docs");
+    expect(activeNavigationItem("/admin/operations")?.label).toBe(
+      "System Operations",
+    );
   });
 
   it("returns the page context for detail routes", () => {

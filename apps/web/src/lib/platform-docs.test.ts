@@ -201,4 +201,23 @@ describe("platform owner and administrator documentation", () => {
       "ai does not calculate or repair authoritative values",
     );
   });
+
+  it("documents production incident, recovery, and release governance", () => {
+    const incident = platformDocumentation.guides.find(
+      (candidate) => candidate.id === "incident-response-recovery",
+    );
+    const release = platformDocumentation.guides.find(
+      (candidate) => candidate.id === "release-manifest-change-control",
+    );
+    const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
+
+    expect(platformDocumentation.version).toBe("1.3.72");
+    expect(platformDocumentation.guides).toHaveLength(22);
+    expect(text).toContain("protect evidence before restoring speed");
+    expect(text).toContain("isolated non-production environment");
+    expect(text).toContain("operator-attested");
+    expect(text).toContain("migration mismatch");
+    expect(text).toContain("zero-credit canary");
+    expect(text).toContain("separate, immutable run");
+  });
 });

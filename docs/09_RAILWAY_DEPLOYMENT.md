@@ -34,6 +34,9 @@ assume the database service is named `postgres` and the Bucket is named `artifac
 ```dotenv
 APP_ENV=production
 APP_VERSION=0.1.0
+METRICSCART_CREDIT_USD=0.002
+RCI_LAST_DATABASE_BACKUP_VERIFIED_AT=<ISO-8601 timestamp after backup evidence is verified>
+RCI_LAST_RESTORE_DRILL_AT=<ISO-8601 timestamp after an isolated restore drill passes>
 LOG_LEVEL=INFO
 ```
 
@@ -143,6 +146,15 @@ each portfolio already uses bounded internal concurrency. Administrators monitor
 `/admin/report-publishing`. A failed job never activates its pending result or archives the prior
 trusted report.
 
+The protected `/admin/operations` workspace reads live queue, publication, cooldown, recent-credit,
+migration, Product Pack, Retailer Pack, and allowlisted Railway release metadata from the API. Set
+`METRICSCART_CREDIT_USD` on `api` to the current accounting rate used for the displayed estimate;
+provider invoices remain authoritative. `RCI_LAST_DATABASE_BACKUP_VERIFIED_AT` and
+`RCI_LAST_RESTORE_DRILL_AT` are operator attestations, not automatic Railway evidence. Set the first
+only after inspecting recoverable backup/PITR evidence and the second only after a non-production
+restore has passed the documented reconciliation. Missing or stale values remain visible as
+attention states.
+
 One Match Certification AI-review batch may contain up to 1,500 explicitly selected or
 queue-wide eligible cases. The server ranks queue-wide scope by Search-derived benchmark and
 competitor exposure, rejects known third-party/finalized/already-drafted cases, and refuses paid
@@ -226,8 +238,8 @@ MetricsCart uses query-parameter authentication.
 3. Create the four GitHub-backed services with no Root Directory and assign the config paths above.
 4. Add reference variables and sealed secrets. Confirm no plaintext secret appears in a shared or
    web variable.
-5. Deploy `api`. Its pre-deploy log must show Alembic at
-   `0024_scoped_match_brand`; then verify
+5. Deploy `api`. Its pre-deploy log must show Alembic at the repository's single current migration
+   head (System Operations currently expects `0048_price_catalog`); then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
@@ -249,6 +261,11 @@ MetricsCart uses query-parameter authentication.
 11. Publish the compact strawberry AnalysisResult and generate HTML, XLSX, email, and audit ZIP.
     Confirm each download URL expires and no bucket object is anonymously readable.
 12. Run a backup restore drill into a non-production environment before declaring the rollout done.
+13. Open `/admin/operations`, reconcile its commit/deployment/migration identity, require zero
+    expired leases, and run the zero-credit verifier:
+    `python3 scripts/verify_release_readiness.py --web-base <public-web-url> --api-base <private-api-url>`.
+    Run this inside the Railway network when the API has no public domain. A paid Search/PDP/AI
+    canary remains a separate explicitly approved run.
 
 Keep `PRODUCT_DETAIL_ENRICHMENT_ENABLED=false` through migration and fixture acceptance. Enable it
 only after an explicit enrichment run with a reviewed credit ceiling has been queued. Search and PDP

@@ -82,11 +82,12 @@ export const platformDocGroups: ReadonlyArray<{
 const lastVerified = "August 28, 2026";
 const aiIntegrationLastVerified = "August 29, 2026";
 const integrationLineageLastVerified = "August 29, 2026";
+const productionOperationsLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.71",
-  lastVerified: integrationLineageLastVerified,
+  version: "1.3.72",
+  lastVerified: productionOperationsLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -231,6 +232,11 @@ export const platformDocumentation: PlatformDocumentation = {
               "Study Discovery",
               "Profile Search results, remove noise, plan selective PDP enrichment, and create evidence for a Product Pack.",
               "Discovery precedes certification and retains Search/PDP source authority.",
+            ],
+            [
+              "System Operations",
+              "Verify release identity, migrations, queues, cooldowns, recent spend, publication state, and recovery evidence.",
+              "The page is read-only. Backup and restore timestamps are operator attestations; provider billing remains authoritative.",
             ],
             [
               "Report Publishing",
@@ -1259,6 +1265,249 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "attention",
           title: "Current access-control limitation",
           text: "The implemented administrator surface uses one protected admin session rather than individual accounts and role-based permissions. The intended roles are Admin, Analyst, and Viewer, but full accounts/RBAC remain future work.",
+        },
+      ],
+    },
+    {
+      id: "incident-response-recovery",
+      group: "operations",
+      title: "Production incident response & recovery",
+      summary:
+        "A severity-based playbook for restoring availability without corrupting queues, evidence, reports, or audit history.",
+      audience: "Platform owner · Platform administrator · Engineering",
+      readingTime: "12 min",
+      lastVerified: productionOperationsLastVerified,
+      status: "Current with limitations",
+      links: [
+        { href: "/admin/operations", label: "Open System Operations" },
+        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+      ],
+      blocks: [
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Protect evidence before restoring speed",
+          text: "Never mark work successful, overwrite raw objects, delete queue rows, or replace the current trusted report to make an incident disappear. Pause claims or roll back stateless code, preserve leases and failure evidence, and recover through supported retry/replay paths.",
+        },
+        {
+          kind: "table",
+          title: "Incident severity",
+          columns: ["Severity", "Use when", "First response", "Target"],
+          rows: [
+            [
+              "SEV-1",
+              "The public app or API is unavailable, authoritative data may be at risk, or paid work is running without its approved boundary.",
+              "Stop new paid claims, preserve evidence, verify Postgres and bucket state, and restore the last healthy stateless deployment.",
+              "Acknowledge immediately; restore safe read access before resuming writes.",
+            ],
+            [
+              "SEV-2",
+              "A major workflow, report, queue, or retailer is unavailable while the rest of the platform remains usable.",
+              "Isolate the affected service/retailer, retain the current trusted publication, and diagnose leases, cooldowns, gates, and recent deployment changes.",
+              "Restore or safely disable the affected workflow without broadening scope.",
+            ],
+            [
+              "SEV-3",
+              "A limited defect, stale evidence warning, isolated failure, or presentation issue has a workaround.",
+              "Record the defect and evidence, prevent misleading output, and schedule a tested correction.",
+              "Correct through the normal release gate.",
+            ],
+          ],
+        },
+        {
+          kind: "steps",
+          title: "Availability incident workflow",
+          items: [
+            {
+              title: "Confirm the failure boundary",
+              detail:
+                "Open System Operations and test web /health, web /health/ready, API /health/live, and API /health/ready. Distinguish an unavailable process, Postgres dependency failure, slow analytical projection, provider cooldown, and browser-only failure.",
+            },
+            {
+              title: "Freeze risky work",
+              detail:
+                "If paid or mutating work is unsafe, scale the worker/scheduler to zero or disable the narrow feature flag. Do not change historical rows. In-flight leases remain reclaimable after expiry.",
+            },
+            {
+              title: "Compare release identity",
+              detail:
+                "Record commit, deployment ID, database migration, Product Pack/Retailer Pack versions, and the last known healthy deployment. A migration mismatch is release-blocking.",
+            },
+            {
+              title: "Restore the smallest component",
+              detail:
+                "Roll back or restart only the affected stateless service when possible. Keep the prior ready AnalysisResult active; a blocked materialization must not replace it.",
+            },
+            {
+              title: "Verify before resuming",
+              detail:
+                "Run the zero-credit readiness verifier, exercise one representative Price and Competitive Intelligence read, inspect queue leases/cooldowns, then resume one worker before restoring normal scale.",
+            },
+            {
+              title: "Record the incident",
+              detail:
+                "Append the timeline, impact, root cause, evidence, spend exposure, remediation, tests, deployment, and follow-up controls to the numbered phase/change record and Platform Docs change-order log.",
+            },
+          ],
+        },
+        {
+          kind: "steps",
+          title: "Database and bucket recovery drill",
+          items: [
+            {
+              title: "Verify a recoverable production backup",
+              detail:
+                "Confirm the Railway Postgres backup/PITR evidence and record its timestamp. Do not test restoration over production.",
+            },
+            {
+              title: "Restore into an isolated non-production environment",
+              detail:
+                "Use a new database/service boundary with no production worker, provider, email, or AI credentials. Preserve string identifiers and timezone-aware timestamps.",
+            },
+            {
+              title: "Reconcile control and data planes",
+              detail:
+                "Verify Alembic head, organizations, definitions, queue history, AnalysisResults, publication state, artifact metadata, and representative private-bucket objects/checksums.",
+            },
+            {
+              title: "Run read-only acceptance",
+              detail:
+                "Start API/web against the restored database, keep COLLECTION_PROVIDER=fake and paid features disabled, and verify one Price and one Competitive report plus protected admin access.",
+            },
+            {
+              title: "Attest only after evidence passes",
+              detail:
+                "Set RCI_LAST_DATABASE_BACKUP_VERIFIED_AT after backup evidence is checked and RCI_LAST_RESTORE_DRILL_AT only after the isolated restore succeeds. System Operations flags absent or stale attestations; it does not manufacture proof.",
+            },
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "attention",
+          title: "Current recovery limitation",
+          text: "The application now displays operator-attested backup and restore-drill freshness, but it does not call Railway's backup API or perform an automatic restore. A real isolated restore remains an explicit infrastructure operation and must be evidenced before either timestamp is marked current.",
+        },
+      ],
+    },
+    {
+      id: "release-manifest-change-control",
+      group: "operations",
+      title: "Release manifest, canaries & change control",
+      summary:
+        "How one release proves its code, migrations, governed configuration, documentation, health, and post-deploy behavior.",
+      audience: "Platform owner · Platform administrator · Engineering",
+      readingTime: "11 min",
+      lastVerified: productionOperationsLastVerified,
+      status: "Current",
+      links: [
+        { href: "/admin/operations", label: "Open System Operations" },
+        { href: "/admin/docs", label: "Open Platform Docs" },
+      ],
+      blocks: [
+        {
+          kind: "definitions",
+          title: "Live release manifest",
+          items: [
+            {
+              term: "Code identity",
+              definition:
+                "The API exposes the allowlisted application version, Railway commit SHA, deployment ID, environment, and service name. Secrets and arbitrary environment values are never serialized.",
+            },
+            {
+              term: "Database identity",
+              definition:
+                "The current alembic_version must equal one configured migration head discovered from the deployed repository. A mismatch blocks operational readiness.",
+            },
+            {
+              term: "Governed configuration",
+              definition:
+                "Every deployed Product Pack and active Retailer Pack is listed by stable ID, semantic version, and checksum so analysis policy can be tied to code and evidence.",
+            },
+            {
+              term: "Operational state",
+              definition:
+                "Queue depth, running claims, expired leases, recent failures/review outcomes, provider cooldowns, publication blockers, and latest successful work come from live Postgres state.",
+            },
+            {
+              term: "Spend reconciliation",
+              definition:
+                "Thirty-day Search/PDP credits and persisted AI estimated cost are operational estimates. Missing AI usage remains explicit and MetricsCart/OpenAI billing stays financially authoritative.",
+            },
+          ],
+        },
+        {
+          kind: "steps",
+          title: "Release sequence",
+          items: [
+            {
+              title: "Review scope and paid boundaries",
+              detail:
+                "Name changed workflows, contracts, migrations, metrics, retailers, Product Packs, AI behavior, secrets, costs, and rollback boundaries. Live provider/AI acceptance requires separate explicit scope and spend approval.",
+            },
+            {
+              title: "Pass documentation coverage",
+              detail:
+                "CI compares behavioral source/config/schema changes with Platform Docs and requires both the maintained guide update and a numbered phase/change record.",
+            },
+            {
+              title: "Pass the complete release gate",
+              detail:
+                "Run schemas, Python format/lint/types/tests, migration upgrade/downgrade/upgrade, TypeScript contracts/format/lint/types/tests/build, browser tests, and all four container builds.",
+            },
+            {
+              title: "Deploy in compatible order",
+              detail:
+                "Apply migration/API first, then lease-safe worker/scheduler services, then web. Do not expose a UI contract before its API is compatible.",
+            },
+            {
+              title: "Run the zero-credit canary",
+              detail:
+                "Run scripts/verify_release_readiness.py against web and API. It verifies liveness/readiness only, emits a JSON record, and always reports zero paid provider calls.",
+            },
+            {
+              title: "Perform live workflow acceptance",
+              detail:
+                "Open System Operations and the changed page, confirm release/migration identity, inspect browser errors, and verify one representative read. Run a paid Search/PDP/AI canary only when separately approved.",
+            },
+          ],
+        },
+        {
+          kind: "table",
+          title: "Automatic publication and release blockers",
+          columns: ["Condition", "Displayed state", "Required action"],
+          rows: [
+            [
+              "Database migration differs from deployed head",
+              "Blocked",
+              "Stop promotion; reconcile migration deployment before writes resume.",
+            ],
+            [
+              "Any running durable task has an expired lease",
+              "Blocked",
+              "Confirm owner/process health and allow governed reclaim; never complete it manually.",
+            ],
+            [
+              "Open validation blocker",
+              "Blocked",
+              "Resolve or supersede through the evidence workflow before publication.",
+            ],
+            [
+              "Recent queue failure, review outcome, provider cooldown, or stale/missing recovery attestation",
+              "Attention",
+              "Investigate and disclose; it may not require taking healthy read surfaces offline.",
+            ],
+            [
+              "All runtime checks pass",
+              "Healthy",
+              "Complete the changed-workflow and live browser acceptance before release sign-off.",
+            ],
+          ],
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Canary spending boundary",
+          text: "The built-in release verifier is deliberately zero-credit. A Search-by-ZIP, PDP, or AI canary is a separate, immutable run with named retailers/locations/products, maximum credits or dollars, and explicit owner approval. Passing public health never implies that a provider page is callable.",
         },
       ],
     },
@@ -2619,6 +2868,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-08-29",
               "Implemented and release-tested",
+              "System Operations, incident/recovery playbooks, live release manifests, zero-credit canaries, and documentation coverage became one governed production-readiness workflow.",
+              "The protected System Operations page reads non-secret Railway release identity, current Alembic head, deployed Product Pack/Retailer Pack checksums, durable queue state, expired leases, provider cooldowns, active publication state, thirty-day Search/PDP credits, recorded AI estimated cost, and operator-attested backup/restore freshness. A migration mismatch, expired lease, or open validation blocker fails closed. The zero-credit verifier checks web/API liveness and readiness without calling MetricsCart or OpenAI. CI now requires behavioral changes to update both Platform Docs and a numbered phase record. Backup/restore timestamps remain explicit operator attestations; no automatic Railway restore or paid provider canary is claimed.",
+            ],
+            [
+              "2026-08-29",
+              "Implemented and release-tested",
               "Platform Docs gained a catalog-backed Retailer Integration Registry and complete source-to-metric lineage guide.",
               "The registry records all 18 enabled Search adapters, corresponding PDP runtime paths, per-call credits, required location/request context, provider limits, selective 30-day cache-first enrichment, seller governance, and the distinction between adapter enablement and run-specific callability. The lineage guide traces immutable Search, location, PDP, brand, seller, Product Pack, certification, geography, deterministic analytics, and publication evidence into Price and Competitive Intelligence metrics. Automated tests compare every enabled Search/PDP path with the maintained guide and protect distinct product-location, benchmark-store, competitor-store, relationship, and delivery-ZIP grains. This documentation-only change makes no MetricsCart, PDP, OpenAI, certification, metric, source-data, or report-publication change.",
             ],
@@ -3265,6 +3520,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Update service and security guidance when variables, credentials, limits, or deployment ownership changes.",
             "Update the Retailer Integration Registry whenever a Search/PDP path, credit, required parameter, location rule, seller policy, runtime override, or enabled status changes.",
             "Update Source-to-Metric Lineage whenever a source authority, normalized field, grain, denominator, formula, exclusion, comparison radius, label, or drill-down changes.",
+            "Review System Operations after every deployment and incident; update recovery attestations only after evidence is verified.",
+            "Run the zero-credit release verifier for every production deployment; keep paid provider/AI canaries separately approved and recorded.",
             "Append a change-order row; do not silently replace history.",
           ],
         },

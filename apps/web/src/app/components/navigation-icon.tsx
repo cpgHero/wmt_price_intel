@@ -73,6 +73,13 @@ const iconPaths: Record<NavigationIconName, React.ReactNode> = {
       <path d="M9 7h6M9 11h6M9 15h4" />
     </>
   ),
+  operations: (
+    <>
+      <path d="M4 5h16v14H4z" />
+      <path d="M7 15V9M12 15V7M17 15v-4" />
+      <path d="M7 18h10" />
+    </>
+  ),
   "product-packs": (
     <>
       <path d="m12 3 8 4-8 4-8-4Z" />
