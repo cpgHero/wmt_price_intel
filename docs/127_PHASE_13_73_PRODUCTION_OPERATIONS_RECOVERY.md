@@ -1,6 +1,6 @@
 # Phase 13.73 — Production Operations, Recovery, and Release Governance
 
-Status: implemented; local release gates pass, Linux CI and production verification pending
+Status: deployed and production-verified; recovery attestations remain intentionally unset
 
 Date: August 29, 2026
 
@@ -63,7 +63,7 @@ Test-only and documentation-only changes do not create a recursive documentation
 
 ### Operating manual
 
-Platform Docs version 1.3.72 adds:
+Platform Docs version 1.3.73 adds:
 
 - **Production incident response & recovery** — severity definitions, availability workflow,
   evidence-preserving rollback, database/bucket recovery drill, and current automation boundary.
@@ -89,14 +89,44 @@ operation.
 - Python formatting, Ruff, MyPy, contracts, and the complete test suite pass locally: 791 tests
   passed and 16 credential/database/golden-data-dependent tests were explicitly skipped.
 - TypeScript contracts, formatting, lint, typecheck, 86 unit tests, and the production build pass
-  locally. Local browser execution is blocked by the known macOS Chromium `SIGTRAP`; Linux CI and
-  signed-in production browser acceptance remain required.
+  locally. Local browser execution remains affected by the known macOS Chromium `SIGTRAP`; the same
+  Playwright suite passes in Linux CI and signed-in production browser acceptance passed.
 - Reversible Alembic upgrade/downgrade/upgrade runs in Linux CI against its disposable Postgres
   service; this phase adds no migration.
 - Four service-container builds.
 - GitHub Actions, Railway deployments, public readiness, protected production System Operations,
   and one representative Price/Competitive read after deployment.
 - No MetricsCart, PDP, OpenAI, SMTP, or paid canary call in this phase.
+
+## Production release evidence
+
+- Implementation commit: `8f14a06325169df086b1a1635e8fcf24f99713a3`
+  (`Add production operations and release governance`).
+- Truth-label correction commit: `517e598d7d68b58602335a31b5a96e4b74f64967`
+  (`Correct operations provider configuration label`). The correction prevents the API container
+  from implying that it can observe the worker container's collection-provider setting.
+- GitHub Actions runs `33270091290` and `33270492530` completed successfully. The latter passed the
+  documentation gate, Python formatting/Ruff/MyPy/contracts/full test suite, disposable-Postgres
+  upgrade/downgrade/upgrade, TypeScript contracts/format/lint/typecheck/unit/build/Linux Playwright,
+  and web/API/worker/scheduler container builds.
+- Railway production deployments are healthy: web
+  `e65338e6-da71-4243-8d34-16e257166f0e` and API
+  `0250e356-9836-49fa-8160-778189c45650` run the correction commit; worker
+  `dbab7ef5-6a50-48ff-a623-5c8d002a61c8` and scheduler
+  `44712f8a-bb21-4a76-aac1-002a5a961224` run the implementation commit because the correction did
+  not touch their watched build inputs.
+- The zero-credit verifier passed web/API liveness and readiness in production and recorded
+  `paid_provider_calls: 0`.
+- Signed-in production browser acceptance passed for System Operations, Platform Docs, the Price
+  Intelligence library and a milk retailer detail, the Competitive Intelligence library, and a
+  governed ground-beef report. No browser warning or error was emitted on those checks.
+- The deployed API reports commit `517e598d7d68`, migration `0048_price_catalog` matching repository
+  head, zero queued/running/expired Search, analysis, PDP, Matching AI, and report-materialization
+  tasks, zero active provider cooldowns, six ready reports, and zero open validation blockers.
+- Overall state correctly remains `attention`: one preserved historical Spring Valley report
+  materialization failed because its analysis was not decision-ready, and neither backup
+  verification nor an isolated restore drill has been attested. No report, queue history, or
+  recovery timestamp was altered to manufacture a green state.
 
 ## Rollback
 
