@@ -341,6 +341,29 @@ Search and PDP remain independent limiter domains.
 - Bucket incident: pause workers; do not mark a task successful unless its raw provider response was
   persisted. Restore service only after authenticated put/head/presign checks pass.
 
+## Backup and isolated restore drill
+
+Recovery attestations are evidence, not configuration defaults. Set
+`RCI_LAST_DATABASE_BACKUP_VERIFIED_AT` only after a recoverable backup is inspected. Set
+`RCI_LAST_RESTORE_DRILL_AT` only after an isolated restore passes the complete acceptance sequence.
+
+Use the maintained procedure and evidence format in
+[`128_PHASE_13_74_RECOVERY_DRILL_AND_BACKUP_GOVERNANCE.md`](128_PHASE_13_74_RECOVERY_DRILL_AND_BACKUP_GOVERNANCE.md).
+At minimum, every drill must:
+
+1. restore into a dedicated non-production Postgres service with paid and mutating services absent;
+2. checksum the dump before and after transfer;
+3. run `scripts/recovery_reconcile.sql` against production and recovery and require an exact diff;
+4. reconcile representative private bucket objects to database byte-size and SHA-256 metadata;
+5. prove unauthenticated admin denial and authenticated admin access;
+6. exercise one publication-materialized Price read and one projected Competitive read; and
+7. remove temporary dump files and credentials after the evidence record is durable.
+
+Railway volume backups, PITR, and logical dumps address different failures. Keep an independent
+logical-dump procedure even when Railway backups are enabled. PITR is not retroactive and may
+redeploy Postgres when enabled; schedule that change in an observed maintenance window. A successful
+manual restore drill does not imply that PITR or scheduled backups are active.
+
 Current platform references: [Railway config as code](https://docs.railway.com/config-as-code/reference),
 [private networking](https://docs.railway.com/private-networking),
 [storage buckets](https://docs.railway.com/storage-buckets), and

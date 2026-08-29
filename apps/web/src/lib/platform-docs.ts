@@ -86,7 +86,7 @@ const productionOperationsLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.73",
+  version: "1.3.74",
   lastVerified: productionOperationsLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1385,7 +1385,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current recovery limitation",
-          text: "The application now displays operator-attested backup and restore-drill freshness, but it does not call Railway's backup API or perform an automatic restore. A real isolated restore remains an explicit infrastructure operation and must be evidenced before either timestamp is marked current.",
+          text: "The 2026-08-29 isolated logical restore passed database, private-object, administrator-boundary, Price, and Competitive acceptance. System Operations displays its operator-attested freshness. Daily and weekly Railway volume backup schedules are active. PITR remains disabled, is not retroactive, and should be enabled only in an observed maintenance window because it can redeploy Postgres.",
         },
       ],
     },
@@ -2865,6 +2865,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "Isolated restore passed; production attestations ready",
+              "The first governed Railway recovery drill restored production into a fail-closed non-production environment and reconciled the complete trust boundary.",
+              "A checksummed 422 MB PostgreSQL custom dump restored in 67 seconds. Migration 0048 and 19 trust-critical table counts matched production exactly; three private bucket objects matched immutable size and SHA-256 metadata; protected admin access, a 649-product Milk paged Price catalog, and Ground Beef three-mile scorecards passed. Daily and weekly Railway volume backup schedules are now active. No MetricsCart, OpenAI, email, worker, scheduler, PDP, matching, or report mutation ran. PITR remains disabled pending an observed maintenance window and is not implied by the attestations.",
+            ],
             [
               "2026-08-29",
               "Production truth-label correction",

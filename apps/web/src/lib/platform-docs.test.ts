@@ -211,11 +211,13 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.73");
+    expect(platformDocumentation.version).toBe("1.3.74");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
     expect(text).toContain("operator-attested");
+    expect(text).toContain("daily and weekly railway volume backup schedules are active");
+    expect(text).toContain("pitr remains disabled");
     expect(text).toContain("migration mismatch");
     expect(text).toContain("zero-credit canary");
     expect(text).toContain("separate, immutable run");
