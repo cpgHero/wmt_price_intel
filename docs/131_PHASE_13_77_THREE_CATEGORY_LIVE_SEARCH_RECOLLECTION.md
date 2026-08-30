@@ -197,6 +197,8 @@ The analysis source records the base run, every recovery component, and manifest
 generation suffixes apply to every generation after the first, preventing analysis-ID collisions.
 The composite also asserts that every selected usable artifact was inserted and that terminal exact
 recovery actual credits did not exceed their reserved upper bound.
+Artifact-lineage bind values are cast to their declared PostgreSQL types before JSONB construction,
+so the immutable manifest behaves identically under local and production database drivers.
 
 Scope-integrity checks read the governed `retailer_location.collection_eligible` state while retaining
 the frozen task/location identity in the assembly manifest. A location made ineligible after the

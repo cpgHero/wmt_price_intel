@@ -2953,7 +2953,7 @@ class PostgresCompositeEvidenceRepository:
                                  'collection_run_id', t.collection_run_id::text,
                                'page_number', t.page_number,
                                'location_scope_key', t.location_scope_key,
-                               'canonical_request_key', :canonical_request_key,
+                               'canonical_request_key', CAST(:canonical_request_key AS text),
                                'location_snapshot', CAST(:location_snapshot AS jsonb)
                                )
                         FROM collection_task t
