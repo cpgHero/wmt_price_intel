@@ -15,11 +15,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from rci_collections import CollectionPlanner, CollectionRetailerCatalog
 from rci_collections.composite import (
     CompositeInputSetRecord,
+    ContinuationSelectionPreview,
     PostgresCompositeEvidenceRepository,
     RecoveryBatchRecord,
     RecoveryBatchRunRecord,
@@ -261,6 +262,28 @@ class RecoverySelectionPreviewResponse(BaseModel):
     items: tuple[RecoverySelectionItemResponse, ...]
 
 
+class ContinuationSelectionPreviewResponse(BaseModel):
+    base_collection_run_id: str
+    continuation_of_recovery_plan_id: str
+    lineage_plan_ids: tuple[str, ...]
+    lineage_checksum: str
+    selection_policy_version: str
+    selection_checksum: str
+    base_snapshot_checksum: str
+    selected_task_count: int
+    maximum_provider_attempts: int
+    maximum_credits: int
+    resolved_before_count: int
+    conclusive_before_count: int
+    retained_success_count: int
+    retained_billable_404_count: int
+    retailers: tuple[RecoveryRetailerSummaryResponse, ...]
+    item_offset: int
+    item_limit: int
+    next_item_offset: int | None
+    items: tuple[RecoverySelectionItemResponse, ...]
+
+
 class ApproveRecoveryPlanRequest(BaseModel):
     selection_checksum: str
     approved_credit_ceiling: int
@@ -269,6 +292,18 @@ class ApproveRecoveryPlanRequest(BaseModel):
     supersedes_recovery_plan_id: UUID | None = None
     recovery_batch_id: UUID | None = None
     plan_mode: Literal["exact_launch", "legacy_adoption"] = "exact_launch"
+
+
+class ApproveRecoveryContinuationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selection_checksum: str = Field(min_length=64, max_length=64)
+    lineage_checksum: str = Field(min_length=64, max_length=64)
+    base_snapshot_checksum: str = Field(min_length=64, max_length=64)
+    approved_credit_ceiling: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=2_000)
+    retailer_ids: tuple[str, ...] = Field(default=(), max_length=100)
+    recovery_batch_id: UUID
 
 
 class ApproveRetailerUnavailabilityRequest(BaseModel):
@@ -307,6 +342,8 @@ class RecoveryPlanResponse(BaseModel):
     selection_scope: dict[str, Any]
     plan_generation: int
     supersedes_recovery_plan_id: str | None
+    continuation_of_recovery_plan_id: str | None
+    continuation_depth: int
     selected_task_count: int
     maximum_credits: int
     approved_credit_ceiling: int
@@ -572,6 +609,39 @@ def _recovery_preview_response(
             if include_items
             else ()
         ),
+    )
+
+
+def _continuation_preview_response(
+    preview: ContinuationSelectionPreview,
+    *,
+    item_offset: int,
+    item_limit: int,
+) -> ContinuationSelectionPreviewResponse:
+    page = preview.items[item_offset : item_offset + item_limit]
+    next_offset = item_offset + len(page)
+    return ContinuationSelectionPreviewResponse(
+        base_collection_run_id=preview.base_collection_run_id,
+        continuation_of_recovery_plan_id=preview.continuation_of_recovery_plan_id,
+        lineage_plan_ids=preview.lineage_plan_ids,
+        lineage_checksum=preview.lineage_checksum,
+        selection_policy_version=preview.selection_policy_version,
+        selection_checksum=preview.selection_checksum,
+        base_snapshot_checksum=preview.base_snapshot_checksum,
+        selected_task_count=preview.selected_task_count,
+        maximum_provider_attempts=preview.maximum_provider_attempts,
+        maximum_credits=preview.maximum_credits,
+        resolved_before_count=preview.resolved_before_count,
+        conclusive_before_count=preview.conclusive_before_count,
+        retained_success_count=preview.retained_success_count,
+        retained_billable_404_count=preview.retained_billable_404_count,
+        retailers=tuple(
+            RecoveryRetailerSummaryResponse.model_validate(item) for item in preview.retailers
+        ),
+        item_offset=item_offset,
+        item_limit=item_limit,
+        next_item_offset=(next_offset if next_offset < preview.selected_task_count else None),
+        items=tuple(RecoverySelectionItemResponse.model_validate(item) for item in page),
     )
 
 
@@ -1119,6 +1189,68 @@ async def approve_failure_only_recovery(
                 else None
             ),
             plan_mode=request_body.plan_mode,
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.get(
+    "/collection-recovery-plans/{plan_id}/continuation-preview",
+    response_model=ContinuationSelectionPreviewResponse,
+    tags=["collections"],
+)
+async def preview_unresolved_recovery_continuation(
+    plan_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    retailer_ids: Annotated[list[str] | None, Query(max_length=100)] = None,
+    item_offset: int = Query(default=0, ge=0, le=50_000),
+    item_limit: int = Query(default=100, ge=1, le=500),
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> ContinuationSelectionPreviewResponse:
+    """Preview a paginated unresolved-only child of a terminal plan lineage."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        preview = await repository.preview_continuation(
+            str(plan_id), retailer_ids=retailer_ids or ()
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+    return _continuation_preview_response(
+        preview,
+        item_offset=item_offset,
+        item_limit=item_limit,
+    )
+
+
+@router.post(
+    "/collection-recovery-plans/{plan_id}/continuations",
+    response_model=RecoveryPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def approve_unresolved_recovery_continuation(
+    plan_id: UUID,
+    request_body: ApproveRecoveryContinuationRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryPlanRecord:
+    """Approve exactly the full checksum-bound continuation preview."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.approve_continuation(
+            str(plan_id),
+            selection_checksum=request_body.selection_checksum,
+            lineage_checksum=request_body.lineage_checksum,
+            base_snapshot_checksum=request_body.base_snapshot_checksum,
+            approved_credit_ceiling=request_body.approved_credit_ceiling,
+            reason=request_body.reason,
+            approved_by=_recovery_admin_actor(),
+            retailer_ids=request_body.retailer_ids,
+            recovery_batch_id=str(request_body.recovery_batch_id),
         )
     except (LookupError, ValueError) as exc:
         raise _composite_error(exc) from exc

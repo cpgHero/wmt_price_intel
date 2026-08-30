@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,9 +20,12 @@ from rci_collections.planner import canonical_checksum
 from rci_collections.request_contract import build_effective_provider_request
 
 SELECTION_POLICY_VERSION = "failure-only-v1"
+CONTINUATION_SELECTION_POLICY_VERSION = "unresolved-continuation-v1"
 ASSEMBLY_POLICY_VERSION = "composite-evidence-v1"
 MINIMUM_CONCLUSIVE_COVERAGE = 0.95
+MAXIMUM_CONTINUATION_TASKS = 50_000
 SEARCH_CREDIT_UNIT_COST_USD = Decimal("0.002000")
+MATERIALIZATION_WRITE_BATCH_SIZE = 1_000
 
 SelectionReason = Literal[
     "failed_gate_scope",
@@ -80,6 +84,38 @@ class RecoverySelectionPreview:
 
 
 @dataclass(frozen=True, slots=True)
+class ContinuationLineageComponent:
+    recovery_plan_id: str
+    recovery_collection_run_id: str
+    continuation_of_recovery_plan_id: str | None
+    continuation_depth: int
+    selection_checksum: str
+    selection_keys: tuple[str, ...]
+    adopted_keys: tuple[str, ...]
+    recovery_rows: tuple[TaskMapping, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ContinuationSelectionPreview:
+    base_collection_run_id: str
+    continuation_of_recovery_plan_id: str
+    lineage_plan_ids: tuple[str, ...]
+    lineage_checksum: str
+    selection_policy_version: str
+    selection_checksum: str
+    base_snapshot_checksum: str
+    selected_task_count: int
+    maximum_provider_attempts: int
+    maximum_credits: int
+    resolved_before_count: int
+    conclusive_before_count: int
+    retained_success_count: int
+    retained_billable_404_count: int
+    retailers: tuple[RetailerRecoverySummary, ...]
+    items: tuple[RecoverySelectionItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class RecoveryPlanRecord:
     id: str
     base_collection_run_id: str
@@ -93,6 +129,8 @@ class RecoveryPlanRecord:
     selection_scope: dict[str, Any]
     plan_generation: int
     supersedes_recovery_plan_id: str | None
+    continuation_of_recovery_plan_id: str | None
+    continuation_depth: int
     selected_task_count: int
     maximum_credits: int
     approved_credit_ceiling: int
@@ -486,7 +524,7 @@ def composite_trust_state(
 
 
 def recovery_adequacy(
-    selected_outcomes_by_retailer: Mapping[str, Sequence[EvidenceOutcome]],
+    outcomes_by_retailer: Mapping[str, Sequence[EvidenceOutcome]],
     *,
     maximum_warning_count: int = 2,
     maximum_warning_rate: float = 0.05,
@@ -494,12 +532,14 @@ def recovery_adequacy(
     """Fail closed on retailer recoveries that do not materially repair evidence.
 
     A small number of isolated, nonbillable gaps may remain a warning only when
-    the same retailer recovery produced definitive usable/unavailable evidence.
+    the same retailer lineage contains definitive usable/unavailable evidence.
+    Callers must pass the complete cumulative lineage population so a failed
+    optional retry cannot turn otherwise-ready 95%+ evidence into a blocker.
     """
 
     blocked = False
     manifest: dict[str, dict[str, Any]] = {}
-    for retailer_id, outcomes in sorted(selected_outcomes_by_retailer.items()):
+    for retailer_id, outcomes in sorted(outcomes_by_retailer.items()):
         counts = {outcome: outcomes.count(outcome) for outcome in set(outcomes)}
         selected = len(outcomes)
         usable = counts.get("usable_success", 0)
@@ -710,7 +750,7 @@ def _task_contract_snapshot(row: TaskMapping) -> dict[str, Any]:
 
 
 def build_exact_recovery_task_contracts(
-    preview: RecoverySelectionPreview,
+    preview: RecoverySelectionPreview | ContinuationSelectionPreview,
     *,
     selection_checksum: str,
     base_snapshot_checksum: str,
@@ -861,6 +901,306 @@ def build_recovery_preview(
     )
 
 
+def build_continuation_preview(
+    base_collection_run_id: str,
+    base_rows: Sequence[TaskMapping],
+    lineage_components: Sequence[ContinuationLineageComponent],
+    *,
+    definition_checksum: str,
+    continuation_of_recovery_plan_id: str,
+    retailer_ids: Sequence[str] = (),
+    minimum_successes: int = 1,
+    maximum_404_rate: float = 0.5,
+    minimum_conclusive_coverage: float = MINIMUM_CONCLUSIVE_COVERAGE,
+) -> ContinuationSelectionPreview:
+    """Select only evidence still needed after an immutable terminal lineage.
+
+    Successful responses and retained billable 404s are conclusive and can never
+    be selected. Integrity failures are always selected. Nonbillable gaps are
+    selected only to the deterministic number needed to satisfy the collection
+    readiness contract, leaving already-safe bounded gaps as disclosed warnings.
+    """
+
+    if not lineage_components:
+        raise ValueError("continuation requires at least one bound recovery component")
+    if not 0 < minimum_conclusive_coverage <= 1:
+        raise ValueError("minimum_conclusive_coverage must be in (0, 1]")
+    if not 0 <= maximum_404_rate <= 1:
+        raise ValueError("maximum_404_rate must be in [0, 1]")
+    if minimum_successes < 1:
+        raise ValueError("minimum_successes must be positive")
+
+    retailer_filter = frozenset(str(value) for value in retailer_ids)
+    base_preview = build_recovery_preview(
+        base_collection_run_id,
+        base_rows,
+        definition_checksum=definition_checksum,
+        allow_ineligible_locations=True,
+    )
+    base_by_key: dict[str, TaskMapping] = {}
+    for row in base_rows:
+        key = canonical_request_key(row)
+        if key in base_by_key:
+            raise ValueError("base run contains duplicate canonical request evidence")
+        base_by_key[key] = row
+    current_by_key = dict(base_by_key)
+    selected_task_ids: dict[str, str] = {}
+    expected_parent: str | None = None
+    seen_plan_ids: set[str] = set()
+    seen_run_ids: set[str] = set()
+    lineage_manifest: list[dict[str, Any]] = []
+    for expected_depth, component in enumerate(lineage_components):
+        if component.recovery_plan_id in seen_plan_ids:
+            raise ValueError("continuation lineage repeats a recovery plan")
+        if component.recovery_collection_run_id in seen_run_ids:
+            raise ValueError("continuation lineage repeats a recovery run")
+        if component.continuation_of_recovery_plan_id != expected_parent:
+            raise ValueError("continuation lineage is not a single ordered chain")
+        if component.continuation_depth != expected_depth:
+            raise ValueError("continuation lineage depth is not contiguous")
+        selection_keys = set(component.selection_keys)
+        adopted_keys = set(component.adopted_keys)
+        if len(selection_keys) != len(component.selection_keys):
+            raise ValueError("continuation ancestor has duplicate selected requests")
+        if selection_keys & adopted_keys:
+            raise ValueError("continuation ancestor selects and adopts the same request")
+        recovery_by_key: dict[str, TaskMapping] = {}
+        for row in component.recovery_rows:
+            key = canonical_request_key(row)
+            if key in recovery_by_key:
+                raise ValueError("continuation ancestor run has duplicate request evidence")
+            recovery_by_key[key] = row
+        governed_keys = selection_keys | adopted_keys
+        if not governed_keys.issubset(base_by_key):
+            raise ValueError("continuation ancestor contains a request outside the base run")
+        if not governed_keys.issubset(recovery_by_key):
+            raise ValueError("continuation ancestor is missing governed request evidence")
+        for key in sorted(governed_keys):
+            current = current_by_key[key]
+            recovery = recovery_by_key[key]
+            if evidence_outcome(current) != "usable_success" and _evidence_strength(
+                evidence_outcome(recovery)
+            ) > _evidence_strength(evidence_outcome(current)):
+                current_by_key[key] = recovery
+                selected_task_ids[key] = str(recovery["id"])
+        lineage_manifest.append(
+            {
+                "recovery_plan_id": component.recovery_plan_id,
+                "recovery_collection_run_id": component.recovery_collection_run_id,
+                "continuation_of_recovery_plan_id": component.continuation_of_recovery_plan_id,
+                "continuation_depth": component.continuation_depth,
+                "selection_checksum": component.selection_checksum,
+                "selected_keys": sorted(selection_keys),
+                "adopted_keys": sorted(adopted_keys),
+                "recovery_evidence_checksum": canonical_checksum(
+                    {
+                        "tasks": [
+                            _task_snapshot(recovery_by_key[key]) for key in sorted(recovery_by_key)
+                        ]
+                    }
+                ),
+            }
+        )
+        seen_plan_ids.add(component.recovery_plan_id)
+        seen_run_ids.add(component.recovery_collection_run_id)
+        expected_parent = component.recovery_plan_id
+    if expected_parent != continuation_of_recovery_plan_id:
+        raise ValueError("continuation parent is not the terminal lineage component")
+
+    lineage_checksum = canonical_checksum(
+        {
+            "base_collection_run_id": base_collection_run_id,
+            "base_snapshot_checksum": base_preview.base_snapshot_checksum,
+            "components": lineage_manifest,
+        }
+    )
+    rows_by_retailer: dict[str, list[tuple[str, TaskMapping]]] = {}
+    for key, row in sorted(current_by_key.items()):
+        retailer_id = str(row["retailer_id"])
+        if retailer_filter and retailer_id not in retailer_filter:
+            continue
+        rows_by_retailer.setdefault(retailer_id, []).append((key, row))
+
+    selected: list[RecoverySelectionItem] = []
+    retailer_values: dict[str, dict[str, int]] = {}
+    for retailer_id, keyed_rows in sorted(rows_by_retailer.items()):
+        conclusive = [
+            (key, row)
+            for key, row in keyed_rows
+            if evidence_outcome(row) in {"usable_success", "retained_billable_404"}
+        ]
+        usable_count = sum(evidence_outcome(row) == "usable_success" for _, row in keyed_rows)
+        nonempty_usable_count = sum(
+            evidence_outcome(row) == "usable_success" and int(row.get("result_count") or 0) > 0
+            for _, row in keyed_rows
+        )
+        retained_404_count = sum(
+            evidence_outcome(row) == "retained_billable_404" for _, row in keyed_rows
+        )
+        hard = [
+            (key, row)
+            for key, row in keyed_rows
+            if evidence_outcome(row) in {"contract_missing", "quarantined"}
+            and row.get("current_location_eligible") is not False
+        ]
+        gaps = [
+            (key, row)
+            for key, row in keyed_rows
+            if evidence_outcome(row) == "zero_credit_missing"
+            and row.get("current_location_eligible") is not False
+        ]
+        planned_count = len(keyed_rows)
+        conclusive_count = len(conclusive)
+        needed_for_coverage = max(
+            0,
+            math.ceil(planned_count * minimum_conclusive_coverage) - conclusive_count,
+        )
+        needed_for_success = max(
+            0,
+            minimum_successes - usable_count,
+            1 - nonempty_usable_count,
+        )
+        if maximum_404_rate == 0:
+            needed_for_404 = len(gaps) + len(hard) if retained_404_count else 0
+        else:
+            needed_for_404 = max(
+                0,
+                math.ceil(retained_404_count / maximum_404_rate) - conclusive_count,
+            )
+        needed_total = max(needed_for_coverage, needed_for_success, needed_for_404)
+        available_unresolved = len(hard) + len(gaps)
+        projected_conclusive = conclusive_count + available_unresolved
+        projected_404_rate = (
+            retained_404_count / projected_conclusive if projected_conclusive else 1.0
+        )
+        if needed_total > available_unresolved or projected_404_rate > maximum_404_rate:
+            raise ValueError(
+                f"{retailer_id} cannot satisfy collection readiness from its unresolved "
+                "canonical requests; use an explicit governed unavailability decision "
+                "instead of spending on an inadequate continuation"
+            )
+        gap_count = max(0, needed_total - len(hard))
+        selected_rows = [*hard, *gaps[:gap_count]]
+        values = {
+            "selected_tasks": 0,
+            "required_tasks": 0,
+            "optional_transient_tasks": 0,
+            "maximum_provider_attempts": 0,
+            "maximum_credits": 0,
+            "reused_successes": usable_count,
+            "retained_billable_404s": retained_404_count,
+            "retained_billable_404_credits": sum(
+                int(row.get("billable_credits") or 0)
+                for _, row in keyed_rows
+                if evidence_outcome(row) == "retained_billable_404"
+            ),
+        }
+        for key, row in selected_rows:
+            outcome = evidence_outcome(row)
+            required = outcome in {"contract_missing", "quarantined"}
+            item = RecoverySelectionItem(
+                source_task_id=str(row["id"]),
+                retailer_id=retailer_id,
+                canonical_request_key=key,
+                selection_reason="blocking_failure" if required else "transient_gap",
+                required_for_assembly=required,
+                credits_per_success=int(row["credits_per_success"]),
+                maximum_credits=int(row["credits_per_success"]) * int(row["max_attempts"]),
+                source_snapshot=_task_snapshot(row),
+            )
+            selected.append(item)
+            values["selected_tasks"] += 1
+            values["required_tasks" if required else "optional_transient_tasks"] += 1
+            values["maximum_provider_attempts"] += int(row["max_attempts"])
+            values["maximum_credits"] += item.maximum_credits
+        retailer_values[retailer_id] = values
+
+    selected.sort(key=lambda item: (item.retailer_id, item.canonical_request_key))
+    if len(selected) > MAXIMUM_CONTINUATION_TASKS:
+        raise ValueError(
+            f"continuation selects {len(selected)} tasks, above the governed "
+            f"{MAXIMUM_CONTINUATION_TASKS}-task cap"
+        )
+    selection_manifest = {
+        "schema_version": "1.0.0",
+        "selection_policy_version": CONTINUATION_SELECTION_POLICY_VERSION,
+        "base_collection_run_id": base_collection_run_id,
+        "base_snapshot_checksum": base_preview.base_snapshot_checksum,
+        "continuation_of_recovery_plan_id": continuation_of_recovery_plan_id,
+        "lineage_checksum": lineage_checksum,
+        "selection_scope": {"retailer_ids": sorted(retailer_filter)},
+        "items": [
+            {
+                "source_task_id": item.source_task_id,
+                "canonical_request_key": item.canonical_request_key,
+                "selection_reason": item.selection_reason,
+                "required_for_assembly": item.required_for_assembly,
+                "source_snapshot": item.source_snapshot,
+            }
+            for item in selected
+        ],
+    }
+    return ContinuationSelectionPreview(
+        base_collection_run_id=base_collection_run_id,
+        continuation_of_recovery_plan_id=continuation_of_recovery_plan_id,
+        lineage_plan_ids=tuple(component.recovery_plan_id for component in lineage_components),
+        lineage_checksum=lineage_checksum,
+        selection_policy_version=CONTINUATION_SELECTION_POLICY_VERSION,
+        selection_checksum=canonical_checksum(selection_manifest),
+        base_snapshot_checksum=base_preview.base_snapshot_checksum,
+        selected_task_count=len(selected),
+        maximum_provider_attempts=sum(
+            int(item.source_snapshot["max_attempts"]) for item in selected
+        ),
+        maximum_credits=sum(item.maximum_credits for item in selected),
+        resolved_before_count=len(selected_task_ids),
+        conclusive_before_count=sum(
+            evidence_outcome(row) in {"usable_success", "retained_billable_404"}
+            for row in current_by_key.values()
+        ),
+        retained_success_count=sum(
+            evidence_outcome(row) == "usable_success" for row in current_by_key.values()
+        ),
+        retained_billable_404_count=sum(
+            evidence_outcome(row) == "retained_billable_404" for row in current_by_key.values()
+        ),
+        retailers=tuple(
+            RetailerRecoverySummary(retailer_id=retailer_id, **values)
+            for retailer_id, values in sorted(retailer_values.items())
+        ),
+        items=tuple(selected),
+    )
+
+
+def partition_uncovered_recovery_keys(
+    uncovered_required_keys: set[str],
+    *,
+    base_by_key: Mapping[str, TaskMapping],
+    chosen_by_key: Mapping[str, tuple[TaskMapping, EvidenceOutcome]],
+    collection_readiness_manifest: Mapping[str, Mapping[str, Any]],
+    unavailable_retailer_ids: set[str],
+) -> tuple[set[str], set[str], set[str]]:
+    """Separate blockers from governed warnings and explicitly unavailable scope."""
+
+    unavailable = {
+        key
+        for key in uncovered_required_keys
+        if str(base_by_key[key]["retailer_id"]) in unavailable_retailer_ids
+    }
+    blocking = {
+        key
+        for key in uncovered_required_keys
+        if str(base_by_key[key]["retailer_id"]) not in unavailable_retailer_ids
+        and (
+            chosen_by_key[key][1] in {"contract_missing", "quarantined"}
+            or collection_readiness_manifest[str(base_by_key[key]["retailer_id"])]["status"]
+            == "blocking_integrity"
+        )
+    }
+    tolerated = uncovered_required_keys - unavailable - blocking
+    return blocking, unavailable, tolerated
+
+
 class PostgresCompositeEvidenceRepository:
     """Persist checksum-bound recovery intent and assemble immutable evidence."""
 
@@ -892,6 +1232,162 @@ class PostgresCompositeEvidenceRepository:
             rows,
             definition_checksum=definition_checksum,
             retailer_ids=retailer_ids,
+        )
+
+    async def preview_continuation(
+        self,
+        continuation_of_recovery_plan_id: str,
+        *,
+        retailer_ids: Sequence[str] = (),
+    ) -> ContinuationSelectionPreview:
+        """Preview incremental work against a terminal immutable plan lineage."""
+
+        async with self._engine.connect() as connection:
+            return await self._build_continuation_preview(
+                connection,
+                continuation_of_recovery_plan_id,
+                retailer_ids=retailer_ids,
+            )
+
+    async def _build_continuation_preview(
+        self,
+        connection: AsyncConnection,
+        continuation_of_recovery_plan_id: str,
+        *,
+        retailer_ids: Sequence[str] = (),
+    ) -> ContinuationSelectionPreview:
+        parent = await self._plan_row(connection, continuation_of_recovery_plan_id)
+        base_run_id = str(parent["base_collection_run_id"])
+        definition_checksum, base_rows = await self._base_rows(connection, base_run_id)
+        run = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT availability_gate_config FROM collection_run "
+                        "WHERE id::text = :run_id"
+                    ),
+                    {"run_id": base_run_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        gate_config = dict(run.get("availability_gate_config") or {})
+        plan_rows = list(
+            (
+                await connection.execute(
+                    text(
+                        """
+                        WITH RECURSIVE lineage AS (
+                          SELECT p.*, ARRAY[p.id] AS lineage_path
+                          FROM collection_recovery_plan p
+                          WHERE p.id::text = :parent_plan_id
+                          UNION ALL
+                          SELECT ancestor.*, child.lineage_path || ancestor.id
+                          FROM collection_recovery_plan ancestor
+                          JOIN lineage child
+                            ON child.continuation_of_recovery_plan_id = ancestor.id
+                          WHERE NOT ancestor.id = ANY(child.lineage_path)
+                        )
+                        SELECT * FROM lineage
+                        ORDER BY continuation_depth, created_at, id
+                        """
+                    ),
+                    {"parent_plan_id": continuation_of_recovery_plan_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if not plan_rows or str(plan_rows[-1]["id"]) != continuation_of_recovery_plan_id:
+            raise ValueError("continuation parent does not resolve to a complete lineage")
+        if any(str(row["base_collection_run_id"]) != base_run_id for row in plan_rows):
+            raise ValueError("continuation lineage spans more than one base run")
+        if len({str(row["organization_id"]) for row in plan_rows}) != 1:
+            raise ValueError("continuation lineage spans more than one organization")
+        if len(plan_rows) > 33:
+            raise ValueError("continuation lineage exceeds the governed depth limit")
+        batch_ids = {str(row.get("recovery_batch_id") or "") for row in plan_rows}
+        if len(batch_ids) != 1 or "" in batch_ids:
+            raise ValueError("continuation lineage must share one immutable recovery batch")
+        if any(str(row["status"]) not in {"bound", "ready"} for row in plan_rows):
+            raise ValueError("continuation requires every ancestor plan to be bound or ready")
+        recovery_run_ids = [
+            str(row["recovery_collection_run_id"])
+            for row in plan_rows
+            if row.get("recovery_collection_run_id") is not None
+        ]
+        if len(recovery_run_ids) != len(plan_rows):
+            raise ValueError("continuation ancestor is not bound to a recovery run")
+        terminal_rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT id::text, status FROM collection_run "
+                        "WHERE id::text = ANY(CAST(:run_ids AS text[]))"
+                    ),
+                    {"run_ids": recovery_run_ids},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        terminal_statuses: dict[str, str] = {
+            str(row["id"]): str(row["status"]) for row in terminal_rows
+        }
+        if set(terminal_statuses) != set(recovery_run_ids) or any(
+            str(status) not in {"succeeded", "completed_with_warnings", "failed", "cancelled"}
+            for status in terminal_statuses.values()
+        ):
+            raise ValueError("continuation requires every ancestor recovery run to be terminal")
+        components: list[ContinuationLineageComponent] = []
+        for plan, recovery_run_id in zip(plan_rows, recovery_run_ids, strict=True):
+            plan_id = str(plan["id"])
+            selection_keys = tuple(
+                str(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            "SELECT canonical_request_key "
+                            "FROM collection_recovery_selection "
+                            "WHERE recovery_plan_id::text = :plan_id ORDER BY ordinal"
+                        ),
+                        {"plan_id": plan_id},
+                    )
+                ).scalars()
+            )
+            binding_manifest = dict(plan.get("binding_manifest") or {})
+            adopted_keys = tuple(
+                sorted(
+                    str(row["canonical_request_key"])
+                    for row in binding_manifest.get("adopted_gap_replacements", [])
+                )
+            )
+            components.append(
+                ContinuationLineageComponent(
+                    recovery_plan_id=plan_id,
+                    recovery_collection_run_id=recovery_run_id,
+                    continuation_of_recovery_plan_id=(
+                        str(plan["continuation_of_recovery_plan_id"])
+                        if plan.get("continuation_of_recovery_plan_id") is not None
+                        else None
+                    ),
+                    continuation_depth=int(plan.get("continuation_depth") or 0),
+                    selection_checksum=str(plan["selection_checksum"]),
+                    selection_keys=selection_keys,
+                    adopted_keys=adopted_keys,
+                    recovery_rows=tuple(await self._task_rows(connection, recovery_run_id)),
+                )
+            )
+        return build_continuation_preview(
+            base_run_id,
+            base_rows,
+            components,
+            definition_checksum=definition_checksum,
+            continuation_of_recovery_plan_id=continuation_of_recovery_plan_id,
+            retailer_ids=retailer_ids,
+            minimum_successes=max(int(gate_config.get("minimum_successful_samples") or 1), 1),
+            maximum_404_rate=float(gate_config.get("max_billable_404_rate", 0.5)),
         )
 
     async def approve_retailer_unavailability(
@@ -1879,6 +2375,243 @@ class PostgresCompositeEvidenceRepository:
                     raise ValueError("the prior recovery plan could not be superseded atomically")
             return self._plan_record(row)
 
+    async def approve_continuation(
+        self,
+        continuation_of_recovery_plan_id: str,
+        *,
+        selection_checksum: str,
+        lineage_checksum: str,
+        base_snapshot_checksum: str,
+        approved_credit_ceiling: int,
+        reason: str,
+        approved_by: str,
+        retailer_ids: Sequence[str] = (),
+        recovery_batch_id: str,
+    ) -> RecoveryPlanRecord:
+        """Reserve and persist one unresolved-only continuation generation."""
+
+        if not reason.strip() or not approved_by.strip():
+            raise ValueError("reason and approved_by are required")
+        async with self._engine.begin() as connection:
+            parent_unlocked = await self._plan_row(connection, continuation_of_recovery_plan_id)
+            base_run_id = str(parent_unlocked["base_collection_run_id"])
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"collection-recovery:{base_run_id}"},
+            )
+            parent = await self._plan_row(
+                connection, continuation_of_recovery_plan_id, for_update=True
+            )
+            preview = await self._build_continuation_preview(
+                connection,
+                continuation_of_recovery_plan_id,
+                retailer_ids=retailer_ids,
+            )
+            if not preview.items:
+                raise ValueError(
+                    "the terminal lineage has no unresolved evidence required for readiness"
+                )
+            if preview.selection_checksum != selection_checksum:
+                raise ValueError("the continuation selection changed; review a new preview")
+            if preview.lineage_checksum != lineage_checksum:
+                raise ValueError("the continuation lineage changed; review a new preview")
+            if preview.base_snapshot_checksum != base_snapshot_checksum:
+                raise ValueError("the continuation no longer matches the immutable base snapshot")
+            if approved_credit_ceiling != preview.maximum_credits:
+                raise ValueError(
+                    "the approved credit ceiling must equal the immutable continuation selection"
+                )
+            build_exact_recovery_task_contracts(
+                preview,
+                selection_checksum=selection_checksum,
+                base_snapshot_checksum=base_snapshot_checksum,
+                approved_credit_ceiling=approved_credit_ceiling,
+            )
+            parent_batch_id = str(parent.get("recovery_batch_id") or "")
+            if not parent_batch_id or parent_batch_id != recovery_batch_id:
+                raise ValueError("continuation must preserve its parent's immutable recovery batch")
+            continuation_depth = int(parent.get("continuation_depth") or 0) + 1
+            if continuation_depth > 32:
+                raise ValueError("continuation lineage exceeds the governed depth limit")
+
+            existing = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM collection_recovery_plan "
+                            "WHERE continuation_of_recovery_plan_id::text = :parent_plan_id "
+                            "AND status NOT IN ('cancelled','superseded') FOR UPDATE"
+                        ),
+                        {"parent_plan_id": continuation_of_recovery_plan_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            expected_scope = {
+                "retailer_ids": sorted(set(str(value) for value in retailer_ids)),
+                "lineage_plan_ids": list(preview.lineage_plan_ids),
+                "lineage_checksum": preview.lineage_checksum,
+            }
+            if existing is not None:
+                same = bool(
+                    str(existing["selection_checksum"]) == preview.selection_checksum
+                    and str(existing["base_snapshot_checksum"]) == preview.base_snapshot_checksum
+                    and int(existing["approved_credit_ceiling"]) == approved_credit_ceiling
+                    and str(existing["recovery_batch_id"]) == recovery_batch_id
+                    and str(existing["reason"]) == reason.strip()
+                    and str(existing["approved_by"]) == approved_by.strip()
+                    and dict(existing.get("selection_scope") or {}) == expected_scope
+                )
+                if same:
+                    return self._plan_record(existing)
+                raise ValueError("continuation parent already has a different active child")
+
+            lineage_ids = list(preview.lineage_plan_ids)
+            overlapping_plan = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT p.id::text, count(*) AS overlap_count
+                            FROM collection_recovery_plan p
+                            JOIN collection_recovery_selection s
+                              ON s.recovery_plan_id = p.id
+                            WHERE p.base_collection_run_id::text = :base_run_id
+                              AND p.status IN ('approved','bound','ready','blocked')
+                              AND NOT (p.id::text = ANY(CAST(:lineage_ids AS text[])))
+                              AND s.canonical_request_key = ANY(CAST(:selection_keys AS text[]))
+                            GROUP BY p.id ORDER BY p.id LIMIT 1
+                            """
+                        ),
+                        {
+                            "base_run_id": base_run_id,
+                            "lineage_ids": lineage_ids,
+                            "selection_keys": [
+                                item.canonical_request_key for item in preview.items
+                            ],
+                        },
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if overlapping_plan is not None:
+                raise ValueError(
+                    "continuation selection overlaps non-lineage plan "
+                    f"{overlapping_plan['id']} ({overlapping_plan['overlap_count']} requests)"
+                )
+
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"collection-recovery-batch:{recovery_batch_id}"},
+            )
+            batch = await self._batch_row(connection, recovery_batch_id, for_update=True)
+            if str(batch["organization_id"]) != str(parent["organization_id"]):
+                raise ValueError("continuation batch belongs to another organization")
+            if str(batch["status"]) != "open":
+                raise ValueError("the authorized phase batch is not open")
+            base_is_accounted = (
+                await connection.execute(
+                    text(
+                        "SELECT 1 FROM collection_recovery_batch_run "
+                        "WHERE recovery_batch_id::text = :batch_id "
+                        "AND collection_run_id::text = :run_id"
+                    ),
+                    {"batch_id": recovery_batch_id, "run_id": base_run_id},
+                )
+            ).scalar_one_or_none()
+            if base_is_accounted is None:
+                raise ValueError(
+                    "base collection run is outside the immutable authorized inventory"
+                )
+            accounted = await self._batch_accounted_credits(connection, recovery_batch_id)
+            requested_total = accounted + preview.maximum_credits
+            if requested_total > int(batch["approved_credit_ceiling"]):
+                raise ValueError(
+                    "aggregate recovery batch lacks remaining credits for this continuation"
+                )
+            await connection.execute(
+                text(
+                    "UPDATE collection_recovery_batch SET reserved_credits = :reserved "
+                    "WHERE id::text = :batch_id"
+                ),
+                {"batch_id": recovery_batch_id, "reserved": requested_total},
+            )
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO collection_recovery_plan (
+                              organization_id, base_collection_run_id,
+                              selection_policy_version, selection_checksum,
+                              base_snapshot_checksum, selection_scope, plan_generation,
+                              recovery_batch_id, plan_mode, reservation_active,
+                              selected_task_count, maximum_credits,
+                              approved_credit_ceiling, reason, approved_by,
+                              continuation_of_recovery_plan_id, continuation_depth
+                            ) VALUES (
+                              CAST(:organization_id AS uuid), CAST(:base_run_id AS uuid),
+                              :policy, :selection_checksum, :base_snapshot_checksum,
+                              CAST(:selection_scope AS jsonb), :plan_generation,
+                              CAST(:recovery_batch_id AS uuid), 'exact_launch', true,
+                              :selected_task_count, :maximum_credits,
+                              :approved_credit_ceiling, :reason, :approved_by,
+                              CAST(:parent_plan_id AS uuid), :continuation_depth
+                            ) RETURNING *
+                            """
+                        ),
+                        {
+                            "organization_id": str(parent["organization_id"]),
+                            "base_run_id": base_run_id,
+                            "policy": CONTINUATION_SELECTION_POLICY_VERSION,
+                            "selection_checksum": preview.selection_checksum,
+                            "base_snapshot_checksum": preview.base_snapshot_checksum,
+                            "selection_scope": _json(expected_scope),
+                            "plan_generation": int(parent["plan_generation"]) + 1,
+                            "recovery_batch_id": recovery_batch_id,
+                            "selected_task_count": preview.selected_task_count,
+                            "maximum_credits": preview.maximum_credits,
+                            "approved_credit_ceiling": approved_credit_ceiling,
+                            "reason": reason.strip(),
+                            "approved_by": approved_by.strip(),
+                            "parent_plan_id": continuation_of_recovery_plan_id,
+                            "continuation_depth": continuation_depth,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            plan_id = str(row["id"])
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO collection_recovery_selection (
+                      recovery_plan_id, source_task_id, ordinal,
+                      canonical_request_key, selection_reason, source_snapshot
+                    ) VALUES (
+                      CAST(:plan_id AS uuid), CAST(:source_task_id AS uuid), :ordinal,
+                      :canonical_request_key, :selection_reason,
+                      CAST(:source_snapshot AS jsonb)
+                    )
+                    """
+                ),
+                [
+                    {
+                        "plan_id": plan_id,
+                        "source_task_id": item.source_task_id,
+                        "ordinal": ordinal,
+                        "canonical_request_key": item.canonical_request_key,
+                        "selection_reason": item.selection_reason,
+                        "source_snapshot": _json(item.source_snapshot),
+                    }
+                    for ordinal, item in enumerate(preview.items)
+                ],
+            )
+            return self._plan_record(row)
+
     async def launch_exact_recovery(self, plan_id: str) -> RecoveryLaunchRecord:
         """Create one idempotent, gate-free run containing only approved failures."""
 
@@ -1906,7 +2639,10 @@ class PostgresCompositeEvidenceRepository:
             existing_run_id = plan.get("recovery_collection_run_id")
             if existing_run_id is not None:
                 manifest = dict(plan.get("binding_manifest") or {})
-                if manifest.get("launch_mode") != "exact_failure_only":
+                if manifest.get("launch_mode") not in {
+                    "exact_failure_only",
+                    "exact_unresolved_continuation",
+                }:
                     raise ValueError("recovery plan is already bound to an externally created run")
                 return await self._launch_record(
                     connection,
@@ -1937,12 +2673,28 @@ class PostgresCompositeEvidenceRepository:
             )
             scope = dict(plan.get("selection_scope") or {})
             retailer_ids = tuple(str(value) for value in scope.get("retailer_ids", []))
-            preview = build_recovery_preview(
-                base_run_id,
-                base_rows,
-                definition_checksum=definition_checksum,
-                retailer_ids=retailer_ids,
-            )
+            continuation_parent = plan.get("continuation_of_recovery_plan_id")
+            if continuation_parent is None:
+                preview: RecoverySelectionPreview | ContinuationSelectionPreview = (
+                    build_recovery_preview(
+                        base_run_id,
+                        base_rows,
+                        definition_checksum=definition_checksum,
+                        retailer_ids=retailer_ids,
+                    )
+                )
+                launch_mode = "exact_failure_only"
+            else:
+                preview = await self._build_continuation_preview(
+                    connection,
+                    str(continuation_parent),
+                    retailer_ids=retailer_ids,
+                )
+                if scope.get("lineage_checksum") != preview.lineage_checksum:
+                    raise ValueError("approved continuation lineage checksum changed")
+                if tuple(scope.get("lineage_plan_ids") or ()) != preview.lineage_plan_ids:
+                    raise ValueError("approved continuation lineage plan order changed")
+                launch_mode = "exact_unresolved_continuation"
             contracts = build_exact_recovery_task_contracts(
                 preview,
                 selection_checksum=str(plan["selection_checksum"]),
@@ -2078,7 +2830,7 @@ class PostgresCompositeEvidenceRepository:
             binding_manifest = {
                 "schema_version": "1.0.0",
                 "binding_mode": "exact",
-                "launch_mode": "exact_failure_only",
+                "launch_mode": launch_mode,
                 "recovery_task_count": len(recovery_rows),
                 "approved_selection_count": len(recovery_rows),
                 "bound_maximum_provider_attempts": preview.maximum_provider_attempts,
@@ -2101,6 +2853,15 @@ class PostgresCompositeEvidenceRepository:
                 ),
                 "redundant_evidence": [],
                 "adopted_gap_replacements": [],
+                "continuation_lineage": (
+                    {
+                        "continuation_of_recovery_plan_id": str(continuation_parent),
+                        "lineage_plan_ids": list(preview.lineage_plan_ids),
+                        "lineage_checksum": preview.lineage_checksum,
+                    }
+                    if isinstance(preview, ContinuationSelectionPreview)
+                    else None
+                ),
             }
             updated = await connection.execute(
                 text(
@@ -2416,7 +3177,8 @@ class PostgresCompositeEvidenceRepository:
                         text(
                             "SELECT * FROM collection_recovery_plan "
                             "WHERE id::text = ANY(CAST(:plan_ids AS text[])) "
-                            "ORDER BY plan_generation, selection_checksum, id FOR UPDATE"
+                            "ORDER BY continuation_depth, plan_generation, "
+                            "selection_checksum, id FOR UPDATE"
                         ),
                         {"plan_ids": list(plan_ids)},
                     )
@@ -2435,6 +3197,32 @@ class PostgresCompositeEvidenceRepository:
                     )
                 if plan.get("recovery_collection_run_id") is None:
                     raise ValueError(f"recovery plan {plan['id']} has not been bound")
+
+            plans_by_id = {str(plan["id"]): plan for plan in plans}
+            ancestor_ids_by_plan: dict[str, set[str]] = {}
+            for plan in plans:
+                plan_id = str(plan["id"])
+                ancestors: set[str] = set()
+                parent_id = (
+                    str(plan["continuation_of_recovery_plan_id"])
+                    if plan.get("continuation_of_recovery_plan_id") is not None
+                    else None
+                )
+                while parent_id is not None:
+                    if parent_id in ancestors:
+                        raise ValueError("recovery continuation lineage contains a cycle")
+                    parent = plans_by_id.get(parent_id)
+                    if parent is None:
+                        raise ValueError(
+                            "materialization requires every continuation ancestor plan"
+                        )
+                    ancestors.add(parent_id)
+                    parent_id = (
+                        str(parent["continuation_of_recovery_plan_id"])
+                        if parent.get("continuation_of_recovery_plan_id") is not None
+                        else None
+                    )
+                ancestor_ids_by_plan[plan_id] = ancestors
 
             recovery_run_ids = tuple(str(plan["recovery_collection_run_id"]) for plan in plans)
             if len(set(recovery_run_ids)) != len(recovery_run_ids):
@@ -2533,7 +3321,10 @@ class PostgresCompositeEvidenceRepository:
             redundant_evidence: list[dict[str, Any]] = []
             component_manifest: list[dict[str, Any]] = []
             for plan, recovery_run_id in zip(plans, recovery_run_ids, strict=True):
-                if str(plan["selection_policy_version"]) != SELECTION_POLICY_VERSION:
+                if str(plan["selection_policy_version"]) not in {
+                    SELECTION_POLICY_VERSION,
+                    CONTINUATION_SELECTION_POLICY_VERSION,
+                }:
                     raise ValueError("unsupported recovery selection policy version")
                 if str(plan["base_snapshot_checksum"]) != full_preview.base_snapshot_checksum:
                     raise ValueError("a recovery plan no longer matches the base snapshot")
@@ -2556,15 +3347,32 @@ class PostgresCompositeEvidenceRepository:
                 if not selection_keys.issubset(full_selection_keys):
                     raise ValueError("recovery plan contains a non-eligible base request")
                 overlap = set(selected_by_plan) & selection_keys
-                if overlap:
+                invalid_overlap = {
+                    key
+                    for key in overlap
+                    if selected_by_plan[key] not in ancestor_ids_by_plan[plan_id]
+                }
+                if invalid_overlap:
                     raise ValueError(
                         "recovery plans contain overlapping approved requests "
-                        f"(overlap={len(overlap)})"
+                        f"outside a continuation lineage (overlap={len(invalid_overlap)})"
                     )
                 recovery_rows = await self._task_rows(connection, recovery_run_id)
                 identity_rows_by_component[recovery_run_id] = recovery_rows
                 recovery_by_key = self._unique_tasks(recovery_rows, f"recovery {recovery_run_id}")
                 binding_manifest = dict(plan.get("binding_manifest") or {})
+                if plan.get("continuation_of_recovery_plan_id") is not None:
+                    continuation_manifest = dict(binding_manifest.get("continuation_lineage") or {})
+                    scope = dict(plan.get("selection_scope") or {})
+                    if (
+                        str(continuation_manifest.get("continuation_of_recovery_plan_id") or "")
+                        != str(plan["continuation_of_recovery_plan_id"])
+                        or continuation_manifest.get("lineage_checksum")
+                        != scope.get("lineage_checksum")
+                        or tuple(continuation_manifest.get("lineage_plan_ids") or ())
+                        != tuple(scope.get("lineage_plan_ids") or ())
+                    ):
+                        raise ValueError("bound continuation lineage manifest is inconsistent")
                 bound_contract_checksum = canonical_checksum(
                     {
                         "tasks": [
@@ -2591,14 +3399,39 @@ class PostgresCompositeEvidenceRepository:
                 if extra_keys != adopted_keys | redundant_keys:
                     raise ValueError("legacy recovery extras do not match the binding manifest")
                 overlap = set(selected_recovery) & (selection_keys | adopted_keys)
-                if overlap:
+                invalid_overlap = {
+                    key
+                    for key in overlap
+                    if selected_by_plan[key] not in ancestor_ids_by_plan[plan_id]
+                }
+                if invalid_overlap:
                     raise ValueError(
                         "recovery components compete for the same canonical request "
-                        f"(overlap={len(overlap)})"
+                        f"outside a continuation lineage (overlap={len(invalid_overlap)})"
                     )
                 for key in sorted(selection_keys | adopted_keys):
-                    selected_recovery[key] = recovery_by_key[key]
-                    selected_by_plan[key] = plan_id
+                    candidate = recovery_by_key[key]
+                    prior = selected_recovery.get(key, base_by_key[key])
+                    if evidence_outcome(prior) != "usable_success" and _evidence_strength(
+                        evidence_outcome(candidate)
+                    ) > _evidence_strength(evidence_outcome(prior)):
+                        selected_recovery[key] = candidate
+                        selected_by_plan[key] = plan_id
+                    elif key not in selected_by_plan:
+                        selected_by_plan[key] = plan_id
+                    else:
+                        redundant_evidence.append(
+                            {
+                                "canonical_request_key": key,
+                                "recovery_plan_id": plan_id,
+                                "prior_recovery_plan_id": selected_by_plan[key],
+                                "prior_task_id": str(prior["id"]),
+                                "prior_outcome": evidence_outcome(prior),
+                                "recovery_task_id": str(candidate["id"]),
+                                "recovery_outcome": evidence_outcome(candidate),
+                                "resolution": "continuation_did_not_improve_lineage_evidence",
+                            }
+                        )
                 redundant_evidence.extend(
                     [{**row, "recovery_plan_id": plan_id} for row in redundant_rows]
                 )
@@ -2613,13 +3446,18 @@ class PostgresCompositeEvidenceRepository:
                         "recovery_task_contract_checksum": bound_contract_checksum,
                         "redundant_evidence_count": len(redundant_rows),
                         "adopted_gap_replacement_count": len(adopted_rows),
+                        "continuation_of_recovery_plan_id": (
+                            str(plan["continuation_of_recovery_plan_id"])
+                            if plan.get("continuation_of_recovery_plan_id") is not None
+                            else None
+                        ),
+                        "continuation_depth": int(plan.get("continuation_depth") or 0),
                     }
                 )
 
             identity_provenance = request_identity_provenance_manifest(identity_rows_by_component)
 
             all_uncovered_required_keys = required_selection_keys - set(selected_by_plan)
-            uncovered_optional_transient_keys = optional_transient_keys - set(selected_by_plan)
             chosen: list[tuple[str, TaskMapping, str | None, EvidenceOutcome]] = []
             for key, base_task in sorted(base_by_key.items()):
                 recovery_task = selected_recovery.get(key)
@@ -2654,14 +3492,12 @@ class PostgresCompositeEvidenceRepository:
                         outcome,
                     )
                 )
-            selected_outcomes_by_retailer: dict[str, list[EvidenceOutcome]] = {}
             chosen_by_key = {key: (row, outcome) for key, row, _, outcome in chosen}
-            for key in sorted(selected_by_plan):
-                row, outcome = chosen_by_key[key]
-                selected_outcomes_by_retailer.setdefault(str(row["retailer_id"]), []).append(
-                    outcome
-                )
-            _, adequacy_manifest = recovery_adequacy(selected_outcomes_by_retailer)
+            unresolved_optional_transient_keys = {
+                key
+                for key in optional_transient_keys
+                if chosen_by_key[key][1] not in {"usable_success", "retained_billable_404"}
+            }
             base_config_for_scope = dict(by_run[base_collection_run_id]["config"])
             configured_retailers = {
                 str(item["retailer_id"])
@@ -2681,6 +3517,7 @@ class PostgresCompositeEvidenceRepository:
                     nonempty_successes_by_retailer[retailer_id] = (
                         nonempty_successes_by_retailer.get(retailer_id, 0) + 1
                     )
+            _, adequacy_manifest = recovery_adequacy(all_outcomes_by_retailer)
             gate_config = dict(by_run[base_collection_run_id].get("availability_gate_config") or {})
             minimum_successes = max(int(gate_config.get("minimum_successful_samples") or 1), 1)
             maximum_404_rate = float(gate_config.get("max_billable_404_rate", 0.5))
@@ -2698,12 +3535,17 @@ class PostgresCompositeEvidenceRepository:
                 for retailer_id, row in collection_readiness_manifest.items()
                 if row["status"] == "unavailable"
             }
-            uncovered_keys = {
-                key
-                for key in all_uncovered_required_keys
-                if str(base_by_key[key]["retailer_id"]) not in unavailable_retailer_ids
-            }
-            unavailable_uncovered_keys = all_uncovered_required_keys - uncovered_keys
+            (
+                uncovered_keys,
+                unavailable_uncovered_keys,
+                tolerated_uncovered_required_keys,
+            ) = partition_uncovered_recovery_keys(
+                all_uncovered_required_keys,
+                base_by_key=base_by_key,
+                chosen_by_key=chosen_by_key,
+                collection_readiness_manifest=collection_readiness_manifest,
+                unavailable_retailer_ids=unavailable_retailer_ids,
+            )
             inadequacy_blocked = any(
                 row["status"] == "blocked"
                 and (
@@ -2788,13 +3630,17 @@ class PostgresCompositeEvidenceRepository:
                 "unrecovered_selection_checksum": canonical_checksum(
                     {"canonical_request_keys": sorted(uncovered_keys)}
                 ),
-                "unrecovered_optional_transient_count": len(uncovered_optional_transient_keys),
+                "unrecovered_optional_transient_count": len(unresolved_optional_transient_keys),
                 "unrecovered_optional_transient_checksum": canonical_checksum(
-                    {"canonical_request_keys": sorted(uncovered_optional_transient_keys)}
+                    {"canonical_request_keys": sorted(unresolved_optional_transient_keys)}
                 ),
                 "unavailable_unrecovered_required_count": len(unavailable_uncovered_keys),
                 "unavailable_unrecovered_required_checksum": canonical_checksum(
                     {"canonical_request_keys": sorted(unavailable_uncovered_keys)}
+                ),
+                "tolerated_unrecovered_required_count": len(tolerated_uncovered_required_keys),
+                "tolerated_unrecovered_required_checksum": canonical_checksum(
+                    {"canonical_request_keys": sorted(tolerated_uncovered_required_keys)}
                 ),
                 "unavailable_retailers": sorted(
                     retailer_id
@@ -2907,72 +3753,12 @@ class PostgresCompositeEvidenceRepository:
                     recovery_plan_id=str(plan["id"]),
                     row=by_run[recovery_run_id],
                 )
-            for ordinal, (key, row, superseded_task_id, outcome) in enumerate(chosen):
-                snapshot = _task_snapshot(row)
-                await connection.execute(
-                    text(
-                        """
-                        INSERT INTO analysis_input_task_lineage (
-                          input_set_id, canonical_request_key, selected_task_id,
-                          retailer_id, location_scope_key, page_number, evidence_outcome,
-                          superseded_task_id, snapshot
-                        ) VALUES (
-                          CAST(:input_set_id AS uuid), :canonical_request_key,
-                          CAST(:selected_task_id AS uuid), :retailer_id,
-                          :location_scope_key, :page_number, :evidence_outcome,
-                          CAST(:superseded_task_id AS uuid), CAST(:snapshot AS jsonb)
-                        )
-                        """
-                    ),
-                    {
-                        "input_set_id": input_set_id,
-                        "canonical_request_key": key,
-                        "selected_task_id": str(row["id"]),
-                        "retailer_id": str(row["retailer_id"]),
-                        "location_scope_key": str(row["location_scope_key"]),
-                        "page_number": int(row["page_number"]),
-                        "evidence_outcome": outcome,
-                        "superseded_task_id": superseded_task_id,
-                        "snapshot": _json(snapshot),
-                    },
-                )
-                if outcome != "usable_success":
-                    continue
-                inserted_artifact = await connection.execute(
-                    text(
-                        """
-                        INSERT INTO analysis_input_artifact (
-                          input_set_id, dataset_artifact_id, ordinal, retailer_id,
-                          adapter_id, source_name, source_format, row_count, checksum, metadata
-                        )
-                        SELECT CAST(:input_set_id AS uuid), da.id, :ordinal, t.retailer_id,
-                               t.adapter_id, 'task-' || t.id::text || '.json.gz',
-                               'metricscart_provider_json', COALESCE(t.result_count, 0),
-                               da.checksum, jsonb_build_object(
-                                 'task_id', t.id::text,
-                                 'collection_run_id', t.collection_run_id::text,
-                               'page_number', t.page_number,
-                               'location_scope_key', t.location_scope_key,
-                               'canonical_request_key', CAST(:canonical_request_key AS text),
-                               'location_snapshot', CAST(:location_snapshot AS jsonb)
-                               )
-                        FROM collection_task t
-                        JOIN dataset_artifact da ON da.id = t.raw_artifact_id
-                        WHERE t.id::text = :task_id
-                        """
-                    ),
-                    {
-                        "input_set_id": input_set_id,
-                        "ordinal": ordinal,
-                        "canonical_request_key": key,
-                        "task_id": str(row["id"]),
-                        "location_snapshot": _json(snapshot["location_snapshot"]),
-                    },
-                )
-                if inserted_artifact.rowcount != 1:
-                    raise RuntimeError(
-                        "composite usable evidence is missing its immutable dataset artifact"
-                    )
+            await self._insert_selected_evidence(
+                connection,
+                input_set_id,
+                chosen,
+                expected_usable_artifacts=usable_artifacts,
+            )
             if not blocking:
                 await connection.execute(
                     text(
@@ -2997,6 +3783,157 @@ class PostgresCompositeEvidenceRepository:
                 trust_state=trust_state,
                 status="failed" if blocking else "ready",
                 analysis_run_id=analysis_run_id,
+            )
+
+    @staticmethod
+    async def _insert_selected_evidence(
+        connection: AsyncConnection,
+        input_set_id: str,
+        chosen: Sequence[tuple[str, TaskMapping, str | None, EvidenceOutcome]],
+        *,
+        expected_usable_artifacts: Sequence[Mapping[str, Any]],
+    ) -> None:
+        """Persist immutable task/artifact lineage with bounded set-based writes."""
+
+        lineage_rows: list[dict[str, Any]] = []
+        artifact_rows: list[dict[str, Any]] = []
+        for ordinal, (key, row, superseded_task_id, outcome) in enumerate(chosen):
+            snapshot = _task_snapshot(row)
+            lineage_rows.append(
+                {
+                    "canonical_request_key": key,
+                    "selected_task_id": str(row["id"]),
+                    "retailer_id": str(row["retailer_id"]),
+                    "location_scope_key": str(row["location_scope_key"]),
+                    "page_number": int(row["page_number"]),
+                    "evidence_outcome": outcome,
+                    "superseded_task_id": superseded_task_id,
+                    "snapshot": snapshot,
+                }
+            )
+            if outcome == "usable_success":
+                artifact_rows.append(
+                    {
+                        "ordinal": ordinal,
+                        "canonical_request_key": key,
+                        "task_id": str(row["id"]),
+                        "location_snapshot": snapshot["location_snapshot"],
+                    }
+                )
+
+        inserted_lineage_keys: list[str] = []
+        for offset in range(0, len(lineage_rows), MATERIALIZATION_WRITE_BATCH_SIZE):
+            batch = lineage_rows[offset : offset + MATERIALIZATION_WRITE_BATCH_SIZE]
+            inserted_lineage_keys.extend(
+                str(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH payload AS (
+                              SELECT *
+                              FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(
+                                canonical_request_key text,
+                                selected_task_id text,
+                                retailer_id text,
+                                location_scope_key text,
+                                page_number integer,
+                                evidence_outcome text,
+                                superseded_task_id text,
+                                snapshot jsonb
+                              )
+                            )
+                            INSERT INTO analysis_input_task_lineage (
+                              input_set_id, canonical_request_key, selected_task_id,
+                              retailer_id, location_scope_key, page_number, evidence_outcome,
+                              superseded_task_id, snapshot
+                            )
+                            SELECT CAST(:input_set_id AS uuid), canonical_request_key,
+                                   CAST(selected_task_id AS uuid), retailer_id,
+                                   location_scope_key, page_number, evidence_outcome,
+                                   CAST(superseded_task_id AS uuid), snapshot
+                            FROM payload
+                            RETURNING canonical_request_key
+                            """
+                        ),
+                        {"input_set_id": input_set_id, "rows": _json(batch)},
+                    )
+                ).scalars()
+            )
+        expected_lineage_keys = sorted(row["canonical_request_key"] for row in lineage_rows)
+        if sorted(inserted_lineage_keys) != expected_lineage_keys:
+            raise RuntimeError("composite task-lineage bulk insertion was incomplete")
+
+        inserted_artifacts: list[dict[str, Any]] = []
+        for offset in range(0, len(artifact_rows), MATERIALIZATION_WRITE_BATCH_SIZE):
+            batch = artifact_rows[offset : offset + MATERIALIZATION_WRITE_BATCH_SIZE]
+            returned = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            WITH payload AS (
+                              SELECT *
+                              FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(
+                                ordinal integer,
+                                canonical_request_key text,
+                                task_id text,
+                                location_snapshot jsonb
+                              )
+                            )
+                            INSERT INTO analysis_input_artifact (
+                              input_set_id, dataset_artifact_id, ordinal, retailer_id,
+                              adapter_id, source_name, source_format, row_count, checksum, metadata
+                            )
+                            SELECT CAST(:input_set_id AS uuid), da.id, payload.ordinal,
+                                   t.retailer_id, t.adapter_id,
+                                   'task-' || t.id::text || '.json.gz',
+                                   'metricscart_provider_json', COALESCE(t.result_count, 0),
+                                   da.checksum, jsonb_build_object(
+                                     'task_id', t.id::text,
+                                     'collection_run_id', t.collection_run_id::text,
+                                     'page_number', t.page_number,
+                                     'location_scope_key', t.location_scope_key,
+                                     'canonical_request_key', payload.canonical_request_key,
+                                     'location_snapshot', payload.location_snapshot
+                                   )
+                            FROM payload
+                            JOIN collection_task t ON t.id = CAST(payload.task_id AS uuid)
+                            JOIN dataset_artifact da ON da.id = t.raw_artifact_id
+                            RETURNING ordinal, metadata->>'canonical_request_key'
+                                      AS canonical_request_key,
+                                      dataset_artifact_id::text AS dataset_artifact_id,
+                                      checksum
+                            """
+                        ),
+                        {"input_set_id": input_set_id, "rows": _json(batch)},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            inserted_artifacts.extend(
+                {
+                    "ordinal": int(row["ordinal"]),
+                    "canonical_request_key": str(row["canonical_request_key"]),
+                    "dataset_artifact_id": str(row["dataset_artifact_id"]),
+                    "checksum": str(row["checksum"]),
+                }
+                for row in returned
+            )
+        expected_artifacts: list[dict[str, Any]] = [
+            {
+                "ordinal": int(row["ordinal"]),
+                "canonical_request_key": str(row["canonical_request_key"]),
+                "dataset_artifact_id": str(row["dataset_artifact_id"]),
+                "checksum": str(row["checksum"]),
+            }
+            for row in expected_usable_artifacts
+        ]
+        expected_artifacts.sort(key=lambda row: int(row["ordinal"]))
+        if sorted(inserted_artifacts, key=lambda row: row["ordinal"]) != expected_artifacts:
+            raise RuntimeError(
+                "composite usable-artifact bulk insertion differs from its immutable manifest"
             )
 
     async def _queue_composite_analysis(
@@ -3247,16 +4184,31 @@ class PostgresCompositeEvidenceRepository:
                         SELECT t.*, g.status AS retailer_gate_status,
                                da.metadata AS raw_artifact_metadata,
                                da.checksum AS raw_artifact_checksum,
-                               l.latitude AS frozen_latitude,
-                               l.longitude AS frozen_longitude,
-                               l.city AS frozen_city,
-                               l.state AS frozen_state,
-                               l.collection_eligible AS current_location_eligible
+                               v.geography_resolution_id::text AS geography_resolution_id,
+                               gl.id::text AS frozen_geography_location_id,
+                               gl.retailer_location_id::text AS frozen_retailer_location_id,
+                               gl.zipcode AS frozen_zipcode,
+                               gl.store_number AS frozen_store_number,
+                               gl.latitude AS frozen_latitude,
+                               gl.longitude AS frozen_longitude,
+                               gl.city AS frozen_city,
+                               gl.state AS frozen_state,
+                               gl.country AS frozen_country,
+                               CASE
+                                 WHEN t.retailer_location_id IS NULL THEN NULL
+                                 ELSE COALESCE(l.collection_eligible, false)
+                               END AS current_location_eligible
                         FROM collection_task t
+                        JOIN collection_run r ON r.id = t.collection_run_id
+                        JOIN collection_definition_version v ON v.id = r.definition_version_id
                         LEFT JOIN collection_retailer_gate g
                           ON g.collection_run_id = t.collection_run_id
                          AND g.retailer_id = t.retailer_id
                         LEFT JOIN dataset_artifact da ON da.id = t.raw_artifact_id
+                        LEFT JOIN collection_geography_location gl
+                          ON gl.resolution_id = v.geography_resolution_id
+                         AND gl.retailer_id = t.retailer_id
+                         AND gl.scope_key = t.location_scope_key
                         LEFT JOIN retailer_location l ON l.id = t.retailer_location_id
                         WHERE t.collection_run_id::text = :run_id
                         ORDER BY t.retailer_id, t.location_scope_key,
@@ -3271,6 +4223,46 @@ class PostgresCompositeEvidenceRepository:
         )
         normalized: list[TaskMapping] = []
         for row in rows:
+            if row.get("geography_resolution_id") is None:
+                raise ValueError(
+                    "collection task has no immutable geography resolution for composite evidence"
+                )
+            if row.get("frozen_geography_location_id") is None:
+                raise ValueError(
+                    "collection task does not match a location in its immutable "
+                    "geography resolution"
+                )
+            if str(row.get("frozen_zipcode") or "") != str(row["zipcode"]):
+                raise ValueError(
+                    "collection task ZIP differs from its immutable geography location"
+                )
+            task_store_number = (
+                str(row["store_number"]) if row.get("store_number") is not None else None
+            )
+            frozen_store_number = (
+                str(row["frozen_store_number"])
+                if row.get("frozen_store_number") is not None
+                else None
+            )
+            if task_store_number != frozen_store_number:
+                raise ValueError(
+                    "collection task store differs from its immutable geography location"
+                )
+            task_location_id = (
+                str(row["retailer_location_id"])
+                if row.get("retailer_location_id") is not None
+                else None
+            )
+            frozen_location_id = (
+                str(row["frozen_retailer_location_id"])
+                if row.get("frozen_retailer_location_id") is not None
+                else None
+            )
+            if task_location_id != frozen_location_id:
+                raise ValueError(
+                    "collection task location identity differs from its immutable "
+                    "geography location"
+                )
             payload = dict(row["request_payload"])
             provenance = "frozen_task_contract"
             if "_provider_request_contract" not in payload:
@@ -3515,6 +4507,12 @@ class PostgresCompositeEvidenceRepository:
                 if row.get("supersedes_recovery_plan_id") is not None
                 else None
             ),
+            continuation_of_recovery_plan_id=(
+                str(row["continuation_of_recovery_plan_id"])
+                if row.get("continuation_of_recovery_plan_id") is not None
+                else None
+            ),
+            continuation_depth=int(row.get("continuation_depth") or 0),
             selected_task_count=int(row["selected_task_count"]),
             maximum_credits=int(row["maximum_credits"]),
             approved_credit_ceiling=int(row["approved_credit_ceiling"]),

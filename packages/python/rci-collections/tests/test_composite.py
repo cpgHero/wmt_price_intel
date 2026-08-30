@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
+import rci_collections.composite as composite_module
 from rci_collections.composite import (
+    ContinuationLineageComponent,
     PostgresCompositeEvidenceRepository,
+    build_continuation_preview,
     build_exact_recovery_task_contracts,
     build_recovery_preview,
     canonical_request_key,
@@ -13,6 +17,7 @@ from rci_collections.composite import (
     effective_request_identity,
     evidence_outcome,
     outbound_query_contract,
+    partition_uncovered_recovery_keys,
     recovery_adequacy,
     request_identity_provenance_manifest,
     resolve_task_precedence,
@@ -561,6 +566,494 @@ def test_exact_recovery_rejects_unapproved_pagination_descendants() -> None:
         raise AssertionError("unbounded pagination must fail closed")
 
 
+def _lineage_component(
+    base: dict[str, Any],
+    recovery: dict[str, Any],
+    *,
+    plan_id: str = "plan-root",
+    parent_plan_id: str | None = None,
+    depth: int = 0,
+) -> ContinuationLineageComponent:
+    return ContinuationLineageComponent(
+        recovery_plan_id=plan_id,
+        recovery_collection_run_id=str(recovery["collection_run_id"]),
+        continuation_of_recovery_plan_id=parent_plan_id,
+        continuation_depth=depth,
+        selection_checksum=f"selection-{plan_id}",
+        selection_keys=(canonical_request_key(base),),
+        adopted_keys=(),
+        recovery_rows=(recovery,),
+    )
+
+
+def test_continuation_retries_only_enough_zero_credit_gaps_for_readiness() -> None:
+    base_rows = [_task(f"success-{index}", f"location:{index}") for index in range(94)]
+    base_rows.extend(
+        _task(
+            f"gap-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=None,
+            failure_class="timeout",
+            billable_credits=0,
+            raw_artifact_id=None,
+        )
+        for index in range(94, 100)
+    )
+    parent_gap = base_rows[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "parent-recovery-gap",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        base_rows,
+        [_lineage_component(parent_gap, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert preview.conclusive_before_count == 94
+    assert preview.selected_task_count == 1
+    assert preview.retailers[0].optional_transient_tasks == 1
+    assert preview.retailers[0].required_tasks == 0
+
+
+def test_continuation_repairs_coverage_below_threshold_without_recalling_successes() -> None:
+    base_rows = [_task(f"success-{index}", f"location:{index}") for index in range(92)]
+    base_rows.extend(
+        _task(
+            f"gap-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=None,
+            failure_class="timeout",
+            billable_credits=0,
+            raw_artifact_id=None,
+        )
+        for index in range(92, 100)
+    )
+    parent_gap = base_rows[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "parent-recovery-gap",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        base_rows,
+        [_lineage_component(parent_gap, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert preview.selected_task_count == 3
+    selected_ids = {item.source_task_id for item in preview.items}
+    assert not selected_ids & {f"success-{index}" for index in range(92)}
+
+
+def test_continuation_never_recalls_success_or_retained_404_and_always_selects_hard_gap() -> None:
+    base_success = _task("base-success", "location:1")
+    base_404 = _task(
+        "base-404",
+        "location:2",
+        status="failed",
+        http_status=404,
+        failure_class="invalid_request",
+        raw_artifact_id="artifact-404",
+    )
+    base_hard = _task(
+        "base-hard",
+        "location:3",
+        status="failed",
+        http_status=200,
+        failure_class="schema_drift",
+        raw_artifact_id="artifact-schema",
+    )
+    parent_recovery = _recovery(
+        base_hard,
+        "parent-hard",
+        status="failed",
+        http_status=200,
+        failure_class="schema_drift",
+        raw_artifact_id="artifact-schema-parent",
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        [base_success, base_404, base_hard],
+        [_lineage_component(base_hard, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert [item.source_task_id for item in preview.items] == ["base-hard"]
+    assert preview.items[0].required_for_assembly is True
+    assert preview.retained_success_count == 1
+    assert preview.retained_billable_404_count == 1
+
+
+def test_continuation_enforces_governed_task_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    hard_rows = [
+        _task(
+            f"hard-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=200,
+            failure_class="schema_drift",
+            raw_artifact_id=f"artifact-schema-{index}",
+        )
+        for index in range(2)
+    ]
+    parent_recovery = _recovery(hard_rows[0], "parent-hard")
+    monkeypatch.setattr(composite_module, "MAXIMUM_CONTINUATION_TASKS", 1)
+
+    with pytest.raises(ValueError, match="above the governed 1-task cap"):
+        build_continuation_preview(
+            "base-run",
+            hard_rows,
+            [_lineage_component(hard_rows[0], parent_recovery)],
+            definition_checksum="definition",
+            continuation_of_recovery_plan_id="plan-root",
+        )
+
+
+def test_continuation_stops_after_prior_recovery_becomes_conclusive() -> None:
+    base_gap = _task(
+        "base-gap",
+        "location:1",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+    recovered = _recovery(
+        base_gap,
+        "recovered-success",
+        status="succeeded",
+        http_status=200,
+        failure_class=None,
+        billable_credits=2,
+        raw_artifact_id="recovered-artifact",
+        result_count=3,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        [base_gap],
+        [_lineage_component(base_gap, recovered)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert preview.selected_task_count == 0
+    assert preview.resolved_before_count == 1
+    assert preview.conclusive_before_count == 1
+
+
+def test_banana_continuation_projection_selects_exact_governed_65_tasks() -> None:
+    def population(
+        retailer_id: str,
+        *,
+        successes: int,
+        retained_404s: int,
+        zero_gaps: int,
+        contract_gaps: int = 0,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        ordinal = 0
+        for _ in range(successes):
+            rows.append(
+                _task(
+                    f"{retailer_id}-success-{ordinal}",
+                    f"location:{retailer_id}:{ordinal}",
+                    retailer_id=retailer_id,
+                )
+            )
+            ordinal += 1
+        for _ in range(retained_404s):
+            rows.append(
+                _task(
+                    f"{retailer_id}-404-{ordinal}",
+                    f"location:{retailer_id}:{ordinal}",
+                    retailer_id=retailer_id,
+                    status="failed",
+                    http_status=404,
+                    failure_class="invalid_request",
+                    raw_artifact_id=f"artifact-404-{ordinal}",
+                )
+            )
+            ordinal += 1
+        for _ in range(zero_gaps):
+            rows.append(
+                _task(
+                    f"{retailer_id}-gap-{ordinal}",
+                    f"location:{retailer_id}:{ordinal}",
+                    retailer_id=retailer_id,
+                    status="failed",
+                    http_status=None,
+                    failure_class="lease_exhausted",
+                    billable_credits=0,
+                    raw_artifact_id=None,
+                )
+            )
+            ordinal += 1
+        for _ in range(contract_gaps):
+            rows.append(
+                _task(
+                    f"{retailer_id}-contract-{ordinal}",
+                    f"location:{retailer_id}:{ordinal}",
+                    retailer_id=retailer_id,
+                    status="failed",
+                    http_status=200,
+                    failure_class="schema_drift",
+                    raw_artifact_id=f"artifact-contract-{ordinal}",
+                )
+            )
+            ordinal += 1
+        return rows
+
+    aldi = population("aldi_us", successes=1_835, retained_404s=655, zero_gaps=197)
+    amazon = population(
+        "amazon_us_same_day",
+        successes=4_151,
+        retained_404s=0,
+        zero_gaps=37,
+        contract_gaps=2,
+    )
+    for row in amazon:
+        row["store_number"] = None
+        row["request_payload"]["amazon_same_day_url_template"] = (
+            "https://amazon.example/s?k={{keyword}}&i=sameday"
+        )
+    walmart = population("walmart_us", successes=4_551, retained_404s=56, zero_gaps=76)
+    parent_gap = walmart[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "walmart-parent-gap",
+        status="failed",
+        http_status=None,
+        failure_class="lease_exhausted",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        [*aldi, *amazon, *walmart],
+        [_lineage_component(parent_gap, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    by_retailer = {row.retailer_id: row for row in preview.retailers}
+    assert preview.selected_task_count == 65
+    assert preview.maximum_credits == 650
+    assert by_retailer["aldi_us"].optional_transient_tasks == 63
+    assert by_retailer["amazon_us_same_day"].required_tasks == 2
+    assert by_retailer["walmart_us"].selected_tasks == 0
+
+
+def test_continuation_selects_exact_minimum_for_zero_success_heb_shape() -> None:
+    base_rows = [
+        _task(
+            f"heb-404-{index}",
+            f"location:heb:{index}",
+            retailer_id="heb_us",
+            status="failed",
+            http_status=404,
+            failure_class="invalid_request",
+            raw_artifact_id=f"artifact-404-{index}",
+        )
+        for index in range(3)
+    ]
+    base_rows.extend(
+        _task(
+            f"heb-gap-{index}",
+            f"location:heb:{index}",
+            retailer_id="heb_us",
+            status="failed",
+            http_status=None,
+            failure_class="timeout",
+            billable_credits=0,
+            raw_artifact_id=None,
+        )
+        for index in range(3, 365)
+    )
+    parent_gap = base_rows[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "heb-parent-gap",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        base_rows,
+        [_lineage_component(parent_gap, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert preview.selected_task_count == 344
+    assert preview.maximum_credits == 3_440
+
+
+def test_continuation_requires_a_nonempty_success_even_with_95_percent_artifacts() -> None:
+    base_rows = [_task(f"empty-{index}", f"location:{index}") for index in range(95)]
+    for row in base_rows:
+        row["result_count"] = 0
+    base_rows.extend(
+        _task(
+            f"gap-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=None,
+            failure_class="timeout",
+            billable_credits=0,
+            raw_artifact_id=None,
+        )
+        for index in range(95, 100)
+    )
+    parent_gap = base_rows[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "parent-gap",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    preview = build_continuation_preview(
+        "base-run",
+        base_rows,
+        [_lineage_component(parent_gap, parent_recovery)],
+        definition_checksum="definition",
+        continuation_of_recovery_plan_id="plan-root",
+    )
+
+    assert preview.selected_task_count == 1
+
+
+def test_uncovered_zero_credit_gaps_follow_readiness_tolerance_not_100_percent() -> None:
+    walmart = _task(
+        "walmart-gap",
+        "location:1",
+        status="failed",
+        http_status=500,
+        failure_class="lease_exhausted",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+    aldi = _task(
+        "aldi-gap",
+        "location:2",
+        retailer_id="aldi_us",
+        status="failed",
+        http_status=500,
+        failure_class="lease_exhausted",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+    amazon = _task(
+        "amazon-contract",
+        "location:3",
+        retailer_id="amazon_us_same_day",
+        status="failed",
+        http_status=200,
+        failure_class="schema_drift",
+        raw_artifact_id="artifact-contract",
+    )
+    amazon["store_number"] = None
+    amazon["request_payload"]["amazon_same_day_url_template"] = (
+        "https://amazon.example/s?k={{keyword}}&i=sameday"
+    )
+    base_by_key = {canonical_request_key(row): row for row in (walmart, aldi, amazon)}
+    chosen_by_key = {key: (row, evidence_outcome(row)) for key, row in base_by_key.items()}
+
+    blocking, unavailable, tolerated = partition_uncovered_recovery_keys(
+        set(base_by_key),
+        base_by_key=base_by_key,
+        chosen_by_key=chosen_by_key,
+        collection_readiness_manifest={
+            "walmart_us": {"status": "warning"},
+            "aldi_us": {"status": "blocking_integrity"},
+            "amazon_us_same_day": {"status": "blocking_integrity"},
+        },
+        unavailable_retailer_ids=set(),
+    )
+
+    assert unavailable == set()
+    assert canonical_request_key(walmart) in tolerated
+    assert canonical_request_key(aldi) in blocking
+    assert canonical_request_key(amazon) in blocking
+
+
+def test_continuation_refuses_spend_when_unresolved_tasks_cannot_fix_404_rate() -> None:
+    base_rows = [_task(f"success-{index}", f"location:{index}") for index in range(218)]
+    base_rows.extend(
+        _task(
+            f"not-found-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=404,
+            failure_class="invalid_request",
+            raw_artifact_id=f"artifact-404-{index}",
+        )
+        for index in range(218, 663)
+    )
+    base_rows.extend(
+        _task(
+            f"gap-{index}",
+            f"location:{index}",
+            status="failed",
+            http_status=None,
+            failure_class="timeout",
+            billable_credits=0,
+            raw_artifact_id=None,
+        )
+        for index in range(663, 670)
+    )
+    parent_gap = base_rows[-1]
+    parent_recovery = _recovery(
+        parent_gap,
+        "parent-gap",
+        status="failed",
+        http_status=None,
+        failure_class="timeout",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+
+    with pytest.raises(ValueError, match="cannot satisfy collection readiness"):
+        build_continuation_preview(
+            "base-run",
+            base_rows,
+            [_lineage_component(parent_gap, parent_recovery)],
+            definition_checksum="definition",
+            continuation_of_recovery_plan_id="plan-root",
+            maximum_404_rate=0.5,
+        )
+
+
 def test_composite_contract_missing_and_quarantine_block_analysis() -> None:
     assert composite_trust_state(["usable_success", "zero_credit_missing"]) == (
         "ready_with_warnings"
@@ -790,3 +1283,199 @@ async def test_composite_analysis_queue_returns_initial_run_when_input_has_repla
     assert analysis_run_id == "analysis-run-initial"
     assert connection.select_count == (2 if first_lookup_misses else 1)
     assert connection.insert_count == (1 if first_lookup_misses else 0)
+
+
+async def test_task_rows_snapshot_uses_frozen_geography_not_mutable_location_master() -> None:
+    row = {
+        **_task("task-1", "location:1"),
+        "retailer_location_id": "retailer-location-1",
+        "raw_artifact_metadata": {},
+        "raw_artifact_checksum": "a" * 64,
+        "geography_resolution_id": "resolution-1",
+        "frozen_geography_location_id": "geography-location-1",
+        "frozen_retailer_location_id": "retailer-location-1",
+        "frozen_zipcode": "00001",
+        "frozen_store_number": "location:1",
+        "frozen_latitude": 41.1,
+        "frozen_longitude": -87.1,
+        "frozen_city": "Frozen City",
+        "frozen_state": "IL",
+        "frozen_country": "USA",
+        "current_location_eligible": True,
+    }
+
+    class MappingResult:
+        def mappings(self) -> MappingResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return [row]
+
+    class FrozenGeographyConnection:
+        sql = ""
+
+        async def execute(self, statement: object, _parameters: dict[str, object]) -> MappingResult:
+            self.sql = " ".join(str(statement).split())
+            return MappingResult()
+
+    connection = FrozenGeographyConnection()
+    repository = PostgresCompositeEvidenceRepository(  # type: ignore[arg-type]
+        None,
+        provider_request_contracts={},
+    )
+
+    tasks = await repository._task_rows(connection, "run-1")  # type: ignore[arg-type]
+    snapshot = composite_module._task_snapshot(tasks[0])
+
+    assert "gl.latitude AS frozen_latitude" in connection.sql
+    assert "SELECT l.latitude AS frozen_latitude" not in connection.sql
+    assert ", l.latitude AS frozen_latitude" not in connection.sql
+    assert snapshot["location_snapshot"] == {
+        "latitude": 41.1,
+        "longitude": -87.1,
+        "city": "Frozen City",
+        "state": "IL",
+    }
+
+
+def test_task_snapshot_preserves_legacy_location_checksum_contract() -> None:
+    task = {
+        **_task("task-1", "location:1"),
+        "geography_resolution_id": "resolution-1",
+        "frozen_geography_location_id": "geography-location-1",
+        "frozen_retailer_location_id": "location-location:1",
+        "frozen_zipcode": "00001",
+        "frozen_store_number": "location:1",
+        "frozen_latitude": 41.1,
+        "frozen_longitude": -87.1,
+        "frozen_city": "Frozen City",
+        "frozen_state": "IL",
+        "frozen_country": "USA",
+    }
+
+    snapshot = composite_module._task_snapshot(task)
+
+    assert set(snapshot["location_snapshot"]) == {"latitude", "longitude", "city", "state"}
+    assert composite_module.canonical_checksum({"tasks": [snapshot]}) == (
+        "e32e0f605604ebd1bc9a1ee4a37b49997e3a4be0551054680d01be3b1c777551"
+    )
+
+
+async def test_task_rows_fails_closed_when_frozen_geography_scope_is_missing() -> None:
+    row = {
+        **_task("task-1", "location:1"),
+        "raw_artifact_metadata": {},
+        "raw_artifact_checksum": "a" * 64,
+        "geography_resolution_id": "resolution-1",
+        "frozen_geography_location_id": None,
+    }
+
+    class MappingResult:
+        def mappings(self) -> MappingResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return [row]
+
+    class MissingScopeConnection:
+        async def execute(
+            self, _statement: object, _parameters: dict[str, object]
+        ) -> MappingResult:
+            return MappingResult()
+
+    repository = PostgresCompositeEvidenceRepository(  # type: ignore[arg-type]
+        None,
+        provider_request_contracts={},
+    )
+    with pytest.raises(ValueError, match="immutable geography resolution"):
+        await repository._task_rows(  # type: ignore[arg-type]
+            MissingScopeConnection(),
+            "run-1",
+        )
+
+
+async def test_composite_evidence_materialization_uses_bounded_bulk_writes() -> None:
+    task_count = composite_module.MATERIALIZATION_WRITE_BATCH_SIZE * 2 + 1
+    chosen: list[tuple[str, dict[str, Any], None, str]] = []
+    expected_artifacts: list[dict[str, Any]] = []
+    task_artifacts: dict[str, tuple[str, str]] = {}
+    for ordinal in range(task_count):
+        task = _task(f"task-{ordinal}", f"location:{ordinal}")
+        task["raw_artifact_id"] = f"artifact-{ordinal}"
+        task["raw_artifact_checksum"] = f"checksum-{ordinal}"
+        key = canonical_request_key(task)
+        chosen.append((key, task, None, "usable_success"))
+        expected_artifacts.append(
+            {
+                "ordinal": ordinal,
+                "canonical_request_key": key,
+                "dataset_artifact_id": f"artifact-{ordinal}",
+                "checksum": f"checksum-{ordinal}",
+            }
+        )
+        task_artifacts[f"task-{ordinal}"] = (f"artifact-{ordinal}", f"checksum-{ordinal}")
+
+    class BulkResult:
+        def __init__(
+            self,
+            *,
+            scalar_values: list[str] | None = None,
+            mapping_values: list[dict[str, Any]] | None = None,
+        ) -> None:
+            self.scalar_values = scalar_values or []
+            self.mapping_values = mapping_values or []
+
+        def scalars(self) -> BulkResult:
+            return self
+
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            return iter(self.scalar_values)
+
+        def mappings(self) -> BulkResult:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return self.mapping_values
+
+    class BulkConnection:
+        def __init__(self) -> None:
+            self.lineage_queries = 0
+            self.artifact_queries = 0
+
+        async def execute(self, statement: object, parameters: dict[str, object]) -> BulkResult:
+            sql = " ".join(str(statement).split())
+            rows = json.loads(str(parameters["rows"]))
+            if "INSERT INTO analysis_input_task_lineage" in sql:
+                self.lineage_queries += 1
+                return BulkResult(scalar_values=[str(row["canonical_request_key"]) for row in rows])
+            if "INSERT INTO analysis_input_artifact" in sql:
+                self.artifact_queries += 1
+                return BulkResult(
+                    mapping_values=[
+                        {
+                            "ordinal": int(row["ordinal"]),
+                            "canonical_request_key": str(row["canonical_request_key"]),
+                            "dataset_artifact_id": task_artifacts[str(row["task_id"])][0],
+                            "checksum": task_artifacts[str(row["task_id"])][1],
+                        }
+                        for row in rows
+                    ]
+                )
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+    connection = BulkConnection()
+    repository = PostgresCompositeEvidenceRepository(  # type: ignore[arg-type]
+        None,
+        provider_request_contracts={},
+    )
+
+    await repository._insert_selected_evidence(  # type: ignore[arg-type]
+        connection,
+        "input-set-1",
+        chosen,  # type: ignore[arg-type]
+        expected_usable_artifacts=expected_artifacts,
+    )
+
+    assert connection.lineage_queries == 3
+    assert connection.artifact_queries == 3
+    assert connection.lineage_queries + connection.artifact_queries == 6

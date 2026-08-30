@@ -12,7 +12,12 @@ from rci_collections import (
     CollectionRetailerCatalog,
     InMemoryCollectionRepository,
 )
-from rci_collections.composite import RecoveryLaunchRecord
+from rci_collections.composite import (
+    ContinuationSelectionPreview,
+    RecoveryLaunchRecord,
+    RecoverySelectionItem,
+    RetailerRecoverySummary,
+)
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import LocationUnit
 from rci_collections.service import CollectionService
@@ -227,6 +232,133 @@ async def test_exact_recovery_launch_api_is_idempotency_visible() -> None:
     }
 
 
+async def test_continuation_preview_is_paginated_but_checksum_covers_full_selection() -> None:
+    plan_id = "00000000-0000-0000-0000-000000000200"
+    items = tuple(
+        RecoverySelectionItem(
+            source_task_id=f"00000000-0000-0000-0000-{index:012d}",
+            retailer_id="aldi_us",
+            canonical_request_key=f"key-{index}",
+            selection_reason="transient_gap",
+            required_for_assembly=False,
+            credits_per_success=2,
+            maximum_credits=10,
+            source_snapshot={"index": index},
+        )
+        for index in range(3)
+    )
+
+    class CompositeRepository:
+        async def preview_continuation(
+            self, parent_plan_id: str, *, retailer_ids: tuple[str, ...] | list[str]
+        ) -> ContinuationSelectionPreview:
+            assert parent_plan_id == plan_id
+            assert tuple(retailer_ids) == ("aldi_us",)
+            return ContinuationSelectionPreview(
+                base_collection_run_id="00000000-0000-0000-0000-000000000100",
+                continuation_of_recovery_plan_id=plan_id,
+                lineage_plan_ids=(plan_id,),
+                lineage_checksum="a" * 64,
+                selection_policy_version="unresolved-continuation-v1",
+                selection_checksum="b" * 64,
+                base_snapshot_checksum="c" * 64,
+                selected_task_count=3,
+                maximum_provider_attempts=15,
+                maximum_credits=30,
+                resolved_before_count=2,
+                conclusive_before_count=97,
+                retained_success_count=96,
+                retained_billable_404_count=1,
+                retailers=(
+                    RetailerRecoverySummary(
+                        retailer_id="aldi_us",
+                        selected_tasks=3,
+                        required_tasks=0,
+                        optional_transient_tasks=3,
+                        maximum_provider_attempts=15,
+                        maximum_credits=30,
+                        reused_successes=96,
+                        retained_billable_404s=1,
+                        retained_billable_404_credits=2,
+                    ),
+                ),
+                items=items,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            f"/api/v1/collection-recovery-plans/{plan_id}/continuation-preview",
+            params={"retailer_ids": "aldi_us", "item_offset": 1, "item_limit": 1},
+        )
+        over_page_cap = await client.get(
+            f"/api/v1/collection-recovery-plans/{plan_id}/continuation-preview",
+            params={"item_limit": 501},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["selection_checksum"] == "b" * 64
+    assert payload["selected_task_count"] == 3
+    assert payload["item_offset"] == 1
+    assert payload["next_item_offset"] == 2
+    assert [item["canonical_request_key"] for item in payload["items"]] == ["key-1"]
+    assert over_page_cap.status_code == 422
+
+
+async def test_continuation_approval_uses_server_actor_and_forbids_extra_fields() -> None:
+    captured: dict[str, object] = {}
+    plan_id = "00000000-0000-0000-0000-000000000200"
+    batch_id = "00000000-0000-0000-0000-000000000300"
+
+    class CompositeRepository:
+        async def approve_continuation(self, parent_plan_id: str, **values: object) -> None:
+            captured.update({"parent_plan_id": parent_plan_id, **values})
+            raise ValueError("intentional audit capture")
+
+    body = {
+        "selection_checksum": "a" * 64,
+        "lineage_checksum": "b" * 64,
+        "base_snapshot_checksum": "c" * 64,
+        "approved_credit_ceiling": 10,
+        "reason": "repair only unresolved lineage evidence",
+        "retailer_ids": ["aldi_us"],
+        "recovery_batch_id": batch_id,
+    }
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            f"/api/v1/collection-recovery-plans/{plan_id}/continuations",
+            headers={"X-RCI-Actor": "forged-client-principal"},
+            json=body,
+        )
+        invalid = await client.post(
+            f"/api/v1/collection-recovery-plans/{plan_id}/continuations",
+            json={**body, "maximum_tasks": 999_999},
+        )
+        over_retailer_cap = await client.post(
+            f"/api/v1/collection-recovery-plans/{plan_id}/continuations",
+            json={**body, "retailer_ids": [f"retailer-{index}" for index in range(101)]},
+        )
+
+    assert response.status_code == 409
+    assert captured["parent_plan_id"] == plan_id
+    assert captured["approved_by"] == "authenticated-platform-admin"
+    assert captured["recovery_batch_id"] == batch_id
+    assert invalid.status_code == 422
+    assert over_retailer_cap.status_code == 422
+
+
 async def test_production_recovery_controls_require_admin_token(monkeypatch: Any) -> None:
     class CompositeRepository:
         async def launch_exact_recovery(self, plan_id: str) -> RecoveryLaunchRecord:
@@ -234,6 +366,16 @@ async def test_production_recovery_controls_require_admin_token(monkeypatch: Any
 
         async def create_recovery_batch(self, **values: object) -> None:
             raise AssertionError(f"unauthorized request reached repository: {values}")
+
+        async def preview_continuation(self, plan_id: str, **values: object) -> None:
+            raise AssertionError(
+                f"unauthorized continuation preview reached repository: {plan_id} {values}"
+            )
+
+        async def approve_continuation(self, plan_id: str, **values: object) -> None:
+            raise AssertionError(
+                f"unauthorized continuation approval reached repository: {plan_id} {values}"
+            )
 
     class CollectionRepository:
         async def retry_failed(self, run_id: str) -> int:
@@ -256,11 +398,28 @@ async def test_production_recovery_controls_require_admin_token(monkeypatch: Any
         retry_response = await client.post(
             "/api/v1/collection-runs/00000000-0000-0000-0000-000000000101/retry-failed"
         )
+        continuation_preview = await client.get(
+            "/api/v1/collection-recovery-plans/"
+            "00000000-0000-0000-0000-000000000200/continuation-preview"
+        )
+        continuation_approval = await client.post(
+            "/api/v1/collection-recovery-plans/00000000-0000-0000-0000-000000000200/continuations",
+            json={
+                "selection_checksum": "a" * 64,
+                "lineage_checksum": "b" * 64,
+                "base_snapshot_checksum": "c" * 64,
+                "approved_credit_ceiling": 1,
+                "reason": "must remain admin-only",
+                "recovery_batch_id": "00000000-0000-0000-0000-000000000300",
+            },
+        )
 
     assert response.status_code == 401
     assert "administrator" in response.json()["detail"].lower()
     assert batch_response.status_code == 401
     assert retry_response.status_code == 401
+    assert continuation_preview.status_code == 401
+    assert continuation_approval.status_code == 401
 
 
 async def test_batch_creation_accepts_only_offline_authorization_id() -> None:

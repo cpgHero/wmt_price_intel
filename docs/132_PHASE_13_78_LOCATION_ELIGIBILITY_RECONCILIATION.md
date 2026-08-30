@@ -91,8 +91,9 @@ rows.
   `6901fd05-6390-4052-a331-88f5c16ef773` disabled the 1,298 aliases and left exactly 1,369 eligible;
   the immediate second dry run proved `changed_rows = 0`. The older frozen Egg run still contains
   all 2,667 task scopes. Phase 13.77 therefore blocks paid Kroger recovery and marks Kroger
-  unavailable/no-scorecard. Follow-on Phase 0052 must bind a scope projection to this audit before
-  the 1,369-row denominator may be used for recovery or scoring.
+  unavailable/no-scorecard. A separate follow-on scope-projection phase (schema revision 0053 if
+  required) must bind a scope projection to this audit before the 1,369-row denominator may be
+  used for recovery or scoring.
 - Dry-run planning does not write an audit or modify a location.
 - Apply is identified, reasoned, auditable, idempotent, and preserves authoritative-retirement
   lineage.

@@ -77,3 +77,9 @@ at $0.002 USD, and the HTTP API can create a batch only from an existing authori
 permits multiple immutable input generations for one base run without rewriting source tasks or
 artifacts. Downgrade is refused after any spend authorization, recovery batch, recovery plan,
 unavailability approval, composite input set, or incompatible duplicate input generation exists.
+`0052_recovery_continuations` adds a bounded, non-branching parent/child lineage for exact
+unresolved-only recovery plans. A continuation may reuse the same canonical request only through
+its explicit ancestor chain, reserves only incremental credits still available in the immutable
+batch, and preserves every ancestor component during materialization. Its downgrade refuses to
+discard any persisted continuation lineage. The separate audit-bound Kroger scope-projection work
+is a follow-on schema revision (0053 if it requires a migration), not part of 0052.

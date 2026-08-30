@@ -122,14 +122,24 @@ as harmless.
 ## Immutable composite evidence and failure-only recovery
 
 Migration `0051_composite_evidence` and the compatible API implement the reconciliation boundary
-without changing any terminal collection run. This implementation is test-verified locally and is
-**not production-deployed or operationally applied yet**.
+without changing any terminal collection run. Migration `0051` is production-deployed and its
+immutable spend/evidence records are active. Migration `0052_recovery_continuations` is implemented
+and locally verified but remains deployment-gated by CI and production readiness checks.
 
 The owner-approved three-category authorization is one aggregate batch of **100,000 Search
 credits**, which equals **$200.00 at the server-controlled $0.002 per credit**. The exact immutable
 inventory is the seven complete run IDs in the table above. Their terminal actual usage is
 **67,908 credits / $135.816** (13,290 + 18,278 + 26,369 + 4 + 4,607 + 5,354 + 6), leaving at most
 32,092 credits / $64.184 under the owner ceiling.
+
+Production authorization `09350e6f-ee09-4bae-9056-d53a7fc6be0e` and batch
+`922b5ba9-95fc-4321-9074-2a28f27b4f49` bind exactly those seven terminal runs. Banana plan
+`ce4fe160-2c99-4109-94c0-7821391f0ff6` adopts the terminal Walmart recovery, and Egg plan
+`247ab4ab-e12e-4d0e-ba13-93d003762955` adopts the terminal ALDI recovery. Egg Kroger and Meijer
+have explicit unavailable/no-scorecard approvals. Banana composite generation
+`ce40a391-83df-44e0-8306-bed4e328d947` correctly remains blocked and queued no analysis because
+ALDI coverage and Amazon contract evidence are incomplete; it is immutable audit history, not a
+partially published report.
 
 The web API cannot create or redefine this authorization. An identified operator first runs
 `scripts/authorize_collection_spend.py` with all seven IDs, a 100,000-credit ceiling, the fixed
@@ -162,6 +172,43 @@ path, and parameter-name set. Parameter values and historical catalog defaults c
 retroactively and are disclosed as unverified; this evidence is never described as exact
 historical request-contract proof.
 
+Migration `0052_recovery_continuations` adds the missing governed retry after a bound terminal
+component. Its administrator-only preview resolves the base plus every terminal ancestor in order,
+retains all usable successes and billable 404s, and selects no conclusive request for another paid
+call. It always selects contract/quarantine blockers. It selects only the deterministic number of
+remaining zero-credit gaps needed to reach the inherited minimum-success, retained-404-rate, and
+95% conclusive-coverage contract; already-safe bounded gaps remain visible warnings rather than an
+invented 100% requirement. The complete selection checksum is stable even though the HTTP response
+paginates item detail at 500 rows maximum. Approval binds the parent, ordered lineage checksum,
+base snapshot, retailer scope, full selection, actor, reason, batch, and exact incremental credit
+reservation. One parent can have only one active child, depth is capped at 32, and PostgreSQL
+advisory locks plus the aggregate batch lock serialize approval/launch races. A continuation still
+rejects unapproved pagination descendants.
+
+The protected workflow is:
+
+1. `GET /api/v1/collection-recovery-plans/{parent}/continuation-preview` with optional repeated
+   `retailer_ids`, `item_offset`, and `item_limit` (maximum 500).
+2. Review the full selected count, maximum attempts/credits, lineage/base/selection checksums,
+   retailer summaries, and every paginated item. Pagination never changes the full checksum.
+3. `POST /api/v1/collection-recovery-plans/{parent}/continuations` with those three checksums,
+   exact credit ceiling, reason, optional retailer scope, and the parent's recovery-batch UUID.
+4. Launch the returned plan through the existing exact-launch endpoint. After it becomes terminal,
+   materialize with the complete ordered ancestor-plus-child plan IDs.
+
+The preview refuses a retailer when even successful use of every unresolved request could not meet
+its retained-404 or coverage contract; that protects against paying for a mathematically inadequate
+retry and directs the administrator to explicit governed unavailability instead.
+
+Materialization requires the complete ancestor chain. Canonical overlap is allowed only between a
+continuation and its own ancestors; unrelated overlaps, missing ancestors, branching, changed
+evidence, or a different organization/base/batch fail closed. Strongest-evidence precedence is
+applied cumulatively, and every weaker continuation result remains redundant lineage. The verified
+Banana projection is 65 tasks / at most 650 credits: 63 of ALDI's 197 unresolved gaps are the exact
+minimum needed to raise 92.67% conclusive coverage to 95%; Amazon's two contract-missing requests
+remain hard blockers; Walmart's 76 gaps remain a disclosed 1.62% warning because its evidence is
+already 98.38% conclusive. No provider call or production write was made by this implementation.
+
 Composite assembly writes a new immutable input generation with component checksums, one lineage
 row per canonical provider request, selected artifact IDs, superseded and redundant task IDs,
 actual component credits, request-identity provenance, and a manifest checksum. It never mutates or
@@ -186,11 +233,12 @@ The frozen Egg run contains 2,667 Kroger tasks: 1,369 canonical eight-digit stor
 seven-digit aliases made ineligible by location audit `6901fd05-6390-4052-a331-88f5c16ef773`.
 Phase 13.77 does not mutate or silently re-denominate that history. Paid preview/approval fails
 closed when a selected task now points to an ineligible location, so no 2,667-task Kroger recovery
-can launch. Kroger must be explicitly unavailable/no-scorecard in this composite. Follow-on Phase
-0052 must introduce an audit/checksum-bound scope projection that preserves every excluded task and
-before/after count, then establishes the 1,369-row denominator before Kroger can be recovered or
-scored. Failed Meijer recovery is also explicit unavailable/no-scorecard in this release; its
-partial evidence remains immutable and visible in readiness metadata.
+can launch. Kroger must be explicitly unavailable/no-scorecard in this composite. A separate
+follow-on scope-projection phase (schema revision 0053 if required) must introduce an
+audit/checksum-bound projection that preserves every excluded task and before/after count, then
+establishes the 1,369-row denominator before Kroger can be recovered or scored. Failed Meijer
+recovery is also explicit unavailable/no-scorecard in this release; its partial evidence remains
+immutable and visible in readiness metadata.
 
 A ready composite queues exactly one downstream `analysis_run`; a blocked composite queues none.
 The analysis source records the base run, every recovery component, and manifest checksum. Replay
@@ -208,32 +256,41 @@ Recovery control routes require the production administrator token, and approval
 the authenticated server request rather than request-body claims. A never-launched approval may be
 superseded atomically without double reservation. Once an exact recovery has launched, it cannot be
 superseded or silently paid again. If it terminates without adequate evidence, the composite stays
-blocked or receives an explicit reasoned unavailable approval; no zero scorecard is emitted. Any
-future unresolved-only retry needs a versioned continuation workflow and remaining-cap approval.
+blocked or receives an explicit reasoned unavailable approval; no zero scorecard is emitted. The
+versioned unresolved-only continuation described above is the only supported retry after a terminal
+bound plan and still requires remaining immutable-batch capacity.
 
 ## Verification
 
-- Full Python suite: 859 passed and 24 skipped. The focused composite, collection, API, worker,
-  analytics, and publication suite passed 93 tests; PostgreSQL-only integration and concurrency
-  tests skipped
-  locally because `RCI_TEST_DATABASE_URL` was unavailable.
+- Continuation implementation verification: the full Python suite passed 875 tests with 27
+  environment/data-dependent skips; the focused composite/API suite passed 43 tests. Ruff, mypy
+  across 156 application/package source files, web TypeScript, 85 web unit tests, the production
+  web build, the single-head Alembic graph, and offline upgrade SQL through
+  `0052_recovery_continuations` passed. Composite location evidence now comes from the immutable
+  definition-bound geography while preserving the pre-`0052` checksum projection; the two existing
+  production root plans recomputed exactly across 11,560 Banana and 20,119 Egg tasks. Lineage and
+  artifacts write in bounded 1,000-row batches with exact returned-key/checksum reconciliation.
+  PostgreSQL tests cover continuation concurrency, 1,002 lineage rows / 1,001 usable artifacts, and
+  transactional rollback on an artifact-checksum mismatch. They are present but skipped locally
+  because `RCI_TEST_DATABASE_URL` was unavailable; pristine-database migration and those
+  database-backed paths remain CI/deployment gates.
 - Rolling-refill regression proves a third task begins while the first slow request is still active.
-- Ruff, mypy across 156 application/package source files, web TypeScript type checking, one unit
-  suite plus 85 web tests/build, 91 normative JSON-document validations, and offline Alembic upgrade
-  SQL through `0051_composite_evidence` passed.
 - CI rehearses the reversible migration sequence on a pristine database before integration tests
   create protected spend and evidence lineage. The `0051` downgrade remains intentionally
   fail-closed once those audit rows exist, so the release gate validates reversibility without
   weakening the production data-loss safeguard.
-- Commit `c6af7b6139738dc65e2ea2328a3d039c863f0406` passed GitHub Actions run `33326968373`,
-  including 17 Playwright tests, real-Postgres upgrade/downgrade/upgrade, and all four containers.
-- Railway deployed API `9e60276c-8b65-4785-b418-5038c23b468d`, worker
-  `4284e6a8-6f88-4139-8faa-cdb005f5b79b`, web `5a27fa39-3cf9-483d-95af-4a12534145f3`,
-  and scheduler `ffecd07a-25cf-49c3-95f8-bc53a038c9da`. Migration `0049_gate_resilience` is current,
-  health/readiness passed, and logs prove five of five unique worker replicas run the new deployment.
+- Commit `05680fec8977ab467c7cb7c60a8565b38316c572` passed GitHub Actions run `33334905653`,
+  including the pristine real-Postgres migration round trip, integration suites, and all four
+  service-container builds.
+- Railway deployed API `8e24c41b-2ea2-4326-95fa-d0af3e299088`, worker
+  `b799c917-ee1f-419c-a111-3b10cfc956d2`, web `18947552-ef9b-465e-a8a2-371ad4299377`,
+  and scheduler `637ded09-8364-474d-b46a-4784503961d0`. Migration
+  `0051_composite_evidence` is current, health/readiness passed, and logs prove five of five unique
+  worker replicas run the same deployment.
 - Resilient recovery run `b11c9efa-c118-49b0-b6b6-a5045ba06940` launched with exactly 4,683
   approved credits. Its five-sample gate passed and released the Walmart bulk collection.
 - All seven authorized runs are terminal at the exact 67,908-credit / $135.816 total recorded above.
-  Composite production registration, checksum-bound unavailable approvals, materialization, semantic
-  publication validation, and successor-report archival remain intentionally pending deployment of
-  `0051_composite_evidence`; no new provider call is authorized by this implementation work.
+  Spend registration, both legacy bindings, two Egg unavailable approvals, and the blocked Banana
+  generation are production-verified. Unresolved-only execution, replacement materialization,
+  semantic publication validation, and successor-report archival remain intentionally pending
+  deployment of `0052`; no new provider call is authorized by implementation work alone.

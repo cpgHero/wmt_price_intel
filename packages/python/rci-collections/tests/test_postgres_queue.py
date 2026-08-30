@@ -8,9 +8,12 @@ import pytest
 from sqlalchemy import text
 
 from rci_collections.composite import (
+    MATERIALIZATION_WRITE_BATCH_SIZE,
     PostgresCompositeEvidenceRepository,
     RecoveryLaunchRecord,
     RecoveryPlanRecord,
+    canonical_request_key,
+    evidence_outcome,
 )
 from rci_collections.models import (
     CollectionPlan,
@@ -62,10 +65,118 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
         },
     }
     definition = await collection_repository.publish_definition(config, canonical_checksum(config))
+    geography_resolution_id = str(uuid4())
+    retailer_location_ids = [str(uuid4()) for _ in range(2)]
+    async with database.engine.begin() as connection:
+        organization_id = str(
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT d.organization_id::text
+                        FROM collection_definition_version v
+                        JOIN collection_definition d ON d.id = v.definition_id
+                        WHERE v.id::text = :version_id
+                        """
+                    ),
+                    {"version_id": definition.version_id},
+                )
+            ).scalar_one()
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO collection_geography_resolution (
+                  id, organization_id, primary_retailer_id, country,
+                  request, checksum, status, counts
+                ) VALUES (
+                  CAST(:resolution_id AS uuid), CAST(:organization_id AS uuid),
+                  'walmart_us', 'USA', '{}'::jsonb, :checksum, 'ready',
+                  '{"primary":2,"competitor":0}'::jsonb
+                )
+                """
+            ),
+            {
+                "resolution_id": geography_resolution_id,
+                "organization_id": organization_id,
+                "checksum": canonical_checksum(
+                    {"test": stable_key, "locations": ["location:0", "location:1"]}
+                ),
+            },
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO retailer_location (
+                  id, retailer_id, provider, provider_location_id,
+                  store_number, store_name, raw_zipcode, zipcode,
+                  city, state, country, latitude, longitude, status,
+                  raw_row, collection_eligible
+                ) VALUES (
+                  CAST(:location_id AS uuid), 'walmart_us', :provider,
+                  :store_number, :store_number, :store_name, :zipcode, :zipcode,
+                  :city, 'CA', 'USA', :latitude, :longitude, 'active',
+                  '{}'::jsonb, true
+                )
+                """
+            ),
+            [
+                {
+                    "location_id": retailer_location_ids[index],
+                    "provider": stable_key,
+                    "store_number": str(2400 + index),
+                    "store_name": f"Mutable Store {index}",
+                    "zipcode": f"9000{index}",
+                    "city": f"Mutable City {index}",
+                    "latitude": 30.0 + index,
+                    "longitude": -110.0 - index,
+                }
+                for index in range(2)
+            ],
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO collection_geography_location (
+                  resolution_id, role, retailer_id, retailer_location_id,
+                  scope_key, store_number, zipcode, country,
+                  latitude, longitude, selection_reason
+                ) VALUES (
+                  CAST(:resolution_id AS uuid), 'primary', 'walmart_us',
+                  CAST(:retailer_location_id AS uuid),
+                  :scope_key, :store_number, :zipcode, 'USA',
+                  :latitude, :longitude, 'postgres_test_fixture'
+                )
+                """
+            ),
+            [
+                {
+                    "resolution_id": geography_resolution_id,
+                    "retailer_location_id": retailer_location_ids[index],
+                    "scope_key": f"location:{index}",
+                    "store_number": str(2400 + index),
+                    "zipcode": f"9000{index}",
+                    "latitude": 34.0 + index,
+                    "longitude": -118.0 - index,
+                }
+                for index in range(2)
+            ],
+        )
+        await connection.execute(
+            text(
+                "UPDATE collection_definition_version "
+                "SET geography_resolution_id = CAST(:resolution_id AS uuid) "
+                "WHERE id::text = :version_id"
+            ),
+            {
+                "resolution_id": geography_resolution_id,
+                "version_id": definition.version_id,
+            },
+        )
     seeds = tuple(
         TaskSeed(
             retailer_id="walmart_us",
-            retailer_location_id=None,
+            retailer_location_id=retailer_location_ids[index],
             adapter_id="fake_walmart",
             location_scope_key=f"location:{index}",
             zipcode=f"9000{index}",
@@ -101,6 +212,19 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
     try:
         base_run = await collection_repository.create_run(definition, plan)
         async with database.engine.begin() as connection:
+            # A later location import may legitimately update the live master. The
+            # composite must continue to use the definition-bound geography snapshot.
+            await connection.execute(
+                text(
+                    """
+                    UPDATE retailer_location
+                    SET latitude = 51.5, longitude = -0.1,
+                        city = 'Mutated After Collection'
+                    WHERE id = ANY(CAST(:location_ids AS uuid[]))
+                    """
+                ),
+                {"location_ids": retailer_location_ids},
+            )
             await connection.execute(
                 text(
                     """
@@ -338,7 +462,44 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
                     {"analysis_run_id": ready.analysis_run_id},
                 )
             ).scalar_one()
+            materialized_counts = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              (SELECT count(*) FROM analysis_input_task_lineage
+                               WHERE input_set_id::text = :input_set_id) AS lineage_count,
+                              (SELECT count(*) FROM analysis_input_artifact
+                               WHERE input_set_id::text = :input_set_id) AS artifact_count
+                            """
+                        ),
+                        {"input_set_id": ready.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            frozen_location_snapshot = dict(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT snapshot->'location_snapshot'
+                            FROM analysis_input_task_lineage
+                            WHERE input_set_id::text = :input_set_id
+                              AND location_scope_key = 'location:0'
+                            """
+                        ),
+                        {"input_set_id": ready.id},
+                    )
+                ).scalar_one()
+            )
         assert str(queued_input_set) == ready.id
+        assert dict(materialized_counts) == {"lineage_count": 2, "artifact_count": 1}
+        assert set(frozen_location_snapshot) == {"latitude", "longitude", "city", "state"}
+        assert frozen_location_snapshot["latitude"] == 34.0
+        assert frozen_location_snapshot["longitude"] == -118.0
         status_record = await composite_repository.get_recovery_batch_status(batch.id)
         assert status_record.accounted_credits == 2
         assert status_record.remaining_credits == 8
@@ -361,6 +522,262 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
                 recovery_batch_id=batch.id,
             )
     finally:
+        await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres bulk-materialization integration",
+)
+async def test_postgres_composite_materializes_more_than_one_bulk_batch_exactly() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _postgres_composite_repository(database)
+    task_count = MATERIALIZATION_WRITE_BATCH_SIZE + 2
+    stable_key = f"postgres-composite-bulk-{uuid4()}"
+    definition: DefinitionRecord | None = None
+    try:
+        definition = await _publish_bulk_materialization_definition(
+            collection_repository,
+            stable_key,
+            task_count=task_count,
+        )
+        await _attach_bulk_materialization_geography(
+            database,
+            definition,
+            task_count=task_count,
+        )
+        seeds = tuple(_bulk_materialization_seed(index) for index in range(task_count))
+        plan = CollectionPlan(
+            estimate=CostEstimate(
+                definition_id=definition.stable_key,
+                retailers=(
+                    RetailerEstimate(
+                        "walmart_us",
+                        task_count,
+                        1,
+                        1,
+                        task_count,
+                        task_count,
+                    ),
+                ),
+                estimated_total_pages=task_count,
+                estimated_total_credits=task_count,
+            ),
+            initial_tasks=seeds,
+        )
+        base_run = await collection_repository.create_run(definition, plan)
+        await _complete_bulk_base_fixture(database, base_run.id)
+
+        preview = await composite_repository.preview(base_run.id)
+        assert preview.selected_task_count == 1
+        assert preview.retailers[0].reused_successes == task_count - 2
+        assert preview.retailers[0].retained_billable_404s == 1
+        organization_id = await _run_organization_id(database, base_run.id)
+        authorization = await composite_repository.authorize_recovery_spend(
+            organization_id=organization_id,
+            phase_key=f"postgres-bulk-materialization-{uuid4()}",
+            approved_credit_ceiling=task_count + 10,
+            unit_cost_usd="0.002000",
+            currency="USD",
+            reason="exercise multi-batch immutable materialization",
+            authorized_by="postgres-bulk-materialization-test",
+            collection_run_ids=(base_run.id,),
+        )
+        batch = await composite_repository.create_recovery_batch(authorization_id=authorization.id)
+        recovery_plan = await composite_repository.approve(
+            base_run.id,
+            selection_checksum=preview.selection_checksum,
+            approved_credit_ceiling=preview.maximum_credits,
+            reason="recover the one nonbillable gap before bulk assembly",
+            approved_by="postgres-bulk-materialization-test",
+            recovery_batch_id=batch.id,
+        )
+        recovery = await composite_repository.launch_exact_recovery(recovery_plan.id)
+        await _complete_bulk_recovery_fixture(database, recovery.collection_run_id)
+
+        materialized = await composite_repository.materialize(base_run.id, (recovery_plan.id,))
+
+        assert materialized.status == "ready"
+        assert materialized.total_rows == (task_count - 1) * 2
+        async with database.engine.connect() as connection:
+            counts = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              (SELECT count(*) FROM analysis_input_task_lineage
+                               WHERE input_set_id::text = :input_set_id) AS lineage_count,
+                              (SELECT count(*) FROM analysis_input_artifact
+                               WHERE input_set_id::text = :input_set_id) AS artifact_count,
+                              (SELECT count(DISTINCT canonical_request_key)
+                               FROM analysis_input_task_lineage
+                               WHERE input_set_id::text = :input_set_id) AS lineage_key_count,
+                              (SELECT count(DISTINCT metadata->>'canonical_request_key')
+                               FROM analysis_input_artifact
+                               WHERE input_set_id::text = :input_set_id) AS artifact_key_count,
+                              (SELECT count(*) FROM analysis_run
+                               WHERE input_set_id::text = :input_set_id) AS analysis_count
+                            """
+                        ),
+                        {"input_set_id": materialized.id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            manifest = dict(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT manifest FROM analysis_input_set WHERE id::text = :input_set_id"
+                        ),
+                        {"input_set_id": materialized.id},
+                    )
+                ).scalar_one()
+            )
+        assert dict(counts) == {
+            "lineage_count": task_count,
+            "artifact_count": task_count - 1,
+            "lineage_key_count": task_count,
+            "artifact_key_count": task_count - 1,
+            "analysis_count": 1,
+        }
+        assert manifest["task_count"] == task_count
+        assert manifest["usable_artifact_count"] == task_count - 1
+    finally:
+        if definition is not None:
+            await _cancel_concurrency_definition_runs(database, definition.version_id)
+        await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres materialization rollback integration",
+)
+async def test_postgres_bulk_reconciliation_mismatch_rolls_back_input_and_analysis() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _postgres_composite_repository(database)
+    definition: DefinitionRecord | None = None
+    input_set_id = str(uuid4())
+    try:
+        definition = await _publish_concurrency_definition(
+            collection_repository,
+            f"postgres-bulk-rollback-{uuid4()}",
+        )
+        succeeded_run = await _create_terminal_concurrency_run(
+            database,
+            collection_repository,
+            definition,
+            request_index=0,
+            outcome="succeeded",
+        )
+        with pytest.raises(
+            RuntimeError,
+            match="usable-artifact bulk insertion differs",
+        ):
+            async with database.engine.begin() as connection:
+                run_row = (
+                    (
+                        await connection.execute(
+                            text(
+                                """
+                                SELECT r.organization_id::text, v.config
+                                FROM collection_run r
+                                JOIN collection_definition_version v
+                                  ON v.id = r.definition_version_id
+                                WHERE r.id::text = :run_id
+                                """
+                            ),
+                            {"run_id": succeeded_run.id},
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                rows = await composite_repository._task_rows(connection, succeeded_run.id)
+                row = rows[0]
+                key = canonical_request_key(row)
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO analysis_input_set (
+                          id, organization_id, source_kind, stable_key, collection_run_id,
+                          product_pack_id, product_pack_version, analysis_config,
+                          manifest, manifest_checksum, total_rows, status, completed_at,
+                          assembly_generation, assembly_policy_version, trust_state
+                        ) VALUES (
+                          CAST(:input_set_id AS uuid), CAST(:organization_id AS uuid),
+                          'live_collection_composite', :stable_key, CAST(:run_id AS uuid),
+                          'fresh_fluid_milk', '1.0.0', CAST(:analysis_config AS jsonb),
+                          '{}'::jsonb, :manifest_checksum, 1, 'ready', now(),
+                          1, 'composite-evidence-v1', 'ready'
+                        )
+                        """
+                    ),
+                    {
+                        "input_set_id": input_set_id,
+                        "organization_id": str(run_row["organization_id"]),
+                        "stable_key": f"rollback-{input_set_id}",
+                        "run_id": succeeded_run.id,
+                        "analysis_config": "{}",
+                        "manifest_checksum": canonical_checksum({"rollback": input_set_id}),
+                    },
+                )
+                await composite_repository._insert_selected_evidence(
+                    connection,
+                    input_set_id,
+                    [(key, row, None, evidence_outcome(row))],
+                    expected_usable_artifacts=(
+                        {
+                            "ordinal": 0,
+                            "canonical_request_key": key,
+                            "dataset_artifact_id": str(row["raw_artifact_id"]),
+                            "checksum": "forced-checksum-mismatch",
+                        },
+                    ),
+                )
+                await composite_repository._queue_composite_analysis(
+                    connection,
+                    input_set_id,
+                    queue_allowed=True,
+                )
+
+        async with database.engine.connect() as connection:
+            rolled_back_counts = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              (SELECT count(*) FROM analysis_input_set
+                               WHERE id::text = :input_set_id) AS input_count,
+                              (SELECT count(*) FROM analysis_input_task_lineage
+                               WHERE input_set_id::text = :input_set_id) AS lineage_count,
+                              (SELECT count(*) FROM analysis_input_artifact
+                               WHERE input_set_id::text = :input_set_id) AS artifact_count,
+                              (SELECT count(*) FROM analysis_run
+                               WHERE input_set_id::text = :input_set_id) AS analysis_count
+                            """
+                        ),
+                        {"input_set_id": input_set_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        assert dict(rolled_back_counts) == {
+            "input_count": 0,
+            "lineage_count": 0,
+            "artifact_count": 0,
+            "analysis_count": 0,
+        }
+    finally:
+        if definition is not None:
+            await _cancel_concurrency_definition_runs(database, definition.version_id)
         await database.dispose()
 
 
@@ -1327,6 +1744,355 @@ async def test_postgres_legacy_bind_retry_is_idempotent_and_never_reopens_provid
         await database.dispose()
 
 
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres continuation concurrency integration",
+)
+async def test_postgres_concurrent_continuation_approval_is_idempotent_and_reserves_once() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _postgres_composite_repository(database)
+    definition: DefinitionRecord | None = None
+    try:
+        definition = await _publish_concurrency_definition(
+            collection_repository, f"postgres-continuation-{uuid4()}"
+        )
+        base_run = await _create_terminal_concurrency_run(
+            database,
+            collection_repository,
+            definition,
+            request_index=0,
+            outcome="failed",
+        )
+        legacy_recovery = await _create_terminal_concurrency_run(
+            database,
+            collection_repository,
+            definition,
+            request_index=0,
+            outcome="failed",
+        )
+        initial_preview = await composite_repository.preview(base_run.id)
+        batch_id = await _create_concurrency_batch(
+            database,
+            composite_repository,
+            (base_run.id, legacy_recovery.id),
+            approved_credit_ceiling=1,
+            phase_key=f"postgres-continuation-{uuid4()}",
+        )
+        root_plan = await composite_repository.approve(
+            base_run.id,
+            selection_checksum=initial_preview.selection_checksum,
+            approved_credit_ceiling=initial_preview.maximum_credits,
+            reason="adopt terminal failed recovery before bounded continuation",
+            approved_by="postgres-concurrency-test",
+            recovery_batch_id=batch_id,
+            plan_mode="legacy_adoption",
+        )
+        root_plan = await composite_repository.bind_recovery_run(
+            root_plan.id,
+            legacy_recovery.id,
+            binding_mode="legacy_operational_adoption",
+        )
+        continuation = await composite_repository.preview_continuation(root_plan.id)
+        assert continuation.selected_task_count == 1
+        assert continuation.maximum_credits == 1
+
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(
+                *(
+                    composite_repository.approve_continuation(
+                        root_plan.id,
+                        selection_checksum=continuation.selection_checksum,
+                        lineage_checksum=continuation.lineage_checksum,
+                        base_snapshot_checksum=continuation.base_snapshot_checksum,
+                        approved_credit_ceiling=continuation.maximum_credits,
+                        reason="one immutable unresolved-only continuation",
+                        approved_by="postgres-concurrency-test",
+                        recovery_batch_id=batch_id,
+                    )
+                    for _ in range(2)
+                ),
+            ),
+            timeout=10,
+        )
+
+        assert len({record.id for record in outcomes}) == 1
+        assert {record.continuation_of_recovery_plan_id for record in outcomes} == {root_plan.id}
+        async with database.engine.connect() as connection:
+            child_count = int(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT count(*) FROM collection_recovery_plan "
+                            "WHERE continuation_of_recovery_plan_id::text = :parent_id"
+                        ),
+                        {"parent_id": root_plan.id},
+                    )
+                ).scalar_one()
+            )
+            reserved_credits = int(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT reserved_credits FROM collection_recovery_batch "
+                            "WHERE id::text = :batch_id"
+                        ),
+                        {"batch_id": batch_id},
+                    )
+                ).scalar_one()
+            )
+        assert child_count == 1
+        assert reserved_credits == 1
+    finally:
+        if definition is not None:
+            await _cancel_concurrency_definition_runs(database, definition.version_id)
+        await database.dispose()
+
+
+async def _publish_bulk_materialization_definition(
+    repository: PostgresCollectionRepository,
+    stable_key: str,
+    *,
+    task_count: int,
+) -> DefinitionRecord:
+    config: dict[str, object] = {
+        "id": stable_key,
+        "name": "Postgres Composite Bulk Materialization Test",
+        "enabled": True,
+        "benchmark_retailer": "walmart_us",
+        "product_pack": {"id": "fresh_fluid_milk", "version": "1.0.0"},
+        "query": {"keyword": "milk"},
+        "budget": {
+            "max_credits_per_run": task_count + 10,
+            "max_credits_per_day": (task_count + 10) * 2,
+            "max_credits_per_month": (task_count + 10) * 2,
+        },
+    }
+    return await repository.publish_definition(config, canonical_checksum(config))
+
+
+async def _attach_bulk_materialization_geography(
+    database: DatabaseProbe,
+    definition: DefinitionRecord,
+    *,
+    task_count: int,
+) -> None:
+    resolution_id = str(uuid4())
+    async with database.engine.begin() as connection:
+        organization_id = str(
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT d.organization_id::text
+                        FROM collection_definition_version v
+                        JOIN collection_definition d ON d.id = v.definition_id
+                        WHERE v.id::text = :version_id
+                        """
+                    ),
+                    {"version_id": definition.version_id},
+                )
+            ).scalar_one()
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO collection_geography_resolution (
+                  id, organization_id, primary_retailer_id, country,
+                  request, checksum, status, counts
+                ) VALUES (
+                  CAST(:resolution_id AS uuid), CAST(:organization_id AS uuid),
+                  'walmart_us', 'USA', '{"fixture":"bulk-materialization"}'::jsonb,
+                  :checksum, 'ready', CAST(:counts AS jsonb)
+                )
+                """
+            ),
+            {
+                "resolution_id": resolution_id,
+                "organization_id": organization_id,
+                "checksum": canonical_checksum(
+                    {
+                        "definition_version_id": definition.version_id,
+                        "task_count": task_count,
+                    }
+                ),
+                "counts": f'{{"primary":{task_count},"competitor":0}}',
+            },
+        )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO collection_geography_location (
+                  resolution_id, role, retailer_id, retailer_location_id,
+                  scope_key, store_number, zipcode, city, state, country,
+                  latitude, longitude, selection_reason
+                ) VALUES (
+                  CAST(:resolution_id AS uuid), 'primary', 'walmart_us', NULL,
+                  :scope_key, :store_number, :zipcode, 'Bulk City', 'CA', 'USA',
+                  :latitude, :longitude, 'postgres_test_fixture'
+                )
+                """
+            ),
+            [
+                {
+                    "resolution_id": resolution_id,
+                    "scope_key": f"bulk:{index}",
+                    "store_number": str(900_000 + index),
+                    "zipcode": f"{10_000 + index:05d}",
+                    "latitude": 30.0 + index / 100_000,
+                    "longitude": -100.0 - index / 100_000,
+                }
+                for index in range(task_count)
+            ],
+        )
+        await connection.execute(
+            text(
+                "UPDATE collection_definition_version "
+                "SET geography_resolution_id = CAST(:resolution_id AS uuid) "
+                "WHERE id::text = :version_id"
+            ),
+            {"resolution_id": resolution_id, "version_id": definition.version_id},
+        )
+
+
+def _bulk_materialization_seed(index: int) -> TaskSeed:
+    zipcode = f"{10_000 + index:05d}"
+    store_number = str(900_000 + index)
+    return TaskSeed(
+        retailer_id="walmart_us",
+        retailer_location_id=None,
+        adapter_id="fake_walmart",
+        location_scope_key=f"bulk:{index}",
+        zipcode=zipcode,
+        store_number=store_number,
+        page_number=1,
+        max_pages=1,
+        stop_on_empty=True,
+        stop_on_short_page=True,
+        credits_per_success=1,
+        request_payload={
+            "keyword": "milk",
+            "zipcode": zipcode,
+            "store_number": store_number,
+            "page": 1,
+            "request_overrides": {},
+            "_provider_request_contract": _CONCURRENCY_REQUEST_CONTRACT,
+        },
+        request_fingerprint=f"bulk-materialization-{index}",
+        is_preflight=False,
+        max_attempts=1,
+    )
+
+
+async def _complete_bulk_base_fixture(database: DatabaseProbe, run_id: str) -> None:
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            text(
+                """
+                WITH artifacts AS (
+                  INSERT INTO dataset_artifact (
+                    collection_run_id, artifact_type, storage_uri, content_type,
+                    row_count, byte_size, checksum, schema_version, metadata
+                  )
+                  SELECT CAST(:run_id AS uuid), 'raw_provider_response',
+                         's3://test/composite-bulk/' || t.id::text || '.json.gz',
+                         'application/json', 2, 64,
+                         md5(t.id::text) || md5(t.id::text), '1.0.0',
+                         jsonb_build_object('task_id', t.id::text)
+                  FROM collection_task t
+                  WHERE t.collection_run_id::text = :run_id
+                    AND t.location_scope_key NOT IN ('bulk:0', 'bulk:1')
+                  RETURNING id, metadata->>'task_id' AS task_id
+                )
+                UPDATE collection_task t
+                SET status = 'succeeded', completed_at = now(), http_status = 200,
+                    result_count = 2, billable_credits = 1, raw_artifact_id = artifacts.id
+                FROM artifacts
+                WHERE t.id::text = artifacts.task_id
+                """
+            ),
+            {"run_id": run_id},
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE collection_task
+                SET status = 'failed', completed_at = now(),
+                    http_status = CASE location_scope_key
+                      WHEN 'bulk:0' THEN 500 ELSE 404 END,
+                    failure_class = CASE location_scope_key
+                      WHEN 'bulk:0' THEN 'lease_exhausted' ELSE 'invalid_request' END,
+                    billable_credits = CASE location_scope_key
+                      WHEN 'bulk:0' THEN 0 ELSE 1 END
+                WHERE collection_run_id::text = :run_id
+                  AND location_scope_key IN ('bulk:0', 'bulk:1')
+                """
+            ),
+            {"run_id": run_id},
+        )
+        await connection.execute(
+            text(
+                """
+                UPDATE collection_run
+                SET status = 'completed_with_warnings',
+                    actual_success_pages = :success_count,
+                    actual_credits = :actual_credits,
+                    completed_at = now()
+                WHERE id::text = :run_id
+                """
+            ),
+            {
+                "run_id": run_id,
+                "success_count": MATERIALIZATION_WRITE_BATCH_SIZE,
+                "actual_credits": MATERIALIZATION_WRITE_BATCH_SIZE + 1,
+            },
+        )
+
+
+async def _complete_bulk_recovery_fixture(database: DatabaseProbe, run_id: str) -> None:
+    async with database.engine.begin() as connection:
+        updated = int(
+            (
+                await connection.execute(
+                    text(
+                        """
+                        WITH artifacts AS (
+                          INSERT INTO dataset_artifact (
+                            collection_run_id, artifact_type, storage_uri, content_type,
+                            row_count, byte_size, checksum, schema_version, metadata
+                          )
+                          SELECT CAST(:run_id AS uuid), 'raw_provider_response',
+                                 's3://test/composite-bulk-recovery/' || t.id::text || '.json.gz',
+                                 'application/json', 2, 64,
+                                 md5(t.id::text) || md5(t.id::text), '1.0.0',
+                                 jsonb_build_object('task_id', t.id::text)
+                          FROM collection_task t
+                          WHERE t.collection_run_id::text = :run_id
+                          RETURNING id, metadata->>'task_id' AS task_id
+                        )
+                        UPDATE collection_task t
+                        SET status = 'succeeded', completed_at = now(), http_status = 200,
+                            result_count = 2, billable_credits = 1,
+                            raw_artifact_id = artifacts.id
+                        FROM artifacts
+                        WHERE t.id::text = artifacts.task_id
+                        RETURNING 1
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+            ).scalar_one()
+        )
+        assert updated == 1
+        await connection.execute(
+            text(
+                "UPDATE collection_run SET status = 'succeeded', actual_success_pages = 1, "
+                "actual_credits = 1, completed_at = now() WHERE id::text = :run_id"
+            ),
+            {"run_id": run_id},
+        )
+
+
 _CONCURRENCY_REQUEST_CONTRACT: dict[str, object] = {
     "retailer_id": "walmart_us",
     "adapter_id": "fake_walmart",
@@ -1379,6 +2145,13 @@ async def _create_terminal_concurrency_run(
         raise ValueError(f"unsupported concurrency fixture outcome {outcome!r}")
     zipcode = f"90{request_index:03d}"
     store_number = str(2400 + request_index)
+    await _ensure_concurrency_geography(
+        database,
+        definition,
+        request_index=request_index,
+        zipcode=zipcode,
+        store_number=store_number,
+    )
     seed = TaskSeed(
         retailer_id="walmart_us",
         retailer_location_id=None,
@@ -1462,6 +2235,101 @@ async def _create_terminal_concurrency_run(
     updated = await repository.get_run(run.id)
     assert updated is not None
     return updated
+
+
+async def _ensure_concurrency_geography(
+    database: DatabaseProbe,
+    definition: DefinitionRecord,
+    *,
+    request_index: int,
+    zipcode: str,
+    store_number: str,
+) -> None:
+    """Give concurrency fixtures the immutable geography required by composites."""
+
+    async with database.engine.begin() as connection:
+        definition_row = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT d.organization_id::text,
+                               v.geography_resolution_id::text
+                        FROM collection_definition_version v
+                        JOIN collection_definition d ON d.id = v.definition_id
+                        WHERE v.id::text = :version_id
+                        FOR UPDATE OF v
+                        """
+                    ),
+                    {"version_id": definition.version_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        resolution_id = definition_row["geography_resolution_id"]
+        if resolution_id is None:
+            resolution_id = str(uuid4())
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO collection_geography_resolution (
+                      id, organization_id, primary_retailer_id, country,
+                      request, checksum, status, counts
+                    ) VALUES (
+                      CAST(:resolution_id AS uuid), CAST(:organization_id AS uuid),
+                      'walmart_us', 'USA', CAST(:request AS jsonb), :checksum,
+                      'ready', '{"primary":0,"competitor":0}'::jsonb
+                    )
+                    """
+                ),
+                {
+                    "resolution_id": resolution_id,
+                    "organization_id": str(definition_row["organization_id"]),
+                    "request": '{"fixture":"postgres-composite-concurrency"}',
+                    "checksum": canonical_checksum(
+                        {
+                            "fixture": "postgres-composite-concurrency",
+                            "definition_version_id": definition.version_id,
+                        }
+                    ),
+                },
+            )
+            await connection.execute(
+                text(
+                    "UPDATE collection_definition_version "
+                    "SET geography_resolution_id = CAST(:resolution_id AS uuid) "
+                    "WHERE id::text = :version_id"
+                ),
+                {
+                    "resolution_id": resolution_id,
+                    "version_id": definition.version_id,
+                },
+            )
+        await connection.execute(
+            text(
+                """
+                INSERT INTO collection_geography_location (
+                  resolution_id, role, retailer_id, retailer_location_id,
+                  scope_key, store_number, zipcode, city, state, country,
+                  latitude, longitude, selection_reason
+                ) VALUES (
+                  CAST(:resolution_id AS uuid), 'primary', 'walmart_us', NULL,
+                  :scope_key, :store_number, :zipcode, 'Fixture City', 'CA', 'USA',
+                  :latitude, :longitude, 'postgres_test_fixture'
+                )
+                ON CONFLICT (resolution_id, retailer_id, scope_key) DO NOTHING
+                """
+            ),
+            {
+                "resolution_id": str(resolution_id),
+                "scope_key": f"location:{request_index}",
+                "store_number": store_number,
+                "zipcode": zipcode,
+                "latitude": 34.0 + request_index / 1000,
+                "longitude": -118.0 - request_index / 1000,
+            },
+        )
 
 
 async def _run_organization_id(database: DatabaseProbe, run_id: str) -> str:
