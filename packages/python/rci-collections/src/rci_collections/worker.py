@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import Counter
 from collections.abc import Callable
 from typing import Protocol
 
@@ -71,13 +72,15 @@ class QueueWorker:
         worker_id: str,
         claim_limit: int = 10,
         lease_seconds: int = 300,
+        retailer_concurrency_limit: int | None = None,
     ) -> None:
         self._repository = repository
         self._provider = provider
         self.worker_id = worker_id
         self.claim_limit = claim_limit
         self.lease_seconds = lease_seconds
-        self._active_tasks: set[asyncio.Task[None]] = set()
+        self.retailer_concurrency_limit = retailer_concurrency_limit
+        self._active_tasks: dict[asyncio.Task[None], QueueTask] = {}
 
     async def run_once(self) -> int:
         """Keep the bounded worker window full and return completed task count.
@@ -92,11 +95,11 @@ class QueueWorker:
             return 0
 
         completed, _ = await asyncio.wait(
-            self._active_tasks,
+            self._active_tasks.keys(),
             return_when=asyncio.FIRST_COMPLETED,
         )
-        self._active_tasks.difference_update(completed)
         for task in completed:
+            self._active_tasks.pop(task, None)
             task.result()
         await self._fill_available_slots()
         return len(completed)
@@ -105,10 +108,13 @@ class QueueWorker:
         available_slots = self.claim_limit - len(self._active_tasks)
         if available_slots <= 0:
             return 0
+        active_retailer_counts = Counter(task.retailer_id for task in self._active_tasks.values())
         tasks = await self._repository.claim_tasks(
             self.worker_id,
             claim_limit=available_slots,
             lease_seconds=self.lease_seconds,
+            active_retailer_counts=dict(active_retailer_counts),
+            retailer_concurrency_limit=self.retailer_concurrency_limit,
         )
         if tasks:
             logger.info(
@@ -119,14 +125,15 @@ class QueueWorker:
                     "claimed_tasks": len(tasks),
                 },
             )
-        self._active_tasks.update(asyncio.create_task(self._execute(task)) for task in tasks)
+        for task in tasks:
+            self._active_tasks[asyncio.create_task(self._execute(task))] = task
         return len(tasks)
 
     async def close(self) -> None:
         """Finish already-leased tasks without claiming new work."""
         if not self._active_tasks:
             return
-        active = tuple(self._active_tasks)
+        active = tuple(self._active_tasks.keys())
         self._active_tasks.clear()
         await asyncio.gather(*active)
 

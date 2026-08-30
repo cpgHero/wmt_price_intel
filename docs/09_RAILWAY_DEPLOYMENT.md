@@ -72,8 +72,11 @@ METRICSCART_API_BASE_URL=https://api.metricscart.com
 METRICSCART_GLOBAL_RPS=2
 METRICSCART_GLOBAL_RPM=108
 METRICSCART_MAX_ATTEMPTS=5
+METRICSCART_MAX_CONNECTIONS=256
+METRICSCART_MAX_KEEPALIVE_CONNECTIONS=128
 WORKER_CLAIM_LIMIT=10
 WORKER_LEASE_SECONDS=300
+WORKER_RETAILER_CONCURRENCY_LIMIT=80
 ANALYSIS_PIPELINE_ENABLED=true
 MATCHING_V2_SHADOW_ENABLED=false
 MATCHING_V2_SHADOW_API_ENABLED=false
@@ -315,6 +318,14 @@ before enabling MetricsCart. Keep `METRICSCART_GLOBAL_RPS=2` and `METRICSCART_GL
 identical across replicas because every replica shares the same credential-hash budget row. The
 scheduler may also scale after initial validation: schedule, analysis, and email work are leased in
 Postgres and schedule slots/delivery keys are unique.
+
+An owner-approved production collection may raise the shared Search limiter to the provider's
+confirmed retailer-specific ceiling, currently `METRICSCART_GLOBAL_RPS=3` and
+`METRICSCART_GLOBAL_RPM=180`. `WORKER_RETAILER_CONCURRENCY_LIMIT` is a per-replica safety boundary:
+it prevents a slow retailer from consuming every async task slot while another retailer has unused
+quota. `WORKER_CLAIM_LIMIT` and `METRICSCART_MAX_CONNECTIONS` must be large enough to accommodate
+the sum of independently active retailer lanes; increasing them never changes the database-backed
+start-rate limit.
 
 Increase only one replica at a time. After each increase, observe at least one representative run and
 check queue latency, pages/minute, aggregate permit counts, 429s and `paused_until`, retries, lease

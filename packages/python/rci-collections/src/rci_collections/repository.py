@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import text
@@ -36,7 +36,7 @@ from rci_collections.models import (
 DEFAULT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000001"
 
 
-def _json(value: dict[str, object]) -> str:
+def _json(value: Mapping[str, object]) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
@@ -1111,7 +1111,13 @@ class PostgresCollectionRepository:
         )
 
     async def claim_tasks(
-        self, worker_id: str, *, claim_limit: int, lease_seconds: int
+        self,
+        worker_id: str,
+        *,
+        claim_limit: int,
+        lease_seconds: int,
+        active_retailer_counts: dict[str, int] | None = None,
+        retailer_concurrency_limit: int | None = None,
     ) -> list[QueueTask]:
         claim_statement = text(
             """
@@ -1174,10 +1180,26 @@ class PostgresCollectionRepository:
                                 e.priority, e.created_at, e.id
                      ) AS lane_position
               FROM eligible e
+            ), retailer_ranked AS (
+              SELECT q.*,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY q.retailer_id
+                       ORDER BY CASE WHEN q.is_preflight THEN 0 ELSE 1 END,
+                                q.lane_position, q.priority, q.created_at, q.id
+                     ) AS retailer_position
+              FROM ranked q
             ), candidates AS MATERIALIZED (
               SELECT t.id
-              FROM ranked q
+              FROM retailer_ranked q
               JOIN collection_task t ON t.id = q.id
+              WHERE :retailer_concurrency_limit IS NULL OR
+                    q.retailer_position <= GREATEST(
+                      :retailer_concurrency_limit - COALESCE(
+                        CAST(:active_retailer_counts AS jsonb) ->> q.retailer_id,
+                        '0'
+                      )::integer,
+                      0
+                    )
               ORDER BY CASE WHEN q.is_preflight THEN 0 ELSE 1 END,
                        q.lane_position, q.priority, q.created_at, q.id
               FOR UPDATE OF t SKIP LOCKED
@@ -1247,6 +1269,8 @@ class PostgresCollectionRepository:
                             "worker_id": worker_id,
                             "claim_limit": claim_limit,
                             "lease_seconds": lease_seconds,
+                            "active_retailer_counts": _json(active_retailer_counts or {}),
+                            "retailer_concurrency_limit": retailer_concurrency_limit,
                         },
                     )
                 )

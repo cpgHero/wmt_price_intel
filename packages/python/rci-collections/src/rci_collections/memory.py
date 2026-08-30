@@ -459,7 +459,13 @@ class InMemoryCollectionRepository:
             return artifact_id
 
     async def claim_tasks(
-        self, worker_id: str, *, claim_limit: int, lease_seconds: int
+        self,
+        worker_id: str,
+        *,
+        claim_limit: int,
+        lease_seconds: int,
+        active_retailer_counts: dict[str, int] | None = None,
+        retailer_concurrency_limit: int | None = None,
     ) -> list[QueueTask]:
         now = datetime.now(UTC)
         async with self._lock:
@@ -523,6 +529,8 @@ class InMemoryCollectionRepository:
                     eligible.append(task)
             eligible.sort(key=lambda item: (item.priority, item.created_at, item.id))
             claimed: list[QueueTask] = []
+            claimed_by_retailer: dict[str, int] = {}
+            active_retailer_counts = active_retailer_counts or {}
             active_preflight_retailers = {
                 task.retailer_id
                 for task in self._tasks.values()
@@ -536,6 +544,12 @@ class InMemoryCollectionRepository:
             for task in eligible:
                 if len(claimed) >= claim_limit:
                     break
+                if retailer_concurrency_limit is not None and (
+                    active_retailer_counts.get(task.retailer_id, 0)
+                    + claimed_by_retailer.get(task.retailer_id, 0)
+                    >= retailer_concurrency_limit
+                ):
+                    continue
                 if task.is_preflight and task.retailer_id in active_preflight_retailers:
                     continue
                 updated = replace(
@@ -547,6 +561,9 @@ class InMemoryCollectionRepository:
                 )
                 self._tasks[task.id] = updated
                 claimed.append(updated)
+                claimed_by_retailer[task.retailer_id] = (
+                    claimed_by_retailer.get(task.retailer_id, 0) + 1
+                )
                 if task.is_preflight:
                     active_preflight_retailers.add(task.retailer_id)
                 run = self._runs[task.collection_run_id]

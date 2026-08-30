@@ -169,6 +169,7 @@ async def run() -> None:
         worker_id=worker_id,
         claim_limit=int(os.getenv("WORKER_CLAIM_LIMIT", "10")),
         lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
+        retailer_concurrency_limit=int(os.getenv("WORKER_RETAILER_CONCURRENCY_LIMIT", "80")),
     )
     assistant: GovernedAnalysisAssistant | None = None
     matching_review_worker: MatchingReviewAIWorker | None = None

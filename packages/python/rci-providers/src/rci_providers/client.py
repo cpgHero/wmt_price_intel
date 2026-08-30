@@ -31,6 +31,8 @@ class MetricsCartSettings:
     api_key: str
     base_url: str = "https://api.metricscart.com"
     timeout_seconds: float = 60
+    max_connections: int = 256
+    max_keepalive_connections: int = 128
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
 
     @classmethod
@@ -42,6 +44,10 @@ class MetricsCartSettings:
             api_key=api_key,
             base_url=os.getenv("METRICSCART_API_BASE_URL", "https://api.metricscart.com"),
             timeout_seconds=float(os.getenv("METRICSCART_TIMEOUT_SECONDS", "60")),
+            max_connections=int(os.getenv("METRICSCART_MAX_CONNECTIONS", "256")),
+            max_keepalive_connections=int(
+                os.getenv("METRICSCART_MAX_KEEPALIVE_CONNECTIONS", "128")
+            ),
             retry_policy=RetryPolicy(
                 initial_backoff_seconds=float(
                     os.getenv("METRICSCART_INITIAL_BACKOFF_SECONDS", "30")
@@ -73,6 +79,10 @@ class MetricsCartClient:
         self._http = http_client or httpx.AsyncClient(
             base_url=settings.base_url,
             timeout=settings.timeout_seconds,
+            limits=httpx.Limits(
+                max_connections=settings.max_connections,
+                max_keepalive_connections=settings.max_keepalive_connections,
+            ),
         )
 
     async def fetch(self, task: QueueTask) -> ProviderPage:

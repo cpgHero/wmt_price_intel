@@ -186,6 +186,21 @@ async def test_worker_refills_a_free_slot_without_waiting_for_slowest_request() 
     assert usage.succeeded_tasks == 3
 
 
+async def test_worker_retailer_concurrency_capacity_prevents_slow_lane_monopoly() -> None:
+    repository = _repository(3)
+    await _run(repository)
+
+    claimed = await repository.claim_tasks(
+        "capacity-worker",
+        claim_limit=3,
+        lease_seconds=30,
+        active_retailer_counts={"walmart_us": 2},
+        retailer_concurrency_limit=2,
+    )
+
+    assert claimed == []
+
+
 async def test_expired_lease_is_reclaimed_and_stale_owner_cannot_complete() -> None:
     repository = _repository(1)
     run = await _run(repository)
@@ -350,6 +365,8 @@ def test_postgres_claim_query_uses_skip_locked() -> None:
     assert "FOR UPDATE OF t SKIP LOCKED" in source
     assert "PARTITION BY e.collection_run_id, e.retailer_id" in source
     assert "q.lane_position" in source
+    assert "q.retailer_position" in source
+    assert "active_retailer_counts" in source
 
 
 async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() -> None:

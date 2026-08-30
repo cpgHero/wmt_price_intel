@@ -54,6 +54,11 @@ billable-call safety boundary for horizontal collection workers.
 Production collection uses three worker replicas. Replica IDs are unique and the database-backed
 limiter prevents horizontal scaling from multiplying a retailer quota.
 
+Each replica also caps active work per retailer while retaining a larger total rolling window and
+HTTP connection pool. Slow ALDI requests therefore cannot occupy every slot needed by Walmart,
+Amazon, or another Egg retailer. The cap governs concurrency, not request starts; the shared
+Postgres limiter remains the authoritative three-per-second and 180-per-minute boundary.
+
 ## Execution and reconciliation gates
 
 1. Each retailer must pass its own five-call availability gate before its bulk tasks are released.

@@ -84,7 +84,13 @@ class CollectionRepository(LocationUniverseRepository, Protocol):
     async def record_artifact(self, run_id: str, artifact: RawArtifact) -> str: ...
 
     async def claim_tasks(
-        self, worker_id: str, *, claim_limit: int, lease_seconds: int
+        self,
+        worker_id: str,
+        *,
+        claim_limit: int,
+        lease_seconds: int,
+        active_retailer_counts: dict[str, int] | None = None,
+        retailer_concurrency_limit: int | None = None,
     ) -> list[QueueTask]: ...
 
     async def extend_lease(self, task_id: str, worker_id: str, lease_seconds: int) -> bool: ...
