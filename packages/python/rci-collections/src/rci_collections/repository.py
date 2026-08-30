@@ -1192,9 +1192,9 @@ class PostgresCollectionRepository:
               SELECT t.id
               FROM retailer_ranked q
               JOIN collection_task t ON t.id = q.id
-              WHERE :retailer_concurrency_limit IS NULL OR
+              WHERE CAST(:retailer_concurrency_limit AS integer) IS NULL OR
                     q.retailer_position <= GREATEST(
-                      :retailer_concurrency_limit - COALESCE(
+                      CAST(:retailer_concurrency_limit AS integer) - COALESCE(
                         CAST(:active_retailer_counts AS jsonb) ->> q.retailer_id,
                         '0'
                       )::integer,
