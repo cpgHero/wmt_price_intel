@@ -13,7 +13,7 @@ from rci_collections import (
     InMemoryCollectionRepository,
     QueueWorker,
 )
-from rci_collections.models import LocationUnit
+from rci_collections.models import LocationUnit, ProviderPage, QueueTask
 from rci_collections.planner import canonical_checksum
 from rci_collections.repository import PostgresCollectionRepository
 from rci_collections.service import CollectionBudgetError, CollectionService
@@ -142,6 +142,48 @@ async def test_multiple_workers_never_claim_or_execute_a_task_twice() -> None:
     completed = await repository.get_run(run.id)
     assert completed is not None
     assert completed.status == "succeeded"
+
+
+async def test_worker_refills_a_free_slot_without_waiting_for_slowest_request() -> None:
+    repository = _repository(3)
+    run = await _run(repository)
+    release_slow = asyncio.Event()
+    third_started = asyncio.Event()
+
+    class VariableLatencyProvider:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+            self.slow_task_id: str | None = None
+
+        async def fetch(self, task: QueueTask) -> ProviderPage:
+            self.calls.append(task.id)
+            if self.slow_task_id is None:
+                self.slow_task_id = task.id
+                await release_slow.wait()
+            elif len(self.calls) >= 3:
+                third_started.set()
+            await asyncio.sleep(0)
+            return ProviderPage(http_status=200, result_count=1)
+
+    provider = VariableLatencyProvider()
+    worker = QueueWorker(
+        repository,
+        provider,
+        worker_id="rolling-worker",
+        claim_limit=2,
+        lease_seconds=30,
+    )
+
+    assert await asyncio.wait_for(worker.run_once(), timeout=1) == 1
+    await asyncio.wait_for(third_started.wait(), timeout=1)
+    assert len(provider.calls) == 3
+    assert provider.slow_task_id in provider.calls
+
+    release_slow.set()
+    assert await worker.drain() == 2
+    usage = await repository.usage(run.id)
+    assert usage is not None
+    assert usage.succeeded_tasks == 3
 
 
 async def test_expired_lease_is_reclaimed_and_stale_owner_cannot_complete() -> None:

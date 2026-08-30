@@ -425,6 +425,7 @@ async def run() -> None:
             "worker stopping",
             extra={"event": "service_stopping", "worker_id": worker_id},
         )
+        await worker.close()
         await health_server.close()
         if metricscart_client is not None:
             await metricscart_client.close()

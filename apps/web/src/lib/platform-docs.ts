@@ -83,11 +83,12 @@ const lastVerified = "August 28, 2026";
 const aiIntegrationLastVerified = "August 29, 2026";
 const integrationLineageLastVerified = "August 29, 2026";
 const productionOperationsLastVerified = "August 29, 2026";
+const liveSearchLastVerified = "August 30, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.76",
-  lastVerified: productionOperationsLastVerified,
+  version: "1.3.77",
+  lastVerified: liveSearchLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -2865,6 +2866,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-30",
+              "Live execution underway; throughput correction release-tested",
+              "Full national Banana, Milk, and Egg API Search recollections launched under a combined owner-approved $200 Search-only ceiling, and collection workers gained rolling slot refill.",
+              "The immutable runs estimate 77,663 credits ($155.326) and enforce combined per-run ceilings of $170, leaving $30 uncommitted. Search starts are shared-limit governed at three per second and 180 per minute per retailer, with three worker replicas and unique owners. A completed request now refills its slot without waiting for a slow batch peer; durable leases, heartbeats, retailer gates, shared cooldowns, retry limits, cancellation, budgets, and immutable raw evidence are unchanged. Twenty-nine collection tests and Ruff pass. No PDP or OpenAI spend is authorized by this phase; final credit and artifact reconciliation remains pending terminal runs.",
+            ],
             [
               "2026-08-29",
               "PITR and database credential maintenance production-verified",

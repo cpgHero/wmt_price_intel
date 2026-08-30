@@ -77,11 +77,37 @@ class QueueWorker:
         self.worker_id = worker_id
         self.claim_limit = claim_limit
         self.lease_seconds = lease_seconds
+        self._active_tasks: set[asyncio.Task[None]] = set()
 
     async def run_once(self) -> int:
+        """Keep the bounded worker window full and return completed task count.
+
+        Provider latency varies substantially by retailer. Waiting for every task in a
+        claimed batch lets one timeout idle all otherwise-free slots. Retaining the
+        unfinished tasks and refilling each completed slot preserves the durable lease
+        boundary while allowing independent retailer limits to run concurrently.
+        """
+        await self._fill_available_slots()
+        if not self._active_tasks:
+            return 0
+
+        completed, _ = await asyncio.wait(
+            self._active_tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        self._active_tasks.difference_update(completed)
+        for task in completed:
+            task.result()
+        await self._fill_available_slots()
+        return len(completed)
+
+    async def _fill_available_slots(self) -> int:
+        available_slots = self.claim_limit - len(self._active_tasks)
+        if available_slots <= 0:
+            return 0
         tasks = await self._repository.claim_tasks(
             self.worker_id,
-            claim_limit=self.claim_limit,
+            claim_limit=available_slots,
             lease_seconds=self.lease_seconds,
         )
         if tasks:
@@ -93,8 +119,16 @@ class QueueWorker:
                     "claimed_tasks": len(tasks),
                 },
             )
-        await asyncio.gather(*(self._execute(task) for task in tasks))
+        self._active_tasks.update(asyncio.create_task(self._execute(task)) for task in tasks)
         return len(tasks)
+
+    async def close(self) -> None:
+        """Finish already-leased tasks without claiming new work."""
+        if not self._active_tasks:
+            return
+        active = tuple(self._active_tasks)
+        self._active_tasks.clear()
+        await asyncio.gather(*active)
 
     async def _execute(self, task: QueueTask) -> None:
         started = time.monotonic()
