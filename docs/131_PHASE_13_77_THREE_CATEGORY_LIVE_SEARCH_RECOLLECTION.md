@@ -59,6 +59,12 @@ HTTP connection pool. Slow ALDI requests therefore cannot occupy every slot need
 Amazon, or another Egg retailer. The cap governs concurrency, not request starts; the shared
 Postgres limiter remains the authoritative three-per-second and 180-per-minute boundary.
 
+When a retailer returns HTTP 429, the shared state pauses only that retailer and records the event.
+For 30 minutes after the last 429, that retailer is paced at two starts per second and 108 per
+minute; retailers without a recent 429 remain at three and 180. Repeated 429s extend the adaptive
+window. This follows the fastest rate the live endpoint actually accepts instead of repeatedly
+re-entering cooldown at an optimistic catalog ceiling.
+
 ## Execution and reconciliation gates
 
 1. Each retailer must pass its own five-call availability gate before its bulk tasks are released.

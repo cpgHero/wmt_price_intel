@@ -147,6 +147,11 @@ async def run() -> None:
             budget_key=credential_budget_key(metricscart_settings.api_key),
             rps=int(os.getenv("METRICSCART_GLOBAL_RPS", "2")),
             rpm=int(os.getenv("METRICSCART_GLOBAL_RPM", "108")),
+            post_429_rps=int(os.getenv("METRICSCART_POST_429_RPS", "2")),
+            post_429_rpm=int(os.getenv("METRICSCART_POST_429_RPM", "108")),
+            post_429_recovery_seconds=int(
+                os.getenv("METRICSCART_POST_429_RECOVERY_SECONDS", "1800")
+            ),
         )
         object_store = S3RawObjectStore.create(
             bucket=os.environ["OBJECT_STORAGE_BUCKET"],

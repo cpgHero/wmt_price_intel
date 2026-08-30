@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -86,3 +87,26 @@ def test_postgres_limiter_serializes_permits_under_row_lock() -> None:
     assert "provider_rate_limit_state" in source
     assert "next_permit_at" in source
     assert "paused_until = GREATEST" in source
+    assert "last_429_at" in source
+
+
+def test_postgres_limiter_temporarily_slows_only_after_recent_429() -> None:
+    limiter = PostgresProviderLimiter(
+        object(),  # type: ignore[arg-type]
+        provider="metricscart",
+        budget_key="test",
+        rps=3,
+        rpm=180,
+        post_429_rps=2,
+        post_429_rpm=108,
+        post_429_recovery_seconds=1800,
+    )
+    now = datetime.now(UTC)
+
+    assert limiter._effective_permit_interval(now, None) == pytest.approx(0.34)
+    assert limiter._effective_permit_interval(now, now - timedelta(minutes=5)) == pytest.approx(
+        60 / 108 * 1.02
+    )
+    assert limiter._effective_permit_interval(now, now - timedelta(minutes=31)) == pytest.approx(
+        0.34
+    )

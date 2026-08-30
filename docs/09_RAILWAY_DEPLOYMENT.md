@@ -71,6 +71,9 @@ COLLECTION_PROVIDER=metricscart
 METRICSCART_API_BASE_URL=https://api.metricscart.com
 METRICSCART_GLOBAL_RPS=2
 METRICSCART_GLOBAL_RPM=108
+METRICSCART_POST_429_RPS=2
+METRICSCART_POST_429_RPM=108
+METRICSCART_POST_429_RECOVERY_SECONDS=1800
 METRICSCART_MAX_ATTEMPTS=5
 METRICSCART_MAX_CONNECTIONS=256
 METRICSCART_MAX_KEEPALIVE_CONNECTIONS=128
@@ -326,6 +329,12 @@ it prevents a slow retailer from consuming every async task slot while another r
 quota. `WORKER_CLAIM_LIMIT` and `METRICSCART_MAX_CONNECTIONS` must be large enough to accommodate
 the sum of independently active retailer lanes; increasing them never changes the database-backed
 start-rate limit.
+
+Provider 429 evidence is retailer-scoped. After a 429, every replica honors the shared cooldown and
+temporarily paces only that retailer at `METRICSCART_POST_429_RPS` /
+`METRICSCART_POST_429_RPM`. A retailer returns to the normal ceiling only after the configured
+recovery window passes without another 429. Do not disable the adaptive lane to make a run appear
+faster.
 
 Increase only one replica at a time. After each increase, observe at least one representative run and
 check queue latency, pages/minute, aggregate permit counts, 429s and `paused_until`, retries, lease

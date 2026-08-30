@@ -101,9 +101,12 @@ class PostgresProviderLimiter:
         budget_key: str,
         rps: int = 2,
         rpm: int = 108,
+        post_429_rps: int = 2,
+        post_429_rpm: int = 108,
+        post_429_recovery_seconds: int = 1800,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
-        if rps < 1 or rpm < 1:
+        if min(rps, rpm, post_429_rps, post_429_rpm, post_429_recovery_seconds) < 1:
             raise ValueError("provider limits must be positive")
         self._engine = engine
         self.provider = provider
@@ -111,6 +114,8 @@ class PostgresProviderLimiter:
         self.rps = rps
         self.rpm = rpm
         self._permit_interval = max(1 / rps, 60 / rpm) * 1.02
+        self._post_429_permit_interval = max(1 / post_429_rps, 60 / post_429_rpm) * 1.02
+        self._post_429_recovery_seconds = post_429_recovery_seconds
         self._sleep = sleep
 
     async def acquire(self, scope_key: str | None = None) -> None:
@@ -156,6 +161,7 @@ class PostgresProviderLimiter:
             minute_start = row["minute_window_start"]
             minute_count = int(row["minute_count"])
             next_permit_at = row["next_permit_at"]
+            permit_interval = self._effective_permit_interval(now, row["last_429_at"])
             if second_start is None or (now - second_start).total_seconds() >= 1:
                 second_start, second_count = now, 0
             if minute_start is None or (now - minute_start).total_seconds() >= 60:
@@ -187,10 +193,18 @@ class PostgresProviderLimiter:
                     "second_count": second_count + 1,
                     "minute_start": minute_start,
                     "minute_count": minute_count + 1,
-                    "next_permit_at": now + timedelta(seconds=self._permit_interval),
+                    "next_permit_at": now + timedelta(seconds=permit_interval),
                 },
             )
             return 0
+
+    def _effective_permit_interval(self, now: datetime, last_429_at: datetime | None) -> float:
+        if (
+            last_429_at is not None
+            and (now - last_429_at).total_seconds() < self._post_429_recovery_seconds
+        ):
+            return max(self._permit_interval, self._post_429_permit_interval)
+        return self._permit_interval
 
     async def pause(self, seconds: float, scope_key: str | None = None) -> None:
         await self._pause(max(seconds, 0), self._scoped_provider(scope_key))
