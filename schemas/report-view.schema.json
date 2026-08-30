@@ -31,6 +31,16 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "unavailable_retailers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "scoreable_retailers": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
     "retailer_scope": {
       "type": "object",
       "additionalProperties": false,

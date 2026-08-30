@@ -510,6 +510,25 @@
     }
   },
   "$defs": {
+    "matchingV2RetailerCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "competitor_retailer_id", "candidate_count", "certified_count",
+        "certified_comparable_count", "certified_not_comparable_count",
+        "unresolved_count"
+      ],
+      "properties": {
+        "competitor_retailer_id": {"type": "string", "minLength": 1},
+        "candidate_count": {"type": "integer", "minimum": 0},
+        "certified_count": {"type": "integer", "minimum": 0},
+        "certified_comparable_count": {"type": "integer", "minimum": 0},
+        "certified_not_comparable_count": {"type": "integer", "minimum": 0},
+        "reviewed_insufficient_evidence_count": {"type": "integer", "minimum": 0},
+        "pending_unreviewed_count": {"type": "integer", "minimum": 0},
+        "unresolved_count": {"type": "integer", "minimum": 0}
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -545,6 +564,67 @@
           "type": "array",
           "uniqueItems": true,
           "items": {"type": "string", "minLength": 1}
+        },
+        "collection_scope_projections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "retailer_id",
+              "projection_kind",
+              "projection_checksum",
+              "raw_task_count",
+              "retained_task_count",
+              "excluded_task_count",
+              "raw_location_count",
+              "retained_location_count",
+              "excluded_location_count",
+              "raw_task_retention_ratio",
+              "governed_coverage_ratio",
+              "minimum_scoreable_coverage",
+              "scorecard_disposition",
+              "source_audit_id",
+              "source_evidence_checksum",
+              "inventory_checksum",
+              "policy_version"
+            ],
+            "properties": {
+              "id": {"type": "string", "format": "uuid"},
+              "retailer_id": {"type": "string", "minLength": 1},
+              "projection_kind": {
+                "enum": ["canonical_alias_collapse", "limited_provider_footprint"]
+              },
+              "projection_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "raw_task_count": {"type": "integer", "minimum": 1},
+              "retained_task_count": {"type": "integer", "minimum": 1},
+              "excluded_task_count": {"type": "integer", "minimum": 0},
+              "raw_location_count": {"type": "integer", "minimum": 1},
+              "retained_location_count": {"type": "integer", "minimum": 1},
+              "excluded_location_count": {"type": "integer", "minimum": 0},
+              "raw_task_retention_ratio": {
+                "type": "string",
+                "pattern": "^(?:0\\.[0-9]{6}|1\\.000000)$"
+              },
+              "governed_coverage_ratio": {
+                "type": "string",
+                "pattern": "^(?:0\\.[0-9]{6}|1\\.000000)$"
+              },
+              "minimum_scoreable_coverage": {
+                "type": "string",
+                "pattern": "^(?:0\\.[0-9]{6}|1\\.000000)$"
+              },
+              "scorecard_disposition": {"enum": ["scoreable", "unavailable"]},
+              "source_audit_id": {"type": ["string", "null"], "format": "uuid"},
+              "source_evidence_checksum": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "inventory_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "policy_version": {"type": "string", "minLength": 1}
+            }
+          }
         },
         "match_revision_id": {
           "type": ["string", "null"],
@@ -605,6 +685,56 @@
                 }
               }
             }
+          }
+        },
+        "matching_v2_reporting_coverage": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": [
+            "authority", "source_authority", "source_coverage_checksum",
+            "scoreable_retailer_ids", "unavailable_retailer_ids",
+            "source_candidate_count", "selected_candidate_count", "selection_complete",
+            "queue_case_count", "certified_label_count", "certified_comparable_count",
+            "certified_not_comparable_count", "unresolved_excluded_count",
+            "reviewed_insufficient_evidence_count", "pending_unreviewed_count",
+            "automatic_fallback_enabled", "retailers", "excluded_unavailable_retailers",
+            "withheld_certified_comparable_count",
+            "withheld_certified_not_comparable_count", "projection_checksum"
+          ],
+          "properties": {
+            "authority": {"const": "matching_v2_scoreable_retailer_projection"},
+            "source_authority": {"type": "string"},
+            "source_coverage_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "scoreable_retailer_ids": {
+              "type": "array", "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "unavailable_retailer_ids": {
+              "type": "array", "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "source_candidate_count": {"type": "integer", "minimum": 0},
+            "selected_candidate_count": {"type": "integer", "minimum": 0},
+            "selection_complete": {"type": "boolean"},
+            "queue_case_count": {"type": "integer", "minimum": 0},
+            "certified_label_count": {"type": "integer", "minimum": 0},
+            "certified_comparable_count": {"type": "integer", "minimum": 0},
+            "certified_not_comparable_count": {"type": "integer", "minimum": 0},
+            "unresolved_excluded_count": {"type": "integer", "minimum": 0},
+            "reviewed_insufficient_evidence_count": {"type": "integer", "minimum": 0},
+            "pending_unreviewed_count": {"type": "integer", "minimum": 0},
+            "automatic_fallback_enabled": {"const": false},
+            "retailers": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/matchingV2RetailerCoverage"}
+            },
+            "excluded_unavailable_retailers": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/matchingV2RetailerCoverage"}
+            },
+            "withheld_certified_comparable_count": {"type": "integer", "minimum": 0},
+            "withheld_certified_not_comparable_count": {"type": "integer", "minimum": 0},
+            "projection_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
           }
         },
         "brand_revision_id": {

@@ -87,7 +87,7 @@ const liveSearchLastVerified = "August 30, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.79",
+  version: "1.3.81",
   lastVerified: liveSearchLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1800,6 +1800,11 @@ export const platformDocumentation: PlatformDocumentation = {
                 "Location import evaluates active status and provider-safe store identity from the versioned Retailer Catalog. When that policy changes, the administrator first writes and reviews a checksummed dry-run artifact containing the catalog, complete selected location snapshot, counts, reasons, and exact row changes. Apply must consume that exact artifact; it cannot silently create a replacement plan or override its retailer scope. Import and apply share one cross-process whole-operation lock, while apply independently regenerates the plan, rejects a stale snapshot or altered evidence, commits the complete correction atomically, and retains the reviewed-plan checksum in its durable audit. Frozen historical geographies are never rewritten.",
             },
             {
+              term: "Audited frozen-run scope projection",
+              definition:
+                "A staged Phase 13.79 control can project one retailer's complete frozen task inventory without mutating the base run. Raw-task retention is disclosed separately from physical-network coverage. Canonical alias collapse requires a completed location audit and maps every excluded alias to a retained canonical task; its governed denominator is the retained canonical physical scope. Limited provider footprint uses distinct immutable physical locations, not task rows, and becomes unavailable/no-scorecard below 95%. A provider rejection is accepted only from a non-null immutable raw artifact whose checksum, provider, retailer, adapter, HTTP status, and exact response-body checksum satisfy the reviewed Retailer Catalog contract; mutable task error text is not authority. The reviewed manifest, source evidence, task inventory, recovery plan, and analysis-input generation are checksum-bound and immutable.",
+            },
+            {
               term: "Service-area context",
               definition:
                 "Amazon Same Day is collected and compared by delivery ZIP, not a fabricated physical store. Its Search URL preserves the Same Day/Fresh service-area context.",
@@ -2151,8 +2156,8 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title:
-            "Unresolved-only composite continuation is staged, not deployed",
-          text: "Migration 0052 and its administrator API are implemented and locally test-verified but are not yet authoritative production behavior. After deployment and PostgreSQL verification, a bound terminal recovery may gain one checksum-bound child that selects no usable success or retained billable 404, always selects integrity blockers, and selects only enough zero-credit gaps to satisfy the existing 95% conclusive-coverage, minimum-success, and retained-404-rate contract. A retailer whose remaining requests cannot mathematically satisfy readiness is not launched and instead requires an explicit governed unavailable decision. The child uses only remaining credits in the original immutable batch, caps lineage depth at 32, rejects unapproved pagination descendants and non-lineage overlap, and requires all ancestors during materialization. No continuation may project or revive Kroger's ineligible historical aliases; that audit-bound scope projection remains separate follow-on work.",
+            "Composite continuation is live; scope projection remains staged",
+          text: "Migration 0052 and its administrator continuation API are authoritative production behavior. Continuations remain bounded to unresolved evidence and the original immutable recovery batch. Egg Amazon continuation plan 63e57d8a-336b-425f-a752-514637891631 launched run 2d4f2e06 and completed its one selected request successfully for two credits. Migration 0053 alone remains staged: its Phase 13.79 scope projection inventories every frozen task for one enabled non-benchmark retailer, rechecks its reviewed checksum before approval and every use, filters before readiness, lineage, artifacts, and analysis input, and never changes frozen tasks or geography. Kroger's expected proof is 2,667 raw tasks → 1,369 canonical eight-digit retained tasks plus 1,298 audit-backed aliases mapped to retained tasks; the 51.33% raw-task retention is not coverage, because canonical physical-scope coverage is 100%. Wegmans remains 89 of 114 distinct provider-valid physical scopes (78.07%) and therefore unavailable/no-scorecard under 95%. A read-only audit verified all 25 Wegmans HTTP-400 exclusions against distinct immutable artifact IDs, matching object checksums and metadata, and the single reviewed raw-body SHA-256 8679d22d…26191; task error text is never sufficient. Migration 0053 deployment, production projection approval, recovery, materialization, and replay remain pending independent review and PostgreSQL verification.",
         },
       ],
     },
@@ -2206,6 +2211,12 @@ export const platformDocumentation: PlatformDocumentation = {
               "Frozen location-master snapshot",
               "Store identity, ZIP, city, state, country, coordinates, physical/service-area behavior",
               "Cannot prove a retailer page was callable or a missing product was out of stock",
+            ],
+            [
+              "Frozen-run scope projection",
+              "Immutable base task/geography snapshot plus checksum-bound location audit or raw provider-response evidence",
+              "Complete retained/excluded task inventory, distinct physical-location denominator, alias mappings, and scoreable/unavailable disposition",
+              "Cannot edit historical tasks, call a provider, treat raw-task retention as network coverage, or publish an unavailable retailer as zero",
             ],
             [
               "Category admission",
@@ -2893,9 +2904,27 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-30",
+              "Deployed and production-verified",
+              "Canonical governed retailer IDs now control production Price Intelligence catalog publication, and the blocked Banana successor completed the trust-gated replacement workflow.",
+              "Commit 8e621bef9082ec773821e213d34cabf0592006f0 passed the complete release gate in GitHub Actions run 33340858383, and Railway API deployment 1fd29c75-2e57-48c9-a452-388d5bdb34fc is healthy. Banana job 8d6c4756-c44f-487e-9a6a-393dc1661b96 succeeded through 25 of 25 stages and passed its semantic audit with zero errors and 39 nonblocking warnings; result d148c963-d080-4164-9d1c-d1f23233786d is ready, and predecessor c148b5fe-014b-4232-b064-1647c8362d4c was recoverably archived at 2026-08-30 23:15 UTC. Milk job 9f0bb4d2-d743-4939-aaa5-b1b98b7d4271 independently succeeded through 16 of 16 stages with zero semantic errors and nine nonblocking warnings; result a12a43c6-f7d3-4a1d-a4fe-de656e75a0d0 is ready, and predecessor 8294aa48-1e80-4454-ac54-7c58d53c8a55 was recoverably archived at 2026-08-30 23:09 UTC. Live browser acceptance was clean. Publication reused retained evidence, made no provider or AI call, and consumed no paid credit.",
+            ],
+            [
+              "2026-08-30",
+              "Implemented and locally test-verified; release CI and deployment pending",
+              "Landing-page quality severity now follows durable publication authority while preserving fail-closed blocker and review behavior.",
+              "Landing-page readiness now distinguishes durable publication authority from source-quality disclosures. A reporting_status=ready, validation=ready_to_share result shows Ready with caveats when nonblocking counts remain; explicit review or blocker states and blocker-classified counts remain actionable/fail-closed. Legacy results without durable readiness retain conservative inference.",
+            ],
+            [
+              "2026-08-30",
               "Implemented and release-tested; production deployment and blocked-job retry pending",
               "Report publication now keys Price Intelligence catalog materialization by canonical governed retailer IDs rather than presentation labels.",
               "The publication planner reads retailer-scope IDs, fails closed when canonical scope is missing or inconsistent, and excludes explicitly unavailable competitors while retaining the benchmark and all scoreable retailers. This corrects the Banana materialization failure where display label ALDI was passed to the aldi_us-keyed service. Eight focused scope tests and 26 publication, Price, and worker tests pass. The existing trusted Banana report remains active; no source collection, provider call, AI call, match decision, metric, or predecessor report changed. The blocked successor will be retried only after the API hotfix is deployed and healthy.",
+            ],
+            [
+              "2026-08-30",
+              "Implemented and locally test-verified; independent review, PostgreSQL CI, deployment, and production approval pending",
+              "Frozen collection evidence gained immutable, checksum-bound retailer scope projections with distinct physical-network coverage semantics.",
+              "Migration 0053 adds one reviewed projection header plus a complete task inventory per base run and retailer, binds it to recovery plans and analysis-input generations, and filters excluded tasks before readiness, precedence, lineage, artifacts, or analysis queueing without rewriting frozen tasks or geography. Kroger's acceptance contract is 2,667 raw tasks → 1,369 canonical eight-digit retained tasks and 1,298 audit-backed seven-digit aliases, each mapped to a retained canonical task under production audit 6901fd05-6390-4052-a331-88f5c16ef773. Its 51.3311% raw-task retention is disclosed separately from 100% canonical physical-scope coverage. Wegmans preserves 114 frozen physical scopes, retains 89 provider-valid locations, excludes exactly 25 immutable invalid-store HTTP 400 scopes, reports 78.0702% provider-network coverage, and is forced unavailable/no-scorecard under 95%. A read-only audit of Egg run 10f96d03…c8f9 verified all 25 distinct raw artifacts, object checksums, HTTP metadata, and exact response bodies with zero errors; the reviewed adapter allowlist contains raw-body SHA-256 8679d22d…26191. Coverage is computed from distinct physical locations so extra keywords/pages cannot weight stores. Full Matching v2 release coverage remains immutable audit provenance; a checksummed scoreable-retailer projection filters unavailable rules, relationships, candidates, decisions, and scorecards while retaining exact reconciliation for scoreable retailers and warning on certified relationships withheld solely for unavailable raw evidence. Authenticated preview/approval APIs expose complete checksums with bounded detail pagination. No provider call, paid credit, production write, deployment, source mutation, certification change, or report publication was made.",
             ],
             [
               "2026-08-30",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from email import policy
 from email.parser import BytesParser
@@ -125,6 +127,8 @@ def test_blueprint_drives_report_view_and_all_artifact_sections() -> None:
             {"id": "amazon_us_same_day", "name": "Amazon Same Day (US)"},
         ],
     }
+    assert view["unavailable_retailers"] == []
+    assert view["scoreable_retailers"] == ["aldi_us", "amazon_us_same_day"]
     assert {(row["competitor_id"], row["profile_id"]) for row in view["retailer_scorecards"]} == {
         (competitor, profile)
         for competitor in ("aldi_us", "amazon_us_same_day")
@@ -717,6 +721,155 @@ def test_publication_readiness_excludes_explicitly_unavailable_competitor() -> N
     )
     assert warning["competitor_id"] == "target_us"
     assert "no scorecard" in warning["message"]
+
+
+def test_matching_v2_integrity_reconciles_only_scoreable_retailer_relationships() -> None:
+    retailer_rows = [
+        {
+            "competitor_retailer_id": "aldi_us",
+            "candidate_count": 1,
+            "certified_count": 1,
+            "certified_comparable_count": 1,
+            "certified_not_comparable_count": 0,
+            "unresolved_count": 0,
+        },
+        {
+            "competitor_retailer_id": "wegmans_us",
+            "candidate_count": 2,
+            "certified_count": 2,
+            "certified_comparable_count": 2,
+            "certified_not_comparable_count": 0,
+            "unresolved_count": 0,
+        },
+    ]
+    full_coverage = {
+        "authority": "matching_v2_certified_gold_set",
+        "selection_complete": True,
+        "queue_case_count": 3,
+        "certified_label_count": 3,
+        "certified_comparable_count": 3,
+        "certified_not_comparable_count": 0,
+        "unresolved_excluded_count": 0,
+        "reviewed_insufficient_evidence_count": 0,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+        "retailers": retailer_rows,
+    }
+    reporting = {
+        "authority": "matching_v2_scoreable_retailer_projection",
+        "source_authority": "matching_v2_certified_gold_set",
+        "source_coverage_checksum": hashlib.sha256(
+            json.dumps(
+                full_coverage,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest(),
+        "scoreable_retailer_ids": ["aldi_us"],
+        "unavailable_retailer_ids": ["wegmans_us"],
+        "source_candidate_count": 1,
+        "selected_candidate_count": 1,
+        "selection_complete": True,
+        "queue_case_count": 1,
+        "certified_label_count": 1,
+        "certified_comparable_count": 1,
+        "certified_not_comparable_count": 0,
+        "unresolved_excluded_count": 0,
+        "reviewed_insufficient_evidence_count": 0,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+        "retailers": [retailer_rows[0]],
+        "excluded_unavailable_retailers": [retailer_rows[1]],
+        "withheld_certified_comparable_count": 2,
+        "withheld_certified_not_comparable_count": 0,
+    }
+    reporting["projection_checksum"] = hashlib.sha256(
+        json.dumps(reporting, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+    result = {
+        "competitors": ["aldi_us", "wegmans_us"],
+        "validation": {"status": "ready_to_share"},
+        "source": {
+            "matching_v2_gold_set_release_id": "release-1",
+            "matching_v2_certification_coverage": full_coverage,
+            "matching_v2_reporting_coverage": reporting,
+            "unavailable_retailers": ["wegmans_us"],
+        },
+    }
+    view = {
+        "match_relationships": [
+            {
+                "relationship_id": "relationship-aldi",
+                "competitor_id": "aldi_us",
+                "status": "confirmed",
+            }
+        ],
+        "ambiguous_match_groups": [],
+        "suppressed_product_decisions": [],
+        "product_decisions": [],
+        "match_candidates": [],
+        "retailer_scorecards": [
+            {
+                "competitor_id": "aldi_us",
+                "evidence_state": "reported",
+                "status": "ready",
+                "benchmark_lower_rate": 1.0,
+                "competitor_lower_rate": 0.0,
+                "parity_rate": 0.0,
+            }
+        ],
+    }
+
+    ArtifactRenderer._apply_report_integrity(view, result)
+
+    codes = {row["code"] for row in view["report_readiness"]["blocking_reasons"]}
+    warning_codes = {row["code"] for row in view["report_readiness"]["warnings"]}
+    assert "certified_relationship_count_mismatch" not in codes
+    assert "certified_retailer_relationship_count_mismatch" not in codes
+    assert "matching_v2_relationships_withheld_for_unavailable_evidence" in warning_codes
+    assert result["source"]["matching_v2_certification_coverage"] == full_coverage
+
+    leaked_view = {
+        **view,
+        "match_relationships": [
+            *view["match_relationships"],
+            {
+                "relationship_id": "relationship-wegmans",
+                "competitor_id": "wegmans_us",
+                "status": "confirmed",
+            },
+        ],
+    }
+    ArtifactRenderer._apply_report_integrity(leaked_view, result)
+    assert any(
+        row["code"] == "governed_output_emitted_for_unavailable_retailer"
+        for row in leaked_view["report_readiness"]["blocking_reasons"]
+    )
+
+    drifted_result = copy.deepcopy(result)
+    drifted_result["source"]["matching_v2_reporting_coverage"]["source_coverage_checksum"] = (
+        "0" * 64
+    )
+    drifted_reporting = drifted_result["source"]["matching_v2_reporting_coverage"]
+    drifted_reporting["projection_checksum"] = hashlib.sha256(
+        json.dumps(
+            {
+                key: value
+                for key, value in drifted_reporting.items()
+                if key != "projection_checksum"
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    drifted_view = copy.deepcopy(view)
+    ArtifactRenderer._apply_report_integrity(drifted_view, drifted_result)
+    assert any(
+        row["code"] == "matching_v2_reporting_scope_checksum_mismatch"
+        for row in drifted_view["report_readiness"]["blocking_reasons"]
+    )
 
 
 def test_certified_relationship_without_price_evidence_is_not_labeled_unmatched() -> None:

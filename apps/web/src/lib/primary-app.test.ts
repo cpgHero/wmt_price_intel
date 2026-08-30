@@ -97,6 +97,80 @@ describe("primary application presentation", () => {
     });
   });
 
+  it("presents audited-ready Milk disclosure counts as caveats, not review work", () => {
+    const record = analysis({
+      data_quality: {
+        status: "warning",
+        issue_counts: {
+          review_offers: 18090,
+          normalization_rejections: 28876,
+          zero_or_missing_price_offers: 645,
+        },
+      },
+      validation: { status: "ready_to_share" },
+    });
+    record.reporting_status = "ready";
+
+    const summary = summarizeQuality(record);
+
+    expect(summary.tier).toBe("caveat");
+    expect(summary.label).toBe("Ready with caveats");
+    expect(summary.totalIssues).toBe(47611);
+  });
+
+  it("presents audited-ready Banana disclosure counts as caveats, not review work", () => {
+    const record = analysis({
+      data_quality: {
+        status: "warning",
+        issue_counts: {
+          review_offers: 10233,
+          zero_or_missing_price_offers: 3865,
+        },
+      },
+      validation: { status: "ready_to_share" },
+    });
+    record.reporting_status = "ready";
+
+    const summary = summarizeQuality(record);
+
+    expect(summary.tier).toBe("caveat");
+    expect(summary.label).toBe("Ready with caveats");
+    expect(summary.totalIssues).toBe(14098);
+  });
+
+  it("honors explicit review status even when the report is publication-ready", () => {
+    const record = analysis({
+      data_quality: { status: "review_required", issue_counts: {} },
+      validation: { status: "ready_to_share" },
+    });
+    record.reporting_status = "ready";
+
+    expect(summarizeQuality(record).tier).toBe("review_required");
+  });
+
+  it("honors explicit blocked status even when validation is ready to share", () => {
+    const record = analysis({
+      data_quality: { status: "warning", issue_counts: { review_offers: 25 } },
+      validation: { status: "ready_to_share" },
+    });
+    record.reporting_status = "blocked";
+
+    expect(summarizeQuality(record).tier).toBe("blocked");
+  });
+
+  it("keeps blocker issue counts fail-closed for an otherwise audited-ready report", () => {
+    const record = analysis({
+      data_quality: {
+        status: "warning",
+        issue_counts: { source_contract_failures: 1 },
+      },
+      validation: { status: "ready_to_share" },
+    });
+    record.reporting_status = "ready";
+
+    expect(summarizeQuality(record).tier).toBe("blocked");
+  });
+
   it("uses named retailers and full-scope source context", () => {
     const summary = summarizeAnalysis(analysis());
     expect(summary.category).toBe("Fresh Ground Beef");

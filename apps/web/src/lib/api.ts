@@ -64,6 +64,7 @@ export interface AnalysisRecord {
   analysis_id: string;
   collection_run_id: string;
   status: string;
+  reporting_status?: string;
   product_pack_id: string;
   product_pack_version: string;
   schema_version: string;

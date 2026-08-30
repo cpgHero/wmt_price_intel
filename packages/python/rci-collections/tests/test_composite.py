@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any
 
 import pytest
@@ -12,6 +13,7 @@ from rci_collections.composite import (
     build_continuation_preview,
     build_exact_recovery_task_contracts,
     build_recovery_preview,
+    build_scope_projection_preview,
     canonical_request_key,
     composite_trust_state,
     effective_request_identity,
@@ -22,6 +24,7 @@ from rci_collections.composite import (
     request_identity_provenance_manifest,
     resolve_task_precedence,
     retailer_collection_readiness,
+    validate_scope_projection_header_manifest,
 )
 
 
@@ -43,6 +46,20 @@ def _provider_contract(retailer_id: str, adapter_id: str) -> dict[str, Any]:
         "required_params": required,
         "default_sort": "Best Match" if "sort" in supported else None,
         "default_request_params": {},
+    }
+
+
+INVALID_STORE_BODY_CHECKSUM = "8679d22d8b7999dd491147500b111c3749f24b11d62730945de6681a44b26191"
+
+
+def _provider_error_contracts(retailer_id: str) -> dict[str, dict[str, Any]]:
+    return {
+        f"metricscart_{retailer_id}_search_zipcode": {
+            "invalid_store_scope": {
+                "http_status": 400,
+                "body_checksum_allowlist": [INVALID_STORE_BODY_CHECKSUM],
+            }
+        }
     }
 
 
@@ -107,6 +124,450 @@ def _recovery(base: dict[str, Any], task_id: str, **changes: Any) -> dict[str, A
     row = {**base, "id": task_id, "collection_run_id": "recovery-run"}
     row.update(changes)
     return row
+
+
+def _scoped_task(
+    task_id: str,
+    *,
+    retailer_id: str,
+    store_number: str,
+    zipcode: str,
+    location_id: str,
+    eligible: bool,
+    status: str = "succeeded",
+    http_status: int = 200,
+    last_error: str | None = None,
+) -> dict[str, Any]:
+    row = _task(
+        task_id,
+        f"location:{location_id}",
+        retailer_id=retailer_id,
+        status=status,
+        http_status=http_status,
+        raw_artifact_id=f"artifact-{task_id}",
+        billable_credits=(2 if status == "succeeded" else 0),
+        failure_class=(None if status == "succeeded" else "invalid_request"),
+    )
+    row.update(
+        {
+            "retailer_location_id": location_id,
+            "store_number": store_number,
+            "zipcode": zipcode,
+            "location_scope_key": f"location:{location_id}",
+            "current_location_eligible": eligible,
+            "last_error": last_error,
+            "raw_artifact_checksum": "2" * 64,
+            "raw_artifact_metadata": {
+                "provider": "metricscart",
+                "retailer_id": retailer_id,
+                "adapter_id": f"metricscart_{retailer_id}_search_zipcode",
+                "http_status": http_status,
+                "body_checksum": (INVALID_STORE_BODY_CHECKSUM if status == "failed" else "3" * 64),
+            },
+        }
+    )
+    return row
+
+
+def test_kroger_scope_projection_proves_canonical_physical_denominator() -> None:
+    rows: list[dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
+    for index in range(1, 1_370):
+        canonical = f"{index:08d}"
+        zipcode = f"{index % 100_000:05d}"
+        rows.append(
+            _scoped_task(
+                f"canonical-{index}",
+                retailer_id="kroger_us",
+                store_number=canonical,
+                zipcode=zipcode,
+                location_id=f"canonical-location-{index}",
+                eligible=True,
+            )
+        )
+        if index <= 1_298:
+            alias = canonical[1:]
+            location_id = f"alias-location-{index}"
+            rows.append(
+                _scoped_task(
+                    f"alias-{index}",
+                    retailer_id="kroger_us",
+                    store_number=alias,
+                    zipcode=zipcode,
+                    location_id=location_id,
+                    eligible=False,
+                )
+            )
+            changes.append(
+                {
+                    "id": location_id,
+                    "retailer_id": "kroger_us",
+                    "store_number": alias,
+                    "before_eligible": True,
+                    "after_eligible": False,
+                    "after_reason": "store_number_not_provider_safe",
+                }
+            )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        rows,
+        retailer_id="kroger_us",
+        projection_kind="canonical_alias_collapse",
+        base_snapshot_checksum="b" * 64,
+        source_audit={
+            "id": "audit-1",
+            "status": "completed",
+            "retailer_ids": ["kroger_us"],
+            "changed_rows": 1_298,
+            "eligible_after": 1_369,
+            "catalog_sha256": "c" * 64,
+            "snapshot_sha256": "d" * 64,
+            "reviewed_plan_sha256": "e" * 64,
+            "changes": changes,
+        },
+    )
+
+    assert preview.raw_task_count == 2_667
+    assert preview.retained_task_count == 1_369
+    assert preview.excluded_task_count == 1_298
+    assert preview.raw_location_count == 2_667
+    assert preview.retained_location_count == 1_369
+    assert preview.excluded_location_count == 1_298
+    assert preview.raw_task_retention_ratio == "0.513311"
+    assert preview.governed_coverage_ratio == "1.000000"
+    assert preview.scorecard_disposition == "scoreable"
+    excluded = [item for item in preview.items if item.disposition == "excluded"]
+    assert len(excluded) == 1_298
+    assert all(item.mapped_retained_task_id is not None for item in excluded)
+    assert len({item.mapped_retained_task_id for item in excluded}) == 1_298
+    assert preview.manifest["coverage_semantics"] == (
+        "canonical_physical_scopes_retained_over_canonical_physical_scopes"
+    )
+
+
+def test_wegmans_scope_projection_preserves_limited_provider_footprint() -> None:
+    rows = [
+        _scoped_task(
+            f"valid-{index}",
+            retailer_id="wegmans_us",
+            store_number=f"{index}",
+            zipcode=f"{index:05d}",
+            location_id=f"valid-location-{index}",
+            eligible=True,
+        )
+        for index in range(1, 90)
+    ]
+    rows.extend(
+        _scoped_task(
+            f"invalid-{index}",
+            retailer_id="wegmans_us",
+            store_number=f"{100 + index}",
+            zipcode=f"{100 + index:05d}",
+            location_id=f"invalid-location-{index}",
+            eligible=True,
+            status="failed",
+            http_status=400,
+            last_error="HTTP 400: Please provide a Valid Store",
+        )
+        for index in range(1, 26)
+    )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        rows,
+        retailer_id="wegmans_us",
+        projection_kind="limited_provider_footprint",
+        base_snapshot_checksum="b" * 64,
+        provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+    )
+
+    assert preview.raw_task_count == 114
+    assert preview.retained_task_count == 89
+    assert preview.excluded_task_count == 25
+    assert preview.raw_location_count == 114
+    assert preview.retained_location_count == 89
+    assert preview.excluded_location_count == 25
+    assert preview.raw_task_retention_ratio == "0.780702"
+    assert preview.governed_coverage_ratio == "0.780702"
+    assert preview.minimum_scoreable_coverage == "0.950000"
+    assert preview.scorecard_disposition == "unavailable"
+    assert all(
+        item.mapped_retained_task_id is None
+        for item in preview.items
+        if item.disposition == "excluded"
+    )
+    assert preview.manifest["coverage_semantics"] == (
+        "provider_valid_scopes_over_frozen_network_scopes"
+    )
+    assert preview.manifest["coverage_numerator_location_count"] == 89
+    assert preview.manifest["coverage_denominator_location_count"] == 114
+
+
+def test_provider_footprint_coverage_uses_distinct_physical_locations() -> None:
+    rows: list[dict[str, Any]] = []
+    for index in range(5):
+        task = _scoped_task(
+            f"valid-a-{index}",
+            retailer_id="wegmans_us",
+            store_number="1",
+            zipcode="10001",
+            location_id="valid-a",
+            eligible=True,
+        )
+        task["request_payload"] = {**task["request_payload"], "keyword": f"milk-{index}"}
+        rows.append(task)
+    rows.append(
+        _scoped_task(
+            "valid-b",
+            retailer_id="wegmans_us",
+            store_number="2",
+            zipcode="10002",
+            location_id="valid-b",
+            eligible=True,
+        )
+    )
+    rows.append(
+        _scoped_task(
+            "invalid-c",
+            retailer_id="wegmans_us",
+            store_number="3",
+            zipcode="10003",
+            location_id="invalid-c",
+            eligible=True,
+            status="failed",
+            http_status=400,
+            last_error="HTTP 400: Please provide a Valid Store",
+        )
+    )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        rows,
+        retailer_id="wegmans_us",
+        projection_kind="limited_provider_footprint",
+        base_snapshot_checksum="b" * 64,
+        provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+    )
+
+    assert preview.raw_task_count == 7
+    assert preview.raw_task_retention_ratio == "0.857143"
+    assert preview.raw_location_count == 3
+    assert preview.governed_coverage_ratio == "0.666667"
+    assert preview.scorecard_disposition == "unavailable"
+
+
+def test_provider_footprint_rejects_conflicting_physical_location_evidence() -> None:
+    valid = _scoped_task(
+        "valid",
+        retailer_id="wegmans_us",
+        store_number="1",
+        zipcode="10001",
+        location_id="same-location",
+        eligible=True,
+    )
+    invalid = _scoped_task(
+        "invalid",
+        retailer_id="wegmans_us",
+        store_number="1",
+        zipcode="10001",
+        location_id="same-location",
+        eligible=True,
+        status="failed",
+        http_status=400,
+        last_error="HTTP 400: Please provide a Valid Store",
+    )
+    invalid["request_payload"] = {**invalid["request_payload"], "keyword": "other"}
+
+    with pytest.raises(ValueError, match="conflicting evidence"):
+        build_scope_projection_preview(
+            "egg-run",
+            [valid, invalid],
+            retailer_id="wegmans_us",
+            projection_kind="limited_provider_footprint",
+            base_snapshot_checksum="b" * 64,
+            provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+        )
+
+
+def test_scope_projection_header_must_match_reviewed_manifest() -> None:
+    rows = [
+        _scoped_task(
+            "valid",
+            retailer_id="wegmans_us",
+            store_number="1",
+            zipcode="10001",
+            location_id="valid-location",
+            eligible=True,
+        ),
+        _scoped_task(
+            "invalid",
+            retailer_id="wegmans_us",
+            store_number="2",
+            zipcode="10002",
+            location_id="invalid-location",
+            eligible=True,
+            status="failed",
+            http_status=400,
+            last_error="HTTP 400: Please provide a Valid Store",
+        ),
+    ]
+    preview = build_scope_projection_preview(
+        "egg-run",
+        rows,
+        retailer_id="wegmans_us",
+        projection_kind="limited_provider_footprint",
+        base_snapshot_checksum="b" * 64,
+        provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+    )
+    stored = asdict(preview)
+    validate_scope_projection_header_manifest(stored)
+
+    stored["scorecard_disposition"] = "scoreable"
+    with pytest.raises(ValueError, match="header differs"):
+        validate_scope_projection_header_manifest(stored)
+
+
+def test_scope_projection_rejects_unmapped_alias_and_unproven_provider_failure() -> None:
+    alias = _scoped_task(
+        "alias",
+        retailer_id="kroger_us",
+        store_number="1234567",
+        zipcode="12345",
+        location_id="alias-location",
+        eligible=False,
+    )
+    unrelated_canonical = _scoped_task(
+        "canonical",
+        retailer_id="kroger_us",
+        store_number="09999999",
+        zipcode="12345",
+        location_id="canonical-location",
+        eligible=True,
+    )
+    with pytest.raises(ValueError, match="no otherwise-identical retained canonical task"):
+        build_scope_projection_preview(
+            "egg-run",
+            [alias, unrelated_canonical],
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            base_snapshot_checksum="b" * 64,
+            source_audit={
+                "id": "audit-1",
+                "status": "completed",
+                "retailer_ids": ["kroger_us"],
+                "changed_rows": 1,
+                "changes": [
+                    {
+                        "id": "alias-location",
+                        "store_number": "1234567",
+                        "before_eligible": True,
+                        "after_eligible": False,
+                    }
+                ],
+            },
+        )
+
+    ambiguous = _scoped_task(
+        "ambiguous",
+        retailer_id="wegmans_us",
+        store_number="87",
+        zipcode="12345",
+        location_id="wegmans-location",
+        eligible=True,
+        status="failed",
+        http_status=400,
+        last_error="HTTP 400: another provider error",
+    )
+    ambiguous["raw_artifact_id"] = None
+    ambiguous["raw_artifact_checksum"] = None
+    with pytest.raises(ValueError, match="lacks an immutable raw artifact"):
+        build_scope_projection_preview(
+            "egg-run",
+            [ambiguous],
+            retailer_id="wegmans_us",
+            projection_kind="limited_provider_footprint",
+            base_snapshot_checksum="b" * 64,
+            provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda row: row["raw_artifact_metadata"].update({"http_status": 404}),
+            "metadata differs from its frozen task",
+        ),
+        (
+            lambda row: row["raw_artifact_metadata"].update({"body_checksum": "4" * 64}),
+            "not in the reviewed checksum allowlist",
+        ),
+    ],
+)
+def test_provider_footprint_rejects_mismatched_immutable_error_evidence(
+    mutation: Any, message: str
+) -> None:
+    failed = _scoped_task(
+        "invalid",
+        retailer_id="wegmans_us",
+        store_number="87",
+        zipcode="12345",
+        location_id="wegmans-invalid-location",
+        eligible=True,
+        status="failed",
+        http_status=400,
+        last_error="HTTP 400: Please provide a Valid Store",
+    )
+    mutation(failed)
+
+    with pytest.raises(ValueError, match=message):
+        build_scope_projection_preview(
+            "egg-run",
+            [failed],
+            retailer_id="wegmans_us",
+            projection_kind="limited_provider_footprint",
+            base_snapshot_checksum="b" * 64,
+            provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+        )
+
+
+def test_provider_footprint_uses_raw_body_evidence_not_mutable_last_error() -> None:
+    valid = _scoped_task(
+        "valid",
+        retailer_id="wegmans_us",
+        store_number="86",
+        zipcode="12345",
+        location_id="wegmans-valid-location",
+        eligible=True,
+    )
+    failed = _scoped_task(
+        "invalid",
+        retailer_id="wegmans_us",
+        store_number="87",
+        zipcode="12345",
+        location_id="wegmans-invalid-location",
+        eligible=True,
+        status="failed",
+        http_status=400,
+        last_error="mutable diagnostic text changed after collection",
+    )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        [valid, failed],
+        retailer_id="wegmans_us",
+        projection_kind="limited_provider_footprint",
+        base_snapshot_checksum="b" * 64,
+        provider_error_evidence_contracts=_provider_error_contracts("wegmans_us"),
+    )
+
+    excluded = next(item for item in preview.items if item.disposition == "excluded")
+    verified = excluded.source_snapshot["provider_error_evidence"]["verified"]
+    assert verified["body_checksum"] == INVALID_STORE_BODY_CHECKSUM
+    assert preview.manifest["source_evidence"]["invalid_store_artifact_evidence"] == [
+        {"source_task_id": "invalid", **verified}
+    ]
 
 
 def test_failed_gate_selects_only_uncalled_and_non_404_failures() -> None:

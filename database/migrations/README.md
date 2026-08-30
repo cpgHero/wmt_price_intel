@@ -81,5 +81,15 @@ unavailability approval, composite input set, or incompatible duplicate input ge
 unresolved-only recovery plans. A continuation may reuse the same canonical request only through
 its explicit ancestor chain, reserves only incremental credits still available in the immutable
 batch, and preserves every ancestor component during materialization. Its downgrade refuses to
-discard any persisted continuation lineage. The separate audit-bound Kroger scope-projection work
-is a follow-on schema revision (0053 if it requires a migration), not part of 0052.
+discard any persisted continuation lineage.
+`0053_scope_projections` adds reviewed, immutable per-base-run/per-retailer projection headers and
+a complete decision row for every frozen retailer task. Canonical-alias collapse requires an
+applied location-eligibility audit and a one-to-one mapping from every excluded alias to a retained
+canonical provider task; limited-provider-footprint projection requires exact immutable provider
+success/rejection evidence. An invalid-store exclusion requires a non-null raw artifact, matching
+artifact/provider/retailer/adapter/HTTP metadata, and an exact response-body checksum from the
+reviewed adapter contract; mutable task error text cannot authorize exclusion. Raw-row retention
+and governed physical/network coverage are separate metrics. Recovery plans and analysis-input
+generations bind exact projection checksums, and
+projection filtering occurs before readiness, task lineage, and usable-artifact materialization.
+No frozen collection task, geography row, provider response, or raw artifact is mutated.

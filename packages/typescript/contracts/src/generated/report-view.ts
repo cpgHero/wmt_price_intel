@@ -6,6 +6,8 @@ export interface RetailCompetitiveIntelligenceReportView {
   generated_at: string;
   benchmark_retailer: string;
   competitors: string[];
+  unavailable_retailers?: string[];
+  scoreable_retailers?: string[];
   retailer_scope: {
     benchmark: Retailer;
     competitors: Retailer[];

@@ -12,6 +12,12 @@ from rci_collections.request_contract import provider_request_contract_from_cata
 
 class CollectionRetailerCatalog:
     def __init__(self, catalog: dict[str, Any]) -> None:
+        self._provider_error_evidence_contracts = {
+            str(item["adapter_id"]): dict(item["provider_error_evidence_contract"])
+            for item in catalog.get("retailers", [])
+            if item.get("adapter_id")
+            and isinstance(item.get("provider_error_evidence_contract"), dict)
+        }
         self._retailers = {
             str(item["id"]): RetailerCapability(
                 retailer_id=str(item["id"]),
@@ -58,4 +64,12 @@ class CollectionRetailerCatalog:
             item.adapter_id: dict(item.provider_request_contract)
             for item in self._retailers.values()
             if item.adapter_id and item.provider_request_contract
+        }
+
+    def provider_error_evidence_contracts(self) -> dict[str, dict[str, Any]]:
+        """Return reviewed response-body evidence contracts keyed by adapter id."""
+
+        return {
+            adapter_id: dict(contract)
+            for adapter_id, contract in self._provider_error_evidence_contracts.items()
         }

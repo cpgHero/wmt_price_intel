@@ -69,6 +69,64 @@ def _result_checksum(result: JsonObject) -> str:
     return hashlib.sha256(canonical_result_bytes(result)).hexdigest()
 
 
+def _canonical_json_checksum(value: JsonObject) -> str:
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+
+
+def _expected_matching_v2_reporting_coverage(
+    certification: JsonObject, unavailable_retailers: set[str]
+) -> JsonObject:
+    """Rebuild the scoreable-retailer projection from full audit provenance."""
+
+    retailer_rows = [
+        dict(row) for row in certification.get("retailers", []) if isinstance(row, dict)
+    ]
+    scoreable = [
+        row
+        for row in retailer_rows
+        if str(row.get("competitor_retailer_id") or "") not in unavailable_retailers
+    ]
+    withheld = [
+        row
+        for row in retailer_rows
+        if str(row.get("competitor_retailer_id") or "") in unavailable_retailers
+    ]
+
+    def total(rows: list[JsonObject], field: str) -> int:
+        return sum(int(row.get(field) or 0) for row in rows)
+
+    return {
+        "authority": "matching_v2_scoreable_retailer_projection",
+        "source_authority": str(certification.get("authority") or ""),
+        "source_coverage_checksum": _canonical_json_checksum(certification),
+        "scoreable_retailer_ids": sorted(
+            str(row.get("competitor_retailer_id") or "") for row in scoreable
+        ),
+        "unavailable_retailer_ids": sorted(unavailable_retailers),
+        "source_candidate_count": total(scoreable, "candidate_count"),
+        "selected_candidate_count": total(scoreable, "candidate_count"),
+        "selection_complete": certification.get("selection_complete") is True,
+        "queue_case_count": total(scoreable, "candidate_count"),
+        "certified_label_count": total(scoreable, "certified_count"),
+        "certified_comparable_count": total(scoreable, "certified_comparable_count"),
+        "certified_not_comparable_count": total(scoreable, "certified_not_comparable_count"),
+        "unresolved_excluded_count": total(scoreable, "unresolved_count"),
+        "reviewed_insufficient_evidence_count": total(
+            scoreable, "reviewed_insufficient_evidence_count"
+        ),
+        "pending_unreviewed_count": total(scoreable, "pending_unreviewed_count"),
+        "automatic_fallback_enabled": False,
+        "retailers": scoreable,
+        "excluded_unavailable_retailers": withheld,
+        "withheld_certified_comparable_count": total(withheld, "certified_comparable_count"),
+        "withheld_certified_not_comparable_count": total(
+            withheld, "certified_not_comparable_count"
+        ),
+    }
+
+
 def _compact_interactive_view(view: JsonObject) -> None:
     """Keep interactive report payloads decision-complete without audit-list bloat.
 
@@ -2215,6 +2273,42 @@ class ArtifactRenderer:
         blocking_reasons: list[JsonObject] = []
         warnings: list[JsonObject] = []
         certification = _mapping(source, "matching_v2_certification_coverage")
+        reporting_certification = _mapping(source, "matching_v2_reporting_coverage")
+        unavailable_competitors = {str(value) for value in source.get("unavailable_retailers", [])}
+        if reporting_certification:
+            reporting_document = {
+                key: value
+                for key, value in reporting_certification.items()
+                if key != "projection_checksum"
+            }
+            expected_reporting_document = _expected_matching_v2_reporting_coverage(
+                certification, unavailable_competitors
+            )
+            if (
+                _canonical_json_checksum(reporting_document)
+                != str(reporting_certification.get("projection_checksum") or "")
+                or reporting_document != expected_reporting_document
+            ):
+                blocking_reasons.append(
+                    {
+                        "code": "matching_v2_reporting_scope_checksum_mismatch",
+                        "message": (
+                            "The scoreable-retailer certification projection differs from its "
+                            "governed checksum or full-release audit provenance."
+                        ),
+                    }
+                )
+        elif certification and unavailable_competitors:
+            blocking_reasons.append(
+                {
+                    "code": "matching_v2_reporting_scope_missing",
+                    "message": (
+                        "Unavailable retailer evidence requires a checksum-bound Matching v2 "
+                        "reporting projection."
+                    ),
+                }
+            )
+        relationship_certification = reporting_certification or certification
         if certification:
             source_candidates = int(
                 certification.get("source_candidate_count")
@@ -2228,7 +2322,9 @@ class ArtifactRenderer:
             )
             queue_cases = int(certification.get("queue_case_count") or 0)
             certified_labels = int(certification.get("certified_label_count") or 0)
-            certified_comparable = int(certification.get("certified_comparable_count") or 0)
+            certified_comparable = int(
+                relationship_certification.get("certified_comparable_count") or 0
+            )
             unresolved = int(certification.get("unresolved_excluded_count") or 0)
             reviewed_insufficient = int(
                 certification.get("reviewed_insufficient_evidence_count") or 0
@@ -2314,7 +2410,7 @@ class ArtifactRenderer:
                 for row in relationships
                 if str(row.get("status")) in {"confirmed", "suggested"}
             )
-            for retailer in certification.get("retailers", []):
+            for retailer in relationship_certification.get("retailers", []):
                 if not isinstance(retailer, dict):
                     continue
                 retailer_id = str(retailer.get("competitor_retailer_id") or "")
@@ -2330,6 +2426,18 @@ class ArtifactRenderer:
                             ),
                         }
                     )
+            withheld = int(reporting_certification.get("withheld_certified_comparable_count") or 0)
+            if withheld:
+                warnings.append(
+                    {
+                        "code": "matching_v2_relationships_withheld_for_unavailable_evidence",
+                        "message": (
+                            f"{withheld:,} certified comparable relationships remain in the "
+                            "full audit release but are withheld from reporting because their "
+                            "retailer has governed unavailable raw evidence."
+                        ),
+                    }
+                )
         validation = _mapping(result, "validation")
         validation_status = str(validation.get("status") or "")
         if validation_status and validation_status != "ready_to_share":
@@ -2418,7 +2526,6 @@ class ArtifactRenderer:
             )
         has_ready_scorecard = any(row.get("status") == "ready" for row in scorecards)
         competitor_ids = {str(value) for value in result.get("competitors", [])}
-        unavailable_competitors = {str(value) for value in source.get("unavailable_retailers", [])}
         invalid_unavailable = unavailable_competitors - competitor_ids
         for competitor_id in sorted(invalid_unavailable):
             blocking_reasons.append(
@@ -2447,6 +2554,35 @@ class ArtifactRenderer:
                     "competitor_id": competitor_id,
                 }
             )
+        unavailable_output_scopes = {
+            "relationship": {
+                str(row.get("competitor_id") or "")
+                for row in relationships
+                if str(row.get("competitor_id") or "") in unavailable_competitors
+            },
+            "candidate": {
+                str(row.get("competitor") or "")
+                for row in _rows(view, "match_candidates")
+                if str(row.get("competitor") or "") in unavailable_competitors
+            },
+            "product decision": {
+                str(row.get("competitor") or "")
+                for row in decisions
+                if str(row.get("competitor") or "") in unavailable_competitors
+            },
+        }
+        for output_kind, leaked_retailers in unavailable_output_scopes.items():
+            for competitor_id in sorted(leaked_retailers):
+                blocking_reasons.append(
+                    {
+                        "code": "governed_output_emitted_for_unavailable_retailer",
+                        "message": (
+                            f"A governed {output_kind} was emitted for an unavailable retailer; "
+                            "unavailable evidence cannot enter report calculations."
+                        ),
+                        "competitor_id": competitor_id,
+                    }
+                )
         evidence_readiness_value = source.get("collection_evidence_readiness")
         evidence_readiness: JsonObject = (
             dict(evidence_readiness_value) if isinstance(evidence_readiness_value, dict) else {}

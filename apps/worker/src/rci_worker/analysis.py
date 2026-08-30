@@ -107,6 +107,53 @@ def _scoreable_competitors(
     )
 
 
+def matching_v2_reporting_coverage(
+    coverage: dict[str, Any], unavailable_retailers: Iterable[str]
+) -> dict[str, Any]:
+    """Project full certification provenance onto retailers with scoreable raw evidence."""
+
+    unavailable = {str(value) for value in unavailable_retailers}
+    retailer_rows = [dict(row) for row in coverage.get("retailers", []) if isinstance(row, dict)]
+    retailer_ids = [str(row.get("competitor_retailer_id") or "") for row in retailer_rows]
+    if not all(retailer_ids) or len(set(retailer_ids)) != len(retailer_ids):
+        raise ValueError("Matching v2 retailer certification coverage is incomplete or duplicated")
+    scoreable = [
+        row for row in retailer_rows if str(row["competitor_retailer_id"]) not in unavailable
+    ]
+    withheld = [row for row in retailer_rows if str(row["competitor_retailer_id"]) in unavailable]
+
+    def total(rows: Iterable[dict[str, Any]], field: str) -> int:
+        return sum(int(row.get(field) or 0) for row in rows)
+
+    projection = {
+        "authority": "matching_v2_scoreable_retailer_projection",
+        "source_authority": str(coverage.get("authority") or ""),
+        "source_coverage_checksum": canonical_checksum(coverage),
+        "scoreable_retailer_ids": sorted(str(row["competitor_retailer_id"]) for row in scoreable),
+        "unavailable_retailer_ids": sorted(unavailable),
+        "source_candidate_count": total(scoreable, "candidate_count"),
+        "selected_candidate_count": total(scoreable, "candidate_count"),
+        "selection_complete": coverage.get("selection_complete") is True,
+        "queue_case_count": total(scoreable, "candidate_count"),
+        "certified_label_count": total(scoreable, "certified_count"),
+        "certified_comparable_count": total(scoreable, "certified_comparable_count"),
+        "certified_not_comparable_count": total(scoreable, "certified_not_comparable_count"),
+        "unresolved_excluded_count": total(scoreable, "unresolved_count"),
+        "reviewed_insufficient_evidence_count": total(
+            scoreable, "reviewed_insufficient_evidence_count"
+        ),
+        "pending_unreviewed_count": total(scoreable, "pending_unreviewed_count"),
+        "automatic_fallback_enabled": False,
+        "retailers": scoreable,
+        "excluded_unavailable_retailers": withheld,
+        "withheld_certified_comparable_count": total(withheld, "certified_comparable_count"),
+        "withheld_certified_not_comparable_count": total(
+            withheld, "certified_not_comparable_count"
+        ),
+    }
+    return {**projection, "projection_checksum": canonical_checksum(projection)}
+
+
 def _normalized_brand_name(value: str) -> str:
     return " ".join(
         "".join(character if character.isalnum() else " " for character in value.casefold()).split()
@@ -562,6 +609,8 @@ def matching_v2_gold_set_presentation(
 def require_matching_v2_relationship_reconciliation(
     relationships: Iterable[dict[str, Any]],
     coverage: dict[str, Any],
+    *,
+    unavailable_retailers: Iterable[str] = (),
 ) -> None:
     """Fail closed if a governed replay drops or invents certified relationships."""
 
@@ -571,7 +620,20 @@ def require_matching_v2_relationship_reconciliation(
         for row in rows
         if str(row.get("status")) == "confirmed" and row.get("relationship_id")
     }
-    expected_total = int(coverage.get("certified_comparable_count") or 0)
+    unavailable = {str(value) for value in unavailable_retailers}
+    reporting_coverage = (
+        matching_v2_reporting_coverage(coverage, unavailable) if unavailable else coverage
+    )
+    leaked = sorted(
+        {
+            str(row.get("competitor_id") or "")
+            for row in rows
+            if str(row.get("competitor_id") or "") in unavailable
+        }
+    )
+    if leaked:
+        raise ValueError(f"Matching v2 presentation emitted unavailable retailers: {leaked}")
+    expected_total = int(reporting_coverage.get("certified_comparable_count") or 0)
     if len(distinct_ids) != expected_total:
         raise ValueError(
             "Matching v2 presentation relationship count does not reconcile: "
@@ -580,7 +642,7 @@ def require_matching_v2_relationship_reconciliation(
     actual_by_retailer = Counter(
         str(row.get("competitor_id") or "") for row in rows if str(row.get("status")) == "confirmed"
     )
-    for retailer in coverage.get("retailers", []):
+    for retailer in reporting_coverage.get("retailers", []):
         if not isinstance(retailer, dict):
             continue
         retailer_id = str(retailer.get("competitor_retailer_id") or "")
@@ -1361,6 +1423,7 @@ class AnalysisProcessor:
         engine = ComparisonEngine(pack, brand_resolver)
         governed_rules: list[ProductMatchRule] = []
         matching_v2_release: dict[str, Any] | None = None
+        reporting_certification_coverage: dict[str, Any] | None = None
         if job.match_revision_id is not None and job.matching_v2_gold_set_release_id is not None:
             raise ValueError("analysis cannot combine legacy and Matching v2 match authorities")
         if job.matching_v2_gold_set_release_id is not None:
@@ -1391,7 +1454,14 @@ class AnalysisProcessor:
                 or matching_v2_release["product_pack_version"] != pack.version
             ):
                 raise ValueError("Matching v2 release Product Pack does not match analysis job")
-            governed_rules = matching_v2_gold_set_rules(matching_v2_release, pack)
+            governed_rules = [
+                rule
+                for rule in matching_v2_gold_set_rules(matching_v2_release, pack)
+                if rule.competitor_id not in unavailable_retailers
+            ]
+            reporting_certification_coverage = matching_v2_reporting_coverage(
+                release_coverage, unavailable_retailers
+            )
         if job.match_revision_id is not None:
             if self._match_reviews is None:
                 raise ValueError("governed reanalysis requires a match-review repository")
@@ -1913,6 +1983,11 @@ class AnalysisProcessor:
                     if job.source_kind == "live_collection_composite"
                     else []
                 ),
+                "collection_scope_projections": (
+                    list((job.input_manifest or {}).get("scope_projections") or [])
+                    if job.source_kind == "live_collection_composite"
+                    else []
+                ),
                 "match_revision_id": job.match_revision_id,
                 "matching_v2_gold_set_release_id": job.matching_v2_gold_set_release_id,
                 "matching_v2_gold_set_checksum": (
@@ -1921,6 +1996,7 @@ class AnalysisProcessor:
                 "matching_v2_certification_coverage": (
                     matching_v2_release["coverage"] if matching_v2_release else None
                 ),
+                "matching_v2_reporting_coverage": reporting_certification_coverage,
                 "brand_revision_id": job.brand_revision_id,
                 "source_analysis_id": job.source_analysis_id,
                 "replay_generation": job.replay_generation,
@@ -1953,6 +2029,16 @@ class AnalysisProcessor:
                         ),
                         "matching_v2_certified_not_comparable": int(
                             matching_v2_release["coverage"]["certified_not_comparable_count"]
+                        ),
+                        "matching_v2_reporting_comparable": int(
+                            (reporting_certification_coverage or {}).get(
+                                "certified_comparable_count", 0
+                            )
+                        ),
+                        "matching_v2_unavailable_comparable_withheld": int(
+                            (reporting_certification_coverage or {}).get(
+                                "withheld_certified_comparable_count", 0
+                            )
                         ),
                     }
                     if matching_v2_release
@@ -2029,6 +2115,17 @@ class AnalysisProcessor:
             require_matching_v2_relationship_reconciliation(
                 match_relationships,
                 matching_v2_release["coverage"],
+                unavailable_retailers=unavailable_retailers,
+            )
+        unavailable_output = {
+            str(row.get("competitor_id") or row.get("competitor") or "")
+            for row in [*match_relationships, *match_candidates, *product_decisions]
+            if str(row.get("competitor_id") or row.get("competitor") or "") in unavailable_retailers
+        }
+        if unavailable_output:
+            raise ValueError(
+                "governed analysis emitted relationships, candidates, or decisions for "
+                f"unavailable retailers: {sorted(unavailable_output)}"
             )
         relationship_index: dict[tuple[str, str, str], dict[str, Any]] = {
             (

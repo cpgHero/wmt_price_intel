@@ -29,6 +29,8 @@ from rci_collections.composite import (
     RecoveryPlanRecord,
     RecoverySelectionPreview,
     RetailerUnavailabilityApprovalRecord,
+    ScopeProjectionPreview,
+    ScopeProjectionRecord,
 )
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import (
@@ -262,6 +264,85 @@ class RecoverySelectionPreviewResponse(BaseModel):
     items: tuple[RecoverySelectionItemResponse, ...]
 
 
+class ScopeProjectionItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    source_task_id: str
+    retailer_id: str
+    canonical_request_key: str
+    disposition: str
+    reason: str
+    mapped_retained_task_id: str | None
+    source_snapshot: dict[str, Any]
+
+
+class ScopeProjectionPreviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    base_collection_run_id: str
+    retailer_id: str
+    projection_kind: str
+    policy_version: str
+    base_snapshot_checksum: str
+    source_audit_id: str | None
+    source_evidence_checksum: str
+    raw_task_count: int
+    retained_task_count: int
+    excluded_task_count: int
+    raw_location_count: int
+    retained_location_count: int
+    excluded_location_count: int
+    raw_task_retention_ratio: str
+    governed_coverage_ratio: str
+    minimum_scoreable_coverage: str
+    scorecard_disposition: str
+    projection_checksum: str
+    manifest: dict[str, Any]
+    item_offset: int
+    item_limit: int
+    next_item_offset: int | None
+    items: tuple[ScopeProjectionItemResponse, ...]
+
+
+class ApproveScopeProjectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    retailer_id: str = Field(min_length=1, max_length=100)
+    projection_kind: Literal["canonical_alias_collapse", "limited_provider_footprint"]
+    projection_checksum: str = Field(min_length=64, max_length=64)
+    base_snapshot_checksum: str = Field(min_length=64, max_length=64)
+    source_audit_id: UUID | None = None
+    review_reason: str = Field(min_length=1, max_length=2_000)
+
+
+class ScopeProjectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    base_collection_run_id: str
+    retailer_id: str
+    projection_kind: str
+    policy_version: str
+    base_snapshot_checksum: str
+    source_audit_id: str | None
+    source_evidence_checksum: str
+    raw_task_count: int
+    retained_task_count: int
+    excluded_task_count: int
+    raw_location_count: int
+    retained_location_count: int
+    excluded_location_count: int
+    raw_task_retention_ratio: str
+    governed_coverage_ratio: str
+    minimum_scoreable_coverage: str
+    scorecard_disposition: str
+    projection_checksum: str
+    review_reason: str
+    reviewed_by: str
+    manifest: dict[str, Any]
+    created_at: datetime
+
+
 class ContinuationSelectionPreviewResponse(BaseModel):
     base_collection_run_id: str
     continuation_of_recovery_plan_id: str
@@ -292,6 +373,8 @@ class ApproveRecoveryPlanRequest(BaseModel):
     supersedes_recovery_plan_id: UUID | None = None
     recovery_batch_id: UUID | None = None
     plan_mode: Literal["exact_launch", "legacy_adoption"] = "exact_launch"
+    scope_projection_id: UUID | None = None
+    scope_projection_checksum: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class ApproveRecoveryContinuationRequest(BaseModel):
@@ -339,6 +422,8 @@ class RecoveryPlanResponse(BaseModel):
     selection_policy_version: str
     selection_checksum: str
     base_snapshot_checksum: str
+    scope_projection_id: str | None
+    scope_projection_checksum: str | None
     selection_scope: dict[str, Any]
     plan_generation: int
     supersedes_recovery_plan_id: str | None
@@ -431,6 +516,7 @@ class BindRecoveryRunRequest(BaseModel):
 
 class MaterializeCompositeInputRequest(BaseModel):
     recovery_plan_ids: tuple[UUID, ...]
+    scope_projection_ids: tuple[UUID, ...] = ()
 
 
 class CompositeInputSetResponse(BaseModel):
@@ -539,6 +625,7 @@ def get_composite_evidence_repository(
         analysis_code_version=request.app.state.settings.app_version or APP_VERSION,
         analysis_max_attempts=int(os.getenv("ANALYSIS_MAX_ATTEMPTS", "3")),
         provider_request_contracts=_retailer_catalog().provider_request_contracts(),
+        provider_error_evidence_contracts=(_retailer_catalog().provider_error_evidence_contracts()),
     )
 
 
@@ -642,6 +729,41 @@ def _continuation_preview_response(
         item_limit=item_limit,
         next_item_offset=(next_offset if next_offset < preview.selected_task_count else None),
         items=tuple(RecoverySelectionItemResponse.model_validate(item) for item in page),
+    )
+
+
+def _scope_projection_preview_response(
+    preview: ScopeProjectionPreview,
+    *,
+    item_offset: int,
+    item_limit: int,
+) -> ScopeProjectionPreviewResponse:
+    page = preview.items[item_offset : item_offset + item_limit]
+    next_offset = item_offset + len(page)
+    return ScopeProjectionPreviewResponse(
+        base_collection_run_id=preview.base_collection_run_id,
+        retailer_id=preview.retailer_id,
+        projection_kind=preview.projection_kind,
+        policy_version=preview.policy_version,
+        base_snapshot_checksum=preview.base_snapshot_checksum,
+        source_audit_id=preview.source_audit_id,
+        source_evidence_checksum=preview.source_evidence_checksum,
+        raw_task_count=preview.raw_task_count,
+        retained_task_count=preview.retained_task_count,
+        excluded_task_count=preview.excluded_task_count,
+        raw_location_count=preview.raw_location_count,
+        retained_location_count=preview.retained_location_count,
+        excluded_location_count=preview.excluded_location_count,
+        raw_task_retention_ratio=preview.raw_task_retention_ratio,
+        governed_coverage_ratio=preview.governed_coverage_ratio,
+        minimum_scoreable_coverage=preview.minimum_scoreable_coverage,
+        scorecard_disposition=preview.scorecard_disposition,
+        projection_checksum=preview.projection_checksum,
+        manifest=preview.manifest,
+        item_offset=item_offset,
+        item_limit=item_limit,
+        next_item_offset=(next_offset if next_offset < preview.raw_task_count else None),
+        items=tuple(ScopeProjectionItemResponse.model_validate(item) for item in page),
     )
 
 
@@ -1009,6 +1131,74 @@ async def retry_failed(
 
 
 @router.get(
+    "/collection-runs/{run_id}/scope-projection-preview",
+    response_model=ScopeProjectionPreviewResponse,
+    tags=["collections"],
+)
+async def preview_collection_scope_projection(
+    run_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    retailer_id: str = Query(min_length=1, max_length=100),
+    projection_kind: Literal["canonical_alias_collapse", "limited_provider_footprint"] = Query(),
+    source_audit_id: Annotated[UUID | None, Query()] = None,
+    item_offset: int = Query(default=0, ge=0, le=100_000),
+    item_limit: int = Query(default=100, ge=1, le=500),
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> ScopeProjectionPreviewResponse:
+    """Preview every retained/excluded frozen task before approval."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        preview = await repository.preview_scope_projection(
+            str(run_id),
+            retailer_id=retailer_id,
+            projection_kind=projection_kind,
+            source_audit_id=(str(source_audit_id) if source_audit_id is not None else None),
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+    return _scope_projection_preview_response(
+        preview, item_offset=item_offset, item_limit=item_limit
+    )
+
+
+@router.post(
+    "/collection-runs/{run_id}/scope-projections",
+    response_model=ScopeProjectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def approve_collection_scope_projection(
+    run_id: UUID,
+    request_body: ApproveScopeProjectionRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> ScopeProjectionRecord:
+    """Persist only the exact complete projection reviewed by an administrator."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.approve_scope_projection(
+            str(run_id),
+            retailer_id=request_body.retailer_id,
+            projection_kind=request_body.projection_kind,
+            projection_checksum=request_body.projection_checksum,
+            base_snapshot_checksum=request_body.base_snapshot_checksum,
+            source_audit_id=(
+                str(request_body.source_audit_id)
+                if request_body.source_audit_id is not None
+                else None
+            ),
+            review_reason=request_body.review_reason,
+            reviewed_by=_recovery_admin_actor(),
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.get(
     "/collection-runs/{run_id}/recovery-preview",
     response_model=RecoverySelectionPreviewResponse,
     tags=["collections"],
@@ -1019,13 +1209,20 @@ async def preview_failure_only_recovery(
     repository: CompositeEvidenceDependency,
     retailer_ids: Annotated[list[str] | None, Query()] = None,
     include_items: bool = Query(default=False),
+    scope_projection_id: Annotated[UUID | None, Query()] = None,
     x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
 ) -> RecoverySelectionPreviewResponse:
     """Preview a zero-overlap, checksum-bound recovery selection."""
 
     _require_recovery_admin(request, x_rci_admin_token)
     try:
-        preview = await repository.preview(str(run_id), retailer_ids=retailer_ids or ())
+        preview = await repository.preview(
+            str(run_id),
+            retailer_ids=retailer_ids or (),
+            scope_projection_id=(
+                str(scope_projection_id) if scope_projection_id is not None else None
+            ),
+        )
     except (LookupError, ValueError) as exc:
         raise _composite_error(exc) from exc
     return _recovery_preview_response(preview, include_items=include_items)
@@ -1189,6 +1386,12 @@ async def approve_failure_only_recovery(
                 else None
             ),
             plan_mode=request_body.plan_mode,
+            scope_projection_id=(
+                str(request_body.scope_projection_id)
+                if request_body.scope_projection_id is not None
+                else None
+            ),
+            scope_projection_checksum=request_body.scope_projection_checksum,
         )
     except (LookupError, ValueError) as exc:
         raise _composite_error(exc) from exc
@@ -1318,7 +1521,9 @@ async def materialize_composite_input_set(
     _require_recovery_admin(request, x_rci_admin_token)
     try:
         return await repository.materialize(
-            str(run_id), tuple(str(value) for value in request_body.recovery_plan_ids)
+            str(run_id),
+            tuple(str(value) for value in request_body.recovery_plan_ids),
+            tuple(str(value) for value in request_body.scope_projection_ids),
         )
     except (LookupError, ValueError) as exc:
         raise _composite_error(exc) from exc

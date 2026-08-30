@@ -399,6 +399,14 @@
       "required_params": ["keyword", "zipcode", "store"],
       "search_inputs": ["keyword"],
       "supported_params": ["keyword", "zipcode", "store", "page"],
+      "provider_error_evidence_contract": {
+        "invalid_store_scope": {
+          "http_status": 400,
+          "body_checksum_allowlist": [
+            "8679d22d8b7999dd491147500b111c3749f24b11d62730945de6681a44b26191"
+          ]
+        }
+      },
       "status": "enabled"
     },
     {

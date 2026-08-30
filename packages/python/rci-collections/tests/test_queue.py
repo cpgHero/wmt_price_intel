@@ -21,6 +21,21 @@ from rci_collections.service import CollectionBudgetError, CollectionService
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 
+def test_retailer_catalog_exposes_reviewed_provider_error_evidence_contract() -> None:
+    catalog = CollectionRetailerCatalog.from_path(
+        REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+    )
+
+    assert catalog.provider_error_evidence_contracts()["metricscart_wegmans_serp_store"] == {
+        "invalid_store_scope": {
+            "http_status": 400,
+            "body_checksum_allowlist": [
+                "8679d22d8b7999dd491147500b111c3749f24b11d62730945de6681a44b26191"
+            ],
+        }
+    }
+
+
 def _config(*, max_pages: int = 1, budget: int | None = None) -> dict[str, object]:
     return {
         "id": "queue-test",

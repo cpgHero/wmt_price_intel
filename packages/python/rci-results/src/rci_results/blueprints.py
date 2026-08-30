@@ -377,7 +377,12 @@ class ReportProjector:
         ]
         source_value = result.get("source")
         source: JsonObject = dict(source_value) if isinstance(source_value, dict) else {}
-        certification_coverage = source.get("matching_v2_certification_coverage")
+        certification_coverage = source.get("matching_v2_reporting_coverage") or source.get(
+            "matching_v2_certification_coverage"
+        )
+        unavailable_retailers = sorted(
+            str(value) for value in source.get("unavailable_retailers", [])
+        )
         return {
             "schema_version": "1.1.0",
             "analysis_id": result["analysis_id"],
@@ -389,6 +394,12 @@ class ReportProjector:
             "competitors": [
                 self._retailer_names.get(str(value), str(value).replace("_", " ").title())
                 for value in result["competitors"]
+            ],
+            "unavailable_retailers": unavailable_retailers,
+            "scoreable_retailers": [
+                str(value)
+                for value in result["competitors"]
+                if str(value) not in set(unavailable_retailers)
             ],
             "retailer_scope": {
                 "benchmark": {
@@ -956,7 +967,8 @@ class ReportProjector:
             product_evidence=product_evidence or {},
             benchmark_name=benchmark_name,
             certification_coverage=(
-                result.get("source", {}).get("matching_v2_certification_coverage")
+                result.get("source", {}).get("matching_v2_reporting_coverage")
+                or result.get("source", {}).get("matching_v2_certification_coverage")
                 if isinstance(result.get("source"), dict)
                 else None
             ),

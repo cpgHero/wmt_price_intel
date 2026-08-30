@@ -17,6 +17,8 @@ from rci_collections.composite import (
     RecoveryLaunchRecord,
     RecoverySelectionItem,
     RetailerRecoverySummary,
+    ScopeProjectionItem,
+    ScopeProjectionPreview,
 )
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import LocationUnit
@@ -311,6 +313,116 @@ async def test_continuation_preview_is_paginated_but_checksum_covers_full_select
     assert over_page_cap.status_code == 422
 
 
+async def test_scope_projection_preview_is_admin_only_paginated_and_checksum_complete() -> None:
+    run_id = "00000000-0000-0000-0000-000000000100"
+    items = tuple(
+        ScopeProjectionItem(
+            source_task_id=f"00000000-0000-0000-0000-{index:012d}",
+            retailer_id="wegmans_us",
+            canonical_request_key=f"key-{index}",
+            disposition=("retained" if index < 2 else "excluded"),
+            reason=(
+                "provider_valid_successful_scope"
+                if index < 2
+                else "provider_rejected_store_scope_http_400"
+            ),
+            mapped_retained_task_id=None,
+            source_snapshot={"index": index},
+        )
+        for index in range(3)
+    )
+
+    class CompositeRepository:
+        async def preview_scope_projection(self, base_run_id: str, **values: object) -> Any:
+            assert base_run_id == run_id
+            assert values == {
+                "retailer_id": "wegmans_us",
+                "projection_kind": "limited_provider_footprint",
+                "source_audit_id": None,
+            }
+            return ScopeProjectionPreview(
+                base_collection_run_id=run_id,
+                retailer_id="wegmans_us",
+                projection_kind="limited_provider_footprint",
+                policy_version="collection-scope-projection-v1",
+                base_snapshot_checksum="a" * 64,
+                source_audit_id=None,
+                source_evidence_checksum="b" * 64,
+                raw_task_count=3,
+                retained_task_count=2,
+                excluded_task_count=1,
+                raw_location_count=3,
+                retained_location_count=2,
+                excluded_location_count=1,
+                raw_task_retention_ratio="0.666667",
+                governed_coverage_ratio="0.666667",
+                minimum_scoreable_coverage="0.950000",
+                scorecard_disposition="unavailable",
+                projection_checksum="c" * 64,
+                manifest={"inventory_checksum": "d" * 64},
+                items=items,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            f"/api/v1/collection-runs/{run_id}/scope-projection-preview",
+            params={
+                "retailer_id": "wegmans_us",
+                "projection_kind": "limited_provider_footprint",
+                "item_offset": 1,
+                "item_limit": 1,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["projection_checksum"] == "c" * 64
+    assert payload["raw_task_count"] == 3
+    assert payload["next_item_offset"] == 2
+    assert payload["items"][0]["source_task_id"].endswith("000000000001")
+
+
+async def test_scope_projection_approval_uses_server_controlled_actor() -> None:
+    captured: dict[str, object] = {}
+    run_id = "00000000-0000-0000-0000-000000000100"
+
+    class CompositeRepository:
+        async def approve_scope_projection(self, base_run_id: str, **values: object) -> None:
+            captured.update({"base_run_id": base_run_id, **values})
+            raise ValueError("intentional audit capture")
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            f"/api/v1/collection-runs/{run_id}/scope-projections",
+            headers={"X-RCI-Actor": "forged-client-principal"},
+            json={
+                "retailer_id": "kroger_us",
+                "projection_kind": "canonical_alias_collapse",
+                "projection_checksum": "a" * 64,
+                "base_snapshot_checksum": "b" * 64,
+                "source_audit_id": "00000000-0000-0000-0000-000000000500",
+                "review_reason": "collapse audited aliases",
+            },
+        )
+
+    assert response.status_code == 409
+    assert captured["base_run_id"] == run_id
+    assert captured["reviewed_by"] == "authenticated-platform-admin"
+    assert captured["source_audit_id"] == "00000000-0000-0000-0000-000000000500"
+
+
 async def test_continuation_approval_uses_server_actor_and_forbids_extra_fields() -> None:
     captured: dict[str, object] = {}
     plan_id = "00000000-0000-0000-0000-000000000200"
@@ -377,6 +489,11 @@ async def test_production_recovery_controls_require_admin_token(monkeypatch: Any
                 f"unauthorized continuation approval reached repository: {plan_id} {values}"
             )
 
+        async def preview_scope_projection(self, run_id: str, **values: object) -> None:
+            raise AssertionError(
+                f"unauthorized scope projection preview reached repository: {run_id} {values}"
+            )
+
     class CollectionRepository:
         async def retry_failed(self, run_id: str) -> int:
             raise AssertionError(f"unauthorized retry reached repository for {run_id}")
@@ -413,6 +530,13 @@ async def test_production_recovery_controls_require_admin_token(monkeypatch: Any
                 "recovery_batch_id": "00000000-0000-0000-0000-000000000300",
             },
         )
+        scope_projection_preview = await client.get(
+            "/api/v1/collection-runs/00000000-0000-0000-0000-000000000101/scope-projection-preview",
+            params={
+                "retailer_id": "wegmans_us",
+                "projection_kind": "limited_provider_footprint",
+            },
+        )
 
     assert response.status_code == 401
     assert "administrator" in response.json()["detail"].lower()
@@ -420,6 +544,7 @@ async def test_production_recovery_controls_require_admin_token(monkeypatch: Any
     assert retry_response.status_code == 401
     assert continuation_preview.status_code == 401
     assert continuation_approval.status_code == 401
+    assert scope_projection_preview.status_code == 401
 
 
 async def test_batch_creation_accepts_only_offline_authorization_id() -> None:

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from rci_collections.composite import (
     MATERIALIZATION_WRITE_BATCH_SIZE,
@@ -27,6 +34,42 @@ from rci_collections.models import (
 from rci_collections.planner import canonical_checksum
 from rci_collections.repository import PostgresCollectionRepository
 from rci_db import DatabaseProbe
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+
+
+_SCOPE_WALMART_REQUEST_CONTRACT: dict[str, object] = {
+    "retailer_id": "walmart_us",
+    "adapter_id": "fake_walmart",
+    "method": "GET",
+    "path": "/fake/walmart/search",
+    "supported_params": ["keyword", "zipcode", "store", "page"],
+    "required_params": ["keyword", "zipcode", "store", "page"],
+    "default_sort": None,
+    "default_request_params": {},
+}
+
+
+_SCOPE_KROGER_REQUEST_CONTRACT: dict[str, object] = {
+    "retailer_id": "kroger_us",
+    "adapter_id": "fake_kroger",
+    "method": "GET",
+    "path": "/fake/kroger/search",
+    "supported_params": ["keyword", "zipcode", "store", "page"],
+    "required_params": ["keyword", "zipcode", "store", "page"],
+    "default_sort": None,
+    "default_request_params": {},
+}
+
+
+@dataclass(frozen=True)
+class _ScopeProjectionFixture:
+    definition: DefinitionRecord
+    base_run: RunRecord
+    source_audit_id: str
+    benchmark_task_id: str | None
+    canonical_task_ids: tuple[str, ...]
+    alias_task_ids: tuple[str, ...]
 
 
 @pytest.mark.skipif(
@@ -780,6 +823,561 @@ async def test_postgres_bulk_reconciliation_mismatch_rolls_back_input_and_analys
         if definition is not None:
             await _cancel_concurrency_definition_runs(database, definition.version_id)
         await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres scope-projection integration",
+)
+async def test_postgres_scope_projection_approval_inventory_and_triggers_are_immutable() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _scope_projection_repository(database)
+    fixture: _ScopeProjectionFixture | None = None
+    try:
+        # 501 canonical/alias pairs cross the 1,000-row persistence batch boundary.
+        # At least one excluded alias is deliberately ordered before the boundary
+        # while its retained canonical target is in the following batch, proving
+        # the DEFERRABLE mapping trigger observes the complete transaction.
+        fixture = await _create_scope_projection_fixture(
+            database,
+            collection_repository,
+            pair_count=501,
+            include_benchmark_failure=False,
+        )
+        preview = await composite_repository.preview_scope_projection(
+            fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            source_audit_id=fixture.source_audit_id,
+        )
+        assert preview.raw_task_count == 1_002
+        assert preview.retained_task_count == 501
+        assert preview.excluded_task_count == 501
+        ordinal_by_task = {
+            item.source_task_id: ordinal for ordinal, item in enumerate(preview.items)
+        }
+        assert any(
+            ordinal < MATERIALIZATION_WRITE_BATCH_SIZE
+            and item.mapped_retained_task_id is not None
+            and ordinal_by_task[item.mapped_retained_task_id] >= MATERIALIZATION_WRITE_BATCH_SIZE
+            for ordinal, item in enumerate(preview.items)
+            if item.disposition == "excluded"
+        )
+
+        approved = await composite_repository.approve_scope_projection(
+            fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            projection_checksum=preview.projection_checksum,
+            base_snapshot_checksum=preview.base_snapshot_checksum,
+            review_reason="approve complete batched canonical inventory",
+            reviewed_by="postgres-scope-projection-test",
+            source_audit_id=fixture.source_audit_id,
+        )
+        repeated = await composite_repository.approve_scope_projection(
+            fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            projection_checksum=preview.projection_checksum,
+            base_snapshot_checksum=preview.base_snapshot_checksum,
+            review_reason="approve complete batched canonical inventory",
+            reviewed_by="postgres-scope-projection-test",
+            source_audit_id=fixture.source_audit_id,
+        )
+        assert repeated.id == approved.id
+        with pytest.raises(ValueError, match="review a new complete preview"):
+            await composite_repository.approve_scope_projection(
+                fixture.base_run.id,
+                retailer_id="kroger_us",
+                projection_kind="canonical_alias_collapse",
+                projection_checksum="f" * 64,
+                base_snapshot_checksum=preview.base_snapshot_checksum,
+                review_reason="altered checksum",
+                reviewed_by="postgres-scope-projection-test",
+                source_audit_id=fixture.source_audit_id,
+            )
+        with pytest.raises(ValueError, match="another approval record"):
+            await composite_repository.approve_scope_projection(
+                fixture.base_run.id,
+                retailer_id="kroger_us",
+                projection_kind="canonical_alias_collapse",
+                projection_checksum=preview.projection_checksum,
+                base_snapshot_checksum=preview.base_snapshot_checksum,
+                review_reason="altered approval reason",
+                reviewed_by="postgres-scope-projection-test",
+                source_audit_id=fixture.source_audit_id,
+            )
+
+        async with database.engine.connect() as connection:
+            inventory_rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT source_task_id::text, ordinal, disposition, "
+                            "mapped_retained_task_id::text AS mapped_retained_task_id "
+                            "FROM collection_scope_projection_task "
+                            "WHERE scope_projection_id::text = :projection_id "
+                            "ORDER BY ordinal"
+                        ),
+                        {"projection_id": approved.id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        assert len(inventory_rows) == 1_002
+        retained_task_ids = {
+            str(row["source_task_id"]) for row in inventory_rows if row["disposition"] == "retained"
+        }
+        assert all(
+            str(row["mapped_retained_task_id"]) in retained_task_ids
+            for row in inventory_rows
+            if row["disposition"] == "excluded"
+        )
+
+        for statement in (
+            "UPDATE collection_scope_projection SET review_reason = 'mutated' "
+            "WHERE id::text = :projection_id",
+            "DELETE FROM collection_scope_projection WHERE id::text = :projection_id",
+            "UPDATE collection_scope_projection_task SET reason = 'mutated' "
+            "WHERE scope_projection_id::text = :projection_id AND ordinal = 0",
+            "DELETE FROM collection_scope_projection_task "
+            "WHERE scope_projection_id::text = :projection_id AND ordinal = 0",
+        ):
+            with pytest.raises(DBAPIError, match="immutable"):
+                async with database.engine.begin() as connection:
+                    await connection.execute(text(statement), {"projection_id": approved.id})
+
+        for statement in (
+            "UPDATE location_eligibility_reconciliation_run "
+            "SET change_reason = 'mutated' WHERE id::text = :audit_id",
+            "DELETE FROM location_eligibility_reconciliation_run WHERE id::text = :audit_id",
+        ):
+            with pytest.raises(DBAPIError, match=r"completed.*audits are immutable"):
+                async with database.engine.begin() as connection:
+                    await connection.execute(text(statement), {"audit_id": fixture.source_audit_id})
+
+        # The header trigger rejects an organization mismatch, the benchmark,
+        # and a retailer absent from the immutable enabled-retailer definition.
+        for organization_id, retailer_id, message in (
+            (str(uuid4()), "kroger_us", "organization differs"),
+            (await _run_organization_id(database, fixture.base_run.id), "walmart_us", "enabled"),
+            (await _run_organization_id(database, fixture.base_run.id), "aldi_us", "enabled"),
+        ):
+            with pytest.raises(DBAPIError, match=message):
+                async with database.engine.begin() as connection:
+                    await _clone_projection_header(
+                        connection,
+                        approved.id,
+                        organization_id=organization_id,
+                        retailer_id=retailer_id,
+                    )
+
+        other_task_id = await _create_cross_run_scope_task(
+            database,
+            collection_repository,
+            fixture.definition,
+        )
+        with pytest.raises(DBAPIError, match="source task differs"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO collection_scope_projection_task ("
+                        "scope_projection_id, source_task_id, ordinal, "
+                        "canonical_request_key, disposition, reason, source_snapshot"
+                        ") VALUES (CAST(:projection_id AS uuid), CAST(:task_id AS uuid), "
+                        "90000, :request_key, 'retained', 'invalid cross-run source', '{}'::jsonb)"
+                    ),
+                    {
+                        "projection_id": approved.id,
+                        "task_id": other_task_id,
+                        "request_key": canonical_checksum({"cross_run": other_task_id}),
+                    },
+                )
+        with pytest.raises(DBAPIError, match="mapped canonical task differs"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO collection_scope_projection_task ("
+                        "scope_projection_id, source_task_id, ordinal, "
+                        "canonical_request_key, disposition, reason, "
+                        "mapped_retained_task_id, source_snapshot"
+                        ") VALUES (CAST(:projection_id AS uuid), CAST(:source_task_id AS uuid), "
+                        "90001, :request_key, 'excluded', 'invalid cross-run mapping', "
+                        "CAST(:mapped_task_id AS uuid), '{}'::jsonb)"
+                    ),
+                    {
+                        "projection_id": approved.id,
+                        "source_task_id": fixture.canonical_task_ids[0],
+                        "mapped_task_id": other_task_id,
+                        "request_key": canonical_checksum({"cross_run_mapping": other_task_id}),
+                    },
+                )
+
+        # Insert a fresh header and only its excluded alias. The deferred
+        # constraint must reject the transaction because its mapped target was
+        # never inserted as retained in that same projection.
+        with pytest.raises(DBAPIError, match="not retained by the same projection"):
+            async with database.engine.begin() as connection:
+                incomplete_projection_id = await _clone_projection_header(
+                    connection,
+                    approved.id,
+                    organization_id=await _run_organization_id(database, fixture.base_run.id),
+                    retailer_id="kroger_us",
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO collection_scope_projection_task ("
+                        "scope_projection_id, source_task_id, ordinal, canonical_request_key, "
+                        "disposition, reason, mapped_retained_task_id, source_snapshot"
+                        ") SELECT CAST(:new_projection_id AS uuid), source_task_id, 0, "
+                        "canonical_request_key, disposition, reason, mapped_retained_task_id, "
+                        "source_snapshot FROM collection_scope_projection_task "
+                        "WHERE scope_projection_id::text = :projection_id "
+                        "AND disposition = 'excluded' ORDER BY ordinal LIMIT 1"
+                    ),
+                    {
+                        "new_projection_id": incomplete_projection_id,
+                        "projection_id": approved.id,
+                    },
+                )
+    finally:
+        if fixture is not None:
+            await _cancel_concurrency_definition_runs(database, fixture.definition.version_id)
+        await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run projected materialization integration",
+)
+async def test_postgres_projection_bound_materialization_is_exact_and_atomic() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _scope_projection_repository(database)
+    fixture: _ScopeProjectionFixture | None = None
+    wrong_fixture: _ScopeProjectionFixture | None = None
+    try:
+        fixture = await _create_scope_projection_fixture(
+            database,
+            collection_repository,
+            pair_count=1,
+            include_benchmark_failure=True,
+        )
+        preview = await composite_repository.preview_scope_projection(
+            fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            source_audit_id=fixture.source_audit_id,
+        )
+        projection = await composite_repository.approve_scope_projection(
+            fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            projection_checksum=preview.projection_checksum,
+            base_snapshot_checksum=preview.base_snapshot_checksum,
+            review_reason="bind the complete canonical projection to materialization",
+            reviewed_by="postgres-scope-projection-test",
+            source_audit_id=fixture.source_audit_id,
+        )
+        recovery_preview = await composite_repository.preview(
+            fixture.base_run.id,
+            scope_projection_id=projection.id,
+        )
+        assert recovery_preview.selected_task_count == 1
+        organization_id = await _run_organization_id(database, fixture.base_run.id)
+        authorization = await composite_repository.authorize_recovery_spend(
+            organization_id=organization_id,
+            phase_key=f"postgres-projected-materialization-{uuid4()}",
+            approved_credit_ceiling=10,
+            unit_cost_usd="0.002000",
+            currency="USD",
+            reason="exercise atomic projection-bound materialization",
+            authorized_by="postgres-scope-projection-test",
+            collection_run_ids=(fixture.base_run.id,),
+        )
+        batch = await composite_repository.create_recovery_batch(authorization_id=authorization.id)
+        plan = await composite_repository.approve(
+            fixture.base_run.id,
+            selection_checksum=recovery_preview.selection_checksum,
+            approved_credit_ceiling=recovery_preview.maximum_credits,
+            reason="recover the benchmark failure under the reviewed scope projection",
+            approved_by="postgres-scope-projection-test",
+            recovery_batch_id=batch.id,
+            scope_projection_id=projection.id,
+            scope_projection_checksum=projection.projection_checksum,
+        )
+        recovery = await composite_repository.launch_exact_recovery(plan.id)
+        recovery_task_id = await _complete_scope_recovery_fixture(
+            database, recovery.collection_run_id
+        )
+
+        class FailingAfterProjectionLinkRepository(PostgresCompositeEvidenceRepository):
+            async def _queue_composite_analysis(
+                self,
+                connection: object,
+                input_set_id: str,
+                *,
+                queue_allowed: bool,
+            ) -> str | None:
+                await super()._queue_composite_analysis(  # type: ignore[arg-type]
+                    connection, input_set_id, queue_allowed=queue_allowed
+                )
+                raise RuntimeError("forced failure after projection lineage insertion")
+
+        failing_repository = FailingAfterProjectionLinkRepository(
+            database.engine,
+            provider_request_contracts={
+                "fake_walmart": _SCOPE_WALMART_REQUEST_CONTRACT,
+                "fake_kroger": _SCOPE_KROGER_REQUEST_CONTRACT,
+            },
+        )
+        with pytest.raises(RuntimeError, match="forced failure"):
+            await failing_repository.materialize(
+                fixture.base_run.id,
+                (plan.id,),
+                (projection.id,),
+            )
+        assert await _projection_materialization_counts(database, fixture.base_run.id) == {
+            "input_count": 0,
+            "lineage_count": 0,
+            "artifact_count": 0,
+            "projection_count": 0,
+            "analysis_count": 0,
+        }
+
+        materialized = await composite_repository.materialize(
+            fixture.base_run.id,
+            (plan.id,),
+            (projection.id,),
+        )
+        repeated = await composite_repository.materialize(
+            fixture.base_run.id,
+            (plan.id,),
+            (projection.id,),
+        )
+        assert repeated.id == materialized.id
+        async with database.engine.connect() as connection:
+            selected_task_ids = set(
+                str(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            "SELECT selected_task_id::text "
+                            "FROM analysis_input_task_lineage "
+                            "WHERE input_set_id::text = :input_set_id"
+                        ),
+                        {"input_set_id": materialized.id},
+                    )
+                ).scalars()
+            )
+            artifact_task_ids = set(
+                str(value)
+                for value in (
+                    await connection.execute(
+                        text(
+                            "SELECT metadata->>'task_id' FROM analysis_input_artifact "
+                            "WHERE input_set_id::text = :input_set_id"
+                        ),
+                        {"input_set_id": materialized.id},
+                    )
+                ).scalars()
+            )
+            projection_links = [
+                dict(row)
+                for row in (
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT scope_projection_id::text AS scope_projection_id, "
+                                "ordinal, projection_checksum "
+                                "FROM analysis_input_scope_projection "
+                                "WHERE input_set_id::text = :input_set_id"
+                            ),
+                            {"input_set_id": materialized.id},
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+            ]
+        assert fixture.alias_task_ids[0] not in selected_task_ids
+        assert fixture.alias_task_ids[0] not in artifact_task_ids
+        assert fixture.canonical_task_ids[0] in selected_task_ids
+        assert fixture.canonical_task_ids[0] in artifact_task_ids
+        assert fixture.benchmark_task_id not in selected_task_ids
+        assert recovery_task_id in selected_task_ids
+        assert projection_links == [
+            {
+                "scope_projection_id": projection.id,
+                "ordinal": 0,
+                "projection_checksum": projection.projection_checksum,
+            }
+        ]
+        assert await _projection_materialization_counts(database, fixture.base_run.id) == {
+            "input_count": 1,
+            "lineage_count": 2,
+            "artifact_count": 2,
+            "projection_count": 1,
+            "analysis_count": 1,
+        }
+
+        with pytest.raises(ValueError, match="requires every recovery-plan scope projection"):
+            await composite_repository.materialize(fixture.base_run.id, (plan.id,), ())
+
+        wrong_fixture = await _create_scope_projection_fixture(
+            database,
+            collection_repository,
+            pair_count=1,
+            include_benchmark_failure=False,
+        )
+        wrong_preview = await composite_repository.preview_scope_projection(
+            wrong_fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            source_audit_id=wrong_fixture.source_audit_id,
+        )
+        wrong_projection = await composite_repository.approve_scope_projection(
+            wrong_fixture.base_run.id,
+            retailer_id="kroger_us",
+            projection_kind="canonical_alias_collapse",
+            projection_checksum=wrong_preview.projection_checksum,
+            base_snapshot_checksum=wrong_preview.base_snapshot_checksum,
+            review_reason="wrong-base projection trigger fixture",
+            reviewed_by="postgres-scope-projection-test",
+            source_audit_id=wrong_fixture.source_audit_id,
+        )
+        with pytest.raises(ValueError, match="requires every recovery-plan scope projection"):
+            await composite_repository.materialize(
+                fixture.base_run.id,
+                (plan.id,),
+                (wrong_projection.id,),
+            )
+
+        with pytest.raises(DBAPIError, match="analysis input scope-projection binding"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO analysis_input_scope_projection ("
+                        "input_set_id, scope_projection_id, ordinal, projection_checksum"
+                        ") VALUES (CAST(:input_set_id AS uuid), "
+                        "CAST(:projection_id AS uuid), 99, :checksum)"
+                    ),
+                    {
+                        "input_set_id": materialized.id,
+                        "projection_id": wrong_projection.id,
+                        "checksum": wrong_projection.projection_checksum,
+                    },
+                )
+        with pytest.raises(DBAPIError, match="analysis input scope-projection binding"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO analysis_input_scope_projection ("
+                        "input_set_id, scope_projection_id, ordinal, projection_checksum"
+                        ") VALUES (CAST(:input_set_id AS uuid), "
+                        "CAST(:projection_id AS uuid), 99, :checksum)"
+                    ),
+                    {
+                        "input_set_id": materialized.id,
+                        "projection_id": projection.id,
+                        "checksum": "0" * 64,
+                    },
+                )
+        with pytest.raises(DBAPIError, match="immutable"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "DELETE FROM analysis_input_scope_projection "
+                        "WHERE input_set_id::text = :input_set_id"
+                    ),
+                    {"input_set_id": materialized.id},
+                )
+        with pytest.raises(DBAPIError, match="recovery plan scope projection binding"):
+            async with database.engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "UPDATE collection_recovery_plan SET "
+                        "scope_projection_id = CAST(:projection_id AS uuid), "
+                        "scope_projection_checksum = :checksum WHERE id::text = :plan_id"
+                    ),
+                    {
+                        "projection_id": wrong_projection.id,
+                        "checksum": wrong_projection.projection_checksum,
+                        "plan_id": plan.id,
+                    },
+                )
+    finally:
+        for candidate in (fixture, wrong_fixture):
+            if candidate is not None:
+                await _cancel_concurrency_definition_runs(database, candidate.definition.version_id)
+        await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres scope-projection downgrade refusal",
+)
+async def test_postgres_scope_projection_history_refuses_migration_downgrade() -> None:
+    database_url = os.environ["RCI_TEST_DATABASE_URL"]
+    database = DatabaseProbe(database_url)
+    collection_repository = PostgresCollectionRepository(database.engine)
+    composite_repository = _scope_projection_repository(database)
+    fixture = await _create_scope_projection_fixture(
+        database,
+        collection_repository,
+        pair_count=1,
+        include_benchmark_failure=False,
+    )
+    preview = await composite_repository.preview_scope_projection(
+        fixture.base_run.id,
+        retailer_id="kroger_us",
+        projection_kind="canonical_alias_collapse",
+        source_audit_id=fixture.source_audit_id,
+    )
+    await composite_repository.approve_scope_projection(
+        fixture.base_run.id,
+        retailer_id="kroger_us",
+        projection_kind="canonical_alias_collapse",
+        projection_checksum=preview.projection_checksum,
+        base_snapshot_checksum=preview.base_snapshot_checksum,
+        review_reason="prove immutable history blocks downgrade",
+        reviewed_by="postgres-scope-projection-test",
+        source_audit_id=fixture.source_audit_id,
+    )
+    await database.dispose()
+
+    environment = {**os.environ, "DATABASE_URL": database_url}
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "database/alembic.ini",
+            "downgrade",
+            "0052_recovery_continuations",
+        ],
+        cwd=REPOSITORY_ROOT,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode != 0
+    assert "cannot downgrade 0053 while immutable collection scope projections exist" in (
+        completed.stdout + completed.stderr
+    )
+    verification = DatabaseProbe(database_url)
+    try:
+        async with verification.engine.connect() as connection:
+            assert (
+                await connection.execute(text("SELECT version_num FROM alembic_version"))
+            ).scalar_one() == "0053_scope_projections"
+    finally:
+        await verification.dispose()
 
 
 async def _isolate_claimable_runs(database: DatabaseProbe) -> None:
@@ -2092,6 +2690,552 @@ async def _complete_bulk_recovery_fixture(database: DatabaseProbe, run_id: str) 
             ),
             {"run_id": run_id},
         )
+
+
+def _scope_projection_repository(
+    database: DatabaseProbe,
+) -> PostgresCompositeEvidenceRepository:
+    return PostgresCompositeEvidenceRepository(
+        database.engine,
+        provider_request_contracts={
+            "fake_walmart": _SCOPE_WALMART_REQUEST_CONTRACT,
+            "fake_kroger": _SCOPE_KROGER_REQUEST_CONTRACT,
+        },
+    )
+
+
+def _scope_task_seed(
+    *,
+    retailer_id: str,
+    retailer_location_id: str | None,
+    adapter_id: str,
+    location_scope_key: str,
+    zipcode: str,
+    store_number: str,
+    request_contract: dict[str, object],
+) -> TaskSeed:
+    return TaskSeed(
+        retailer_id=retailer_id,
+        retailer_location_id=retailer_location_id,
+        adapter_id=adapter_id,
+        location_scope_key=location_scope_key,
+        zipcode=zipcode,
+        store_number=store_number,
+        page_number=1,
+        max_pages=1,
+        stop_on_empty=True,
+        stop_on_short_page=True,
+        credits_per_success=1,
+        request_payload={
+            "keyword": "milk",
+            "zipcode": zipcode,
+            "store_number": store_number,
+            "page": 1,
+            "request_overrides": {},
+            "_provider_request_contract": request_contract,
+        },
+        request_fingerprint=canonical_checksum(
+            {
+                "retailer_id": retailer_id,
+                "location_scope_key": location_scope_key,
+                "store_number": store_number,
+            }
+        ),
+        is_preflight=False,
+        max_attempts=1,
+    )
+
+
+async def _create_scope_projection_fixture(
+    database: DatabaseProbe,
+    repository: PostgresCollectionRepository,
+    *,
+    pair_count: int,
+    include_benchmark_failure: bool,
+) -> _ScopeProjectionFixture:
+    stable_key = f"postgres-scope-projection-{uuid4()}"
+    config: dict[str, object] = {
+        "id": stable_key,
+        "name": "Postgres Scope Projection Test",
+        "enabled": True,
+        "benchmark_retailer": "walmart_us",
+        "product_pack": {"id": "fresh_fluid_milk", "version": "1.0.0"},
+        "query": {"keyword": "milk"},
+        "retailers": [
+            {
+                "retailer_id": "walmart_us",
+                "adapter_id": "fake_walmart",
+                "enabled": True,
+                "request_overrides": {},
+            },
+            {
+                "retailer_id": "kroger_us",
+                "adapter_id": "fake_kroger",
+                "enabled": True,
+                "request_overrides": {},
+            },
+        ],
+        "budget": {
+            "max_credits_per_run": pair_count * 2 + 20,
+            "max_credits_per_day": pair_count * 4 + 100,
+            "max_credits_per_month": pair_count * 4 + 100,
+        },
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    resolution_id = str(uuid4())
+    benchmark_location_id = str(uuid4()) if include_benchmark_failure else None
+    location_rows: list[dict[str, object]] = []
+    geography_rows: list[dict[str, object]] = []
+    seeds: list[TaskSeed] = []
+    audit_changes: list[dict[str, object]] = []
+    if benchmark_location_id is not None:
+        location_rows.append(
+            {
+                "location_id": benchmark_location_id,
+                "retailer_id": "walmart_us",
+                "provider": stable_key,
+                "provider_location_id": "2400",
+                "store_number": "2400",
+                "store_name": "Benchmark Store",
+                "zipcode": "90020",
+                "city": "Los Angeles",
+                "state": "CA",
+                "latitude": 34.05,
+                "longitude": -118.25,
+                "eligible": True,
+            }
+        )
+        geography_rows.append(
+            {
+                **location_rows[-1],
+                "resolution_id": resolution_id,
+                "role": "primary",
+                "scope_key": "walmart:benchmark",
+            }
+        )
+        seeds.append(
+            _scope_task_seed(
+                retailer_id="walmart_us",
+                retailer_location_id=benchmark_location_id,
+                adapter_id="fake_walmart",
+                location_scope_key="walmart:benchmark",
+                zipcode="90020",
+                store_number="2400",
+                request_contract=_SCOPE_WALMART_REQUEST_CONTRACT,
+            )
+        )
+    for index in range(pair_count):
+        canonical_store = f"{1_000_000 + index:08d}"
+        alias_store = canonical_store[1:]
+        zipcode = f"{index % 100_000:05d}"
+        canonical_location_id = str(uuid4())
+        alias_location_id = str(uuid4())
+        for kind, store_number, location_id, eligible in (
+            ("canonical", canonical_store, canonical_location_id, True),
+            ("alias", alias_store, alias_location_id, False),
+        ):
+            location = {
+                "location_id": location_id,
+                "retailer_id": "kroger_us",
+                "provider": stable_key,
+                "provider_location_id": f"{kind}-{store_number}",
+                "store_number": store_number,
+                "store_name": f"Kroger {kind.title()} {index}",
+                "zipcode": zipcode,
+                "city": "Projection City",
+                "state": "OH",
+                "latitude": 39.0 + index / 100_000,
+                "longitude": -84.0 - index / 100_000,
+                "eligible": eligible,
+            }
+            location_rows.append(location)
+            geography_rows.append(
+                {
+                    **location,
+                    "resolution_id": resolution_id,
+                    "role": "competitor",
+                    "scope_key": f"kroger:{kind}:{index}",
+                }
+            )
+            seeds.append(
+                _scope_task_seed(
+                    retailer_id="kroger_us",
+                    retailer_location_id=location_id,
+                    adapter_id="fake_kroger",
+                    location_scope_key=f"kroger:{kind}:{index}",
+                    zipcode=zipcode,
+                    store_number=store_number,
+                    request_contract=_SCOPE_KROGER_REQUEST_CONTRACT,
+                )
+            )
+        audit_changes.append(
+            {
+                "id": alias_location_id,
+                "retailer_id": "kroger_us",
+                "store_number": alias_store,
+                "before_eligible": True,
+                "after_eligible": False,
+                "after_reason": "store_number_not_provider_safe",
+            }
+        )
+
+    async with database.engine.begin() as connection:
+        organization_id = str(
+            (
+                await connection.execute(
+                    text(
+                        "SELECT d.organization_id::text "
+                        "FROM collection_definition_version v "
+                        "JOIN collection_definition d ON d.id = v.definition_id "
+                        "WHERE v.id::text = :version_id"
+                    ),
+                    {"version_id": definition.version_id},
+                )
+            ).scalar_one()
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO collection_geography_resolution ("
+                "id, organization_id, primary_retailer_id, country, request, checksum, "
+                "status, counts) VALUES (CAST(:resolution_id AS uuid), "
+                "CAST(:organization_id AS uuid), 'walmart_us', 'USA', "
+                "'{\"fixture\":\"scope-projection\"}'::jsonb, :checksum, 'ready', "
+                "CAST(:counts AS jsonb))"
+            ),
+            {
+                "resolution_id": resolution_id,
+                "organization_id": organization_id,
+                "checksum": canonical_checksum(
+                    {"fixture": stable_key, "location_count": len(location_rows)}
+                ),
+                "counts": json.dumps(
+                    {
+                        "primary": int(include_benchmark_failure),
+                        "competitor": pair_count * 2,
+                    }
+                ),
+            },
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO retailer_location ("
+                "id, retailer_id, provider, provider_location_id, store_number, store_name, "
+                "raw_zipcode, zipcode, city, state, country, latitude, longitude, status, "
+                "raw_row, collection_eligible) VALUES (CAST(:location_id AS uuid), "
+                ":retailer_id, :provider, :provider_location_id, :store_number, :store_name, "
+                ":zipcode, :zipcode, :city, :state, 'USA', :latitude, :longitude, 'active', "
+                "'{}'::jsonb, :eligible)"
+            ),
+            location_rows,
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO collection_geography_location ("
+                "resolution_id, role, retailer_id, retailer_location_id, scope_key, "
+                "store_number, zipcode, city, state, country, latitude, longitude, "
+                "selection_reason) VALUES (CAST(:resolution_id AS uuid), :role, "
+                ":retailer_id, CAST(:location_id AS uuid), :scope_key, :store_number, "
+                ":zipcode, :city, :state, 'USA', :latitude, :longitude, "
+                "'postgres_scope_projection_fixture')"
+            ),
+            geography_rows,
+        )
+        await connection.execute(
+            text(
+                "UPDATE collection_definition_version "
+                "SET geography_resolution_id = CAST(:resolution_id AS uuid) "
+                "WHERE id::text = :version_id"
+            ),
+            {"resolution_id": resolution_id, "version_id": definition.version_id},
+        )
+        source_audit_id = str(
+            (
+                await connection.execute(
+                    text(
+                        "INSERT INTO location_eligibility_reconciliation_run ("
+                        "catalog_path, catalog_sha256, snapshot_sha256, reviewed_plan_sha256, "
+                        "retailer_ids, requested_by, change_reason, status, scanned_rows, "
+                        "changed_rows, eligible_before, eligible_after, enabled_rows, "
+                        "disabled_rows, reason_counts_before, reason_counts_after, changes, "
+                        "completed_at) VALUES ('config/retailer-catalog.json', :catalog, "
+                        ":snapshot, :plan, ARRAY['kroger_us']::text[], "
+                        "'postgres-scope-projection-test', 'canonical alias fixture', "
+                        "'completed', :scanned, :changed, :eligible_before, :eligible_after, "
+                        "0, :changed, '{}'::jsonb, "
+                        "'{\"store_number_not_provider_safe\":1}'::jsonb, "
+                        "CAST(:changes AS jsonb), now()) RETURNING id::text"
+                    ),
+                    {
+                        "catalog": canonical_checksum({"catalog": stable_key}),
+                        "snapshot": canonical_checksum({"snapshot": stable_key}),
+                        "plan": canonical_checksum({"plan": stable_key}),
+                        "scanned": pair_count * 2,
+                        "changed": pair_count,
+                        "eligible_before": pair_count * 2,
+                        "eligible_after": pair_count,
+                        "changes": json.dumps(audit_changes, sort_keys=True),
+                    },
+                )
+            ).scalar_one()
+        )
+
+    estimates = [
+        RetailerEstimate("kroger_us", pair_count * 2, 1, 1, pair_count * 2, pair_count * 2)
+    ]
+    if include_benchmark_failure:
+        estimates.insert(0, RetailerEstimate("walmart_us", 1, 1, 1, 1, 1))
+    plan = CollectionPlan(
+        estimate=CostEstimate(
+            definition_id=definition.stable_key,
+            retailers=tuple(estimates),
+            estimated_total_pages=len(seeds),
+            estimated_total_credits=len(seeds),
+        ),
+        initial_tasks=tuple(seeds),
+    )
+    base_run = await repository.create_run(definition, plan)
+    async with database.engine.begin() as connection:
+        if include_benchmark_failure:
+            await connection.execute(
+                text(
+                    "WITH artifacts AS ("
+                    "INSERT INTO dataset_artifact (collection_run_id, artifact_type, "
+                    "storage_uri, content_type, row_count, byte_size, checksum, "
+                    "schema_version, metadata) SELECT CAST(:run_id AS uuid), "
+                    "'raw_provider_response', 's3://test/scope/' || t.id::text || '.json.gz', "
+                    "'application/json', 1, 64, md5(t.id::text) || md5(t.id::text), "
+                    "'1.0.0', jsonb_build_object('task_id', t.id::text, 'provider', 'test') "
+                    "FROM collection_task t WHERE t.collection_run_id::text = :run_id "
+                    "AND t.retailer_id = 'kroger_us' RETURNING id, metadata->>'task_id' AS task_id"
+                    ") UPDATE collection_task t SET status = 'succeeded', completed_at = now(), "
+                    "http_status = 200, result_count = 1, billable_credits = 1, "
+                    "raw_artifact_id = artifacts.id FROM artifacts "
+                    "WHERE t.id::text = artifacts.task_id"
+                ),
+                {"run_id": base_run.id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE collection_task SET status = 'failed', completed_at = now(), "
+                    "http_status = 500, failure_class = 'lease_exhausted', "
+                    "billable_credits = 0 WHERE collection_run_id::text = :run_id "
+                    "AND retailer_id = 'walmart_us'"
+                ),
+                {"run_id": base_run.id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE collection_run SET status = 'completed_with_warnings', "
+                    "actual_success_pages = :successes, actual_credits = :successes, "
+                    "completed_at = now() WHERE id::text = :run_id"
+                ),
+                {"run_id": base_run.id, "successes": pair_count * 2},
+            )
+        else:
+            await connection.execute(
+                text(
+                    "UPDATE collection_task SET status = 'cancelled', completed_at = now(), "
+                    "failure_class = 'cancelled' WHERE collection_run_id::text = :run_id"
+                ),
+                {"run_id": base_run.id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE collection_run SET status = 'cancelled', completed_at = now() "
+                    "WHERE id::text = :run_id"
+                ),
+                {"run_id": base_run.id},
+            )
+        task_rows = list(
+            (
+                await connection.execute(
+                    text(
+                        "SELECT id::text, retailer_id, location_scope_key "
+                        "FROM collection_task WHERE collection_run_id::text = :run_id"
+                    ),
+                    {"run_id": base_run.id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+    benchmark_task_id = next(
+        (str(row["id"]) for row in task_rows if row["retailer_id"] == "walmart_us"),
+        None,
+    )
+    canonical_task_ids = tuple(
+        str(row["id"])
+        for row in sorted(task_rows, key=lambda row: str(row["location_scope_key"]))
+        if str(row["location_scope_key"]).startswith("kroger:canonical:")
+    )
+    alias_task_ids = tuple(
+        str(row["id"])
+        for row in sorted(task_rows, key=lambda row: str(row["location_scope_key"]))
+        if str(row["location_scope_key"]).startswith("kroger:alias:")
+    )
+    return _ScopeProjectionFixture(
+        definition=definition,
+        base_run=base_run,
+        source_audit_id=source_audit_id,
+        benchmark_task_id=benchmark_task_id,
+        canonical_task_ids=canonical_task_ids,
+        alias_task_ids=alias_task_ids,
+    )
+
+
+async def _create_cross_run_scope_task(
+    database: DatabaseProbe,
+    repository: PostgresCollectionRepository,
+    definition: DefinitionRecord,
+) -> str:
+    seed = _scope_task_seed(
+        retailer_id="kroger_us",
+        retailer_location_id=None,
+        adapter_id="fake_kroger",
+        location_scope_key=f"cross-run:{uuid4()}",
+        zipcode="43230",
+        store_number="09999999",
+        request_contract=_SCOPE_KROGER_REQUEST_CONTRACT,
+    )
+    run = await repository.create_run(
+        definition,
+        CollectionPlan(
+            estimate=CostEstimate(
+                definition_id=definition.stable_key,
+                retailers=(RetailerEstimate("kroger_us", 1, 1, 1, 1, 1),),
+                estimated_total_pages=1,
+                estimated_total_credits=1,
+            ),
+            initial_tasks=(seed,),
+        ),
+    )
+    async with database.engine.begin() as connection:
+        task_id = str(
+            (
+                await connection.execute(
+                    text(
+                        "UPDATE collection_task SET status = 'cancelled', completed_at = now(), "
+                        "failure_class = 'cancelled' WHERE collection_run_id::text = :run_id "
+                        "RETURNING id::text"
+                    ),
+                    {"run_id": run.id},
+                )
+            ).scalar_one()
+        )
+        await connection.execute(
+            text(
+                "UPDATE collection_run SET status = 'cancelled', completed_at = now() "
+                "WHERE id::text = :run_id"
+            ),
+            {"run_id": run.id},
+        )
+    return task_id
+
+
+async def _clone_projection_header(
+    connection: AsyncConnection,
+    source_projection_id: str,
+    *,
+    organization_id: str,
+    retailer_id: str,
+) -> str:
+    return str(
+        (
+            await connection.execute(
+                text(
+                    "INSERT INTO collection_scope_projection ("
+                    "organization_id, base_collection_run_id, retailer_id, projection_kind, "
+                    "policy_version, base_snapshot_checksum, source_audit_id, "
+                    "source_evidence_checksum, raw_task_count, retained_task_count, "
+                    "excluded_task_count, raw_location_count, retained_location_count, "
+                    "excluded_location_count, raw_task_retention_ratio, "
+                    "governed_coverage_ratio, minimum_scoreable_coverage, "
+                    "scorecard_disposition, projection_checksum, review_reason, reviewed_by, "
+                    "manifest) SELECT CAST(:organization_id AS uuid), "
+                    "base_collection_run_id, :retailer_id, projection_kind, policy_version, "
+                    "base_snapshot_checksum, source_audit_id, source_evidence_checksum, "
+                    "raw_task_count, retained_task_count, excluded_task_count, "
+                    "raw_location_count, retained_location_count, excluded_location_count, "
+                    "raw_task_retention_ratio, governed_coverage_ratio, "
+                    "minimum_scoreable_coverage, scorecard_disposition, :checksum, "
+                    "'direct trigger fixture', 'postgres-scope-projection-test', manifest "
+                    "FROM collection_scope_projection WHERE id::text = :projection_id "
+                    "RETURNING id::text"
+                ),
+                {
+                    "organization_id": organization_id,
+                    "retailer_id": retailer_id,
+                    "checksum": canonical_checksum({"projection_clone": str(uuid4())}),
+                    "projection_id": source_projection_id,
+                },
+            )
+        ).scalar_one()
+    )
+
+
+async def _complete_scope_recovery_fixture(database: DatabaseProbe, run_id: str) -> str:
+    async with database.engine.begin() as connection:
+        task_id = str(
+            (
+                await connection.execute(
+                    text(
+                        "WITH artifact AS ("
+                        "INSERT INTO dataset_artifact (collection_run_id, artifact_type, "
+                        "storage_uri, content_type, row_count, byte_size, checksum, "
+                        "schema_version, metadata) SELECT CAST(:run_id AS uuid), "
+                        "'raw_provider_response', 's3://test/scope-recovery/' || t.id::text || "
+                        "'.json.gz', 'application/json', 1, 64, "
+                        "md5(t.id::text) || md5(t.id::text), '1.0.0', "
+                        "jsonb_build_object('task_id', t.id::text, 'provider', 'test') "
+                        "FROM collection_task t WHERE t.collection_run_id::text = :run_id "
+                        "RETURNING id, metadata->>'task_id' AS task_id"
+                        ") UPDATE collection_task t SET status = 'succeeded', "
+                        "completed_at = now(), http_status = 200, result_count = 1, "
+                        "billable_credits = 1, raw_artifact_id = artifact.id FROM artifact "
+                        "WHERE t.id::text = artifact.task_id RETURNING t.id::text"
+                    ),
+                    {"run_id": run_id},
+                )
+            ).scalar_one()
+        )
+        await connection.execute(
+            text(
+                "UPDATE collection_run SET status = 'succeeded', actual_success_pages = 1, "
+                "actual_credits = 1, completed_at = now() WHERE id::text = :run_id"
+            ),
+            {"run_id": run_id},
+        )
+    return task_id
+
+
+async def _projection_materialization_counts(
+    database: DatabaseProbe, base_run_id: str
+) -> dict[str, int]:
+    async with database.engine.connect() as connection:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "WITH inputs AS (SELECT id FROM analysis_input_set "
+                        "WHERE collection_run_id::text = :run_id "
+                        "AND source_kind = 'live_collection_composite') SELECT "
+                        "(SELECT count(*) FROM inputs) AS input_count, "
+                        "(SELECT count(*) FROM analysis_input_task_lineage "
+                        "WHERE input_set_id IN (SELECT id FROM inputs)) AS lineage_count, "
+                        "(SELECT count(*) FROM analysis_input_artifact "
+                        "WHERE input_set_id IN (SELECT id FROM inputs)) AS artifact_count, "
+                        "(SELECT count(*) FROM analysis_input_scope_projection "
+                        "WHERE input_set_id IN (SELECT id FROM inputs)) AS projection_count, "
+                        "(SELECT count(*) FROM analysis_run "
+                        "WHERE input_set_id IN (SELECT id FROM inputs)) AS analysis_count"
+                    ),
+                    {"run_id": base_run_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+    return {key: int(value) for key, value in row.items()}
 
 
 _CONCURRENCY_REQUEST_CONTRACT: dict[str, object] = {

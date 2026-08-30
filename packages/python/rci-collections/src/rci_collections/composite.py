@@ -22,6 +22,7 @@ from rci_collections.request_contract import build_effective_provider_request
 SELECTION_POLICY_VERSION = "failure-only-v1"
 CONTINUATION_SELECTION_POLICY_VERSION = "unresolved-continuation-v1"
 ASSEMBLY_POLICY_VERSION = "composite-evidence-v1"
+SCOPE_PROJECTION_POLICY_VERSION = "collection-scope-projection-v1"
 MINIMUM_CONCLUSIVE_COVERAGE = 0.95
 MAXIMUM_CONTINUATION_TASKS = 50_000
 SEARCH_CREDIT_UNIT_COST_USD = Decimal("0.002000")
@@ -35,6 +36,8 @@ SelectionReason = Literal[
 ]
 BindingMode = Literal["exact", "legacy_operational_adoption"]
 RecoveryPlanMode = Literal["exact_launch", "legacy_adoption"]
+ScopeProjectionKind = Literal["canonical_alias_collapse", "limited_provider_footprint"]
+ScopeProjectionDisposition = Literal["scoreable", "unavailable"]
 EvidenceOutcome = Literal[
     "usable_success",
     "retained_billable_404",
@@ -84,6 +87,68 @@ class RecoverySelectionPreview:
 
 
 @dataclass(frozen=True, slots=True)
+class ScopeProjectionItem:
+    source_task_id: str
+    retailer_id: str
+    canonical_request_key: str
+    disposition: Literal["retained", "excluded"]
+    reason: str
+    mapped_retained_task_id: str | None
+    source_snapshot: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeProjectionPreview:
+    base_collection_run_id: str
+    retailer_id: str
+    projection_kind: ScopeProjectionKind
+    policy_version: str
+    base_snapshot_checksum: str
+    source_audit_id: str | None
+    source_evidence_checksum: str
+    raw_task_count: int
+    retained_task_count: int
+    excluded_task_count: int
+    raw_location_count: int
+    retained_location_count: int
+    excluded_location_count: int
+    raw_task_retention_ratio: str
+    governed_coverage_ratio: str
+    minimum_scoreable_coverage: str
+    scorecard_disposition: ScopeProjectionDisposition
+    projection_checksum: str
+    manifest: dict[str, Any]
+    items: tuple[ScopeProjectionItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeProjectionRecord:
+    id: str
+    base_collection_run_id: str
+    retailer_id: str
+    projection_kind: str
+    policy_version: str
+    base_snapshot_checksum: str
+    source_audit_id: str | None
+    source_evidence_checksum: str
+    raw_task_count: int
+    retained_task_count: int
+    excluded_task_count: int
+    raw_location_count: int
+    retained_location_count: int
+    excluded_location_count: int
+    raw_task_retention_ratio: str
+    governed_coverage_ratio: str
+    minimum_scoreable_coverage: str
+    scorecard_disposition: str
+    projection_checksum: str
+    review_reason: str
+    reviewed_by: str
+    manifest: dict[str, Any]
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class ContinuationLineageComponent:
     recovery_plan_id: str
     recovery_collection_run_id: str
@@ -126,6 +191,8 @@ class RecoveryPlanRecord:
     selection_policy_version: str
     selection_checksum: str
     base_snapshot_checksum: str
+    scope_projection_id: str | None
+    scope_projection_checksum: str | None
     selection_scope: dict[str, Any]
     plan_generation: int
     supersedes_recovery_plan_id: str | None
@@ -577,6 +644,7 @@ def retailer_collection_readiness(
     maximum_404_rate: float,
     nonempty_successes_by_retailer: Mapping[str, int] | None = None,
     unavailability_approvals: Mapping[str, Mapping[str, Any]] | None = None,
+    scope_projection_dispositions: Mapping[str, Mapping[str, Any]] | None = None,
     minimum_conclusive_coverage: float = MINIMUM_CONCLUSIVE_COVERAGE,
 ) -> tuple[bool, dict[str, dict[str, Any]]]:
     """Validate raw Search coverage, not product relevance or scorecard readiness.
@@ -599,6 +667,11 @@ def retailer_collection_readiness(
         hard = outcomes.count("contract_missing") + outcomes.count("quarantined")
         nonempty_successes = int((nonempty_successes_by_retailer or {}).get(retailer_id, 0))
         approval = (unavailability_approvals or {}).get(retailer_id)
+        scope_projection = (scope_projection_dispositions or {}).get(retailer_id)
+        projection_unavailable = bool(
+            scope_projection is not None
+            and str(scope_projection.get("scorecard_disposition") or "") == "unavailable"
+        )
         sufficient = bool(
             not hard
             and successes >= minimum_successes
@@ -606,7 +679,7 @@ def retailer_collection_readiness(
             and conclusive_coverage >= minimum_conclusive_coverage
             and not_found_rate <= maximum_404_rate
         )
-        explicitly_unavailable = bool(not hard and approval is not None)
+        explicitly_unavailable = bool(not hard and (approval is not None or projection_unavailable))
         retailer_blocked = bool(hard or (not sufficient and not explicitly_unavailable))
         blocked = blocked or retailer_blocked
         if retailer_blocked:
@@ -637,6 +710,27 @@ def retailer_collection_readiness(
                     "base_snapshot_checksum": str(approval["base_snapshot_checksum"]),
                 }
                 if explicitly_unavailable and approval is not None
+                else None
+            ),
+            "scope_projection": (
+                {
+                    "id": str(scope_projection["id"]),
+                    "projection_kind": str(scope_projection["projection_kind"]),
+                    "projection_checksum": str(scope_projection["projection_checksum"]),
+                    "raw_task_count": int(scope_projection["raw_task_count"]),
+                    "retained_task_count": int(scope_projection["retained_task_count"]),
+                    "excluded_task_count": int(scope_projection["excluded_task_count"]),
+                    "raw_location_count": int(scope_projection["raw_location_count"]),
+                    "retained_location_count": int(scope_projection["retained_location_count"]),
+                    "excluded_location_count": int(scope_projection["excluded_location_count"]),
+                    "raw_task_retention_ratio": str(scope_projection["raw_task_retention_ratio"]),
+                    "governed_coverage_ratio": str(scope_projection["governed_coverage_ratio"]),
+                    "minimum_scoreable_coverage": str(
+                        scope_projection["minimum_scoreable_coverage"]
+                    ),
+                    "scorecard_disposition": str(scope_projection["scorecard_disposition"]),
+                }
+                if scope_projection is not None
                 else None
             ),
         }
@@ -749,6 +843,519 @@ def _task_contract_snapshot(row: TaskMapping) -> dict[str, Any]:
     }
 
 
+def _scope_task_snapshot(
+    row: TaskMapping,
+    *,
+    verified_provider_error_evidence: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the complete immutable inputs used by one scope decision."""
+
+    last_error = str(row.get("last_error") or "")
+    raw_metadata = row.get("raw_artifact_metadata")
+    metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+    return {
+        "task": _task_snapshot(row),
+        "canonical_request_key": canonical_request_key(row),
+        "current_location_eligible": row.get("current_location_eligible"),
+        "raw_artifact": {
+            "id": (str(row["raw_artifact_id"]) if row.get("raw_artifact_id") is not None else None),
+            "checksum": row.get("raw_artifact_checksum"),
+            "provider": metadata.get("provider"),
+            "retailer_id": metadata.get("retailer_id"),
+            "adapter_id": metadata.get("adapter_id"),
+            "http_status": metadata.get("http_status"),
+            "body_checksum": metadata.get("body_checksum"),
+        },
+        "provider_error_evidence": {
+            "verified": (
+                dict(verified_provider_error_evidence)
+                if verified_provider_error_evidence is not None
+                else None
+            ),
+            "mutable_diagnostic": {
+                "task_http_status": row.get("http_status"),
+                "failure_class": row.get("failure_class"),
+                "last_error_sha256": hashlib.sha256(last_error.encode()).hexdigest(),
+            },
+        },
+    }
+
+
+def _alias_family_key(row: TaskMapping, canonical_store_number: str) -> str:
+    """Bind an alias to the otherwise-identical canonical provider request."""
+
+    identity = effective_request_identity(row)
+    params = dict(identity.get("params") or {})
+    params["store"] = canonical_store_number
+    return canonical_checksum(
+        {
+            "method": identity.get("method"),
+            "path": identity.get("path"),
+            "params": params,
+        }
+    )
+
+
+def _physical_location_identity(row: TaskMapping) -> str:
+    location_id = str(row.get("retailer_location_id") or "")
+    if not location_id:
+        raise ValueError("store scope projection requires an immutable retailer location identity")
+    return location_id
+
+
+def _is_sha256(value: object) -> bool:
+    text_value = str(value or "")
+    return len(text_value) == 64 and all(
+        character in "0123456789abcdef" for character in text_value
+    )
+
+
+def _provider_invalid_store_rejection_evidence(
+    row: TaskMapping,
+    provider_error_evidence_contracts: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    """Verify an invalid-store rejection from immutable raw response evidence.
+
+    ``last_error`` is intentionally excluded from authority: it is mutable task
+    diagnostic text. The projection instead requires the immutable dataset
+    artifact, its compressed-object checksum, HTTP metadata, and an exact raw
+    response-body checksum from the reviewed adapter contract.
+    """
+
+    if str(row.get("status") or "") != "failed" or row.get("http_status") != 400:
+        return None
+    adapter_id = str(row.get("adapter_id") or "")
+    contract_container = provider_error_evidence_contracts.get(adapter_id)
+    contract = (
+        contract_container.get("invalid_store_scope")
+        if isinstance(contract_container, Mapping)
+        else None
+    )
+    if not isinstance(contract, Mapping):
+        raise ValueError(
+            "provider invalid-store rejection has no reviewed response evidence contract"
+        )
+    expected_status = int(contract.get("http_status") or 0)
+    body_checksum_allowlist = {
+        str(value) for value in contract.get("body_checksum_allowlist") or []
+    }
+    if (
+        expected_status != 400
+        or not body_checksum_allowlist
+        or not all(_is_sha256(value) for value in body_checksum_allowlist)
+    ):
+        raise ValueError("provider invalid-store response evidence contract is invalid")
+
+    artifact_id = str(row.get("raw_artifact_id") or "")
+    artifact_checksum = str(row.get("raw_artifact_checksum") or "")
+    metadata_value = row.get("raw_artifact_metadata")
+    if not artifact_id or not _is_sha256(artifact_checksum):
+        raise ValueError(
+            "provider invalid-store rejection lacks an immutable raw artifact and checksum"
+        )
+    if not isinstance(metadata_value, Mapping):
+        raise ValueError("provider invalid-store rejection lacks raw artifact metadata")
+    metadata = dict(metadata_value)
+    if (
+        metadata.get("provider") != "metricscart"
+        or str(metadata.get("retailer_id") or "") != str(row.get("retailer_id") or "")
+        or str(metadata.get("adapter_id") or "") != adapter_id
+        or metadata.get("http_status") != expected_status
+    ):
+        raise ValueError(
+            "provider invalid-store raw artifact metadata differs from its frozen task"
+        )
+    body_checksum = str(metadata.get("body_checksum") or "")
+    if not _is_sha256(body_checksum) or body_checksum not in body_checksum_allowlist:
+        raise ValueError(
+            "provider invalid-store raw response body is not in the reviewed checksum allowlist"
+        )
+    return {
+        "classification": "invalid_store_scope",
+        "provider": "metricscart",
+        "retailer_id": str(row["retailer_id"]),
+        "adapter_id": adapter_id,
+        "http_status": expected_status,
+        "raw_artifact_id": artifact_id,
+        "raw_artifact_checksum": artifact_checksum,
+        "body_checksum": body_checksum,
+        "evidence_contract_checksum": canonical_checksum(dict(contract)),
+    }
+
+
+def _location_audit_evidence(source_audit: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "location_eligibility_reconciliation",
+        "audit_id": str(source_audit.get("id") or ""),
+        "catalog_sha256": str(source_audit.get("catalog_sha256") or ""),
+        "snapshot_sha256": str(source_audit.get("snapshot_sha256") or ""),
+        "reviewed_plan_sha256": str(source_audit.get("reviewed_plan_sha256") or ""),
+        "retailer_ids": sorted(str(value) for value in source_audit.get("retailer_ids") or []),
+        "status": str(source_audit.get("status") or ""),
+        "scanned_rows": int(source_audit.get("scanned_rows") or 0),
+        "changed_rows": int(source_audit.get("changed_rows") or 0),
+        "eligible_before": int(source_audit.get("eligible_before") or 0),
+        "eligible_after": int(source_audit.get("eligible_after") or 0),
+        "changes": list(source_audit.get("changes") or []),
+    }
+
+
+def validate_scope_projection_header_manifest(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Fail closed when a persisted projection header drifts from its review manifest."""
+
+    manifest = dict(row.get("manifest") or {})
+    if canonical_checksum(manifest) != str(row["projection_checksum"]):
+        raise ValueError("stored scope projection manifest checksum is invalid")
+
+    def fixed_ratio(name: str) -> str:
+        return format(Decimal(str(row[name])), ".6f")
+
+    source_audit_value = row.get("source_audit_text")
+    if source_audit_value is None:
+        source_audit_value = row.get("source_audit_id")
+    header_contract = {
+        "policy_version": str(row["policy_version"]),
+        "base_collection_run_id": str(row.get("base_run_id") or row["base_collection_run_id"]),
+        "retailer_id": str(row["retailer_id"]),
+        "projection_kind": str(row["projection_kind"]),
+        "base_snapshot_checksum": str(row["base_snapshot_checksum"]),
+        "source_audit_id": (str(source_audit_value) if source_audit_value is not None else None),
+        "source_evidence_checksum": str(row["source_evidence_checksum"]),
+        "raw_task_count": int(row["raw_task_count"]),
+        "retained_task_count": int(row["retained_task_count"]),
+        "excluded_task_count": int(row["excluded_task_count"]),
+        "raw_location_count": int(row["raw_location_count"]),
+        "retained_location_count": int(row["retained_location_count"]),
+        "excluded_location_count": int(row["excluded_location_count"]),
+        "raw_task_retention_ratio": fixed_ratio("raw_task_retention_ratio"),
+        "governed_coverage_ratio": fixed_ratio("governed_coverage_ratio"),
+        "minimum_scoreable_coverage": fixed_ratio("minimum_scoreable_coverage"),
+        "scorecard_disposition": str(row["scorecard_disposition"]),
+    }
+    if {key: manifest.get(key) for key in header_contract} != header_contract:
+        raise ValueError("stored scope projection header differs from its reviewed manifest")
+    source_evidence = manifest.get("source_evidence")
+    if not isinstance(source_evidence, Mapping) or canonical_checksum(dict(source_evidence)) != str(
+        row["source_evidence_checksum"]
+    ):
+        raise ValueError("stored scope projection source evidence checksum is invalid")
+    inventory_checksum = manifest.get("inventory_checksum")
+    if not isinstance(inventory_checksum, str) or len(inventory_checksum) != 64:
+        raise ValueError("stored scope projection manifest has no inventory checksum")
+    return manifest
+
+
+def build_scope_projection_preview(
+    base_collection_run_id: str,
+    rows: Sequence[TaskMapping],
+    *,
+    retailer_id: str,
+    projection_kind: ScopeProjectionKind,
+    base_snapshot_checksum: str,
+    source_audit: Mapping[str, Any] | None = None,
+    provider_error_evidence_contracts: Mapping[str, Mapping[str, Any]] | None = None,
+    minimum_scoreable_coverage: float = MINIMUM_CONCLUSIVE_COVERAGE,
+) -> ScopeProjectionPreview:
+    """Build a complete, checksum-bound retailer task projection.
+
+    Alias collapse proves a one-for-one canonical physical-scope denominator;
+    raw-row retention is disclosed separately and never drives scoreability.
+    Limited provider footprint uses retained/raw network coverage and therefore
+    becomes unavailable when it is below the governed minimum.
+    """
+
+    selected = sorted(
+        (row for row in rows if str(row["retailer_id"]) == retailer_id),
+        key=lambda row: (canonical_request_key(row), str(row["id"])),
+    )
+    if not selected:
+        raise ValueError("scope projection retailer has no tasks in the immutable base run")
+    if not (0 < minimum_scoreable_coverage <= 1):
+        raise ValueError("minimum scoreable coverage must be greater than zero and at most one")
+
+    items: list[ScopeProjectionItem] = []
+    source_evidence: dict[str, Any]
+    if projection_kind == "canonical_alias_collapse":
+        if source_audit is None:
+            raise ValueError("canonical alias collapse requires a completed location audit")
+        if str(source_audit.get("status") or "") != "completed":
+            raise ValueError("canonical alias collapse requires a completed location audit")
+        if retailer_id not in {str(value) for value in source_audit.get("retailer_ids") or []}:
+            raise ValueError("location audit does not cover the projected retailer")
+        audit_changes = list(source_audit.get("changes") or [])
+        if int(source_audit.get("changed_rows") or 0) != len(audit_changes):
+            raise ValueError("location audit change inventory is incomplete")
+        audit_by_location: dict[str, Mapping[str, Any]] = {}
+        for change in audit_changes:
+            if not isinstance(change, Mapping):
+                raise ValueError("location audit contains an invalid change record")
+            location_id = str(change.get("id") or "")
+            if not location_id or location_id in audit_by_location:
+                raise ValueError("location audit contains an ambiguous location identity")
+            audit_by_location[location_id] = change
+
+        retained_rows: dict[str, TaskMapping] = {}
+        excluded_rows: list[TaskMapping] = []
+        for row in selected:
+            store_number = str(row.get("store_number") or "")
+            if bool(row.get("current_location_eligible")):
+                if len(store_number) != 8 or not store_number.isdigit():
+                    raise ValueError(
+                        "canonical alias collapse retained a non-eight-digit provider scope"
+                    )
+                family_key = _alias_family_key(row, store_number)
+                if family_key in retained_rows:
+                    raise ValueError("canonical alias collapse has duplicate retained scopes")
+                retained_rows[family_key] = row
+            else:
+                if len(store_number) != 7 or not store_number.isdigit():
+                    raise ValueError(
+                        "canonical alias collapse may exclude only audited seven-digit aliases"
+                    )
+                excluded_rows.append(row)
+        if not retained_rows or not excluded_rows:
+            raise ValueError("canonical alias collapse requires retained and excluded scopes")
+
+        alias_location_mapping: dict[str, str] = {}
+        mapped_physical_targets: set[str] = set()
+        for row in selected:
+            store_number = str(row.get("store_number") or "")
+            snapshot = _scope_task_snapshot(row)
+            if bool(row.get("current_location_eligible")):
+                items.append(
+                    ScopeProjectionItem(
+                        source_task_id=str(row["id"]),
+                        retailer_id=retailer_id,
+                        canonical_request_key=canonical_request_key(row),
+                        disposition="retained",
+                        reason="provider_safe_canonical_scope",
+                        mapped_retained_task_id=None,
+                        source_snapshot=snapshot,
+                    )
+                )
+                continue
+            location_id = str(row.get("retailer_location_id") or "")
+            audit_change = audit_by_location.get(location_id)
+            if audit_change is None:
+                raise ValueError("excluded alias is not backed by the reviewed location audit")
+            if not (
+                bool(audit_change.get("before_eligible"))
+                and not bool(audit_change.get("after_eligible"))
+                and str(audit_change.get("store_number") or "") == store_number
+            ):
+                raise ValueError("excluded alias conflicts with its location-audit decision")
+            canonical_store = store_number.zfill(8)
+            retained = retained_rows.get(_alias_family_key(row, canonical_store))
+            if retained is None:
+                raise ValueError(
+                    "excluded alias has no otherwise-identical retained canonical task"
+                )
+            retained_task_id = str(retained["id"])
+            alias_location_id = _physical_location_identity(row)
+            retained_location_id = _physical_location_identity(retained)
+            prior_target = alias_location_mapping.setdefault(
+                alias_location_id, retained_location_id
+            )
+            if prior_target != retained_location_id:
+                raise ValueError("one alias location maps to multiple canonical physical scopes")
+            items.append(
+                ScopeProjectionItem(
+                    source_task_id=str(row["id"]),
+                    retailer_id=retailer_id,
+                    canonical_request_key=canonical_request_key(row),
+                    disposition="excluded",
+                    reason="audited_alias_of_provider_safe_canonical_scope",
+                    mapped_retained_task_id=retained_task_id,
+                    source_snapshot=snapshot,
+                )
+            )
+        for target in alias_location_mapping.values():
+            if target in mapped_physical_targets:
+                raise ValueError("more than one alias maps to the same canonical physical scope")
+            mapped_physical_targets.add(target)
+        excluded_location_ids = {_physical_location_identity(row) for row in excluded_rows}
+        if set(alias_location_mapping) != excluded_location_ids:
+            raise ValueError("canonical alias location inventory is not completely mapped")
+        governed_coverage = Decimal("1")
+        disposition: ScopeProjectionDisposition = "scoreable"
+        source_evidence = _location_audit_evidence(source_audit)
+        source_audit_id = str(source_audit.get("id") or "")
+        if not source_audit_id:
+            raise ValueError("completed location audit has no durable audit identity")
+    elif projection_kind == "limited_provider_footprint":
+        if source_audit is not None:
+            raise ValueError("limited provider footprint is bound to task evidence, not an audit")
+        disposition_by_location: dict[str, Literal["retained", "excluded"]] = {}
+        invalid_store_artifact_evidence: list[dict[str, Any]] = []
+        response_contracts = provider_error_evidence_contracts or {}
+        for row in selected:
+            rejection_evidence = _provider_invalid_store_rejection_evidence(row, response_contracts)
+            if rejection_evidence is not None:
+                disposition_value: Literal["retained", "excluded"] = "excluded"
+                reason = "provider_rejected_store_scope_http_400"
+                invalid_store_artifact_evidence.append(
+                    {"source_task_id": str(row["id"]), **rejection_evidence}
+                )
+            elif evidence_outcome(row) == "usable_success":
+                disposition_value = "retained"
+                reason = "provider_valid_successful_scope"
+            else:
+                raise ValueError(
+                    "limited provider footprint contains evidence other than a usable success "
+                    "or an exact provider invalid-store rejection"
+                )
+            location_id = _physical_location_identity(row)
+            prior_disposition = disposition_by_location.setdefault(location_id, disposition_value)
+            if prior_disposition != disposition_value:
+                raise ValueError(
+                    "provider footprint contains conflicting evidence for one physical location"
+                )
+            items.append(
+                ScopeProjectionItem(
+                    source_task_id=str(row["id"]),
+                    retailer_id=retailer_id,
+                    canonical_request_key=canonical_request_key(row),
+                    disposition=disposition_value,
+                    reason=reason,
+                    mapped_retained_task_id=None,
+                    source_snapshot=_scope_task_snapshot(
+                        row,
+                        verified_provider_error_evidence=rejection_evidence,
+                    ),
+                )
+            )
+        retained_location_count = sum(
+            value == "retained" for value in disposition_by_location.values()
+        )
+        governed_coverage = Decimal(retained_location_count) / Decimal(len(disposition_by_location))
+        disposition = (
+            "scoreable"
+            if governed_coverage >= Decimal(str(minimum_scoreable_coverage))
+            else "unavailable"
+        )
+        source_audit_id = None
+        source_evidence = {
+            "kind": "immutable_provider_task_evidence",
+            "valid_location_ids": sorted(
+                location_id
+                for location_id, value in disposition_by_location.items()
+                if value == "retained"
+            ),
+            "invalid_store_location_ids": sorted(
+                location_id
+                for location_id, value in disposition_by_location.items()
+                if value == "excluded"
+            ),
+            "valid_success_task_ids": sorted(
+                item.source_task_id for item in items if item.disposition == "retained"
+            ),
+            "invalid_store_task_ids": sorted(
+                item.source_task_id for item in items if item.disposition == "excluded"
+            ),
+            "invalid_store_artifact_evidence": sorted(
+                invalid_store_artifact_evidence,
+                key=lambda value: str(value["source_task_id"]),
+            ),
+        }
+    else:
+        raise ValueError(f"unsupported scope projection kind {projection_kind!r}")
+
+    items.sort(key=lambda item: (item.canonical_request_key, item.source_task_id))
+    if len({item.canonical_request_key for item in items}) != len(items):
+        raise ValueError("scope projection contains duplicate canonical provider requests")
+    retained_count = sum(item.disposition == "retained" for item in items)
+    excluded_count = len(items) - retained_count
+    if retained_count == 0:
+        raise ValueError("scope projection cannot remove the complete retailer population")
+    raw_retention = Decimal(retained_count) / Decimal(len(items))
+    locations_by_disposition: dict[str, set[str]] = {"retained": set(), "excluded": set()}
+    row_by_task_id = {str(row["id"]): row for row in selected}
+    for item in items:
+        locations_by_disposition[item.disposition].add(
+            _physical_location_identity(row_by_task_id[item.source_task_id])
+        )
+    overlap_locations = locations_by_disposition["retained"] & locations_by_disposition["excluded"]
+    if overlap_locations:
+        raise ValueError("one physical location has both retained and excluded task decisions")
+    retained_location_count = len(locations_by_disposition["retained"])
+    excluded_location_count = len(locations_by_disposition["excluded"])
+    raw_location_count = retained_location_count + excluded_location_count
+
+    def ratio(value: Decimal) -> str:
+        return str(value.quantize(Decimal("0.000001")))
+
+    source_evidence_checksum = canonical_checksum(source_evidence)
+    manifest = {
+        "schema_version": "1.0.0",
+        "policy_version": SCOPE_PROJECTION_POLICY_VERSION,
+        "base_collection_run_id": base_collection_run_id,
+        "retailer_id": retailer_id,
+        "projection_kind": projection_kind,
+        "base_snapshot_checksum": base_snapshot_checksum,
+        "source_audit_id": source_audit_id,
+        "source_evidence_checksum": source_evidence_checksum,
+        "source_evidence": source_evidence,
+        "raw_task_count": len(items),
+        "retained_task_count": retained_count,
+        "excluded_task_count": excluded_count,
+        "raw_location_count": raw_location_count,
+        "retained_location_count": retained_location_count,
+        "excluded_location_count": excluded_location_count,
+        "raw_task_retention_ratio": ratio(raw_retention),
+        "governed_coverage_ratio": ratio(governed_coverage),
+        "minimum_scoreable_coverage": ratio(Decimal(str(minimum_scoreable_coverage))),
+        "scorecard_disposition": disposition,
+        "coverage_numerator_location_count": retained_location_count,
+        "coverage_denominator_location_count": (
+            retained_location_count
+            if projection_kind == "canonical_alias_collapse"
+            else raw_location_count
+        ),
+        "coverage_semantics": (
+            "canonical_physical_scopes_retained_over_canonical_physical_scopes"
+            if projection_kind == "canonical_alias_collapse"
+            else "provider_valid_scopes_over_frozen_network_scopes"
+        ),
+        "inventory_checksum": canonical_checksum(
+            {
+                "items": [
+                    {
+                        "source_task_id": item.source_task_id,
+                        "canonical_request_key": item.canonical_request_key,
+                        "disposition": item.disposition,
+                        "reason": item.reason,
+                        "mapped_retained_task_id": item.mapped_retained_task_id,
+                        "source_snapshot": item.source_snapshot,
+                    }
+                    for item in items
+                ]
+            }
+        ),
+    }
+    return ScopeProjectionPreview(
+        base_collection_run_id=base_collection_run_id,
+        retailer_id=retailer_id,
+        projection_kind=projection_kind,
+        policy_version=SCOPE_PROJECTION_POLICY_VERSION,
+        base_snapshot_checksum=base_snapshot_checksum,
+        source_audit_id=source_audit_id,
+        source_evidence_checksum=source_evidence_checksum,
+        raw_task_count=len(items),
+        retained_task_count=retained_count,
+        excluded_task_count=excluded_count,
+        raw_location_count=raw_location_count,
+        retained_location_count=retained_location_count,
+        excluded_location_count=excluded_location_count,
+        raw_task_retention_ratio=ratio(raw_retention),
+        governed_coverage_ratio=ratio(governed_coverage),
+        minimum_scoreable_coverage=ratio(Decimal(str(minimum_scoreable_coverage))),
+        scorecard_disposition=disposition,
+        projection_checksum=canonical_checksum(manifest),
+        manifest=manifest,
+        items=tuple(items),
+    )
+
+
 def build_exact_recovery_task_contracts(
     preview: RecoverySelectionPreview | ContinuationSelectionPreview,
     *,
@@ -805,17 +1412,20 @@ def build_recovery_preview(
     definition_checksum: str,
     retailer_ids: Sequence[str] = (),
     allow_ineligible_locations: bool = False,
+    base_snapshot_checksum_override: str | None = None,
+    scope_projection_binding: Mapping[str, Any] | None = None,
 ) -> RecoverySelectionPreview:
     retailer_filter = frozenset(str(value) for value in retailer_ids)
     ordered = sorted(rows, key=lambda row: (str(row["retailer_id"]), canonical_request_key(row)))
     snapshots = [_task_snapshot(row) for row in ordered]
-    base_snapshot_checksum = canonical_checksum(
+    calculated_base_snapshot_checksum = canonical_checksum(
         {
             "base_collection_run_id": base_collection_run_id,
             "definition_checksum": definition_checksum,
             "tasks": snapshots,
         }
     )
+    base_snapshot_checksum = base_snapshot_checksum_override or calculated_base_snapshot_checksum
     items: list[RecoverySelectionItem] = []
     retailer_values: dict[str, dict[str, int]] = {}
     for row in ordered:
@@ -884,6 +1494,8 @@ def build_recovery_preview(
             for item in items
         ],
     }
+    if scope_projection_binding is not None:
+        selection_manifest["scope_projection"] = dict(scope_projection_binding)
     retailers = tuple(
         RetailerRecoverySummary(retailer_id=retailer_id, **values)
         for retailer_id, values in sorted(retailer_values.items())
@@ -912,6 +1524,8 @@ def build_continuation_preview(
     minimum_successes: int = 1,
     maximum_404_rate: float = 0.5,
     minimum_conclusive_coverage: float = MINIMUM_CONCLUSIVE_COVERAGE,
+    base_snapshot_checksum_override: str | None = None,
+    scope_projection_binding: Mapping[str, Any] | None = None,
 ) -> ContinuationSelectionPreview:
     """Select only evidence still needed after an immutable terminal lineage.
 
@@ -936,6 +1550,8 @@ def build_continuation_preview(
         base_rows,
         definition_checksum=definition_checksum,
         allow_ineligible_locations=True,
+        base_snapshot_checksum_override=base_snapshot_checksum_override,
+        scope_projection_binding=scope_projection_binding,
     )
     base_by_key: dict[str, TaskMapping] = {}
     for row in base_rows:
@@ -1140,6 +1756,8 @@ def build_continuation_preview(
             for item in selected
         ],
     }
+    if scope_projection_binding is not None:
+        selection_manifest["scope_projection"] = dict(scope_projection_binding)
     return ContinuationSelectionPreview(
         base_collection_run_id=base_collection_run_id,
         continuation_of_recovery_plan_id=continuation_of_recovery_plan_id,
@@ -1211,6 +1829,7 @@ class PostgresCompositeEvidenceRepository:
         analysis_code_version: str = ASSEMBLY_POLICY_VERSION,
         analysis_max_attempts: int = 3,
         provider_request_contracts: Mapping[str, Mapping[str, Any]],
+        provider_error_evidence_contracts: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         self._engine = engine
         self._analysis_code_version = analysis_code_version
@@ -1218,21 +1837,251 @@ class PostgresCompositeEvidenceRepository:
         self._provider_request_contracts = {
             str(key): dict(value) for key, value in provider_request_contracts.items()
         }
+        self._provider_error_evidence_contracts = {
+            str(key): dict(value)
+            for key, value in (provider_error_evidence_contracts or {}).items()
+        }
 
     async def preview(
         self,
         base_collection_run_id: str,
         *,
         retailer_ids: Sequence[str] = (),
+        scope_projection_id: str | None = None,
     ) -> RecoverySelectionPreview:
         async with self._engine.connect() as connection:
             definition_checksum, rows = await self._base_rows(connection, base_collection_run_id)
+            raw_preview = build_recovery_preview(
+                base_collection_run_id,
+                rows,
+                definition_checksum=definition_checksum,
+                allow_ineligible_locations=True,
+            )
+            binding = None
+            if scope_projection_id is not None:
+                projection = await self._scope_projection_row(
+                    connection, scope_projection_id, include_inventory=True
+                )
+                rows = self._apply_scope_projection_rows(
+                    rows,
+                    [projection],
+                    base_collection_run_id=base_collection_run_id,
+                    base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+                )
+                binding = self._scope_projection_binding(projection)
         return build_recovery_preview(
             base_collection_run_id,
             rows,
             definition_checksum=definition_checksum,
             retailer_ids=retailer_ids,
+            base_snapshot_checksum_override=raw_preview.base_snapshot_checksum,
+            scope_projection_binding=binding,
         )
+
+    async def preview_scope_projection(
+        self,
+        base_collection_run_id: str,
+        *,
+        retailer_id: str,
+        projection_kind: ScopeProjectionKind,
+        source_audit_id: str | None = None,
+    ) -> ScopeProjectionPreview:
+        async with self._engine.connect() as connection:
+            return await self._build_scope_projection_preview(
+                connection,
+                base_collection_run_id,
+                retailer_id=retailer_id,
+                projection_kind=projection_kind,
+                source_audit_id=source_audit_id,
+            )
+
+    async def approve_scope_projection(
+        self,
+        base_collection_run_id: str,
+        *,
+        retailer_id: str,
+        projection_kind: ScopeProjectionKind,
+        projection_checksum: str,
+        base_snapshot_checksum: str,
+        review_reason: str,
+        reviewed_by: str,
+        source_audit_id: str | None = None,
+    ) -> ScopeProjectionRecord:
+        """Persist exactly the complete projection an administrator reviewed."""
+
+        if not review_reason.strip() or not reviewed_by.strip():
+            raise ValueError("review_reason and reviewed_by are required")
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"collection-scope-projection:{base_collection_run_id}:{retailer_id}"},
+            )
+            preview = await self._build_scope_projection_preview(
+                connection,
+                base_collection_run_id,
+                retailer_id=retailer_id,
+                projection_kind=projection_kind,
+                source_audit_id=source_audit_id,
+                for_update=True,
+            )
+            if preview.base_snapshot_checksum != base_snapshot_checksum:
+                raise ValueError("scope projection no longer matches the immutable base snapshot")
+            if preview.projection_checksum != projection_checksum:
+                raise ValueError("scope projection changed; review a new complete preview")
+            existing = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM collection_scope_projection "
+                            "WHERE base_collection_run_id::text = :run_id "
+                            "AND retailer_id = :retailer_id "
+                            "AND projection_checksum = :checksum"
+                        ),
+                        {
+                            "run_id": base_collection_run_id,
+                            "retailer_id": retailer_id,
+                            "checksum": projection_checksum,
+                        },
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if existing is not None:
+                if (
+                    str(existing["review_reason"]) != review_reason.strip()
+                    or str(existing["reviewed_by"]) != reviewed_by.strip()
+                ):
+                    raise ValueError("the reviewed projection already has another approval record")
+                verified = await self._scope_projection_row(
+                    connection, str(existing["id"]), include_inventory=True
+                )
+                return self._scope_projection_record(verified)
+            run = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT organization_id::text FROM collection_run "
+                            "WHERE id::text = :run_id"
+                        ),
+                        {"run_id": base_collection_run_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            inserted = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO collection_scope_projection (
+                              organization_id, base_collection_run_id, retailer_id,
+                              projection_kind, policy_version, base_snapshot_checksum,
+                              source_audit_id, source_evidence_checksum,
+                              raw_task_count, retained_task_count, excluded_task_count,
+                              raw_location_count, retained_location_count,
+                              excluded_location_count, raw_task_retention_ratio,
+                              governed_coverage_ratio,
+                              minimum_scoreable_coverage, scorecard_disposition,
+                              projection_checksum, review_reason, reviewed_by, manifest
+                            ) VALUES (
+                              CAST(:organization_id AS uuid), CAST(:run_id AS uuid),
+                              :retailer_id, :projection_kind, :policy_version,
+                              :base_snapshot_checksum, CAST(:source_audit_id AS uuid),
+                              :source_evidence_checksum, :raw_task_count,
+                              :retained_task_count, :excluded_task_count,
+                              :raw_location_count, :retained_location_count,
+                              :excluded_location_count, :raw_task_retention_ratio,
+                              :governed_coverage_ratio,
+                              :minimum_scoreable_coverage, :scorecard_disposition,
+                              :projection_checksum, :review_reason, :reviewed_by,
+                              CAST(:manifest AS jsonb)
+                            ) RETURNING *
+                            """
+                        ),
+                        {
+                            "organization_id": str(run["organization_id"]),
+                            "run_id": base_collection_run_id,
+                            "retailer_id": retailer_id,
+                            "projection_kind": projection_kind,
+                            "policy_version": preview.policy_version,
+                            "base_snapshot_checksum": preview.base_snapshot_checksum,
+                            "source_audit_id": preview.source_audit_id,
+                            "source_evidence_checksum": preview.source_evidence_checksum,
+                            "raw_task_count": preview.raw_task_count,
+                            "retained_task_count": preview.retained_task_count,
+                            "excluded_task_count": preview.excluded_task_count,
+                            "raw_location_count": preview.raw_location_count,
+                            "retained_location_count": preview.retained_location_count,
+                            "excluded_location_count": preview.excluded_location_count,
+                            "raw_task_retention_ratio": preview.raw_task_retention_ratio,
+                            "governed_coverage_ratio": preview.governed_coverage_ratio,
+                            "minimum_scoreable_coverage": preview.minimum_scoreable_coverage,
+                            "scorecard_disposition": preview.scorecard_disposition,
+                            "projection_checksum": preview.projection_checksum,
+                            "review_reason": review_reason.strip(),
+                            "reviewed_by": reviewed_by.strip(),
+                            "manifest": _json(preview.manifest),
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            projection_id = str(inserted["id"])
+            inventory = [
+                {
+                    "scope_projection_id": projection_id,
+                    "source_task_id": item.source_task_id,
+                    "ordinal": ordinal,
+                    "canonical_request_key": item.canonical_request_key,
+                    "disposition": item.disposition,
+                    "reason": item.reason,
+                    "mapped_retained_task_id": item.mapped_retained_task_id,
+                    "source_snapshot": item.source_snapshot,
+                }
+                for ordinal, item in enumerate(preview.items)
+            ]
+            inserted_count = 0
+            for offset in range(0, len(inventory), MATERIALIZATION_WRITE_BATCH_SIZE):
+                batch = inventory[offset : offset + MATERIALIZATION_WRITE_BATCH_SIZE]
+                inserted_count += int(
+                    (
+                        await connection.execute(
+                            text(
+                                """
+                                WITH payload AS (
+                                  SELECT * FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS x(
+                                    scope_projection_id text, source_task_id text,
+                                    ordinal integer, canonical_request_key text,
+                                    disposition text, reason text,
+                                    mapped_retained_task_id text, source_snapshot jsonb
+                                  )
+                                ), inserted AS (
+                                  INSERT INTO collection_scope_projection_task (
+                                    scope_projection_id, source_task_id, ordinal,
+                                    canonical_request_key, disposition, reason,
+                                    mapped_retained_task_id, source_snapshot
+                                  )
+                                  SELECT CAST(scope_projection_id AS uuid),
+                                         CAST(source_task_id AS uuid), ordinal,
+                                         canonical_request_key, disposition, reason,
+                                         CAST(mapped_retained_task_id AS uuid), source_snapshot
+                                  FROM payload RETURNING 1
+                                ) SELECT count(*)::integer FROM inserted
+                                """
+                            ),
+                            {"rows": _json(batch)},
+                        )
+                    ).scalar_one()
+                )
+            if inserted_count != preview.raw_task_count:
+                raise RuntimeError("scope projection inventory insertion was incomplete")
+            verified = await self._scope_projection_row(
+                connection, projection_id, include_inventory=True
+            )
+            return self._scope_projection_record(verified)
 
     async def preview_continuation(
         self,
@@ -1259,6 +2108,28 @@ class PostgresCompositeEvidenceRepository:
         parent = await self._plan_row(connection, continuation_of_recovery_plan_id)
         base_run_id = str(parent["base_collection_run_id"])
         definition_checksum, base_rows = await self._base_rows(connection, base_run_id)
+        raw_preview = build_recovery_preview(
+            base_run_id,
+            base_rows,
+            definition_checksum=definition_checksum,
+            allow_ineligible_locations=True,
+        )
+        scope_projection_binding = None
+        if parent.get("scope_projection_id") is not None:
+            projection = await self._scope_projection_row(
+                connection, str(parent["scope_projection_id"]), include_inventory=True
+            )
+            if str(projection["projection_checksum"]) != str(
+                parent.get("scope_projection_checksum") or ""
+            ):
+                raise ValueError("continuation parent scope projection checksum changed")
+            base_rows = self._apply_scope_projection_rows(
+                base_rows,
+                [projection],
+                base_collection_run_id=base_run_id,
+                base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+            )
+            scope_projection_binding = self._scope_projection_binding(projection)
         run = (
             (
                 await connection.execute(
@@ -1303,6 +2174,14 @@ class PostgresCompositeEvidenceRepository:
             raise ValueError("continuation parent does not resolve to a complete lineage")
         if any(str(row["base_collection_run_id"]) != base_run_id for row in plan_rows):
             raise ValueError("continuation lineage spans more than one base run")
+        if any(
+            str(row.get("scope_projection_id") or "")
+            != str(parent.get("scope_projection_id") or "")
+            or str(row.get("scope_projection_checksum") or "")
+            != str(parent.get("scope_projection_checksum") or "")
+            for row in plan_rows
+        ):
+            raise ValueError("continuation lineage changes its scope projection")
         if len({str(row["organization_id"]) for row in plan_rows}) != 1:
             raise ValueError("continuation lineage spans more than one organization")
         if len(plan_rows) > 33:
@@ -1388,6 +2267,8 @@ class PostgresCompositeEvidenceRepository:
             retailer_ids=retailer_ids,
             minimum_successes=max(int(gate_config.get("minimum_successful_samples") or 1), 1),
             maximum_404_rate=float(gate_config.get("max_billable_404_rate", 0.5)),
+            base_snapshot_checksum_override=raw_preview.base_snapshot_checksum,
+            scope_projection_binding=scope_projection_binding,
         )
 
     async def approve_retailer_unavailability(
@@ -2035,6 +2916,8 @@ class PostgresCompositeEvidenceRepository:
         supersedes_recovery_plan_id: str | None = None,
         recovery_batch_id: str | None = None,
         plan_mode: RecoveryPlanMode = "exact_launch",
+        scope_projection_id: str | None = None,
+        scope_projection_checksum: str | None = None,
     ) -> RecoveryPlanRecord:
         if not reason.strip() or not approved_by.strip():
             raise ValueError("reason and approved_by are required")
@@ -2048,11 +2931,36 @@ class PostgresCompositeEvidenceRepository:
             definition_checksum, rows = await self._base_rows(
                 connection, base_collection_run_id, for_update=True
             )
+            raw_preview = build_recovery_preview(
+                base_collection_run_id,
+                rows,
+                definition_checksum=definition_checksum,
+                allow_ineligible_locations=True,
+            )
+            scope_projection = None
+            scope_projection_binding = None
+            if (scope_projection_id is None) != (scope_projection_checksum is None):
+                raise ValueError("scope projection id and checksum must be supplied together")
+            if scope_projection_id is not None:
+                scope_projection = await self._scope_projection_row(
+                    connection, scope_projection_id, include_inventory=True
+                )
+                if str(scope_projection["projection_checksum"]) != scope_projection_checksum:
+                    raise ValueError("scope projection checksum differs from the reviewed record")
+                rows = self._apply_scope_projection_rows(
+                    rows,
+                    [scope_projection],
+                    base_collection_run_id=base_collection_run_id,
+                    base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+                )
+                scope_projection_binding = self._scope_projection_binding(scope_projection)
             preview = build_recovery_preview(
                 base_collection_run_id,
                 rows,
                 definition_checksum=definition_checksum,
                 retailer_ids=retailer_ids,
+                base_snapshot_checksum_override=raw_preview.base_snapshot_checksum,
+                scope_projection_binding=scope_projection_binding,
             )
             if not preview.items:
                 raise ValueError("the base run has no eligible failure-only recovery tasks")
@@ -2081,6 +2989,12 @@ class PostgresCompositeEvidenceRepository:
                     raise ValueError("a replacement plan must preserve the exact selection")
                 if str(superseded["base_snapshot_checksum"]) != preview.base_snapshot_checksum:
                     raise ValueError("a replacement plan must preserve the exact base snapshot")
+                if str(superseded.get("scope_projection_id") or "") != str(
+                    scope_projection_id or ""
+                ) or str(superseded.get("scope_projection_checksum") or "") != str(
+                    scope_projection_checksum or ""
+                ):
+                    raise ValueError("a replacement plan must preserve its scope projection")
                 plan_generation = int(superseded["plan_generation"]) + 1
                 if (
                     str(superseded["status"]) != "approved"
@@ -2302,14 +3216,16 @@ class PostgresCompositeEvidenceRepository:
                               base_snapshot_checksum, selection_scope, plan_generation,
                               supersedes_recovery_plan_id, recovery_batch_id, plan_mode,
                               reservation_active, selected_task_count,
-                              maximum_credits, approved_credit_ceiling, reason, approved_by
+                              maximum_credits, approved_credit_ceiling, reason, approved_by,
+                              scope_projection_id, scope_projection_checksum
                             ) VALUES (
                               CAST(:organization_id AS uuid), CAST(:base_run_id AS uuid),
                               :policy, :selection_checksum, :base_snapshot_checksum,
                               CAST(:selection_scope AS jsonb), :plan_generation,
                               CAST(:supersedes_plan_id AS uuid), CAST(:recovery_batch_id AS uuid),
                               :plan_mode, :reservation_active, :selected_task_count,
-                              :maximum_credits, :approved_credit_ceiling, :reason, :approved_by
+                              :maximum_credits, :approved_credit_ceiling, :reason, :approved_by,
+                              CAST(:scope_projection_id AS uuid), :scope_projection_checksum
                             )
                             RETURNING *
                             """
@@ -2320,7 +3236,16 @@ class PostgresCompositeEvidenceRepository:
                             "policy": preview.selection_policy_version,
                             "selection_checksum": preview.selection_checksum,
                             "base_snapshot_checksum": preview.base_snapshot_checksum,
-                            "selection_scope": _json({"retailer_ids": sorted(set(retailer_ids))}),
+                            "selection_scope": _json(
+                                {
+                                    "retailer_ids": sorted(set(retailer_ids)),
+                                    **(
+                                        {"scope_projection": scope_projection_binding}
+                                        if scope_projection_binding is not None
+                                        else {}
+                                    ),
+                                }
+                            ),
                             "plan_generation": plan_generation,
                             "supersedes_plan_id": supersedes_recovery_plan_id,
                             "recovery_batch_id": recovery_batch_id,
@@ -2331,6 +3256,8 @@ class PostgresCompositeEvidenceRepository:
                             "approved_credit_ceiling": approved_credit_ceiling,
                             "reason": reason.strip(),
                             "approved_by": approved_by.strip(),
+                            "scope_projection_id": scope_projection_id,
+                            "scope_projection_checksum": scope_projection_checksum,
                         },
                     )
                 )
@@ -2448,11 +3375,19 @@ class PostgresCompositeEvidenceRepository:
                 .mappings()
                 .one_or_none()
             )
-            expected_scope = {
+            expected_scope: dict[str, Any] = {
                 "retailer_ids": sorted(set(str(value) for value in retailer_ids)),
                 "lineage_plan_ids": list(preview.lineage_plan_ids),
                 "lineage_checksum": preview.lineage_checksum,
             }
+            if parent.get("scope_projection_id") is not None:
+                expected_scope["scope_projection"] = {
+                    "id": str(parent["scope_projection_id"]),
+                    "retailer_id": str(
+                        dict(parent.get("selection_scope") or {})["scope_projection"]["retailer_id"]
+                    ),
+                    "projection_checksum": str(parent["scope_projection_checksum"]),
+                }
             if existing is not None:
                 same = bool(
                     str(existing["selection_checksum"]) == preview.selection_checksum
@@ -2550,7 +3485,8 @@ class PostgresCompositeEvidenceRepository:
                               recovery_batch_id, plan_mode, reservation_active,
                               selected_task_count, maximum_credits,
                               approved_credit_ceiling, reason, approved_by,
-                              continuation_of_recovery_plan_id, continuation_depth
+                              continuation_of_recovery_plan_id, continuation_depth,
+                              scope_projection_id, scope_projection_checksum
                             ) VALUES (
                               CAST(:organization_id AS uuid), CAST(:base_run_id AS uuid),
                               :policy, :selection_checksum, :base_snapshot_checksum,
@@ -2558,7 +3494,8 @@ class PostgresCompositeEvidenceRepository:
                               CAST(:recovery_batch_id AS uuid), 'exact_launch', true,
                               :selected_task_count, :maximum_credits,
                               :approved_credit_ceiling, :reason, :approved_by,
-                              CAST(:parent_plan_id AS uuid), :continuation_depth
+                              CAST(:parent_plan_id AS uuid), :continuation_depth,
+                              CAST(:scope_projection_id AS uuid), :scope_projection_checksum
                             ) RETURNING *
                             """
                         ),
@@ -2578,6 +3515,16 @@ class PostgresCompositeEvidenceRepository:
                             "approved_by": approved_by.strip(),
                             "parent_plan_id": continuation_of_recovery_plan_id,
                             "continuation_depth": continuation_depth,
+                            "scope_projection_id": (
+                                str(parent["scope_projection_id"])
+                                if parent.get("scope_projection_id") is not None
+                                else None
+                            ),
+                            "scope_projection_checksum": (
+                                str(parent["scope_projection_checksum"])
+                                if parent.get("scope_projection_checksum") is not None
+                                else None
+                            ),
                         },
                     )
                 )
@@ -2671,16 +3618,42 @@ class PostgresCompositeEvidenceRepository:
             definition_checksum, base_rows = await self._base_rows(
                 connection, base_run_id, for_update=True
             )
+            raw_preview = build_recovery_preview(
+                base_run_id,
+                base_rows,
+                definition_checksum=definition_checksum,
+                allow_ineligible_locations=True,
+            )
             scope = dict(plan.get("selection_scope") or {})
             retailer_ids = tuple(str(value) for value in scope.get("retailer_ids", []))
             continuation_parent = plan.get("continuation_of_recovery_plan_id")
             if continuation_parent is None:
+                scope_projection_binding = None
+                if plan.get("scope_projection_id") is not None:
+                    projection = await self._scope_projection_row(
+                        connection, str(plan["scope_projection_id"]), include_inventory=True
+                    )
+                    if str(projection["projection_checksum"]) != str(
+                        plan.get("scope_projection_checksum") or ""
+                    ):
+                        raise ValueError("recovery plan scope projection checksum changed")
+                    base_rows = self._apply_scope_projection_rows(
+                        base_rows,
+                        [projection],
+                        base_collection_run_id=base_run_id,
+                        base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+                    )
+                    scope_projection_binding = self._scope_projection_binding(projection)
+                    if scope.get("scope_projection") != scope_projection_binding:
+                        raise ValueError("recovery plan scope-projection selection binding changed")
                 preview: RecoverySelectionPreview | ContinuationSelectionPreview = (
                     build_recovery_preview(
                         base_run_id,
                         base_rows,
                         definition_checksum=definition_checksum,
                         retailer_ids=retailer_ids,
+                        base_snapshot_checksum_override=raw_preview.base_snapshot_checksum,
+                        scope_projection_binding=scope_projection_binding,
                     )
                 )
                 launch_mode = "exact_failure_only"
@@ -3152,10 +4125,12 @@ class PostgresCompositeEvidenceRepository:
         self,
         base_collection_run_id: str,
         recovery_plan_ids: Sequence[str],
+        scope_projection_ids: Sequence[str] = (),
     ) -> CompositeInputSetRecord:
         """Assemble a base run and one or more immutable recovery components."""
 
         plan_ids = tuple(sorted(set(recovery_plan_ids)))
+        projection_ids = tuple(sorted(set(scope_projection_ids)))
         if not plan_ids:
             raise ValueError("at least one recovery plan is required")
         async with self._engine.begin() as connection:
@@ -3269,7 +4244,67 @@ class PostgresCompositeEvidenceRepository:
                     "terminal recovery actual credits exceeded the reserved hard upper bound"
                 )
 
-            base_rows = await self._task_rows(connection, base_collection_run_id)
+            raw_base_rows = await self._task_rows(connection, base_collection_run_id)
+            raw_preview = build_recovery_preview(
+                base_collection_run_id,
+                raw_base_rows,
+                definition_checksum=str(by_run[base_collection_run_id]["definition_checksum"]),
+                allow_ineligible_locations=True,
+            )
+            projections = [
+                await self._scope_projection_row(connection, projection_id, include_inventory=True)
+                for projection_id in projection_ids
+            ]
+            immutable_config = dict(by_run[base_collection_run_id]["config"] or {})
+            enabled_retailers = {
+                str(item["retailer_id"])
+                for item in immutable_config.get("retailers", [])
+                if isinstance(item, Mapping) and bool(item.get("enabled"))
+            }
+            benchmark_retailer = str(immutable_config.get("benchmark_retailer") or "")
+            invalid_projection_retailers = sorted(
+                str(projection["retailer_id"])
+                for projection in projections
+                if str(projection["retailer_id"]) not in enabled_retailers
+                or str(projection["retailer_id"]) == benchmark_retailer
+            )
+            if invalid_projection_retailers:
+                raise ValueError(
+                    "scope projections must target enabled non-benchmark retailers "
+                    f"({', '.join(invalid_projection_retailers)})"
+                )
+            plan_projection_ids = {
+                str(plan["scope_projection_id"])
+                for plan in plans
+                if plan.get("scope_projection_id") is not None
+            }
+            if not plan_projection_ids.issubset(set(projection_ids)):
+                raise ValueError("materialization requires every recovery-plan scope projection")
+            projection_by_id = {
+                str(projection.get("projection_id") or projection["id"]): projection
+                for projection in projections
+            }
+            for plan in plans:
+                if plan.get("scope_projection_id") is None:
+                    continue
+                projection = projection_by_id[str(plan["scope_projection_id"])]
+                if str(plan.get("scope_projection_checksum") or "") != str(
+                    projection["projection_checksum"]
+                ):
+                    raise ValueError("recovery plan differs from its reviewed scope projection")
+            base_rows = self._apply_scope_projection_rows(
+                raw_base_rows,
+                projections,
+                base_collection_run_id=base_collection_run_id,
+                base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+            )
+            scope_projection_bindings = [
+                self._scope_projection_binding(projection) for projection in projections
+            ]
+            scope_projection_bindings.sort(key=lambda row: (row["retailer_id"], row["id"]))
+            scope_projection_context = (
+                {"projections": scope_projection_bindings} if scope_projection_bindings else None
+            )
             identity_rows_by_component: dict[str, Sequence[TaskMapping]] = {"base": base_rows}
             base_by_key = self._unique_tasks(base_rows, "base")
             full_preview = build_recovery_preview(
@@ -3277,6 +4312,8 @@ class PostgresCompositeEvidenceRepository:
                 base_rows,
                 definition_checksum=str(by_run[base_collection_run_id]["definition_checksum"]),
                 allow_ineligible_locations=True,
+                base_snapshot_checksum_override=raw_preview.base_snapshot_checksum,
+                scope_projection_binding=scope_projection_context,
             )
             unavailability_rows = list(
                 (
@@ -3299,7 +4336,7 @@ class PostgresCompositeEvidenceRepository:
             stale_unavailability = [
                 str(row["retailer_id"])
                 for row in unavailability_rows
-                if str(row["base_snapshot_checksum"]) != full_preview.base_snapshot_checksum
+                if str(row["base_snapshot_checksum"]) != raw_preview.base_snapshot_checksum
             ]
             if stale_unavailability:
                 raise ValueError(
@@ -3309,6 +4346,35 @@ class PostgresCompositeEvidenceRepository:
             unavailability_approvals = {
                 str(row["retailer_id"]): dict(row) for row in unavailability_rows
             }
+            scope_projection_dispositions = {
+                str(projection["retailer_id"]): {
+                    **self._scope_projection_binding(projection),
+                    "projection_kind": str(projection["projection_kind"]),
+                    "raw_task_count": int(projection["raw_task_count"]),
+                    "retained_task_count": int(projection["retained_task_count"]),
+                    "excluded_task_count": int(projection["excluded_task_count"]),
+                    "raw_location_count": int(projection["raw_location_count"]),
+                    "retained_location_count": int(projection["retained_location_count"]),
+                    "excluded_location_count": int(projection["excluded_location_count"]),
+                    "raw_task_retention_ratio": str(projection["raw_task_retention_ratio"]),
+                    "governed_coverage_ratio": str(projection["governed_coverage_ratio"]),
+                    "minimum_scoreable_coverage": str(projection["minimum_scoreable_coverage"]),
+                    "scorecard_disposition": str(projection["scorecard_disposition"]),
+                }
+                for projection in projections
+            }
+            conflicting_approvals = sorted(
+                retailer_id
+                for retailer_id, projection in scope_projection_dispositions.items()
+                if projection["scorecard_disposition"] == "scoreable"
+                and retailer_id in unavailability_approvals
+            )
+            if conflicting_approvals:
+                raise ValueError(
+                    "scoreable scope projections conflict with active retailer-unavailability "
+                    f"approvals ({', '.join(conflicting_approvals)}); revoke those approvals "
+                    "through the governed API before materialization"
+                )
             full_selection_keys = {item.canonical_request_key for item in full_preview.items}
             required_selection_keys = {
                 item.canonical_request_key
@@ -3326,7 +4392,7 @@ class PostgresCompositeEvidenceRepository:
                     CONTINUATION_SELECTION_POLICY_VERSION,
                 }:
                     raise ValueError("unsupported recovery selection policy version")
-                if str(plan["base_snapshot_checksum"]) != full_preview.base_snapshot_checksum:
+                if str(plan["base_snapshot_checksum"]) != raw_preview.base_snapshot_checksum:
                     raise ValueError("a recovery plan no longer matches the base snapshot")
                 plan_id = str(plan["id"])
                 selection_rows = list(
@@ -3528,6 +4594,7 @@ class PostgresCompositeEvidenceRepository:
                     maximum_404_rate=maximum_404_rate,
                     nonempty_successes_by_retailer=nonempty_successes_by_retailer,
                     unavailability_approvals=unavailability_approvals,
+                    scope_projection_dispositions=scope_projection_dispositions,
                 )
             )
             unavailable_retailer_ids = {
@@ -3618,6 +4685,38 @@ class PostgresCompositeEvidenceRepository:
                 "base_snapshot_checksum": full_preview.base_snapshot_checksum,
                 "definition_checksum": str(by_run[base_collection_run_id]["definition_checksum"]),
                 "components": component_manifest,
+                "scope_projections": [
+                    {
+                        "id": str(projection.get("projection_id") or projection["id"]),
+                        "retailer_id": str(projection["retailer_id"]),
+                        "projection_kind": str(projection["projection_kind"]),
+                        "policy_version": str(projection["policy_version"]),
+                        "projection_checksum": str(projection["projection_checksum"]),
+                        "source_audit_id": (
+                            str(projection["source_audit_id"])
+                            if projection.get("source_audit_id") is not None
+                            else None
+                        ),
+                        "source_evidence_checksum": str(projection["source_evidence_checksum"]),
+                        "raw_task_count": int(projection["raw_task_count"]),
+                        "retained_task_count": int(projection["retained_task_count"]),
+                        "excluded_task_count": int(projection["excluded_task_count"]),
+                        "raw_location_count": int(projection["raw_location_count"]),
+                        "retained_location_count": int(projection["retained_location_count"]),
+                        "excluded_location_count": int(projection["excluded_location_count"]),
+                        "raw_task_retention_ratio": str(projection["raw_task_retention_ratio"]),
+                        "governed_coverage_ratio": str(projection["governed_coverage_ratio"]),
+                        "minimum_scoreable_coverage": str(projection["minimum_scoreable_coverage"]),
+                        "scorecard_disposition": str(projection["scorecard_disposition"]),
+                        "inventory_checksum": str(
+                            dict(projection["manifest"])["inventory_checksum"]
+                        ),
+                    }
+                    for projection in projections
+                ],
+                "raw_base_task_count": len(raw_base_rows),
+                "projected_base_task_count": len(base_rows),
+                "projected_excluded_task_count": len(raw_base_rows) - len(base_rows),
                 "task_chain_checksum": task_chain_checksum,
                 "task_count": len(chosen),
                 "total_rows": total_rows,
@@ -3677,6 +4776,42 @@ class PostgresCompositeEvidenceRepository:
                 .one_or_none()
             )
             if existing is not None:
+                stored_projection_links = list(
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT scope_projection_id::text, ordinal, "
+                                "projection_checksum FROM analysis_input_scope_projection "
+                                "WHERE input_set_id::text = :input_set_id ORDER BY ordinal"
+                            ),
+                            {"input_set_id": str(existing["id"])},
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                expected_projection_links = [
+                    {
+                        "scope_projection_id": str(
+                            projection.get("projection_id") or projection["id"]
+                        ),
+                        "ordinal": ordinal,
+                        "projection_checksum": str(projection["projection_checksum"]),
+                    }
+                    for ordinal, projection in enumerate(projections)
+                ]
+                actual_projection_links = [
+                    {
+                        "scope_projection_id": str(row["scope_projection_id"]),
+                        "ordinal": int(row["ordinal"]),
+                        "projection_checksum": str(row["projection_checksum"]),
+                    }
+                    for row in stored_projection_links
+                ]
+                if actual_projection_links != expected_projection_links:
+                    raise ValueError(
+                        "existing analysis input scope-projection lineage is incomplete or changed"
+                    )
                 analysis_run_id = await self._queue_composite_analysis(
                     connection,
                     str(existing["id"]),
@@ -3759,6 +4894,30 @@ class PostgresCompositeEvidenceRepository:
                 chosen,
                 expected_usable_artifacts=usable_artifacts,
             )
+            if projections:
+                await connection.execute(
+                    text(
+                        """
+                        INSERT INTO analysis_input_scope_projection (
+                          input_set_id, scope_projection_id, ordinal, projection_checksum
+                        ) VALUES (
+                          CAST(:input_set_id AS uuid), CAST(:projection_id AS uuid),
+                          :ordinal, :projection_checksum
+                        )
+                        """
+                    ),
+                    [
+                        {
+                            "input_set_id": input_set_id,
+                            "projection_id": str(
+                                projection.get("projection_id") or projection["id"]
+                            ),
+                            "ordinal": ordinal,
+                            "projection_checksum": str(projection["projection_checksum"]),
+                        }
+                        for ordinal, projection in enumerate(projections)
+                    ],
+                )
             if not blocking:
                 await connection.execute(
                     text(
@@ -4138,6 +5297,225 @@ class PostgresCompositeEvidenceRepository:
             reused_existing_run=reused_existing_run,
         )
 
+    async def _build_scope_projection_preview(
+        self,
+        connection: AsyncConnection,
+        base_collection_run_id: str,
+        *,
+        retailer_id: str,
+        projection_kind: ScopeProjectionKind,
+        source_audit_id: str | None,
+        for_update: bool = False,
+    ) -> ScopeProjectionPreview:
+        definition_checksum, rows = await self._base_rows(
+            connection, base_collection_run_id, for_update=for_update
+        )
+        base_config = dict(
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.config FROM collection_run r "
+                        "JOIN collection_definition_version v ON v.id = r.definition_version_id "
+                        "WHERE r.id::text = :run_id"
+                    ),
+                    {"run_id": base_collection_run_id},
+                )
+            ).scalar_one()
+        )
+        enabled_retailers = {
+            str(item["retailer_id"])
+            for item in base_config.get("retailers", [])
+            if isinstance(item, Mapping) and bool(item.get("enabled"))
+        }
+        if retailer_id not in enabled_retailers:
+            raise ValueError("scope projection retailer is not enabled in the base definition")
+        if retailer_id == str(base_config.get("benchmark_retailer") or ""):
+            raise ValueError("the benchmark retailer cannot receive a scope projection")
+        raw_preview = build_recovery_preview(
+            base_collection_run_id,
+            rows,
+            definition_checksum=definition_checksum,
+            allow_ineligible_locations=True,
+        )
+        source_audit: TaskMapping | None = None
+        if projection_kind == "canonical_alias_collapse":
+            if source_audit_id is None:
+                raise ValueError("canonical alias collapse requires source_audit_id")
+            source_audit = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT id::text, catalog_sha256, snapshot_sha256, "
+                            "reviewed_plan_sha256, retailer_ids, status, scanned_rows, "
+                            "changed_rows, eligible_before, eligible_after, changes "
+                            "FROM location_eligibility_reconciliation_run "
+                            "WHERE id::text = :audit_id"
+                        ),
+                        {"audit_id": source_audit_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if source_audit is None:
+                raise LookupError(f"location eligibility audit {source_audit_id!r} was not found")
+        elif source_audit_id is not None:
+            raise ValueError("limited provider footprint cannot bind a location audit")
+        return build_scope_projection_preview(
+            base_collection_run_id,
+            rows,
+            retailer_id=retailer_id,
+            projection_kind=projection_kind,
+            base_snapshot_checksum=raw_preview.base_snapshot_checksum,
+            source_audit=(dict(source_audit) if source_audit is not None else None),
+            provider_error_evidence_contracts=self._provider_error_evidence_contracts,
+        )
+
+    async def _scope_projection_row(
+        self,
+        connection: AsyncConnection,
+        scope_projection_id: str,
+        *,
+        include_inventory: bool,
+    ) -> dict[str, Any]:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT *, id::text AS projection_id, "
+                        "base_collection_run_id::text AS base_run_id, "
+                        "source_audit_id::text AS source_audit_text "
+                        "FROM collection_scope_projection WHERE id::text = :projection_id"
+                    ),
+                    {"projection_id": scope_projection_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise LookupError(f"collection scope projection {scope_projection_id!r} was not found")
+        result = dict(row)
+        manifest = validate_scope_projection_header_manifest(result)
+        source_evidence = dict(manifest["source_evidence"])
+        if result.get("source_audit_text") is not None:
+            source_audit = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT id::text, catalog_sha256, snapshot_sha256, "
+                            "reviewed_plan_sha256, retailer_ids, status, scanned_rows, "
+                            "changed_rows, eligible_before, eligible_after, changes "
+                            "FROM location_eligibility_reconciliation_run "
+                            "WHERE id = CAST(:audit_id AS uuid)"
+                        ),
+                        {"audit_id": str(result["source_audit_text"])},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if (
+                source_audit is None
+                or _location_audit_evidence(dict(source_audit)) != source_evidence
+            ):
+                raise ValueError(
+                    "scope projection location-audit evidence differs from its immutable snapshot"
+                )
+        if include_inventory:
+            inventory = list(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT source_task_id::text, ordinal, canonical_request_key, "
+                            "disposition, reason, mapped_retained_task_id::text, source_snapshot "
+                            "FROM collection_scope_projection_task "
+                            "WHERE scope_projection_id::text = :projection_id ORDER BY ordinal"
+                        ),
+                        {"projection_id": scope_projection_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if len(inventory) != int(result["raw_task_count"]):
+                raise ValueError("stored scope projection task inventory is incomplete")
+            inventory_document = {
+                "items": [
+                    {
+                        "source_task_id": str(item["source_task_id"]),
+                        "canonical_request_key": str(item["canonical_request_key"]),
+                        "disposition": str(item["disposition"]),
+                        "reason": str(item["reason"]),
+                        "mapped_retained_task_id": (
+                            str(item["mapped_retained_task_id"])
+                            if item.get("mapped_retained_task_id") is not None
+                            else None
+                        ),
+                        "source_snapshot": dict(item["source_snapshot"]),
+                    }
+                    for item in inventory
+                ]
+            }
+            if canonical_checksum(inventory_document) != str(manifest["inventory_checksum"]):
+                raise ValueError("stored scope projection inventory checksum is invalid")
+            result["inventory"] = inventory
+        return result
+
+    @staticmethod
+    def _scope_projection_binding(projection: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "id": str(projection.get("projection_id") or projection["id"]),
+            "retailer_id": str(projection["retailer_id"]),
+            "projection_checksum": str(projection["projection_checksum"]),
+        }
+
+    @staticmethod
+    def _apply_scope_projection_rows(
+        rows: Sequence[TaskMapping],
+        projections: Sequence[Mapping[str, Any]],
+        *,
+        base_collection_run_id: str,
+        base_snapshot_checksum: str,
+    ) -> list[TaskMapping]:
+        by_task_id = {str(row["id"]): row for row in rows}
+        projection_by_retailer: dict[str, Mapping[str, Any]] = {}
+        retained_by_retailer: dict[str, set[str]] = {}
+        for projection in projections:
+            if str(projection.get("base_run_id") or projection["base_collection_run_id"]) != (
+                base_collection_run_id
+            ):
+                raise ValueError("scope projection belongs to another base collection run")
+            if str(projection["base_snapshot_checksum"]) != base_snapshot_checksum:
+                raise ValueError("scope projection no longer matches the immutable base snapshot")
+            retailer_id = str(projection["retailer_id"])
+            if retailer_id in projection_by_retailer:
+                raise ValueError("more than one scope projection targets the same retailer")
+            inventory = list(projection.get("inventory") or [])
+            retailer_task_ids = {
+                task_id
+                for task_id, row in by_task_id.items()
+                if str(row["retailer_id"]) == retailer_id
+            }
+            inventory_task_ids = {str(item["source_task_id"]) for item in inventory}
+            if inventory_task_ids != retailer_task_ids:
+                raise ValueError("scope projection does not inventory every frozen retailer task")
+            retained = {
+                str(item["source_task_id"])
+                for item in inventory
+                if str(item["disposition"]) == "retained"
+            }
+            if len(retained) != int(projection["retained_task_count"]):
+                raise ValueError("scope projection retained count differs from its inventory")
+            projection_by_retailer[retailer_id] = projection
+            retained_by_retailer[retailer_id] = retained
+        return [
+            row
+            for row in rows
+            if str(row["retailer_id"]) not in retained_by_retailer
+            or str(row["id"]) in retained_by_retailer[str(row["retailer_id"])]
+        ]
+
     async def _base_rows(
         self,
         connection: AsyncConnection,
@@ -4500,6 +5878,16 @@ class PostgresCompositeEvidenceRepository:
             selection_policy_version=str(row["selection_policy_version"]),
             selection_checksum=str(row["selection_checksum"]),
             base_snapshot_checksum=str(row["base_snapshot_checksum"]),
+            scope_projection_id=(
+                str(row["scope_projection_id"])
+                if row.get("scope_projection_id") is not None
+                else None
+            ),
+            scope_projection_checksum=(
+                str(row["scope_projection_checksum"])
+                if row.get("scope_projection_checksum") is not None
+                else None
+            ),
             selection_scope=dict(row.get("selection_scope") or {}),
             plan_generation=int(row["plan_generation"]),
             supersedes_recovery_plan_id=(
@@ -4520,6 +5908,36 @@ class PostgresCompositeEvidenceRepository:
             approved_by=str(row["approved_by"]),
             status=str(row["status"]),
             binding_manifest=dict(row.get("binding_manifest") or {}),
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _scope_projection_record(row: TaskMapping) -> ScopeProjectionRecord:
+        return ScopeProjectionRecord(
+            id=str(row["id"]),
+            base_collection_run_id=str(row["base_collection_run_id"]),
+            retailer_id=str(row["retailer_id"]),
+            projection_kind=str(row["projection_kind"]),
+            policy_version=str(row["policy_version"]),
+            base_snapshot_checksum=str(row["base_snapshot_checksum"]),
+            source_audit_id=(
+                str(row["source_audit_id"]) if row.get("source_audit_id") is not None else None
+            ),
+            source_evidence_checksum=str(row["source_evidence_checksum"]),
+            raw_task_count=int(row["raw_task_count"]),
+            retained_task_count=int(row["retained_task_count"]),
+            excluded_task_count=int(row["excluded_task_count"]),
+            raw_location_count=int(row["raw_location_count"]),
+            retained_location_count=int(row["retained_location_count"]),
+            excluded_location_count=int(row["excluded_location_count"]),
+            raw_task_retention_ratio=str(row["raw_task_retention_ratio"]),
+            governed_coverage_ratio=str(row["governed_coverage_ratio"]),
+            minimum_scoreable_coverage=str(row["minimum_scoreable_coverage"]),
+            scorecard_disposition=str(row["scorecard_disposition"]),
+            projection_checksum=str(row["projection_checksum"]),
+            review_reason=str(row["review_reason"]),
+            reviewed_by=str(row["reviewed_by"]),
+            manifest=dict(row["manifest"]),
             created_at=row["created_at"],
         )
 

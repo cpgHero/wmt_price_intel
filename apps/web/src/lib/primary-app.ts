@@ -128,15 +128,32 @@ export function summarizeQuality(analysis: AnalysisRecord): QualitySummary {
   const validation = asObject(result.validation);
   const sourceRows = totalSourceRows(result);
   const counts = issueCounts(quality);
-  const status =
-    `${String(quality.status ?? "")} ${String(validation.status ?? "")}`.toLowerCase();
+  const qualityStatus = String(quality.status ?? "").toLowerCase();
+  const validationStatus = String(validation.status ?? "").toLowerCase();
+  const reportingStatus = String(analysis.reporting_status ?? "").toLowerCase();
+  const statuses = [qualityStatus, validationStatus, reportingStatus];
+  const authoritativeReady =
+    reportingStatus === "ready" && validationStatus === "ready_to_share";
+  const explicitBlockingStatus = statuses.some((status) =>
+    /blocked|failed|invalid|error/.test(status),
+  );
+  const explicitReviewStatus = statuses.some((status) =>
+    /review_required|needs_review/.test(status),
+  );
+  // A report activated by the semantic publication gate is decision-ready.
+  // Its positive review-named counts are retained as disclosures, not inferred
+  // work. Explicit blocker counts remain fail-closed, while older records without
+  // that dual authority keep the legacy name-based review inference.
   const blocking =
-    counts.some(([key]) => issueSeverity(key) === "blocker") ||
-    /blocked|failed|invalid|error/.test(status);
+    explicitBlockingStatus ||
+    counts.some(([key]) => issueSeverity(key) === "blocker");
   const reviewRequired =
-    counts.some(([key]) => issueSeverity(key) === "review") ||
-    /review_required|needs_review/.test(status);
-  const caveat = counts.length > 0 || /warning|caveat/.test(status);
+    explicitReviewStatus ||
+    (!authoritativeReady &&
+      counts.some(([key]) => issueSeverity(key) === "review"));
+  const caveat =
+    counts.length > 0 ||
+    statuses.some((status) => /warning|caveat/.test(status));
   const tier: QualityTier = blocking
     ? "blocked"
     : reviewRequired

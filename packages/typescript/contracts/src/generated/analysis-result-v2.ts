@@ -205,6 +205,26 @@ export interface Source {
     };
   } | null;
   unavailable_retailers?: string[];
+  collection_scope_projections?: {
+    id: string;
+    retailer_id: string;
+    projection_kind: "canonical_alias_collapse" | "limited_provider_footprint";
+    projection_checksum: string;
+    raw_task_count: number;
+    retained_task_count: number;
+    excluded_task_count: number;
+    raw_location_count: number;
+    retained_location_count: number;
+    excluded_location_count: number;
+    raw_task_retention_ratio: string;
+    governed_coverage_ratio: string;
+    minimum_scoreable_coverage: string;
+    scorecard_disposition: "scoreable" | "unavailable";
+    source_audit_id: string | null;
+    source_evidence_checksum: string;
+    inventory_checksum: string;
+    policy_version: string;
+  }[];
   match_revision_id?: string | null;
   matching_v2_gold_set_release_id?: string | null;
   matching_v2_gold_set_checksum?: string | null;
@@ -233,6 +253,29 @@ export interface Source {
       unresolved_count: number;
     }[];
   } | null;
+  matching_v2_reporting_coverage?: {
+    authority: "matching_v2_scoreable_retailer_projection";
+    source_authority: string;
+    source_coverage_checksum: string;
+    scoreable_retailer_ids: string[];
+    unavailable_retailer_ids: string[];
+    source_candidate_count: number;
+    selected_candidate_count: number;
+    selection_complete: boolean;
+    queue_case_count: number;
+    certified_label_count: number;
+    certified_comparable_count: number;
+    certified_not_comparable_count: number;
+    unresolved_excluded_count: number;
+    reviewed_insufficient_evidence_count: number;
+    pending_unreviewed_count: number;
+    automatic_fallback_enabled: false;
+    retailers: MatchingV2RetailerCoverage[];
+    excluded_unavailable_retailers: MatchingV2RetailerCoverage[];
+    withheld_certified_comparable_count: number;
+    withheld_certified_not_comparable_count: number;
+    projection_checksum: string;
+  } | null;
   brand_revision_id?: string | null;
   source_analysis_id?: string | null;
   replay_generation?: number;
@@ -245,6 +288,16 @@ export interface Source {
    * @minItems 1
    */
   source_artifact_ids: [string, ...string[]];
+}
+export interface MatchingV2RetailerCoverage {
+  competitor_retailer_id: string;
+  candidate_count: number;
+  certified_count: number;
+  certified_comparable_count: number;
+  certified_not_comparable_count: number;
+  reviewed_insufficient_evidence_count?: number;
+  pending_unreviewed_count?: number;
+  unresolved_count: number;
 }
 export interface Metric {
   metric_id: string;

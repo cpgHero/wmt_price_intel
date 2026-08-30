@@ -38,6 +38,7 @@ from rci_worker.analysis import (
     historical_source_row,
     matching_v2_gold_set_presentation,
     matching_v2_gold_set_rules,
+    matching_v2_reporting_coverage,
     require_matching_v2_relationship_reconciliation,
     scope_matching_v2_rules_to_brand_profiles,
 )
@@ -733,6 +734,74 @@ def test_gold_set_presentation_reconciliation_fails_when_relationship_is_lost() 
         )
 
 
+def test_matching_v2_reconciliation_projects_out_unavailable_retailer_labels() -> None:
+    coverage = {
+        "authority": "matching_v2_certified_gold_set",
+        "selection_complete": True,
+        "automatic_fallback_enabled": False,
+        "retailers": [
+            {
+                "competitor_retailer_id": "aldi_us",
+                "candidate_count": 2,
+                "certified_count": 2,
+                "certified_comparable_count": 1,
+                "certified_not_comparable_count": 1,
+                "unresolved_count": 0,
+            },
+            {
+                "competitor_retailer_id": "wegmans_us",
+                "candidate_count": 3,
+                "certified_count": 3,
+                "certified_comparable_count": 2,
+                "certified_not_comparable_count": 1,
+                "unresolved_count": 0,
+            },
+        ],
+        "certified_comparable_count": 3,
+    }
+    relationships = [
+        {
+            "relationship_id": "relationship-aldi",
+            "competitor_id": "aldi_us",
+            "status": "confirmed",
+        }
+    ]
+
+    reporting = matching_v2_reporting_coverage(coverage, {"wegmans_us"})
+    require_matching_v2_relationship_reconciliation(
+        relationships,
+        coverage,
+        unavailable_retailers={"wegmans_us"},
+    )
+
+    assert reporting["certified_comparable_count"] == 1
+    assert reporting["withheld_certified_comparable_count"] == 2
+    assert reporting["scoreable_retailer_ids"] == ["aldi_us"]
+    assert reporting["unavailable_retailer_ids"] == ["wegmans_us"]
+    assert reporting["retailers"][0]["competitor_retailer_id"] == "aldi_us"
+    assert reporting["excluded_unavailable_retailers"][0]["competitor_retailer_id"] == "wegmans_us"
+
+    with pytest.raises(ValueError, match="emitted unavailable retailers"):
+        require_matching_v2_relationship_reconciliation(
+            [
+                *relationships,
+                {
+                    "relationship_id": "relationship-wegmans",
+                    "competitor_id": "wegmans_us",
+                    "status": "confirmed",
+                },
+            ],
+            coverage,
+            unavailable_retailers={"wegmans_us"},
+        )
+    with pytest.raises(ValueError, match="does not reconcile"):
+        require_matching_v2_relationship_reconciliation(
+            [],
+            coverage,
+            unavailable_retailers={"wegmans_us"},
+        )
+
+
 def _task(
     retailer_id: str,
     adapter_id: str,
@@ -1050,6 +1119,28 @@ async def test_composite_unavailable_competitor_is_declared_but_never_scored() -
         component_collection_run_ids=(RUN_ID, "recovery-run"),
         input_manifest={
             "unavailable_retailers": ["amazon_us_same_day"],
+            "scope_projections": [
+                {
+                    "id": "00000000-0000-0000-0000-000000000714",
+                    "retailer_id": "amazon_us_same_day",
+                    "projection_kind": "limited_provider_footprint",
+                    "policy_version": "collection-scope-projection-v1",
+                    "projection_checksum": "d" * 64,
+                    "source_audit_id": None,
+                    "source_evidence_checksum": "e" * 64,
+                    "raw_task_count": 114,
+                    "retained_task_count": 89,
+                    "excluded_task_count": 25,
+                    "raw_location_count": 114,
+                    "retained_location_count": 89,
+                    "excluded_location_count": 25,
+                    "raw_task_retention_ratio": "0.780702",
+                    "governed_coverage_ratio": "0.780702",
+                    "minimum_scoreable_coverage": "0.950000",
+                    "scorecard_disposition": "unavailable",
+                    "inventory_checksum": "f" * 64,
+                }
+            ],
             "retailer_collection_readiness": {
                 "amazon_us_same_day": {
                     "status": "unavailable",
@@ -1065,6 +1156,10 @@ async def test_composite_unavailable_competitor_is_declared_but_never_scored() -
     analysis = await result_service.get_by_collection_run(RUN_ID)
     assert analysis.result["competitors"] == ["aldi_us", "amazon_us_same_day"]
     assert analysis.result["source"]["unavailable_retailers"] == ["amazon_us_same_day"]
+    assert (
+        analysis.result["source"]["collection_scope_projections"][0]["governed_coverage_ratio"]
+        == "0.780702"
+    )
     assert all(
         row.get("competitor_id") != "amazon_us_same_day"
         for row in analysis.result.get("comparisons", [])
