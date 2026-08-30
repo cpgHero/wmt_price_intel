@@ -333,9 +333,9 @@ start-rate limit.
 
 Provider 429 evidence is retailer-scoped. After a 429, every replica honors the shared cooldown and
 temporarily paces only that retailer at `METRICSCART_POST_429_RPS` /
-`METRICSCART_POST_429_RPM`. A retailer returns to the normal ceiling only after the configured
-recovery window passes without another 429. Do not disable the adaptive lane to make a run appear
-faster.
+`METRICSCART_POST_429_RPM`. During the configured recovery window, its permitted start interval
+shrinks continuously back toward the normal ceiling; another 429 resets that retailer's ramp. Do
+not disable the adaptive lane to make a run appear faster.
 
 Increase only one replica at a time. After each increase, observe at least one representative run and
 check queue latency, pages/minute, aggregate permit counts, 429s and `paused_until`, retries, lease

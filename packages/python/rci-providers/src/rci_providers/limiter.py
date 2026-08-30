@@ -199,12 +199,14 @@ class PostgresProviderLimiter:
             return 0
 
     def _effective_permit_interval(self, now: datetime, last_429_at: datetime | None) -> float:
-        if (
-            last_429_at is not None
-            and (now - last_429_at).total_seconds() < self._post_429_recovery_seconds
-        ):
-            return max(self._permit_interval, self._post_429_permit_interval)
-        return self._permit_interval
+        if last_429_at is None:
+            return self._permit_interval
+        elapsed = max((now - last_429_at).total_seconds(), 0)
+        if elapsed >= self._post_429_recovery_seconds:
+            return self._permit_interval
+        slow_interval = max(self._permit_interval, self._post_429_permit_interval)
+        recovery_progress = elapsed / self._post_429_recovery_seconds
+        return slow_interval - ((slow_interval - self._permit_interval) * recovery_progress)
 
     async def pause(self, seconds: float, scope_key: str | None = None) -> None:
         await self._pause(max(seconds, 0), self._scoped_provider(scope_key))

@@ -90,7 +90,7 @@ def test_postgres_limiter_serializes_permits_under_row_lock() -> None:
     assert "last_429_at" in source
 
 
-def test_postgres_limiter_temporarily_slows_only_after_recent_429() -> None:
+def test_postgres_limiter_gradually_recovers_only_after_recent_429() -> None:
     limiter = PostgresProviderLimiter(
         object(),  # type: ignore[arg-type]
         provider="metricscart",
@@ -104,9 +104,15 @@ def test_postgres_limiter_temporarily_slows_only_after_recent_429() -> None:
     now = datetime.now(UTC)
 
     assert limiter._effective_permit_interval(now, None) == pytest.approx(0.34)
-    assert limiter._effective_permit_interval(now, now - timedelta(minutes=5)) == pytest.approx(
-        60 / 108 * 1.02
+    slow_interval = 60 / 108 * 1.02
+    normal_interval = 0.34
+    assert limiter._effective_permit_interval(now, now) == pytest.approx(slow_interval)
+    assert limiter._effective_permit_interval(now, now - timedelta(minutes=15)) == pytest.approx(
+        (slow_interval + normal_interval) / 2
+    )
+    assert limiter._effective_permit_interval(now, now - timedelta(minutes=29)) < (
+        limiter._effective_permit_interval(now, now - timedelta(minutes=15))
     )
     assert limiter._effective_permit_interval(now, now - timedelta(minutes=31)) == pytest.approx(
-        0.34
+        normal_interval
     )

@@ -61,8 +61,9 @@ Postgres limiter remains the authoritative three-per-second and 180-per-minute b
 
 When a retailer returns HTTP 429, the shared state pauses only that retailer and records the event.
 For 30 minutes after the last 429, that retailer is paced at one start per second and 54 starts per
-minute; retailers without a recent 429 remain at three and 180. Repeated 429s extend the adaptive
-window. This follows the fastest rate the live endpoint actually accepts instead of repeatedly
+minute initially, then ramps continuously back toward three starts per second and 180 per minute;
+retailers without a recent 429 remain at the full ceiling. Repeated 429s reset only that retailer's
+adaptive recovery window. This follows the fastest rate the live endpoint actually accepts instead of repeatedly
 re-entering cooldown at an optimistic catalog ceiling.
 
 ## Execution and reconciliation gates
