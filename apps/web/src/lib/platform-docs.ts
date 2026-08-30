@@ -87,7 +87,7 @@ const liveSearchLastVerified = "August 30, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.78",
+  version: "1.3.79",
   lastVerified: liveSearchLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2606,7 +2606,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "3. Stage deterministic read models",
               detail:
-                "The worker stages one compact Price Intelligence catalog per configured retailer, the three default Price Architecture matrices, and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. Retailer catalogs build one at a time to protect interactive API readiness. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
+                "The worker stages one compact Price Intelligence catalog per governed scoreable retailer, the three default Price Architecture matrices, and one Competitive Portfolio for every configured comparison basis at 1, 3, and 5 miles. The publication plan always uses canonical retailer IDs from the report's governed retailer scope; display labels such as ALDI are never used as service keys. A retailer explicitly classified unavailable remains in audit provenance but receives no catalog or scorecard. Retailer catalogs build one at a time to protect interactive API readiness. Completed scopes survive an automatic retry, so successful work is not repeated unnecessarily.",
             },
             {
               title: "4. Run the semantic trust gate",
@@ -2891,6 +2891,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-30",
+              "Implemented and release-tested; production deployment and blocked-job retry pending",
+              "Report publication now keys Price Intelligence catalog materialization by canonical governed retailer IDs rather than presentation labels.",
+              "The publication planner reads retailer-scope IDs, fails closed when canonical scope is missing or inconsistent, and excludes explicitly unavailable competitors while retaining the benchmark and all scoreable retailers. This corrects the Banana materialization failure where display label ALDI was passed to the aldi_us-keyed service. Eight focused scope tests and 26 publication, Price, and worker tests pass. The existing trusted Banana report remains active; no source collection, provider call, AI call, match decision, metric, or predecessor report changed. The blocked successor will be retried only after the API hotfix is deployed and healthy.",
+            ],
             [
               "2026-08-30",
               "Implemented and locally test-verified; PostgreSQL CI, deployment, and any provider call pending",
