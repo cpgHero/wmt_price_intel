@@ -18,10 +18,14 @@ credit ceilings.
 | Fresh Bananas | `f2e876dc-afb2-458c-9cbe-2cf02472b923` | 18,437 | 20,000 |
 | Fresh Fluid Milk | `d0409065-cc9c-4326-a01d-42c335eef42d` | 18,437 | 20,000 |
 | Fresh Shell Eggs | `10f96d03-0064-411a-a2d9-41eec6eec8f9` | 40,789 | 45,000 |
+| Fresh Bananas — Walmart recovery | `b4dae462-a06a-4ea1-95ca-fc1260dff922` | 4,683 | 5,000 |
 
-The combined estimate is 77,663 credits ($155.326). Combined hard ceilings are 85,000 credits
-($170), leaving $30 uncommitted for diagnosed Search-only recovery without allowing the approved
-$200 ceiling to be exceeded.
+The three primary runs estimate 77,663 credits ($155.326). One Walmart-only Banana recovery was
+authorized after four successful preflight responses and one nonbillable provider HTTP 500 caused
+the immutable primary run's Walmart gate to fail. The recovery reuses the frozen geography and has
+a 5,000-credit ($10) hard ceiling; it does not rewrite or retry the failed primary task. Combined
+hard ceilings are now 90,000 credits ($180), leaving $20 uncommitted without allowing the approved
+$200 Search ceiling to be exceeded.
 
 ## Throughput correction
 
@@ -41,6 +45,11 @@ Eligible claims are ranked by collection-run/retailer lane before row locking. E
 takes one eligible task from every lane before taking a second from any lane. This prevents an
 older category or a high-volume retailer from monopolizing rolling slots while preserving global
 preflight priority and `SKIP LOCKED` safety across replicas.
+
+The final claim update also rechecks pending/expired-lease eligibility after row locking. This
+prevents a concurrently selected candidate from being reassigned after another replica has already
+renewed its lease. The candidate set is explicitly materialized before the update. This is the
+billable-call safety boundary for horizontal collection workers.
 
 Production collection uses three worker replicas. Replica IDs are unique and the database-backed
 limiter prevents horizontal scaling from multiplying a retailer quota.
@@ -62,7 +71,7 @@ limiter prevents horizontal scaling from multiplying a retailer quota.
 
 ## Verification
 
-- Collection queue tests: 29 passed; three database-only integration tests skipped locally.
+- Collection queue tests: 15 passed; four database-only integration tests skipped locally.
 - Rolling-refill regression proves a third task begins while the first slow request is still active.
 - Ruff passed for all changed files.
 - Production exposes three healthy worker replicas with unique IDs and shared Postgres permits.

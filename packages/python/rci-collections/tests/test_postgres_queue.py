@@ -5,6 +5,7 @@ import os
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
 from rci_collections.models import (
     CollectionPlan,
@@ -18,12 +19,29 @@ from rci_collections.repository import PostgresCollectionRepository
 from rci_db import DatabaseProbe
 
 
+async def _isolate_claimable_runs(database: DatabaseProbe) -> None:
+    """Keep global queue-claim integration tests independent of prior test fixtures."""
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            text(
+                """
+                UPDATE collection_run
+                SET status = 'cancelled',
+                    cancel_requested_at = COALESCE(cancel_requested_at, now()),
+                    completed_at = COALESCE(completed_at, now())
+                WHERE status IN ('queued', 'running')
+                """
+            )
+        )
+
+
 @pytest.mark.skipif(
     not os.getenv("RCI_TEST_DATABASE_URL"),
     reason="set RCI_TEST_DATABASE_URL to run Postgres SKIP LOCKED integration",
 )
 async def test_postgres_workers_claim_without_duplicates() -> None:
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
     repository = PostgresCollectionRepository(database.engine)
     stable_key = f"postgres-concurrency-{uuid4()}"
     config: dict[str, object] = {
@@ -135,6 +153,7 @@ async def test_postgres_workers_claim_without_duplicates() -> None:
 )
 async def test_postgres_claims_round_robin_across_retailer_lanes() -> None:
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
     repository = PostgresCollectionRepository(database.engine)
     stable_key = f"postgres-retailer-fairness-{uuid4()}"
     config: dict[str, object] = {
@@ -198,6 +217,7 @@ async def test_postgres_claims_round_robin_across_retailer_lanes() -> None:
 )
 async def test_postgres_retailer_gates_release_healthy_retailer_independently() -> None:
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
     repository = PostgresCollectionRepository(database.engine)
     stable_key = f"postgres-retailer-gates-{uuid4()}"
     config: dict[str, object] = {
@@ -305,6 +325,7 @@ async def test_postgres_retailer_gates_release_healthy_retailer_independently() 
 )
 async def test_postgres_claims_eligible_preflight_before_released_bulk_work() -> None:
     database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
     repository = PostgresCollectionRepository(database.engine)
     stable_key = f"postgres-preflight-priority-{uuid4()}"
     config: dict[str, object] = {

@@ -1174,7 +1174,7 @@ class PostgresCollectionRepository:
                                 e.priority, e.created_at, e.id
                      ) AS lane_position
               FROM eligible e
-            ), candidates AS (
+            ), candidates AS MATERIALIZED (
               SELECT t.id
               FROM ranked q
               JOIN collection_task t ON t.id = q.id
@@ -1189,6 +1189,11 @@ class PostgresCollectionRepository:
                 attempt_count = t.attempt_count + 1
             FROM candidates c
             WHERE t.id = c.id
+              AND (
+                (t.status = 'pending' AND t.available_at <= now()) OR
+                (t.status = 'running' AND t.lease_expires_at <= now())
+              )
+              AND t.attempt_count < t.max_attempts
             RETURNING t.*
             """
         )
