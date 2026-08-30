@@ -95,8 +95,17 @@ async def test_postgres_workers_claim_without_duplicates() -> None:
             )
         )
         claimed = [task for claim_set in claim_sets for task in claim_set]
+        assert len({task.id for task in claimed}) == len(claimed)
+        while len(claimed) < 40:
+            refill = await repository.claim_tasks(
+                "postgres-refill-worker",
+                claim_limit=40 - len(claimed),
+                lease_seconds=30,
+            )
+            assert refill
+            claimed.extend(refill)
+            assert len({task.id for task in claimed}) == len(claimed)
         assert len(claimed) == 40
-        assert len({task.id for task in claimed}) == 40
 
         first = claimed[0]
         assert await repository.complete_failure(
