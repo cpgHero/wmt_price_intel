@@ -153,6 +153,181 @@ async def test_multi_keyword_query_expands_tasks_and_cost_without_inflating_loca
     assert len({task.request_fingerprint for task in plan.initial_tasks}) == 2
 
 
+async def test_recovery_gate_excludes_only_preflight_scope_and_preserves_full_geography() -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id=f"walmart-{index}",
+                retailer_id="walmart_us",
+                zipcode=f"90{index:03d}",
+                store_number=str(2400 + index),
+                state="CA",
+                country="USA",
+            )
+            for index in range(6)
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _strawberry_config()
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+            "max_pages_override": 1,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "walmart_us",
+        "country": "USA",
+    }
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["walmart_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+    }
+    baseline = await planner.plan(config)
+    excluded_scope = next(
+        task.location_scope_key for task in baseline.initial_tasks if task.is_preflight
+    )
+
+    recovery_gate = config["availability_gate"]
+    assert isinstance(recovery_gate, dict)
+    recovery_gate.update(
+        {
+            "minimum_successful_samples": 4,
+            "max_transient_nonbillable_failures": 1,
+            "excluded_preflight_location_scope_keys": [excluded_scope],
+        }
+    )
+    recovery = await planner.plan(config)
+
+    assert len(recovery.initial_tasks) == 6
+    excluded_task = next(
+        task for task in recovery.initial_tasks if task.location_scope_key == excluded_scope
+    )
+    assert excluded_task.is_preflight is False
+    assert len([task for task in recovery.initial_tasks if task.is_preflight]) == 5
+    assert recovery.availability_gate == {
+        "enabled": True,
+        "retailer_ids": ["walmart_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+        "minimum_successful_samples": 4,
+        "max_transient_nonbillable_failures": 1,
+        "excluded_preflight_location_scope_keys": [excluded_scope],
+    }
+
+
+@pytest.mark.parametrize(
+    ("gate_override", "expected_minimum", "expected_maximum"),
+    [
+        ({"minimum_successful_samples": 4}, 4, 1),
+        ({"max_transient_nonbillable_failures": 1}, 4, 1),
+    ],
+)
+async def test_recovery_gate_derives_missing_quorum_companion(
+    gate_override: dict[str, int],
+    expected_minimum: int,
+    expected_maximum: int,
+) -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id=f"walmart-{index}",
+                retailer_id="walmart_us",
+                zipcode=f"90{index:03d}",
+                store_number=str(2400 + index),
+                state="CA",
+                country="USA",
+            )
+            for index in range(6)
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _strawberry_config()
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+            "max_pages_override": 1,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "walmart_us",
+        "country": "USA",
+    }
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["walmart_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+        **gate_override,
+    }
+
+    plan = await planner.plan(config)
+
+    assert plan.availability_gate["minimum_successful_samples"] == expected_minimum
+    assert plan.availability_gate["max_transient_nonbillable_failures"] == expected_maximum
+
+
+@pytest.mark.parametrize(
+    "gate_policy",
+    [
+        {"minimum_successful_samples": 4, "max_transient_nonbillable_failures": 1},
+        {"minimum_successful_samples": 1, "max_transient_nonbillable_failures": 4},
+    ],
+)
+async def test_resilient_gate_rejects_policy_larger_than_actual_retailer_sample(
+    gate_policy: dict[str, int],
+) -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id=f"walmart-{index}",
+                retailer_id="walmart_us",
+                zipcode=f"90{index:03d}",
+                store_number=str(2400 + index),
+                state="CA",
+                country="USA",
+            )
+            for index in range(3)
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _strawberry_config()
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_search_zipcode_v2",
+            "enabled": True,
+            "max_pages_override": 1,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "walmart_us",
+        "country": "USA",
+    }
+    config["availability_gate"] = {
+        "enabled": True,
+        "retailer_ids": ["walmart_us"],
+        "sample_size_per_retailer": 5,
+        "max_billable_404_rate": 0.5,
+        **gate_policy,
+    }
+
+    with pytest.raises(ValueError, match="exceeds the 3 available preflight samples"):
+        await planner.plan(config)
+
+
 async def test_non_paginated_retailer_rejects_multiple_pages_before_launch() -> None:
     repository = InMemoryCollectionRepository(
         [

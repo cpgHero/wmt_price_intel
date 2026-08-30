@@ -4,7 +4,8 @@ The deployable topology is six Railway resources in one project, environment, an
 
 - `web`: Next.js production server; the only service with a public domain.
 - `api`: FastAPI control plane on the private network; owns the Alembic pre-deploy migration.
-- `worker`: durable queue consumer; start at exactly one replica.
+- `worker`: durable queue consumer; start a new environment at one replica. The approved August 30
+  live recollection currently runs five replicas after shared-limit and lease-safety verification.
 - `scheduler`: always-on schedule, alert-evaluation, and email-delivery process. Postgres leases make
   it replica-safe, though the initial rollout remains one replica.
 - `postgres`: Railway PostgreSQL, authoritative state and queue.
@@ -224,10 +225,11 @@ bucket needs path style, change this one value to `true` on `api` and `worker`.
 | worker | `/health/live` | `/health/ready` verifies PostgreSQL |
 | scheduler | `/health/live` | `/health/ready` verifies PostgreSQL |
 
-The worker and scheduler host a small dependency-free health server on Railway's `PORT`. A worker
-gets 90 seconds of deployment drain time: SIGTERM stops new claims, while in-flight work finishes or
-its Postgres lease eventually becomes reclaimable. API and web deployments overlap for 20 seconds;
-singleton worker and scheduler deployments do not overlap.
+The worker and scheduler host a small dependency-free health server on Railway's `PORT`. Each worker
+replica gets 90 seconds of deployment drain time: SIGTERM stops new claims, while in-flight work
+finishes or its Postgres lease eventually becomes reclaimable. API and web deployments overlap for
+20 seconds; worker replicas drain independently and the singleton scheduler deployment does not
+overlap.
 
 Python processes emit one-line JSON logs to stdout with Railway deployment/replica metadata. Worker
 task logs include run, task, retailer, location, page, attempt, status, latency, and failure class.
@@ -317,11 +319,12 @@ and memory gates pass.
 
 ## Worker scaling runbook
 
-Railway defaults a service to one replica; explicitly verify one worker replica in Settings → Scale
-before enabling MetricsCart. Keep `METRICSCART_GLOBAL_RPS=2` and `METRICSCART_GLOBAL_RPM=108`
-identical across replicas because every replica shares the same credential-hash budget row. The
-scheduler may also scale after initial validation: schedule, analysis, and email work are leased in
-Postgres and schedule slots/delivery keys are unique.
+Railway defaults a service to one replica; explicitly verify the intended count in Settings → Scale
+before enabling MetricsCart. The August 30 national recollection is intentionally scaled to five
+healthy worker replicas with unique replica IDs. Keep `METRICSCART_GLOBAL_RPS=2` and
+`METRICSCART_GLOBAL_RPM=108` identical across replicas because every replica shares the same
+credential-hash budget row. The scheduler may also scale after initial validation: schedule,
+analysis, and email work are leased in Postgres and schedule slots/delivery keys are unique.
 
 An owner-approved production collection may raise the shared Search limiter to the provider's
 confirmed retailer-specific ceiling, currently `METRICSCART_GLOBAL_RPS=3` and
@@ -330,6 +333,22 @@ it prevents a slow retailer from consuming every async task slot while another r
 quota. `WORKER_CLAIM_LIMIT` and `METRICSCART_MAX_CONNECTIONS` must be large enough to accommodate
 the sum of independently active retailer lanes; increasing them never changes the database-backed
 start-rate limit.
+
+Migration `0049_collection_gate_resilience`, the compatible API, and every worker replica must be on
+the same release before launching a definition that uses resilient availability gates. The policy is
+opt-in: `minimum_successful_samples` sets the required quorum and
+`max_transient_nonbillable_failures` caps tolerated retry-exhausted zero-credit `provider_5xx`,
+`timeout`, `network`, and `rate_limit` samples. Hard failures and the configured billable-404 rate
+remain fail-closed. `excluded_preflight_location_scope_keys` rotates exact scopes out of preflight
+only; those scopes stay in the frozen full collection, and the planner refuses a definition that
+cannot supply the required sample count. Definitions without the quorum fields retain the legacy
+fail-on-any-terminal-non-404 behavior.
+
+The same failure boundary applies after the gate. A terminal non-preflight failure is warning-only
+only when it is zero-credit and in that explicit transient whitelist; with at least one useful
+success, the run may finish `completed_with_warnings`. Hard and billable non-404 failures remain
+fatal; billable 404s retain their separate threshold and warning behavior. Never broaden the
+whitelist merely to make a run appear complete.
 
 Provider 429 evidence is retailer-scoped. After a 429, every replica honors the shared cooldown and
 temporarily paces only that retailer at `METRICSCART_POST_429_RPS` /

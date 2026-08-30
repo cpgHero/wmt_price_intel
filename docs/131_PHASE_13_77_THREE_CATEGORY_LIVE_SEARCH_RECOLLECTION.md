@@ -51,7 +51,7 @@ prevents a concurrently selected candidate from being reassigned after another r
 renewed its lease. The candidate set is explicitly materialized before the update. This is the
 billable-call safety boundary for horizontal collection workers.
 
-Production collection uses three worker replicas. Replica IDs are unique and the database-backed
+Production collection uses five worker replicas. Replica IDs are unique and the database-backed
 limiter prevents horizontal scaling from multiplying a retailer quota.
 
 Each replica also caps active work per retailer while retaining a larger total rolling window and
@@ -66,9 +66,40 @@ retailers without a recent 429 remain at the full ceiling. Repeated 429s reset o
 adaptive recovery window. This follows the fastest rate the live endpoint actually accepts instead of repeatedly
 re-entering cooldown at an optimistic catalog ceiling.
 
+## Availability-gate resilience and recovery rotation
+
+The historical gate remains immutable and the default behavior remains strict. A new definition may
+explicitly require a successful-sample quorum and allow a bounded number of retry-exhausted,
+zero-credit transient samples. Only `provider_5xx`, `timeout`, `network`, and `rate_limit` are
+tolerable. Authentication, invalid-request, schema, parse, storage, billable, and unknown failures
+remain hard blockers; the billable-404 ceiling remains independent. All selected samples must
+terminate before the retailer can pass.
+
+An immutable recovery may exclude exact location-scope keys from preflight designation. The planner
+rotates in the next deterministic fingerprints and fails planning if too few samples remain. The
+excluded location is still collected in the full frozen geography; this control cannot hide a store,
+rewrite a failed task, or suppress its final evidence.
+
+The Banana Walmart replacement policy is five samples, a quorum of four successful samples, and at
+most one tolerated transient nonbillable failure. It rotates ZIP `60430` / store `5404` out of the
+preflight sample because that exact scope exhausted five zero-credit provider-500 attempts. The four
+previous HTTP-200 controls remain samples and ZIP `32224` / store `1172` is the deterministic
+replacement. Migration `0049_collection_gate_resilience`, the compatible API, and all five workers
+must be deployed before this definition may launch.
+
+The terminal bulk-run rule uses the same narrow boundary. If useful work succeeded, a
+retry-exhausted non-preflight failure may produce `completed_with_warnings` only when it is
+zero-credit and in the explicit transient whitelist. Hard and billable non-404 failures remain
+fatal; billable 404s retain their separate threshold and warning behavior. This preserves nearly
+complete useful evidence without relabeling an authentication, contract, storage, or paid failure
+as harmless.
+
 ## Execution and reconciliation gates
 
 1. Each retailer must pass its own five-call availability gate before its bulk tasks are released.
+   Legacy definitions require every sample to avoid a terminal non-404 failure. An explicitly
+   configured resilient definition must satisfy its successful-sample quorum, transient-failure
+   ceiling, independent 404 ceiling, and zero-hard-failure rule.
 2. A failed retailer is isolated; healthy retailers continue concurrently.
 3. HTTP 200 and 404 responses are billable. Billable 404s are not retried blindly.
 4. Actual credits are reconciled from durable task evidence against each run ceiling and the
@@ -83,9 +114,12 @@ re-entering cooldown at an optimistic catalog ceiling.
 
 ## Verification
 
-- Collection queue tests: 15 passed; four database-only integration tests skipped locally.
+- Targeted collection, contract, API, and gate tests: 85 passed; five database-only tests skipped
+  locally because `RCI_TEST_DATABASE_URL` was unavailable.
 - Rolling-refill regression proves a third task begins while the first slow request is still active.
-- Ruff passed for all changed files.
-- Production exposes three healthy worker replicas with unique IDs and shared Postgres permits.
+- Ruff, mypy across 152 files, web TypeScript type checking, 91 normative JSON-document validation,
+  and offline Alembic upgrade SQL through `0049_gate_resilience` passed.
+- Production exposes five healthy worker replicas with unique IDs and shared Postgres permits. The
+  gate-resilience release and migration remain deployment prerequisites for the replacement run.
 - Final run totals, failure manifests, spend, artifact completeness, and downstream readiness remain
   pending until all three runs reach terminal state.

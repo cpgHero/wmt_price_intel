@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from rci_collections.models import (
+    TRANSIENT_NONBILLABLE_FAILURE_CLASSES,
     BudgetExceededError,
     CollectionPlan,
     DefinitionRecord,
@@ -196,6 +197,12 @@ class InMemoryCollectionRepository:
                 self._insert_task(run.id, seed, now)
             if plan.availability_gate:
                 maximum = float(plan.availability_gate.get("max_billable_404_rate", 0.5))
+                minimum_successful_samples = plan.availability_gate.get(
+                    "minimum_successful_samples"
+                )
+                max_transient_failures = plan.availability_gate.get(
+                    "max_transient_nonbillable_failures"
+                )
                 for retailer_id in sorted(
                     {seed.retailer_id for seed in plan.initial_tasks if seed.is_preflight}
                 ):
@@ -212,7 +219,19 @@ class InMemoryCollectionRepository:
                         successful_samples=0,
                         not_found_samples=0,
                         other_failure_samples=0,
+                        transient_nonbillable_failure_samples=0,
+                        hard_failure_samples=0,
                         maximum_404_rate=maximum,
+                        minimum_successful_samples=(
+                            int(minimum_successful_samples)
+                            if minimum_successful_samples is not None
+                            else None
+                        ),
+                        max_transient_nonbillable_failures=(
+                            int(max_transient_failures)
+                            if max_transient_failures is not None
+                            else None
+                        ),
                         reason=None,
                         resolved_at=None,
                     )
@@ -441,6 +460,22 @@ class InMemoryCollectionRepository:
             not_found_samples=sum(task.http_status == 404 for task in sample),
             other_failure_samples=sum(
                 task.status == "failed" and task.http_status != 404 for task in sample
+            ),
+            transient_nonbillable_failure_samples=sum(
+                task.status == "failed"
+                and task.http_status != 404
+                and task.billable_credits == 0
+                and task.failure_class in TRANSIENT_NONBILLABLE_FAILURE_CLASSES
+                for task in sample
+            ),
+            hard_failure_samples=sum(
+                task.status == "failed"
+                and task.http_status != 404
+                and not (
+                    task.billable_credits == 0
+                    and task.failure_class in TRANSIENT_NONBILLABLE_FAILURE_CLASSES
+                )
+                for task in sample
             ),
         )
 
@@ -770,11 +805,30 @@ class InMemoryCollectionRepository:
             current = self._gate_with_counts(gate, tasks)
             maximum_not_found = int(current.maximum_404_rate * current.sample_size)
             reason = None
-            if current.other_failure_samples:
+            minimum_successful = current.minimum_successful_samples
+            resilient_policy = minimum_successful is not None
+            if current.hard_failure_samples:
+                reason = f"{current.hard_failure_samples} hard non-404 failure(s)"
+            elif not resilient_policy and current.other_failure_samples:
                 reason = f"{current.other_failure_samples} terminal non-404 failure(s)"
+            elif resilient_policy and current.transient_nonbillable_failure_samples > int(
+                current.max_transient_nonbillable_failures or 0
+            ):
+                reason = (
+                    f"{current.transient_nonbillable_failure_samples} transient nonbillable "
+                    "failure(s) exceeded "
+                    f"{int(current.max_transient_nonbillable_failures or 0)}"
+                )
             elif current.not_found_samples > maximum_not_found:
                 rate = current.not_found_samples / current.sample_size
                 reason = f"404 rate {rate:.3f} exceeded {current.maximum_404_rate:.3f}"
+            elif minimum_successful is not None and (
+                current.successful_samples + current.open_samples < minimum_successful
+            ):
+                reason = (
+                    f"successful sample quorum {current.successful_samples}/"
+                    f"{minimum_successful} cannot be met"
+                )
             status = "failed" if reason else ("passed" if current.open_samples == 0 else "pending")
             if status == "pending":
                 continue
@@ -816,14 +870,18 @@ class InMemoryCollectionRepository:
         elif any(task.status == "failed" for task in tasks):
             failures = [task for task in tasks if task.status == "failed"]
             critical_failures = [task for task in failures if not task.is_preflight]
-            only_billable_unavailable = all(
-                task.http_status == 404 and task.failure_class == "invalid_request"
+            only_warning_failures = all(
+                (task.http_status == 404 and task.failure_class == "invalid_request")
+                or (
+                    task.billable_credits == 0
+                    and task.failure_class in TRANSIENT_NONBILLABLE_FAILURE_CLASSES
+                )
                 for task in critical_failures
             )
             status = (
                 "completed_with_warnings"
                 if (
-                    (not critical_failures or only_billable_unavailable)
+                    (not critical_failures or only_warning_failures)
                     and any(task.status == "succeeded" for task in tasks)
                 )
                 else "failed"

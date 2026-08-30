@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,39 @@ def test_walmart_and_aldi_requests_preserve_string_store_ids() -> None:
     }
     assert aldi.path == "/mc/new_aldi/serp/zipcode"
     assert aldi.params["store"] == "36873"
+
+
+def test_walmart_owner_control_request_is_constructed_exactly() -> None:
+    task = replace(
+        _task(
+            retailer_id="walmart_us",
+            adapter_id="metricscart_walmart_search_zipcode_v2",
+            store_number="2464",
+        ),
+        location_scope_key="location:walmart-2464",
+        zipcode="90020",
+        page_number=1,
+        request_payload={
+            "keyword": "bananas",
+            "sort": "Best Match",
+            "request_overrides": {},
+        },
+    )
+
+    request = (
+        MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+        .get("metricscart_walmart_search_zipcode_v2")
+        .build_request(task)
+    )
+
+    assert request.path == "/mc/walmart/search/zipcode/v2/"
+    assert request.params == {
+        "keyword": "bananas",
+        "zipcode": "90020",
+        "store": "2464",
+        "page": 1,
+        "sort": "Best Match",
+    }
 
 
 def test_amazon_requires_and_renders_same_day_url_context() -> None:

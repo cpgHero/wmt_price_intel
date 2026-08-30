@@ -65,6 +65,9 @@ export type RetailCompetitiveIntelligenceCollectionDefinition = {
     retailer_ids: string[];
     sample_size_per_retailer: number;
     max_billable_404_rate: number;
+    minimum_successful_samples?: number;
+    max_transient_nonbillable_failures?: number;
+    excluded_preflight_location_scope_keys?: string[];
   } | null;
   schedule?: {
     [k: string]: unknown;

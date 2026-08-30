@@ -730,7 +730,11 @@ export interface RetailerGateProgress {
   successful_samples: number;
   not_found_samples: number;
   other_failure_samples: number;
+  transient_nonbillable_failure_samples: number;
+  hard_failure_samples: number;
   maximum_404_rate: number;
+  minimum_successful_samples: number | null;
+  max_transient_nonbillable_failures: number | null;
   reason: string | null;
   resolved_at: string | null;
 }

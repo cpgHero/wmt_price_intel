@@ -11,6 +11,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from rci_collections.models import (
+    TRANSIENT_NONBILLABLE_FAILURE_CLASSES,
     BudgetExceededError,
     CollectionPlan,
     CostEstimate,
@@ -772,6 +773,12 @@ class PostgresCollectionRepository:
                 )
                 if plan.availability_gate:
                     maximum = float(plan.availability_gate.get("max_billable_404_rate", 0.5))
+                    minimum_successful_samples = plan.availability_gate.get(
+                        "minimum_successful_samples"
+                    )
+                    max_transient_failures = plan.availability_gate.get(
+                        "max_transient_nonbillable_failures"
+                    )
                     sample_counts: dict[str, int] = {}
                     for seed in plan.initial_tasks:
                         if seed.is_preflight:
@@ -784,10 +791,14 @@ class PostgresCollectionRepository:
                                 """
                                 INSERT INTO collection_retailer_gate (
                                   collection_run_id, retailer_id, status,
-                                  sample_size, maximum_404_rate
+                                  sample_size, maximum_404_rate,
+                                  minimum_successful_samples,
+                                  max_transient_nonbillable_failures
                                 ) VALUES (
                                   CAST(:collection_run_id AS uuid), :retailer_id,
-                                  'pending', :sample_size, :maximum_404_rate
+                                  'pending', :sample_size, :maximum_404_rate,
+                                  :minimum_successful_samples,
+                                  :max_transient_nonbillable_failures
                                 )
                                 """
                             ),
@@ -797,6 +808,8 @@ class PostgresCollectionRepository:
                                     "retailer_id": retailer_id,
                                     "sample_size": sample_size,
                                     "maximum_404_rate": maximum,
+                                    "minimum_successful_samples": minimum_successful_samples,
+                                    "max_transient_nonbillable_failures": max_transient_failures,
                                 }
                                 for retailer_id, sample_size in sorted(sample_counts.items())
                             ],
@@ -1061,7 +1074,27 @@ class PostgresCollectionRepository:
                                  WHERE t.status = 'failed'
                                    AND t.http_status IS DISTINCT FROM 404
                                )::integer AS other_failure_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                                   AND t.billable_credits = 0
+                                   AND t.failure_class = ANY(
+                                     CAST(:transient_failure_classes AS text[])
+                                   )
+                               )::integer AS transient_nonbillable_failure_samples,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                                   AND NOT (
+                                     t.billable_credits = 0
+                                     AND COALESCE(t.failure_class, '') = ANY(
+                                       CAST(:transient_failure_classes AS text[])
+                                     )
+                                   )
+                               )::integer AS hard_failure_samples,
                                g.maximum_404_rate::float AS maximum_404_rate,
+                               g.minimum_successful_samples,
+                               g.max_transient_nonbillable_failures,
                                g.reason, g.resolved_at
                         FROM collection_retailer_gate g
                         LEFT JOIN collection_task t
@@ -1073,7 +1106,10 @@ class PostgresCollectionRepository:
                         ORDER BY g.retailer_id
                         """
                     ),
-                    {"run_id": run_id},
+                    {
+                        "run_id": run_id,
+                        "transient_failure_classes": sorted(TRANSIENT_NONBILLABLE_FAILURE_CLASSES),
+                    },
                 )
             ).mappings()
             retailer_gates = tuple(RetailerGateProgress(**dict(row)) for row in gate_rows)
@@ -1706,14 +1742,37 @@ class PostgresCollectionRepository:
                         """
                         SELECT g.retailer_id, g.status, g.sample_size,
                                g.maximum_404_rate::float AS maximum_404_rate,
+                               g.minimum_successful_samples,
+                               g.max_transient_nonbillable_failures,
                                count(t.id) FILTER (
                                  WHERE t.status IN ('pending', 'running')
                                )::integer AS open,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'succeeded'
+                               )::integer AS successful,
                                count(t.id) FILTER (WHERE t.http_status = 404)::integer AS not_found,
                                count(t.id) FILTER (
                                  WHERE t.status = 'failed'
                                    AND t.http_status IS DISTINCT FROM 404
-                               )::integer AS other_failures
+                               )::integer AS other_failures,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                                   AND t.billable_credits = 0
+                                   AND t.failure_class = ANY(
+                                     CAST(:transient_failure_classes AS text[])
+                                   )
+                               )::integer AS transient_failures,
+                               count(t.id) FILTER (
+                                 WHERE t.status = 'failed'
+                                   AND t.http_status IS DISTINCT FROM 404
+                                   AND NOT (
+                                     t.billable_credits = 0
+                                     AND COALESCE(t.failure_class, '') = ANY(
+                                       CAST(:transient_failure_classes AS text[])
+                                     )
+                                   )
+                               )::integer AS hard_failures
                         FROM collection_retailer_gate g
                         LEFT JOIN collection_task t
                           ON t.collection_run_id = g.collection_run_id
@@ -1724,7 +1783,10 @@ class PostgresCollectionRepository:
                         ORDER BY g.retailer_id
                         """
                     ),
-                    {"run_id": run_id},
+                    {
+                        "run_id": run_id,
+                        "transient_failure_classes": sorted(TRANSIENT_NONBILLABLE_FAILURE_CLASSES),
+                    },
                 )
             )
             .mappings()
@@ -1737,14 +1799,31 @@ class PostgresCollectionRepository:
             maximum = float(summary["maximum_404_rate"])
             not_found = int(summary["not_found"])
             other_failures = int(summary["other_failures"])
+            transient_failures = int(summary["transient_failures"])
+            hard_failures = int(summary["hard_failures"])
+            successful = int(summary["successful"])
             open_samples = int(summary["open"])
             maximum_not_found = int(maximum * sample_size)
+            minimum_successful = summary["minimum_successful_samples"]
+            max_transient = summary["max_transient_nonbillable_failures"]
+            resilient_policy = minimum_successful is not None
             reason: str | None = None
-            if other_failures:
+            if hard_failures:
+                reason = f"{hard_failures} hard non-404 failure(s)"
+            elif not resilient_policy and other_failures:
                 reason = f"{other_failures} terminal non-404 failure(s)"
+            elif resilient_policy and transient_failures > int(max_transient or 0):
+                reason = (
+                    f"{transient_failures} transient nonbillable failure(s) exceeded "
+                    f"{int(max_transient or 0)}"
+                )
             elif not_found > maximum_not_found:
                 rate = not_found / sample_size
                 reason = f"404 rate {rate:.3f} exceeded {maximum:.3f}"
+            elif resilient_policy and successful + open_samples < int(minimum_successful):
+                reason = (
+                    f"successful sample quorum {successful}/{int(minimum_successful)} cannot be met"
+                )
             status = "failed" if reason else ("passed" if open_samples == 0 else "pending")
             if status == "pending":
                 continue
@@ -1859,6 +1938,12 @@ class PostgresCollectionRepository:
                           AND NOT (
                             t.http_status = 404 AND t.failure_class = 'invalid_request'
                           )
+                          AND NOT (
+                            t.billable_credits = 0
+                            AND t.failure_class = ANY(
+                              CAST(:transient_failure_classes AS text[])
+                            )
+                          )
                       ) THEN 'failed'
                       WHEN EXISTS (
                         SELECT 1 FROM collection_task t
@@ -1881,5 +1966,8 @@ class PostgresCollectionRepository:
                   )
                 """
             ),
-            {"run_id": run_id},
+            {
+                "run_id": run_id,
+                "transient_failure_classes": sorted(TRANSIENT_NONBILLABLE_FAILURE_CLASSES),
+            },
         )

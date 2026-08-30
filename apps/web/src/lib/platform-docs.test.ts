@@ -177,6 +177,10 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("30-day policy");
     expect(text).toContain("known third party");
     expect(text).toContain("missing seller");
+    expect(text).toContain("successful-sample quorum");
+    expect(text).toContain("retry-exhausted zero-credit");
+    expect(text).toContain("remains in the complete frozen collection");
+    expect(text).toContain("hard and billable non-404 failures remain fatal");
   });
 
   it("documents source-to-metric authority, grain, and audit lineage", () => {
@@ -224,5 +228,7 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("migration mismatch");
     expect(text).toContain("zero-credit canary");
     expect(text).toContain("separate, immutable run");
+    expect(allText()).toContain("five current replicas");
+    expect(allText()).toContain("migration 0049");
   });
 });

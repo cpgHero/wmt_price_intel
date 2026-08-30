@@ -31,8 +31,31 @@ the definition and creating its run.
 An optional definition-level gate marks a deterministic sample of first-page tasks per configured
 retailer. While the gate is pending, `FOR UPDATE SKIP LOCKED` claims only those sample tasks. The
 remaining tasks are released only when the billable-404 rate is at or below the configured threshold
-and no other terminal provider failure occurred. A failed gate cancels every still-pending non-sample
-task without issuing provider requests; already incurred 2xx/404 credits remain in actual usage.
+and the definition's strict or resilient terminal-failure policy passes. A failed gate cancels every
+still-pending non-sample task without issuing provider requests; already incurred 2xx/404 credits
+remain in actual usage.
+
+The default remains strict for backward compatibility: without an explicit quorum policy, any
+terminal non-404 sample failure fails that retailer's gate. A definition may opt into resilient
+preflight evaluation with `minimum_successful_samples` and
+`max_transient_nonbillable_failures`. Only retry-exhausted, zero-credit `provider_5xx`, `timeout`,
+`network`, or `rate_limit` outcomes may consume that tolerance. Authentication, invalid-request,
+schema, parse, storage, billable, or otherwise unclassified failures remain hard blockers, and the
+configured billable-404 rate remains an independent fail-closed limit. The gate resolves only after
+all selected samples terminate and the successful-sample quorum, transient-failure ceiling, 404
+ceiling, and hard-failure rule all pass.
+
+An immutable recovery definition may list exact
+`excluded_preflight_location_scope_keys`. Exclusion rotates those scopes out of preflight
+designation only; it never removes their full-collection tasks or changes the frozen geography. The
+planner deterministically selects the next eligible fingerprints and rejects a definition when the
+exclusions leave too few samples. This makes a known transient control location replaceable without
+rewriting a prior run or silently avoiding that location in the actual collection.
+
+After preflight, a retry-exhausted non-preflight failure is warning-only only when it is zero-credit
+and belongs to the same explicit transient whitelist. If at least one task succeeded, the run may
+finish `completed_with_warnings`; hard or billable non-preflight failures remain fatal. Billable 404
+warning behavior is unchanged, and every failure remains in the immutable task and credit ledger.
 
 ## Location expansion
 

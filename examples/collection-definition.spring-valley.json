@@ -27,7 +27,7 @@
     "refresh_policy": "frozen"
   },
   "pagination": {"max_pages": 1, "stop_on_empty": true, "stop_on_short_page": false},
-  "availability_gate": {"enabled": true, "retailer_ids": ["walmart_us", "cvs_us", "walgreens_us"], "sample_size_per_retailer": 1, "max_billable_404_rate": 0.5},
+  "availability_gate": {"enabled": true, "retailer_ids": ["walmart_us", "cvs_us", "walgreens_us"], "sample_size_per_retailer": 1, "max_billable_404_rate": 0.5, "minimum_successful_samples": 1, "max_transient_nonbillable_failures": 0, "excluded_preflight_location_scope_keys": []},
   "schedule": {"type": "manual", "cron": null, "timezone": "America/Chicago"},
   "analysis": {"comparison_profiles": ["exact_spec", "compatible_spec"], "enable_ai_fallback": true, "enable_proximity_validation": true},
   "delivery": {"web_report": true, "excel": false, "leadership_email": false, "audit_package": true},

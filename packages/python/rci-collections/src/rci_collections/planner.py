@@ -284,22 +284,91 @@ class CollectionPlanner:
             return {}
         retailer_ids = {str(item) for item in value.get("retailer_ids", [])}
         sample_size = int(value.get("sample_size_per_retailer", 5))
+        if not 1 <= sample_size <= 25:
+            raise ValueError("availability gate sample size must be between 1 and 25")
+        excluded_scope_keys = {
+            str(item).strip()
+            for item in value.get("excluded_preflight_location_scope_keys", [])
+            if str(item).strip()
+        }
+        policy_configured = any(
+            name in value
+            for name in (
+                "minimum_successful_samples",
+                "max_transient_nonbillable_failures",
+            )
+        )
+        minimum_successful_samples: int | None = None
+        max_transient_failures: int | None = None
+        if policy_configured:
+            if "minimum_successful_samples" in value:
+                minimum_successful_samples = int(value["minimum_successful_samples"])
+            else:
+                minimum_successful_samples = max(
+                    sample_size - int(value["max_transient_nonbillable_failures"]), 1
+                )
+            if "max_transient_nonbillable_failures" in value:
+                max_transient_failures = int(value["max_transient_nonbillable_failures"])
+            else:
+                max_transient_failures = sample_size - minimum_successful_samples
+            if not 1 <= minimum_successful_samples <= sample_size:
+                raise ValueError(
+                    "availability gate minimum_successful_samples must be between 1 "
+                    "and sample_size_per_retailer"
+                )
+            if not 0 <= max_transient_failures <= sample_size:
+                raise ValueError(
+                    "availability gate max_transient_nonbillable_failures must be between "
+                    "0 and sample_size_per_retailer"
+                )
         selected: list[str] = []
         for retailer_id in sorted(retailer_ids):
-            candidates = sorted(
+            all_candidates = sorted(
                 (task for task in tasks if task.retailer_id == retailer_id),
                 key=lambda task: (task.request_fingerprint, task.location_scope_key),
             )
+            candidates = [
+                task
+                for task in all_candidates
+                if task.location_scope_key not in excluded_scope_keys
+            ]
+            expected_samples = min(sample_size, len(all_candidates))
+            if policy_configured:
+                assert minimum_successful_samples is not None
+                assert max_transient_failures is not None
+                if minimum_successful_samples > expected_samples:
+                    raise ValueError(
+                        "availability gate minimum_successful_samples exceeds the "
+                        f"{expected_samples} available preflight samples for {retailer_id}"
+                    )
+                if max_transient_failures > expected_samples:
+                    raise ValueError(
+                        "availability gate max_transient_nonbillable_failures exceeds the "
+                        f"{expected_samples} available preflight samples for {retailer_id}"
+                    )
+            if len(candidates) < expected_samples:
+                raise ValueError(
+                    f"availability gate exclusions leave only {len(candidates)} of "
+                    f"{expected_samples} required preflight samples for {retailer_id}"
+                )
             selected.extend(task.request_fingerprint for task in candidates[:sample_size])
         if not selected:
             return {}
-        return {
+        gate: JsonObject = {
             "enabled": True,
             "retailer_ids": sorted(retailer_ids),
             "sample_size_per_retailer": sample_size,
             "max_billable_404_rate": float(value.get("max_billable_404_rate", 0.5)),
             "task_fingerprints": selected,
         }
+        if policy_configured:
+            assert minimum_successful_samples is not None
+            assert max_transient_failures is not None
+            gate["minimum_successful_samples"] = minimum_successful_samples
+            gate["max_transient_nonbillable_failures"] = max_transient_failures
+        if "excluded_preflight_location_scope_keys" in value:
+            gate["excluded_preflight_location_scope_keys"] = sorted(excluded_scope_keys)
+        return gate
 
     @staticmethod
     def _select_store_units(

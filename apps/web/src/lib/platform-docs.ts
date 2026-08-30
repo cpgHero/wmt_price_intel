@@ -435,6 +435,13 @@ export const platformDocumentation: PlatformDocumentation = {
           ],
         },
         {
+          kind: "callout",
+          tone: "attention",
+          title:
+            "Resilient availability gates are release-tested and deployment-gated",
+          text: "Existing definitions remain strict. Migration 0049 adds an opt-in successful-sample quorum and a ceiling for retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples. Hard and billable non-404 failures still block, and the billable-404 ceiling remains independent. Exact location-scope exclusions rotate only the deterministic preflight sample; they never remove that location from the frozen full collection. The compatible migration, API, and all five worker replicas must run the same release before this policy is used in production.",
+        },
+        {
           kind: "list",
           title: "Geography options currently governed",
           items: [
@@ -1541,7 +1548,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "worker",
               "Collection, normalization, analysis, PDP, Product Pack validation, AI, and bounded-concurrency Matching v2 review batches.",
-              "Durable Postgres claims; provider and OpenAI credentials live here.",
+              "Five current replicas; durable Postgres claims and shared provider limits; provider and OpenAI credentials live here.",
             ],
             [
               "scheduler",
@@ -1587,7 +1594,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "Check budget and availability gates",
               detail:
-                "A hard credit cap, daily/monthly budget, retailer-specific availability gate, disabled feature flag, or missing separate PDP/AI approval may intentionally stop work. A failed retailer no longer blocks retailers that passed.",
+                "A hard credit cap, daily/monthly budget, retailer-specific availability gate, disabled feature flag, or missing separate PDP/AI approval may intentionally stop work. A failed retailer no longer blocks retailers that passed. An explicitly configured resilient gate tolerates only its bounded successful-sample quorum and retry-exhausted zero-credit transient whitelist; hard failures and the 404 ceiling still fail closed.",
             },
             {
               title: "Retry through the governed path",
@@ -1757,6 +1764,12 @@ export const platformDocumentation: PlatformDocumentation = {
           tone: "attention",
           title: "Enabled is not the same as universally callable",
           text: "Enabled means the catalogued adapter may be planned and executed. It does not promise that every retailer, category, store, ZIP, or page is currently available from MetricsCart. The immutable run-specific retailer preflight is the authority: each retailer passes, fails, or remains pending independently, and one failed retailer must not contaminate another retailer's plan.",
+        },
+        {
+          kind: "callout",
+          tone: "information",
+          title: "Quorum never hides a location or a paid failure",
+          text: "The release-tested resilient gate is opt-in. It may tolerate only a configured number of retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples while requiring its successful-sample quorum. Authentication, request-contract, schema, parse, storage, billable, and unknown failures remain hard blockers, and 404s retain their separate configured ceiling. A recovery may rotate an exact failed scope out of preflight, but that scope remains in the complete frozen collection and its later result remains immutable evidence.",
         },
         {
           kind: "definitions",
@@ -2120,6 +2133,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "HTTP 404 normally means the retailer page was unavailable in that request context and may still be billable; it is not automatically a bad location-master row.",
             "Schema drift fails closed after the raw response is preserved. It does not become an empty product page or a false zero.",
             "A failed retailer gate does not stop independently valid retailers unless the approved definition requires all-retailer completeness.",
+            "After a gate passes, a terminal bulk-task failure becomes warning-only only when it is zero-credit and in the explicit transient whitelist and at least one useful task succeeded; hard and billable non-404 failures remain fatal, while billable 404s keep their separate threshold and warning behavior.",
             "Walmart Mexico is catalogued but not enabled. Whole Foods Market currently has normalization/Retailer Pack support but no live Search adapter in this registry.",
           ],
         },
@@ -2868,9 +2882,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-30",
-              "Live execution underway; throughput correction release-tested",
-              "Full national Banana, Milk, and Egg API Search recollections launched under a combined owner-approved $200 Search-only ceiling, and collection workers gained rolling slot refill.",
-              "The three primary immutable runs estimate 77,663 credits ($155.326). After four successful Walmart Banana preflight responses and one nonbillable provider HTTP 500 failed that retailer gate, a Walmart-only recovery reused the frozen geography with a 5,000-credit ($10) ceiling instead of rewriting history. Combined per-run ceilings are now $180, leaving $20 uncommitted. Search starts are shared-limit governed at three per second and 180 per minute per retailer, with horizontally scaled workers and unique owners. A completed request refills its slot without waiting for a slow batch peer, claims round-robin collection-run/retailer lanes, and applies a per-replica retailer concurrency ceiling so a slow endpoint cannot consume every slot needed by other retailers. A retailer that returns 429 enters a shared 150-second cooldown, restarts at one start per second and 54 starts per minute, and ramps continuously toward the full ceiling over 30 minutes; another 429 resets only that retailer's ramp. Unaffected retailers remain at the full ceiling. Candidate rows are materialized under SKIP LOCKED and the final update rechecks pending or expired-lease eligibility, preventing a concurrent stale candidate from receiving a second live lease. The expanded HTTP pool changes concurrency only; the Postgres limiter still owns request starts. Durable heartbeats, retailer gates, retry limits, cancellation, budgets, and immutable raw evidence remain intact. No PDP or OpenAI spend is authorized by this phase; final credit and artifact reconciliation remains pending terminal runs.",
+              "Live execution underway; throughput and gate resilience release-tested; gate deployment pending",
+              "Full national Banana, Milk, and Egg API Search recollections launched under a combined owner-approved $200 Search-only ceiling; collection workers gained rolling slot refill, and an opt-in resilient availability-gate policy is ready for deployment.",
+              "The three primary immutable runs estimate 77,663 credits ($155.326). After four successful Walmart Banana preflight responses and one nonbillable provider HTTP 500 failed that retailer gate, an immutable Walmart recovery retained the frozen geography instead of rewriting history. Five healthy production worker replicas use unique owners and shared Postgres permits. Completed requests refill rolling slots, claims rotate across run/retailer lanes, and a per-replica retailer ceiling prevents slow endpoints from consuming every slot. Shared 429 recovery starts at one request per second / 54 per minute and ramps toward three / 180 over 30 minutes. Migration 0049 adds an optional successful-sample quorum, a bounded retry-exhausted zero-credit transient allowance, and exact preflight-only scope rotation; legacy definitions remain strict, hard and billable non-404 failures remain fatal, and 404s keep their independent ceiling and warning behavior. A terminal bulk transient is warning-only only when zero-credit, explicitly whitelisted, and accompanied by useful success. Migration/API/all five workers must run the same release before the Banana replacement launches. Durable heartbeats, cancellation, budgets, immutable tasks/raw evidence, PDP boundaries, and AI boundaries remain intact; final credit and artifact reconciliation remains pending terminal runs.",
             ],
             [
               "2026-08-29",

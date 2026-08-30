@@ -233,7 +233,11 @@ class RetailerGateProgressResponse(BaseModel):
     successful_samples: int
     not_found_samples: int
     other_failure_samples: int
+    transient_nonbillable_failure_samples: int
+    hard_failure_samples: int
     maximum_404_rate: float
+    minimum_successful_samples: int | None
+    max_transient_nonbillable_failures: int | None
     reason: str | None
     resolved_at: datetime | None
 

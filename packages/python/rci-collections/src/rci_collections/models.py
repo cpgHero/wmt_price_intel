@@ -8,6 +8,14 @@ from typing import Any
 
 JsonObject = dict[str, Any]
 
+# These are the retry-exhaustible, nonbillable transport/provider outcomes that
+# an explicitly configured availability-gate quorum may tolerate. The provider
+# client emits `network` (not `network_error`). All other terminal non-404
+# failures remain hard blockers.
+TRANSIENT_NONBILLABLE_FAILURE_CLASSES = frozenset(
+    {"provider_5xx", "timeout", "network", "rate_limit"}
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RetailerCapability:
@@ -265,7 +273,11 @@ class RetailerGateProgress:
     successful_samples: int
     not_found_samples: int
     other_failure_samples: int
+    transient_nonbillable_failure_samples: int
+    hard_failure_samples: int
     maximum_404_rate: float
+    minimum_successful_samples: int | None
+    max_transient_nonbillable_failures: int | None
     reason: str | None
     resolved_at: datetime | None
 

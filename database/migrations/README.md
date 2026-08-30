@@ -59,3 +59,6 @@ partial without discarding task or billing evidence.
 AnalysisResult. Catalogs join the leased report-publication staging and atomic activation flow,
 support server-side product search/facets/paging, and remain derived, reversible, and free of paid
 provider or AI work.
+`0049_gate_resilience` adds nullable, run-scoped successful-sample quorum and transient-nonbillable
+failure ceilings to retailer availability gates. Null preserves the legacy strict gate. The revision
+does not alter frozen tasks, raw evidence, 404 accounting, budgets, or historical gate decisions.

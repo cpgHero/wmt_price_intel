@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -79,6 +80,47 @@ def _client(store: InMemoryRawObjectStore, limiter=None) -> MetricsCartClient:
         limiter or InMemoryProviderLimiter(rps=100, rpm=1000),
         store,
     )
+
+
+@respx.mock
+async def test_walmart_owner_control_request_is_sent_exactly() -> None:
+    payload = json.loads(
+        (REPOSITORY_ROOT / "fixtures" / "api_samples" / "walmart_success.json").read_text()
+    )
+    route = respx.get(f"{BASE_URL}/mc/walmart/search/zipcode/v2/").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    task = replace(
+        _task("metricscart_walmart_search_zipcode_v2", "walmart_us", store="2464"),
+        location_scope_key="location:walmart-2464",
+        zipcode="90020",
+        page_number=1,
+        request_payload={
+            "keyword": "bananas",
+            "sort": "Best Match",
+            "request_overrides": {},
+        },
+    )
+    client = _client(InMemoryRawObjectStore())
+
+    try:
+        await client.fetch(task)
+    finally:
+        await client.close()
+
+    assert route.called
+    request = route.calls.last.request
+    assert request.url.path == "/mc/walmart/search/zipcode/v2/"
+    assert dict(request.url.params) == {
+        "zipcode": "90020",
+        "page": "1",
+        "keyword": "bananas",
+        "store": "2464",
+        "sort": "Best Match",
+        "x-api-key": "test-secret-key",
+    }
+    assert request.headers["accept"] == "application/json"
+    assert request.headers["content-type"] == "application/json"
 
 
 @pytest.mark.parametrize(

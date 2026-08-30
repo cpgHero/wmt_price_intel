@@ -330,6 +330,111 @@ async def test_postgres_retailer_gates_release_healthy_retailer_independently() 
 
 @pytest.mark.skipif(
     not os.getenv("RCI_TEST_DATABASE_URL"),
+    reason="set RCI_TEST_DATABASE_URL to run Postgres resilient-gate integration",
+)
+async def test_postgres_resilient_gate_and_terminal_transient_warning_match_memory() -> None:
+    database = DatabaseProbe(os.environ["RCI_TEST_DATABASE_URL"])
+    await _isolate_claimable_runs(database)
+    repository = PostgresCollectionRepository(database.engine)
+    stable_key = f"postgres-resilient-gate-{uuid4()}"
+    config: dict[str, object] = {
+        "id": stable_key,
+        "name": "Postgres Resilient Gate Test",
+        "enabled": True,
+    }
+    definition = await repository.publish_definition(config, canonical_checksum(config))
+    seeds = tuple(
+        TaskSeed(
+            retailer_id="walmart_us",
+            retailer_location_id=None,
+            adapter_id="fake",
+            location_scope_key=f"location:walmart-{index}",
+            zipcode=f"90{index:03d}",
+            store_number=str(2400 + index),
+            page_number=1,
+            max_pages=1,
+            stop_on_empty=True,
+            stop_on_short_page=False,
+            credits_per_success=1,
+            request_payload={"page": 1, "zipcode": f"90{index:03d}"},
+            request_fingerprint=f"walmart-resilient-{index}",
+            is_preflight=index < 5,
+        )
+        for index in range(6)
+    )
+    plan = CollectionPlan(
+        estimate=CostEstimate(
+            definition_id=stable_key,
+            retailers=(RetailerEstimate("walmart_us", 6, 1, 1, 6, 6),),
+            estimated_total_pages=6,
+            estimated_total_credits=6,
+        ),
+        initial_tasks=seeds,
+        availability_gate={
+            "enabled": True,
+            "retailer_ids": ["walmart_us"],
+            "sample_size_per_retailer": 5,
+            "max_billable_404_rate": 0.5,
+            "minimum_successful_samples": 4,
+            "max_transient_nonbillable_failures": 1,
+        },
+    )
+    try:
+        run = await repository.create_run(definition, plan)
+        for _ in range(4):
+            task = (await repository.claim_tasks("gate-worker", claim_limit=1, lease_seconds=30))[0]
+            assert task.is_preflight
+            assert await repository.complete_success(
+                task.id,
+                "gate-worker",
+                http_status=200,
+                result_count=1,
+                next_task=None,
+            )
+        failed_sample = (
+            await repository.claim_tasks("gate-worker", claim_limit=1, lease_seconds=30)
+        )[0]
+        assert failed_sample.is_preflight
+        assert await repository.complete_failure(
+            failed_sample.id,
+            "gate-worker",
+            failure_class="provider_5xx",
+            error_message="provider 500 exhausted retries",
+            retryable=False,
+            retry_delay_seconds=0,
+            http_status=500,
+            billable=False,
+        )
+        bulk = (await repository.claim_tasks("collection-worker", claim_limit=1, lease_seconds=30))[
+            0
+        ]
+        assert bulk.is_preflight is False
+        assert await repository.complete_failure(
+            bulk.id,
+            "collection-worker",
+            failure_class="provider_5xx",
+            error_message="provider 500 exhausted retries",
+            retryable=False,
+            retry_delay_seconds=0,
+            http_status=500,
+            billable=False,
+        )
+
+        final = await repository.get_run(run.id)
+        monitor = await repository.monitor(run.id)
+        assert final is not None and monitor is not None
+        assert final.availability_gate_status == "passed"
+        assert final.status == "completed_with_warnings"
+        gate = monitor.retailer_gates[0]
+        assert gate.successful_samples == 4
+        assert gate.transient_nonbillable_failure_samples == 1
+        assert gate.hard_failure_samples == 0
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.skipif(
+    not os.getenv("RCI_TEST_DATABASE_URL"),
     reason="set RCI_TEST_DATABASE_URL to run Postgres preflight-priority integration",
 )
 async def test_postgres_claims_eligible_preflight_before_released_bulk_work() -> None:
