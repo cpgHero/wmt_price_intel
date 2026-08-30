@@ -46,6 +46,45 @@ def _checksum(document: dict[str, Any]) -> str:
     return hashlib.sha256(_json(document).encode()).hexdigest()
 
 
+def _canonical_catalog_retailer_ids(report: dict[str, Any]) -> list[str]:
+    """Return canonical retailer IDs from a rendered report view.
+
+    The top-level benchmark and competitor fields are human-readable labels.  All
+    downstream Price Intelligence services are keyed by the canonical IDs in
+    ``retailer_scope``.
+    """
+
+    scope = report.get("retailer_scope")
+    if not isinstance(scope, dict):
+        raise ValueError("Report retailer scope is unavailable for materialization.")
+    benchmark = scope.get("benchmark")
+    competitors = scope.get("competitors")
+    if not isinstance(benchmark, dict) or not str(benchmark.get("id") or "").strip():
+        raise ValueError("Report benchmark retailer ID is unavailable for materialization.")
+    if not isinstance(competitors, list):
+        raise ValueError("Report competitor retailer IDs are unavailable for materialization.")
+    competitor_ids: list[str] = []
+    for competitor in competitors:
+        if not isinstance(competitor, dict) or not str(competitor.get("id") or "").strip():
+            raise ValueError("A report competitor retailer ID is unavailable for materialization.")
+        competitor_ids.append(str(competitor["id"]).strip())
+    scoreable_value = report.get("scoreable_retailers")
+    if scoreable_value is None:
+        scoreable_ids = competitor_ids
+    else:
+        if not isinstance(scoreable_value, list) or any(
+            not isinstance(value, str) or not value.strip() for value in scoreable_value
+        ):
+            raise ValueError("Report scoreable retailer IDs are unavailable for materialization.")
+        scoreable_ids = [value.strip() for value in scoreable_value]
+        unknown = sorted(set(scoreable_ids) - set(competitor_ids))
+        if unknown:
+            raise ValueError(
+                "Report scoreable retailer scope contains unconfigured IDs: " + ", ".join(unknown)
+            )
+    return sorted({str(benchmark["id"]).strip(), *scoreable_ids})
+
+
 def _require_internal_token(provided: str | None) -> None:
     expected = os.getenv("RCI_INTERNAL_SERVICE_TOKEN", "").strip()
     if not expected or not provided or not secrets.compare_digest(expected, provided):
@@ -224,16 +263,13 @@ async def prepare_report_materialization(
             status_code=status.HTTP_409_CONFLICT,
             detail="No governed comparison basis is available for publication.",
         )
-    catalog_retailers = sorted(
-        {
-            str(retailer_id)
-            for retailer_id in [
-                report.get("benchmark_retailer"),
-                *list(report.get("competitors") or []),
-            ]
-            if retailer_id
-        }
-    )
+    try:
+        catalog_retailers = _canonical_catalog_retailer_ids(report)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     plan = {
         "schema_version": "1.0.0-report-materialization-plan",
         "analysis_id": str(job["analysis_id"]),
