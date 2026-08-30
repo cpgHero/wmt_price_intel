@@ -92,7 +92,7 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
                 ) VALUES (
                   CAST(:resolution_id AS uuid), CAST(:organization_id AS uuid),
                   'walmart_us', 'USA', '{}'::jsonb, :checksum, 'ready',
-                  '{"primary":2,"competitor":0}'::jsonb
+                  CAST(:counts AS jsonb)
                 )
                 """
             ),
@@ -102,6 +102,7 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
                 "checksum": canonical_checksum(
                     {"test": stable_key, "locations": ["location:0", "location:1"]}
                 ),
+                "counts": '{"primary":2,"competitor":0}',
             },
         )
         await connection.execute(
@@ -2000,7 +2001,7 @@ async def _complete_bulk_base_fixture(database: DatabaseProbe, run_id: str) -> N
                          md5(t.id::text) || md5(t.id::text), '1.0.0',
                          jsonb_build_object('task_id', t.id::text)
                   FROM collection_task t
-                  WHERE t.collection_run_id::text = :run_id
+                  WHERE t.collection_run_id = CAST(:run_id AS uuid)
                     AND t.location_scope_key NOT IN ('bulk:0', 'bulk:1')
                   RETURNING id, metadata->>'task_id' AS task_id
                 )
@@ -2067,7 +2068,7 @@ async def _complete_bulk_recovery_fixture(database: DatabaseProbe, run_id: str) 
                                  md5(t.id::text) || md5(t.id::text), '1.0.0',
                                  jsonb_build_object('task_id', t.id::text)
                           FROM collection_task t
-                          WHERE t.collection_run_id::text = :run_id
+                          WHERE t.collection_run_id = CAST(:run_id AS uuid)
                           RETURNING id, metadata->>'task_id' AS task_id
                         )
                         UPDATE collection_task t
@@ -2279,7 +2280,7 @@ async def _ensure_concurrency_geography(
                     ) VALUES (
                       CAST(:resolution_id AS uuid), CAST(:organization_id AS uuid),
                       'walmart_us', 'USA', CAST(:request AS jsonb), :checksum,
-                      'ready', '{"primary":0,"competitor":0}'::jsonb
+                      'ready', CAST(:counts AS jsonb)
                     )
                     """
                 ),
@@ -2287,6 +2288,7 @@ async def _ensure_concurrency_geography(
                     "resolution_id": resolution_id,
                     "organization_id": str(definition_row["organization_id"]),
                     "request": '{"fixture":"postgres-composite-concurrency"}',
+                    "counts": '{"primary":0,"competitor":0}',
                     "checksum": canonical_checksum(
                         {
                             "fixture": "postgres-composite-concurrency",
