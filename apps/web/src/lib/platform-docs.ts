@@ -86,7 +86,7 @@ const productionOperationsLastVerified = "August 29, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.75",
+  version: "1.3.76",
   lastVerified: productionOperationsLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1384,8 +1384,8 @@ export const platformDocumentation: PlatformDocumentation = {
         {
           kind: "callout",
           tone: "attention",
-          title: "Current recovery limitation",
-          text: "The 2026-08-29 isolated logical restore passed database, private-object, administrator-boundary, Price, and Competitive acceptance. System Operations displays its operator-attested freshness. Daily and weekly Railway volume backup schedules are active. PITR remains disabled, is not retroactive, and should be enabled only in an observed maintenance window because it can redeploy Postgres.",
+          title: "Current recovery posture",
+          text: "The 2026-08-29 isolated logical restore passed database, private-object, administrator-boundary, Price, and Competitive acceptance. System Operations displays its operator-attested freshness. Daily and weekly Railway volume backup schedules are active. PITR was enabled in an observed maintenance window on 2026-08-29; it is not retroactive, so the retained named backup remains the recovery layer for time before enablement. A forced WAL segment archived successfully with zero failures.",
         },
       ],
     },
@@ -2865,6 +2865,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-29",
+              "PITR and database credential maintenance production-verified",
+              "Railway Postgres PITR was enabled, the database role credential was rotated, and API, worker, and scheduler were bound explicitly to the Postgres service reference.",
+              "All durable queues were idle before maintenance. Railway reports PITR enabled, recovery-bucket wiring, and live availability; PostgreSQL archived a forced WAL segment with zero failures. A fresh database connection, all four web/API health checks, and System Operations passed after redeployment with zero provider or AI calls. OpenAI, MetricsCart, and administrator-password rotation remain intentionally deferred by the owner.",
+            ],
             [
               "2026-08-29",
               "App/bucket credentials rotated and production-verified",

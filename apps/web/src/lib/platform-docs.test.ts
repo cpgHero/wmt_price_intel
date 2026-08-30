@@ -211,7 +211,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.75");
+    expect(platformDocumentation.version).toBe("1.3.76");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -219,7 +219,8 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain(
       "daily and weekly railway volume backup schedules are active",
     );
-    expect(text).toContain("pitr remains disabled");
+    expect(text).toContain("pitr was enabled");
+    expect(text).toContain("forced wal segment archived successfully");
     expect(text).toContain("migration mismatch");
     expect(text).toContain("zero-credit canary");
     expect(text).toContain("separate, immutable run");
