@@ -19,13 +19,16 @@ credit ceilings.
 | Fresh Fluid Milk | `d0409065-cc9c-4326-a01d-42c335eef42d` | 18,437 | 20,000 |
 | Fresh Shell Eggs | `10f96d03-0064-411a-a2d9-41eec6eec8f9` | 40,789 | 45,000 |
 | Fresh Bananas — Walmart recovery | `b4dae462-a06a-4ea1-95ca-fc1260dff922` | 4,683 | 5,000 |
+| Fresh Bananas — resilient Walmart recovery | `b11c9efa-c118-49b0-b6b6-a5045ba06940` | 4,683 | 4,683 |
 
 The three primary runs estimate 77,663 credits ($155.326). One Walmart-only Banana recovery was
 authorized after four successful preflight responses and one nonbillable provider HTTP 500 caused
 the immutable primary run's Walmart gate to fail. The recovery reuses the frozen geography and has
-a 5,000-credit ($10) hard ceiling; it does not rewrite or retry the failed primary task. Combined
-hard ceilings are now 90,000 credits ($180), leaving $20 uncommitted without allowing the approved
-$200 Search ceiling to be exceeded.
+a 5,000-credit ($10) hard ceiling; it does not rewrite or retry the failed primary task. The resilient
+successor adds an exact 4,683-credit ceiling. At its launch, the conservative estimate across the
+batch was 87,029 credits ($174.058), while actual credits plus open work plus the successor projected
+62,638 credits ($125.276). The sum of per-run hard ceilings is 94,683 credits ($189.366), still below
+the approved $200 Search ceiling.
 
 ## Throughput correction
 
@@ -85,7 +88,9 @@ most one tolerated transient nonbillable failure. It rotates ZIP `60430` / store
 preflight sample because that exact scope exhausted five zero-credit provider-500 attempts. The four
 previous HTTP-200 controls remain samples and ZIP `32224` / store `1172` is the deterministic
 replacement. Migration `0049_collection_gate_resilience`, the compatible API, and all five workers
-must be deployed before this definition may launch.
+were deployed before run `b11c9efa-c118-49b0-b6b6-a5045ba06940` launched. Its intended five-sample
+gate included replacement ZIP `32224` / store `1172`, passed, and released all bulk tasks. The known
+bad ZIP `60430` / store `5404` remained a non-preflight task in the full collection.
 
 The terminal bulk-run rule uses the same narrow boundary. If useful work succeeded, a
 retry-exhausted non-preflight failure may produce `completed_with_warnings` only when it is
@@ -119,7 +124,13 @@ as harmless.
 - Rolling-refill regression proves a third task begins while the first slow request is still active.
 - Ruff, mypy across 152 files, web TypeScript type checking, 91 normative JSON-document validation,
   and offline Alembic upgrade SQL through `0049_gate_resilience` passed.
-- Production exposes five healthy worker replicas with unique IDs and shared Postgres permits. The
-  gate-resilience release and migration remain deployment prerequisites for the replacement run.
+- Commit `c6af7b6139738dc65e2ea2328a3d039c863f0406` passed GitHub Actions run `33326968373`,
+  including 17 Playwright tests, real-Postgres upgrade/downgrade/upgrade, and all four containers.
+- Railway deployed API `9e60276c-8b65-4785-b418-5038c23b468d`, worker
+  `4284e6a8-6f88-4139-8faa-cdb005f5b79b`, web `5a27fa39-3cf9-483d-95af-4a12534145f3`,
+  and scheduler `ffecd07a-25cf-49c3-95f8-bc53a038c9da`. Migration `0049_gate_resilience` is current,
+  health/readiness passed, and logs prove five of five unique worker replicas run the new deployment.
+- Resilient recovery run `b11c9efa-c118-49b0-b6b6-a5045ba06940` launched with exactly 4,683
+  approved credits. Its five-sample gate passed and released the Walmart bulk collection.
 - Final run totals, failure manifests, spend, artifact completeness, and downstream readiness remain
   pending until all three runs reach terminal state.

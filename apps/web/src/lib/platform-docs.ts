@@ -436,10 +436,9 @@ export const platformDocumentation: PlatformDocumentation = {
         },
         {
           kind: "callout",
-          tone: "attention",
-          title:
-            "Resilient availability gates are release-tested and deployment-gated",
-          text: "Existing definitions remain strict. Migration 0049 adds an opt-in successful-sample quorum and a ceiling for retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples. Hard and billable non-404 failures still block, and the billable-404 ceiling remains independent. Exact location-scope exclusions rotate only the deterministic preflight sample; they never remove that location from the frozen full collection. The compatible migration, API, and all five worker replicas must run the same release before this policy is used in production.",
+          tone: "success",
+          title: "Resilient availability gates are deployed",
+          text: "Existing definitions remain strict. Migration 0049 adds an opt-in successful-sample quorum and a ceiling for retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples. Hard and billable non-404 failures still block, and the billable-404 ceiling remains independent. Exact location-scope exclusions rotate only the deterministic preflight sample; they never remove that location from the frozen full collection. The migration, compatible API, and all five worker replicas are deployed; the first resilient Walmart gate passed before its bulk tasks were released.",
         },
         {
           kind: "list",
@@ -1769,7 +1768,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Quorum never hides a location or a paid failure",
-          text: "The release-tested resilient gate is opt-in. It may tolerate only a configured number of retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples while requiring its successful-sample quorum. Authentication, request-contract, schema, parse, storage, billable, and unknown failures remain hard blockers, and 404s retain their separate configured ceiling. A recovery may rotate an exact failed scope out of preflight, but that scope remains in the complete frozen collection and its later result remains immutable evidence.",
+          text: "The deployed resilient gate is opt-in. It may tolerate only a configured number of retry-exhausted zero-credit provider_5xx, timeout, network, or rate_limit samples while requiring its successful-sample quorum. Authentication, request-contract, schema, parse, storage, billable, and unknown failures remain hard blockers, and 404s retain their separate configured ceiling. A recovery may rotate an exact failed scope out of preflight, but that scope remains in the complete frozen collection and its later result remains immutable evidence.",
         },
         {
           kind: "definitions",
@@ -2882,9 +2881,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-08-30",
-              "Live execution underway; throughput and gate resilience release-tested; gate deployment pending",
-              "Full national Banana, Milk, and Egg API Search recollections launched under a combined owner-approved $200 Search-only ceiling; collection workers gained rolling slot refill, and an opt-in resilient availability-gate policy is ready for deployment.",
-              "The three primary immutable runs estimate 77,663 credits ($155.326). After four successful Walmart Banana preflight responses and one nonbillable provider HTTP 500 failed that retailer gate, an immutable Walmart recovery retained the frozen geography instead of rewriting history. Five healthy production worker replicas use unique owners and shared Postgres permits. Completed requests refill rolling slots, claims rotate across run/retailer lanes, and a per-replica retailer ceiling prevents slow endpoints from consuming every slot. Shared 429 recovery starts at one request per second / 54 per minute and ramps toward three / 180 over 30 minutes. Migration 0049 adds an optional successful-sample quorum, a bounded retry-exhausted zero-credit transient allowance, and exact preflight-only scope rotation; legacy definitions remain strict, hard and billable non-404 failures remain fatal, and 404s keep their independent ceiling and warning behavior. A terminal bulk transient is warning-only only when zero-credit, explicitly whitelisted, and accompanied by useful success. Migration/API/all five workers must run the same release before the Banana replacement launches. Durable heartbeats, cancellation, budgets, immutable tasks/raw evidence, PDP boundaries, and AI boundaries remain intact; final credit and artifact reconciliation remains pending terminal runs.",
+              "Deployed and production-verified; live execution underway",
+              "Full national Banana, Milk, and Egg API Search recollections run under a combined owner-approved $200 Search-only ceiling; workers use rolling slot refill, and an opt-in resilient Walmart availability gate passed before releasing its bulk tasks.",
+              "The three primary runs estimate 77,663 credits ($155.326). Resilient recovery b11c9efa-c118-49b0-b6b6-a5045ba06940 launched at exactly 4,683 credits; the conservative batch estimate was 87,029 credits ($174.058) and the actual-plus-open projection was 62,638 ($125.276). Its five-sample gate required four successes, allowed at most one retry-exhausted zero-credit transient, rotated ZIP 60430 / store 5404 out of preflight only, included ZIP 32224 / store 1172, passed, and retained the known-bad scope in the full collection. Commit c6af7b6139738dc65e2ea2328a3d039c863f0406 and CI 33326968373 passed 17 Playwright tests, real-Postgres migration round-trip, and all four containers. Railway deployed migration 0049 plus compatible API, web, scheduler, and five of five uniquely identified workers; health/readiness passed. Shared limits, 429 ramp recovery, leases, cancellation, hard caps, immutable tasks/raw evidence, PDP boundaries, and AI boundaries remain intact. Final run totals, failures, credits, artifact completeness, and downstream readiness remain pending terminal runs.",
             ],
             [
               "2026-08-29",
