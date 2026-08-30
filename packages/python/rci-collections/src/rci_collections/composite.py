@@ -3251,7 +3251,7 @@ class PostgresCompositeEvidenceRepository:
                                l.longitude AS frozen_longitude,
                                l.city AS frozen_city,
                                l.state AS frozen_state,
-                               l.eligible AS current_location_eligible
+                               l.collection_eligible AS current_location_eligible
                         FROM collection_task t
                         LEFT JOIN collection_retailer_gate g
                           ON g.collection_run_id = t.collection_run_id

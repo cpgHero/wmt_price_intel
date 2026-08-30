@@ -135,7 +135,9 @@ async def test_historical_import_reaches_generic_analysis_queue_idempotently(
                             SELECT organization_id, 'live_collection_composite',
                                    :stable_key, collection_run_id, product_pack_id,
                                    product_pack_version, analysis_config,
-                                   jsonb_build_object('test', :manifest_checksum),
+                                   jsonb_build_object(
+                                     'test', CAST(:manifest_checksum AS text)
+                                   ),
                                    :manifest_checksum, total_rows, 'ready', now(), 2,
                                    'composite-evidence-v1', 'ready'
                             FROM analysis_input_set WHERE id::text = :source_input_set_id
@@ -164,7 +166,9 @@ async def test_historical_import_reaches_generic_analysis_queue_idempotently(
                             SELECT organization_id, 'live_collection_composite',
                                    :stable_key, collection_run_id, product_pack_id,
                                    product_pack_version, analysis_config,
-                                   jsonb_build_object('test', :manifest_checksum),
+                                   jsonb_build_object(
+                                     'test', CAST(:manifest_checksum AS text)
+                                   ),
                                    :manifest_checksum, 0, 'failed', now(), 3,
                                    'composite-evidence-v1', 'blocked'
                             FROM analysis_input_set WHERE id::text = :source_input_set_id
