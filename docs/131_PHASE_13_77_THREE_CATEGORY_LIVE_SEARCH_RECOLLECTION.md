@@ -198,6 +198,10 @@ generation suffixes apply to every generation after the first, preventing analys
 The composite also asserts that every selected usable artifact was inserted and that terminal exact
 recovery actual credits did not exceed their reserved upper bound.
 
+Scope-integrity checks read the governed `retailer_location.collection_eligible` state while retaining
+the frozen task/location identity in the assembly manifest. A location made ineligible after the
+original collection therefore cannot silently enter a paid recovery or a scorecard.
+
 Recovery control routes require the production administrator token, and approval actors come from
 the authenticated server request rather than request-body claims. A never-launched approval may be
 superseded atomically without double reservation. Once an exact recovery has launched, it cannot be

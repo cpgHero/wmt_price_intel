@@ -263,7 +263,7 @@ async def test_postgres_exact_recovery_launch_is_failure_only_and_idempotent() -
         assert first.task_count == 1
         assert first.maximum_credits == 1
         assert first.availability_gate_status == "skipped"
-        with pytest.raises(ValueError, match="already accounted through its plan"):
+        with pytest.raises(ValueError, match="immutable authorized phase inventory"):
             await composite_repository.attach_run_to_recovery_batch(
                 batch.id, first.collection_run_id
             )
