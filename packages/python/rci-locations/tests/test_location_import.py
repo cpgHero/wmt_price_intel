@@ -101,6 +101,20 @@ def test_provider_safe_store_identifiers_are_collection_eligible() -> None:
     assert aldi.collection_eligible
     assert aldi.collection_eligibility_reason is None
 
+    kroger, _ = transform_row(
+        _row(Provider="kroger", Store_No="01800576", Zip_Code="48160"),
+        catalog,
+    )
+    assert kroger.collection_eligible
+    assert kroger.collection_eligibility_reason is None
+
+    unpadded_kroger, _ = transform_row(
+        _row(Provider="kroger", Store_No="1800576", Zip_Code="48160"),
+        catalog,
+    )
+    assert not unpadded_kroger.collection_eligible
+    assert unpadded_kroger.collection_eligibility_reason == "store_number_not_provider_safe"
+
     legacy_aldi, _ = transform_row(
         _row(Provider="ALDI", Store_No="463-048", Zip_Code="44906"),
         catalog,
@@ -204,6 +218,7 @@ async def test_complete_supplied_location_master_is_country_scoped() -> None:
     assert repository.retailer_counts["target_us"] == 2023
     assert repository.retailer_counts["target__au"] == 124
     assert repository.retailer_counts["target__unknown"] == 1
+    assert repository.retailer_counts["kroger_us"] == 2667
     assert repository.collection_eligible_counts["walmart_us"] == 4683
     assert repository.collection_eligible_counts["aldi_us"] == 2687
     assert repository.collection_eligible_counts["albertsons_us"] == 376
@@ -213,6 +228,11 @@ async def test_complete_supplied_location_master_is_country_scoped() -> None:
     assert repository.collection_eligible_counts["costco_us"] == 652
     assert repository.collection_eligible_counts["cvs_us"] == 9841
     assert repository.collection_eligible_counts["walgreens_us"] == 8980
+    assert repository.collection_eligible_counts["kroger_us"] == 1369
+    assert (
+        repository.retailer_counts["kroger_us"] - repository.collection_eligible_counts["kroger_us"]
+        == 1298
+    )
     assert repository.collection_eligible_counts["target__au"] == 0
     assert repository.collection_eligible_counts["target__unknown"] == 0
     assert "03500995" in repository.kroger_store_numbers

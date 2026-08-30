@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from dataclasses import asdict
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from rci_locations.eligibility import eligibility_plan_sha256, eligibility_snapshot_sha256
 from rci_locations.models import (
+    EligibilityReconciliationPlan,
     ImportState,
     ImportSummary,
+    LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
     RetailerAlias,
@@ -19,10 +24,49 @@ from rci_locations.models import (
     RetailerDefinition,
 )
 
+LOCATION_POLICY_LOCK_NAMESPACE = 1_381_124_633
+LOCATION_POLICY_LOCK_KEY = 1
+
 
 class PostgresLocationRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    @asynccontextmanager
+    async def location_policy_operation_lock(self) -> AsyncIterator[None]:
+        """Serialize whole imports and eligibility applies across service replicas."""
+
+        async with self._engine.connect() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_lock(:namespace, :lock_key)"),
+                {
+                    "namespace": LOCATION_POLICY_LOCK_NAMESPACE,
+                    "lock_key": LOCATION_POLICY_LOCK_KEY,
+                },
+            )
+            body_error: BaseException | None = None
+            try:
+                yield
+            except BaseException as exc:
+                body_error = exc
+                raise
+            finally:
+                try:
+                    unlocked = await connection.scalar(
+                        text("SELECT pg_advisory_unlock(:namespace, :lock_key)"),
+                        {
+                            "namespace": LOCATION_POLICY_LOCK_NAMESPACE,
+                            "lock_key": LOCATION_POLICY_LOCK_KEY,
+                        },
+                    )
+                    if unlocked is not True:
+                        raise RuntimeError("location policy operation lock was not held")
+                except BaseException:
+                    # A session lock survives a pooled transaction reset. Force-close the
+                    # physical connection if normal unlock cannot be proven.
+                    await connection.invalidate()
+                    if body_error is None:
+                        raise
 
     async def begin_import(self, source_path: str, source_sha256: str) -> str:
         statement = text(
@@ -326,3 +370,197 @@ class PostgresLocationRepository:
         async with self._engine.connect() as connection:
             rows = (await connection.execute(statement, {"limit": limit})).mappings()
             return [ImportState(**dict(row)) for row in rows]
+
+    @staticmethod
+    async def _location_eligibility_states(
+        connection: AsyncConnection,
+        retailer_ids: Sequence[str],
+    ) -> list[LocationEligibilityState]:
+        statement = text(
+            """
+            SELECT id::text AS id, retailer_id, store_number, status,
+                   collection_eligible, collection_eligibility_reason
+            FROM retailer_location
+            WHERE cardinality(CAST(:retailer_ids AS text[])) = 0
+               OR retailer_id = ANY(CAST(:retailer_ids AS text[]))
+            ORDER BY id
+            """
+        )
+        rows = (
+            await connection.execute(statement, {"retailer_ids": list(retailer_ids)})
+        ).mappings()
+        return [LocationEligibilityState(**dict(row)) for row in rows]
+
+    async def list_location_eligibility_states(
+        self,
+        retailer_ids: Sequence[str],
+    ) -> list[LocationEligibilityState]:
+        async with self._engine.connect() as connection:
+            return await self._location_eligibility_states(connection, retailer_ids)
+
+    async def begin_eligibility_reconciliation(
+        self,
+        plan: EligibilityReconciliationPlan,
+        *,
+        requested_by: str,
+        change_reason: str,
+    ) -> str:
+        statement = text(
+            """
+            INSERT INTO location_eligibility_reconciliation_run (
+              catalog_path, catalog_sha256, snapshot_sha256, reviewed_plan_sha256,
+              retailer_ids,
+              requested_by, change_reason, status, scanned_rows, changed_rows,
+              eligible_before, eligible_after, enabled_rows, disabled_rows,
+              reason_counts_before, reason_counts_after, changes
+            ) VALUES (
+              :catalog_path, :catalog_sha256, :snapshot_sha256, :reviewed_plan_sha256,
+              CAST(:retailer_ids AS text[]), :requested_by, :change_reason,
+              'running', :scanned_rows, :changed_rows, :eligible_before,
+              :eligible_after, :enabled_rows, :disabled_rows,
+              CAST(:reason_counts_before AS jsonb),
+              CAST(:reason_counts_after AS jsonb), CAST(:changes AS jsonb)
+            )
+            RETURNING id::text
+            """
+        )
+        parameters = {
+            "catalog_path": plan.catalog_path,
+            "catalog_sha256": plan.catalog_sha256,
+            "snapshot_sha256": plan.snapshot_sha256,
+            "reviewed_plan_sha256": eligibility_plan_sha256(plan),
+            "retailer_ids": list(plan.retailer_ids),
+            "requested_by": requested_by,
+            "change_reason": change_reason,
+            "scanned_rows": plan.scanned_rows,
+            "changed_rows": plan.changed_rows,
+            "eligible_before": plan.eligible_before,
+            "eligible_after": plan.eligible_after,
+            "enabled_rows": plan.enabled_rows,
+            "disabled_rows": plan.disabled_rows,
+            "reason_counts_before": json.dumps(plan.reason_counts_before, sort_keys=True),
+            "reason_counts_after": json.dumps(plan.reason_counts_after, sort_keys=True),
+            "changes": json.dumps(
+                [asdict(change) for change in plan.changes],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        }
+        async with self._engine.begin() as connection:
+            result = await connection.execute(statement, parameters)
+            return str(result.scalar_one())
+
+    async def apply_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        plan: EligibilityReconciliationPlan,
+    ) -> None:
+        async with self._engine.begin() as connection:
+            # Block concurrent location imports while the planned snapshot is rechecked
+            # and the complete correction set is applied atomically.
+            await connection.execute(
+                text("LOCK TABLE retailer_location IN SHARE ROW EXCLUSIVE MODE")
+            )
+            current = await self._location_eligibility_states(
+                connection,
+                plan.retailer_ids,
+            )
+            current_sha256 = eligibility_snapshot_sha256(current)
+            if current_sha256 != plan.snapshot_sha256:
+                raise RuntimeError(
+                    "location eligibility snapshot changed after dry run; rerun reconciliation"
+                )
+
+            if plan.changes:
+                update_statement = text(
+                    """
+                    WITH proposed AS (
+                      SELECT *
+                      FROM jsonb_to_recordset(CAST(:changes AS jsonb)) AS proposed_row(
+                        id uuid,
+                        status text,
+                        before_eligible boolean,
+                        before_reason text,
+                        after_eligible boolean,
+                        after_reason text
+                      )
+                    ), updated AS (
+                      UPDATE retailer_location AS location
+                      SET collection_eligible = proposed.after_eligible,
+                          collection_eligibility_reason = proposed.after_reason
+                      FROM proposed
+                      WHERE location.id = proposed.id
+                        AND location.status IS NOT DISTINCT FROM proposed.status
+                        AND location.collection_eligible IS NOT DISTINCT FROM
+                            proposed.before_eligible
+                        AND location.collection_eligibility_reason IS NOT DISTINCT FROM
+                            proposed.before_reason
+                      RETURNING location.id
+                    )
+                    SELECT count(*)::integer FROM updated
+                    """
+                )
+                changes = [
+                    {
+                        "id": change.id,
+                        "status": change.status,
+                        "before_eligible": change.before_eligible,
+                        "before_reason": change.before_reason,
+                        "after_eligible": change.after_eligible,
+                        "after_reason": change.after_reason,
+                    }
+                    for change in plan.changes
+                ]
+                updated = int(
+                    (
+                        await connection.execute(
+                            update_statement,
+                            {
+                                "changes": json.dumps(
+                                    changes,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                    sort_keys=True,
+                                )
+                            },
+                        )
+                    ).scalar_one()
+                )
+                if updated != plan.changed_rows:
+                    raise RuntimeError(
+                        "location eligibility update count did not match the audited plan: "
+                        f"expected {plan.changed_rows}, updated {updated}"
+                    )
+
+            completed = await connection.execute(
+                text(
+                    """
+                    UPDATE location_eligibility_reconciliation_run
+                    SET status = 'completed', completed_at = now()
+                    WHERE id = CAST(:id AS uuid) AND status = 'running'
+                    RETURNING id
+                    """
+                ),
+                {"id": audit_run_id},
+            )
+            if completed.scalar_one_or_none() is None:
+                raise RuntimeError("eligibility reconciliation audit run is not applyable")
+
+    async def fail_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        error_message: str,
+    ) -> None:
+        statement = text(
+            """
+            UPDATE location_eligibility_reconciliation_run
+            SET status = 'failed', error_message = :error_message, completed_at = now()
+            WHERE id = CAST(:id AS uuid) AND status = 'running'
+            """
+        )
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                statement,
+                {"id": audit_run_id, "error_message": error_message[:4_000]},
+            )

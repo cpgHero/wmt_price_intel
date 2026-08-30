@@ -140,6 +140,29 @@ class RetailerCatalog:
     def static_retailers(self) -> tuple[ResolvedRetailer, ...]:
         return tuple(self._static[key] for key in sorted(self._static))
 
+    def retailer_ids(self) -> frozenset[str]:
+        """Return the immutable catalogued retailer-ID universe."""
+
+        return frozenset(self._static)
+
+    def collection_eligibility_for_retailer_id(
+        self,
+        retailer_id: str,
+        *,
+        store_number: str,
+        status: str | None,
+    ) -> tuple[bool, str | None]:
+        """Evaluate a persisted row against the current catalog policy."""
+
+        resolved = self._static.get(retailer_id)
+        if resolved is None:
+            return False, "retailer_not_enabled_for_collection"
+        return self.collection_eligibility(
+            resolved,
+            store_number=store_number,
+            status=status,
+        )
+
     def collection_eligibility(
         self,
         resolved: ResolvedRetailer,

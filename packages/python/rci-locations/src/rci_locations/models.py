@@ -117,4 +117,50 @@ class ImportState:
     completed_at: datetime | None
 
 
+@dataclass(frozen=True, slots=True)
+class LocationEligibilityState:
+    """Persisted eligibility inputs and decision for one location row."""
+
+    id: str
+    retailer_id: str
+    store_number: str
+    status: str | None
+    collection_eligible: bool
+    collection_eligibility_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class LocationEligibilityChange:
+    """One catalog-driven correction with its optimistic-lock inputs."""
+
+    id: str
+    retailer_id: str
+    store_number: str
+    status: str | None
+    before_eligible: bool
+    before_reason: str | None
+    after_eligible: bool
+    after_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class EligibilityReconciliationPlan:
+    """Complete deterministic dry-run result before an optional apply."""
+
+    catalog_path: str
+    catalog_sha256: str
+    snapshot_sha256: str
+    retailer_ids: tuple[str, ...]
+    scanned_rows: int
+    changed_rows: int
+    eligible_before: int
+    eligible_after: int
+    enabled_rows: int
+    disabled_rows: int
+    reason_counts_before: dict[str, int]
+    reason_counts_after: dict[str, int]
+    changes: tuple[LocationEligibilityChange, ...]
+    audit_run_id: str | None = None
+
+
 JsonObject = dict[str, Any]

@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 rci-locations = "rci_locations.cli:main"
+rci-location-eligibility = "rci_locations.eligibility_cli:main"
 
 [tool.uv.sources]
 rci-core = { workspace = true }
@@ -19,4 +20,3 @@ rci-db = { workspace = true }
 [build-system]
 requires = ["hatchling==1.29.0"]
 build-backend = "hatchling.build"
-

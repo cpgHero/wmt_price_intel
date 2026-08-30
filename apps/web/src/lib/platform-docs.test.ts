@@ -181,6 +181,11 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("retry-exhausted zero-credit");
     expect(text).toContain("remains in the complete frozen collection");
     expect(text).toContain("hard and billable non-404 failures remain fatal");
+    expect(text).toContain("canonical eight-digit store");
+    expect(text).toContain("eligibility policy reconciliation");
+    expect(text).toContain("rejects a stale snapshot");
+    expect(text).toContain("reviewed-plan");
+    expect(text).toContain("whole-operation lock");
   });
 
   it("documents source-to-metric authority, grain, and audit lineage", () => {
@@ -215,7 +220,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.77");
+    expect(platformDocumentation.version).toBe("1.3.78");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");

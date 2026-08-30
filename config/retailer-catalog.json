@@ -226,14 +226,14 @@
       "location_dimension": "store_zip",
       "location_collection_policy": {
         "eligible_statuses": ["active"],
-        "store_number_pattern": "^[0-9]+$"
+        "store_number_pattern": "^[0-9]{8}$"
       },
       "required_params": ["keyword", "zipcode", "store", "page"],
       "search_inputs": ["keyword", "url"],
       "supported_params": ["keyword", "url", "zipcode", "store", "page"],
       "status": "enabled",
       "quirks": [
-        "store IDs may contain leading zeros; always strings"
+        "Search requires the provider's canonical eight-digit store ID; preserve leading zeros and keep the value as a string"
       ]
     },
     {

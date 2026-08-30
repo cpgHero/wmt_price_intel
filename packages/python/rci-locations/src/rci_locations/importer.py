@@ -127,6 +127,18 @@ class LocationImporter:
         *,
         authoritative_retailer_ids: set[str] | None = None,
     ) -> ImportSummary:
+        async with self._repository.location_policy_operation_lock():
+            return await self._import_file_locked(
+                source,
+                authoritative_retailer_ids=authoritative_retailer_ids,
+            )
+
+    async def _import_file_locked(
+        self,
+        source: Path,
+        *,
+        authoritative_retailer_ids: set[str] | None = None,
+    ) -> ImportSummary:
         resolved_source = source.resolve()
         checksum = source_sha256(resolved_source)
         import_id = await self._repository.begin_import(str(resolved_source), checksum)

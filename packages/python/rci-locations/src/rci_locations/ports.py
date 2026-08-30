@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
 from rci_locations.models import (
+    EligibilityReconciliationPlan,
     ImportState,
     ImportSummary,
+    LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
     RetailerAlias,
@@ -16,7 +19,11 @@ from rci_locations.models import (
 )
 
 
-class LocationRepository(Protocol):
+class LocationPolicyOperationRepository(Protocol):
+    def location_policy_operation_lock(self) -> AbstractAsyncContextManager[None]: ...
+
+
+class LocationRepository(LocationPolicyOperationRepository, Protocol):
     async def begin_import(self, source_path: str, source_sha256: str) -> str: ...
 
     async def upsert_retailers(
@@ -65,3 +72,30 @@ class LocationReadRepository(Protocol):
     ) -> list[LocationSearchResult]: ...
 
     async def list_imports(self, limit: int = 20) -> list[ImportState]: ...
+
+
+class LocationEligibilityRepository(LocationPolicyOperationRepository, Protocol):
+    async def list_location_eligibility_states(
+        self,
+        retailer_ids: Sequence[str],
+    ) -> list[LocationEligibilityState]: ...
+
+    async def begin_eligibility_reconciliation(
+        self,
+        plan: EligibilityReconciliationPlan,
+        *,
+        requested_by: str,
+        change_reason: str,
+    ) -> str: ...
+
+    async def apply_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        plan: EligibilityReconciliationPlan,
+    ) -> None: ...
+
+    async def fail_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        error_message: str,
+    ) -> None: ...

@@ -81,13 +81,13 @@ export const platformDocGroups: ReadonlyArray<{
 
 const lastVerified = "August 28, 2026";
 const aiIntegrationLastVerified = "August 29, 2026";
-const integrationLineageLastVerified = "August 29, 2026";
+const integrationLineageLastVerified = "August 30, 2026";
 const productionOperationsLastVerified = "August 29, 2026";
 const liveSearchLastVerified = "August 30, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.77",
+  version: "1.3.78",
   lastVerified: liveSearchLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1795,6 +1795,11 @@ export const platformDocumentation: PlatformDocumentation = {
                 "The current location master supplies Store_No and normalized five-digit ZIP. Store and ZIP identifiers remain strings, including leading zeros. Target collection locations must be USA rows. ALDI's current authoritative roster uses numeric Store_No values; legacy hyphenated IDs are retained only for history.",
             },
             {
+              term: "Eligibility policy reconciliation",
+              definition:
+                "Location import evaluates active status and provider-safe store identity from the versioned Retailer Catalog. When that policy changes, the administrator first writes and reviews a checksummed dry-run artifact containing the catalog, complete selected location snapshot, counts, reasons, and exact row changes. Apply must consume that exact artifact; it cannot silently create a replacement plan or override its retailer scope. Import and apply share one cross-process whole-operation lock, while apply independently regenerates the plan, rejects a stale snapshot or altered evidence, commits the complete correction atomically, and retains the reviewed-plan checksum in its durable audit. Frozen historical geographies are never rewritten.",
+            },
+            {
               term: "Service-area context",
               definition:
                 "Amazon Same Day is collected and compared by delivery ZIP, not a fabricated physical store. Its Search URL preserves the Same Day/Fresh service-area context.",
@@ -1852,7 +1857,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "kroger_us",
               "/mc/kroger/search/zipcode/",
               "3",
-              "Keyword · ZIP · store · page; preserve leading-zero store IDs",
+              "Keyword · ZIP · canonical eight-digit store · page; preserve leading zeros",
             ],
             [
               "Safeway",
@@ -2879,6 +2884,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-08-30",
+              "Implemented and test-verified; production deployment and apply pending",
+              "Location eligibility gained a generic catalog-driven dry-run/apply reconciliation, and Kroger's provider-safe policy now requires its canonical eight-digit store IDs.",
+              "The command defaults to read-only, requires its exact checksummed reviewed-plan artifact plus an identified operator and reason for apply, and refuses scope overrides or stale evidence. Import and apply now share one cross-process whole-operation lock; apply also locks the location table and commits exact before/after decisions with a durable migration-0050 audit. Fixture and read-only production inspection both reconcile to 2,667 Kroger rows: 1,369 canonical eight-digit IDs and 1,298 seven-digit IDs to disable. Migration downgrade is refused once audit history exists. Active paid Search runs are not touched. Production deployment, Kroger dry-run review, explicit apply, zero-change rerun, and audit ID remain pending and are not claimed here.",
+            ],
             [
               "2026-08-30",
               "Deployed and production-verified; live execution underway",

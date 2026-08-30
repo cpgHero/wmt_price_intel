@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from rci_locations.eligibility import eligibility_plan_sha256, eligibility_snapshot_sha256
 from rci_locations.models import (
+    EligibilityReconciliationPlan,
     ImportState,
     ImportSummary,
+    LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
     RetailerAlias,
@@ -25,6 +30,13 @@ class InMemoryLocationRepository:
         self.locations: dict[tuple[str, str, str, str], LocationRecord] = {}
         self.location_import_ids: dict[tuple[str, str, str, str], str] = {}
         self.imports: dict[str, ImportState] = {}
+        self.eligibility_reconciliations: dict[str, dict[str, object]] = {}
+        self._location_policy_lock = asyncio.Lock()
+
+    @asynccontextmanager
+    async def location_policy_operation_lock(self) -> AsyncIterator[None]:
+        async with self._location_policy_lock:
+            yield
 
     async def begin_import(self, source_path: str, source_sha256: str) -> str:
         import_id = str(uuid4())
@@ -194,3 +206,76 @@ class InMemoryLocationRepository:
 
     async def list_imports(self, limit: int = 20) -> list[ImportState]:
         return sorted(self.imports.values(), key=lambda item: item.started_at, reverse=True)[:limit]
+
+    async def list_location_eligibility_states(
+        self,
+        retailer_ids: Sequence[str],
+    ) -> list[LocationEligibilityState]:
+        selected = set(retailer_ids)
+        states = [
+            LocationEligibilityState(
+                id="|".join(identity),
+                retailer_id=location.retailer_id,
+                store_number=location.store_number,
+                status=location.status,
+                collection_eligible=location.collection_eligible,
+                collection_eligibility_reason=location.collection_eligibility_reason,
+            )
+            for identity, location in self.locations.items()
+            if not selected or location.retailer_id in selected
+        ]
+        return sorted(states, key=lambda item: item.id)
+
+    async def begin_eligibility_reconciliation(
+        self,
+        plan: EligibilityReconciliationPlan,
+        *,
+        requested_by: str,
+        change_reason: str,
+    ) -> str:
+        audit_run_id = str(uuid4())
+        self.eligibility_reconciliations[audit_run_id] = {
+            "status": "running",
+            "plan": plan,
+            "requested_by": requested_by,
+            "change_reason": change_reason,
+            "reviewed_plan_sha256": eligibility_plan_sha256(plan),
+            "error_message": None,
+        }
+        return audit_run_id
+
+    async def apply_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        plan: EligibilityReconciliationPlan,
+    ) -> None:
+        current = await self.list_location_eligibility_states(plan.retailer_ids)
+        if eligibility_snapshot_sha256(current) != plan.snapshot_sha256:
+            raise RuntimeError(
+                "location eligibility snapshot changed after dry run; rerun reconciliation"
+            )
+
+        by_id = {"|".join(identity): identity for identity in self.locations}
+        for change in plan.changes:
+            identity = by_id[change.id]
+            location = self.locations[identity]
+            if (
+                location.status != change.status
+                or location.collection_eligible != change.before_eligible
+                or location.collection_eligibility_reason != change.before_reason
+            ):
+                raise RuntimeError("location eligibility update no longer matches audited plan")
+            self.locations[identity] = replace(
+                location,
+                collection_eligible=change.after_eligible,
+                collection_eligibility_reason=change.after_reason,
+            )
+        self.eligibility_reconciliations[audit_run_id]["status"] = "completed"
+
+    async def fail_eligibility_reconciliation(
+        self,
+        audit_run_id: str,
+        error_message: str,
+    ) -> None:
+        self.eligibility_reconciliations[audit_run_id]["status"] = "failed"
+        self.eligibility_reconciliations[audit_run_id]["error_message"] = error_message[:4_000]

@@ -62,3 +62,10 @@ provider or AI work.
 `0049_gate_resilience` adds nullable, run-scoped successful-sample quorum and transient-nonbillable
 failure ceilings to retailer availability gates. Null preserves the legacy strict gate. The revision
 does not alter frozen tasks, raw evidence, 404 accounting, budgets, or historical gate decisions.
+`0050_location_reconcile` adds a durable audit run for catalog-driven location-eligibility
+corrections. The administrator command defaults to a read-only dry run; an explicit apply records
+the reviewed-plan, catalog, and location-snapshot checksums, operator, reason, before/after counts,
+and exact row changes. Apply must consume the reviewed dry-run artifact, shares a whole-operation
+advisory lock with location import, rejects a stale snapshot, and commits all changes plus audit
+completion atomically. Downgrade is refused after audit history exists so a schema rollback cannot
+silently destroy the record of an applied eligibility decision.
