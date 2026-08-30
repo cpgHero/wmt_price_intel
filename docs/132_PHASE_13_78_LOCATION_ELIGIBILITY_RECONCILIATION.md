@@ -2,9 +2,10 @@
 
 ## Status
 
-Implemented and test-verified on August 30, 2026. Production deployment and the first Kroger apply
-remain pending until active paid Search runs have drained. No production row, collection task,
-provider call, PDP request, AI task, or report was changed while this phase was built.
+Implemented, deployed, and production-verified on August 30, 2026. The first reviewed Kroger plan
+was applied only after all paid Search runs were terminal. The reconciliation changed current
+location eligibility only; it did not rewrite a frozen geography, historical task, raw artifact,
+provider response, PDP record, AI decision, or report.
 
 ## Problem
 
@@ -56,8 +57,7 @@ leading zeros are preserved. Fixture validation finds 1,369 active canonical eig
 locations eligible for future collection. Seven-digit duplicates stay in the master with
 `store_number_not_provider_safe`; they are not deleted or rewritten.
 
-After deployment and only after paid runs are idle, the production operator must run and retain the
-dry-run artifact before applying:
+The production operator ran and retained the dry-run artifact after paid runs became idle:
 
 ```bash
 rci-location-eligibility \
@@ -65,8 +65,8 @@ rci-location-eligibility \
   --output /tmp/kroger-location-eligibility-dry-run.json
 ```
 
-The dry-run totals must reconcile to the expected production population before the explicitly
-identified apply is executed:
+The reviewed dry run reconciled exactly to 2,667 selected rows, 1,298 proposed disables, and 1,369
+remaining eligible canonical locations before the explicitly identified apply was executed:
 
 ```bash
 rci-location-eligibility \
@@ -77,25 +77,33 @@ rci-location-eligibility \
   --output /tmp/kroger-location-eligibility-apply.json
 ```
 
-Then rerun dry mode and require `changed_rows = 0` and `eligible_after = 1369` before resolving any
-new Kroger geography. The exact production audit ID and counts must be appended here after apply;
-this document does not claim them early.
+Production audit `6901fd05-6390-4052-a331-88f5c16ef773` records the completed apply. Its reviewed
+plan checksum is `7b07bc6dbce372ea7f0aed0d364d09f5bdc29ae4b5cca7ec39b7f6cb2e29149d`.
+The immediate second dry run returned `changed_rows = 0`, `eligible_before = 1369`, and
+`eligible_after = 1369`. New Kroger geographies may now resolve only from those eligible canonical
+rows.
 
 ## Verification
 
 - Canonical eight-digit Kroger IDs are eligible; their seven-digit forms are not.
-- The complete supplied location fixture and read-only production inspection both contain exactly
-  2,667 Kroger rows: 1,369 canonical eight-digit rows and 1,298 seven-digit rows. All 2,667
-  production rows are active and presently eligible, so the reviewed first production plan must
-  disable exactly 1,298 and leave exactly 1,369 eligible.
+- The complete supplied location fixture and production audit contained exactly 2,667 Kroger rows:
+  1,369 canonical eight-digit rows and 1,298 seven-digit rows. Audit
+  `6901fd05-6390-4052-a331-88f5c16ef773` disabled the 1,298 aliases and left exactly 1,369 eligible;
+  the immediate second dry run proved `changed_rows = 0`. The older frozen Egg run still contains
+  all 2,667 task scopes. Phase 13.77 therefore blocks paid Kroger recovery and marks Kroger
+  unavailable/no-scorecard. Follow-on Phase 0052 must bind a scope projection to this audit before
+  the 1,369-row denominator may be used for recovery or scoring.
 - Dry-run planning does not write an audit or modify a location.
 - Apply is identified, reasoned, auditable, idempotent, and preserves authoritative-retirement
   lineage.
 - Import and reconciliation are mutually exclusive for their entire operations; a state change
   still invalidates the reviewed checksum and fails closed.
 - Unknown retailer IDs and anonymous/unreasoned applies are rejected.
-- Migration `0050_location_reconcile` is the current migration head. Its downgrade succeeds only
-  before audit history exists.
+- Migration `0050_location_reconcile` is directly followed by the current
+  `0051_composite_evidence` head. Its downgrade succeeds only before audit history exists.
+- Release commit `8259a0ae67a24e840931999652c4a6bc3ff306a9` deployed to the API as Railway
+  deployment `aa589a13-05ee-411a-9710-b077fda463d7`; the production database reported
+  `0050_location_reconcile` as its migration head before the apply.
 
 ## Rollback
 

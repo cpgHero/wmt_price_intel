@@ -33,7 +33,7 @@ def _config(*, max_pages: int = 1, budget: int | None = None) -> dict[str, objec
         "retailers": [
             {
                 "retailer_id": "walmart_us",
-                "adapter_id": "fake_walmart",
+                "adapter_id": "metricscart_walmart_search_zipcode_v2",
                 "enabled": True,
                 "request_overrides": {},
             }

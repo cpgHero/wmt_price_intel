@@ -27,6 +27,7 @@ class RetailerCapability:
     credits_per_successful_page: int
     endpoint: str
     supports_pagination: bool = True
+    provider_request_contract: JsonObject = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

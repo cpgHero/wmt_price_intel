@@ -54,6 +54,7 @@ from rci_analytics.models import MatchRecord
 from rci_analytics.normalization import RetailerIdentityMap
 from rci_analytics.product_pack import ProductPack
 from rci_collections.models import QueueTask
+from rci_collections.planner import canonical_checksum
 from rci_collections.repository import PostgresCollectionRepository
 from rci_products import ProductDetailRepository
 from rci_providers import MetricsCartAdapterRegistry
@@ -67,6 +68,43 @@ from rci_retailer_packs import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _scoreable_competitors(
+    definition_config: dict[str, Any], input_manifest: dict[str, Any] | None
+) -> tuple[str, list[str], set[str]]:
+    """Separate configured competitors from explicitly unavailable evidence scopes.
+
+    An unavailable retailer remains in immutable source/readiness metadata, but it
+    must never enter analytics builders where sparse or empty evidence could be
+    rendered as a valid zero scorecard.
+    """
+
+    benchmark = str(definition_config["benchmark_retailer"])
+    configured_retailers = [
+        str(value["retailer_id"])
+        for value in definition_config.get("retailers", [])
+        if isinstance(value, dict) and bool(value.get("enabled"))
+    ]
+    unavailable = {
+        str(value) for value in ((input_manifest or {}).get("unavailable_retailers") or [])
+    }
+    unknown = unavailable - set(configured_retailers)
+    if unknown:
+        raise ValueError(
+            f"composite input marks unconfigured retailers unavailable: {sorted(unknown)}"
+        )
+    if benchmark in unavailable:
+        raise ValueError("the benchmark retailer cannot be marked unavailable")
+    return (
+        benchmark,
+        [
+            retailer_id
+            for retailer_id in configured_retailers
+            if retailer_id != benchmark and retailer_id not in unavailable
+        ],
+        unavailable,
+    )
 
 
 def _normalized_brand_name(value: str) -> str:
@@ -572,6 +610,9 @@ class AnalysisJob:
     source_analysis_id: str | None = None
     replay_generation: int = 1
     replay_reason: str | None = None
+    input_manifest_checksum: str | None = None
+    component_collection_run_ids: tuple[str, ...] = ()
+    input_manifest: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -642,6 +683,59 @@ def _task(row: RowMapping) -> QueueTask:
             str(row["raw_artifact_id"]) if row["raw_artifact_id"] is not None else None
         ),
         is_preflight=bool(row["is_preflight"]),
+    )
+
+
+def _composite_task(snapshot: dict[str, Any], collected_at: datetime) -> QueueTask:
+    """Rehydrate a task exclusively from the immutable composite lineage snapshot."""
+
+    return QueueTask(
+        id=str(snapshot["task_id"]),
+        collection_run_id=str(snapshot["collection_run_id"]),
+        retailer_id=str(snapshot["retailer_id"]),
+        retailer_location_id=(
+            str(snapshot["retailer_location_id"])
+            if snapshot.get("retailer_location_id") is not None
+            else None
+        ),
+        adapter_id=str(snapshot["adapter_id"]),
+        location_scope_key=str(snapshot["location_scope_key"]),
+        zipcode=str(snapshot["zipcode"]),
+        store_number=(
+            str(snapshot["store_number"]) if snapshot.get("store_number") is not None else None
+        ),
+        page_number=int(snapshot["page_number"]),
+        max_pages=int(snapshot["max_pages"]),
+        stop_on_empty=bool(snapshot["stop_on_empty"]),
+        stop_on_short_page=bool(snapshot["stop_on_short_page"]),
+        credits_per_success=int(snapshot["credits_per_success"]),
+        request_payload=dict(snapshot["request_payload"]),
+        request_fingerprint=str(snapshot["request_fingerprint"]),
+        status=str(snapshot["status"]),
+        priority=int(snapshot["priority"]),
+        attempt_count=int(snapshot["attempt_count"]),
+        max_attempts=int(snapshot["max_attempts"]),
+        available_at=collected_at,
+        locked_by=None,
+        lease_expires_at=None,
+        created_at=collected_at,
+        http_status=(
+            int(snapshot["http_status"]) if snapshot.get("http_status") is not None else None
+        ),
+        result_count=(
+            int(snapshot["result_count"]) if snapshot.get("result_count") is not None else None
+        ),
+        failure_class=(
+            str(snapshot["failure_class"]) if snapshot.get("failure_class") is not None else None
+        ),
+        last_error=None,
+        billable_credits=int(snapshot["billable_credits"]),
+        raw_artifact_id=(
+            str(snapshot["raw_artifact_id"])
+            if snapshot.get("raw_artifact_id") is not None
+            else None
+        ),
+        is_preflight=bool(snapshot["is_preflight"]),
     )
 
 
@@ -720,7 +814,8 @@ class PostgresAnalysisQueue:
                               AND i.id = ar.input_set_id AND i.status = 'ready'
                               AND v.id = cr.definition_version_id
                             RETURNING ar.id::text, ar.collection_run_id::text,
-                              ar.input_set_id::text, i.source_kind,
+                              ar.input_set_id::text, i.source_kind, i.manifest_checksum,
+                              i.manifest,
                               ar.product_pack_id, ar.product_pack_version,
                               ar.attempt_count, ar.max_attempts, v.config,
                               ar.match_revision_id::text,
@@ -732,6 +827,12 @@ class PostgresAnalysisQueue:
                                 FROM analysis_result source_result
                                 WHERE source_result.id = ar.source_analysis_result_id
                               ) AS source_analysis_id
+                              , ARRAY(
+                                  SELECT component.collection_run_id::text
+                                  FROM analysis_input_component component
+                                  WHERE component.input_set_id = i.id
+                                  ORDER BY component.ordinal
+                                ) AS component_collection_run_ids
                             """
                         ),
                         {
@@ -780,6 +881,11 @@ class PostgresAnalysisQueue:
                     replay_reason=(
                         str(row["replay_reason"]) if row["replay_reason"] is not None else None
                     ),
+                    input_manifest_checksum=str(row["manifest_checksum"]),
+                    component_collection_run_ids=tuple(
+                        str(value) for value in (row["component_collection_run_ids"] or [])
+                    ),
+                    input_manifest=dict(row["manifest"] or {}),
                 )
                 for row in rows
             ]
@@ -897,6 +1003,95 @@ class PostgresAnalysisQueue:
             )
             for row in rows
         ]
+
+    async def composite_pages(self, input_set_id: str) -> list[CollectedPage]:
+        """Load only the de-duplicated raw pages selected by a composite input set."""
+
+        async with self._engine.connect() as connection:
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT ia.ordinal, ia.checksum AS input_artifact_checksum,
+                                   ia.metadata AS input_artifact_metadata,
+                                   lineage.canonical_request_key,
+                                   lineage.snapshot,
+                                   da.id::text AS dataset_artifact_id,
+                                   da.storage_uri, da.checksum,
+                                   da.created_at AS artifact_created_at,
+                                   i.manifest
+                            FROM analysis_input_artifact ia
+                            JOIN analysis_input_set i ON i.id = ia.input_set_id
+                            JOIN dataset_artifact da ON da.id = ia.dataset_artifact_id
+                            JOIN analysis_input_task_lineage lineage
+                              ON lineage.input_set_id = ia.input_set_id
+                             AND lineage.canonical_request_key =
+                                 ia.metadata->>'canonical_request_key'
+                            WHERE ia.input_set_id::text = :input_set_id
+                              AND i.source_kind = 'live_collection_composite'
+                              AND i.status = 'ready'
+                            ORDER BY ia.ordinal
+                            """
+                        ),
+                        {"input_set_id": input_set_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        if not rows:
+            raise ValueError("ready composite input set has no immutable usable artifacts")
+        manifest = dict(rows[0]["manifest"] or {})
+        artifact_manifest = [
+            {
+                "ordinal": int(row["ordinal"]),
+                "canonical_request_key": str(row["canonical_request_key"]),
+                "dataset_artifact_id": str(row["dataset_artifact_id"]),
+                "checksum": str(row["checksum"]),
+            }
+            for row in rows
+        ]
+        expected_count = int(manifest.get("usable_artifact_count") or -1)
+        if len(rows) != expected_count:
+            raise ValueError(
+                "composite artifact count does not match its immutable assembly manifest"
+            )
+        actual_manifest_checksum = canonical_checksum({"artifacts": artifact_manifest})
+        if actual_manifest_checksum != str(manifest.get("usable_artifact_manifest_checksum") or ""):
+            raise ValueError(
+                "composite artifact lineage checksum does not match its assembly manifest"
+            )
+        if any(str(row["input_artifact_checksum"]) != str(row["checksum"]) for row in rows):
+            raise ValueError("composite input artifact checksum drift was detected")
+        unavailable_retailers = {
+            str(value) for value in (manifest.get("unavailable_retailers") or [])
+        }
+        pages: list[CollectedPage] = []
+        for row in rows:
+            snapshot = dict(row["snapshot"])
+            if str(snapshot["retailer_id"]) in unavailable_retailers:
+                continue
+            location_snapshot = dict(snapshot.get("location_snapshot") or {})
+            pages.append(
+                CollectedPage(
+                    task=_composite_task(snapshot, row["artifact_created_at"]),
+                    storage_uri=str(row["storage_uri"]),
+                    checksum=str(row["checksum"]),
+                    collected_at=row["artifact_created_at"],
+                    latitude=(
+                        float(location_snapshot["latitude"])
+                        if location_snapshot.get("latitude") is not None
+                        else None
+                    ),
+                    longitude=(
+                        float(location_snapshot["longitude"])
+                        if location_snapshot.get("longitude") is not None
+                        else None
+                    ),
+                )
+            )
+        return pages
 
     async def historical_sources(self, input_set_id: str) -> list[HistoricalSource]:
         async with self._engine.connect() as connection:
@@ -1105,7 +1300,17 @@ class AnalysisProcessor:
             pack = apply_brand_classification_rules(pack, brand_rules)
         else:
             brand_rules = []
-        benchmark = str(job.definition_config["benchmark_retailer"])
+        benchmark, competitors, unavailable_retailers = _scoreable_competitors(
+            job.definition_config,
+            job.input_manifest if job.source_kind == "live_collection_composite" else None,
+        )
+        configured_competitors = [
+            str(value["retailer_id"])
+            for value in job.definition_config.get("retailers", [])
+            if isinstance(value, dict)
+            and bool(value.get("enabled"))
+            and str(value["retailer_id"]) != benchmark
+        ]
         analysis_options = job.definition_config.get("analysis", {})
         configured_profiles = (
             analysis_options.get("comparison_profiles", [])
@@ -1124,13 +1329,6 @@ class AnalysisProcessor:
             for profile in pack.matching_profiles
             if not requested_profile_ids or str(profile["id"]) in requested_profile_ids
         ]
-        configured_retailers = [
-            str(value["retailer_id"])
-            for value in job.definition_config.get("retailers", [])
-            if isinstance(value, dict) and bool(value.get("enabled"))
-        ]
-        competitors = [value for value in configured_retailers if value != benchmark]
-
         normalizer = CanonicalOfferNormalizer(
             RetailerIdentityMap.from_catalog(self._root / "config" / "retailer-catalog.json")
         )
@@ -1326,8 +1524,12 @@ class AnalysisProcessor:
             if len(normalized_batches[retailer_id]) >= batch_size:
                 await flush(retailer_id)
 
-        if job.source_kind == "live_collection":
-            pages = await self._queue.pages(job.collection_run_id)
+        if job.source_kind in {"live_collection", "live_collection_composite"}:
+            pages = (
+                await self._queue.composite_pages(job.input_set_id)
+                if job.source_kind == "live_collection_composite"
+                else await self._queue.pages(job.collection_run_id)
+            )
             if not pages:
                 raise ValueError("completed collection has no successful raw provider pages")
             if self._product_details is not None:
@@ -1666,10 +1868,10 @@ class AnalysisProcessor:
             analysis_id = f"{analysis_id}-match-{job.match_revision_id[:8]}"
         if job.matching_v2_gold_set_release_id is not None:
             analysis_id = f"{analysis_id}-match-v2-{job.matching_v2_gold_set_release_id[:8]}"
-            if job.replay_generation > 1:
-                analysis_id = f"{analysis_id}-r{job.replay_generation}"
         if job.brand_revision_id is not None:
             analysis_id = f"{analysis_id}-brand-{job.brand_revision_id[:8]}"
+        if job.replay_generation > 1:
+            analysis_id = f"{analysis_id}-r{job.replay_generation}"
         if not source_evidence_artifacts:
             raise ValueError("analysis input has no immutable source-artifact evidence")
         evidence_sets = [
@@ -1694,6 +1896,23 @@ class AnalysisProcessor:
                 "collection_run_id": (
                     job.collection_run_id if job.source_kind == "live_collection" else None
                 ),
+                "base_collection_run_id": (
+                    job.collection_run_id
+                    if job.source_kind == "live_collection_composite"
+                    else None
+                ),
+                "component_collection_run_ids": list(job.component_collection_run_ids),
+                "input_manifest_checksum": job.input_manifest_checksum,
+                "collection_evidence_readiness": (
+                    (job.input_manifest or {}).get("retailer_collection_readiness")
+                    if job.source_kind == "live_collection_composite"
+                    else None
+                ),
+                "unavailable_retailers": (
+                    sorted(unavailable_retailers)
+                    if job.source_kind == "live_collection_composite"
+                    else []
+                ),
                 "match_revision_id": job.match_revision_id,
                 "matching_v2_gold_set_release_id": job.matching_v2_gold_set_release_id,
                 "matching_v2_gold_set_checksum": (
@@ -1717,7 +1936,7 @@ class AnalysisProcessor:
                 "source_artifact_ids": sorted(set(raw_artifact_ids)),
             },
             benchmark_retailer=benchmark,
-            competitors=competitors,
+            competitors=configured_competitors,
             coverage_facts=coverage,
             comparison_facts=comparison_facts,
             data_quality_facts={

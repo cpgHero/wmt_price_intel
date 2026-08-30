@@ -677,6 +677,48 @@ def test_retailer_scorecards_keep_missing_basis_as_an_explicit_zero_state() -> N
     assert profiles["compatible"]["status"] == "limited_evidence"
 
 
+def test_publication_readiness_blocks_configured_competitor_with_no_reported_evidence() -> None:
+    result = _result()
+    result["competitors"].append("target_us")
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert view["report_readiness"]["status"] == "review_required"
+    blocker = next(
+        row
+        for row in view["report_readiness"]["blocking_reasons"]
+        if row["code"] == "competitor_without_reported_price_evidence"
+    )
+    assert blocker["competitor_id"] == "target_us"
+
+
+def test_publication_readiness_excludes_explicitly_unavailable_competitor() -> None:
+    result = _result()
+    result["competitors"].append("target_us")
+    result["source"]["unavailable_retailers"] = ["target_us"]
+    result["source"]["collection_evidence_readiness"] = {
+        "target_us": {
+            "status": "unavailable",
+            "unavailability_approval": {"reason": "provider instability remains unresolved"},
+        }
+    }
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert not any(
+        row["code"] == "competitor_without_reported_price_evidence"
+        and row.get("competitor_id") == "target_us"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+    warning = next(
+        row
+        for row in view["report_readiness"]["warnings"]
+        if row["code"] == "competitor_data_unavailable"
+    )
+    assert warning["competitor_id"] == "target_us"
+    assert "no scorecard" in warning["message"]
+
+
 def test_certified_relationship_without_price_evidence_is_not_labeled_unmatched() -> None:
     result = _result()
     result["comparison_modes"].append(

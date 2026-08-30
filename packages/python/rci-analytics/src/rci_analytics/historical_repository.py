@@ -459,6 +459,10 @@ class PostgresAnalysisInputRepository:
         """Wrap completed provider collections in immutable input sets and queue analysis."""
 
         async with self._engine.begin() as connection:
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": "analysis-input-materialization"},
+            )
             candidates = (
                 (
                     await connection.execute(
@@ -605,7 +609,8 @@ class PostgresAnalysisInputRepository:
                     INSERT INTO analysis_run (
                       collection_run_id, input_set_id, product_pack_id, product_pack_version,
                       status, code_version, max_attempts,
-                      match_revision_id, brand_revision_id, source_analysis_result_id
+                      match_revision_id, brand_revision_id, source_analysis_result_id,
+                      replay_generation, replay_reason
                     )
                     SELECT i.collection_run_id, i.id, i.product_pack_id,
                            i.product_pack_version, 'queued', :code_version, :max_attempts,
@@ -613,7 +618,9 @@ class PostgresAnalysisInputRepository:
                            COALESCE(
                              governed_match.source_analysis_result_id,
                              governed_brand.source_analysis_result_id
-                           )
+                           ), replay.next_generation,
+                           CASE WHEN i.source_kind = 'live_collection_composite'
+                             THEN 'composite collection evidence' ELSE NULL END
                     FROM analysis_input_set i
                     LEFT JOIN LATERAL (
                       SELECT revision.id, revision.source_analysis_result_id
@@ -639,12 +646,23 @@ class PostgresAnalysisInputRepository:
                           i.analysis_config->>'benchmark_retailer'
                       LIMIT 1
                     ) governed_brand ON true
-                    WHERE i.source_kind = 'live_collection' AND i.status = 'ready'
+                    LEFT JOIN LATERAL (
+                      SELECT COALESCE(max(existing.replay_generation), 0) + 1
+                        AS next_generation
+                      FROM analysis_run existing
+                      WHERE existing.collection_run_id = i.collection_run_id
+                        AND existing.product_pack_id = i.product_pack_id
+                        AND existing.product_pack_version = i.product_pack_version
+                        AND existing.match_revision_id IS NOT DISTINCT FROM governed_match.id
+                        AND existing.brand_revision_id IS NOT DISTINCT FROM governed_brand.id
+                        AND existing.matching_v2_gold_set_release_id IS NULL
+                    ) replay ON true
+                    WHERE i.source_kind IN (
+                        'live_collection', 'live_collection_composite'
+                      ) AND i.status = 'ready'
                       AND NOT EXISTS (
                         SELECT 1 FROM analysis_run ar
-                        WHERE ar.collection_run_id = i.collection_run_id
-                          AND ar.product_pack_id = i.product_pack_id
-                          AND ar.product_pack_version = i.product_pack_version
+                        WHERE ar.input_set_id = i.id
                       )
                     ON CONFLICT ON CONSTRAINT
                       analysis_run_collection_pack_match_revision_uq DO NOTHING

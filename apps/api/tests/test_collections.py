@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from httpx import ASGITransport, AsyncClient
 
-from rci_api.collections import get_collection_service
+from rci_api.collections import get_collection_service, get_composite_evidence_repository
 from rci_api.main import create_app
 from rci_collections import (
     CollectionPlanner,
     CollectionRetailerCatalog,
     InMemoryCollectionRepository,
 )
+from rci_collections.composite import RecoveryLaunchRecord
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import LocationUnit
 from rci_collections.service import CollectionService
+from rci_core import AppSettings
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -30,7 +33,7 @@ def _config() -> dict[str, object]:
         "retailers": [
             {
                 "retailer_id": "walmart_us",
-                "adapter_id": "fake_walmart",
+                "adapter_id": "metricscart_walmart_search_zipcode_v2",
                 "enabled": True,
             }
         ],
@@ -177,7 +180,6 @@ async def test_collection_definition_run_and_usage_apis() -> None:
                 "retries": 0,
             }
         ]
-
         failures = await client.get(f"/api/v1/collection-runs/{run_id}/failures.csv")
         assert failures.status_code == 200
         assert failures.headers["content-type"].startswith("text/csv")
@@ -185,6 +187,138 @@ async def test_collection_definition_run_and_usage_apis() -> None:
 
         cancelled = await client.post(f"/api/v1/collection-runs/{run_id}/cancel")
         assert cancelled.json()["status"] == "cancelled"
+
+
+async def test_exact_recovery_launch_api_is_idempotency_visible() -> None:
+    class CompositeRepository:
+        async def launch_exact_recovery(self, plan_id: str) -> RecoveryLaunchRecord:
+            return RecoveryLaunchRecord(
+                recovery_plan_id=plan_id,
+                collection_run_id="00000000-0000-0000-0000-000000000201",
+                definition_version_id="00000000-0000-0000-0000-000000000202",
+                status="queued",
+                task_count=13,
+                maximum_credits=23,
+                availability_gate_status="skipped",
+                reused_existing_run=True,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            "/api/v1/collection-recovery-plans/00000000-0000-0000-0000-000000000200/launch"
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "recovery_plan_id": "00000000-0000-0000-0000-000000000200",
+        "collection_run_id": "00000000-0000-0000-0000-000000000201",
+        "definition_version_id": "00000000-0000-0000-0000-000000000202",
+        "status": "queued",
+        "task_count": 13,
+        "maximum_credits": 23,
+        "availability_gate_status": "skipped",
+        "reused_existing_run": True,
+    }
+
+
+async def test_production_recovery_controls_require_admin_token(monkeypatch: Any) -> None:
+    class CompositeRepository:
+        async def launch_exact_recovery(self, plan_id: str) -> RecoveryLaunchRecord:
+            raise AssertionError(f"unauthorized request reached repository for {plan_id}")
+
+        async def create_recovery_batch(self, **values: object) -> None:
+            raise AssertionError(f"unauthorized request reached repository: {values}")
+
+    class CollectionRepository:
+        async def retry_failed(self, run_id: str) -> int:
+            raise AssertionError(f"unauthorized retry reached repository for {run_id}")
+
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "private-recovery-token")
+    app = create_app(AppSettings(app_env="production"))
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    app.dependency_overrides[get_collection_service] = CollectionRepository
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/collection-recovery-plans/00000000-0000-0000-0000-000000000200/launch"
+        )
+        batch_response = await client.post(
+            "/api/v1/collection-recovery-batches",
+            json={
+                "authorization_id": "00000000-0000-0000-0000-000000000099",
+            },
+        )
+        retry_response = await client.post(
+            "/api/v1/collection-runs/00000000-0000-0000-0000-000000000101/retry-failed"
+        )
+
+    assert response.status_code == 401
+    assert "administrator" in response.json()["detail"].lower()
+    assert batch_response.status_code == 401
+    assert retry_response.status_code == 401
+
+
+async def test_batch_creation_accepts_only_offline_authorization_id() -> None:
+    captured: dict[str, object] = {}
+
+    class CompositeRepository:
+        async def create_recovery_batch(self, **values: object) -> None:
+            captured.update(values)
+            raise ValueError("intentional audit capture")
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            "/api/v1/collection-recovery-batches",
+            headers={"X-RCI-Actor": "forged-client-principal"},
+            json={
+                "authorization_id": "00000000-0000-0000-0000-000000000099",
+            },
+        )
+
+    assert response.status_code == 409
+    assert captured == {"authorization_id": "00000000-0000-0000-0000-000000000099"}
+
+
+async def test_recovery_controls_reject_malformed_or_client_defined_authorization() -> None:
+    class CompositeRepository:
+        async def create_recovery_batch(self, **values: object) -> None:
+            raise AssertionError(f"invalid request reached repository: {values}")
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        malformed = await client.post(
+            "/api/v1/collection-recovery-batches",
+            json={"authorization_id": "not-a-uuid"},
+        )
+        client_defined = await client.post(
+            "/api/v1/collection-recovery-batches",
+            json={
+                "authorization_id": "00000000-0000-0000-0000-000000000099",
+                "approved_credit_ceiling": 999_999,
+                "unit_cost_usd": "0.001",
+            },
+        )
+        malformed_path = await client.post("/api/v1/collection-recovery-plans/not-a-uuid/launch")
+
+    assert malformed.status_code == 422
+    assert client_defined.status_code == 422
+    assert malformed_path.status_code == 422
 
 
 async def test_invalid_collection_definition_is_rejected() -> None:

@@ -10,8 +10,8 @@ const snapshot = {
     deployment_id: "deployment-1",
     environment: "production",
     service: "api",
-    database_migration: "0050_location_reconcile",
-    expected_migration_heads: ["0050_location_reconcile"],
+    database_migration: "0051_composite_evidence",
+    expected_migration_heads: ["0051_composite_evidence"],
     migration_matches: true,
     product_packs: [
       { id: "fresh_shell_eggs", version: "1.3.1", checksum: "a".repeat(64) },

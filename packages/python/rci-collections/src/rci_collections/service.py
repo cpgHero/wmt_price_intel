@@ -258,4 +258,7 @@ class CollectionService:
 
     async def retry_failed(self, run_id: str) -> int:
         await self.get_run(run_id)
-        return await self.repository.retry_failed(run_id)
+        try:
+            return await self.repository.retry_failed(run_id)
+        except ValueError as exc:
+            raise CollectionApprovalError(str(exc)) from exc

@@ -8,7 +8,13 @@ from typing import Any
 
 import pytest
 
-from rci_collections.models import QueueTask
+from rci_collections import (
+    CollectionPlanner,
+    CollectionRetailerCatalog,
+    InMemoryCollectionRepository,
+)
+from rci_collections.models import LocationUnit, QueueTask
+from rci_collections.request_contract import build_effective_provider_request
 from rci_providers.adapters import MetricsCartAdapterRegistry
 from rci_providers.extraction import extract_result_array, inspect_result_array
 
@@ -233,6 +239,102 @@ def test_all_enabled_search_adapters_are_catalog_driven() -> None:
         assert set(request.params) <= set(item["supported_params"])
         assert set(item.get("required_params", [])) <= set(request.params)
         assert request.params.get("store") in {None, "0007"}
+
+
+async def test_all_enabled_planner_tasks_match_their_catalog_adapter_requests() -> None:
+    catalog_document = json.loads(CATALOG_PATH.read_text())
+    enabled = [item for item in catalog_document["retailers"] if item.get("status") == "enabled"]
+    collection_catalog = CollectionRetailerCatalog.from_path(CATALOG_PATH)
+    locations = [
+        LocationUnit(
+            id=f"{item['id']}-location",
+            retailer_id=str(item["id"]),
+            zipcode="00123",
+            store_number="0007",
+            state="NY",
+            country="USA",
+        )
+        for item in enabled
+        if item["location_dimension"] == "store_zip"
+    ]
+    planner = CollectionPlanner(
+        InMemoryCollectionRepository(locations), collection_catalog, max_attempts=1
+    )
+    plan = await planner.plan(
+        {
+            "id": "all-enabled-contract-test",
+            "benchmark_retailer": "walmart_us",
+            "query": {
+                "keyword": "milk",
+                "amazon_same_day_url_template": (
+                    "https://www.amazon.com/s?k={{keyword}}&i=samedaystore"
+                ),
+            },
+            "retailers": [
+                {
+                    "retailer_id": item["id"],
+                    "adapter_id": item["adapter_id"],
+                    "enabled": True,
+                    "max_pages_override": 1,
+                    "sort": item.get("default_sort"),
+                    "request_overrides": {},
+                }
+                for item in enabled
+            ],
+            "geography": {
+                "strategy": "custom_zips",
+                "benchmark_retailer": "walmart_us",
+                "country": "USA",
+                "states": [],
+                "zipcodes": ["00123"],
+                "location_ids": [],
+            },
+            "pagination": {
+                "max_pages": 1,
+                "stop_on_empty": True,
+                "stop_on_short_page": False,
+            },
+            "availability_gate": {"enabled": False},
+        }
+    )
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+
+    assert len(plan.initial_tasks) == len(enabled)
+    for seed in plan.initial_tasks:
+        queue_task = replace(
+            _task(
+                retailer_id=seed.retailer_id,
+                adapter_id=seed.adapter_id,
+                store_number=seed.store_number,
+                credits_per_success=seed.credits_per_success,
+                max_pages=seed.max_pages,
+            ),
+            retailer_location_id=seed.retailer_location_id,
+            location_scope_key=seed.location_scope_key,
+            zipcode=seed.zipcode,
+            page_number=seed.page_number,
+            stop_on_empty=seed.stop_on_empty,
+            stop_on_short_page=seed.stop_on_short_page,
+            request_payload=seed.request_payload,
+            request_fingerprint=seed.request_fingerprint,
+            max_attempts=seed.max_attempts,
+        )
+        built = registry.get(seed.adapter_id).build_request(queue_task)
+        identity = build_effective_provider_request(
+            {
+                "retailer_id": seed.retailer_id,
+                "adapter_id": seed.adapter_id,
+                "zipcode": seed.zipcode,
+                "store_number": seed.store_number,
+                "page_number": seed.page_number,
+                "request_payload": seed.request_payload,
+            }
+        )
+        assert (built.method, built.path, built.params) == (
+            identity["method"],
+            identity["path"],
+            identity["params"],
+        )
 
 
 def test_endpoint_specific_search_parameters_do_not_leak() -> None:

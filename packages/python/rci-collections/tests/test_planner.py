@@ -153,6 +153,40 @@ async def test_multi_keyword_query_expands_tasks_and_cost_without_inflating_loca
     assert len({task.request_fingerprint for task in plan.initial_tasks}) == 2
 
 
+async def test_planner_rejects_definition_adapter_that_differs_from_enabled_catalog() -> None:
+    repository = InMemoryCollectionRepository(
+        [
+            LocationUnit(
+                id="walmart-2098",
+                retailer_id="walmart_us",
+                zipcode="43219",
+                store_number="2098",
+                state="OH",
+                country="USA",
+            )
+        ]
+    )
+    planner = CollectionPlanner(repository, _retailer_catalog())
+    config = _egg_config()
+    config["retailers"] = [
+        {
+            "retailer_id": "walmart_us",
+            "adapter_id": "metricscart_walmart_typo",
+            "enabled": True,
+            "max_pages_override": 1,
+            "request_overrides": {},
+        }
+    ]
+    config["geography"] = {
+        "strategy": "all_retailer_locations",
+        "benchmark_retailer": "walmart_us",
+        "country": "USA",
+    }
+
+    with pytest.raises(ValueError, match="does not match enabled catalog adapter"):
+        await planner.plan(config)
+
+
 async def test_recovery_gate_excludes_only_preflight_scope_and_preserves_full_geography() -> None:
     repository = InMemoryCollectionRepository(
         [

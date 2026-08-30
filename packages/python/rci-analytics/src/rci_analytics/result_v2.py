@@ -72,6 +72,7 @@ def _metric_display(metric: JsonObject) -> str:
 def matching_v2_certification_is_complete(
     source: JsonObject,
     competitors: list[str],
+    unavailable_competitors: set[str] | None = None,
 ) -> bool:
     """Return whether an operational Matching v2 snapshot has a final outcome per case.
 
@@ -107,10 +108,15 @@ def matching_v2_certification_is_complete(
     retailer_ids = {
         str(row.get("competitor_retailer_id") or "") for row in retailers if isinstance(row, dict)
     }
-    if retailer_ids != set(competitors):
+    unavailable = unavailable_competitors or set()
+    if retailer_ids != set(competitors) | unavailable:
         return False
     return all(
-        isinstance(row, dict) and int(row.get("pending_unreviewed_count") or 0) == 0
+        isinstance(row, dict)
+        and (
+            str(row.get("competitor_retailer_id") or "") in unavailable
+            or int(row.get("pending_unreviewed_count") or 0) == 0
+        )
         for row in retailers
     )
 
@@ -239,12 +245,25 @@ class AnalysisResultV2Builder:
         matched_competitors = {
             fact.competitor_id for fact in comparison_facts if fact.segment_id == "all"
         }
+        unavailable_competitors = {
+            str(value) for value in (source.get("unavailable_retailers") or [])
+        }
+        unknown_unavailable = unavailable_competitors - set(competitors)
+        if unknown_unavailable:
+            raise ValueError(
+                "unavailable retailers are outside the configured competitor scope: "
+                f"{sorted(unknown_unavailable)}"
+            )
+        scoreable_competitors = [
+            competitor for competitor in competitors if competitor not in unavailable_competitors
+        ]
         matching_v2_certification_ready = matching_v2_certification_is_complete(
             source,
-            competitors,
+            scoreable_competitors,
+            unavailable_competitors,
         )
         ready_to_share = bool(comparisons) and (
-            matched_competitors == set(competitors) or matching_v2_certification_ready
+            matched_competitors == set(scoreable_competitors) or matching_v2_certification_ready
         )
         result: JsonObject = {
             "schema_version": "2.0.0",

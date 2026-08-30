@@ -194,8 +194,17 @@ export interface RetailCompetitiveIntelligenceAnalysisResultV2 {
 }
 export interface Source {
   input_set_id: string;
-  kind: "live_collection" | "historical_import";
+  kind: "live_collection" | "live_collection_composite" | "historical_import";
   collection_run_id?: string | null;
+  base_collection_run_id?: string | null;
+  component_collection_run_ids?: string[];
+  input_manifest_checksum?: string | null;
+  collection_evidence_readiness?: {
+    [k: string]: {
+      [k: string]: unknown;
+    };
+  } | null;
+  unavailable_retailers?: string[];
   match_revision_id?: string | null;
   matching_v2_gold_set_release_id?: string | null;
   matching_v2_gold_set_checksum?: string | null;

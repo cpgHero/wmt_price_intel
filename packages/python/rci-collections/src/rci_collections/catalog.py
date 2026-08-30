@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from rci_collections.models import RetailerCapability
+from rci_collections.request_contract import provider_request_contract_from_catalog_item
 
 
 class CollectionRetailerCatalog:
@@ -21,6 +22,11 @@ class CollectionRetailerCatalog:
                 credits_per_successful_page=int(item["credits_per_successful_page"]),
                 endpoint=str(item["endpoint"]),
                 supports_pagination="page" in item.get("supported_params", []),
+                provider_request_contract=(
+                    provider_request_contract_from_catalog_item(item)
+                    if item.get("adapter_id")
+                    else {}
+                ),
             )
             for item in catalog.get("retailers", [])
         }
@@ -44,3 +50,12 @@ class CollectionRetailerCatalog:
                 key=lambda item: (item.display_name, item.retailer_id),
             )
         )
+
+    def provider_request_contracts(self) -> dict[str, dict[str, Any]]:
+        """Return immutable request contracts keyed by adapter id."""
+
+        return {
+            item.adapter_id: dict(item.provider_request_contract)
+            for item in self._retailers.values()
+            if item.adapter_id and item.provider_request_contract
+        }

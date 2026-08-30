@@ -117,6 +117,97 @@ async def test_historical_import_reaches_generic_analysis_queue_idempotently(
                 ).scalar_one()
             )
         assert artifact_rows == 1
+
+        ready_manifest = f"ready-{uuid4()}"
+        blocked_manifest = f"blocked-{uuid4()}"
+        async with database.engine.begin() as connection:
+            ready_input_set_id = str(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO analysis_input_set (
+                              organization_id, source_kind, stable_key, collection_run_id,
+                              product_pack_id, product_pack_version, analysis_config,
+                              manifest, manifest_checksum, total_rows, status, completed_at,
+                              assembly_generation, assembly_policy_version, trust_state
+                            )
+                            SELECT organization_id, 'live_collection_composite',
+                                   :stable_key, collection_run_id, product_pack_id,
+                                   product_pack_version, analysis_config,
+                                   jsonb_build_object('test', :manifest_checksum),
+                                   :manifest_checksum, total_rows, 'ready', now(), 2,
+                                   'composite-evidence-v1', 'ready'
+                            FROM analysis_input_set WHERE id::text = :source_input_set_id
+                            RETURNING id::text
+                            """
+                        ),
+                        {
+                            "stable_key": ready_manifest,
+                            "manifest_checksum": ready_manifest,
+                            "source_input_set_id": first.input_set_id,
+                        },
+                    )
+                ).scalar_one()
+            )
+            blocked_input_set_id = str(
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            INSERT INTO analysis_input_set (
+                              organization_id, source_kind, stable_key, collection_run_id,
+                              product_pack_id, product_pack_version, analysis_config,
+                              manifest, manifest_checksum, total_rows, status, completed_at,
+                              assembly_generation, assembly_policy_version, trust_state
+                            )
+                            SELECT organization_id, 'live_collection_composite',
+                                   :stable_key, collection_run_id, product_pack_id,
+                                   product_pack_version, analysis_config,
+                                   jsonb_build_object('test', :manifest_checksum),
+                                   :manifest_checksum, 0, 'failed', now(), 3,
+                                   'composite-evidence-v1', 'blocked'
+                            FROM analysis_input_set WHERE id::text = :source_input_set_id
+                            RETURNING id::text
+                            """
+                        ),
+                        {
+                            "stable_key": blocked_manifest,
+                            "manifest_checksum": blocked_manifest,
+                            "source_input_set_id": first.input_set_id,
+                        },
+                    )
+                ).scalar_one()
+            )
+
+        await repository.materialize_live(code_version="test", max_attempts=3)
+        async with database.engine.connect() as connection:
+            composite_runs = list(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT input_set_id::text FROM analysis_run "
+                            "WHERE input_set_id::text IN (:ready_id, :blocked_id)"
+                        ),
+                        {
+                            "ready_id": ready_input_set_id,
+                            "blocked_id": blocked_input_set_id,
+                        },
+                    )
+                ).scalars()
+            )
+        assert composite_runs == [ready_input_set_id]
+
+        composite_jobs = await PostgresAnalysisQueue(
+            database.engine,
+            code_version="test",
+            historical_replay_enabled=True,
+        ).claim("composite-test-worker", limit=100, lease_seconds=30)
+        composite_job = next(
+            value for value in composite_jobs if value.input_set_id == ready_input_set_id
+        )
+        assert composite_job.source_kind == "live_collection_composite"
+        assert all(value.input_set_id != blocked_input_set_id for value in composite_jobs)
     finally:
         if run_id is not None:
             async with database.engine.begin() as connection:

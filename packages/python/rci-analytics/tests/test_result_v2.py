@@ -47,6 +47,41 @@ def test_complete_matching_v2_certification_does_not_require_legacy_zip_rows_per
     )
 
 
+def test_complete_matching_v2_certification_retains_unavailable_retailer_release_scope() -> None:
+    source = {
+        "matching_v2_gold_set_release_id": "3c967ecc-17fd-4bad-a749-c223519723d0",
+        "matching_v2_certification_coverage": {
+            "selection_complete": True,
+            "queue_case_count": 2,
+            "certified_label_count": 1,
+            "unresolved_excluded_count": 1,
+            "reviewed_insufficient_evidence_count": 1,
+            "pending_unreviewed_count": 0,
+            "automatic_fallback_enabled": False,
+            "retailers": [
+                {
+                    "competitor_retailer_id": "target_us",
+                    "pending_unreviewed_count": 0,
+                },
+                {
+                    "competitor_retailer_id": "meijer_us",
+                    "pending_unreviewed_count": 0,
+                },
+            ],
+        },
+    }
+
+    assert matching_v2_certification_is_complete(
+        source,
+        ["target_us"],
+        {"meijer_us"},
+    )
+    assert not matching_v2_certification_is_complete(
+        source,
+        ["target_us"],
+    )
+
+
 def test_builder_accepts_complete_matching_v2_identity_without_legacy_row_per_retailer() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_shell_eggs")
     source_evidence = evidence_set(

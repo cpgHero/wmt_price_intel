@@ -6,16 +6,29 @@ import csv
 import io
 import json
 import os
+import secrets
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from rci_collections import CollectionPlanner, CollectionRetailerCatalog
+from rci_collections.composite import (
+    CompositeInputSetRecord,
+    PostgresCompositeEvidenceRepository,
+    RecoveryBatchRecord,
+    RecoveryBatchRunRecord,
+    RecoveryBatchStatusRecord,
+    RecoveryLaunchRecord,
+    RecoveryPlanRecord,
+    RecoverySelectionPreview,
+    RetailerUnavailabilityApprovalRecord,
+)
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import (
     CostEstimate,
@@ -36,6 +49,7 @@ from rci_collections.service import (
     CollectionService,
 )
 from rci_contracts import ContractError
+from rci_core import APP_VERSION
 from rci_product_packs import PostgresProductPackCatalog
 
 router = APIRouter(prefix="/api/v1")
@@ -208,6 +222,194 @@ class RetryResponse(BaseModel):
     retried_tasks: int
 
 
+class RecoveryRetailerSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    retailer_id: str
+    selected_tasks: int
+    required_tasks: int
+    optional_transient_tasks: int
+    maximum_provider_attempts: int
+    maximum_credits: int
+    reused_successes: int
+    retained_billable_404s: int
+    retained_billable_404_credits: int
+
+
+class RecoverySelectionItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    source_task_id: str
+    retailer_id: str
+    canonical_request_key: str
+    selection_reason: str
+    required_for_assembly: bool
+    credits_per_success: int
+    maximum_credits: int
+    source_snapshot: dict[str, Any]
+
+
+class RecoverySelectionPreviewResponse(BaseModel):
+    base_collection_run_id: str
+    selection_policy_version: str
+    selection_checksum: str
+    base_snapshot_checksum: str
+    selected_task_count: int
+    maximum_provider_attempts: int
+    maximum_credits: int
+    retailers: tuple[RecoveryRetailerSummaryResponse, ...]
+    items: tuple[RecoverySelectionItemResponse, ...]
+
+
+class ApproveRecoveryPlanRequest(BaseModel):
+    selection_checksum: str
+    approved_credit_ceiling: int
+    reason: str
+    retailer_ids: tuple[str, ...] = ()
+    supersedes_recovery_plan_id: UUID | None = None
+    recovery_batch_id: UUID | None = None
+    plan_mode: Literal["exact_launch", "legacy_adoption"] = "exact_launch"
+
+
+class ApproveRetailerUnavailabilityRequest(BaseModel):
+    retailer_id: str
+    base_snapshot_checksum: str
+    reason: str
+
+
+class RetailerUnavailabilityApprovalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    base_collection_run_id: str
+    retailer_id: str
+    base_snapshot_checksum: str
+    reason: str
+    approved_by: str
+    status: str
+    created_at: datetime
+    revoked_at: datetime | None
+    revoked_by: str | None
+
+
+class RecoveryPlanResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    base_collection_run_id: str
+    recovery_collection_run_id: str | None
+    recovery_batch_id: str | None
+    plan_mode: str
+    reservation_active: bool
+    selection_policy_version: str
+    selection_checksum: str
+    base_snapshot_checksum: str
+    selection_scope: dict[str, Any]
+    plan_generation: int
+    supersedes_recovery_plan_id: str | None
+    selected_task_count: int
+    maximum_credits: int
+    approved_credit_ceiling: int
+    reason: str
+    approved_by: str
+    status: str
+    binding_manifest: dict[str, Any]
+    created_at: datetime
+
+
+class RecoveryLaunchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recovery_plan_id: str
+    collection_run_id: str
+    definition_version_id: str
+    status: str
+    task_count: int
+    maximum_credits: int
+    availability_gate_status: str
+    reused_existing_run: bool
+
+
+class CreateRecoveryBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    authorization_id: UUID
+
+
+class RecoveryBatchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    organization_id: str
+    spend_authorization_id: str
+    phase_key: str
+    inventory_checksum: str
+    authorized_run_ids: tuple[str, ...]
+    approved_credit_ceiling: int
+    reserved_credits: int
+    unit_cost_usd: str
+    currency: str
+    reason: str
+    approved_by: str
+    status: str
+    created_at: datetime
+    closed_at: datetime | None
+
+
+class RecoveryBatchInventoryRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    collection_run_id: str
+    status: str
+    actual_credits: int
+    estimated_credits: int
+    accounted_credits: int
+
+
+class RecoveryBatchStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    batch: RecoveryBatchResponse
+    accounted_credits: int
+    remaining_credits: int
+    approved_amount_usd: str
+    accounted_amount_usd: str
+    recovery_plan_count: int
+    runs: tuple[RecoveryBatchInventoryRunResponse, ...]
+
+
+class RecoveryBatchRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recovery_batch_id: str
+    collection_run_id: str
+    accounted_credits: int
+    batch_accounted_credits: int
+
+
+class BindRecoveryRunRequest(BaseModel):
+    recovery_run_id: UUID
+    binding_mode: Literal["legacy_operational_adoption"] = "legacy_operational_adoption"
+
+
+class MaterializeCompositeInputRequest(BaseModel):
+    recovery_plan_ids: tuple[UUID, ...]
+
+
+class CompositeInputSetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    base_collection_run_id: str
+    recovery_collection_run_ids: tuple[str, ...]
+    assembly_generation: int
+    manifest_checksum: str
+    total_rows: int
+    trust_state: str
+    status: str
+    analysis_run_id: str | None
+
+
 class RetailerProgressResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -292,12 +494,44 @@ def get_collection_service(request: Request) -> CollectionService:
     )
 
 
+def get_composite_evidence_repository(
+    request: Request,
+) -> PostgresCompositeEvidenceRepository:
+    return PostgresCompositeEvidenceRepository(
+        request.app.state.database_probe.engine,
+        analysis_code_version=request.app.state.settings.app_version or APP_VERSION,
+        analysis_max_attempts=int(os.getenv("ANALYSIS_MAX_ATTEMPTS", "3")),
+        provider_request_contracts=_retailer_catalog().provider_request_contracts(),
+    )
+
+
 CollectionServiceDependency = Annotated[CollectionService, Depends(get_collection_service)]
+CompositeEvidenceDependency = Annotated[
+    PostgresCompositeEvidenceRepository,
+    Depends(get_composite_evidence_repository),
+]
 CollectionConfigBody = Annotated[dict[str, Any], Body()]
 
 
 def _not_found(exc: CollectionNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+def _require_recovery_admin(request: Request, provided: str | None) -> None:
+    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN", "").strip()
+    if request.app.state.settings.is_production and (
+        not expected or not provided or not secrets.compare_digest(expected, provided)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated administrator access is required.",
+        )
+
+
+def _recovery_admin_actor() -> str:
+    """Return a server-controlled principal; client headers cannot forge audit identity."""
+
+    return "authenticated-platform-admin"
 
 
 def _scope_estimate_response(record: ScopeEstimateRecord) -> ScopeEstimateResponse:
@@ -314,6 +548,39 @@ def _scope_estimate_response(record: ScopeEstimateRecord) -> ScopeEstimateRespon
         estimated_total_credits=record.estimate.estimated_total_credits,
         expires_at=record.expires_at,
         created_at=record.created_at,
+    )
+
+
+def _recovery_preview_response(
+    preview: RecoverySelectionPreview,
+    *,
+    include_items: bool,
+) -> RecoverySelectionPreviewResponse:
+    return RecoverySelectionPreviewResponse(
+        base_collection_run_id=preview.base_collection_run_id,
+        selection_policy_version=preview.selection_policy_version,
+        selection_checksum=preview.selection_checksum,
+        base_snapshot_checksum=preview.base_snapshot_checksum,
+        selected_task_count=preview.selected_task_count,
+        maximum_provider_attempts=preview.maximum_provider_attempts,
+        maximum_credits=preview.maximum_credits,
+        retailers=tuple(
+            RecoveryRetailerSummaryResponse.model_validate(item) for item in preview.retailers
+        ),
+        items=(
+            tuple(RecoverySelectionItemResponse.model_validate(item) for item in preview.items)
+            if include_items
+            else ()
+        ),
+    )
+
+
+def _composite_error(exc: LookupError | ValueError) -> HTTPException:
+    return HTTPException(
+        status_code=(
+            status.HTTP_404_NOT_FOUND if isinstance(exc, LookupError) else status.HTTP_409_CONFLICT
+        ),
+        detail=str(exc),
     )
 
 
@@ -655,12 +922,274 @@ async def cancel_run(run_id: str, service: CollectionServiceDependency) -> RunRe
     response_model=RetryResponse,
     tags=["collections"],
 )
-async def retry_failed(run_id: str, service: CollectionServiceDependency) -> RetryResponse:
+async def retry_failed(
+    run_id: str,
+    request: Request,
+    service: CollectionServiceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RetryResponse:
+    _require_recovery_admin(request, x_rci_admin_token)
     try:
         count = await service.retry_failed(run_id)
     except CollectionNotFoundError as exc:
         raise _not_found(exc) from exc
+    except CollectionApprovalError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return RetryResponse(run_id=run_id, retried_tasks=count)
+
+
+@router.get(
+    "/collection-runs/{run_id}/recovery-preview",
+    response_model=RecoverySelectionPreviewResponse,
+    tags=["collections"],
+)
+async def preview_failure_only_recovery(
+    run_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    retailer_ids: Annotated[list[str] | None, Query()] = None,
+    include_items: bool = Query(default=False),
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoverySelectionPreviewResponse:
+    """Preview a zero-overlap, checksum-bound recovery selection."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        preview = await repository.preview(str(run_id), retailer_ids=retailer_ids or ())
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+    return _recovery_preview_response(preview, include_items=include_items)
+
+
+@router.post(
+    "/collection-runs/{run_id}/retailer-unavailability",
+    response_model=RetailerUnavailabilityApprovalResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def approve_retailer_unavailability(
+    run_id: UUID,
+    request_body: ApproveRetailerUnavailabilityRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RetailerUnavailabilityApprovalRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.approve_retailer_unavailability(
+            str(run_id),
+            retailer_id=request_body.retailer_id,
+            base_snapshot_checksum=request_body.base_snapshot_checksum,
+            reason=request_body.reason,
+            approved_by=_recovery_admin_actor(),
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/retailer-unavailability/{approval_id}/revoke",
+    response_model=RetailerUnavailabilityApprovalResponse,
+    tags=["collections"],
+)
+async def revoke_retailer_unavailability(
+    approval_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RetailerUnavailabilityApprovalRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.revoke_retailer_unavailability(
+            str(approval_id), revoked_by=_recovery_admin_actor()
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-recovery-batches",
+    response_model=RecoveryBatchResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def create_recovery_batch(
+    request_body: CreateRecoveryBatchRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryBatchRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.create_recovery_batch(
+            authorization_id=str(request_body.authorization_id),
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.get(
+    "/collection-recovery-batches/{batch_id}",
+    response_model=RecoveryBatchStatusResponse,
+    tags=["collections"],
+)
+async def get_recovery_batch_status(
+    batch_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryBatchStatusRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.get_recovery_batch_status(str(batch_id))
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-recovery-batches/{batch_id}/close",
+    response_model=RecoveryBatchStatusResponse,
+    tags=["collections"],
+)
+async def close_recovery_batch(
+    batch_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryBatchStatusRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.close_recovery_batch(str(batch_id))
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-recovery-batches/{batch_id}/runs/{run_id}",
+    response_model=RecoveryBatchRunResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def attach_run_to_recovery_batch(
+    batch_id: UUID,
+    run_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryBatchRunRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.attach_run_to_recovery_batch(str(batch_id), str(run_id))
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-runs/{run_id}/recovery-plans",
+    response_model=RecoveryPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def approve_failure_only_recovery(
+    run_id: UUID,
+    request_body: ApproveRecoveryPlanRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryPlanRecord:
+    """Persist approval for the exact previewed task set without launching it."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.approve(
+            str(run_id),
+            selection_checksum=request_body.selection_checksum,
+            approved_credit_ceiling=request_body.approved_credit_ceiling,
+            reason=request_body.reason,
+            approved_by=_recovery_admin_actor(),
+            retailer_ids=request_body.retailer_ids,
+            supersedes_recovery_plan_id=(
+                str(request_body.supersedes_recovery_plan_id)
+                if request_body.supersedes_recovery_plan_id is not None
+                else None
+            ),
+            recovery_batch_id=(
+                str(request_body.recovery_batch_id)
+                if request_body.recovery_batch_id is not None
+                else None
+            ),
+            plan_mode=request_body.plan_mode,
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-recovery-plans/{plan_id}/launch",
+    response_model=RecoveryLaunchResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def launch_failure_only_recovery(
+    plan_id: UUID,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryLaunchRecord:
+    """Idempotently launch only the checksum-bound, approved recovery tasks."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.launch_exact_recovery(str(plan_id))
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-recovery-plans/{plan_id}/bind-run",
+    response_model=RecoveryPlanResponse,
+    tags=["collections"],
+)
+async def bind_recovery_run(
+    plan_id: UUID,
+    request_body: BindRecoveryRunRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> RecoveryPlanRecord:
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.bind_recovery_run(
+            str(plan_id),
+            str(request_body.recovery_run_id),
+            binding_mode=request_body.binding_mode,
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
+
+
+@router.post(
+    "/collection-runs/{run_id}/composite-input-sets",
+    response_model=CompositeInputSetResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["collections"],
+)
+async def materialize_composite_input_set(
+    run_id: UUID,
+    request_body: MaterializeCompositeInputRequest,
+    request: Request,
+    repository: CompositeEvidenceDependency,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> CompositeInputSetRecord:
+    """Assemble de-duplicated evidence; blocked assemblies never queue analysis."""
+
+    _require_recovery_admin(request, x_rci_admin_token)
+    try:
+        return await repository.materialize(
+            str(run_id), tuple(str(value) for value in request_body.recovery_plan_ids)
+        )
+    except (LookupError, ValueError) as exc:
+        raise _composite_error(exc) from exc
 
 
 @router.get(

@@ -69,3 +69,11 @@ and exact row changes. Apply must consume the reviewed dry-run artifact, shares 
 advisory lock with location import, rejects a stale snapshot, and commits all changes plus audit
 completion atomically. Downgrade is refused after audit history exists so a schema rollback cannot
 silently destroy the record of an applied eligibility decision.
+`0051_composite_evidence` adds an offline-created immutable spend authorization consumed by exactly
+one aggregate recovery batch; checksum-bound, failure-only recovery plans; versioned retailer
+unavailability approvals; immutable base/recovery input components; one canonical selected task
+per provider request; and downstream composite-analysis lineage. The Search credit rate is pinned
+at $0.002 USD, and the HTTP API can create a batch only from an existing authorization UUID. It
+permits multiple immutable input generations for one base run without rewriting source tasks or
+artifacts. Downgrade is refused after any spend authorization, recovery batch, recovery plan,
+unavailability approval, composite input set, or incompatible duplicate input generation exists.

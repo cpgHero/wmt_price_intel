@@ -23,6 +23,7 @@ from rci_providers import MetricsCartAdapterRegistry
 from rci_results import (
     AnalysisResultService,
     AnalysisResultValidator,
+    ArtifactRenderer,
     InMemoryReportObjectStore,
     InMemoryResultsRepository,
 )
@@ -32,6 +33,7 @@ from rci_worker.analysis import (
     CollectedPage,
     HistoricalSource,
     S3HistoricalCSVReader,
+    _scoreable_competitors,
     apply_brand_classification_rules,
     historical_source_row,
     matching_v2_gold_set_presentation,
@@ -42,6 +44,40 @@ from rci_worker.analysis import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 RUN_ID = "00000000-0000-0000-0000-000000000701"
+
+
+def test_composite_unavailable_retailer_is_not_scored_or_silently_zeroed() -> None:
+    config = {
+        "benchmark_retailer": "walmart_us",
+        "retailers": [
+            {"retailer_id": "walmart_us", "enabled": True},
+            {"retailer_id": "aldi_us", "enabled": True},
+            {"retailer_id": "meijer_us", "enabled": True},
+        ],
+    }
+
+    benchmark, competitors, unavailable = _scoreable_competitors(
+        config, {"unavailable_retailers": ["meijer_us"]}
+    )
+
+    assert benchmark == "walmart_us"
+    assert competitors == ["aldi_us"]
+    assert unavailable == {"meijer_us"}
+
+
+def test_composite_cannot_waive_benchmark_or_unconfigured_retailer() -> None:
+    config = {
+        "benchmark_retailer": "walmart_us",
+        "retailers": [
+            {"retailer_id": "walmart_us", "enabled": True},
+            {"retailer_id": "aldi_us", "enabled": True},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="benchmark retailer"):
+        _scoreable_competitors(config, {"unavailable_retailers": ["walmart_us"]})
+    with pytest.raises(ValueError, match="unconfigured retailers"):
+        _scoreable_competitors(config, {"unavailable_retailers": ["meijer_us"]})
 
 
 def test_matching_v2_gold_set_rules_are_scope_aware_and_certified_only() -> None:
@@ -743,6 +779,10 @@ class PageQueue:
         assert run_id == RUN_ID
         return self._pages
 
+    async def composite_pages(self, input_set_id: str) -> list[CollectedPage]:
+        assert input_set_id == "00000000-0000-0000-0000-000000000713"
+        return self._pages
+
 
 class HistoricalQueue:
     def __init__(self, sources: list[HistoricalSource]) -> None:
@@ -942,6 +982,107 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
         "Requires at least 25 retained observations" in row["suppression_reasons"]
         for row in suppressed
     )
+
+
+async def test_composite_unavailable_competitor_is_declared_but_never_scored() -> None:
+    specifications = [
+        ("walmart_us", "metricscart_walmart_search_zipcode_v2", "44391605", "2040", "$2.98"),
+        ("aldi_us", "metricscart_new_aldi_serp_zipcode", "16383764", "463-048", "$2.49"),
+    ]
+    now = datetime.now(UTC)
+    pages: list[CollectedPage] = []
+    payloads: dict[str, object] = {}
+    for retailer_id, adapter_id, product_id, store_number, price in specifications:
+        task = _task(retailer_id, adapter_id, product_id, store_number)
+        pages.append(
+            CollectedPage(
+                task=task,
+                storage_uri=f"s3://raw/{task.id}.json.gz",
+                checksum="b" * 64,
+                collected_at=now,
+                latitude=40.7584,
+                longitude=-82.5154,
+            )
+        )
+        payloads[task.id] = _payload(product_id, price)
+
+    result_service = AnalysisResultService(
+        InMemoryResultsRepository(),
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        InMemoryReportObjectStore(),
+    )
+    processor = AnalysisProcessor(
+        repository_root=REPOSITORY_ROOT,
+        queue=PageQueue(pages),  # type: ignore[arg-type]
+        adapters=MetricsCartAdapterRegistry.from_catalog(
+            REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+        ),
+        raw_reader=RawReader(payloads),  # type: ignore[arg-type]
+        dataset_writer=ParquetDatasetWriter(InMemoryDatasetStore()),
+        collections=ArtifactRecorder(),  # type: ignore[arg-type]
+        results=result_service,
+        code_version="test-version",
+    )
+    job = AnalysisJob(
+        id="00000000-0000-0000-0000-000000000712",
+        collection_run_id=RUN_ID,
+        input_set_id="00000000-0000-0000-0000-000000000713",
+        source_kind="live_collection_composite",
+        product_pack_id="fresh_strawberries",
+        product_pack_version="1.1.0",
+        definition_config={
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {"retailer_id": "walmart_us", "enabled": True},
+                {"retailer_id": "aldi_us", "enabled": True},
+                {"retailer_id": "amazon_us_same_day", "enabled": True},
+            ],
+            "delivery": {
+                "web_report": False,
+                "excel": False,
+                "leadership_email": False,
+                "audit_package": False,
+            },
+        },
+        attempt_count=1,
+        max_attempts=3,
+        input_manifest_checksum="c" * 64,
+        component_collection_run_ids=(RUN_ID, "recovery-run"),
+        input_manifest={
+            "unavailable_retailers": ["amazon_us_same_day"],
+            "retailer_collection_readiness": {
+                "amazon_us_same_day": {
+                    "status": "unavailable",
+                    "unavailability_approval": {
+                        "reason": "provider evidence remained insufficient"
+                    },
+                }
+            },
+        },
+    )
+
+    analysis_id = await processor.process(job)
+    analysis = await result_service.get_by_collection_run(RUN_ID)
+    assert analysis.result["competitors"] == ["aldi_us", "amazon_us_same_day"]
+    assert analysis.result["source"]["unavailable_retailers"] == ["amazon_us_same_day"]
+    assert all(
+        row.get("competitor_id") != "amazon_us_same_day"
+        for row in analysis.result.get("comparisons", [])
+    )
+    assortment = analysis.result.get("assortment_analysis", {})
+    assert all(
+        row.get("retailer_id") != "amazon_us_same_day" for row in assortment.get("retailers", [])
+    )
+    publication = await result_service.latest_publication(analysis_id)
+    assert publication is not None
+    assert analysis.result["validation"]["status"] == "ready_to_share"
+    readiness = ArtifactRenderer(REPOSITORY_ROOT).report_view(analysis.result)["report_readiness"]
+    assert readiness["status"] in {"ready", "limited"}
+    assert not readiness["blocking_reasons"]
+    assert all(
+        row.get("code") != "analysis_validation_not_ready" for row in readiness["blocking_reasons"]
+    )
+    assert any(row.get("code") == "competitor_data_unavailable" for row in readiness["warnings"])
 
 
 async def test_historical_input_replays_through_same_generic_pipeline() -> None:

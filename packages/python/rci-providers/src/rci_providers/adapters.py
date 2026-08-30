@@ -7,13 +7,14 @@ from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus
 
 from rci_collections.models import QueueTask
+from rci_collections.request_contract import (
+    build_effective_provider_request,
+    provider_request_contract_from_spec,
+)
 from rci_providers.extraction import ResultArrayExtraction, inspect_result_array
 from rci_providers.models import JsonObject, ProviderRequest, RetailerSpec
-
-PROTECTED_OVERRIDES = {"x-api-key", "page", "zipcode", "store"}
 
 
 class MetricsCartRetailerAdapter:
@@ -45,46 +46,34 @@ class MetricsCartRetailerAdapter:
                 f"task credit value {task.credits_per_success} does not match catalog value "
                 f"{self.credits_per_successful_page} for {self.retailer_id}"
             )
-        payload = task.request_payload
-        keyword = str(payload.get("keyword") or "").strip()
         supported = set(self.spec.supported_params)
         if task.max_pages > 1 and "page" not in supported:
             raise ValueError(f"{self.retailer_id} does not support Search pagination")
-        params: JsonObject = dict(self.spec.default_request_params)
-        if "zipcode" in supported:
-            params["zipcode"] = task.zipcode
-        if "page" in supported:
-            params["page"] = task.page_number
-        if self.retailer_id == "amazon_us_same_day":
-            template = payload.get("amazon_same_day_url_template")
-            if not isinstance(template, str) or not template.strip():
-                raise ValueError("Amazon Same Day requires amazon_same_day_url_template")
-            params["url"] = template.replace("{{keyword}}", quote_plus(keyword))
-        else:
-            if not keyword:
-                raise ValueError(f"{self.retailer_id} requires a keyword")
-            params["keyword"] = keyword
-            if "store" in supported and task.store_number is None:
-                raise ValueError(f"{self.retailer_id} requires a store number")
-            if "store" in supported:
-                params["store"] = task.store_number
-
-        sort = payload.get("sort") or self.spec.default_sort
-        if sort and "sort" in supported:
-            params["sort"] = str(sort)
-        overrides = payload.get("request_overrides", {})
-        if not isinstance(overrides, dict):
-            raise ValueError("request_overrides must be an object")
-        protected = PROTECTED_OVERRIDES.intersection(overrides)
-        if protected:
-            raise ValueError(
-                f"request_overrides cannot set protected parameters: {', '.join(sorted(protected))}"
-            )
-        params.update({str(key): value for key, value in overrides.items() if value is not None})
-        missing = [name for name in self.spec.required_params if not params.get(name)]
-        if missing:
-            raise ValueError(f"missing required provider parameters: {', '.join(missing)}")
-        return ProviderRequest(method=self.spec.method, path=self.spec.endpoint, params=params)
+        identity = build_effective_provider_request(
+            {
+                "retailer_id": task.retailer_id,
+                "adapter_id": task.adapter_id,
+                "zipcode": task.zipcode,
+                "store_number": task.store_number,
+                "page_number": task.page_number,
+                "request_payload": task.request_payload,
+            },
+            provider_contract=provider_request_contract_from_spec(
+                retailer_id=self.retailer_id,
+                adapter_id=self.id,
+                endpoint=self.spec.endpoint,
+                method=self.spec.method,
+                supported_params=self.spec.supported_params,
+                required_params=self.spec.required_params,
+                default_sort=self.spec.default_sort,
+                default_request_params=self.spec.default_request_params,
+            ),
+        )
+        return ProviderRequest(
+            method=str(identity["method"]),
+            path=str(identity["path"]),
+            params=dict(identity["params"]),
+        )
 
     def extract_result_array(self, payload: Any) -> list[JsonObject]:
         return self.inspect_result_array(payload).results

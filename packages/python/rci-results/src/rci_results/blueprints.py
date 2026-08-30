@@ -898,9 +898,18 @@ class ReportProjector:
             str(value): index
             for index, value in enumerate(decision_rules.get("profile_priority", []))
         }
+        source = result.get("source")
+        unavailable_retailers = {
+            str(value)
+            for value in (
+                source.get("unavailable_retailers", []) if isinstance(source, dict) else []
+            )
+        }
         scorecards: list[JsonObject] = []
         for competitor_value in result.get("competitors", []):
             competitor_id = str(competitor_value)
+            if competitor_id in unavailable_retailers:
+                continue
             candidates = [
                 row for row in comparisons if str(row.get("competitor_id")) == competitor_id
             ]

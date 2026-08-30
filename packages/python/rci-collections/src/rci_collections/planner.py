@@ -172,6 +172,12 @@ class CollectionPlanner:
         for retailer in retailers:
             retailer_id = str(retailer["retailer_id"])
             capability = capabilities[retailer_id]
+            configured_adapter_id = str(retailer.get("adapter_id") or "")
+            if configured_adapter_id != capability.adapter_id:
+                raise ValueError(
+                    f"retailer {retailer_id} adapter {configured_adapter_id!r} does not match "
+                    f"enabled catalog adapter {capability.adapter_id!r}"
+                )
             max_pages = int(retailer.get("max_pages_override") or default_pages)
             if not 1 <= max_pages <= 10:
                 raise ValueError("max pages must be between 1 and 10")
@@ -202,6 +208,7 @@ class CollectionPlanner:
                         stop_on_short_page,
                         capability.credits_per_successful_page,
                         self._max_attempts,
+                        capability.provider_request_contract,
                     )
                     for unit in location_units
                     if unit.zipcode is not None
@@ -229,6 +236,7 @@ class CollectionPlanner:
                         stop_on_short_page,
                         capability.credits_per_successful_page,
                         self._max_attempts,
+                        capability.provider_request_contract,
                     )
                     for zipcode in zipcodes
                     for keyword in keywords
@@ -439,6 +447,7 @@ class CollectionPlanner:
         keyword: str,
         zipcode: str,
         store_number: str | None,
+        provider_request_contract: JsonObject,
     ) -> JsonObject:
         return {
             "retailer_id": str(retailer["retailer_id"]),
@@ -450,6 +459,7 @@ class CollectionPlanner:
             "sort": retailer.get("sort"),
             "page": 1,
             "request_overrides": retailer.get("request_overrides", {}),
+            "_provider_request_contract": provider_request_contract,
         }
 
     @classmethod
@@ -464,6 +474,7 @@ class CollectionPlanner:
         stop_on_short_page: bool,
         credits_per_success: int,
         max_attempts: int,
+        provider_request_contract: JsonObject,
     ) -> TaskSeed:
         assert unit.zipcode is not None
         payload = cls._base_payload(
@@ -472,6 +483,7 @@ class CollectionPlanner:
             keyword=keyword,
             zipcode=unit.zipcode,
             store_number=unit.store_number,
+            provider_request_contract=provider_request_contract,
         )
         return TaskSeed(
             retailer_id=str(retailer["retailer_id"]),
@@ -502,9 +514,15 @@ class CollectionPlanner:
         stop_on_short_page: bool,
         credits_per_success: int,
         max_attempts: int,
+        provider_request_contract: JsonObject,
     ) -> TaskSeed:
         payload = cls._base_payload(
-            retailer, query, keyword=keyword, zipcode=zipcode, store_number=None
+            retailer,
+            query,
+            keyword=keyword,
+            zipcode=zipcode,
+            store_number=None,
+            provider_request_contract=provider_request_contract,
         )
         return TaskSeed(
             retailer_id=str(retailer["retailer_id"]),

@@ -1627,6 +1627,34 @@ class PostgresCollectionRepository:
 
     async def retry_failed(self, run_id: str) -> int:
         async with self._engine.begin() as connection:
+            run_exists = (
+                await connection.execute(
+                    text("SELECT id FROM collection_run WHERE id::text = :run_id FOR UPDATE"),
+                    {"run_id": run_id},
+                )
+            ).first()
+            if run_exists is None:
+                return 0
+            governed_recovery_reference = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT 1 FROM collection_recovery_batch_run
+                        WHERE collection_run_id::text = :run_id
+                        UNION ALL
+                        SELECT 1 FROM collection_recovery_plan
+                        WHERE recovery_collection_run_id::text = :run_id
+                        LIMIT 1
+                        """
+                    ),
+                    {"run_id": run_id},
+                )
+            ).first()
+            if governed_recovery_reference is not None:
+                raise ValueError(
+                    "a run accounted by immutable recovery governance cannot be reopened; "
+                    "create a new checksum-bound unresolved-only recovery plan"
+                )
             result = await connection.execute(
                 text(
                     """

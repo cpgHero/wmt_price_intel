@@ -2418,20 +2418,76 @@ class ArtifactRenderer:
             )
         has_ready_scorecard = any(row.get("status") == "ready" for row in scorecards)
         competitor_ids = {str(value) for value in result.get("competitors", [])}
+        unavailable_competitors = {str(value) for value in source.get("unavailable_retailers", [])}
+        invalid_unavailable = unavailable_competitors - competitor_ids
+        for competitor_id in sorted(invalid_unavailable):
+            blocking_reasons.append(
+                {
+                    "code": "invalid_unavailable_retailer_scope",
+                    "message": (
+                        "A retailer marked unavailable is not a configured competitor; the "
+                        "composite evidence manifest is inconsistent."
+                    ),
+                    "competitor_id": competitor_id,
+                }
+            )
+        scorecard_for_unavailable = {
+            str(row.get("competitor_id"))
+            for row in scorecards
+            if str(row.get("competitor_id")) in unavailable_competitors
+        }
+        for competitor_id in sorted(scorecard_for_unavailable):
+            blocking_reasons.append(
+                {
+                    "code": "scorecard_emitted_for_unavailable_retailer",
+                    "message": (
+                        "A retailer explicitly governed as data unavailable produced a "
+                        "scorecard; its metrics must be excluded rather than shown as zero."
+                    ),
+                    "competitor_id": competitor_id,
+                }
+            )
+        evidence_readiness_value = source.get("collection_evidence_readiness")
+        evidence_readiness: JsonObject = (
+            dict(evidence_readiness_value) if isinstance(evidence_readiness_value, dict) else {}
+        )
+        for competitor_id in sorted(unavailable_competitors & competitor_ids):
+            detail = evidence_readiness.get(competitor_id)
+            reason = (
+                dict(detail).get("unavailability_approval", {}).get("reason")
+                if isinstance(detail, dict)
+                and isinstance(dict(detail).get("unavailability_approval"), dict)
+                else None
+            )
+            warnings.append(
+                {
+                    "code": "competitor_data_unavailable",
+                    "message": (
+                        f"Data for {competitor_id} is explicitly unavailable under the "
+                        "governed collection evidence contract; no scorecard or zero-valued "
+                        "metric is published." + (f" Reason: {reason}" if reason else "")
+                    ),
+                    "competitor_id": competitor_id,
+                }
+            )
         reported_competitors = {
             str(row.get("competitor_id"))
             for row in scorecards
             if row.get("evidence_state") == "reported"
         }
-        missing_competitors = sorted(competitor_ids - reported_competitors)
-        if missing_competitors:
-            warnings.append(
+        missing_competitors = sorted(
+            competitor_ids - reported_competitors - unavailable_competitors
+        )
+        for competitor_id in missing_competitors:
+            blocking_reasons.append(
                 {
-                    "code": "competitors_without_reported_price_evidence",
+                    "code": "competitor_without_reported_price_evidence",
                     "message": (
-                        f"{len(missing_competitors):,} configured competitor retailers have no "
-                        "reported price evidence under any governed comparison basis."
+                        "The configured competitor has no admitted, governed comparable "
+                        "price evidence under any comparison basis; a zero value is not a "
+                        "valid scorecard outcome."
                     ),
+                    "competitor_id": competitor_id,
                 }
             )
         status = (
