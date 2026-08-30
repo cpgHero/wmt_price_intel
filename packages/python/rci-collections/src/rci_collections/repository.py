@@ -1115,8 +1115,9 @@ class PostgresCollectionRepository:
     ) -> list[QueueTask]:
         claim_statement = text(
             """
-            WITH candidates AS (
-              SELECT t.id
+            WITH eligible AS (
+              SELECT t.id, t.collection_run_id, t.retailer_id, t.is_preflight,
+                     t.priority, t.created_at
               FROM collection_task t
               JOIN collection_run r ON r.id = t.collection_run_id
               WHERE (
@@ -1165,8 +1166,20 @@ class PostgresCollectionRepository:
                     )
                   )
                 )
-              ORDER BY CASE WHEN t.is_preflight THEN 0 ELSE 1 END,
-                       t.priority, t.created_at, t.id
+            ), ranked AS (
+              SELECT e.*,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY e.collection_run_id, e.retailer_id
+                       ORDER BY CASE WHEN e.is_preflight THEN 0 ELSE 1 END,
+                                e.priority, e.created_at, e.id
+                     ) AS lane_position
+              FROM eligible e
+            ), candidates AS (
+              SELECT t.id
+              FROM ranked q
+              JOIN collection_task t ON t.id = q.id
+              ORDER BY CASE WHEN q.is_preflight THEN 0 ELSE 1 END,
+                       q.lane_position, q.priority, q.created_at, q.id
               FOR UPDATE OF t SKIP LOCKED
               LIMIT :claim_limit
             )

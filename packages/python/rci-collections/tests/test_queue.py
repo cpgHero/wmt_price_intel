@@ -348,6 +348,8 @@ async def test_budget_blocks_run_before_tasks_are_created() -> None:
 def test_postgres_claim_query_uses_skip_locked() -> None:
     source = inspect.getsource(PostgresCollectionRepository.claim_tasks)
     assert "FOR UPDATE OF t SKIP LOCKED" in source
+    assert "PARTITION BY e.collection_run_id, e.retailer_id" in source
+    assert "q.lane_position" in source
 
 
 async def test_availability_gate_claims_sample_first_and_stops_on_excess_404s() -> None:

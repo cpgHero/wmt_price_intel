@@ -37,6 +37,11 @@ timeout could idle otherwise-free retailer capacity. Rolling refill does not cha
 budgets, retailer gates, retry ceilings, cancellation, immutable raw evidence, or `FOR UPDATE SKIP
 LOCKED` ownership. Graceful shutdown completes already-leased requests without claiming more.
 
+Eligible claims are ranked by collection-run/retailer lane before row locking. Each claim window
+takes one eligible task from every lane before taking a second from any lane. This prevents an
+older category or a high-volume retailer from monopolizing rolling slots while preserving global
+preflight priority and `SKIP LOCKED` safety across replicas.
+
 Production collection uses three worker replicas. Replica IDs are unique and the database-backed
 limiter prevents horizontal scaling from multiplying a retailer quota.
 
