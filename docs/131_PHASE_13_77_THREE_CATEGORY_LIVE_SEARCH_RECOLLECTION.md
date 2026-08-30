@@ -221,6 +221,10 @@ future unresolved-only retry needs a versioned continuation workflow and remaini
 - Ruff, mypy across 156 application/package source files, web TypeScript type checking, one unit
   suite plus 85 web tests/build, 91 normative JSON-document validations, and offline Alembic upgrade
   SQL through `0051_composite_evidence` passed.
+- CI rehearses the reversible migration sequence on a pristine database before integration tests
+  create protected spend and evidence lineage. The `0051` downgrade remains intentionally
+  fail-closed once those audit rows exist, so the release gate validates reversibility without
+  weakening the production data-loss safeguard.
 - Commit `c6af7b6139738dc65e2ea2328a3d039c863f0406` passed GitHub Actions run `33326968373`,
   including 17 Playwright tests, real-Postgres upgrade/downgrade/upgrade, and all four containers.
 - Railway deployed API `9e60276c-8b65-4785-b418-5038c23b468d`, worker
