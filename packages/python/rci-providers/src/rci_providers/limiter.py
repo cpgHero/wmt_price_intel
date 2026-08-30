@@ -101,8 +101,8 @@ class PostgresProviderLimiter:
         budget_key: str,
         rps: int = 2,
         rpm: int = 108,
-        post_429_rps: int = 2,
-        post_429_rpm: int = 108,
+        post_429_rps: int = 1,
+        post_429_rpm: int = 54,
         post_429_recovery_seconds: int = 1800,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
