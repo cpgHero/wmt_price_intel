@@ -2962,7 +2962,7 @@ async def _create_scope_projection_fixture(
                         "'postgres-scope-projection-test', 'canonical alias fixture', "
                         "'completed', :scanned, :changed, :eligible_before, :eligible_after, "
                         "0, :changed, '{}'::jsonb, "
-                        "'{\"store_number_not_provider_safe\":1}'::jsonb, "
+                        "CAST(:reason_counts_after AS jsonb), "
                         "CAST(:changes AS jsonb), now()) RETURNING id::text"
                     ),
                     {
@@ -2973,6 +2973,10 @@ async def _create_scope_projection_fixture(
                         "changed": pair_count,
                         "eligible_before": pair_count * 2,
                         "eligible_after": pair_count,
+                        "reason_counts_after": json.dumps(
+                            {"store_number_not_provider_safe": pair_count},
+                            sort_keys=True,
+                        ),
                         "changes": json.dumps(audit_changes, sort_keys=True),
                     },
                 )
