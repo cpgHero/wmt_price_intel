@@ -3009,7 +3009,7 @@ async def _create_scope_projection_fixture(
                     "'raw_provider_response', 's3://test/scope/' || t.id::text || '.json.gz', "
                     "'application/json', 1, 64, md5(t.id::text) || md5(t.id::text), "
                     "'1.0.0', jsonb_build_object('task_id', t.id::text, 'provider', 'test') "
-                    "FROM collection_task t WHERE t.collection_run_id::text = :run_id "
+                    "FROM collection_task t WHERE t.collection_run_id = CAST(:run_id AS uuid) "
                     "AND t.retailer_id = 'kroger_us' RETURNING id, metadata->>'task_id' AS task_id"
                     ") UPDATE collection_task t SET status = 'succeeded', completed_at = now(), "
                     "http_status = 200, result_count = 1, billable_credits = 1, "
@@ -3022,7 +3022,7 @@ async def _create_scope_projection_fixture(
                 text(
                     "UPDATE collection_task SET status = 'failed', completed_at = now(), "
                     "http_status = 500, failure_class = 'lease_exhausted', "
-                    "billable_credits = 0 WHERE collection_run_id::text = :run_id "
+                    "billable_credits = 0 WHERE collection_run_id = CAST(:run_id AS uuid) "
                     "AND retailer_id = 'walmart_us'"
                 ),
                 {"run_id": base_run.id},
@@ -3031,7 +3031,7 @@ async def _create_scope_projection_fixture(
                 text(
                     "UPDATE collection_run SET status = 'completed_with_warnings', "
                     "actual_success_pages = :successes, actual_credits = :successes, "
-                    "completed_at = now() WHERE id::text = :run_id"
+                    "completed_at = now() WHERE id = CAST(:run_id AS uuid)"
                 ),
                 {"run_id": base_run.id, "successes": pair_count * 2},
             )
@@ -3039,14 +3039,15 @@ async def _create_scope_projection_fixture(
             await connection.execute(
                 text(
                     "UPDATE collection_task SET status = 'cancelled', completed_at = now(), "
-                    "failure_class = 'cancelled' WHERE collection_run_id::text = :run_id"
+                    "failure_class = 'cancelled' "
+                    "WHERE collection_run_id = CAST(:run_id AS uuid)"
                 ),
                 {"run_id": base_run.id},
             )
             await connection.execute(
                 text(
                     "UPDATE collection_run SET status = 'cancelled', completed_at = now() "
-                    "WHERE id::text = :run_id"
+                    "WHERE id = CAST(:run_id AS uuid)"
                 ),
                 {"run_id": base_run.id},
             )
@@ -3055,7 +3056,8 @@ async def _create_scope_projection_fixture(
                 await connection.execute(
                     text(
                         "SELECT id::text, retailer_id, location_scope_key "
-                        "FROM collection_task WHERE collection_run_id::text = :run_id"
+                        "FROM collection_task "
+                        "WHERE collection_run_id = CAST(:run_id AS uuid)"
                     ),
                     {"run_id": base_run.id},
                 )
@@ -3119,7 +3121,8 @@ async def _create_cross_run_scope_task(
                 await connection.execute(
                     text(
                         "UPDATE collection_task SET status = 'cancelled', completed_at = now(), "
-                        "failure_class = 'cancelled' WHERE collection_run_id::text = :run_id "
+                        "failure_class = 'cancelled' "
+                        "WHERE collection_run_id = CAST(:run_id AS uuid) "
                         "RETURNING id::text"
                     ),
                     {"run_id": run.id},
@@ -3129,7 +3132,7 @@ async def _create_cross_run_scope_task(
         await connection.execute(
             text(
                 "UPDATE collection_run SET status = 'cancelled', completed_at = now() "
-                "WHERE id::text = :run_id"
+                "WHERE id = CAST(:run_id AS uuid)"
             ),
             {"run_id": run.id},
         )
@@ -3191,7 +3194,8 @@ async def _complete_scope_recovery_fixture(database: DatabaseProbe, run_id: str)
                         "'.json.gz', 'application/json', 1, 64, "
                         "md5(t.id::text) || md5(t.id::text), '1.0.0', "
                         "jsonb_build_object('task_id', t.id::text, 'provider', 'test') "
-                        "FROM collection_task t WHERE t.collection_run_id::text = :run_id "
+                        "FROM collection_task t "
+                        "WHERE t.collection_run_id = CAST(:run_id AS uuid) "
                         "RETURNING id, metadata->>'task_id' AS task_id"
                         ") UPDATE collection_task t SET status = 'succeeded', "
                         "completed_at = now(), http_status = 200, result_count = 1, "
@@ -3205,7 +3209,8 @@ async def _complete_scope_recovery_fixture(database: DatabaseProbe, run_id: str)
         await connection.execute(
             text(
                 "UPDATE collection_run SET status = 'succeeded', actual_success_pages = 1, "
-                "actual_credits = 1, completed_at = now() WHERE id::text = :run_id"
+                "actual_credits = 1, completed_at = now() "
+                "WHERE id = CAST(:run_id AS uuid)"
             ),
             {"run_id": run_id},
         )
@@ -3221,7 +3226,7 @@ async def _projection_materialization_counts(
                 await connection.execute(
                     text(
                         "WITH inputs AS (SELECT id FROM analysis_input_set "
-                        "WHERE collection_run_id::text = :run_id "
+                        "WHERE collection_run_id = CAST(:run_id AS uuid) "
                         "AND source_kind = 'live_collection_composite') SELECT "
                         "(SELECT count(*) FROM inputs) AS input_count, "
                         "(SELECT count(*) FROM analysis_input_task_lineage "
