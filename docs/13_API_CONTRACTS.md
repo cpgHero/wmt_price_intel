@@ -31,6 +31,24 @@ Prefix: `/api/v1`.
 - `GET /collection-runs/{id}/monitor` returns exact retailer/status aggregates,
   retry/failure counts, elapsed time, configured global provider limits, and shared
   Postgres cooldown state without exposing the credential budget key.
+- `GET /collection-runs/{id}/scope-projection-preview` is an administrator-only, read-only
+  projection over one terminal base run and enabled non-benchmark retailer. Query parameters are
+  `retailer_id`, `projection_kind`, optional `source_audit_id`, and bounded item pagination. The
+  checksum always covers the complete inventory. Phase 13.81 adds
+  `audited_alias_reconciliation` under policy `audited-alias-reconciliation-v1`; its response
+  explicitly includes raw/retained/excluded task and distinct-location counts,
+  `denominator_gap_location_count`, coverage numerator and denominator location counts,
+  `coverage_semantics`, raw-task retention, governed physical coverage, disposition, source
+  evidence checksum, ordered inventory checksum, and bounded item detail. Existing 0053
+  `canonical_alias_collapse` and `limited_provider_footprint` responses remain compatible.
+- `POST /collection-runs/{id}/scope-projections` is administrator-only and idempotently approves
+  the exact recomputed preview. The request supplies `retailer_id`, `projection_kind`, complete
+  `projection_checksum`, `base_snapshot_checksum`, an identified review reason, and the audit ID
+  when required. It never edits the base run, task, frozen geography, audit, or artifact. An audited
+  unpaired gap is valid only when the completed retailer audit has exact reason
+  `store_number_not_provider_safe` and no exact retained request twin; proximity, address, and
+  shared ZIP cannot supply a mapping. The response repeats the immutable projection and coverage
+  lineage used by recovery, materialization, AnalysisResult, publication readiness, and warnings.
 
 ## Analyses
 - `GET /analyses`

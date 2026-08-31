@@ -292,10 +292,14 @@ class ScopeProjectionPreviewResponse(BaseModel):
     raw_location_count: int
     retained_location_count: int
     excluded_location_count: int
+    denominator_gap_location_count: int
     raw_task_retention_ratio: str
     governed_coverage_ratio: str
     minimum_scoreable_coverage: str
     scorecard_disposition: str
+    coverage_numerator_location_count: int
+    coverage_denominator_location_count: int
+    coverage_semantics: str
     projection_checksum: str
     manifest: dict[str, Any]
     item_offset: int
@@ -308,7 +312,11 @@ class ApproveScopeProjectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     retailer_id: str = Field(min_length=1, max_length=100)
-    projection_kind: Literal["canonical_alias_collapse", "limited_provider_footprint"]
+    projection_kind: Literal[
+        "canonical_alias_collapse",
+        "limited_provider_footprint",
+        "audited_alias_reconciliation",
+    ]
     projection_checksum: str = Field(min_length=64, max_length=64)
     base_snapshot_checksum: str = Field(min_length=64, max_length=64)
     source_audit_id: UUID | None = None
@@ -332,10 +340,14 @@ class ScopeProjectionResponse(BaseModel):
     raw_location_count: int
     retained_location_count: int
     excluded_location_count: int
+    denominator_gap_location_count: int
     raw_task_retention_ratio: str
     governed_coverage_ratio: str
     minimum_scoreable_coverage: str
     scorecard_disposition: str
+    coverage_numerator_location_count: int
+    coverage_denominator_location_count: int
+    coverage_semantics: str
     projection_checksum: str
     review_reason: str
     reviewed_by: str
@@ -754,10 +766,14 @@ def _scope_projection_preview_response(
         raw_location_count=preview.raw_location_count,
         retained_location_count=preview.retained_location_count,
         excluded_location_count=preview.excluded_location_count,
+        denominator_gap_location_count=preview.denominator_gap_location_count,
         raw_task_retention_ratio=preview.raw_task_retention_ratio,
         governed_coverage_ratio=preview.governed_coverage_ratio,
         minimum_scoreable_coverage=preview.minimum_scoreable_coverage,
         scorecard_disposition=preview.scorecard_disposition,
+        coverage_numerator_location_count=preview.coverage_numerator_location_count,
+        coverage_denominator_location_count=preview.coverage_denominator_location_count,
+        coverage_semantics=preview.coverage_semantics,
         projection_checksum=preview.projection_checksum,
         manifest=preview.manifest,
         item_offset=item_offset,
@@ -1140,7 +1156,11 @@ async def preview_collection_scope_projection(
     request: Request,
     repository: CompositeEvidenceDependency,
     retailer_id: str = Query(min_length=1, max_length=100),
-    projection_kind: Literal["canonical_alias_collapse", "limited_provider_footprint"] = Query(),
+    projection_kind: Literal[
+        "canonical_alias_collapse",
+        "limited_provider_footprint",
+        "audited_alias_reconciliation",
+    ] = Query(),
     source_audit_id: Annotated[UUID | None, Query()] = None,
     item_offset: int = Query(default=0, ge=0, le=100_000),
     item_limit: int = Query(default=100, ge=1, le=500),

@@ -314,7 +314,10 @@
         "message": { "type": "string", "minLength": 1 },
         "competitor_id": { "type": ["string", "null"] },
         "profile_id": { "type": ["string", "null"] },
-        "relationship_id": { "type": ["string", "null"] }
+        "relationship_id": { "type": ["string", "null"] },
+        "coverage_numerator_location_count": { "type": "integer", "minimum": 0 },
+        "coverage_denominator_location_count": { "type": "integer", "minimum": 0 },
+        "denominator_gap_location_count": { "type": "integer", "minimum": 0 }
       }
     },
     "scorecard": {

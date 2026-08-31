@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from rci_collections.composite import (
     RetailerRecoverySummary,
     ScopeProjectionItem,
     ScopeProjectionPreview,
+    ScopeProjectionRecord,
 )
 from rci_collections.geography import CollectionGeographyResolver
 from rci_collections.models import LocationUnit
@@ -354,10 +356,14 @@ async def test_scope_projection_preview_is_admin_only_paginated_and_checksum_com
                 raw_location_count=3,
                 retained_location_count=2,
                 excluded_location_count=1,
+                denominator_gap_location_count=0,
                 raw_task_retention_ratio="0.666667",
                 governed_coverage_ratio="0.666667",
                 minimum_scoreable_coverage="0.950000",
                 scorecard_disposition="unavailable",
+                coverage_numerator_location_count=2,
+                coverage_denominator_location_count=3,
+                coverage_semantics="provider_valid_scopes_over_frozen_network_scopes",
                 projection_checksum="c" * 64,
                 manifest={"inventory_checksum": "d" * 64},
                 items=items,
@@ -386,6 +392,38 @@ async def test_scope_projection_preview_is_admin_only_paginated_and_checksum_com
     assert payload["raw_task_count"] == 3
     assert payload["next_item_offset"] == 2
     assert payload["items"][0]["source_task_id"].endswith("000000000001")
+
+
+async def test_audited_projection_preview_explains_zero_gap_policy_mismatch() -> None:
+    run_id = "00000000-0000-0000-0000-000000000100"
+
+    class CompositeRepository:
+        async def preview_scope_projection(self, base_run_id: str, **values: object) -> None:
+            assert base_run_id == run_id
+            assert values["projection_kind"] == "audited_alias_reconciliation"
+            raise ValueError(
+                "audited alias reconciliation requires at least one audited unpaired "
+                "denominator gap; use canonical_alias_collapse when every alias is mapped"
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            f"/api/v1/collection-runs/{run_id}/scope-projection-preview",
+            params={
+                "retailer_id": "kroger_us",
+                "projection_kind": "audited_alias_reconciliation",
+                "source_audit_id": "00000000-0000-0000-0000-000000000500",
+            },
+        )
+
+    assert response.status_code == 409
+    assert "use canonical_alias_collapse" in response.json()["detail"]
 
 
 async def test_scope_projection_approval_uses_server_controlled_actor() -> None:
@@ -421,6 +459,72 @@ async def test_scope_projection_approval_uses_server_controlled_actor() -> None:
     assert captured["base_run_id"] == run_id
     assert captured["reviewed_by"] == "authenticated-platform-admin"
     assert captured["source_audit_id"] == "00000000-0000-0000-0000-000000000500"
+
+
+async def test_audited_scope_projection_approval_is_api_idempotent() -> None:
+    run_id = "00000000-0000-0000-0000-000000000100"
+    projection_id = "00000000-0000-0000-0000-000000000054"
+    calls: list[dict[str, object]] = []
+    record = ScopeProjectionRecord(
+        id=projection_id,
+        base_collection_run_id=run_id,
+        retailer_id="kroger_us",
+        projection_kind="audited_alias_reconciliation",
+        policy_version="audited-alias-reconciliation-v1",
+        base_snapshot_checksum="b" * 64,
+        source_audit_id="00000000-0000-0000-0000-000000000500",
+        source_evidence_checksum="c" * 64,
+        raw_task_count=2_667,
+        retained_task_count=1_369,
+        excluded_task_count=1_298,
+        raw_location_count=2_667,
+        retained_location_count=1_369,
+        excluded_location_count=1_298,
+        denominator_gap_location_count=2,
+        raw_task_retention_ratio="0.513311",
+        governed_coverage_ratio="0.998541",
+        minimum_scoreable_coverage="0.950000",
+        scorecard_disposition="scoreable",
+        coverage_numerator_location_count=1_369,
+        coverage_denominator_location_count=1_371,
+        coverage_semantics=("provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"),
+        projection_checksum="a" * 64,
+        review_reason="approve governed legacy reconciliation",
+        reviewed_by="authenticated-platform-admin",
+        manifest={"inventory_checksum": "d" * 64},
+        created_at=datetime(2026, 8, 30, tzinfo=UTC),
+    )
+
+    class CompositeRepository:
+        async def approve_scope_projection(
+            self, base_run_id: str, **values: object
+        ) -> ScopeProjectionRecord:
+            calls.append({"base_run_id": base_run_id, **values})
+            return record
+
+    body = {
+        "retailer_id": "kroger_us",
+        "projection_kind": "audited_alias_reconciliation",
+        "projection_checksum": "a" * 64,
+        "base_snapshot_checksum": "b" * 64,
+        "source_audit_id": "00000000-0000-0000-0000-000000000500",
+        "review_reason": "approve governed legacy reconciliation",
+    }
+    app = create_app()
+    app.dependency_overrides[get_composite_evidence_repository] = CompositeRepository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        first = await client.post(f"/api/v1/collection-runs/{run_id}/scope-projections", json=body)
+        second = await client.post(f"/api/v1/collection-runs/{run_id}/scope-projections", json=body)
+
+    assert first.status_code == second.status_code == 201
+    assert first.json() == second.json()
+    assert first.json()["id"] == projection_id
+    assert len(calls) == 2
+    assert all(call["projection_kind"] == "audited_alias_reconciliation" for call in calls)
 
 
 async def test_continuation_approval_uses_server_actor_and_forbids_extra_fields() -> None:
