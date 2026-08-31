@@ -220,7 +220,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.81");
+    expect(platformDocumentation.version).toBe("1.3.82");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -238,7 +238,9 @@ describe("platform owner and administrator documentation", () => {
     expect(allText()).toContain(
       "migration 0052 and its administrator continuation api are authoritative production behavior",
     );
-    expect(allText()).toContain("migration 0053 alone remains staged");
+    expect(allText()).toContain("migrations 0053 and 0054 remain staged");
+    expect(allText()).toContain("0054_audited_alias_reconcile");
+    expect(allText()).toContain("1,369/1,371 = 0.998541");
     expect(allText()).toContain(
       "landing-page readiness now distinguishes durable publication authority from source-quality disclosures",
     );

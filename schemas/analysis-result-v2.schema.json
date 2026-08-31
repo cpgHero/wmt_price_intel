@@ -594,7 +594,11 @@
               "id": {"type": "string", "format": "uuid"},
               "retailer_id": {"type": "string", "minLength": 1},
               "projection_kind": {
-                "enum": ["canonical_alias_collapse", "limited_provider_footprint"]
+                "enum": [
+                  "canonical_alias_collapse",
+                  "limited_provider_footprint",
+                  "audited_alias_reconciliation"
+                ]
               },
               "projection_checksum": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
               "raw_task_count": {"type": "integer", "minimum": 1},
@@ -603,6 +607,7 @@
               "raw_location_count": {"type": "integer", "minimum": 1},
               "retained_location_count": {"type": "integer", "minimum": 1},
               "excluded_location_count": {"type": "integer", "minimum": 0},
+              "denominator_gap_location_count": {"type": "integer", "minimum": 0},
               "raw_task_retention_ratio": {
                 "type": "string",
                 "pattern": "^(?:0\\.[0-9]{6}|1\\.000000)$"
@@ -616,6 +621,9 @@
                 "pattern": "^(?:0\\.[0-9]{6}|1\\.000000)$"
               },
               "scorecard_disposition": {"enum": ["scoreable", "unavailable"]},
+              "coverage_numerator_location_count": {"type": "integer", "minimum": 1},
+              "coverage_denominator_location_count": {"type": "integer", "minimum": 1},
+              "coverage_semantics": {"type": "string", "minLength": 1},
               "source_audit_id": {"type": ["string", "null"], "format": "uuid"},
               "source_evidence_checksum": {
                 "type": "string",

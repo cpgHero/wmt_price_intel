@@ -8,7 +8,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal
 
 from sqlalchemy import text
@@ -23,6 +23,7 @@ SELECTION_POLICY_VERSION = "failure-only-v1"
 CONTINUATION_SELECTION_POLICY_VERSION = "unresolved-continuation-v1"
 ASSEMBLY_POLICY_VERSION = "composite-evidence-v1"
 SCOPE_PROJECTION_POLICY_VERSION = "collection-scope-projection-v1"
+AUDITED_ALIAS_RECONCILIATION_POLICY_VERSION = "audited-alias-reconciliation-v1"
 MINIMUM_CONCLUSIVE_COVERAGE = 0.95
 MAXIMUM_CONTINUATION_TASKS = 50_000
 SEARCH_CREDIT_UNIT_COST_USD = Decimal("0.002000")
@@ -36,7 +37,11 @@ SelectionReason = Literal[
 ]
 BindingMode = Literal["exact", "legacy_operational_adoption"]
 RecoveryPlanMode = Literal["exact_launch", "legacy_adoption"]
-ScopeProjectionKind = Literal["canonical_alias_collapse", "limited_provider_footprint"]
+ScopeProjectionKind = Literal[
+    "canonical_alias_collapse",
+    "limited_provider_footprint",
+    "audited_alias_reconciliation",
+]
 ScopeProjectionDisposition = Literal["scoreable", "unavailable"]
 EvidenceOutcome = Literal[
     "usable_success",
@@ -112,10 +117,14 @@ class ScopeProjectionPreview:
     raw_location_count: int
     retained_location_count: int
     excluded_location_count: int
+    denominator_gap_location_count: int
     raw_task_retention_ratio: str
     governed_coverage_ratio: str
     minimum_scoreable_coverage: str
     scorecard_disposition: ScopeProjectionDisposition
+    coverage_numerator_location_count: int
+    coverage_denominator_location_count: int
+    coverage_semantics: str
     projection_checksum: str
     manifest: dict[str, Any]
     items: tuple[ScopeProjectionItem, ...]
@@ -137,10 +146,14 @@ class ScopeProjectionRecord:
     raw_location_count: int
     retained_location_count: int
     excluded_location_count: int
+    denominator_gap_location_count: int
     raw_task_retention_ratio: str
     governed_coverage_ratio: str
     minimum_scoreable_coverage: str
     scorecard_disposition: str
+    coverage_numerator_location_count: int
+    coverage_denominator_location_count: int
+    coverage_semantics: str
     projection_checksum: str
     review_reason: str
     reviewed_by: str
@@ -419,14 +432,14 @@ def request_identity_provenance(row: TaskMapping) -> dict[str, Any]:
         raise ValueError("successful legacy evidence lacks provider artifact request metadata")
     actual_method = str(metadata.get("request_method") or "").upper()
     actual_path = str(metadata.get("request_path") or "")
-    actual_parameter_names = sorted(
-        str(value) for value in (metadata.get("request_parameter_names") or [])
-    )
+    actual_parameter_names = metadata.get("request_parameter_names")
     expected_method = str(identity["method"]).upper()
     expected_path = str(identity["path"])
     expected_parameter_names = sorted(str(value) for value in dict(identity["params"]))
     if (
-        actual_method != expected_method
+        not isinstance(actual_parameter_names, list)
+        or any(not isinstance(value, str) for value in actual_parameter_names)
+        or actual_method != expected_method
         or actual_path != expected_path
         or actual_parameter_names != expected_parameter_names
     ):
@@ -672,6 +685,20 @@ def retailer_collection_readiness(
             scope_projection is not None
             and str(scope_projection.get("scorecard_disposition") or "") == "unavailable"
         )
+        projection_has_governed_gaps = bool(
+            scope_projection is not None
+            and (
+                int(scope_projection.get("denominator_gap_location_count") or 0) > 0
+                if (
+                    str(scope_projection.get("projection_kind") or "")
+                    == "audited_alias_reconciliation"
+                    and str(scope_projection.get("policy_version") or "")
+                    == AUDITED_ALIAS_RECONCILIATION_POLICY_VERSION
+                )
+                else Decimal(str(scope_projection.get("governed_coverage_ratio") or "1"))
+                < Decimal("1")
+            )
+        )
         sufficient = bool(
             not hard
             and successes >= minimum_successes
@@ -686,7 +713,7 @@ def retailer_collection_readiness(
             readiness_status = "blocking_integrity"
         elif explicitly_unavailable:
             readiness_status = "unavailable"
-        elif conclusive_coverage < 1.0 or not_found:
+        elif conclusive_coverage < 1.0 or not_found or projection_has_governed_gaps:
             readiness_status = "warning"
         else:
             readiness_status = "scoreable"
@@ -716,6 +743,7 @@ def retailer_collection_readiness(
                 {
                     "id": str(scope_projection["id"]),
                     "projection_kind": str(scope_projection["projection_kind"]),
+                    "policy_version": str(scope_projection["policy_version"]),
                     "projection_checksum": str(scope_projection["projection_checksum"]),
                     "raw_task_count": int(scope_projection["raw_task_count"]),
                     "retained_task_count": int(scope_projection["retained_task_count"]),
@@ -723,18 +751,58 @@ def retailer_collection_readiness(
                     "raw_location_count": int(scope_projection["raw_location_count"]),
                     "retained_location_count": int(scope_projection["retained_location_count"]),
                     "excluded_location_count": int(scope_projection["excluded_location_count"]),
+                    "denominator_gap_location_count": int(
+                        scope_projection.get("denominator_gap_location_count") or 0
+                    ),
                     "raw_task_retention_ratio": str(scope_projection["raw_task_retention_ratio"]),
                     "governed_coverage_ratio": str(scope_projection["governed_coverage_ratio"]),
                     "minimum_scoreable_coverage": str(
                         scope_projection["minimum_scoreable_coverage"]
                     ),
                     "scorecard_disposition": str(scope_projection["scorecard_disposition"]),
+                    "coverage_numerator_location_count": int(
+                        scope_projection.get("coverage_numerator_location_count")
+                        or scope_projection["retained_location_count"]
+                    ),
+                    "coverage_denominator_location_count": int(
+                        scope_projection.get("coverage_denominator_location_count")
+                        or scope_projection["retained_location_count"]
+                    ),
+                    "coverage_semantics": str(scope_projection.get("coverage_semantics") or ""),
                 }
                 if scope_projection is not None
                 else None
             ),
         }
     return blocked, manifest
+
+
+def _scope_projection_readiness_contract(
+    projection: Mapping[str, Any],
+) -> dict[str, Any]:
+    manifest = dict(projection["manifest"])
+    return {
+        "id": str(projection["id"]),
+        "projection_checksum": str(projection["projection_checksum"]),
+        "projection_kind": str(projection["projection_kind"]),
+        "policy_version": str(projection["policy_version"]),
+        "raw_task_count": int(projection["raw_task_count"]),
+        "retained_task_count": int(projection["retained_task_count"]),
+        "excluded_task_count": int(projection["excluded_task_count"]),
+        "raw_location_count": int(projection["raw_location_count"]),
+        "retained_location_count": int(projection["retained_location_count"]),
+        "excluded_location_count": int(projection["excluded_location_count"]),
+        "denominator_gap_location_count": int(
+            projection.get("denominator_gap_location_count") or 0
+        ),
+        "raw_task_retention_ratio": str(projection["raw_task_retention_ratio"]),
+        "governed_coverage_ratio": str(projection["governed_coverage_ratio"]),
+        "minimum_scoreable_coverage": str(projection["minimum_scoreable_coverage"]),
+        "scorecard_disposition": str(projection["scorecard_disposition"]),
+        "coverage_numerator_location_count": int(manifest["coverage_numerator_location_count"]),
+        "coverage_denominator_location_count": int(manifest["coverage_denominator_location_count"]),
+        "coverage_semantics": str(manifest["coverage_semantics"]),
+    }
 
 
 def resolve_task_precedence(
@@ -881,6 +949,50 @@ def _scope_task_snapshot(
     }
 
 
+def _audited_reconciliation_task_snapshot(row: TaskMapping) -> dict[str, Any]:
+    """Bind a new-policy decision to the persisted payload and sealed identity mode.
+
+    Legacy tasks receive a current-catalog contract in memory so their effective
+    provider request can be reconstructed.  The immutable inventory must still
+    preserve the payload that was actually persisted on the source task.
+    """
+
+    snapshot = _scope_task_snapshot(row)
+    persisted_payload = row.get("_persisted_request_payload", row["request_payload"])
+    if not isinstance(persisted_payload, Mapping):
+        raise ValueError("audited reconciliation persisted request payload is not an object")
+    mode = str(row.get("_request_contract_provenance") or "frozen_task_contract")
+    if mode not in {"frozen_task_contract", "reconstructed_current_catalog"}:
+        raise ValueError(f"unsupported audited reconciliation identity mode {mode!r}")
+    identity = effective_request_identity(row)
+    task_snapshot = dict(snapshot["task"])
+    task_snapshot["persisted_request_payload"] = dict(persisted_payload)
+    task_snapshot["persisted_request_fingerprint"] = str(row["request_fingerprint"])
+    task_snapshot["request_fingerprint"] = canonical_checksum(
+        dict(task_snapshot["request_payload"])
+    )
+    task_snapshot["request_identity_provenance"] = {
+        "mode": mode,
+        "sealed_contract_checksum": str(identity["catalog_contract_checksum"]),
+        "verified_fields": (
+            ["frozen_provider_request_contract"]
+            if mode == "frozen_task_contract"
+            else [
+                "persisted_request_payload",
+                "persisted_request_fingerprint",
+                "same_run_adapter_and_task_inputs",
+            ]
+        ),
+        "unverified_fields": (
+            []
+            if mode == "frozen_task_contract"
+            else ["historical_parameter_values", "historical_catalog_defaults"]
+        ),
+    }
+    snapshot["task"] = task_snapshot
+    return snapshot
+
+
 def _alias_family_key(row: TaskMapping, canonical_store_number: str) -> str:
     """Bind an alias to the otherwise-identical canonical provider request."""
 
@@ -908,6 +1020,161 @@ def _is_sha256(value: object) -> bool:
     return len(text_value) == 64 and all(
         character in "0123456789abcdef" for character in text_value
     )
+
+
+def _normalized_request_contract(row: TaskMapping) -> dict[str, Any]:
+    payload = row.get("request_payload")
+    if not isinstance(payload, Mapping):
+        raise ValueError("audited reconciliation request payload is not an object")
+    value = payload.get("_provider_request_contract")
+    if not isinstance(value, Mapping):
+        raise ValueError("audited reconciliation has no provider request contract")
+    contract = dict(value)
+    return {
+        "retailer_id": str(row["retailer_id"]),
+        "adapter_id": str(row["adapter_id"]),
+        "method": str(contract.get("method", "GET")).upper(),
+        "path": str(contract["path"]),
+        "supported_params": sorted(str(item) for item in contract.get("supported_params", [])),
+        "required_params": sorted(str(item) for item in contract.get("required_params", [])),
+        "default_sort": contract.get("default_sort"),
+        "default_request_params": {
+            str(key): item
+            for key, item in dict(contract.get("default_request_params") or {}).items()
+        },
+    }
+
+
+def _audited_request_identity_evidence(rows: Sequence[TaskMapping]) -> dict[str, Any]:
+    """Seal modern and governed-legacy request identity evidence by adapter."""
+
+    by_adapter: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        adapter_id = str(row["adapter_id"])
+        retailer_id = str(row["retailer_id"])
+        persisted_payload = row.get("_persisted_request_payload", row.get("request_payload"))
+        if not isinstance(persisted_payload, Mapping) or canonical_checksum(
+            dict(persisted_payload)
+        ) != str(row.get("request_fingerprint") or ""):
+            raise ValueError(
+                "audited reconciliation persisted payload differs from its request fingerprint"
+            )
+        mode = str(row.get("_request_contract_provenance") or "frozen_task_contract")
+        if mode not in {"frozen_task_contract", "reconstructed_current_catalog"}:
+            raise ValueError(f"unsupported audited reconciliation identity mode {mode!r}")
+        contract = _normalized_request_contract(row)
+        contract_checksum = canonical_checksum(contract)
+        identity = effective_request_identity(row)
+        if str(identity["catalog_contract_checksum"]) != contract_checksum:
+            raise ValueError("audited reconciliation normalized contract checksum drifted")
+        entry = by_adapter.setdefault(
+            adapter_id,
+            {
+                "retailer_id": retailer_id,
+                "adapter_id": adapter_id,
+                "contract": contract,
+                "sealed_contract_checksum": contract_checksum,
+                "frozen_task_count": 0,
+                "reconstructed_task_count": 0,
+                "called_artifacts": [],
+            },
+        )
+        if (
+            entry["retailer_id"] != retailer_id
+            or entry["sealed_contract_checksum"] != contract_checksum
+        ):
+            raise ValueError(
+                "audited reconciliation requires one sealed contract per retailer adapter"
+            )
+        if mode == "frozen_task_contract":
+            entry["frozen_task_count"] += 1
+            continue
+
+        entry["reconstructed_task_count"] += 1
+        raw_artifact_id = row.get("raw_artifact_id")
+        if raw_artifact_id is None:
+            if not (
+                str(row.get("status") or "") == "cancelled"
+                and int(row.get("attempt_count") or 0) == 0
+                and int(row.get("billable_credits") or 0) == 0
+                and row.get("http_status") is None
+            ):
+                raise ValueError(
+                    "legacy request reconstruction without an artifact is allowed only for "
+                    "a never-called cancelled zero-credit task"
+                )
+            continue
+
+        artifact_checksum = str(row.get("raw_artifact_checksum") or "")
+        metadata_value = row.get("raw_artifact_metadata")
+        task_http_status = row.get("http_status")
+        if (
+            int(row.get("attempt_count") or 0) < 1
+            or str(row.get("status") or "") not in {"succeeded", "failed"}
+            or row.get("completed_at") is None
+            or not isinstance(task_http_status, int)
+            or isinstance(task_http_status, bool)
+            or not 100 <= task_http_status <= 599
+            or str(row.get("raw_artifact_type") or "") != "raw_provider_response"
+            or not _is_sha256(artifact_checksum)
+            or not isinstance(metadata_value, Mapping)
+            or str(row.get("raw_artifact_collection_run_id") or "") != str(row["collection_run_id"])
+            or not bool(row.get("raw_artifact_immutable"))
+        ):
+            raise ValueError("called legacy task lacks immutable provider artifact evidence")
+        metadata = dict(metadata_value)
+        body_checksum = str(metadata.get("body_checksum") or "")
+        if not _is_sha256(body_checksum):
+            raise ValueError("called legacy task has no immutable provider body checksum")
+        parameter_names = metadata.get("request_parameter_names")
+        expected_parameter_names = sorted(str(value) for value in dict(identity["params"]))
+        if (
+            not isinstance(parameter_names, list)
+            or any(not isinstance(value, str) for value in parameter_names)
+            or metadata.get("provider") != "metricscart"
+            or str(metadata.get("retailer_id") or "") != retailer_id
+            or str(metadata.get("adapter_id") or "") != adapter_id
+            or str(metadata.get("task_id") or "") != str(row["id"])
+            or str(metadata.get("request_method") or "").upper() != str(identity["method"])
+            or str(metadata.get("request_path") or "") != str(identity["path"])
+            or parameter_names != expected_parameter_names
+            or not isinstance(metadata.get("http_status"), int)
+            or isinstance(metadata.get("http_status"), bool)
+            or metadata.get("http_status") != task_http_status
+        ):
+            raise ValueError(
+                "legacy provider artifact request metadata conflicts with the sealed contract"
+            )
+        entry["called_artifacts"].append(
+            {
+                "task_id": str(row["id"]),
+                "artifact_id": str(raw_artifact_id),
+                "artifact_checksum": artifact_checksum,
+                "body_checksum": body_checksum,
+                "http_status": task_http_status,
+            }
+        )
+
+    contracts: dict[str, Any] = {}
+    for adapter_id, mutable_entry in sorted(by_adapter.items()):
+        artifacts = sorted(mutable_entry.pop("called_artifacts"), key=lambda item: item["task_id"])
+        if int(mutable_entry["reconstructed_task_count"]) > 0 and not artifacts:
+            raise ValueError(
+                "legacy request reconstruction requires same-run immutable artifact corroboration"
+            )
+        contracts[adapter_id] = {
+            **mutable_entry,
+            "called_artifact_count": len(artifacts),
+            "called_artifacts_checksum": canonical_checksum({"artifacts": artifacts}),
+            "called_artifacts": artifacts,
+        }
+    return {
+        "contracts": contracts,
+        "reconstructed_current_catalog_unverified": [
+            "historical_parameter_values",
+            "historical_catalog_defaults",
+        ],
+    }
 
 
 def _provider_invalid_store_rejection_evidence(
@@ -1032,8 +1299,25 @@ def validate_scope_projection_header_manifest(row: Mapping[str, Any]) -> dict[st
         "minimum_scoreable_coverage": fixed_ratio("minimum_scoreable_coverage"),
         "scorecard_disposition": str(row["scorecard_disposition"]),
     }
+    if str(row["policy_version"]) == AUDITED_ALIAS_RECONCILIATION_POLICY_VERSION:
+        header_contract["denominator_gap_location_count"] = int(
+            row["denominator_gap_location_count"]
+        )
     if {key: manifest.get(key) for key in header_contract} != header_contract:
         raise ValueError("stored scope projection header differs from its reviewed manifest")
+    coverage_contract = {
+        "coverage_numerator_location_count": int(row["retained_location_count"]),
+        "coverage_denominator_location_count": int(row["retained_location_count"])
+        + int(row.get("denominator_gap_location_count") or 0),
+        "coverage_semantics": (
+            "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+        ),
+    }
+    if (
+        str(row["policy_version"]) == AUDITED_ALIAS_RECONCILIATION_POLICY_VERSION
+        and {key: manifest.get(key) for key in coverage_contract} != coverage_contract
+    ):
+        raise ValueError("stored scope projection coverage differs from its reviewed manifest")
     source_evidence = manifest.get("source_evidence")
     if not isinstance(source_evidence, Mapping) or canonical_checksum(dict(source_evidence)) != str(
         row["source_evidence_checksum"]
@@ -1072,14 +1356,24 @@ def build_scope_projection_preview(
         raise ValueError("scope projection retailer has no tasks in the immutable base run")
     if not (0 < minimum_scoreable_coverage <= 1):
         raise ValueError("minimum scoreable coverage must be greater than zero and at most one")
+    if projection_kind == "audited_alias_reconciliation" and Decimal(
+        str(minimum_scoreable_coverage)
+    ) != Decimal(str(MINIMUM_CONCLUSIVE_COVERAGE)):
+        raise ValueError("audited alias reconciliation pins scoreable coverage at 0.950000")
 
     items: list[ScopeProjectionItem] = []
     source_evidence: dict[str, Any]
-    if projection_kind == "canonical_alias_collapse":
+    projection_policy_version = SCOPE_PROJECTION_POLICY_VERSION
+    denominator_gap_location_ids: set[str] = set()
+    disposition: ScopeProjectionDisposition
+    if projection_kind in {"canonical_alias_collapse", "audited_alias_reconciliation"}:
+        is_audited_reconciliation = projection_kind == "audited_alias_reconciliation"
+        if is_audited_reconciliation:
+            projection_policy_version = AUDITED_ALIAS_RECONCILIATION_POLICY_VERSION
         if source_audit is None:
-            raise ValueError("canonical alias collapse requires a completed location audit")
+            raise ValueError("audited alias projection requires a completed location audit")
         if str(source_audit.get("status") or "") != "completed":
-            raise ValueError("canonical alias collapse requires a completed location audit")
+            raise ValueError("audited alias projection requires a completed location audit")
         if retailer_id not in {str(value) for value in source_audit.get("retailer_ids") or []}:
             raise ValueError("location audit does not cover the projected retailer")
         audit_changes = list(source_audit.get("changes") or [])
@@ -1093,6 +1387,9 @@ def build_scope_projection_preview(
             if not location_id or location_id in audit_by_location:
                 raise ValueError("location audit contains an ambiguous location identity")
             audit_by_location[location_id] = change
+        request_identity_evidence = (
+            _audited_request_identity_evidence(selected) if is_audited_reconciliation else None
+        )
 
         retained_rows: dict[str, TaskMapping] = {}
         excluded_rows: list[TaskMapping] = []
@@ -1120,7 +1417,11 @@ def build_scope_projection_preview(
         mapped_physical_targets: set[str] = set()
         for row in selected:
             store_number = str(row.get("store_number") or "")
-            snapshot = _scope_task_snapshot(row)
+            snapshot = (
+                _audited_reconciliation_task_snapshot(row)
+                if is_audited_reconciliation
+                else _scope_task_snapshot(row)
+            )
             if bool(row.get("current_location_eligible")):
                 items.append(
                     ScopeProjectionItem(
@@ -1142,16 +1443,40 @@ def build_scope_projection_preview(
                 bool(audit_change.get("before_eligible"))
                 and not bool(audit_change.get("after_eligible"))
                 and str(audit_change.get("store_number") or "") == store_number
+                and (
+                    not is_audited_reconciliation
+                    or str(audit_change.get("retailer_id") or "") == retailer_id
+                )
             ):
                 raise ValueError("excluded alias conflicts with its location-audit decision")
             canonical_store = store_number.zfill(8)
             retained = retained_rows.get(_alias_family_key(row, canonical_store))
-            if retained is None:
+            if retained is None and not is_audited_reconciliation:
                 raise ValueError(
                     "excluded alias has no otherwise-identical retained canonical task"
                 )
-            retained_task_id = str(retained["id"])
             alias_location_id = _physical_location_identity(row)
+            if retained is None:
+                if str(audit_change.get("after_reason") or "") != (
+                    "store_number_not_provider_safe"
+                ):
+                    raise ValueError(
+                        "unpaired provider-unsafe scope lacks the exact reviewed audit reason"
+                    )
+                denominator_gap_location_ids.add(alias_location_id)
+                items.append(
+                    ScopeProjectionItem(
+                        source_task_id=str(row["id"]),
+                        retailer_id=retailer_id,
+                        canonical_request_key=canonical_request_key(row),
+                        disposition="excluded",
+                        reason="audited_provider_unsafe_unpaired_scope_gap",
+                        mapped_retained_task_id=None,
+                        source_snapshot=snapshot,
+                    )
+                )
+                continue
+            retained_task_id = str(retained["id"])
             retained_location_id = _physical_location_identity(retained)
             prior_target = alias_location_mapping.setdefault(
                 alias_location_id, retained_location_id
@@ -1174,11 +1499,43 @@ def build_scope_projection_preview(
                 raise ValueError("more than one alias maps to the same canonical physical scope")
             mapped_physical_targets.add(target)
         excluded_location_ids = {_physical_location_identity(row) for row in excluded_rows}
-        if set(alias_location_mapping) != excluded_location_ids:
+        if not set(alias_location_mapping).isdisjoint(denominator_gap_location_ids):
+            raise ValueError(
+                "one excluded physical location has both mapped-alias and gap decisions"
+            )
+        if set(alias_location_mapping) | denominator_gap_location_ids != excluded_location_ids:
             raise ValueError("canonical alias location inventory is not completely mapped")
-        governed_coverage = Decimal("1")
-        disposition: ScopeProjectionDisposition = "scoreable"
-        source_evidence = _location_audit_evidence(source_audit)
+        if is_audited_reconciliation and not denominator_gap_location_ids:
+            raise ValueError(
+                "audited alias reconciliation requires at least one audited unpaired "
+                "denominator gap; use canonical_alias_collapse when every alias is mapped"
+            )
+        retained_physical_location_ids = {
+            _physical_location_identity(row) for row in retained_rows.values()
+        }
+        if denominator_gap_location_ids & retained_physical_location_ids:
+            raise ValueError("a provider-unsafe denominator gap overlaps a retained scope")
+        coverage_numerator_location_count = len(retained_physical_location_ids)
+        coverage_denominator_location_count = coverage_numerator_location_count + len(
+            denominator_gap_location_ids
+        )
+        governed_coverage = Decimal(coverage_numerator_location_count) / Decimal(
+            coverage_denominator_location_count
+        )
+        disposition = (
+            "scoreable"
+            if governed_coverage >= Decimal(str(minimum_scoreable_coverage))
+            else "unavailable"
+        )
+        source_evidence = (
+            {
+                "kind": "audited_alias_reconciliation_evidence",
+                "location_audit": _location_audit_evidence(source_audit),
+                "request_identity": request_identity_evidence,
+            }
+            if is_audited_reconciliation
+            else _location_audit_evidence(source_audit)
+        )
         source_audit_id = str(source_audit.get("id") or "")
         if not source_audit_id:
             raise ValueError("completed location audit has no durable audit identity")
@@ -1227,6 +1584,8 @@ def build_scope_projection_preview(
         retained_location_count = sum(
             value == "retained" for value in disposition_by_location.values()
         )
+        coverage_numerator_location_count = retained_location_count
+        coverage_denominator_location_count = len(disposition_by_location)
         governed_coverage = Decimal(retained_location_count) / Decimal(len(disposition_by_location))
         disposition = (
             "scoreable"
@@ -1282,12 +1641,22 @@ def build_scope_projection_preview(
     raw_location_count = retained_location_count + excluded_location_count
 
     def ratio(value: Decimal) -> str:
+        if projection_kind == "audited_alias_reconciliation":
+            return str(value.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP))
         return str(value.quantize(Decimal("0.000001")))
+
+    if projection_kind == "audited_alias_reconciliation":
+        disposition = (
+            "scoreable"
+            if Decimal(ratio(governed_coverage))
+            >= Decimal(ratio(Decimal(str(minimum_scoreable_coverage))))
+            else "unavailable"
+        )
 
     source_evidence_checksum = canonical_checksum(source_evidence)
     manifest = {
         "schema_version": "1.0.0",
-        "policy_version": SCOPE_PROJECTION_POLICY_VERSION,
+        "policy_version": projection_policy_version,
         "base_collection_run_id": base_collection_run_id,
         "retailer_id": retailer_id,
         "projection_kind": projection_kind,
@@ -1305,16 +1674,16 @@ def build_scope_projection_preview(
         "governed_coverage_ratio": ratio(governed_coverage),
         "minimum_scoreable_coverage": ratio(Decimal(str(minimum_scoreable_coverage))),
         "scorecard_disposition": disposition,
-        "coverage_numerator_location_count": retained_location_count,
-        "coverage_denominator_location_count": (
-            retained_location_count
-            if projection_kind == "canonical_alias_collapse"
-            else raw_location_count
-        ),
+        "coverage_numerator_location_count": coverage_numerator_location_count,
+        "coverage_denominator_location_count": coverage_denominator_location_count,
         "coverage_semantics": (
             "canonical_physical_scopes_retained_over_canonical_physical_scopes"
             if projection_kind == "canonical_alias_collapse"
-            else "provider_valid_scopes_over_frozen_network_scopes"
+            else (
+                "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+                if projection_kind == "audited_alias_reconciliation"
+                else "provider_valid_scopes_over_frozen_network_scopes"
+            )
         ),
         "inventory_checksum": canonical_checksum(
             {
@@ -1332,11 +1701,13 @@ def build_scope_projection_preview(
             }
         ),
     }
+    if projection_kind == "audited_alias_reconciliation":
+        manifest["denominator_gap_location_count"] = len(denominator_gap_location_ids)
     return ScopeProjectionPreview(
         base_collection_run_id=base_collection_run_id,
         retailer_id=retailer_id,
         projection_kind=projection_kind,
-        policy_version=SCOPE_PROJECTION_POLICY_VERSION,
+        policy_version=projection_policy_version,
         base_snapshot_checksum=base_snapshot_checksum,
         source_audit_id=source_audit_id,
         source_evidence_checksum=source_evidence_checksum,
@@ -1346,10 +1717,14 @@ def build_scope_projection_preview(
         raw_location_count=raw_location_count,
         retained_location_count=retained_location_count,
         excluded_location_count=excluded_location_count,
+        denominator_gap_location_count=len(denominator_gap_location_ids),
         raw_task_retention_ratio=ratio(raw_retention),
         governed_coverage_ratio=ratio(governed_coverage),
         minimum_scoreable_coverage=ratio(Decimal(str(minimum_scoreable_coverage))),
         scorecard_disposition=disposition,
+        coverage_numerator_location_count=coverage_numerator_location_count,
+        coverage_denominator_location_count=coverage_denominator_location_count,
+        coverage_semantics=str(manifest["coverage_semantics"]),
         projection_checksum=canonical_checksum(manifest),
         manifest=manifest,
         items=tuple(items),
@@ -1400,6 +1775,9 @@ def build_exact_recovery_task_contracts(
                 "until deterministic descendants are implemented"
             )
         contract = {name: snapshot[name] for name in fields}
+        request_payload = dict(contract["request_payload"])
+        contract["request_payload"] = request_payload
+        contract["request_fingerprint"] = canonical_checksum(request_payload)
         contract["is_preflight"] = False
         contracts.append(contract)
     return tuple(contracts)
@@ -1851,17 +2229,20 @@ class PostgresCompositeEvidenceRepository:
     ) -> RecoverySelectionPreview:
         async with self._engine.connect() as connection:
             definition_checksum, rows = await self._base_rows(connection, base_collection_run_id)
+            projection = None
+            binding = None
+            if scope_projection_id is not None:
+                projection = await self._scope_projection_row(
+                    connection, scope_projection_id, include_inventory=True
+                )
+                rows = self._rehydrate_scope_projection_rows(rows, [projection])
             raw_preview = build_recovery_preview(
                 base_collection_run_id,
                 rows,
                 definition_checksum=definition_checksum,
                 allow_ineligible_locations=True,
             )
-            binding = None
-            if scope_projection_id is not None:
-                projection = await self._scope_projection_row(
-                    connection, scope_projection_id, include_inventory=True
-                )
+            if projection is not None:
                 rows = self._apply_scope_projection_rows(
                     rows,
                     [projection],
@@ -1916,18 +2297,6 @@ class PostgresCompositeEvidenceRepository:
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                 {"key": f"collection-scope-projection:{base_collection_run_id}:{retailer_id}"},
             )
-            preview = await self._build_scope_projection_preview(
-                connection,
-                base_collection_run_id,
-                retailer_id=retailer_id,
-                projection_kind=projection_kind,
-                source_audit_id=source_audit_id,
-                for_update=True,
-            )
-            if preview.base_snapshot_checksum != base_snapshot_checksum:
-                raise ValueError("scope projection no longer matches the immutable base snapshot")
-            if preview.projection_checksum != projection_checksum:
-                raise ValueError("scope projection changed; review a new complete preview")
             existing = (
                 (
                     await connection.execute(
@@ -1948,15 +2317,49 @@ class PostgresCompositeEvidenceRepository:
                 .one_or_none()
             )
             if existing is not None:
+                existing_source_audit_id = (
+                    str(existing["source_audit_id"])
+                    if existing.get("source_audit_id") is not None
+                    else None
+                )
                 if (
-                    str(existing["review_reason"]) != review_reason.strip()
+                    str(existing["projection_kind"]) != projection_kind
+                    or str(existing["base_snapshot_checksum"]) != base_snapshot_checksum
+                    or existing_source_audit_id != source_audit_id
+                    or str(existing["review_reason"]) != review_reason.strip()
                     or str(existing["reviewed_by"]) != reviewed_by.strip()
                 ):
                     raise ValueError("the reviewed projection already has another approval record")
                 verified = await self._scope_projection_row(
                     connection, str(existing["id"]), include_inventory=True
                 )
+                definition_checksum, rows = await self._base_rows(
+                    connection, base_collection_run_id
+                )
+                rows = self._rehydrate_scope_projection_rows(rows, [verified])
+                raw_preview = build_recovery_preview(
+                    base_collection_run_id,
+                    rows,
+                    definition_checksum=definition_checksum,
+                    allow_ineligible_locations=True,
+                )
+                if raw_preview.base_snapshot_checksum != base_snapshot_checksum:
+                    raise ValueError(
+                        "scope projection no longer matches the immutable base snapshot"
+                    )
                 return self._scope_projection_record(verified)
+            preview = await self._build_scope_projection_preview(
+                connection,
+                base_collection_run_id,
+                retailer_id=retailer_id,
+                projection_kind=projection_kind,
+                source_audit_id=source_audit_id,
+                for_update=True,
+            )
+            if preview.base_snapshot_checksum != base_snapshot_checksum:
+                raise ValueError("scope projection no longer matches the immutable base snapshot")
+            if preview.projection_checksum != projection_checksum:
+                raise ValueError("scope projection changed; review a new complete preview")
             run = (
                 (
                     await connection.execute(
@@ -1981,7 +2384,8 @@ class PostgresCompositeEvidenceRepository:
                               source_audit_id, source_evidence_checksum,
                               raw_task_count, retained_task_count, excluded_task_count,
                               raw_location_count, retained_location_count,
-                              excluded_location_count, raw_task_retention_ratio,
+                              excluded_location_count, denominator_gap_location_count,
+                              raw_task_retention_ratio,
                               governed_coverage_ratio,
                               minimum_scoreable_coverage, scorecard_disposition,
                               projection_checksum, review_reason, reviewed_by, manifest
@@ -1992,7 +2396,8 @@ class PostgresCompositeEvidenceRepository:
                               :source_evidence_checksum, :raw_task_count,
                               :retained_task_count, :excluded_task_count,
                               :raw_location_count, :retained_location_count,
-                              :excluded_location_count, :raw_task_retention_ratio,
+                              :excluded_location_count, :denominator_gap_location_count,
+                              :raw_task_retention_ratio,
                               :governed_coverage_ratio,
                               :minimum_scoreable_coverage, :scorecard_disposition,
                               :projection_checksum, :review_reason, :reviewed_by,
@@ -2015,6 +2420,9 @@ class PostgresCompositeEvidenceRepository:
                             "raw_location_count": preview.raw_location_count,
                             "retained_location_count": preview.retained_location_count,
                             "excluded_location_count": preview.excluded_location_count,
+                            "denominator_gap_location_count": (
+                                preview.denominator_gap_location_count
+                            ),
                             "raw_task_retention_ratio": preview.raw_task_retention_ratio,
                             "governed_coverage_ratio": preview.governed_coverage_ratio,
                             "minimum_scoreable_coverage": preview.minimum_scoreable_coverage,
@@ -2108,12 +2516,7 @@ class PostgresCompositeEvidenceRepository:
         parent = await self._plan_row(connection, continuation_of_recovery_plan_id)
         base_run_id = str(parent["base_collection_run_id"])
         definition_checksum, base_rows = await self._base_rows(connection, base_run_id)
-        raw_preview = build_recovery_preview(
-            base_run_id,
-            base_rows,
-            definition_checksum=definition_checksum,
-            allow_ineligible_locations=True,
-        )
+        projection = None
         scope_projection_binding = None
         if parent.get("scope_projection_id") is not None:
             projection = await self._scope_projection_row(
@@ -2123,6 +2526,14 @@ class PostgresCompositeEvidenceRepository:
                 parent.get("scope_projection_checksum") or ""
             ):
                 raise ValueError("continuation parent scope projection checksum changed")
+            base_rows = self._rehydrate_scope_projection_rows(base_rows, [projection])
+        raw_preview = build_recovery_preview(
+            base_run_id,
+            base_rows,
+            definition_checksum=definition_checksum,
+            allow_ineligible_locations=True,
+        )
+        if projection is not None:
             base_rows = self._apply_scope_projection_rows(
                 base_rows,
                 [projection],
@@ -2931,12 +3342,6 @@ class PostgresCompositeEvidenceRepository:
             definition_checksum, rows = await self._base_rows(
                 connection, base_collection_run_id, for_update=True
             )
-            raw_preview = build_recovery_preview(
-                base_collection_run_id,
-                rows,
-                definition_checksum=definition_checksum,
-                allow_ineligible_locations=True,
-            )
             scope_projection = None
             scope_projection_binding = None
             if (scope_projection_id is None) != (scope_projection_checksum is None):
@@ -2947,6 +3352,14 @@ class PostgresCompositeEvidenceRepository:
                 )
                 if str(scope_projection["projection_checksum"]) != scope_projection_checksum:
                     raise ValueError("scope projection checksum differs from the reviewed record")
+                rows = self._rehydrate_scope_projection_rows(rows, [scope_projection])
+            raw_preview = build_recovery_preview(
+                base_collection_run_id,
+                rows,
+                definition_checksum=definition_checksum,
+                allow_ineligible_locations=True,
+            )
+            if scope_projection is not None:
                 rows = self._apply_scope_projection_rows(
                     rows,
                     [scope_projection],
@@ -3618,6 +4031,17 @@ class PostgresCompositeEvidenceRepository:
             definition_checksum, base_rows = await self._base_rows(
                 connection, base_run_id, for_update=True
             )
+            projection = None
+            scope_projection_binding = None
+            if plan.get("scope_projection_id") is not None:
+                projection = await self._scope_projection_row(
+                    connection, str(plan["scope_projection_id"]), include_inventory=True
+                )
+                if str(projection["projection_checksum"]) != str(
+                    plan.get("scope_projection_checksum") or ""
+                ):
+                    raise ValueError("recovery plan scope projection checksum changed")
+                base_rows = self._rehydrate_scope_projection_rows(base_rows, [projection])
             raw_preview = build_recovery_preview(
                 base_run_id,
                 base_rows,
@@ -3628,15 +4052,7 @@ class PostgresCompositeEvidenceRepository:
             retailer_ids = tuple(str(value) for value in scope.get("retailer_ids", []))
             continuation_parent = plan.get("continuation_of_recovery_plan_id")
             if continuation_parent is None:
-                scope_projection_binding = None
-                if plan.get("scope_projection_id") is not None:
-                    projection = await self._scope_projection_row(
-                        connection, str(plan["scope_projection_id"]), include_inventory=True
-                    )
-                    if str(projection["projection_checksum"]) != str(
-                        plan.get("scope_projection_checksum") or ""
-                    ):
-                        raise ValueError("recovery plan scope projection checksum changed")
+                if projection is not None:
                     base_rows = self._apply_scope_projection_rows(
                         base_rows,
                         [projection],
@@ -4245,16 +4661,17 @@ class PostgresCompositeEvidenceRepository:
                 )
 
             raw_base_rows = await self._task_rows(connection, base_collection_run_id)
+            projections = [
+                await self._scope_projection_row(connection, projection_id, include_inventory=True)
+                for projection_id in projection_ids
+            ]
+            raw_base_rows = self._rehydrate_scope_projection_rows(raw_base_rows, projections)
             raw_preview = build_recovery_preview(
                 base_collection_run_id,
                 raw_base_rows,
                 definition_checksum=str(by_run[base_collection_run_id]["definition_checksum"]),
                 allow_ineligible_locations=True,
             )
-            projections = [
-                await self._scope_projection_row(connection, projection_id, include_inventory=True)
-                for projection_id in projection_ids
-            ]
             immutable_config = dict(by_run[base_collection_run_id]["config"] or {})
             enabled_retailers = {
                 str(item["retailer_id"])
@@ -4347,20 +4764,7 @@ class PostgresCompositeEvidenceRepository:
                 str(row["retailer_id"]): dict(row) for row in unavailability_rows
             }
             scope_projection_dispositions = {
-                str(projection["retailer_id"]): {
-                    **self._scope_projection_binding(projection),
-                    "projection_kind": str(projection["projection_kind"]),
-                    "raw_task_count": int(projection["raw_task_count"]),
-                    "retained_task_count": int(projection["retained_task_count"]),
-                    "excluded_task_count": int(projection["excluded_task_count"]),
-                    "raw_location_count": int(projection["raw_location_count"]),
-                    "retained_location_count": int(projection["retained_location_count"]),
-                    "excluded_location_count": int(projection["excluded_location_count"]),
-                    "raw_task_retention_ratio": str(projection["raw_task_retention_ratio"]),
-                    "governed_coverage_ratio": str(projection["governed_coverage_ratio"]),
-                    "minimum_scoreable_coverage": str(projection["minimum_scoreable_coverage"]),
-                    "scorecard_disposition": str(projection["scorecard_disposition"]),
-                }
+                str(projection["retailer_id"]): _scope_projection_readiness_contract(projection)
                 for projection in projections
             }
             conflicting_approvals = sorted(
@@ -4704,10 +5108,22 @@ class PostgresCompositeEvidenceRepository:
                         "raw_location_count": int(projection["raw_location_count"]),
                         "retained_location_count": int(projection["retained_location_count"]),
                         "excluded_location_count": int(projection["excluded_location_count"]),
+                        "denominator_gap_location_count": int(
+                            projection.get("denominator_gap_location_count") or 0
+                        ),
                         "raw_task_retention_ratio": str(projection["raw_task_retention_ratio"]),
                         "governed_coverage_ratio": str(projection["governed_coverage_ratio"]),
                         "minimum_scoreable_coverage": str(projection["minimum_scoreable_coverage"]),
                         "scorecard_disposition": str(projection["scorecard_disposition"]),
+                        "coverage_numerator_location_count": int(
+                            dict(projection["manifest"])["coverage_numerator_location_count"]
+                        ),
+                        "coverage_denominator_location_count": int(
+                            dict(projection["manifest"])["coverage_denominator_location_count"]
+                        ),
+                        "coverage_semantics": str(
+                            dict(projection["manifest"])["coverage_semantics"]
+                        ),
                         "inventory_checksum": str(
                             dict(projection["manifest"])["inventory_checksum"]
                         ),
@@ -5307,6 +5723,52 @@ class PostgresCompositeEvidenceRepository:
         source_audit_id: str | None,
         for_update: bool = False,
     ) -> ScopeProjectionPreview:
+        prelocked_geography_resolution: str | None = None
+        if for_update and projection_kind == "audited_alias_reconciliation":
+            prelocked_geography_resolution = (
+                await connection.execute(
+                    text(
+                        "SELECT version.geography_resolution_id::text "
+                        "FROM collection_run run "
+                        "JOIN collection_definition_version version "
+                        "ON version.id = run.definition_version_id "
+                        "WHERE run.id::text = :run_id"
+                    ),
+                    {"run_id": base_collection_run_id},
+                )
+            ).scalar_one_or_none()
+            if prelocked_geography_resolution is None:
+                raise ValueError(
+                    "audited reconciliation requires a definition-bound frozen geography"
+                )
+            # Match the database trigger's child-before-parent lock order.  A
+            # concurrent updater cannot hold a projected task/task-linked geography row and
+            # then deadlock against the parent run/resolution lock acquired below.
+            await connection.execute(
+                text(
+                    "SELECT id FROM collection_task "
+                    "WHERE collection_run_id::text = :run_id "
+                    "AND retailer_id = :retailer_id ORDER BY id FOR SHARE"
+                ),
+                {"run_id": base_collection_run_id, "retailer_id": retailer_id},
+            )
+            await connection.execute(
+                text(
+                    "SELECT geography.id FROM collection_geography_location geography "
+                    "WHERE geography.resolution_id::text = :resolution_id "
+                    "AND EXISTS (SELECT 1 FROM collection_task task "
+                    "WHERE task.collection_run_id::text = :run_id "
+                    "AND task.retailer_id = :retailer_id "
+                    "AND task.retailer_id = geography.retailer_id "
+                    "AND task.location_scope_key = geography.scope_key) "
+                    "ORDER BY geography.id FOR SHARE"
+                ),
+                {
+                    "resolution_id": prelocked_geography_resolution,
+                    "run_id": base_collection_run_id,
+                    "retailer_id": retailer_id,
+                },
+            )
         definition_checksum, rows = await self._base_rows(
             connection, base_collection_run_id, for_update=for_update
         )
@@ -5322,6 +5784,23 @@ class PostgresCompositeEvidenceRepository:
                 )
             ).scalar_one()
         )
+        if prelocked_geography_resolution is not None:
+            current_geography_resolution = str(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT version.geography_resolution_id::text "
+                            "FROM collection_run run "
+                            "JOIN collection_definition_version version "
+                            "ON version.id = run.definition_version_id "
+                            "WHERE run.id::text = :run_id"
+                        ),
+                        {"run_id": base_collection_run_id},
+                    )
+                ).scalar_one()
+            )
+            if current_geography_resolution != prelocked_geography_resolution:
+                raise ValueError("audited reconciliation frozen geography changed during approval")
         enabled_retailers = {
             str(item["retailer_id"])
             for item in base_config.get("retailers", [])
@@ -5338,9 +5817,9 @@ class PostgresCompositeEvidenceRepository:
             allow_ineligible_locations=True,
         )
         source_audit: TaskMapping | None = None
-        if projection_kind == "canonical_alias_collapse":
+        if projection_kind in {"canonical_alias_collapse", "audited_alias_reconciliation"}:
             if source_audit_id is None:
-                raise ValueError("canonical alias collapse requires source_audit_id")
+                raise ValueError("audited alias projection requires source_audit_id")
             source_audit = (
                 (
                     await connection.execute(
@@ -5359,7 +5838,7 @@ class PostgresCompositeEvidenceRepository:
             )
             if source_audit is None:
                 raise LookupError(f"location eligibility audit {source_audit_id!r} was not found")
-        elif source_audit_id is not None:
+        elif projection_kind == "limited_provider_footprint" and source_audit_id is not None:
             raise ValueError("limited provider footprint cannot bind a location audit")
         return build_scope_projection_preview(
             base_collection_run_id,
@@ -5415,12 +5894,73 @@ class PostgresCompositeEvidenceRepository:
                 .mappings()
                 .one_or_none()
             )
+            expected_audit_evidence = (
+                source_evidence.get("location_audit")
+                if str(result["projection_kind"]) == "audited_alias_reconciliation"
+                else source_evidence
+            )
             if (
                 source_audit is None
-                or _location_audit_evidence(dict(source_audit)) != source_evidence
+                or _location_audit_evidence(dict(source_audit)) != expected_audit_evidence
             ):
                 raise ValueError(
                     "scope projection location-audit evidence differs from its immutable snapshot"
+                )
+        if str(result["projection_kind"]) == "audited_alias_reconciliation":
+            request_identity = source_evidence.get("request_identity")
+            if not isinstance(request_identity, Mapping):
+                raise ValueError("audited reconciliation has no sealed request identity evidence")
+            contract_entries = request_identity.get("contracts")
+            if not isinstance(contract_entries, Mapping):
+                raise ValueError("audited reconciliation has no sealed adapter contracts")
+            identity_rows = list(
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT t.*, da.metadata AS raw_artifact_metadata, "
+                            "da.checksum AS raw_artifact_checksum, "
+                            "da.collection_run_id::text AS raw_artifact_collection_run_id, "
+                            "da.artifact_type AS raw_artifact_type, "
+                            "da.immutable AS raw_artifact_immutable "
+                            "FROM collection_task t LEFT JOIN dataset_artifact da "
+                            "ON da.id = t.raw_artifact_id "
+                            "WHERE t.collection_run_id = CAST(:run_id AS uuid) "
+                            "AND t.retailer_id = :retailer_id ORDER BY t.id"
+                        ),
+                        {
+                            "run_id": str(result["base_run_id"]),
+                            "retailer_id": str(result["retailer_id"]),
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            normalized_identity_rows: list[TaskMapping] = []
+            for identity_row in identity_rows:
+                identity_task = dict(identity_row)
+                persisted_payload = dict(identity_task["request_payload"])
+                adapter_entry = contract_entries.get(str(identity_task["adapter_id"]))
+                if not isinstance(adapter_entry, Mapping) or not isinstance(
+                    adapter_entry.get("contract"), Mapping
+                ):
+                    raise ValueError("audited reconciliation task adapter has no sealed contract")
+                payload = dict(persisted_payload)
+                provenance = "frozen_task_contract"
+                if "_provider_request_contract" not in payload:
+                    payload["_provider_request_contract"] = dict(adapter_entry["contract"])
+                    provenance = "reconstructed_current_catalog"
+                normalized_identity_rows.append(
+                    {
+                        **identity_task,
+                        "request_payload": payload,
+                        "_persisted_request_payload": persisted_payload,
+                        "_request_contract_provenance": provenance,
+                    }
+                )
+            if _audited_request_identity_evidence(normalized_identity_rows) != request_identity:
+                raise ValueError(
+                    "audited reconciliation request identity evidence differs from source tasks"
                 )
         if include_inventory:
             inventory = list(
@@ -5471,6 +6011,85 @@ class PostgresCompositeEvidenceRepository:
         }
 
     @staticmethod
+    def _rehydrate_scope_projection_rows(
+        rows: Sequence[TaskMapping],
+        projections: Sequence[Mapping[str, Any]],
+    ) -> list[TaskMapping]:
+        """Restore projection-sealed request identity before checksum/application.
+
+        Historical tasks can lack a persisted provider contract.  `_task_rows`
+        reconstructs those rows from the current catalog, but an approved audited
+        projection must remain bound to the contract it sealed.  Preserve the
+        original persisted fingerprint while the raw base checksum is recomputed;
+        `_apply_scope_projection_rows` derives the executable fingerprint only for
+        retained new-policy rows.
+        """
+
+        sealed_by_task_id: dict[str, Mapping[str, Any]] = {}
+        for projection in projections:
+            if str(projection.get("projection_kind") or "") != ("audited_alias_reconciliation"):
+                continue
+            for item in list(projection.get("inventory") or []):
+                task_id = str(item["source_task_id"])
+                if task_id in sealed_by_task_id:
+                    raise ValueError("more than one audited projection inventories a source task")
+                source_snapshot = item.get("source_snapshot")
+                if not isinstance(source_snapshot, Mapping) or not isinstance(
+                    source_snapshot.get("task"), Mapping
+                ):
+                    raise ValueError("audited projection task has no sealed request snapshot")
+                sealed_by_task_id[task_id] = source_snapshot["task"]
+
+        rehydrated: list[TaskMapping] = []
+        for row in rows:
+            task_id = str(row["id"])
+            task_snapshot = sealed_by_task_id.get(task_id)
+            if task_snapshot is None:
+                rehydrated.append(row)
+                continue
+            if str(task_snapshot.get("task_id") or "") != task_id:
+                raise ValueError("audited projection request snapshot belongs to another task")
+            sealed_payload = task_snapshot.get("request_payload")
+            persisted_payload = task_snapshot.get("persisted_request_payload")
+            persisted_fingerprint = str(task_snapshot.get("persisted_request_fingerprint") or "")
+            provenance = task_snapshot.get("request_identity_provenance")
+            if (
+                not isinstance(sealed_payload, Mapping)
+                or not isinstance(persisted_payload, Mapping)
+                or not persisted_fingerprint
+                or not isinstance(provenance, Mapping)
+            ):
+                raise ValueError("audited projection request snapshot is incomplete")
+            actual_persisted_payload = row.get("_persisted_request_payload", row["request_payload"])
+            if (
+                not isinstance(actual_persisted_payload, Mapping)
+                or dict(actual_persisted_payload) != dict(persisted_payload)
+                or str(row["request_fingerprint"]) != persisted_fingerprint
+            ):
+                raise ValueError(
+                    "audited projection persisted request identity differs from its source task"
+                )
+            if str(task_snapshot.get("request_fingerprint") or "") != canonical_checksum(
+                dict(sealed_payload)
+            ):
+                raise ValueError("audited projection sealed request fingerprint is invalid")
+            mode = str(provenance.get("mode") or "")
+            if mode not in {"frozen_task_contract", "reconstructed_current_catalog"}:
+                raise ValueError("audited projection request provenance is invalid")
+            rehydrated.append(
+                {
+                    **dict(row),
+                    "request_payload": dict(sealed_payload),
+                    "request_fingerprint": persisted_fingerprint,
+                    "_persisted_request_payload": dict(persisted_payload),
+                    "_request_contract_provenance": mode,
+                }
+            )
+        if set(sealed_by_task_id) - {str(row["id"]) for row in rows}:
+            raise ValueError("audited projection inventories a task absent from its base run")
+        return rehydrated
+
+    @staticmethod
     def _apply_scope_projection_rows(
         rows: Sequence[TaskMapping],
         projections: Sequence[Mapping[str, Any]],
@@ -5509,12 +6128,31 @@ class PostgresCompositeEvidenceRepository:
                 raise ValueError("scope projection retained count differs from its inventory")
             projection_by_retailer[retailer_id] = projection
             retained_by_retailer[retailer_id] = retained
-        return [
-            row
-            for row in rows
-            if str(row["retailer_id"]) not in retained_by_retailer
-            or str(row["id"]) in retained_by_retailer[str(row["retailer_id"])]
-        ]
+        projected_rows: list[TaskMapping] = []
+        for row in rows:
+            retailer_id = str(row["retailer_id"])
+            retained_task_ids = retained_by_retailer.get(retailer_id)
+            if retained_task_ids is None:
+                projected_rows.append(row)
+                continue
+            if str(row["id"]) not in retained_task_ids:
+                continue
+
+            # A reviewed projection freezes the approval-time scope decision.  The
+            # current retailer-location master remains intentionally mutable, so a
+            # later operational disable must not reinterpret an already-retained
+            # historical task as ineligible.  Clone instead of mutating the raw row;
+            # the immutable base snapshot and projection inventory remain untouched.
+            projected_row = dict(row)
+            projected_row["current_location_eligible"] = True
+            if str(projection_by_retailer[retailer_id].get("projection_kind") or "") == (
+                "audited_alias_reconciliation"
+            ):
+                projected_row["request_fingerprint"] = canonical_checksum(
+                    dict(projected_row["request_payload"])
+                )
+            projected_rows.append(projected_row)
+        return projected_rows
 
     async def _base_rows(
         self,
@@ -5562,6 +6200,9 @@ class PostgresCompositeEvidenceRepository:
                         SELECT t.*, g.status AS retailer_gate_status,
                                da.metadata AS raw_artifact_metadata,
                                da.checksum AS raw_artifact_checksum,
+                               da.collection_run_id::text AS raw_artifact_collection_run_id,
+                               da.artifact_type AS raw_artifact_type,
+                               da.immutable AS raw_artifact_immutable,
                                v.geography_resolution_id::text AS geography_resolution_id,
                                gl.id::text AS frozen_geography_location_id,
                                gl.retailer_location_id::text AS frozen_retailer_location_id,
@@ -5641,7 +6282,8 @@ class PostgresCompositeEvidenceRepository:
                     "collection task location identity differs from its immutable "
                     "geography location"
                 )
-            payload = dict(row["request_payload"])
+            persisted_payload = dict(row["request_payload"])
+            payload = dict(persisted_payload)
             provenance = "frozen_task_contract"
             if "_provider_request_contract" not in payload:
                 contract = self._provider_request_contracts.get(str(row["adapter_id"]))
@@ -5656,6 +6298,7 @@ class PostgresCompositeEvidenceRepository:
                 {
                     **dict(row),
                     "request_payload": payload,
+                    "_persisted_request_payload": persisted_payload,
                     "_request_contract_provenance": provenance,
                 }
             )
@@ -5930,10 +6573,18 @@ class PostgresCompositeEvidenceRepository:
             raw_location_count=int(row["raw_location_count"]),
             retained_location_count=int(row["retained_location_count"]),
             excluded_location_count=int(row["excluded_location_count"]),
+            denominator_gap_location_count=int(row.get("denominator_gap_location_count") or 0),
             raw_task_retention_ratio=str(row["raw_task_retention_ratio"]),
             governed_coverage_ratio=str(row["governed_coverage_ratio"]),
             minimum_scoreable_coverage=str(row["minimum_scoreable_coverage"]),
             scorecard_disposition=str(row["scorecard_disposition"]),
+            coverage_numerator_location_count=int(
+                dict(row["manifest"])["coverage_numerator_location_count"]
+            ),
+            coverage_denominator_location_count=int(
+                dict(row["manifest"])["coverage_denominator_location_count"]
+            ),
+            coverage_semantics=str(dict(row["manifest"])["coverage_semantics"]),
             projection_checksum=str(row["projection_checksum"]),
             review_reason=str(row["review_reason"]),
             reviewed_by=str(row["reviewed_by"]),

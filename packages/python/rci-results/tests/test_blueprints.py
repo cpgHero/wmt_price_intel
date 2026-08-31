@@ -723,6 +723,227 @@ def test_publication_readiness_excludes_explicitly_unavailable_competitor() -> N
     assert "no scorecard" in warning["message"]
 
 
+def test_publication_readiness_surfaces_nonblocking_audited_scope_gap() -> None:
+    result = _result()
+    result["source"]["collection_scope_projections"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000054",
+            "retailer_id": "aldi_us",
+            "projection_kind": "audited_alias_reconciliation",
+            "policy_version": "audited-alias-reconciliation-v1",
+            "projection_checksum": "a" * 64,
+            "raw_task_count": 2_667,
+            "retained_task_count": 1_369,
+            "excluded_task_count": 1_298,
+            "raw_location_count": 2_667,
+            "retained_location_count": 1_369,
+            "excluded_location_count": 1_298,
+            "denominator_gap_location_count": 2,
+            "raw_task_retention_ratio": "0.513311",
+            "governed_coverage_ratio": "0.998541",
+            "minimum_scoreable_coverage": "0.950000",
+            "scorecard_disposition": "scoreable",
+            "coverage_numerator_location_count": 1_369,
+            "coverage_denominator_location_count": 1_371,
+            "coverage_semantics": (
+                "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+            ),
+            "source_audit_id": "00000000-0000-0000-0000-000000000053",
+            "source_evidence_checksum": "b" * 64,
+            "inventory_checksum": "c" * 64,
+        }
+    ]
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert not any(
+        row["code"] == "governed_scope_projection_coverage_inconsistent"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+    warning = next(
+        row
+        for row in view["report_readiness"]["warnings"]
+        if row["code"] == "governed_collection_scope_gap"
+    )
+    assert warning["competitor_id"] == "aldi_us"
+    assert warning["coverage_numerator_location_count"] == 1_369
+    assert warning["coverage_denominator_location_count"] == 1_371
+    assert warning["denominator_gap_location_count"] == 2
+    assert "rather than represented as zero-valued stores" in warning["message"]
+
+
+def test_publication_readiness_preserves_scoreable_v1_limited_footprint() -> None:
+    result = _result()
+    result["source"]["collection_scope_projections"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000053",
+            "retailer_id": "aldi_us",
+            "projection_kind": "limited_provider_footprint",
+            "policy_version": "collection-scope-projection-v1",
+            "projection_checksum": "a" * 64,
+            "raw_task_count": 100,
+            "retained_task_count": 96,
+            "excluded_task_count": 4,
+            "raw_location_count": 100,
+            "retained_location_count": 96,
+            "excluded_location_count": 4,
+            "raw_task_retention_ratio": "0.960000",
+            "governed_coverage_ratio": "0.960000",
+            "minimum_scoreable_coverage": "0.950000",
+            "scorecard_disposition": "scoreable",
+            "source_audit_id": None,
+            "source_evidence_checksum": "b" * 64,
+            "inventory_checksum": "c" * 64,
+        }
+    ]
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    codes = {
+        row["code"]
+        for row in [
+            *view["report_readiness"]["blocking_reasons"],
+            *view["report_readiness"]["warnings"],
+        ]
+    }
+    assert "governed_scope_projection_coverage_inconsistent" not in codes
+    assert "governed_collection_scope_gap" not in codes
+
+
+def test_publication_readiness_uses_postgres_half_up_for_audited_tie() -> None:
+    result = _result()
+    result["source"]["collection_scope_projections"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000054",
+            "retailer_id": "aldi_us",
+            "projection_kind": "audited_alias_reconciliation",
+            "policy_version": "audited-alias-reconciliation-v1",
+            "projection_checksum": "a" * 64,
+            "raw_task_count": 3_200,
+            "retained_task_count": 125,
+            "excluded_task_count": 3_075,
+            "raw_location_count": 126,
+            "retained_location_count": 125,
+            "excluded_location_count": 1,
+            "denominator_gap_location_count": 1,
+            "raw_task_retention_ratio": "0.039063",
+            "governed_coverage_ratio": "0.992063",
+            "minimum_scoreable_coverage": "0.950000",
+            "scorecard_disposition": "scoreable",
+            "coverage_numerator_location_count": 125,
+            "coverage_denominator_location_count": 126,
+            "coverage_semantics": (
+                "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+            ),
+        }
+    ]
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert not any(
+        row["code"] == "governed_scope_projection_coverage_inconsistent"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+    assert any(
+        row["code"] == "governed_collection_scope_gap"
+        for row in view["report_readiness"]["warnings"]
+    )
+
+
+def test_publication_readiness_discloses_gap_when_coverage_rounds_to_one() -> None:
+    result = _result()
+    result["source"]["collection_scope_projections"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000054",
+            "retailer_id": "aldi_us",
+            "projection_kind": "audited_alias_reconciliation",
+            "policy_version": "audited-alias-reconciliation-v1",
+            "projection_checksum": "a" * 64,
+            "raw_task_count": 2_000_001,
+            "retained_task_count": 2_000_000,
+            "excluded_task_count": 1,
+            "raw_location_count": 2_000_001,
+            "retained_location_count": 2_000_000,
+            "excluded_location_count": 1,
+            "denominator_gap_location_count": 1,
+            "raw_task_retention_ratio": "1.000000",
+            "governed_coverage_ratio": "1.000000",
+            "minimum_scoreable_coverage": "0.950000",
+            "scorecard_disposition": "scoreable",
+            "coverage_numerator_location_count": 2_000_000,
+            "coverage_denominator_location_count": 2_000_001,
+            "coverage_semantics": (
+                "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+            ),
+        }
+    ]
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert any(
+        row["code"] == "governed_collection_scope_gap"
+        for row in view["report_readiness"]["warnings"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("governed_coverage_ratio", "1.000000"),
+        ("governed_coverage_ratio", "0.500000"),
+        ("coverage_denominator_location_count", 1_370),
+        ("coverage_numerator_location_count", 1_368),
+        ("denominator_gap_location_count", 0),
+        ("scorecard_disposition", "unavailable"),
+        ("raw_task_count", 2_666),
+        ("retained_task_count", 1_368),
+        ("excluded_task_count", 1_297),
+        ("raw_location_count", 2_666),
+        ("excluded_location_count", 1_297),
+        ("raw_task_retention_ratio", "0.900000"),
+        ("coverage_semantics", "provider_scopes_over_zip_markets"),
+        ("policy_version", "audited-alias-reconciliation-v0"),
+        ("minimum_scoreable_coverage", "0.500000"),
+    ],
+)
+def test_publication_readiness_blocks_corrupt_audited_scope_lineage(
+    field: str, value: object
+) -> None:
+    result = _result()
+    projection = {
+        "id": "00000000-0000-0000-0000-000000000054",
+        "retailer_id": "aldi_us",
+        "projection_kind": "audited_alias_reconciliation",
+        "policy_version": "audited-alias-reconciliation-v1",
+        "projection_checksum": "a" * 64,
+        "raw_task_count": 2_667,
+        "retained_task_count": 1_369,
+        "excluded_task_count": 1_298,
+        "raw_location_count": 2_667,
+        "retained_location_count": 1_369,
+        "excluded_location_count": 1_298,
+        "denominator_gap_location_count": 2,
+        "raw_task_retention_ratio": "0.513311",
+        "governed_coverage_ratio": "0.998541",
+        "minimum_scoreable_coverage": "0.950000",
+        "scorecard_disposition": "scoreable",
+        "coverage_numerator_location_count": 1_369,
+        "coverage_denominator_location_count": 1_371,
+        "coverage_semantics": (
+            "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+        ),
+    }
+    projection[field] = value
+    result["source"]["collection_scope_projections"] = [projection]
+
+    view = ArtifactRenderer(REPOSITORY_ROOT).report_view(result)
+
+    assert any(
+        row["code"] == "governed_scope_projection_coverage_inconsistent"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+
+
 def test_matching_v2_integrity_reconciles_only_scoreable_retailer_relationships() -> None:
     retailer_rows = [
         {

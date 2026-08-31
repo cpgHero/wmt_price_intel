@@ -93,3 +93,29 @@ and governed physical/network coverage are separate metrics. Recovery plans and 
 generations bind exact projection checksums, and
 projection filtering occurs before readiness, task lineage, and usable-artifact materialization.
 No frozen collection task, geography row, provider response, or raw artifact is mutated.
+`0054_audited_alias_reconcile` is a forward-only extension that preserves both 0053 projection
+kinds, policy bytes, manifests, and checksums. It adds `audited_alias_reconciliation` under the
+separate `audited-alias-reconciliation-v1` policy for inventories that contain exact aliases plus
+completed-audit-backed provider-unsafe scopes with no exact retained request. Exact aliases still
+require an otherwise-identical retained task with only seven-to-eight-digit store normalization;
+unpaired scopes remain null-mapped and contribute distinct frozen physical locations to an explicit
+coverage denominator gap. The migration seals and revalidates the full terminal retailer task
+population, definition-bound frozen geography, completed retailer audit, request identity,
+ordered inventory checksum, raw retention, governed coverage, and disposition in one deferred
+projection-level check. Historical tasks without persisted provider contracts preserve their
+original payload/fingerprint and use a separately sealed current-catalog reconstruction whose
+called rows require immutable same-run artifact corroboration; recovery clones persist the sealed
+contract and a newly derived fingerprint. Targeted guards freeze the approved base run, projected
+task population, task-linked definition-bound geography locations, and referenced raw artifacts.
+The geography-resolution header, unrelated location rows, and precomputed edges remain outside
+this projection identity. The database binds the reviewed full-base checksum into the
+header/manifest; API approval and recovery/materialization
+runtime remain authoritative for recomputing that complete multi-retailer snapshot. Approval locks
+the target task and bound-geography children before their parent run/resolution. Projection
+application preserves retained approval-time eligibility even if the mutable live location master
+later changes and rehydrates audited legacy requests from the sealed contract before checksum and
+selection; later catalog content cannot reinterpret history, although the adapter ID must remain
+registered. Precomputed geography edges are not projection identity or scoreability inputs.
+Downgrade
+refuses while 0054 history exists and otherwise restores the exact 0053 functions/constraints
+before removing the additive helpers, guard index/triggers, and column.

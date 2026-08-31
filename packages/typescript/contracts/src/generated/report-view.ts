@@ -159,6 +159,9 @@ export interface ReadinessReason {
   competitor_id?: string | null;
   profile_id?: string | null;
   relationship_id?: string | null;
+  coverage_numerator_location_count?: number;
+  coverage_denominator_location_count?: number;
+  denominator_gap_location_count?: number;
 }
 export interface Group {
   id: string;

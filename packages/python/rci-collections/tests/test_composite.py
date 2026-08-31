@@ -166,6 +166,7 @@ def _scoped_task(
             },
         }
     )
+    row["request_fingerprint"] = composite_module.canonical_checksum(row["request_payload"])
     return row
 
 
@@ -244,6 +245,502 @@ def test_kroger_scope_projection_proves_canonical_physical_denominator() -> None
     assert preview.manifest["coverage_semantics"] == (
         "canonical_physical_scopes_retained_over_canonical_physical_scopes"
     )
+    assert preview.policy_version == "collection-scope-projection-v1"
+    assert "denominator_gap_location_count" not in preview.manifest
+
+
+def test_production_shaped_audited_alias_reconciliation_preserves_two_scope_gaps() -> None:
+    rows: list[dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
+    for index in range(1, 1_370):
+        canonical = f"{index:08d}"
+        zipcode = f"{index % 100_000:05d}"
+        rows.append(
+            _scoped_task(
+                f"canonical-{index}",
+                retailer_id="kroger_us",
+                store_number=canonical,
+                zipcode=zipcode,
+                location_id=f"canonical-location-{index}",
+                eligible=True,
+            )
+        )
+        if index <= 1_296:
+            alias = canonical[1:]
+            location_id = f"alias-location-{index}"
+            rows.append(
+                _scoped_task(
+                    f"alias-{index}",
+                    retailer_id="kroger_us",
+                    store_number=alias,
+                    zipcode=zipcode,
+                    location_id=location_id,
+                    eligible=False,
+                )
+            )
+            changes.append(
+                {
+                    "id": location_id,
+                    "retailer_id": "kroger_us",
+                    "store_number": alias,
+                    "before_eligible": True,
+                    "after_eligible": False,
+                    "after_reason": "store_number_not_provider_safe",
+                }
+            )
+    for task_id, store_number, zipcode in (
+        ("unpaired-1400945", "1400945", "45069"),
+        ("unpaired-2900768", "2900768", "25064"),
+    ):
+        location_id = f"location-{task_id}"
+        rows.append(
+            _scoped_task(
+                task_id,
+                retailer_id="kroger_us",
+                store_number=store_number,
+                zipcode=zipcode,
+                location_id=location_id,
+                eligible=False,
+            )
+        )
+        changes.append(
+            {
+                "id": location_id,
+                "retailer_id": "kroger_us",
+                "store_number": store_number,
+                "before_eligible": True,
+                "after_eligible": False,
+                "after_reason": "store_number_not_provider_safe",
+            }
+        )
+
+    # Match the frozen production run: no task persisted a provider contract,
+    # four called rows have immutable request metadata, and every other task was
+    # cancelled before its first provider attempt.
+    called_statuses = {
+        "canonical-1": ("succeeded", 200),
+        "canonical-2": ("failed", 404),
+        "canonical-3": ("failed", 404),
+        "canonical-4": ("failed", 404),
+    }
+    for row in rows:
+        executable_payload = dict(row["request_payload"])
+        persisted_payload = {
+            key: value
+            for key, value in executable_payload.items()
+            if key != "_provider_request_contract"
+        }
+        row["_persisted_request_payload"] = persisted_payload
+        row["_request_contract_provenance"] = "reconstructed_current_catalog"
+        row["request_fingerprint"] = composite_module.canonical_checksum(persisted_payload)
+        row.update(
+            {
+                "status": "cancelled",
+                "attempt_count": 0,
+                "billable_credits": 0,
+                "http_status": None,
+                "raw_artifact_id": None,
+                "raw_artifact_checksum": None,
+                "raw_artifact_metadata": None,
+                "raw_artifact_collection_run_id": None,
+                "raw_artifact_immutable": None,
+            }
+        )
+        called = called_statuses.get(str(row["id"]))
+        if called is None:
+            continue
+        status, http_status = called
+        identity = effective_request_identity(row)
+        row.update(
+            {
+                "status": status,
+                "completed_at": "2026-08-30T19:00:00+00:00",
+                "attempt_count": 1,
+                "billable_credits": 3,
+                "http_status": http_status,
+                "raw_artifact_id": f"artifact-{row['id']}",
+                "raw_artifact_checksum": composite_module.canonical_checksum(
+                    {"artifact": str(row["id"]), "http_status": http_status}
+                ),
+                "raw_artifact_collection_run_id": "base-run",
+                "raw_artifact_type": "raw_provider_response",
+                "raw_artifact_immutable": True,
+                "raw_artifact_metadata": {
+                    "provider": "metricscart",
+                    "retailer_id": "kroger_us",
+                    "adapter_id": row["adapter_id"],
+                    "task_id": row["id"],
+                    "request_method": identity["method"],
+                    "request_path": identity["path"],
+                    "request_parameter_names": sorted(identity["params"]),
+                    "http_status": http_status,
+                    "body_checksum": composite_module.canonical_checksum(
+                        {"body": str(row["id"]), "http_status": http_status}
+                    ),
+                },
+            }
+        )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        rows,
+        retailer_id="kroger_us",
+        projection_kind="audited_alias_reconciliation",
+        base_snapshot_checksum="b" * 64,
+        source_audit={
+            "id": "audit-1",
+            "status": "completed",
+            "retailer_ids": ["kroger_us"],
+            "changed_rows": 1_298,
+            "eligible_after": 1_369,
+            "catalog_sha256": "c" * 64,
+            "snapshot_sha256": "d" * 64,
+            "reviewed_plan_sha256": "e" * 64,
+            "changes": changes,
+        },
+    )
+
+    assert preview.policy_version == "audited-alias-reconciliation-v1"
+    assert preview.raw_task_count == 2_667
+    assert preview.retained_task_count == 1_369
+    assert preview.excluded_task_count == 1_298
+    assert preview.raw_task_retention_ratio == "0.513311"
+    assert preview.denominator_gap_location_count == 2
+    assert preview.coverage_numerator_location_count == 1_369
+    assert preview.coverage_denominator_location_count == 1_371
+    assert preview.governed_coverage_ratio == "0.998541"
+    assert preview.scorecard_disposition == "scoreable"
+    identity_evidence = preview.manifest["source_evidence"]["request_identity"]
+    adapter_evidence = identity_evidence["contracts"]["metricscart_kroger_us_search_zipcode"]
+    assert adapter_evidence["frozen_task_count"] == 0
+    assert adapter_evidence["reconstructed_task_count"] == 2_667
+    assert adapter_evidence["called_artifact_count"] == 4
+    assert len(adapter_evidence["called_artifacts"]) == 4
+    assert identity_evidence["reconstructed_current_catalog_unverified"] == [
+        "historical_parameter_values",
+        "historical_catalog_defaults",
+    ]
+    excluded = [item for item in preview.items if item.disposition == "excluded"]
+    mapped = [item for item in excluded if item.mapped_retained_task_id is not None]
+    gaps = [item for item in excluded if item.mapped_retained_task_id is None]
+    assert len(mapped) == 1_296
+    assert len(gaps) == 2
+    assert {item.source_task_id for item in gaps} == {
+        "unpaired-1400945",
+        "unpaired-2900768",
+    }
+    assert {item.reason for item in gaps} == {"audited_provider_unsafe_unpaired_scope_gap"}
+    assert preview.manifest["coverage_semantics"] == (
+        "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+    )
+
+
+def _legacy_called_audited_fixture() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    called = _scoped_task(
+        "called-canonical",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="called-location",
+        eligible=True,
+    )
+    gap = _scoped_task(
+        "never-called-gap",
+        retailer_id="kroger_us",
+        store_number="7654321",
+        zipcode="25064",
+        location_id="gap-location",
+        eligible=False,
+    )
+    for row in (called, gap):
+        persisted_payload = {
+            key: value
+            for key, value in row["request_payload"].items()
+            if key != "_provider_request_contract"
+        }
+        row["_persisted_request_payload"] = persisted_payload
+        row["_request_contract_provenance"] = "reconstructed_current_catalog"
+        row["request_fingerprint"] = composite_module.canonical_checksum(persisted_payload)
+    identity = effective_request_identity(called)
+    called.update(
+        {
+            "status": "succeeded",
+            "completed_at": "2026-08-30T19:00:00+00:00",
+            "attempt_count": 1,
+            "billable_credits": 3,
+            "http_status": 200,
+            "raw_artifact_id": "artifact-called",
+            "raw_artifact_checksum": "a" * 64,
+            "raw_artifact_collection_run_id": "base-run",
+            "raw_artifact_type": "raw_provider_response",
+            "raw_artifact_immutable": True,
+            "raw_artifact_metadata": {
+                "provider": "metricscart",
+                "retailer_id": "kroger_us",
+                "adapter_id": called["adapter_id"],
+                "task_id": called["id"],
+                "request_method": identity["method"],
+                "request_path": identity["path"],
+                "request_parameter_names": sorted(identity["params"]),
+                "http_status": 200,
+                "body_checksum": "b" * 64,
+            },
+        }
+    )
+    gap.update(
+        {
+            "status": "cancelled",
+            "completed_at": "2026-08-30T19:00:00+00:00",
+            "attempt_count": 0,
+            "billable_credits": 0,
+            "http_status": None,
+            "raw_artifact_id": None,
+            "raw_artifact_checksum": None,
+            "raw_artifact_collection_run_id": None,
+            "raw_artifact_type": None,
+            "raw_artifact_immutable": None,
+            "raw_artifact_metadata": None,
+        }
+    )
+    return [called, gap], {
+        "id": "audit-legacy-artifact",
+        "status": "completed",
+        "retailer_ids": ["kroger_us"],
+        "changed_rows": 1,
+        "changes": [
+            {
+                "id": "gap-location",
+                "retailer_id": "kroger_us",
+                "store_number": "7654321",
+                "before_eligible": True,
+                "after_eligible": False,
+                "after_reason": "store_number_not_provider_safe",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda row: row.__setitem__("raw_artifact_type", "analysis_input"),
+            "lacks immutable provider artifact evidence",
+        ),
+        (
+            lambda row: row.__setitem__("http_status", None),
+            "lacks immutable provider artifact evidence",
+        ),
+        (
+            lambda row: row.__setitem__("status", "cancelled"),
+            "lacks immutable provider artifact evidence",
+        ),
+        (
+            lambda row: row.__setitem__("completed_at", None),
+            "lacks immutable provider artifact evidence",
+        ),
+        (
+            lambda row: row["raw_artifact_metadata"].__setitem__(
+                "request_parameter_names",
+                list(reversed(row["raw_artifact_metadata"]["request_parameter_names"])),
+            ),
+            "metadata conflicts with the sealed contract",
+        ),
+        (
+            lambda row: row["raw_artifact_metadata"].__setitem__(
+                "request_parameter_names", ["keyword", 1, "store", "zipcode"]
+            ),
+            "metadata conflicts with the sealed contract",
+        ),
+    ],
+)
+def test_audited_legacy_preview_rejects_malformed_called_artifact(
+    mutation: Any, message: str
+) -> None:
+    rows, audit = _legacy_called_audited_fixture()
+    mutation(rows[0])
+
+    with pytest.raises(ValueError, match=message):
+        build_scope_projection_preview(
+            "base-run",
+            rows,
+            retailer_id="kroger_us",
+            projection_kind="audited_alias_reconciliation",
+            base_snapshot_checksum="b" * 64,
+            source_audit=audit,
+        )
+
+
+def test_audited_alias_reconciliation_does_not_infer_mapping_from_same_zip() -> None:
+    canonical = _scoped_task(
+        "canonical",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="canonical-location",
+        eligible=True,
+    )
+    unpaired = _scoped_task(
+        "unpaired",
+        retailer_id="kroger_us",
+        store_number="1400945",
+        zipcode="45069",
+        location_id="unpaired-location",
+        eligible=False,
+    )
+    audit = {
+        "id": "audit-1",
+        "status": "completed",
+        "retailer_ids": ["kroger_us"],
+        "changed_rows": 1,
+        "changes": [
+            {
+                "id": "unpaired-location",
+                "retailer_id": "kroger_us",
+                "store_number": "1400945",
+                "before_eligible": True,
+                "after_eligible": False,
+                "after_reason": "store_number_not_provider_safe",
+            }
+        ],
+    }
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        [canonical, unpaired],
+        retailer_id="kroger_us",
+        projection_kind="audited_alias_reconciliation",
+        base_snapshot_checksum="b" * 64,
+        source_audit=audit,
+    )
+
+    gap = next(item for item in preview.items if item.disposition == "excluded")
+    assert gap.mapped_retained_task_id is None
+    assert preview.governed_coverage_ratio == "0.500000"
+    assert preview.scorecard_disposition == "unavailable"
+
+    with pytest.raises(ValueError, match=r"pins scoreable coverage at 0\.950000"):
+        build_scope_projection_preview(
+            "egg-run",
+            [canonical, unpaired],
+            retailer_id="kroger_us",
+            projection_kind="audited_alias_reconciliation",
+            base_snapshot_checksum="b" * 64,
+            source_audit=audit,
+            minimum_scoreable_coverage=0.90,
+        )
+
+    audit["changes"][0]["after_reason"] = "reviewed_ineligible"
+    with pytest.raises(ValueError, match="exact reviewed audit reason"):
+        build_scope_projection_preview(
+            "egg-run",
+            [canonical, unpaired],
+            retailer_id="kroger_us",
+            projection_kind="audited_alias_reconciliation",
+            base_snapshot_checksum="b" * 64,
+            source_audit=audit,
+        )
+
+
+def test_audited_alias_reconciliation_requires_a_real_denominator_gap() -> None:
+    canonical = _scoped_task(
+        "canonical",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="canonical-location",
+        eligible=True,
+    )
+    alias = _scoped_task(
+        "alias",
+        retailer_id="kroger_us",
+        store_number="1234567",
+        zipcode="45069",
+        location_id="alias-location",
+        eligible=False,
+    )
+
+    with pytest.raises(ValueError, match="use canonical_alias_collapse"):
+        build_scope_projection_preview(
+            "egg-run",
+            [canonical, alias],
+            retailer_id="kroger_us",
+            projection_kind="audited_alias_reconciliation",
+            base_snapshot_checksum="b" * 64,
+            source_audit={
+                "id": "audit-all-mapped",
+                "status": "completed",
+                "retailer_ids": ["kroger_us"],
+                "changed_rows": 1,
+                "changes": [
+                    {
+                        "id": "alias-location",
+                        "retailer_id": "kroger_us",
+                        "store_number": "1234567",
+                        "before_eligible": True,
+                        "after_eligible": False,
+                        "after_reason": "store_number_not_provider_safe",
+                    }
+                ],
+            },
+        )
+
+
+def test_audited_alias_reconciliation_uses_postgres_half_up_ratio_rounding() -> None:
+    retained = _scoped_task(
+        "canonical",
+        retailer_id="kroger_us",
+        store_number="01000000",
+        zipcode="00000",
+        location_id="canonical-location",
+        eligible=True,
+    )
+    gaps: list[dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
+    for index in range(127):
+        store_number = f"{2_000_000 + index:07d}"
+        location_id = f"gap-location-{index}"
+        gap = _scoped_task(
+            f"gap-{index}",
+            retailer_id="kroger_us",
+            store_number=store_number,
+            zipcode=f"{index + 1:05d}",
+            location_id=location_id,
+            eligible=False,
+        )
+        gap["request_payload"]["keyword"] = f"milk-gap-{index}"
+        gap["request_fingerprint"] = composite_module.canonical_checksum(gap["request_payload"])
+        gaps.append(gap)
+        changes.append(
+            {
+                "id": location_id,
+                "retailer_id": "kroger_us",
+                "store_number": store_number,
+                "before_eligible": True,
+                "after_eligible": False,
+                "after_reason": "store_number_not_provider_safe",
+            }
+        )
+
+    preview = build_scope_projection_preview(
+        "egg-run",
+        [retained, *gaps],
+        retailer_id="kroger_us",
+        projection_kind="audited_alias_reconciliation",
+        base_snapshot_checksum="b" * 64,
+        source_audit={
+            "id": "audit-half-up",
+            "status": "completed",
+            "retailer_ids": ["kroger_us"],
+            "changed_rows": 127,
+            "changes": changes,
+        },
+    )
+
+    # PostgreSQL ROUND(numeric, 6) rounds this exact tie away from zero.
+    assert preview.raw_task_retention_ratio == "0.007813"
+    assert preview.governed_coverage_ratio == "0.007813"
+    assert preview.scorecard_disposition == "unavailable"
 
 
 def test_wegmans_scope_projection_preserves_limited_provider_footprint() -> None:
@@ -426,6 +923,156 @@ def test_scope_projection_header_must_match_reviewed_manifest() -> None:
     stored["scorecard_disposition"] = "scoreable"
     with pytest.raises(ValueError, match="header differs"):
         validate_scope_projection_header_manifest(stored)
+
+
+def test_runtime_rejects_self_consistent_projection_with_wrong_full_base_checksum() -> None:
+    retained = _scoped_task(
+        "retained",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="retained-location",
+        eligible=True,
+    )
+    projection = {
+        "id": "projection-wrong-base",
+        "base_collection_run_id": "base-run",
+        "retailer_id": "kroger_us",
+        "base_snapshot_checksum": "0" * 64,
+        "retained_task_count": 1,
+        "inventory": [
+            {
+                "source_task_id": "retained",
+                "disposition": "retained",
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="no longer matches the immutable base snapshot"):
+        PostgresCompositeEvidenceRepository._apply_scope_projection_rows(
+            [retained],
+            [projection],
+            base_collection_run_id="base-run",
+            base_snapshot_checksum="1" * 64,
+        )
+
+
+def test_runtime_projection_preserves_approval_time_retained_eligibility() -> None:
+    retained = _scoped_task(
+        "retained",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="retained-location",
+        eligible=False,
+    )
+    excluded = _scoped_task(
+        "excluded",
+        retailer_id="kroger_us",
+        store_number="1234567",
+        zipcode="45069",
+        location_id="excluded-location",
+        eligible=False,
+    )
+    unrelated = _scoped_task(
+        "unrelated",
+        retailer_id="target_us",
+        store_number="1000",
+        zipcode="45069",
+        location_id="unrelated-location",
+        eligible=False,
+    )
+    projection = {
+        "id": "projection-sealed-eligibility",
+        "base_collection_run_id": "base-run",
+        "retailer_id": "kroger_us",
+        "base_snapshot_checksum": "a" * 64,
+        "retained_task_count": 1,
+        "inventory": [
+            {"source_task_id": "retained", "disposition": "retained"},
+            {"source_task_id": "excluded", "disposition": "excluded"},
+        ],
+    }
+
+    projected = PostgresCompositeEvidenceRepository._apply_scope_projection_rows(
+        [retained, excluded, unrelated],
+        [projection],
+        base_collection_run_id="base-run",
+        base_snapshot_checksum="a" * 64,
+    )
+
+    assert [str(row["id"]) for row in projected] == ["retained", "unrelated"]
+    assert projected[0]["current_location_eligible"] is True
+    assert projected[1]["current_location_eligible"] is False
+    assert retained["current_location_eligible"] is False
+
+
+def test_runtime_projection_rehydrates_sealed_legacy_contract_before_checksum() -> None:
+    retained = _scoped_task(
+        "retained",
+        retailer_id="kroger_us",
+        store_number="01234567",
+        zipcode="45069",
+        location_id="retained-location",
+        eligible=False,
+    )
+    sealed_payload = dict(retained["request_payload"])
+    persisted_payload = {
+        key: value for key, value in sealed_payload.items() if key != "_provider_request_contract"
+    }
+    persisted_fingerprint = composite_module.canonical_checksum(persisted_payload)
+    changed_contract = {
+        **sealed_payload["_provider_request_contract"],
+        "path": "/changed/catalog/path",
+    }
+    retained["request_payload"] = {
+        **persisted_payload,
+        "_provider_request_contract": changed_contract,
+    }
+    retained["request_fingerprint"] = persisted_fingerprint
+    retained["_persisted_request_payload"] = persisted_payload
+    retained["_request_contract_provenance"] = "reconstructed_current_catalog"
+    projection = {
+        "id": "projection-sealed-request",
+        "base_collection_run_id": "base-run",
+        "retailer_id": "kroger_us",
+        "projection_kind": "audited_alias_reconciliation",
+        "base_snapshot_checksum": "a" * 64,
+        "retained_task_count": 1,
+        "inventory": [
+            {
+                "source_task_id": "retained",
+                "disposition": "retained",
+                "source_snapshot": {
+                    "task": {
+                        "task_id": "retained",
+                        "request_payload": sealed_payload,
+                        "request_fingerprint": composite_module.canonical_checksum(sealed_payload),
+                        "persisted_request_payload": persisted_payload,
+                        "persisted_request_fingerprint": persisted_fingerprint,
+                        "request_identity_provenance": {"mode": "reconstructed_current_catalog"},
+                    }
+                },
+            }
+        ],
+    }
+
+    rehydrated = PostgresCompositeEvidenceRepository._rehydrate_scope_projection_rows(
+        [retained], [projection]
+    )
+    assert rehydrated[0]["request_payload"] == sealed_payload
+    assert rehydrated[0]["request_fingerprint"] == persisted_fingerprint
+    assert retained["request_payload"]["_provider_request_contract"] == changed_contract
+
+    applied = PostgresCompositeEvidenceRepository._apply_scope_projection_rows(
+        rehydrated,
+        [projection],
+        base_collection_run_id="base-run",
+        base_snapshot_checksum="a" * 64,
+    )
+    assert applied[0]["request_payload"] == sealed_payload
+    assert applied[0]["request_fingerprint"] == composite_module.canonical_checksum(sealed_payload)
+    assert applied[0]["current_location_eligible"] is True
 
 
 def test_scope_projection_rejects_unmapped_alias_and_unproven_provider_failure() -> None:
@@ -999,6 +1646,39 @@ def test_exact_recovery_contract_is_checksum_bound_and_disables_preflight() -> N
         assert "selection" in str(exc)
     else:
         raise AssertionError("stale exact recovery selection should fail closed")
+
+
+def test_legacy_exact_recovery_persists_sealed_contract_with_derived_fingerprint() -> None:
+    failed = _task(
+        "legacy-failed",
+        "location:1",
+        status="failed",
+        gate_status="failed",
+        http_status=500,
+        failure_class="lease_exhausted",
+        billable_credits=0,
+        raw_artifact_id=None,
+    )
+    sealed_payload = dict(failed["request_payload"])
+    persisted_payload = {
+        key: value for key, value in sealed_payload.items() if key != "_provider_request_contract"
+    }
+    failed["request_fingerprint"] = composite_module.canonical_checksum(persisted_payload)
+    failed["_persisted_request_payload"] = persisted_payload
+    failed["_request_contract_provenance"] = "reconstructed_current_catalog"
+    preview = build_recovery_preview("base-run", [failed], definition_checksum="definition")
+
+    contract = build_exact_recovery_task_contracts(
+        preview,
+        selection_checksum=preview.selection_checksum,
+        base_snapshot_checksum=preview.base_snapshot_checksum,
+        approved_credit_ceiling=preview.maximum_credits,
+    )[0]
+
+    assert contract["request_payload"] == sealed_payload
+    assert "_provider_request_contract" in contract["request_payload"]
+    assert contract["request_fingerprint"] == composite_module.canonical_checksum(sealed_payload)
+    assert contract["request_fingerprint"] != failed["request_fingerprint"]
 
 
 def test_exact_recovery_rejects_unapproved_pagination_descendants() -> None:
@@ -1591,6 +2271,99 @@ def test_retailer_collection_readiness_blocks_all_404_or_sparse_evidence() -> No
     )
     assert blocked is False
     assert scope_invalid["kroger_us"]["status"] == "unavailable"
+
+    blocked, governed_gap = retailer_collection_readiness(
+        {"kroger_us": ["usable_success"] * 1_369},
+        minimum_successes=1,
+        maximum_404_rate=0.5,
+        nonempty_successes_by_retailer={"kroger_us": 1_369},
+        scope_projection_dispositions={
+            "kroger_us": {
+                "id": "projection-1",
+                "projection_kind": "audited_alias_reconciliation",
+                "policy_version": "audited-alias-reconciliation-v1",
+                "projection_checksum": "a" * 64,
+                "raw_task_count": 2_667,
+                "retained_task_count": 1_369,
+                "excluded_task_count": 1_298,
+                "raw_location_count": 2_667,
+                "retained_location_count": 1_369,
+                "excluded_location_count": 1_298,
+                "denominator_gap_location_count": 2,
+                "raw_task_retention_ratio": "0.513311",
+                "governed_coverage_ratio": "0.998541",
+                "minimum_scoreable_coverage": "0.950000",
+                "scorecard_disposition": "scoreable",
+                "coverage_numerator_location_count": 1_369,
+                "coverage_denominator_location_count": 1_371,
+                "coverage_semantics": (
+                    "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+                ),
+            }
+        },
+    )
+    assert blocked is False
+    assert governed_gap["kroger_us"]["status"] == "warning"
+    assert governed_gap["kroger_us"]["scope_projection"] == {
+        "id": "projection-1",
+        "projection_kind": "audited_alias_reconciliation",
+        "policy_version": "audited-alias-reconciliation-v1",
+        "projection_checksum": "a" * 64,
+        "raw_task_count": 2_667,
+        "retained_task_count": 1_369,
+        "excluded_task_count": 1_298,
+        "raw_location_count": 2_667,
+        "retained_location_count": 1_369,
+        "excluded_location_count": 1_298,
+        "denominator_gap_location_count": 2,
+        "raw_task_retention_ratio": "0.513311",
+        "governed_coverage_ratio": "0.998541",
+        "minimum_scoreable_coverage": "0.950000",
+        "scorecard_disposition": "scoreable",
+        "coverage_numerator_location_count": 1_369,
+        "coverage_denominator_location_count": 1_371,
+        "coverage_semantics": (
+            "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+        ),
+    }
+
+    rounded_projection = {
+        "id": "projection-rounded-gap",
+        "projection_kind": "audited_alias_reconciliation",
+        "policy_version": "audited-alias-reconciliation-v1",
+        "projection_checksum": "b" * 64,
+        "raw_task_count": 2_000_001,
+        "retained_task_count": 2_000_000,
+        "excluded_task_count": 1,
+        "raw_location_count": 2_000_001,
+        "retained_location_count": 2_000_000,
+        "excluded_location_count": 1,
+        "denominator_gap_location_count": 1,
+        "raw_task_retention_ratio": "1.000000",
+        "governed_coverage_ratio": "1.000000",
+        "minimum_scoreable_coverage": "0.950000",
+        "scorecard_disposition": "scoreable",
+        "manifest": {
+            "coverage_numerator_location_count": 2_000_000,
+            "coverage_denominator_location_count": 2_000_001,
+            "coverage_semantics": (
+                "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+            ),
+        },
+    }
+    rounded_readiness_contract = composite_module._scope_projection_readiness_contract(
+        rounded_projection
+    )
+    assert rounded_readiness_contract["policy_version"] == ("audited-alias-reconciliation-v1")
+    blocked, rounded_gap = retailer_collection_readiness(
+        {"kroger_us": ["usable_success"]},
+        minimum_successes=1,
+        maximum_404_rate=0.5,
+        nonempty_successes_by_retailer={"kroger_us": 1},
+        scope_projection_dispositions={"kroger_us": rounded_readiness_contract},
+    )
+    assert blocked is False
+    assert rounded_gap["kroger_us"]["status"] == "warning"
 
     blocked, integrity = retailer_collection_readiness(
         {"meijer_us": ["contract_missing"]},

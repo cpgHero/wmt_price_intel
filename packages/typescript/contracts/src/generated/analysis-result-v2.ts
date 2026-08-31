@@ -208,7 +208,7 @@ export interface Source {
   collection_scope_projections?: {
     id: string;
     retailer_id: string;
-    projection_kind: "canonical_alias_collapse" | "limited_provider_footprint";
+    projection_kind: "canonical_alias_collapse" | "limited_provider_footprint" | "audited_alias_reconciliation";
     projection_checksum: string;
     raw_task_count: number;
     retained_task_count: number;
@@ -216,10 +216,14 @@ export interface Source {
     raw_location_count: number;
     retained_location_count: number;
     excluded_location_count: number;
+    denominator_gap_location_count?: number;
     raw_task_retention_ratio: string;
     governed_coverage_ratio: string;
     minimum_scoreable_coverage: string;
     scorecard_disposition: "scoreable" | "unavailable";
+    coverage_numerator_location_count?: number;
+    coverage_denominator_location_count?: number;
+    coverage_semantics?: string;
     source_audit_id: string | null;
     source_evidence_checksum: string;
     inventory_checksum: string;

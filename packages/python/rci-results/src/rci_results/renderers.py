@@ -8,6 +8,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from email.message import EmailMessage
 from html import escape
 from io import BytesIO
@@ -20,7 +21,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.15.1"
+RENDERER_VERSION = "2.15.2"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -2587,6 +2588,119 @@ class ArtifactRenderer:
         evidence_readiness: JsonObject = (
             dict(evidence_readiness_value) if isinstance(evidence_readiness_value, dict) else {}
         )
+        scope_projection_values = source.get("collection_scope_projections")
+        scope_projections = (
+            [row for row in scope_projection_values if isinstance(row, dict)]
+            if isinstance(scope_projection_values, list)
+            else []
+        )
+        for projection in scope_projections:
+            if str(projection.get("projection_kind") or "") != "audited_alias_reconciliation":
+                continue
+            expected_policy_version = "audited-alias-reconciliation-v1"
+            policy_version = str(projection.get("policy_version") or "")
+            numerator = projection.get("coverage_numerator_location_count")
+            denominator = projection.get("coverage_denominator_location_count")
+            gap_count = projection.get("denominator_gap_location_count")
+            retained_location_count = projection.get("retained_location_count")
+            excluded_location_count = projection.get("excluded_location_count")
+            raw_location_count = projection.get("raw_location_count")
+            retained_task_count = projection.get("retained_task_count")
+            excluded_task_count = projection.get("excluded_task_count")
+            raw_task_count = projection.get("raw_task_count")
+            try:
+                governed_coverage = Decimal(str(projection["governed_coverage_ratio"]))
+                minimum_coverage = Decimal(str(projection["minimum_scoreable_coverage"]))
+                raw_task_retention = Decimal(str(projection["raw_task_retention_ratio"]))
+                expected_coverage = (
+                    Decimal(numerator) / Decimal(denominator)
+                    if isinstance(numerator, int)
+                    and not isinstance(numerator, bool)
+                    and isinstance(denominator, int)
+                    and not isinstance(denominator, bool)
+                    and denominator > 0
+                    else Decimal("-1")
+                ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                expected_raw_task_retention = (
+                    Decimal(retained_task_count) / Decimal(raw_task_count)
+                    if isinstance(retained_task_count, int)
+                    and not isinstance(retained_task_count, bool)
+                    and isinstance(raw_task_count, int)
+                    and not isinstance(raw_task_count, bool)
+                    and raw_task_count > 0
+                    else Decimal("-1")
+                ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+            except (InvalidOperation, KeyError, TypeError, ValueError, ZeroDivisionError):
+                governed_coverage = Decimal("-1")
+                minimum_coverage = Decimal("-1")
+                raw_task_retention = Decimal("-1")
+                expected_coverage = Decimal("-2")
+                expected_raw_task_retention = Decimal("-2")
+            scorecard_disposition = str(projection.get("scorecard_disposition") or "")
+            expected_disposition = (
+                "scoreable" if governed_coverage >= minimum_coverage else "unavailable"
+            )
+            inconsistent = (
+                not isinstance(numerator, int)
+                or isinstance(numerator, bool)
+                or not isinstance(denominator, int)
+                or isinstance(denominator, bool)
+                or not isinstance(gap_count, int)
+                or isinstance(gap_count, bool)
+                or numerator <= 0
+                or gap_count <= 0
+                or numerator != retained_location_count
+                or denominator != numerator + gap_count
+                or not isinstance(excluded_location_count, int)
+                or isinstance(excluded_location_count, bool)
+                or not isinstance(raw_location_count, int)
+                or isinstance(raw_location_count, bool)
+                or retained_location_count + excluded_location_count != raw_location_count
+                or not isinstance(retained_task_count, int)
+                or isinstance(retained_task_count, bool)
+                or not isinstance(excluded_task_count, int)
+                or isinstance(excluded_task_count, bool)
+                or not isinstance(raw_task_count, int)
+                or isinstance(raw_task_count, bool)
+                or retained_task_count + excluded_task_count != raw_task_count
+                or raw_task_retention != expected_raw_task_retention
+                or str(projection.get("coverage_semantics") or "")
+                != "provider_safe_scopes_over_provider_safe_plus_audited_unpaired_gaps"
+                or policy_version != expected_policy_version
+                or governed_coverage != expected_coverage
+                or minimum_coverage != Decimal("0.950000")
+                or scorecard_disposition != expected_disposition
+            )
+            if inconsistent:
+                blocking_reasons.append(
+                    {
+                        "code": "governed_scope_projection_coverage_inconsistent",
+                        "message": (
+                            "A scoreable collection scope projection reports incomplete coverage "
+                            "without reconciling its numerator, denominator, and governed gaps."
+                        ),
+                        "competitor_id": str(projection.get("retailer_id") or ""),
+                    }
+                )
+                continue
+            if scorecard_disposition != "scoreable":
+                continue
+            warnings.append(
+                {
+                    "code": "governed_collection_scope_gap",
+                    "message": (
+                        f"{projection.get('retailer_id')} is scoreable with governed collection "
+                        f"coverage at {numerator:,} of {denominator:,} physical scopes; "
+                        f"{gap_count:,} audit-backed provider-unsafe scope gap"
+                        f"{'s are' if gap_count != 1 else ' is'} excluded from metrics rather "
+                        "than represented as zero-valued stores."
+                    ),
+                    "competitor_id": str(projection.get("retailer_id") or ""),
+                    "coverage_numerator_location_count": numerator,
+                    "coverage_denominator_location_count": denominator,
+                    "denominator_gap_location_count": gap_count,
+                }
+            )
         for competitor_id in sorted(unavailable_competitors & competitor_ids):
             detail = evidence_readiness.get(competitor_id)
             reason = (

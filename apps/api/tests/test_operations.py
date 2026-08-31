@@ -16,7 +16,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 class FakeOperationsRepository:
     async def snapshot(self) -> dict[str, Any]:
         return {
-            "migration_version": "0053_scope_projections",
+            "migration_version": "0054_audited_alias_reconcile",
             "collection_queued": 2,
             "collection_running": 1,
             "collection_expired": 0,
@@ -53,7 +53,7 @@ class FakeOperationsRepository:
 
 
 def test_repository_migration_graph_has_one_expected_head() -> None:
-    assert _migration_heads(REPOSITORY_ROOT) == ("0053_scope_projections",)
+    assert _migration_heads(REPOSITORY_ROOT) == ("0054_audited_alias_reconcile",)
 
 
 def test_recovery_evidence_fails_openly_when_not_recorded() -> None:
