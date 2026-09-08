@@ -11,6 +11,7 @@ export interface RetailCompetitiveIntelligenceAnalysisResultV2 {
   analysis_run_id: string;
   generated_at: string;
   source: Source;
+  distribution_contract: DistributionContract;
   benchmark_retailer: string;
   /**
    * @minItems 1
@@ -298,6 +299,16 @@ export interface MatchingV2RetailerCoverage {
   reviewed_insufficient_evidence_count?: number;
   pending_unreviewed_count?: number;
   unresolved_count: number;
+}
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
 }
 export interface Metric {
   metric_id: string;

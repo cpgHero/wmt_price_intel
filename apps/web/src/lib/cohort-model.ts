@@ -21,13 +21,13 @@ export interface ComparableCohort {
   pairCount: number;
   matches: number;
   matchedGeographies: number;
-  benchmarkVerifiedLocations: number;
+  benchmarkDistributionStores: number | null;
+  benchmarkServiceAreaPresences: number | null;
   benchmarkScoredLocations: number;
   benchmarkUnscoredLocations: number;
-  locationCoverageRate: number | null;
-  competitorContributingLocations: number;
-  competitorContributingStores: number;
-  competitorContributingServiceAreas: number;
+  storeDistributionCoverageRate: number | null;
+  competitorContributingStores: number | null;
+  competitorContributingServiceAreas: number | null;
   benchmarkLowerRate: number;
   competitorLowerRate: number;
   parityRate: number;
@@ -99,6 +99,34 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
   const profileId = String(row._profile_id ?? "");
   const segmentId = String(row._segment_id ?? segment);
   const attributes = row._segment_attributes;
+  const benchmarkDistributionStores = numericValue(
+    row,
+    "_distribution_store_count",
+    "distribution store count",
+  );
+  const benchmarkServiceAreaPresences = numericValue(
+    row,
+    "_service_area_presence_count",
+    "service area presence count",
+  );
+  const benchmarkScoredLocations =
+    numericValue(
+      row,
+      "_benchmark_scored_locations",
+      "benchmark scored locations",
+    ) ?? 0;
+  const validDistributionStores =
+    benchmarkDistributionStores !== null &&
+    Number.isInteger(benchmarkDistributionStores) &&
+    benchmarkDistributionStores >= 0
+      ? benchmarkDistributionStores
+      : null;
+  const validServiceAreaPresences =
+    benchmarkServiceAreaPresences !== null &&
+    Number.isInteger(benchmarkServiceAreaPresences) &&
+    benchmarkServiceAreaPresences >= 0
+      ? benchmarkServiceAreaPresences
+      : null;
   return {
     id: `${competitorId}:${profileId}:${segmentId}`,
     competitorId,
@@ -120,47 +148,31 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     matches: numericValue(row, "_matches", "matches") ?? 0,
     matchedGeographies:
       numericValue(row, "_matched_geographies", "matched geographies") ?? 0,
-    benchmarkVerifiedLocations:
-      numericValue(
-        row,
-        "_benchmark_observed_locations",
-        "benchmark verified locations",
-      ) ?? 0,
-    benchmarkScoredLocations:
-      numericValue(
-        row,
-        "_benchmark_scored_locations",
-        "benchmark scored locations",
-      ) ?? 0,
+    benchmarkDistributionStores: validDistributionStores,
+    benchmarkServiceAreaPresences: validServiceAreaPresences,
+    benchmarkScoredLocations,
     benchmarkUnscoredLocations:
       numericValue(
         row,
         "_benchmark_unscored_locations",
         "benchmark unscored locations",
       ) ?? 0,
-    locationCoverageRate: numericValue(
+    storeDistributionCoverageRate:
+      validDistributionStores !== null &&
+      validDistributionStores > 0 &&
+      benchmarkScoredLocations <= validDistributionStores
+        ? benchmarkScoredLocations / validDistributionStores
+        : null,
+    competitorContributingStores: numericValue(
       row,
-      "_location_coverage_rate",
-      "location coverage rate",
+      "_competitor_contributing_stores",
+      "competitor contributing stores",
     ),
-    competitorContributingLocations:
-      numericValue(
-        row,
-        "_competitor_contributing_locations",
-        "competitor contributing locations",
-      ) ?? 0,
-    competitorContributingStores:
-      numericValue(
-        row,
-        "_competitor_contributing_stores",
-        "competitor contributing stores",
-      ) ?? 0,
-    competitorContributingServiceAreas:
-      numericValue(
-        row,
-        "_competitor_contributing_service_areas",
-        "competitor contributing service areas",
-      ) ?? 0,
+    competitorContributingServiceAreas: numericValue(
+      row,
+      "_competitor_contributing_service_areas",
+      "competitor contributing service areas",
+    ),
     benchmarkLowerRate:
       numericValue(row, "_benchmark_lower_rate", "benchmark lower") ?? 0,
     competitorLowerRate:

@@ -149,8 +149,9 @@ export function marketPerformance(
     .map((row) => ({
       ...row,
       scoredRate:
-        row.benchmark_observed_stores > 0
-          ? row.scored_stores / row.benchmark_observed_stores
+        row.distribution_store_count > 0 &&
+        row.scored_stores <= row.distribution_store_count
+          ? row.scored_stores / row.distribution_store_count
           : null,
       lossRate:
         row.scored_stores > 0 ? row.losing_stores / row.scored_stores : null,

@@ -4,9 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
 import {
-  availabilityEvidenceLabel,
-  priceEvidenceLabel,
-} from "@/lib/availability-presentation";
+  distributionCount,
+  distributionLabel,
+  distributionNoun,
+  serviceAreaPresenceDefinition,
+  storeDistributionDefinition,
+} from "@/lib/distribution-presentation";
 
 import styles from "./evidence-retail-map.module.css";
 
@@ -159,7 +162,6 @@ function toFeatureCollection(points: MapPoint[]) {
         status: point.status,
         position: pointPosition(point),
         price_label: point.price === null ? "" : currency(point.price),
-        availability_status: point.availability_status,
       },
     })),
   };
@@ -259,19 +261,7 @@ function addEvidenceLayers(
           ]
         : "#f5b642",
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 4, 9, 6, 14, 9],
-      "circle-stroke-color": isObserved
-        ? [
-            "match",
-            ["get", "availability_status"],
-            "verified_in_stock",
-            "#14845f",
-            "explicitly_out_of_stock",
-            "#b63f3f",
-            "unverified_sponsored",
-            "#d99016",
-            "#718087",
-          ]
-        : "#4a3a16",
+      "circle-stroke-color": isObserved ? "#ffffff" : "#4a3a16",
       "circle-stroke-width": isObserved ? 2.5 : 1.5,
       "circle-opacity": 0.9,
     },
@@ -404,10 +394,14 @@ export function EvidenceRetailMap({
         map.on("load", () => {
           if (!map || cancelled) return;
           const observed = mapData.points.filter(
-            (point) => point.status === "observed",
+            (point) =>
+              point.status === "observed" &&
+              point.kind === view.retailer.location_dimension,
           );
           const gaps = mapData.points.filter(
-            (point) => point.status === "not_observed",
+            (point) =>
+              point.status === "not_observed" &&
+              point.kind === view.retailer.location_dimension,
           );
           map.addSource(OBSERVED_SOURCE, {
             type: "geojson",
@@ -519,7 +513,13 @@ export function EvidenceRetailMap({
       mapRef.current = null;
       map?.remove();
     };
-  }, [clusterPoints, detail, mapData, pointByScope]);
+  }, [
+    clusterPoints,
+    detail,
+    mapData,
+    pointByScope,
+    view.retailer.location_dimension,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -539,9 +539,13 @@ export function EvidenceRetailMap({
       map.setLayoutProperty(layer, "visibility", gapVisibility);
     }
     const visiblePoints =
-      mapData?.points.filter((point) => point.status === activeMode) ?? [];
+      mapData?.points.filter(
+        (point) =>
+          point.status === activeMode &&
+          point.kind === view.retailer.location_dimension,
+      ) ?? [];
     fitToPoints(map, visiblePoints, detail);
-  }, [activeMode, clusterPoints, detail, mapData, mapReady]);
+  }, [activeMode, clusterPoints, detail, mapData, mapReady, view.retailer]);
 
   const display = mapData?.display;
   const hasPricePositionCounts = Boolean(
@@ -552,14 +556,15 @@ export function EvidenceRetailMap({
   );
   const modeTotal = display
     ? activeMode === "observed"
-      ? display.search_observed_locations
+      ? (distributionCount(display, view.retailer.location_dimension) ?? 0)
       : display.not_observed_locations
     : 0;
-  const modePoints = display
-    ? activeMode === "observed"
-      ? display.observed_points
-      : display.not_observed_points
-    : 0;
+  const modePoints =
+    mapData?.points.filter(
+      (point) =>
+        point.status === activeMode &&
+        point.kind === view.retailer.location_dimension,
+    ).length ?? 0;
   const modeSampled = display
     ? activeMode === "observed"
       ? display.observed_sampled
@@ -600,9 +605,18 @@ export function EvidenceRetailMap({
             onClick={() => selectMode("observed")}
             type="button"
           >
-            Search reach
+            {view.retailer.location_dimension === "store"
+              ? "Store distribution"
+              : "Service-area presence"}
             <small>
-              {display ? count(display.search_observed_locations) : "—"}
+              {display
+                ? count(
+                    distributionCount(
+                      display,
+                      view.retailer.location_dimension,
+                    ) ?? 0,
+                  )
+                : "—"}
             </small>
           </button>
           <button
@@ -617,29 +631,6 @@ export function EvidenceRetailMap({
             </small>
           </button>
         </div>
-
-        {display ? (
-          <section className={styles.positionSummary}>
-            <header>
-              <span>Local availability proof</span>
-              <strong>separate from Search reach</strong>
-            </header>
-            <dl>
-              <div className={styles.below}>
-                <dt>Verified in stock</dt>
-                <dd>{count(display.verified_available_locations)}</dd>
-              </div>
-              <div className={styles.at}>
-                <dt>Search-observed, not verified (total)</dt>
-                <dd>{count(display.unverified_locations)}</dd>
-              </div>
-              <div className={styles.above}>
-                <dt>Explicitly out of stock (subset)</dt>
-                <dd>{count(display.explicitly_out_of_stock_locations)}</dd>
-              </div>
-            </dl>
-          </section>
-        ) : null}
 
         {activeMode === "observed" && display && hasPricePositionCounts ? (
           <section className={styles.positionSummary}>
@@ -668,7 +659,9 @@ export function EvidenceRetailMap({
 
         <p className={styles.coverage}>
           <strong>{count(modePoints)} mapped</strong> of {count(modeTotal)}{" "}
-          store-context queries
+          {activeMode === "observed"
+            ? distributionNoun(view.retailer.location_dimension, modeTotal)
+            : "searched location non-observations"}
           {modeSampled ? " · bounded overview sample" : ""}
         </p>
 
@@ -676,7 +669,7 @@ export function EvidenceRetailMap({
           <section className={styles.pointDetail}>
             <small>
               {selectedPoint.status === "observed"
-                ? availabilityEvidenceLabel(selectedPoint)
+                ? distributionLabel(selectedPoint.kind)
                 : "Search non-observation"}
             </small>
             <strong>
@@ -693,14 +686,14 @@ export function EvidenceRetailMap({
             {selectedPoint.status === "observed" ? (
               <>
                 <b>
-                  {priceEvidenceLabel(selectedPoint)} ·{" "}
-                  {currency(selectedPoint.price)} ·{" "}
+                  Search-listed price · {currency(selectedPoint.price)} ·{" "}
                   {signedCurrency(selectedPoint.difference_from_reference)} vs.
                   median
                 </b>
                 <p>
-                  A store-context Search return proves query reach. Only a
-                  “Verified locally in stock” status proves availability.
+                  {selectedPoint.kind === "store"
+                    ? "This exact product appeared in this store-level Search result with a price greater than $0, so the distinct store counts once in observed distribution. This is not an inventory claim."
+                    : "This positive-price Search result counts as service-area presence, never as a store."}
                 </p>
               </>
             ) : (
@@ -758,19 +751,18 @@ export function EvidenceRetailMap({
           </section>
         ) : (
           <p className={styles.prompt}>
-            Select a store-context point for listed price and availability
-            evidence.
+            Select a point for its Search-listed price and observed distribution
+            context.
           </p>
         )}
 
         <footer>
-          Every point in Search reach is a query-context return, not a carriage
-          claim. Search is authoritative for listed price and explicit stock
-          status; sponsored or missing availability evidence remains unverified.
-          Point outlines are green for verified in stock, red for explicitly out
-          of stock, gold for unverified sponsored, and gray for other unverified
-          evidence. Store names and geography come from the retailer location
-          master. Map data © OpenStreetMap contributors.
+          {view.retailer.location_dimension === "store"
+            ? storeDistributionDefinition
+            : serviceAreaPresenceDefinition}{" "}
+          Search supplies the listed price and observed context. Store names and
+          geography come from the retailer location master. Map data ©
+          OpenStreetMap contributors.
         </footer>
       </aside>
     </div>

@@ -10,15 +10,19 @@
     "retailer_id",
     "product_id",
     "source_authority",
+    "distribution_contract",
+    "store_count",
     "locations",
     "checksum"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "retailer_id": { "type": "string", "minLength": 1 },
     "product_id": { "type": "string", "minLength": 1 },
-    "source_authority": { "const": "search" },
+    "source_authority": { "const": "store_level_search" },
+    "distribution_contract": { "$ref": "#/$defs/distributionContract" },
+    "store_count": { "type": "integer", "minimum": 0 },
     "locations": {
       "type": "array",
       "items": { "$ref": "#/$defs/location" }
@@ -26,14 +30,29 @@
     "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
   },
   "$defs": {
+    "distributionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "basis", "grain", "deduplication", "price_rule", "inventory_claim", "stock_status_used", "sponsorship_used"],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_store_search_result" },
+        "grain": { "const": "retailer_product_id_x_store_id" },
+        "deduplication": { "const": "distinct_store_id_per_product" },
+        "price_rule": { "const": "price_gt_zero" },
+        "inventory_claim": { "const": false },
+        "stock_status_used": { "const": false },
+        "sponsorship_used": { "const": false }
+      }
+    },
     "location": {
       "type": "object",
       "additionalProperties": false,
       "required": ["scope_key", "zipcode", "observations"],
       "properties": {
         "scope_key": { "type": "string", "minLength": 1 },
-        "store_number": { "type": ["string", "null"] },
-        "zipcode": { "type": "string", "pattern": "^[0-9]{5}$" },
+        "store_number": { "type": "string", "minLength": 1 },
+        "zipcode": { "type": ["string", "null"], "pattern": "^[0-9]{5}$" },
         "state": { "type": ["string", "null"] },
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },

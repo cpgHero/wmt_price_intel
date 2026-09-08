@@ -51,7 +51,8 @@ export function productEvidenceFilename(evidence: ProductEvidenceResponse) {
 const coverageColumns = [
   ["product_id", "product_id"],
   ["product_name", "product_name"],
-  ["verified_local_locations", "observed_locations"],
+  ["distribution_store_count", "distribution_store_count"],
+  ["service_area_presence_count", "service_area_presence_count"],
   ["status", "status"],
   ["certified_relationships", "certified_relationships"],
   ["selected_price_basis_relationships", "selected_price_basis_relationships"],

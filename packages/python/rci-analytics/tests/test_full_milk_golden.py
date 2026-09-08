@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 
 from rci_analytics.classification import OfferClassifier
-from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
+from rci_analytics.matching import ComparisonInputReducer, product_footprint
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
-from rci_analytics.product_location import classify_local_availability
+from rci_analytics.price_monitoring import PriceMonitoringFilters, PriceMonitoringProjector
 from rci_analytics.product_pack import ProductPackLoader
+from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 INPUT_ENV = {
@@ -34,7 +35,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None:
+def test_full_milk_reported_store_distribution_equals_retained_positive_search_source() -> None:
     expected = json.loads(
         (REPOSITORY_ROOT / "fixtures/golden/milk/validated_summary.json").read_text()
     )
@@ -50,7 +51,7 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
     qualifying_zips: dict[str, set[str]] = defaultdict(set)
     qualifying_stores: dict[str, set[str]] = defaultdict(set)
     qualifying_products: dict[str, set[str]] = defaultdict(set)
-    availability_statuses: dict[str, Counter[str]] = defaultdict(Counter)
+    product_distribution_stores: dict[tuple[str, str], set[str]] = defaultdict(set)
     walmart_locations: dict[str, tuple[str, str]] = {}
     with (REPOSITORY_ROOT / "fixtures/location_master/locations.csv").open(
         newline="", encoding="utf-8-sig"
@@ -63,7 +64,7 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
     audited_product_zips: set[str] = set()
     audited_product_states: set[str] = set()
     audited_product_cities: set[str] = set()
-    audited_product_statuses: Counter[str] = Counter()
+    audited_product_offers = []
 
     for expected_retailer, input_path in INPUTS.items():
         assert input_path is not None
@@ -72,17 +73,11 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
                 normalized = replace(normalizer.normalize(dict(row)), raw={})
                 assert normalized.retailer_id == expected_retailer
                 raw_rows[expected_retailer] += 1
-                availability_status = classify_local_availability(
-                    in_stock=normalized.in_stock,
-                    is_sponsored=normalized.is_sponsored,
-                )
-                availability_statuses[expected_retailer][availability_status] += 1
                 if (
                     expected_retailer == "walmart_us"
                     and normalized.retailer_product_id == "46942839"
                 ):
                     audited_product_rows += 1
-                    audited_product_statuses[availability_status] += 1
                     assert normalized.store_number is not None
                     assert normalized.zipcode is not None
                     audited_product_stores.add(normalized.store_number)
@@ -91,6 +86,11 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
                     audited_product_states.add(state)
                     audited_product_cities.add(city)
                 classified = classifier.classify(normalized)
+                if (
+                    expected_retailer == "walmart_us"
+                    and normalized.retailer_product_id == "46942839"
+                ):
+                    audited_product_offers.append(classified)
                 if classified.in_scope:
                     qualifying_rows[expected_retailer] += 1
                     if normalized.zipcode is not None:
@@ -98,6 +98,15 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
                     if normalized.store_number is not None:
                         qualifying_stores[expected_retailer].add(normalized.store_number)
                     qualifying_products[expected_retailer].add(normalized.retailer_product_id)
+                if (
+                    (classified.in_scope or classified.scope_reason == "explicitly out of stock")
+                    and normalized.price is not None
+                    and normalized.price > 0
+                    and normalized.store_number is not None
+                ):
+                    product_distribution_stores[
+                        (expected_retailer, normalized.retailer_product_id)
+                    ].add(normalized.store_number)
                 reducer.add(classified)
 
     assert sum(raw_rows.values()) == expected["source_rows_total"] == 348_980
@@ -109,42 +118,80 @@ def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None
         assert len(qualifying_stores[retailer_id]) == scorecard["fresh_stores"]
         assert len(qualifying_products[retailer_id]) == scorecard["fresh_products"]
 
-    offers = reducer.offers()
-    engine = ComparisonEngine(pack)
-    assert availability_statuses == {
-        "walmart_us": Counter({"unverified": 184_750, "unverified_sponsored": 56_029}),
-        "aldi_us": Counter({"unverified": 41_321}),
-        "amazon_us_same_day": Counter(
-            {"verified_in_stock": 63_854, "explicitly_out_of_stock": 3_026}
-        ),
-    }
     assert audited_product_rows == 83
     assert len(audited_product_stores) == 83
     assert len(audited_product_zips) == 78
     assert audited_product_states == {"CA"}
     assert len(audited_product_cities) == 59
-    assert audited_product_statuses == Counter({"unverified": 83})
-    # These immutable historical Search exports remain valid discovery and
-    # price evidence, but Walmart and ALDI contain no explicit stock signal.
-    # They must therefore produce no local comparisons instead of recreating
-    # the legacy Search-placement footprint as store carriage.
-    profile_by_mode = {
-        "same_brand": "same_brand_exact",
-        "private_label": "private_label",
-        "equivalent": "all_brand",
+    assert len(product_distribution_stores[("walmart_us", "46942839")]) == 83
+
+    footprint = product_footprint(
+        audited_product_offers,
+        analysis_id="milk-46942839-source-audit",
+        retailer_id="walmart_us",
+        product_id="46942839",
+    )
+    assert footprint["store_count"] == 83
+    assert len(footprint["locations"]) == 83
+    assert {row["store_number"] for row in footprint["locations"]} == (audited_product_stores)
+    assert footprint["distribution_contract"]["inventory_claim"] is False
+    assert footprint["distribution_contract"]["stock_status_used"] is False
+
+    monitoring = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+        seller_resolver=GovernedSellerResolver.from_repository(REPOSITORY_ROOT),
+    ).build(
+        audited_product_offers,
+        analysis_id="milk-46942839-source-audit",
+        generated_at="2026-08-07T12:00:00Z",
+        filters=PriceMonitoringFilters(
+            retailer_id="walmart_us",
+            product_id="46942839",
+        ),
+        source_rows=len(audited_product_offers),
+        product_location_limit=None,
+    )
+    assert monitoring["summary"]["distribution_store_count"] == 83
+    assert monitoring["summary"]["service_area_presence_count"] == 0
+    assert monitoring["presence"]["distribution_store_count"] == 83
+    assert monitoring["presence"]["service_area_presence_count"] == 0
+    product = monitoring["products"][0]
+    assert product["product_id"] == "46942839"
+    assert product["distribution_store_count"] == 83
+    assert product["service_area_presence_count"] == 0
+    assert len(product["sample_locations"]) == 83
+
+    def keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {key for child in value.values() for key in keys(child)}
+        if isinstance(value, list):
+            return {key for child in value for key in keys(child)}
+        return set()
+
+    assert {
+        "in_stock",
+        "availability_status",
+        "verified_local_availability",
+        "verified_available_locations",
+    }.isdisjoint(keys(monitoring))
+
+    with (REPOSITORY_ROOT / "fixtures/golden/milk/product_catalog.csv").open(
+        newline="", encoding="utf-8-sig"
+    ) as handle:
+        walmart_catalog = {
+            str(row["Product ID"]): int(row["Covered Stores"])
+            for row in csv.DictReader(handle)
+            if row["Retailer"] == "Walmart" and row["Qualifying Fresh"] == "True"
+        }
+    assert walmart_catalog
+    assert set(walmart_catalog) == {
+        product_id
+        for retailer_id, product_id in product_distribution_stores
+        if retailer_id == "walmart_us"
     }
-    for competitor_id, display_name in (
-        ("aldi_us", "ALDI"),
-        ("amazon_us_same_day", "Amazon"),
-    ):
-        for mode, profile_id in profile_by_mode.items():
-            matches = engine.compare(
-                offers,
-                benchmark_id="walmart_us",
-                competitor_id=competitor_id,
-                profile_id=profile_id,
-            )
-            assert matches == [], (
-                f"legacy {display_name} {mode} Search rows must remain quarantined "
-                "from verified-local comparisons"
-            )
+    for product_id, reported_store_count in walmart_catalog.items():
+        assert reported_store_count == len(
+            product_distribution_stores[("walmart_us", product_id)]
+        ), product_id
+    assert walmart_catalog["46942839"] == 83

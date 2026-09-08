@@ -1,7 +1,9 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
-export type RetailCompetitiveIntelligencePriceObservation = AvailabilityInvariant & {
-  schema_version: "1.2.0";
+export type RetailCompetitiveIntelligencePriceObservation = {
+  [k: string]: unknown;
+} & {
+  schema_version: "1.3.0";
   observation_id: string;
   analysis_id: string;
   product_pack_id: string;
@@ -34,10 +36,9 @@ export type RetailCompetitiveIntelligencePriceObservation = AvailabilityInvarian
   discounted_price: number | null;
   currency: string;
   search_observed: true;
-  in_stock: boolean | null;
   is_sponsored: boolean | null;
-  availability_status: "verified_in_stock" | "explicitly_out_of_stock" | "unverified_sponsored" | "unverified";
-  verified_local_availability: boolean;
+  distribution_store_id: string | null;
+  distribution_contract: DistributionContract;
   price_metrics: {
     [k: string]: number | null;
   };
@@ -50,31 +51,14 @@ export type RetailCompetitiveIntelligencePriceObservation = AvailabilityInvarian
    */
   exclusion_reasons: [];
 };
-export type AvailabilityInvariant =
-  | {
-      availability_status: "verified_in_stock";
-      in_stock: true;
-      is_sponsored: false;
-      verified_local_availability: true;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "explicitly_out_of_stock";
-      in_stock: false;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "unverified_sponsored";
-      in_stock: true | null;
-      is_sponsored: true;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "unverified";
-      in_stock: true | null;
-      is_sponsored: false | null;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    };
+
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
+}

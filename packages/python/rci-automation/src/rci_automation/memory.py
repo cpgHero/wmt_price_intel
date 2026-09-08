@@ -18,7 +18,7 @@ from rci_automation.models import (
     ScheduleRecord,
     ScheduleSource,
 )
-from rci_results.contracts import has_verified_local_availability_contract
+from rci_results.contracts import has_store_search_distribution_contract
 
 
 class InMemoryAutomationRepository:
@@ -180,7 +180,7 @@ class InMemoryAutomationRepository:
         return bool(
             context is not None
             and context.analysis.reporting_status == "ready"
-            and has_verified_local_availability_contract(context.analysis.result)
+            and has_store_search_distribution_contract(context.analysis.result)
         )
 
     def _certified_event(self, event: AlertEventRecord) -> bool:

@@ -347,9 +347,6 @@ class OfferClassifier:
             offer.price is None or offer.price <= 0
         ):
             return False, "positive USD price is required"
-        availability_policy = self.pack.document["scope"].get("availability_policy")
-        if availability_policy == "in_stock_only" and offer.in_stock is False:
-            return False, "explicitly out of stock"
         return True, None
 
     @staticmethod

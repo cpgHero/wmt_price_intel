@@ -1604,7 +1604,7 @@ def test_incremental_listing_accumulator_matches_batch_collapse() -> None:
     )
 
 
-def test_listing_identity_retains_search_evidence_but_location_footprint_is_verified() -> None:
+def test_listing_location_footprint_uses_all_positive_price_search_evidence() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
     offers = (
@@ -1650,21 +1650,27 @@ def test_listing_identity_retains_search_evidence_but_location_footprint_is_veri
     by_product = {listing.retailer_product_id: listing for listing in listings}
 
     assert set(by_product) == {"w1", "identity-only"}
-    assert by_product["w1"].observed_location_count == 1
-    assert [row.scope_key for row in by_product["w1"].observed_locations] == [
-        "walmart_us|72712|verified"
-    ]
+    assert by_product["w1"].observed_location_count == 5
+    assert {row.scope_key for row in by_product["w1"].observed_locations} == {
+        "walmart_us|72712|out-of-stock",
+        "walmart_us|72712|sponsored",
+        "walmart_us|72712|unknown-sponsorship",
+        "walmart_us|72712|unknown-stock",
+        "walmart_us|72712|verified",
+    }
     assert by_product["identity-only"].title == "Product identity-only"
-    assert by_product["identity-only"].observed_location_count == 0
-    assert by_product["identity-only"].observed_locations == ()
+    assert by_product["identity-only"].observed_location_count == 1
+    assert by_product["identity-only"].observed_locations[0].scope_key == (
+        "walmart_us|72712|search-only"
+    )
 
 
-def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timestamp_ties() -> None:
+def test_listing_footprint_ignores_stock_and_sponsorship_metadata() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
     listings = build_listing_evidence_v2(
         (
-            # Intentionally arrive newest first: stale stock cannot be resurrected.
+            # Positive Search evidence counts even when stock metadata is false.
             replace(
                 _classified_offer(
                     values,
@@ -1684,7 +1690,7 @@ def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timest
                 store="1",
                 collected_at="2026-08-15T10:00:00Z",
             ),
-            # Verified organic evidence wins a same-time tie with a sponsored row.
+            # Sponsorship metadata does not change distribution eligibility.
             _classified_offer(
                 values,
                 retailer="walmart_us",
@@ -1700,7 +1706,7 @@ def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timest
                 store="2",
                 collected_at="2026-08-15T10:00:00Z",
             ),
-            # Contradictory organic stock flags at one instant fail closed.
+            # Contradictory stock metadata does not erase positive Search evidence.
             _classified_offer(
                 values,
                 retailer="walmart_us",
@@ -1729,9 +1735,9 @@ def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timest
     )
     by_product = {listing.retailer_product_id: listing for listing in listings}
 
-    assert by_product["chronological"].observed_location_count == 0
+    assert by_product["chronological"].observed_location_count == 1
     assert by_product["organic-tie"].observed_location_count == 1
-    assert by_product["stock-conflict"].observed_location_count == 0
+    assert by_product["stock-conflict"].observed_location_count == 1
     assert by_product["missing-location"].observed_location_count == 0
 
 
@@ -1745,7 +1751,7 @@ def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timest
     ids=("out-of-stock", "sponsored", "unknown-stock"),
 )
 @pytest.mark.parametrize("reverse_order", (False, True), ids=("chronological", "reversed"))
-def test_price_less_latest_state_retracts_v2_location_without_creating_a_listing(
+def test_price_less_later_state_does_not_retract_earlier_positive_search_evidence(
     later_price: str | None,
     later_in_stock: bool | None,
     later_is_sponsored: bool | None,
@@ -1773,14 +1779,16 @@ def test_price_less_latest_state_retracts_v2_location_without_creating_a_listing
     )
     if is_tombstone:
         later = replace(later, in_scope=False, scope_reason="explicitly out of stock")
+    else:
+        later = replace(later, in_scope=False, scope_reason="positive USD price is required")
     rows = (later, older) if reverse_order else (older, later)
 
     listings = build_listing_evidence_v2(rows, pack=pack, retailer_id="walmart_us")
 
     assert len(listings) == 1
     assert listings[0].retailer_product_id == "stateful"
-    assert listings[0].observed_location_count == 0
-    assert listings[0].observed_locations == ()
+    assert listings[0].observed_location_count == 1
+    assert listings[0].observed_locations[0].scope_key == "walmart_us|72712|1"
     assert build_listing_evidence_v2((later,), pack=pack, retailer_id="walmart_us") == ()
 
 
@@ -1815,7 +1823,7 @@ def test_seller_policy_exclusion_retracts_v2_verified_location() -> None:
     assert listings[0].observed_locations == ()
 
 
-def test_local_shadow_candidates_fail_closed_without_verified_locations() -> None:
+def test_local_shadow_candidates_use_positive_search_locations() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
     values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
     policy = replace(
@@ -1843,8 +1851,8 @@ def test_local_shadow_candidates_fail_closed_without_verified_locations() -> Non
 
     assert result.benchmark_listings == 1
     assert result.competitor_listings == 1
-    assert result.evaluated_pairs == 0
-    assert result.geography_blocked_pairs == 1
+    assert result.evaluated_pairs == 1
+    assert result.geography_blocked_pairs == 0
 
 
 def test_shadow_listing_conflict_fails_closed() -> None:

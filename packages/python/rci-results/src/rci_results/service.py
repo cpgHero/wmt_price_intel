@@ -8,7 +8,7 @@ from rci_product_packs import ProductPackCatalog
 from rci_results.blueprints import ReportBlueprint
 from rci_results.contracts import (
     AnalysisResultValidator,
-    has_verified_local_availability_contract,
+    has_store_search_distribution_contract,
     result_checksum,
 )
 from rci_results.models import (
@@ -153,6 +153,7 @@ class AnalysisResultService:
             "analysis_run_id",
             "generated_at",
             "source",
+            "distribution_contract",
             "benchmark_retailer",
             "competitors",
             "product_pack",
@@ -197,10 +198,10 @@ class AnalysisResultService:
         # Ignore caller input and bind it deterministically to the exact document.
         publication_provenance[mutable_checksum_field] = "0" * 64
         publication_provenance[mutable_checksum_field] = result_checksum(result)
-        if has_verified_local_availability_contract(
+        if has_store_search_distribution_contract(
             analysis.result
-        ) and not has_verified_local_availability_contract(result):
-            raise ValueError("publication removed the verified local-availability contract")
+        ) and not has_store_search_distribution_contract(result):
+            raise ValueError("publication removed the store-Search distribution contract")
         context = dict(presentation_context or {})
         unknown_context = set(context) - {
             "product_highlights",

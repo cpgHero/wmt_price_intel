@@ -464,8 +464,8 @@ def test_coverage_rows_partition_the_complete_catalog_once() -> None:
             product_id: {
                 "product_id": product_id,
                 "observed_locations": 3,
-                "verified_available_locations": 3,
-                "availability_status": "verified_in_stock",
+                "distribution_store_count": 3,
+                "service_area_presence_count": 0,
             }
             for product_id in ("p1", "p2", "p3", "p4")
         },
@@ -532,21 +532,17 @@ def test_coverage_rows_partition_the_complete_catalog_once() -> None:
     }
 
 
-def test_assortment_api_fails_closed_on_search_only_or_contradictory_reach() -> None:
+def test_assortment_api_uses_explicit_store_distribution_without_stock_gating() -> None:
     verified = {
         "canonical_product_id": "walmart_us:verified",
         "product_id": "verified",
         "name": "Verified product",
         "observed_locations": 2,
         "observed_zipcodes": 2,
-        "verified_available_locations": 2,
-        "verified_available_zipcodes": 2,
+        "distribution_store_count": 2,
+        "service_area_presence_count": 0,
         "search_observed_locations": 4,
         "search_observed_zipcodes": 3,
-        "availability_status": "verified_in_stock",
-        "explicitly_out_of_stock_locations": 0,
-        "unverified_locations": 0,
-        "unverified_sponsored_locations": 0,
     }
     search_only = {
         "canonical_product_id": "walmart_us:search-only",
@@ -554,21 +550,17 @@ def test_assortment_api_fails_closed_on_search_only_or_contradictory_reach() -> 
         "name": "Search-only product",
         "observed_locations": 4_510,
         "observed_zipcodes": 4_510,
-        "verified_available_locations": 0,
-        "verified_available_zipcodes": 0,
+        "distribution_store_count": 4_510,
+        "service_area_presence_count": 0,
         "search_observed_locations": 4_510,
         "search_observed_zipcodes": 4_510,
-        "availability_status": "unverified_sponsored",
-        "explicitly_out_of_stock_locations": 0,
-        "unverified_locations": 0,
-        "unverified_sponsored_locations": 4_510,
     }
     contradictory = {
         **search_only,
         "canonical_product_id": "walmart_us:contradictory",
         "product_id": "contradictory",
         "name": "Contradictory product",
-        "verified_available_locations": 12,
+        "distribution_store_count": 12,
     }
     assortment = {
         "retailers": [
@@ -581,32 +573,20 @@ def test_assortment_api_fails_closed_on_search_only_or_contradictory_reach() -> 
 
     rows = _assortment_products(assortment, "walmart_us")
     assert [row["product_id"] for row in rows] == [
-        "verified",
-        "contradictory",
         "search-only",
+        "contradictory",
+        "verified",
     ]
 
     compact = _compact_assortment_products(rows)
-    assert compact == [
-        {
-            "canonical_product_id": "walmart_us:verified",
-            "product_id": "verified",
-            "name": "Verified product",
-            "brand": None,
-            "brand_type": "unclassified",
-            "image_url": None,
-            "observed_locations": 2,
-            "observed_zipcodes": 2,
-            "verified_available_locations": 2,
-            "verified_available_zipcodes": 2,
-            "search_observed_locations": 4,
-            "search_observed_zipcodes": 3,
-            "availability_status": "verified_in_stock",
-            "explicitly_out_of_stock_locations": 0,
-            "unverified_locations": 0,
-            "unverified_sponsored_locations": 0,
-        }
+    assert [row["product_id"] for row in compact] == [
+        "search-only",
+        "contradictory",
+        "verified",
     ]
+    assert [row["distribution_store_count"] for row in compact] == [4_510, 12, 2]
+    assert all(row["service_area_presence_count"] == 0 for row in compact)
+    assert all("availability_status" not in row for row in compact)
 
     funnel, products = _coverage_rows(
         catalog={row["product_id"]: {} for row in rows},
@@ -622,11 +602,11 @@ def test_assortment_api_fails_closed_on_search_only_or_contradictory_reach() -> 
         selected_candidates=[],
         product_summaries=[],
     )
-    assert funnel["observed_catalog_products"] == 1
+    assert funnel["observed_catalog_products"] == 3
     assert {row["product_id"]: (row["observed_locations"], row["status"]) for row in products} == {
         "verified": (2, "no_selected_price_basis"),
-        "contradictory": (0, "benchmark_not_observed"),
-        "search-only": (0, "benchmark_not_observed"),
+        "contradictory": (12, "no_selected_price_basis"),
+        "search-only": (4_510, "no_selected_price_basis"),
     }
 
 
@@ -862,11 +842,10 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                                     "name": "Walmart product",
                                     "observed_locations": 2,
                                     "observed_zipcodes": 2,
-                                    "verified_available_locations": 2,
-                                    "verified_available_zipcodes": 2,
+                                    "distribution_store_count": 2,
+                                    "service_area_presence_count": 0,
                                     "search_observed_locations": 2,
                                     "search_observed_zipcodes": 2,
-                                    "availability_status": "verified_in_stock",
                                 }
                             ],
                         },
@@ -879,11 +858,10 @@ async def test_portfolio_view_aggregates_each_certified_product_location_once() 
                                     "name": f"ALDI {product_id}",
                                     "observed_locations": 1,
                                     "observed_zipcodes": 1,
-                                    "verified_available_locations": 1,
-                                    "verified_available_zipcodes": 1,
+                                    "distribution_store_count": 1,
+                                    "service_area_presence_count": 0,
                                     "search_observed_locations": 1,
                                     "search_observed_zipcodes": 1,
-                                    "availability_status": "verified_in_stock",
                                 }
                                 for product_id in ("a1", "a2", "a3")
                             ],

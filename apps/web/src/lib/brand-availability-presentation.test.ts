@@ -4,102 +4,88 @@ import type { BrandWorkbenchBrand } from "./api";
 import { brandDistributionPresentation } from "./brand-availability-presentation";
 
 function brand(
-  distribution_evidence: BrandWorkbenchBrand["distribution_evidence"],
+  overrides: Partial<BrandWorkbenchBrand> = {},
 ): BrandWorkbenchBrand {
   return {
     retailer_id: "walmart_us",
-    normalized_brand: "example",
-    display_brand: "Example",
-    role: "national",
-    status: "suggested",
-    origin: "deterministic",
+    normalized_brand: "great value",
+    display_brand: "Great Value",
+    role: "private_label",
+    status: "confirmed",
+    origin: "product_pack",
     canonical_brand_id: null,
     canonical_brand_name: null,
     candidate_status: "none",
     candidate_matches: [],
-    observed_products: 2,
+    observed_products: 12,
     observed_locations: 4_510,
-    observed_zipcodes: 3_900,
+    observed_zipcodes: 4_000,
+    distribution_store_count: 0,
+    service_area_presence_count: 0,
     location_share: 1,
-    distribution_tier:
-      distribution_evidence === "verified_local_search_availability"
-        ? "broad"
-        : "unknown",
-    distribution_evidence,
+    distribution_tier: "broad",
+    distribution_evidence: "search_brand_field",
     product_examples: [],
-  };
+    ...overrides,
+  } as BrandWorkbenchBrand;
 }
 
-describe("brandDistributionPresentation", () => {
-  it("presents explicit local availability as verified distribution", () => {
+describe("brand distribution presentation", () => {
+  it("presents explicit stores and service areas separately", () => {
     const result = brandDistributionPresentation(
-      brand("verified_local_search_availability"),
+      brand({
+        distribution_store_count: 83,
+        service_area_presence_count: 2,
+      }),
     );
 
-    expect(result.verified).toBe(true);
-    expect(result.productLabel).toBe("verified-available products");
-    expect(result.locationLabel).toBe("verified locations");
-    expect(result.evidenceLabel).toBe("verified ZIPs");
-    expect(result.footprintLabel).toContain("verified local availability");
-    expect(result.footprintShare).toBe(1);
+    expect(result.contractSupplied).toBe(true);
+    expect(result.hasDistribution).toBe(true);
+    expect(result.productLabel).toBe("products with observed distribution");
+    expect(result.locationValue).toBe("83");
+    expect(result.locationLabel).toBe("stores in observed distribution");
+    expect(result.evidenceValue).toBe("2");
+    expect(result.evidenceLabel).toBe("service-area presences");
+    expect(result.footprintLabel).toContain("price greater than $0");
+    expect(result.footprintLabel).toContain("never extrapolated");
   });
 
-  it("labels legacy Search brand reach as unverified", () => {
-    const result = brandDistributionPresentation(brand("search_brand_field"));
-
-    expect(result.verified).toBe(false);
-    expect(result.productLabel).toBe("Search-observed products");
-    expect(result.locationLabel).toBe("Search-observed locations");
-    expect(result.evidenceLabel).toBe("Search-observed ZIPs");
-    expect(result.footprintLabel).toBe(
-      "Availability unverified; legacy Search reach does not prove local carriage",
+  it("does not fall back to legacy reach, footprint share, or evidence mode", () => {
+    const result = brandDistributionPresentation(
+      brand({
+        observed_locations: 4_510,
+        observed_zipcodes: 4_000,
+        location_share: 1,
+        distribution_store_count: undefined,
+        service_area_presence_count: undefined,
+      }),
     );
-    expect(result.footprintShare).toBe(0);
-  });
 
-  it("fails closed for a contradictory verified-local mode", () => {
-    const contradictory = brand("verified_local_search_availability");
-    contradictory.observed_locations = 0;
-    contradictory.distribution_tier = "unknown";
-
-    const result = brandDistributionPresentation(contradictory);
-
-    expect(result.verified).toBe(false);
-    expect(result.productValue).toBe("—");
+    expect(result.contractSupplied).toBe(false);
+    expect(result.hasDistribution).toBe(false);
     expect(result.locationValue).toBe("—");
-    expect(result.footprintLabel).toContain("incomplete or contradictory");
-    expect(result.footprintShare).toBe(0);
+    expect(result.evidenceValue).toBe("—");
+    expect(result.footprintLabel).toContain("not supplied");
   });
 
-  it("keeps authoritative zero counters unverified without reviving legacy reach", () => {
-    const corrected = brand("search_brand_field");
-    corrected.observed_products = 0;
-    corrected.observed_locations = 0;
-    corrected.observed_zipcodes = 0;
-    corrected.location_share = 0;
-
-    const result = brandDistributionPresentation(corrected);
-
-    expect(result.verified).toBe(false);
-    expect(result.productValue).toBe("0");
-    expect(result.productLabel).toBe("Search-observed products");
-    expect(result.locationValue).toBe("0");
-    expect(result.footprintShare).toBe(0);
-  });
-
-  it("does not promote PDP joins or PDP identity to carriage", () => {
-    const joined = brandDistributionPresentation(
-      brand("pdp_identity_joined_to_matched_search"),
+  it("keeps identity and discovery product labels separate from distribution", () => {
+    const discovered = brandDistributionPresentation(
+      brand({
+        distribution_store_count: 0,
+        service_area_presence_count: 0,
+      }),
     );
-    const pdpOnly = brandDistributionPresentation(brand("pdp_identity_only"));
-
-    expect(joined.verified).toBe(false);
-    expect(joined.productLabel).toBe("PDP identity products");
-    expect(joined.footprintLabel).toContain("availability unverified");
-    expect(joined.footprintShare).toBe(0);
-    expect(pdpOnly.verified).toBe(false);
-    expect(pdpOnly.footprintLabel).toContain(
-      "no verified local availability evidence",
+    const identity = brandDistributionPresentation(
+      brand({
+        distribution_evidence: "pdp_identity_only",
+        distribution_store_count: 0,
+        service_area_presence_count: 0,
+      }),
     );
+
+    expect(discovered.productLabel).toBe("Search-observed products");
+    expect(discovered.hasDistribution).toBe(false);
+    expect(identity.productLabel).toBe("identity products");
+    expect(identity.hasDistribution).toBe(false);
   });
 });

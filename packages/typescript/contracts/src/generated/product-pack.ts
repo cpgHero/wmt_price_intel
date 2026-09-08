@@ -16,7 +16,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
     target_terms?: [string, ...string[]];
     target_attribute?: string;
     /**
-     * Category-discovery admission policy. It does not establish local carriage; reporting requires explicit in-stock, non-sponsored local Search evidence.
+     * Legacy category-discovery selector retained for compatibility. Current reporting uses positive-price Search presence; stock and sponsorship fields do not determine price or store distribution.
      */
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     require_positive_price?: boolean;
@@ -110,7 +110,7 @@ export interface RetailCompetitiveIntelligenceProductPack {
       high_metric: string;
     };
     /**
-     * Legacy comparison-policy selector retained for compatibility. Location-scoped comparisons always require explicit in-stock, non-sponsored local Search evidence.
+     * Legacy comparison-policy selector retained for compatibility. Current location-scoped comparisons use positive-price Search evidence; stock and sponsorship fields are not eligibility conditions.
      */
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     relationship_scope_policy?: {

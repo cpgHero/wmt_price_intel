@@ -10,6 +10,7 @@
     "analysis_run_id",
     "generated_at",
     "source",
+    "distribution_contract",
     "benchmark_retailer",
     "competitors",
     "product_pack",
@@ -48,6 +49,9 @@
     },
     "source": {
       "$ref": "#/$defs/source"
+    },
+    "distribution_contract": {
+      "$ref": "#/$defs/distributionContract"
     },
     "benchmark_retailer": {
       "type": "string",
@@ -510,6 +514,21 @@
     }
   },
   "$defs": {
+    "distributionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "basis", "grain", "deduplication", "price_rule", "inventory_claim", "stock_status_used", "sponsorship_used"],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_store_search_result" },
+        "grain": { "const": "retailer_product_id_x_store_id" },
+        "deduplication": { "const": "distinct_store_id_per_product" },
+        "price_rule": { "const": "price_gt_zero" },
+        "inventory_claim": { "const": false },
+        "stock_status_used": { "const": false },
+        "sponsorship_used": { "const": false }
+      }
+    },
     "matchingV2RetailerCoverage": {
       "type": "object",
       "additionalProperties": false,

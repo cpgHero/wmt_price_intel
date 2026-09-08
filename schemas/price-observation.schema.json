@@ -4,7 +4,21 @@
   "title": "RetailCompetitiveIntelligencePriceObservation",
   "type": "object",
   "additionalProperties": false,
-  "allOf": [{ "$ref": "#/$defs/availabilityInvariant" }],
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "object",
+            "properties": { "kind": { "const": "store" } }
+          }
+        }
+      },
+      "then": { "properties": { "distribution_store_id": { "type": "string", "minLength": 1 } } },
+      "else": { "properties": { "distribution_store_id": { "type": "null" } } }
+    }
+  ],
   "required": [
     "schema_version",
     "observation_id",
@@ -28,10 +42,9 @@
     "discounted_price",
     "currency",
     "search_observed",
-    "in_stock",
     "is_sponsored",
-    "availability_status",
-    "verified_local_availability",
+    "distribution_store_id",
+    "distribution_contract",
     "price_metrics",
     "observed_at",
     "source_authority",
@@ -40,7 +53,7 @@
     "exclusion_reasons"
   ],
   "properties": {
-    "schema_version": { "const": "1.2.0" },
+    "schema_version": { "const": "1.3.0" },
     "observation_id": { "type": "string", "minLength": 1 },
     "analysis_id": { "type": "string", "minLength": 1 },
     "product_pack_id": { "type": "string", "minLength": 1 },
@@ -93,17 +106,9 @@
     "discounted_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
     "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
     "search_observed": { "const": true },
-    "in_stock": { "type": ["boolean", "null"] },
     "is_sponsored": { "type": ["boolean", "null"] },
-    "availability_status": {
-      "enum": [
-        "verified_in_stock",
-        "explicitly_out_of_stock",
-        "unverified_sponsored",
-        "unverified"
-      ]
-    },
-    "verified_local_availability": { "type": "boolean" },
+    "distribution_store_id": { "type": ["string", "null"], "minLength": 1 },
+    "distribution_contract": { "$ref": "#/$defs/distributionContract" },
     "price_metrics": {
       "type": "object",
       "additionalProperties": { "type": ["number", "null"], "minimum": 0 }
@@ -120,75 +125,20 @@
     }
   },
   "$defs": {
-    "availabilityInvariant": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "availability_status": { "const": "verified_in_stock" },
-            "in_stock": { "const": true },
-            "is_sponsored": { "const": false },
-            "verified_local_availability": { "const": true }
-          },
-          "required": [
-            "availability_status",
-            "in_stock",
-            "is_sponsored",
-            "verified_local_availability"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "availability_status": { "const": "explicitly_out_of_stock" },
-            "in_stock": { "const": false },
-            "verified_local_availability": { "const": false }
-          },
-          "required": [
-            "availability_status",
-            "in_stock",
-            "verified_local_availability"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "availability_status": { "const": "unverified_sponsored" },
-            "in_stock": { "enum": [true, null] },
-            "is_sponsored": { "const": true },
-            "verified_local_availability": { "const": false }
-          },
-          "required": [
-            "availability_status",
-            "in_stock",
-            "is_sponsored",
-            "verified_local_availability"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "availability_status": { "const": "unverified" },
-            "in_stock": { "enum": [true, null] },
-            "is_sponsored": { "enum": [false, null] },
-            "verified_local_availability": { "const": false }
-          },
-          "required": [
-            "availability_status",
-            "in_stock",
-            "is_sponsored",
-            "verified_local_availability"
-          ],
-          "not": {
-            "type": "object",
-            "properties": {
-              "in_stock": { "const": true },
-              "is_sponsored": { "const": false }
-            },
-            "required": ["in_stock", "is_sponsored"]
-          }
-        }
-      ]
+    "distributionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "basis", "grain", "deduplication", "price_rule", "inventory_claim", "stock_status_used", "sponsorship_used"],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_store_search_result" },
+        "grain": { "const": "retailer_product_id_x_store_id" },
+        "deduplication": { "const": "distinct_store_id_per_product" },
+        "price_rule": { "const": "price_gt_zero" },
+        "inventory_claim": { "const": false },
+        "stock_status_used": { "const": false },
+        "sponsorship_used": { "const": false }
+      }
     }
   }
 }

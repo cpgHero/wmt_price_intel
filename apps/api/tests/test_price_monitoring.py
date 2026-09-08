@@ -638,12 +638,14 @@ async def test_price_architecture_unavailable_retailer_emits_zero_evidence_field
     assert {
         field: competitor[field]
         for field in (
-            "verified_available_locations",
+            "distribution_store_count",
+            "service_area_presence_count",
             "search_observed_locations",
             "search_observed_skus",
         )
     } == {
-        "verified_available_locations": 0,
+        "distribution_store_count": 0,
+        "service_area_presence_count": 0,
         "search_observed_locations": 0,
         "search_observed_skus": 0,
     }
@@ -773,10 +775,16 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                 {
                     "product_id": "123",
                     "name": "Product 123",
+                    "distribution_store_count": 2,
+                    "service_area_presence_count": 0,
                     "price_stats": {"observation_median": 5.0},
                     "search_price_stats": {"observation_median": 5.0},
                 }
             ],
+            "summary": {
+                "distribution_store_count": 2,
+                "service_area_presence_count": 0,
+            },
             "location_display": {"total": 2},
             "locations": [
                 {
@@ -793,10 +801,7 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                     "median_price": 4.5,
                     "search_median_price": 4.5,
                     "search_observed": True,
-                    "in_stock": True,
                     "is_sponsored": False,
-                    "availability_status": "verified_in_stock",
-                    "verified_local_availability": True,
                 },
                 {
                     "scope_key": "store:2",
@@ -812,10 +817,7 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                     "median_price": None,
                     "search_median_price": 5.5,
                     "search_observed": True,
-                    "in_stock": True,
                     "is_sponsored": True,
-                    "availability_status": "unverified_sponsored",
-                    "verified_local_availability": False,
                 },
             ],
             "distribution_gaps": {
@@ -848,9 +850,8 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
     assert result["display"] == {
         "observed_locations": 2,
         "search_observed_locations": 2,
-        "verified_available_locations": 1,
-        "explicitly_out_of_stock_locations": 0,
-        "unverified_locations": 1,
+        "distribution_store_count": 2,
+        "service_area_presence_count": 0,
         "observed_points": 2,
         "observed_missing_coordinates": 0,
         "observed_sampled": False,
@@ -863,17 +864,16 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
         "not_observed_sampled": False,
     }
     assert result["points"][0]["status"] == "observed"
-    assert result["points"][0]["availability_status"] == "verified_in_stock"
-    assert result["points"][0]["verified_local_availability"] is True
+    assert result["points"][0]["distribution_store_id"] == "1"
     assert result["points"][0]["difference_from_reference"] == -0.5
     assert result["points"][1]["status"] == "observed"
-    assert result["points"][1]["availability_status"] == "unverified_sponsored"
-    assert result["points"][1]["verified_local_availability"] is False
+    assert result["points"][1]["distribution_store_id"] == "2"
     assert result["points"][1]["price"] == 5.5
     assert result["points"][2]["status"] == "not_observed"
-    assert result["points"][2]["availability_status"] == "unverified"
-    assert result["points"][2]["verified_local_availability"] is False
+    assert result["points"][2]["distribution_store_id"] is None
     assert result["points"][2]["price"] is None
+    assert all("in_stock" not in point for point in result["points"])
+    assert all("availability_status" not in point for point in result["points"])
 
 
 async def test_price_monitoring_evidence_export_passes_exact_product_scope() -> None:

@@ -262,6 +262,8 @@ function outcomeFeatures(outcomes: Outcome[]) {
       .filter(
         (row) =>
           row.competitor !== null &&
+          row.benchmark.location_kind === "store" &&
+          row.benchmark.distribution_store_id !== null &&
           row.benchmark.latitude !== null &&
           row.benchmark.longitude !== null,
       )
@@ -278,7 +280,7 @@ function outcomeFeatures(outcomes: Outcome[]) {
               id: row.id,
               retailer: row.benchmark.retailer_name,
               color: BENCHMARK_MAP_COLOR,
-              location_kind: "benchmark",
+              location_kind: "store",
             },
           },
         ];
@@ -297,7 +299,7 @@ function outcomeFeatures(outcomes: Outcome[]) {
               id: row.id,
               retailer: competitor.retailer_name,
               color: retailerMapColor(competitor.retailer_id),
-              location_kind: "competitor",
+              location_kind: competitor.location_kind,
             },
           });
         }
@@ -384,7 +386,13 @@ function LeadershipMap({
           });
           const points = outcomes.flatMap((row) => {
             if (!row.competitor) return [];
-            const locations = [row.benchmark, row.competitor];
+            const locations = [
+              ...(row.benchmark.location_kind === "store" &&
+              row.benchmark.distribution_store_id !== null
+                ? [row.benchmark]
+                : []),
+              row.competitor,
+            ];
             return locations.filter(
               (location) =>
                 location.latitude !== null && location.longitude !== null,
@@ -524,7 +532,7 @@ function Pagination({
 }
 
 function StatusDistribution({ summary }: Readonly<{ summary: Summary }>) {
-  const total = Math.max(1, summary.benchmark_observed_stores);
+  const total = Math.max(1, summary.distribution_store_count);
   const rows = [
     ["Leader", summary.leader_stores, "leader"],
     ["Tied", summary.tied_stores, "tied"],
@@ -538,8 +546,9 @@ function StatusDistribution({ summary }: Readonly<{ summary: Summary }>) {
         <div>
           <h3>Store leadership status</h3>
           <p>
-            Every benchmark store with verified local evidence appears in one
-            mutually exclusive status.
+            Every store in the benchmark product&apos;s observed distribution
+            appears in one mutually exclusive status. This is not an inventory
+            measure.
           </p>
         </div>
       </header>
@@ -577,6 +586,8 @@ function Overview({
   const mapped = view.outcomes.filter(
     (row) =>
       row.competitor !== null &&
+      row.benchmark.location_kind === "store" &&
+      row.benchmark.distribution_store_id !== null &&
       row.benchmark.latitude !== null &&
       row.benchmark.longitude !== null,
   ).length;
@@ -592,7 +603,7 @@ function Overview({
         <KpiCard
           label="Mapped Walmart stores"
           value={count(mapped)}
-          note={`${rate(mapped / Math.max(view.summary.benchmark_observed_stores, 1))} of verified-local stores have mapped comparison evidence`}
+          note={`${rate(mapped / Math.max(view.summary.distribution_store_count, 1))} of stores in observed distribution have mapped comparison evidence`}
         />
         <KpiCard
           label="Comparable stores"
@@ -622,6 +633,11 @@ function Overview({
           value={count(view.summary.unscored_stores)}
           note="No geographically comparable evidence"
         />
+        <KpiCard
+          label="Service-area presence"
+          value={count(view.summary.service_area_presence_count)}
+          note="Reported separately and never counted as stores"
+        />
       </div>
       <div className={styles.overviewGrid}>
         <section className={`${styles.card} ${styles.brief}`}>
@@ -647,8 +663,9 @@ function Overview({
           <ul>
             <li>
               {count(view.summary.scored_stores)} of{" "}
-              {count(view.summary.benchmark_observed_stores)} stores with
-              verified local evidence have comparable nearby evidence.
+              {count(view.summary.distribution_store_count)} stores in observed
+              distribution have comparable nearby evidence. Service-area
+              presence is reported separately.
             </li>
             {leadingCompetitor ? (
               <li>
@@ -724,7 +741,8 @@ function GeographyTable({
 }>) {
   const exportRows = rows.map((row) => ({
     Geography: row.label,
-    "Verified-local Walmart stores": row.benchmark_observed_stores,
+    "Walmart stores in observed distribution": row.distribution_store_count,
+    "Walmart service-area presences": row.service_area_presence_count,
     "Scored Walmart stores": row.scored_stores,
     "Coverage rate": row.coverage_rate,
     "Leader stores": row.leader_stores,
@@ -745,7 +763,8 @@ function GeographyTable({
           <thead>
             <tr>
               <th>Market</th>
-              <th>Scored / verified local</th>
+              <th>Scored / observed distribution</th>
+              <th>Service-area presence</th>
               <th>Coverage</th>
               <th>Leader</th>
               <th>At risk</th>
@@ -771,8 +790,9 @@ function GeographyTable({
                 </th>
                 <td>
                   {count(row.scored_stores)} /{" "}
-                  {count(row.benchmark_observed_stores)}
+                  {count(row.distribution_store_count)}
                 </td>
+                <td>{count(row.service_area_presence_count)}</td>
                 <td>{rate(row.coverage_rate)}</td>
                 <td>{count(row.leader_stores)}</td>
                 <td>{count(row.at_risk_stores)}</td>
@@ -835,9 +855,9 @@ function MatchGroupAnalysis({
           note="Participating in this product group"
         />
         <KpiCard
-          label="Relationships with verified evidence"
+          label="Relationships with comparable evidence"
           value={count(summary.relationshipsWithEvidence)}
-          note={`${count(summary.relationships - summary.relationshipsWithEvidence)} configured relationships had no verified nearby comparison`}
+          note={`${count(summary.relationships - summary.relationshipsWithEvidence)} configured relationships had no comparable nearby observation`}
           tone={
             summary.relationshipsWithEvidence === summary.relationships
               ? "good"
@@ -847,12 +867,12 @@ function MatchGroupAnalysis({
         <KpiCard
           label="Location-scoped matches"
           value={count(summary.locationScopedRelationships)}
-          note="Admitted only in governed benchmark footprints"
+          note="Admitted only at explicitly governed benchmark locations"
         />
         <KpiCard
           label="Global matches"
           value={count(summary.globalRelationships)}
-          note="Eligible across the benchmark footprint"
+          note="Relationship is not restricted to named benchmark locations"
         />
       </div>
       <div className={styles.overviewGrid}>
@@ -891,10 +911,10 @@ function MatchGroupAnalysis({
               benchmark stores.
             </li>
             <li>
-              Search supplies listed price, query reach, explicit stock status,
-              and sponsorship. Only an explicit in-stock, non-sponsored result
-              verifies local availability; PDP and retailer packs supply
-              governed identity and brand context.
+              Store distribution requires the exact product in a store-level
+              Search result with price greater than zero. Service-area presence
+              is separate; neither measure claims inventory. PDP and retailer
+              packs supply governed identity and brand context.
             </li>
           </ul>
         </section>
@@ -980,8 +1000,12 @@ function CompetitiveHistory({
             <dd>{displayDate(view.generated_at)}</dd>
           </div>
           <div>
-            <dt>Baseline verified-local stores</dt>
-            <dd>{count(view.summary.benchmark_observed_stores)}</dd>
+            <dt>Baseline stores in observed distribution</dt>
+            <dd>{count(view.summary.distribution_store_count)}</dd>
+          </div>
+          <div>
+            <dt>Baseline service-area presence</dt>
+            <dd>{count(view.summary.service_area_presence_count)}</dd>
           </div>
           <div>
             <dt>Required for first trend</dt>
@@ -1045,7 +1069,7 @@ function StoreComparisons({
         <KpiCard
           label="Scored benchmark stores"
           value={count(view.summary.scored_stores)}
-          note="One outcome per benchmark store with verified local evidence"
+          note="One outcome per positive-price Search-observed benchmark store"
         />
         <KpiCard
           label="Stores to inspect"
@@ -1073,9 +1097,9 @@ function StoreComparisons({
           note="Search evidence shows a lower promo price"
         />
         <KpiCard
-          label="Availability evidence gate"
-          value="Passed"
-          note="All scored offers are explicit in-stock and non-sponsored"
+          label="Distribution contract"
+          value="Positive-price Search"
+          note="No stock-status or inventory claim"
           tone="good"
         />
       </div>
@@ -1084,9 +1108,11 @@ function StoreComparisons({
           <div>
             <h3>Detailed store comparisons</h3>
             <p>
-              One row per benchmark store with verified local evidence. Prices
-              and locations come from Search; physical stores use the selected
-              radius and service areas use the governed same-ZIP rule.
+              One row per store in the benchmark product&apos;s observed
+              distribution. The exact product must appear in store-level Search
+              with price greater than zero. Physical stores use the selected
+              radius; service areas remain separate and use the governed
+              same-ZIP rule.
             </p>
           </div>
           <ExportButtons
@@ -1270,7 +1296,7 @@ function MatchedPriceMatrix({
           <h3>Matched-product price matrix</h3>
           <p>
             Certified matched items positioned across the Walmart product&apos;s
-            verified-local footprint. This is a product-match view—not the
+            observed store distribution. This is a product-match view—not the
             unmatched category price-band matrix in Price Intelligence.
           </p>
         </div>
@@ -1284,7 +1310,7 @@ function MatchedPriceMatrix({
               <th>Comparable Walmart stores</th>
               <th>Footprint coverage</th>
               <th>Median price</th>
-              <th>Verified local range</th>
+              <th>Observed price range</th>
               <th>Median vs. Walmart</th>
               <th>Store-level position</th>
             </tr>
@@ -1326,7 +1352,7 @@ function MatchedPriceMatrix({
                 </td>
                 <td>
                   {row.is_benchmark
-                    ? "Walmart verified-local footprint"
+                    ? "Walmart observed store distribution"
                     : `${count(row.below_benchmark_locations)} below · ${count(row.tied_benchmark_locations)} tied · ${count(row.above_benchmark_locations)} above`}
                 </td>
               </tr>
@@ -1365,7 +1391,7 @@ function PriceLadders({
         <KpiCard
           label="Comparable Walmart stores"
           value={count(ladder.comparable_benchmark_locations)}
-          note={`${count(ladder.benchmark_observed_locations)} Walmart stores with verified local evidence`}
+          note={`${count(view.summary.distribution_store_count)} Walmart stores in observed distribution; ${count(view.summary.service_area_presence_count)} service-area presences separate`}
         />
         <KpiCard
           label="Median Walmart rank"
@@ -1410,7 +1436,7 @@ function PriceLadders({
                 <th>Product</th>
                 <th>Comparable footprint</th>
                 <th>Median price</th>
-                <th>Verified local range</th>
+                <th>Observed price range</th>
                 <th>Median vs. Walmart</th>
                 <th>Store positions</th>
               </tr>

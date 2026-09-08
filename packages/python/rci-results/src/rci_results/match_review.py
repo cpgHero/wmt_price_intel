@@ -19,6 +19,53 @@ from rci_results.models import AnalysisRecord, JsonObject
 from rci_results.repository import DEFAULT_ORGANIZATION_ID
 from rci_results.service import AnalysisResultService
 
+_STORE_SEARCH_DISTRIBUTION_CONTRACT: JsonObject = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+
+
+def _distribution_scope_keys(product: JsonObject) -> tuple[list[str], list[str]]:
+    """Return reconciled store and service-area scopes from the governed Search footprint."""
+
+    if product.get("distribution_contract") != _STORE_SEARCH_DISTRIBUTION_CONTRACT:
+        return [], []
+    store_count = product.get("distribution_store_count")
+    service_area_count = product.get("service_area_presence_count")
+    if (
+        not isinstance(store_count, int)
+        or isinstance(store_count, bool)
+        or store_count < 0
+        or not isinstance(service_area_count, int)
+        or isinstance(service_area_count, bool)
+        or service_area_count < 0
+    ):
+        return [], []
+    scope_keys = {
+        str(value)
+        for value in product.get("location_scope_keys", [])
+        if isinstance(value, str) and value
+    }
+    store_keys = sorted(
+        value
+        for value in scope_keys
+        if len(value.split("|", 2)) == 3 and value.split("|", 2)[1] == "store"
+    )
+    service_area_keys = sorted(
+        value
+        for value in scope_keys
+        if len(value.split("|", 2)) == 3 and value.split("|", 2)[1] == "service_area"
+    )
+    if len(store_keys) != store_count or len(service_area_keys) != service_area_count:
+        return [], []
+    return store_keys, service_area_keys
+
 
 def _price_unit(comparison_metric: str) -> str:
     if comparison_metric == "package_price":
@@ -1018,14 +1065,11 @@ class MatchReviewService:
         materialized = copy.deepcopy(scope)
         definition = dict(materialized.get("definition") or {})
         if str(scope.get("mode")) == "observed_benchmark_product_footprint":
-            verified = {
-                str(value)
-                for value in benchmark_product.get("verified_location_scope_keys", [])
-                if str(value)
-            }
-            # Never preserve a caller-supplied or legacy Search-only footprint
-            # when current verified-local scope evidence is absent.
-            definition["benchmark_location_scope_keys"] = sorted(verified)
+            store_keys, _service_area_keys = _distribution_scope_keys(benchmark_product)
+            # Only the governed, reconciled store footprint can scope a
+            # store-level relationship. Service-area presence remains a
+            # separate product field and never enters the store scope.
+            definition["benchmark_location_scope_keys"] = store_keys
             definition["source_analysis_id"] = analysis_id
             definition.setdefault("excluded_benchmark_location_scope_keys", [])
             definition.setdefault("future_location_policy", "follow_unique_product_footprint")
@@ -1115,6 +1159,8 @@ class MatchReviewService:
             }
         assortment = context.get("assortment_analysis", {})
         if isinstance(assortment, dict):
+            distribution_contract = assortment.get("distribution_contract")
+            has_distribution_contract = distribution_contract == _STORE_SEARCH_DISTRIBUTION_CONTRACT
             for retailer_row in assortment.get("retailers", []):
                 if not isinstance(retailer_row, dict):
                     continue
@@ -1165,20 +1211,19 @@ class MatchReviewService:
                         "attribute_conflict",
                         "observed_locations",
                         "observed_zipcodes",
-                        "verified_available_locations",
-                        "verified_available_zipcodes",
-                        "search_observed_locations",
-                        "search_observed_zipcodes",
-                        "availability_status",
-                        "explicitly_out_of_stock_locations",
-                        "unverified_locations",
-                        "unverified_sponsored_locations",
                         "location_scope_keys",
-                        "verified_location_scope_keys",
-                        "search_location_scope_keys",
                     ):
                         if row.get(key) not in (None, "", [], {}):
                             current[key] = copy.deepcopy(row[key])
+                    if has_distribution_contract:
+                        current["distribution_contract"] = copy.deepcopy(distribution_contract)
+                        current["distribution_store_count"] = row.get("distribution_store_count")
+                        current["service_area_presence_count"] = row.get(
+                            "service_area_presence_count"
+                        )
+                        store_keys, service_area_keys = _distribution_scope_keys(current)
+                        current["distribution_store_scope_keys"] = store_keys
+                        current["service_area_scope_keys"] = service_area_keys
         candidate_rows = context.get("match_candidates", context.get("product_decisions", [])) or []
         for row in candidate_rows:
             if not isinstance(row, dict):

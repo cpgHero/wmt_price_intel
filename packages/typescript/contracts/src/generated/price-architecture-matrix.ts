@@ -12,19 +12,17 @@ export type Retailer = {
   sku_count: number;
   eligible_locations: number;
   /**
-   * Legacy alias of verified_available_locations in this corrected matrix contract; never Search reach.
+   * Store distribution plus separate service-area Search presence.
    */
   observed_locations: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   /**
-   * Distinct locations with at least one filtered SKU carrying explicit verified-local availability.
-   */
-  verified_available_locations: number;
-  /**
-   * Distinct Search-observed locations in the same active geography, brand-type, and brand filter scope; not local-carriage proof.
+   * Distinct positive-price Search locations in the active filter scope.
    */
   search_observed_locations: number;
   /**
-   * Distinct Search-observed SKUs in the same active geography, brand-type, and brand filter scope; may include products without verified local availability.
+   * Distinct positive-price Search SKUs in the active filter scope.
    */
   search_observed_skus: number;
   verified_first_party_skus: number;
@@ -40,19 +38,17 @@ export type Retailer = {
   sku_count: number;
   eligible_locations: number;
   /**
-   * Legacy alias of verified_available_locations in this corrected matrix contract; never Search reach.
+   * Store distribution plus separate service-area Search presence.
    */
   observed_locations: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   /**
-   * Distinct locations with at least one filtered SKU carrying explicit verified-local availability.
-   */
-  verified_available_locations: number;
-  /**
-   * Distinct Search-observed locations in the same active geography, brand-type, and brand filter scope; not local-carriage proof.
+   * Distinct positive-price Search locations in the active filter scope.
    */
   search_observed_locations: number;
   /**
-   * Distinct Search-observed SKUs in the same active geography, brand-type, and brand filter scope; may include products without verified local availability.
+   * Distinct positive-price Search SKUs in the active filter scope.
    */
   search_observed_skus: number;
   verified_first_party_skus: number;
@@ -63,17 +59,18 @@ export type Retailer = {
 };
 
 export interface RetailCompetitiveIntelligencePriceArchitectureMatrix {
-  schema_version: "1.2.0";
+  schema_version: "1.3.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
   source: {
     authority: "Search";
-    price_grain: "retailer product x median positive Search-listed package price across verified-available locations";
-    availability_rule: "explicit in-stock signal from an organic Search result";
+    price_grain: "retailer product x median positive Search-listed package price across observed Search locations";
+    distribution_rule: "distinct store IDs where the product appears in store-level Search with price greater than zero; not an in-stock indicator";
     assignment_rule: "price only; no product-match relationship is used";
     anchor_rule: string;
   };
+  distribution_contract: DistributionContract;
   filters: {
     anchor_retailer_id: string;
     mode: "benchmark_anchored" | "fixed_range";
@@ -106,6 +103,16 @@ export interface IdNameVersion {
   id: string;
   name: string;
   version: string;
+}
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
 }
 export interface BrandOption {
   name: string;
@@ -142,7 +149,8 @@ export interface Product {
   minimum_price: number;
   maximum_price: number;
   observed_locations: number;
-  verified_available_locations: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   search_observed_locations: number;
 }
 export interface Cell {

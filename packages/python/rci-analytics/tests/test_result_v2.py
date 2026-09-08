@@ -130,9 +130,9 @@ def test_builder_accepts_complete_matching_v2_identity_without_legacy_row_per_re
                 "in_scope_offers": 20,
                 "in_scope_zips": 10,
                 "in_scope_stores": 10,
-                "verified_available_offers": 20,
-                "verified_available_zips": 10,
-                "verified_available_stores": 10,
+                "distribution_search_offers": 20,
+                "distribution_stores": 10,
+                "service_area_presence_count": 0,
                 "evidence_ref": f"evidence.classified.{retailer}",
             }
         )
@@ -288,9 +288,9 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
                 "in_scope_offers": 20,
                 "in_scope_zips": 20,
                 "in_scope_stores": 20,
-                "verified_available_offers": 5,
-                "verified_available_zips": 4,
-                "verified_available_stores": 4,
+                "distribution_search_offers": 20,
+                "distribution_stores": 20,
+                "service_area_presence_count": 0,
                 "explicitly_out_of_stock_search_offers": 3,
                 "sponsored_search_offers": 10,
                 "unverified_availability_search_offers": 12,
@@ -302,9 +302,9 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
                 "in_scope_offers": 20,
                 "in_scope_zips": 20,
                 "in_scope_stores": 0,
-                "verified_available_offers": 0,
-                "verified_available_zips": 0,
-                "verified_available_stores": 0,
+                "distribution_search_offers": 0,
+                "distribution_stores": 0,
+                "service_area_presence_count": 20,
                 "explicitly_out_of_stock_search_offers": 4,
                 "sponsored_search_offers": 9,
                 "unverified_availability_search_offers": 16,
@@ -337,16 +337,18 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
     assert result["validation"]["unsupported_numeric_claims"] == 0
     assert result["validation"]["metric_reference_coverage"] == 1
     assert result["validation"]["status"] == "needs_review"
-    assert result["data_quality"]["status"] == "blocked"
-    availability_check = next(
-        row for row in result["validation"]["checks"] if row["id"] == "verified-local-availability"
+    assert result["data_quality"]["status"] == "ready"
+    distribution_check = next(
+        row for row in result["validation"]["checks"] if row["id"] == "store-search-distribution"
     )
-    assert availability_check["status"] == "failed"
+    assert distribution_check["status"] == "passed"
     metrics = {row["metric_id"]: row for row in result["metrics"]}
-    verified_metric_id = "coverage.walmart_us.verified_available_offers"
-    assert metrics[verified_metric_id]["value"] == 5
-    assert metrics[verified_metric_id]["name"].endswith("Verified locally available offers")
-    assert verified_metric_id in result["assortment"]["metric_refs"]
+    distribution_metric_id = "coverage.walmart_us.distribution_search_offers"
+    assert metrics[distribution_metric_id]["value"] == 20
+    assert metrics[distribution_metric_id]["name"].endswith(
+        "Positive-price store-level Search offers"
+    )
+    assert distribution_metric_id in result["assortment"]["metric_refs"]
     assert "coverage.walmart_us.qualifying_offers" not in result["assortment"]["metric_refs"]
     narrative_ids = {section["id"] for section in result["narratives"]["sections"]}
     assert {
@@ -438,6 +440,9 @@ def test_executive_summary_prefers_governed_scorecard_profile_over_larger_sensit
                 "in_scope_offers": 100,
                 "in_scope_zips": 30,
                 "in_scope_stores": 30,
+                "distribution_search_offers": 100,
+                "distribution_stores": 30,
+                "service_area_presence_count": 0,
                 "evidence_ref": "evidence.source",
             }
             for retailer in ("walmart_us", "aldi_us")
@@ -471,10 +476,10 @@ def test_executive_summary_prefers_governed_scorecard_profile_over_larger_sensit
     )
     assert "strict same-zip and exact-package comparison" in summary
     assert "10 mile" not in summary
-    assert result["validation"]["status"] == "needs_review"
-    availability_check = next(
+    assert result["validation"]["status"] == "ready_to_share"
+    distribution_check = next(
         check
         for check in result["validation"]["checks"]
-        if check["id"] == "verified-local-availability"
+        if check["id"] == "store-search-distribution"
     )
-    assert availability_check["status"] == "failed"
+    assert distribution_check["status"] == "passed"

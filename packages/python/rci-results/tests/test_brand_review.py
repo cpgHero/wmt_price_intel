@@ -19,6 +19,17 @@ from rci_retailer_packs import GovernedBrandResolver
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
+STORE_SEARCH_DISTRIBUTION_CONTRACT = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+
 
 class FakePackLoader:
     async def load(self, pack_id: str, version: str):
@@ -43,18 +54,20 @@ class FakeResults:
                 "benchmark_retailer": "walmart_us",
                 "competitors": ["aldi_us"],
                 "assortment_analysis": {
+                    "distribution_contract": STORE_SEARCH_DISTRIBUTION_CONTRACT,
                     "retailers": [
                         {
                             "retailer": "walmart_us",
+                            "distribution_store_count": 100,
+                            "service_area_presence_count": 0,
                             "brands": [
                                 {
                                     "brand": "Great Value",
                                     "distinct_products": 4,
                                     "observed_locations": 80,
                                     "observed_zipcodes": 75,
-                                    "verified_available_products": 4,
-                                    "verified_available_locations": 80,
-                                    "verified_available_zipcodes": 75,
+                                    "distribution_store_count": 80,
+                                    "service_area_presence_count": 0,
                                     "location_share": 0.8,
                                 },
                                 {
@@ -62,9 +75,8 @@ class FakeResults:
                                     "distinct_products": 3,
                                     "observed_locations": 14,
                                     "observed_zipcodes": 12,
-                                    "verified_available_products": 3,
-                                    "verified_available_locations": 14,
-                                    "verified_available_zipcodes": 12,
+                                    "distribution_store_count": 14,
+                                    "service_area_presence_count": 0,
                                     "location_share": 0.14,
                                 },
                                 {
@@ -72,29 +84,29 @@ class FakeResults:
                                     "distinct_products": 2,
                                     "observed_locations": 10,
                                     "observed_zipcodes": 9,
-                                    "verified_available_products": 2,
-                                    "verified_available_locations": 10,
-                                    "verified_available_zipcodes": 9,
+                                    "distribution_store_count": 10,
+                                    "service_area_presence_count": 0,
                                     "location_share": 0.1,
                                 },
                             ],
                         },
                         {
                             "retailer": "aldi_us",
+                            "distribution_store_count": 50,
+                            "service_area_presence_count": 0,
                             "brands": [
                                 {
                                     "brand": "Friendly Farms",
                                     "distinct_products": 3,
                                     "observed_locations": 40,
                                     "observed_zipcodes": 38,
-                                    "verified_available_products": 3,
-                                    "verified_available_locations": 40,
-                                    "verified_available_zipcodes": 38,
+                                    "distribution_store_count": 40,
+                                    "service_area_presence_count": 0,
                                     "location_share": 0.8,
                                 }
                             ],
                         },
-                    ]
+                    ],
                 },
             },
             created_at=datetime.now(UTC),
@@ -191,7 +203,9 @@ async def test_brand_workbench_stages_human_roles_without_immediate_reanalysis()
     assert hiland["role"] == "regional"
     assert hiland["status"] == "suggested"
     assert hiland["distribution_tier"] == "concentrated"
-    assert hiland["distribution_evidence"] == "verified_local_search_availability"
+    assert hiland["distribution_evidence"] == "positive_price_store_search_result"
+    assert hiland["distribution_store_count"] == 14
+    assert hiland["service_area_presence_count"] == 0
     mayfield = next(row for row in initial["brands"] if row["display_brand"] == "Mayfield")
     assert mayfield["role"] == "unclassified"
     assert mayfield["candidate_status"] == "candidate"
@@ -314,16 +328,15 @@ async def test_brand_workbench_rejects_unoffered_or_role_mismatched_mappings() -
 
 
 @pytest.mark.asyncio
-async def test_brand_workbench_does_not_promote_explicit_zero_verified_counts() -> None:
+async def test_brand_workbench_treats_explicit_zero_distribution_as_authoritative() -> None:
     results = FakeResults()
     retailer = results.analysis.result["assortment_analysis"]["retailers"][0]  # type: ignore[index]
     brand = retailer["brands"][1]
-    brand["verified_available_products"] = 0
-    brand["verified_available_locations"] = 0
-    brand["verified_available_zipcodes"] = 0
-    brand["distinct_products"] = 37
+    brand["distribution_store_count"] = 0
+    brand["service_area_presence_count"] = 0
+    brand["distinct_products"] = 0
     brand["observed_locations"] = 4_510
-    brand["observed_zipcodes"] = 2_700
+    brand["observed_zipcodes"] = 0
     brand["location_share"] = 0.99
 
     service = BrandReviewService(  # type: ignore[arg-type]
@@ -343,8 +356,10 @@ async def test_brand_workbench_does_not_promote_explicit_zero_verified_counts() 
     assert hiland["observed_products"] == 0
     assert hiland["observed_locations"] == 0
     assert hiland["observed_zipcodes"] == 0
+    assert hiland["distribution_store_count"] == 0
+    assert hiland["service_area_presence_count"] == 0
     assert hiland["location_share"] == 0
-    assert hiland["distribution_evidence"] == "search_brand_field"
+    assert hiland["distribution_evidence"] == "positive_price_store_search_result"
     assert hiland["distribution_tier"] == "unknown"
 
 
@@ -368,8 +383,11 @@ async def test_brand_workbench_backfills_pdp_brands_from_legacy_publication_cont
 
     assert great_value["role"] == "private_label"
     assert great_value["observed_products"] == 2
-    assert great_value["observed_zipcodes"] == 22
+    assert great_value["observed_locations"] == 0
+    assert great_value["observed_zipcodes"] == 0
+    assert great_value["distribution_store_count"] == 0
+    assert great_value["service_area_presence_count"] == 0
     assert great_value["location_share"] == 0
     assert great_value["distribution_tier"] == "unknown"
-    assert great_value["distribution_evidence"] == "pdp_identity_joined_to_matched_search"
+    assert great_value["distribution_evidence"] == "pdp_identity_only"
     assert friendly_farms["distribution_evidence"] == "search_brand_field"

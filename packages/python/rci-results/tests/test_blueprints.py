@@ -28,6 +28,17 @@ PACK_IDS = (
     "fresh_ground_beef",
 )
 
+STORE_SEARCH_DISTRIBUTION_CONTRACT = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+
 
 def _result() -> dict[str, object]:
     return json.loads(
@@ -298,6 +309,8 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
                                 "brand_origin": "retailer_pack",
                                 "brand_status": "approved",
                                 "image_url": None,
+                                "distribution_store_count": 2,
+                                "service_area_presence_count": 1,
                                 "observed_locations": 2,
                                 "observed_zipcodes": 2,
                                 "verified_available_locations": 2,
@@ -360,17 +373,11 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
         "brand_origin": "retailer_pack",
         "brand_status": "approved",
         "image_url": None,
-        "observed_locations": 2,
-        "observed_zipcodes": 2,
-        "verified_available_locations": 2,
-        "verified_available_zipcodes": 2,
-        "search_observed_locations": 4,
-        "search_observed_zipcodes": 3,
-        "availability_status": "verified_in_stock",
-        "explicitly_out_of_stock_locations": 1,
-        "unverified_locations": 1,
-        "unverified_sponsored_locations": 1,
+        "distribution_store_count": 2,
+        "service_area_presence_count": 1,
     }
+    assert "verified_available_locations" not in product
+    assert "availability_status" not in product
     assert view["assortment_analysis"]["retailers"][0]["products"][1]["observed_brand"] is None
     assert view["assortment_analysis"]["retailers"][0]["products"][2]["observed_brand"] is None
 
@@ -1186,21 +1193,20 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     context = {
         "product_decisions": [decision],
         "assortment_analysis": {
+            "distribution_contract": STORE_SEARCH_DISTRIBUTION_CONTRACT,
             "benchmark_retailer": "walmart_us",
             "retailers": [
                 {
                     "retailer": "walmart_us",
                     "distinct_products": 8,
-                    "verified_available_products": 8,
-                    "verified_available_locations": 51,
-                    "verified_available_zipcodes": 42,
+                    "distribution_store_count": 51,
+                    "service_area_presence_count": 0,
                 },
                 {
                     "retailer": "aldi_us",
                     "distinct_products": 6,
-                    "verified_available_products": 6,
-                    "verified_available_locations": 42,
-                    "verified_available_zipcodes": 42,
+                    "distribution_store_count": 42,
+                    "service_area_presence_count": 0,
                 },
             ],
             "comparisons": [
@@ -1275,7 +1281,7 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     assert "Export manifest" in html
 
 
-def test_shareable_html_fails_closed_for_legacy_availability_and_missing_prices() -> None:
+def test_shareable_html_uses_only_governed_distribution_counts_and_missing_prices() -> None:
     result = _result()
     context = {
         "product_decisions": [
@@ -1291,21 +1297,20 @@ def test_shareable_html_fails_closed_for_legacy_availability_and_missing_prices(
             }
         ],
         "assortment_analysis": {
+            "distribution_contract": STORE_SEARCH_DISTRIBUTION_CONTRACT,
             "benchmark_retailer": "walmart_us",
             "retailers": [
                 {
                     "retailer": "walmart_us",
                     "distinct_products": 99,
-                    "verified_available_products": 1,
-                    "verified_available_locations": 4,
-                    "verified_available_zipcodes": 3,
+                    "distribution_store_count": 4,
+                    "service_area_presence_count": 3,
                 },
                 {
                     "retailer": "aldi_us",
                     "distinct_products": 1,
-                    "verified_available_products": 0,
-                    "verified_available_locations": 0,
-                    "verified_available_zipcodes": 0,
+                    "distribution_store_count": 0,
+                    "service_area_presence_count": 0,
                 },
             ],
             "comparisons": [
@@ -1323,10 +1328,9 @@ def test_shareable_html_fails_closed_for_legacy_availability_and_missing_prices(
                             "observed_zipcodes": 3_900,
                         },
                         {
-                            "name": "Verified local product",
-                            "availability_status": "verified_in_stock",
-                            "verified_available_locations": 4,
-                            "verified_available_zipcodes": 3,
+                            "name": "Governed distribution product",
+                            "distribution_store_count": 4,
+                            "service_area_presence_count": 3,
                         },
                     ],
                     "top_competitor_whitespace": [],
@@ -1342,8 +1346,8 @@ def test_shareable_html_fails_closed_for_legacy_availability_and_missing_prices(
     )
 
     assert "Legacy Search-only product" not in html
-    assert "Verified local product" in html
-    assert "4 verified locations · 3 verified ZIPs" in html
+    assert "Governed distribution product" in html
+    assert "4 positive-price stores · 3 service-area Search presences" in html
     assert "Benchmark missing price</h3>" in html
     assert html.count("Unavailable</b>") >= 2
     assert "Median matched-price evidence is unavailable" in html
@@ -1387,8 +1391,8 @@ def test_shareable_html_suppresses_legacy_assortment_rollups() -> None:
         .body.decode()
     )
 
-    assert "Availability evidence unverified" in html
-    assert "Legacy Search reach cannot support" in html
+    assert "Store distribution definition unavailable" in html
+    assert "location counters are not displayed" in html
     assert "Search-only rollup must not render." not in html
     assert "Search-only product must not render" not in html
     assert "4,510 shared ZIPs" not in html

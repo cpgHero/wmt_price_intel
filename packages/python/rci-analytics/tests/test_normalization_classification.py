@@ -490,5 +490,6 @@ def test_supplied_compact_rows_normalize_and_classify_deterministically(
     classified = configured_classifier.classify_many(normalized)
 
     assert len(rows) == len(normalized) == len(classified) == 1500
-    assert sum(item.in_scope for item in classified) == 140
+    # Stock metadata does not exclude otherwise qualifying positive-price Search rows.
+    assert sum(item.in_scope for item in classified) == 182
     assert all("price_per_strawberry" not in item.metrics for item in classified)

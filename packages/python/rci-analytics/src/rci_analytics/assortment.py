@@ -17,7 +17,7 @@ from rci_analytics.latest_product_location import (
     product_location_key,
 )
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord
-from rci_analytics.product_location import classify_local_availability
+from rci_analytics.product_location import store_search_distribution_contract
 
 
 def _brand_type(item: ClassifiedOffer) -> str:
@@ -33,6 +33,7 @@ class _BrandWorking(TypedDict):
     brand: str
     product_ids: set[str]
     locations: set[str]
+    service_areas: set[str]
     zipcodes: set[str]
 
 
@@ -41,9 +42,8 @@ class _BrandSummary(TypedDict):
     distinct_products: int
     observed_locations: int
     observed_zipcodes: int
-    verified_available_products: int
-    verified_available_locations: int
-    verified_available_zipcodes: int
+    distribution_store_count: int
+    service_area_presence_count: int
     location_share: float
 
 
@@ -63,25 +63,20 @@ _PRODUCT_INTERNAL_FIELDS = {
     "zipcodes",
     "search_locations",
     "search_zipcodes",
-    "explicitly_out_of_stock_locations",
-    "unverified_locations",
-    "unverified_sponsored_locations",
+    "service_areas",
     "attribute_variants",
 }
 
 
 class AssortmentAccumulator:
-    """Separate Search discovery from verified local assortment breadth."""
+    """Accumulate positive-price Search assortment and distribution breadth."""
 
     def __init__(self) -> None:
         self._products: dict[str, dict[str, JsonObject]] = defaultdict(dict)
         self._locations: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         self._zips: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-        self._search_locations: dict[str, dict[str, set[str]]] = defaultdict(
-            lambda: defaultdict(set)
-        )
-        self._search_zips: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-        self._latest_location_availability: LatestProductLocationSelector[ClassifiedOffer] = (
+        self._service_areas: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        self._latest_search_rows: LatestProductLocationSelector[ClassifiedOffer] = (
             LatestProductLocationSelector()
         )
 
@@ -90,7 +85,7 @@ class AssortmentAccumulator:
             return
         offer = item.offer
         if is_seller_policy_exclusion(item):
-            add_classified_offer(self._latest_location_availability, item)
+            add_classified_offer(self._latest_search_rows, item)
             return
         product = self._products[offer.retailer_id].setdefault(
             offer.retailer_product_id,
@@ -106,9 +101,7 @@ class AssortmentAccumulator:
                 "zipcodes": set(),
                 "search_locations": set(),
                 "search_zipcodes": set(),
-                "explicitly_out_of_stock_locations": set(),
-                "unverified_locations": set(),
-                "unverified_sponsored_locations": set(),
+                "service_areas": set(),
                 "attribute_variants": {},
             },
         )
@@ -135,60 +128,51 @@ class AssortmentAccumulator:
         )
         if identity is None:
             return
-        zipcode = offer.zipcode
-        location = (
-            f"{zipcode or 'unknown-zip'}|{offer.store_number}"
-            if offer.store_number
-            else str(zipcode)
-        )
-        product["search_locations"].add(location)
-        self._search_locations[offer.retailer_id][location].add(offer.retailer_product_id)
-        if zipcode is not None:
-            product["search_zipcodes"].add(zipcode)
-            self._search_zips[offer.retailer_id][zipcode].add(offer.retailer_product_id)
-        add_classified_offer(self._latest_location_availability, item)
+        add_classified_offer(self._latest_search_rows, item)
 
-    def _rebuild_local_availability(self) -> None:
+    def _rebuild_distribution(self) -> None:
         self._locations.clear()
         self._zips.clear()
+        self._service_areas.clear()
         for retailer_products in self._products.values():
             for product in retailer_products.values():
                 for field in (
                     "locations",
                     "zipcodes",
-                    "explicitly_out_of_stock_locations",
-                    "unverified_locations",
-                    "unverified_sponsored_locations",
+                    "search_locations",
+                    "search_zipcodes",
+                    "service_areas",
                 ):
                     product[field].clear()
-        for item in self._latest_location_availability.values():
+        for item in self._latest_search_rows.values():
             offer = item.offer
             selected_product = self._products.get(offer.retailer_id, {}).get(
                 offer.retailer_product_id
             )
-            if selected_product is None:
+            if (
+                selected_product is None
+                or is_seller_policy_exclusion(item)
+                or offer.price is None
+                or offer.price <= 0
+            ):
                 continue
-            location = (
-                f"{offer.zipcode or 'unknown-zip'}|{offer.store_number}"
-                if offer.store_number
-                else str(offer.zipcode)
-            )
-            status = classify_local_availability(
-                in_stock=offer.in_stock,
-                is_sponsored=offer.is_sponsored,
-            )
-            if item.in_scope and status == "verified_in_stock":
+            distribution_store_id = str(offer.store_number or "").strip()
+            if distribution_store_id:
+                location = distribution_store_id
                 selected_product["locations"].add(location)
+                selected_product["search_locations"].add(f"store:{location}")
                 self._locations[offer.retailer_id][location].add(offer.retailer_product_id)
-                if offer.zipcode is not None:
-                    selected_product["zipcodes"].add(offer.zipcode)
-                    self._zips[offer.retailer_id][offer.zipcode].add(offer.retailer_product_id)
-            elif status == "explicitly_out_of_stock":
-                selected_product["explicitly_out_of_stock_locations"].add(location)
-            elif status == "unverified_sponsored":
-                selected_product["unverified_sponsored_locations"].add(location)
             else:
-                selected_product["unverified_locations"].add(location)
+                service_area = str(offer.zipcode or "").strip()
+                if not service_area:
+                    continue
+                selected_product["service_areas"].add(service_area)
+                selected_product["search_locations"].add(f"service_area:{service_area}")
+                self._service_areas[offer.retailer_id][service_area].add(offer.retailer_product_id)
+            if offer.zipcode is not None:
+                selected_product["zipcodes"].add(offer.zipcode)
+                selected_product["search_zipcodes"].add(offer.zipcode)
+                self._zips[offer.retailer_id][offer.zipcode].add(offer.retailer_product_id)
 
     def finalize(
         self,
@@ -200,7 +184,7 @@ class AssortmentAccumulator:
         ambiguous_groups: Iterable[JsonObject] = (),
         relationships: Iterable[JsonObject] = (),
     ) -> JsonObject:
-        self._rebuild_local_availability()
+        self._rebuild_distribution()
         profile_labels = {
             str(profile["id"]): str(profile.get("label") or profile["id"]) for profile in profiles
         }
@@ -209,18 +193,12 @@ class AssortmentAccumulator:
         relationship_rows = list(relationships)
         retailers = [benchmark_retailer, *[str(value) for value in competitors]]
         return {
-            "source": (
-                "Search results admitted by Product Pack category rules; local assortment "
-                "requires the latest explicit in-stock and non-sponsored location state"
-            ),
+            "source": "Positive-priced Search results admitted by Product Pack category rules",
             "grain": (
-                "Distinct retailer product IDs; verified store breadth uses ZIP + store ID "
-                "when available; Search reach is reported separately"
+                "Retailer product x distinct store ID for distribution; service-area Search "
+                "presence is reported separately"
             ),
-            "availability_definition": (
-                "Verified local availability requires in_stock=true and is_sponsored=false. "
-                "Sponsored, explicitly out-of-stock, or unknown evidence remains Search-only."
-            ),
+            "distribution_contract": store_search_distribution_contract(),
             "benchmark_retailer": benchmark_retailer,
             "retailers": [self._retailer_summary(retailer) for retailer in retailers],
             "comparisons": [
@@ -239,13 +217,21 @@ class AssortmentAccumulator:
 
     def _retailer_summary(self, retailer: str) -> JsonObject:
         products = self._products.get(retailer, {})
-        verified_products = {
-            product_id: product for product_id, product in products.items() if product["locations"]
+        observed_products = {
+            product_id: product
+            for product_id, product in products.items()
+            if product["locations"] or product["service_areas"]
         }
-        counts = [len(values) for values in self._locations.get(retailer, {}).values()]
+        counts = [
+            len(values)
+            for values in (
+                *self._locations.get(retailer, {}).values(),
+                *self._service_areas.get(retailer, {}).values(),
+            )
+        ]
         brands: dict[str, _BrandWorking] = {}
         unbranded_products = 0
-        for product in verified_products.values():
+        for product in observed_products.values():
             brand = str(product.get("brand") or "").strip()
             if not brand:
                 unbranded_products += 1
@@ -257,23 +243,29 @@ class AssortmentAccumulator:
                     "brand": brand,
                     "product_ids": set(),
                     "locations": set(),
+                    "service_areas": set(),
                     "zipcodes": set(),
                 },
             )
             row["product_ids"].add(str(product["product_id"]))
             row["locations"].update(product["locations"])
+            row["service_areas"].update(product["service_areas"])
             row["zipcodes"].update(product["zipcodes"])
-        retailer_location_count = len(self._locations.get(retailer, {}))
+        retailer_location_count = len(self._locations.get(retailer, {})) + len(
+            self._service_areas.get(retailer, {})
+        )
         brand_rows: list[_BrandSummary] = [
             {
                 "brand": str(row["brand"]),
                 "distinct_products": len(row["product_ids"]),
-                "observed_locations": len(row["locations"]),
+                "observed_locations": len(row["locations"]) + len(row["service_areas"]),
                 "observed_zipcodes": len(row["zipcodes"]),
-                "verified_available_products": len(row["product_ids"]),
-                "verified_available_locations": len(row["locations"]),
-                "verified_available_zipcodes": len(row["zipcodes"]),
-                "location_share": _rate(len(row["locations"]), retailer_location_count),
+                "distribution_store_count": len(row["locations"]),
+                "service_area_presence_count": len(row["service_areas"]),
+                "location_share": _rate(
+                    len(row["locations"]) + len(row["service_areas"]),
+                    retailer_location_count,
+                ),
             }
             for row in brands.values()
         ]
@@ -298,15 +290,12 @@ class AssortmentAccumulator:
         )
         return {
             "retailer": retailer,
-            "distinct_products": len(verified_products),
-            "verified_available_products": len(verified_products),
-            "search_distinct_products": len(products),
-            "observed_locations": len(self._locations.get(retailer, {})),
+            "distinct_products": len(observed_products),
+            "search_distinct_products": len(observed_products),
+            "observed_locations": retailer_location_count,
             "observed_zipcodes": len(self._zips.get(retailer, {})),
-            "verified_available_locations": len(self._locations.get(retailer, {})),
-            "verified_available_zipcodes": len(self._zips.get(retailer, {})),
-            "search_observed_locations": len(self._search_locations.get(retailer, {})),
-            "search_observed_zipcodes": len(self._search_zips.get(retailer, {})),
+            "distribution_store_count": len(self._locations.get(retailer, {})),
+            "service_area_presence_count": len(self._service_areas.get(retailer, {})),
             "median_products_per_location": (
                 round(float(statistics.median(counts)), 1) if counts else 0.0
             ),
@@ -324,26 +313,14 @@ class AssortmentAccumulator:
                     },
                     "observed_locations": len(product["locations"]),
                     "observed_zipcodes": len(product["zipcodes"]),
-                    "verified_available_locations": len(product["locations"]),
-                    "verified_available_zipcodes": len(product["zipcodes"]),
-                    "search_observed_locations": len(product["search_locations"]),
-                    "search_observed_zipcodes": len(product["search_zipcodes"]),
+                    "distribution_store_count": len(product["locations"]),
+                    "service_area_presence_count": len(product["service_areas"]),
                     "location_scope_keys": sorted(
-                        f"{retailer}|{location}" for location in product["locations"]
-                    ),
-                    "verified_location_scope_keys": sorted(
-                        f"{retailer}|{location}" for location in product["locations"]
-                    ),
-                    "search_location_scope_keys": sorted(
-                        f"{retailer}|{location}" for location in product["search_locations"]
-                    ),
-                    "availability_status": self._product_availability_status(product),
-                    "explicitly_out_of_stock_locations": len(
-                        product["explicitly_out_of_stock_locations"]
-                    ),
-                    "unverified_locations": len(product["unverified_locations"]),
-                    "unverified_sponsored_locations": len(
-                        product["unverified_sponsored_locations"]
+                        [f"{retailer}|store|{location}" for location in product["locations"]]
+                        + [
+                            f"{retailer}|service_area|{location}"
+                            for location in product["service_areas"]
+                        ]
                     ),
                     "attributes": next(iter(product["attribute_variants"].values()), {}),
                     "attribute_variants": sorted(
@@ -353,7 +330,7 @@ class AssortmentAccumulator:
                     "attribute_conflict": len(product["attribute_variants"]) > 1,
                 }
                 for product in sorted(
-                    products.values(),
+                    observed_products.values(),
                     key=lambda value: (
                         str(value["name"]).casefold(),
                         str(value["product_id"]),
@@ -374,18 +351,16 @@ class AssortmentAccumulator:
         benchmark_products = {
             product_id: product
             for product_id, product in self._products.get(benchmark, {}).items()
-            if product["locations"]
+            if product["locations"] or product["service_areas"]
         }
         competitor_products = {
             product_id: product
             for product_id, product in self._products.get(competitor, {}).items()
-            if product["locations"]
+            if product["locations"] or product["service_areas"]
         }
-        verified_benchmark_ids = set(benchmark_products)
-        verified_competitor_ids = set(competitor_products)
-        latest_offers = {
-            item.offer.offer_id: item for item in self._latest_location_availability.values()
-        }
+        observed_benchmark_ids = set(benchmark_products)
+        observed_competitor_ids = set(competitor_products)
+        latest_offers = {item.offer.offer_id: item for item in self._latest_search_rows.values()}
         pair_profiles: dict[tuple[str, str], set[str]] = defaultdict(set)
         for match in matches:
             if match.competitor_id != competitor:
@@ -399,8 +374,8 @@ class AssortmentAccumulator:
             if (
                 benchmark_offer.offer.retailer_id != benchmark
                 or competitor_offer.offer.retailer_id != competitor
-                or benchmark_product_id not in verified_benchmark_ids
-                or competitor_product_id not in verified_competitor_ids
+                or benchmark_product_id not in observed_benchmark_ids
+                or competitor_product_id not in observed_competitor_ids
             ):
                 continue
             pair_profiles[(benchmark_product_id, competitor_product_id)].add(match.profile_id)
@@ -414,8 +389,8 @@ class AssortmentAccumulator:
             if (
                 not benchmark_product_id
                 or not competitor_product_id
-                or benchmark_product_id not in verified_benchmark_ids
-                or competitor_product_id not in verified_competitor_ids
+                or benchmark_product_id not in observed_benchmark_ids
+                or competitor_product_id not in observed_competitor_ids
             ):
                 continue
             eligible_profiles = relationship.get("eligible_profile_ids")
@@ -429,32 +404,32 @@ class AssortmentAccumulator:
         matched_competitor = {pair[1] for pair in pair_profiles}
         matched_observed_benchmark = matched_benchmark & set(benchmark_products)
         matched_observed_competitor = matched_competitor & set(competitor_products)
-        verified_ambiguous_candidates: list[JsonObject] = []
-        verified_ambiguous_group_count = 0
+        observed_ambiguous_candidates: list[JsonObject] = []
+        observed_ambiguous_group_count = 0
         for group in ambiguous_groups:
             if str(group.get("competitor_id")) != competitor:
                 continue
-            group_has_verified_pair = False
+            group_has_observed_pair = False
             for candidate in group.get("candidates", []):
                 if not isinstance(candidate, dict):
                     continue
                 benchmark_product_id = str(candidate.get("benchmark_product_id") or "")
                 competitor_product_id = str(candidate.get("competitor_product_id") or "")
                 if (
-                    benchmark_product_id in verified_benchmark_ids
-                    and competitor_product_id in verified_competitor_ids
+                    benchmark_product_id in observed_benchmark_ids
+                    and competitor_product_id in observed_competitor_ids
                 ):
-                    verified_ambiguous_candidates.append(candidate)
-                    group_has_verified_pair = True
-            verified_ambiguous_group_count += group_has_verified_pair
+                    observed_ambiguous_candidates.append(candidate)
+                    group_has_observed_pair = True
+            observed_ambiguous_group_count += group_has_observed_pair
         ambiguous_benchmark = {
             str(candidate.get("benchmark_product_id"))
-            for candidate in verified_ambiguous_candidates
+            for candidate in observed_ambiguous_candidates
             if candidate.get("benchmark_product_id")
         }
         ambiguous_competitor = {
             str(candidate.get("competitor_product_id"))
-            for candidate in verified_ambiguous_candidates
+            for candidate in observed_ambiguous_candidates
             if candidate.get("competitor_product_id")
         }
         benchmark_only = set(benchmark_products) - matched_benchmark - ambiguous_benchmark
@@ -500,7 +475,7 @@ class AssortmentAccumulator:
         return {
             "competitor": competitor,
             "product_relationships": len(pair_profiles),
-            "ambiguous_candidate_groups": verified_ambiguous_group_count,
+            "ambiguous_candidate_groups": observed_ambiguous_group_count,
             "matched_benchmark_products": len(matched_observed_benchmark),
             "matched_competitor_products": len(matched_observed_competitor),
             "benchmark_match_coverage": _rate(
@@ -539,7 +514,7 @@ class AssortmentAccumulator:
                 (
                     f"{len(pair_profiles):,} distinct Product Pack pairings cover "
                     f"{_rate(len(matched_observed_benchmark), len(benchmark_products)):.0%} "
-                    "of the primary retailer's verified-available products."
+                    "of the primary retailer's Search-observed products."
                 ),
                 (
                     f"{len(competitor_only):,} competitor products have no admitted primary "
@@ -548,23 +523,11 @@ class AssortmentAccumulator:
                 ),
                 (
                     f"Across {len(shared_zips):,} shared ZIPs, the primary retailer has "
-                    f"broader verified-available variety in {benchmark_broader:,} and the "
+                    f"broader Search-observed variety in {benchmark_broader:,} and the "
                     f"competitor in {competitor_broader:,}."
                 ),
             ],
         }
-
-    @staticmethod
-    def _product_availability_status(product: JsonObject) -> str:
-        if product["locations"]:
-            return "verified_in_stock"
-        if product["unverified_sponsored_locations"]:
-            return "unverified_sponsored"
-        if product["unverified_locations"]:
-            return "unverified"
-        if product["explicitly_out_of_stock_locations"]:
-            return "explicitly_out_of_stock"
-        return "unverified"
 
     def _rank_products(self, retailer: str, product_ids: set[str]) -> list[JsonObject]:
         rows = []
@@ -579,11 +542,8 @@ class AssortmentAccumulator:
                     },
                     "observed_locations": len(product["locations"]),
                     "observed_zipcodes": len(product["zipcodes"]),
-                    "verified_available_locations": len(product["locations"]),
-                    "verified_available_zipcodes": len(product["zipcodes"]),
-                    "search_observed_locations": len(product["search_locations"]),
-                    "search_observed_zipcodes": len(product["search_zipcodes"]),
-                    "availability_status": self._product_availability_status(product),
+                    "distribution_store_count": len(product["locations"]),
+                    "service_area_presence_count": len(product["service_areas"]),
                 }
             )
         return sorted(
@@ -596,7 +556,7 @@ def merge_assortment_product_context(
     assortment: JsonObject,
     highlights: Iterable[JsonObject],
 ) -> JsonObject:
-    """Overlay PDP identity without replacing verified/Search evidence metrics."""
+    """Overlay PDP identity without replacing Search distribution metrics."""
 
     enriched = copy.deepcopy(assortment)
     context = {
@@ -614,8 +574,8 @@ def merge_assortment_product_context(
         if not pdp:
             return
         # These fields describe the retailer product and can safely improve the
-        # review surface. Search remains the price-placement source; only explicit
-        # non-sponsored in-stock evidence establishes verified local availability.
+        # review surface. Search remains the sole source for price and observed
+        # store distribution; PDP content cannot create a store observation.
         for key in (
             "name",
             "brand",

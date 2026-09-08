@@ -5078,6 +5078,17 @@ tbody tr:last-child td {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.cert-replay .cert-replay-rebuild > span {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  gap: 0.5rem;
+}
+.cert-replay .cert-replay-rebuild input {
+  height: 1rem;
+  margin: 0;
+  width: 1rem;
+}
 .cert-replay-result {
   border-top: 1px solid var(--line);
   display: grid;

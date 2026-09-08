@@ -17,6 +17,16 @@
       "raw-amazon-ground-beef"
     ]
   },
+  "distribution_contract": {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": false,
+    "stock_status_used": false,
+    "sponsorship_used": false
+  },
   "benchmark_retailer": "walmart_us",
   "competitors": [
     "aldi_us",

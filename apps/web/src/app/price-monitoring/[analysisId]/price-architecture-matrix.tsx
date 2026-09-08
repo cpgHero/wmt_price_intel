@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
-import { hasVerifiedArchitectureRetailerEvidence } from "@/lib/availability-presentation";
 import type { PriceArchitectureMatrix } from "@/lib/api";
+import {
+  distributionCount,
+  distributionLabel,
+  distributionNoun,
+  serviceAreaPresenceDefinition,
+  storeDistributionDefinition,
+} from "@/lib/distribution-presentation";
 
 type MatrixRung = PriceArchitectureMatrix["rungs"][number];
 type MatrixCell = MatrixRung["cells"][number];
@@ -18,12 +24,12 @@ type CellMetric =
 type RungMethod = "benchmark" | "fixed-050" | "fixed-100";
 
 const metricLabels: Record<CellMetric, string> = {
-  products: "Verified products + prices",
-  sku_count: "Verified-available SKU count",
-  assortment_share: "% of verified assortment",
-  store_coverage: "Verified availability coverage",
-  average_price: "Verified local average price",
-  price_density: "Verified price density",
+  products: "Products + Search prices",
+  sku_count: "Positive-price SKU count",
+  assortment_share: "% of observed assortment",
+  store_coverage: "Observed distribution coverage",
+  average_price: "Average Search-listed price",
+  price_density: "Observed price density",
 };
 
 const brandLabels: Record<string, string> = {
@@ -78,12 +84,22 @@ function footprintLabel(
   product: MatrixProduct,
   retailer: PriceArchitectureMatrix["retailers"][number],
 ) {
-  const locationLabel =
-    retailer.location_dimension === "service_area" ? "service areas" : "stores";
+  const locations =
+    distributionCount(product, retailer.location_dimension) ?? 0;
   const coverage = retailer.eligible_locations
-    ? ` · ${percent(product.verified_available_locations / retailer.eligible_locations)}`
+    ? ` · ${percent(locations / retailer.eligible_locations)}`
     : "";
-  return `${count(product.verified_available_locations)} verified in-stock ${locationLabel}${coverage} · ${count(product.search_observed_locations)} Search-observed`;
+  return `${count(locations)} observed ${distributionNoun(retailer.location_dimension, locations)}${coverage}`;
+}
+
+function hasDistributionEvidence(
+  retailer: PriceArchitectureMatrix["retailers"][number],
+) {
+  return (
+    retailer.status === "available" &&
+    retailer.sku_count > 0 &&
+    (distributionCount(retailer, retailer.location_dimension) ?? 0) > 0
+  );
 }
 
 function methodQuery(method: RungMethod) {
@@ -133,9 +149,8 @@ function ProductDrawer({
             <p className="section-kicker">Price-rung evidence</p>
             <h2>{retailer.name}</h2>
             <p>
-              {rung.label} · {count(cell.sku_count)} SKUs with verified local
-              availability · {percent(cell.store_coverage)} of eligible
-              locations verify at least one SKU in this rung
+              {rung.label} · {count(cell.sku_count)} positive-price SKUs ·{" "}
+              {percent(cell.store_coverage)} observed distribution coverage
             </p>
           </div>
           <button
@@ -147,10 +162,13 @@ function ProductDrawer({
           </button>
         </header>
         <div className="pi-matrix-drawer-note">
-          Products appear here only when at least one non-sponsored Search row
-          explicitly reports in stock; their median verified local Search price
-          falls in this band. This view does not assert that any two products
-          are substitutes or matches.
+          Products appear here when their median positive Search-listed price
+          falls in this band.{" "}
+          {retailer.location_dimension === "store"
+            ? storeDistributionDefinition
+            : serviceAreaPresenceDefinition}{" "}
+          This view does not assert that any two products are substitutes or
+          matches.
         </div>
         <div className="pi-matrix-product-list">
           {cell.products.map((product) => (
@@ -177,18 +195,18 @@ function ProductDrawer({
                 </span>
                 <dl>
                   <div>
-                    <dt>Median verified local price</dt>
+                    <dt>Median Search-listed price</dt>
                     <dd>{currency(product.median_price)}</dd>
                   </div>
                   <div>
-                    <dt>Verified local price range</dt>
+                    <dt>Search-listed price range</dt>
                     <dd>
                       {currency(product.minimum_price)}–
                       {currency(product.maximum_price)}
                     </dd>
                   </div>
                   <div>
-                    <dt>Availability and Search reach</dt>
+                    <dt>{distributionLabel(retailer.location_dimension)}</dt>
                     <dd>{footprintLabel(product, retailer)}</dd>
                   </div>
                   <div>
@@ -289,9 +307,7 @@ export function PriceArchitectureMatrixWorkspace({
     return () => controller.abort();
   }, [analysisId, requestKey]);
 
-  const availableRetailers = matrix?.retailers.filter(
-    hasVerifiedArchitectureRetailerEvidence,
-  );
+  const availableRetailers = matrix?.retailers.filter(hasDistributionEvidence);
   const maxima = useMemo(() => {
     const values = new Map<string, number>();
     if (!matrix) return values;
@@ -345,10 +361,9 @@ export function PriceArchitectureMatrixWorkspace({
     );
   }
   const unavailableRetailers = matrix.retailers.filter(
-    (retailer) => !hasVerifiedArchitectureRetailerEvidence(retailer),
+    (retailer) => !hasDistributionEvidence(retailer),
   );
-  const anchorEvidenceAvailable =
-    hasVerifiedArchitectureRetailerEvidence(anchor);
+  const anchorEvidenceAvailable = hasDistributionEvidence(anchor);
   const crowded = matrix.rungs.find(
     (rung) => rung.id === matrix.summary.most_crowded_rung_id,
   );
@@ -363,8 +378,9 @@ export function PriceArchitectureMatrixWorkspace({
           <h2>Price Architecture Matrix</h2>
           <p>
             {anchor.name} defines the price rungs. Every retailer SKU is placed
-            only by its median verified local Search price—never by a product
-            match. Sponsored-only or unknown-stock products are excluded.
+            only by its median positive Search-listed price—never by a product
+            match or stock indicator. Known third-party marketplace products are
+            excluded.
           </p>
         </div>
         {loading ? (
@@ -433,19 +449,19 @@ export function PriceArchitectureMatrixWorkspace({
         <article>
           <span>
             {matrix.filters.mode === "benchmark_anchored"
-              ? `${anchor.name} verified-local price rungs`
+              ? `${anchor.name} Search-price rungs`
               : "Fixed price bands"}
           </span>
           <strong>{count(matrix.summary.rung_count)}</strong>
           <small>
             {anchorEvidenceAvailable
-              ? `${count(matrix.summary.anchor_skus)} verified-available ${anchor.name} SKUs · `
-              : `No ${anchor.name} SKU with verified availability under the current product filters · `}
+              ? `${count(matrix.summary.anchor_skus)} positive-price ${anchor.name} SKUs · `
+              : `No positive-price ${anchor.name} SKU under the current product filters · `}
             {count(matrix.summary.anchor_price_points)} distinct price points
           </small>
         </article>
         <article>
-          <span>Verified-available competitor SKUs</span>
+          <span>Positive-price competitor SKUs</span>
           <strong>{count(matrix.summary.competitor_skus)}</strong>
           <small>
             {count(Math.max(0, availableRetailers.length - 1))} retailers
@@ -455,7 +471,7 @@ export function PriceArchitectureMatrixWorkspace({
           <span>Most crowded rung</span>
           <strong>{crowded?.label ?? "—"}</strong>
           <small>
-            {count(crowded?.competitor_sku_count ?? 0)} verified-available
+            {count(crowded?.competitor_sku_count ?? 0)} positive-price
             competitor SKUs
           </small>
         </article>
@@ -463,7 +479,7 @@ export function PriceArchitectureMatrixWorkspace({
           <span>Competitor white-space rungs</span>
           <strong>{count(matrix.summary.whitespace_rung_count)}</strong>
           <small>
-            No competitor SKU with verified availability in the band
+            No competitor SKU with a positive Search-listed price in the band
           </small>
         </article>
       </div>
@@ -471,13 +487,13 @@ export function PriceArchitectureMatrixWorkspace({
       <div className="pi-matrix-method-note">
         <strong>How to read it</strong>
         <span>
-          One SKU contributes once, using its verified-local-availability median
-          package price. Coverage is the distinct union of verified in-stock
-          locations for products in the cell. Search reach is retained
-          separately on each product. Known third-party marketplace sellers are
+          One SKU contributes once, using its median positive Search-listed
+          package price. Store coverage is the distinct union of observed stores
+          for products in the cell and is never extrapolated. Service-area
+          presence is kept separate. Known third-party marketplace sellers are
           excluded; products without seller evidence remain labeled seller
-          unknown. Empty cells mean no eligible SKU has verified availability in
-          the band—not necessarily that the retailer has no such product.
+          unknown. Empty cells mean no positive-price SKU was observed in the
+          band—not necessarily that the retailer does not sell one.
         </span>
       </div>
 
@@ -489,8 +505,8 @@ export function PriceArchitectureMatrixWorkspace({
                 <strong>{anchor.name} anchor / price rung</strong>
                 <span>
                   {anchorEvidenceAvailable
-                    ? `${count(anchor.sku_count)} verified-available SKUs across ${count(anchor.verified_available_locations)} verified local locations`
-                    : "No filtered anchor SKU has verified local availability"}
+                    ? `${count(anchor.sku_count)} positive-price SKUs across ${count(distributionCount(anchor, anchor.location_dimension) ?? 0)} observed ${distributionNoun(anchor.location_dimension, distributionCount(anchor, anchor.location_dimension) ?? 0)}`
+                    : "No filtered anchor SKU has positive-price Search evidence"}
                 </span>
                 <span>{sellerCoverage(anchor)}</span>
               </th>
@@ -503,9 +519,21 @@ export function PriceArchitectureMatrixWorkspace({
                   <th key={retailer.id}>
                     <strong>{retailer.name}</strong>
                     <span>
-                      {count(retailer.sku_count)} verified-available SKUs across{" "}
-                      {count(retailer.verified_available_locations)} verified
-                      local locations
+                      {count(retailer.sku_count)} positive-price SKUs across{" "}
+                      {count(
+                        distributionCount(
+                          retailer,
+                          retailer.location_dimension,
+                        ) ?? 0,
+                      )}{" "}
+                      observed{" "}
+                      {distributionNoun(
+                        retailer.location_dimension,
+                        distributionCount(
+                          retailer,
+                          retailer.location_dimension,
+                        ) ?? 0,
+                      )}
                     </span>
                     <span>{sellerCoverage(retailer)}</span>
                   </th>
@@ -545,7 +573,7 @@ export function PriceArchitectureMatrixWorkspace({
                           <small>
                             {anchor
                               ? footprintLabel(product, anchor)
-                              : `${count(product.verified_available_locations)} verified in-stock locations · ${count(product.search_observed_locations)} Search-observed`}
+                              : `${count(distributionCount(product, "store") ?? 0)} observed stores`}
                           </small>
                           <small>
                             {product.seller
@@ -573,7 +601,7 @@ export function PriceArchitectureMatrixWorkspace({
                           <td className="pi-matrix-empty" key={retailer.id}>
                             <span>—</span>
                             <small>
-                              No SKU with verified availability in band
+                              No positive-price SKU observed in band
                             </small>
                           </td>
                         );
@@ -640,14 +668,15 @@ export function PriceArchitectureMatrixWorkspace({
       {unavailableRetailers.length ? (
         <details className="pi-matrix-unavailable">
           <summary>
-            Retailers without verified local evidence in this snapshot
+            Retailers without observed positive-price distribution in this
+            snapshot
           </summary>
           <ul>
             {unavailableRetailers.map((retailer) => (
               <li key={retailer.id}>
                 <strong>{retailer.name}</strong> —{" "}
                 {retailer.reason ??
-                  "No explicit verified-local assortment and price evidence is available."}
+                  "No explicit positive-price Search distribution is available."}
               </li>
             ))}
           </ul>

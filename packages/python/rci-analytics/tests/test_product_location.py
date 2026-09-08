@@ -140,9 +140,11 @@ def test_canonical_population_governs_authority_dedupe_identity_and_contract() -
     assert observation.location.zipcode == "03038"
     assert observation.location.latitude == 42.8806
     assert observation.is_sponsored is False
-    assert observation.to_price_monitoring_row()["in_stock"] is True
-    assert observation.availability_status == "verified_in_stock"
-    assert observation.verified_local_availability is True
+    monitoring_row = observation.to_price_monitoring_row()
+    assert monitoring_row["distribution_store_id"] == "0017"
+    assert "in_stock" not in monitoring_row
+    assert "availability_status" not in monitoring_row
+    assert "verified_local_availability" not in monitoring_row
     assert dict(population.exclusion_counts) == {
         "missing_or_zero_price": 1,
         "out_of_scope": 1,
@@ -163,6 +165,12 @@ def test_canonical_population_governs_authority_dedupe_identity_and_contract() -
     )
     assert contract["source_authority"] == "search_location_observation"
     assert contract["location_authority"] == "retailer_location_master"
+    assert contract["distribution_store_id"] == "0017"
+    assert contract["distribution_contract"]["price_rule"] == "price_gt_zero"
+    assert contract["distribution_contract"]["inventory_claim"] is False
+    assert "in_stock" not in contract
+    assert "availability_status" not in contract
+    assert "verified_local_availability" not in contract
 
     package_rows = population.comparison_observations(
         {"000123"},
@@ -224,7 +232,9 @@ def test_canonical_population_excludes_known_third_party_sellers_but_keeps_missi
     assert dict(population.exclusion_counts) == {"known_third_party_seller": 1}
 
 
-def test_local_availability_requires_organic_explicit_in_stock_evidence() -> None:
+def test_positive_price_search_rows_are_distribution_evidence_regardless_of_stock_metadata() -> (
+    None
+):
     population = _projector().build(
         [
             _classified(
@@ -268,10 +278,6 @@ def test_local_availability_requires_organic_explicit_in_stock_evidence() -> Non
     )
 
     by_product = {row.product_id: row for row in population.observations}
-    assert by_product["sponsored-out"].availability_status == "explicitly_out_of_stock"
-    assert by_product["sponsored-unknown"].availability_status == "unverified_sponsored"
-    assert by_product["organic-in"].availability_status == "verified_in_stock"
-    assert by_product["legacy"].availability_status == "unverified"
     assert {
         product_id: len(rows)
         for product_id, rows in population.comparison_observations(
@@ -279,10 +285,10 @@ def test_local_availability_requires_organic_explicit_in_stock_evidence() -> Non
             "package_price",
         ).items()
     } == {
-        "sponsored-out": 0,
-        "sponsored-unknown": 0,
+        "sponsored-out": 1,
+        "sponsored-unknown": 1,
         "organic-in": 1,
-        "legacy": 0,
+        "legacy": 1,
     }
     search_rows = population.comparison_observations(
         set(by_product),
@@ -291,9 +297,20 @@ def test_local_availability_requires_organic_explicit_in_stock_evidence() -> Non
     )
     assert all(len(rows) == 1 for rows in search_rows.values())
     assert all(rows[0].search_observed for rows in search_rows.values())
+    assert {row.distribution_store_id for row in population.observations} == {
+        "1",
+        "2",
+        "3",
+        "4",
+    }
+    for row in population.observations:
+        public_row = row.to_price_monitoring_row()
+        assert "in_stock" not in public_row
+        assert "availability_status" not in public_row
+        assert "verified_local_availability" not in public_row
 
 
-def test_same_timestamp_dedupe_prefers_verified_over_sponsored_and_flags_stock_conflict() -> None:
+def test_same_timestamp_dedupe_ignores_stock_and_sponsorship_and_flags_source_conflict() -> None:
     verified_over_sponsored = _projector().build(
         [
             _classified(
@@ -313,8 +330,8 @@ def test_same_timestamp_dedupe_prefers_verified_over_sponsored_and_flags_stock_c
         ],
         retailer_id="walmart_us",
     )
-    assert verified_over_sponsored.observations[0].offer_id == "a-organic"
-    assert verified_over_sponsored.observations[0].verified_local_availability is True
+    assert verified_over_sponsored.observations[0].offer_id == "z-sponsored"
+    assert verified_over_sponsored.observations[0].distribution_store_id == "0017"
 
     contradictory_organic = _projector().build(
         [
@@ -341,7 +358,7 @@ def test_same_timestamp_dedupe_prefers_verified_over_sponsored_and_flags_stock_c
     }
 
 
-def test_out_of_scope_availability_tombstone_retracts_older_verified_observation() -> None:
+def test_legacy_out_of_stock_scope_reason_does_not_retract_positive_price_search_row() -> None:
     tombstone = replace(
         _classified(
             offer_id="later-out",
@@ -367,7 +384,10 @@ def test_out_of_scope_availability_tombstone_retracts_older_verified_observation
     assert len(population.observations) == 1
     assert population.observations[0].offer_id == "later-out"
     assert population.observations[0].availability_status == "explicitly_out_of_stock"
-    assert population.comparison_observations({"000123"}, "package_price") == {"000123": ()}
+    comparison = population.comparison_observations({"000123"}, "package_price")
+    assert len(comparison["000123"]) == 1
+    assert comparison["000123"][0].location_kind == "store"
+    assert comparison["000123"][0].store_number == "0017"
 
 
 def test_newer_seller_policy_exclusion_retracts_older_verified_observation() -> None:
@@ -413,7 +433,7 @@ def test_newer_seller_policy_exclusion_retracts_older_verified_observation() -> 
         (True, None),
     ],
 )
-def test_newer_price_less_state_retracts_older_priced_verified_observation(
+def test_newer_price_less_state_does_not_retract_older_positive_price_search_row(
     in_stock: bool | None,
     sponsored: bool | None,
 ) -> None:
@@ -438,9 +458,14 @@ def test_newer_price_less_state_retracts_older_priced_verified_observation(
         retailer_id="walmart_us",
     )
 
-    assert population.observations == ()
-    assert population.duplicate_rows == 1
-    assert dict(population.exclusion_counts) == {"missing_or_zero_price": 1}
+    assert len(population.observations) == 1
+    assert population.observations[0].offer_id == "older-priced-in"
+    assert population.observations[0].distribution_store_id == "0017"
+    assert population.duplicate_rows == 0
+    assert dict(population.exclusion_counts) == {
+        "missing_or_zero_price": 1,
+        **({"out_of_scope": 1} if in_stock is False else {}),
+    }
 
 
 def test_unknown_location_is_excluded_from_every_downstream_projection() -> None:

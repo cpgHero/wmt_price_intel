@@ -35,8 +35,9 @@ describe("platform owner and administrator documentation", () => {
     const text = allText();
     expect(text).toContain("search data owns listed price");
     expect(text).toContain(
-      "only in_stock=true on a non-sponsored result verifies local availability",
+      "observed store distribution counts a distinct store when the exact product appears",
     );
+    expect(text).toContain("does not use stock status");
     expect(text).toContain("location master owns");
     expect(text).toContain("pdp");
     expect(text).toContain("retailer packs");
@@ -49,12 +50,8 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("kroger product details uses the provider-catalog");
     expect(text).toContain("kroger pdp contract is verified");
     expect(text).toContain("cache-adjusted estimate");
-    expect(text).toContain(
-      "select the latest search availability state before admitting price evidence",
-    );
-    expect(text).toContain(
-      "including one with null or zero price—retracts an older verified state",
-    );
+    expect(text).toContain("deduplicate by retailer product id × store id");
+    expect(text).toContain("no count is extrapolated to unobserved locations");
   });
 
   it("maintains valid tables, internal links, limitations, and change orders", () => {
@@ -229,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.82");
+    expect(platformDocumentation.version).toBe("1.3.83");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -254,7 +251,7 @@ describe("platform owner and administrator documentation", () => {
     expect(allText()).toContain("8d6c4756-c44f-487e-9a6a-393dc1661b96");
   });
 
-  it("separates Search reach from verified local availability", () => {
+  it("documents positive-price store distribution without inventory claims", () => {
     const guides = Object.fromEntries(
       platformDocumentation.guides.map((guide) => [
         guide.id,
@@ -263,57 +260,57 @@ describe("platform owner and administrator documentation", () => {
     );
 
     expect(guides["analytics-reporting"]).toContain(
-      "search reach and search-listed price remain distinct from verified local availability",
+      "observed store distribution counts each distinct store once",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "sponsored results, unknown sponsorship, missing stock flags, and legacy rows remain unverified",
+      "does not use store-level stock status",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "price monitoring map 1.2.0",
+      "service-area presence is calculated and labeled separately",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "both use the active geography, brand-type, and brand filter scope",
+      "never extrapolates to unobserved stores",
     );
     expect(guides["source-metric-lineage"]).toContain(
-      "verified locally available location",
+      "observed store distribution",
     );
     expect(guides["source-metric-lineage"]).toContain(
-      "measures search reach only; never proves local availability or carriage",
+      "distinct stores where the exact retailer product id appears in a store-level search result with price > 0",
     );
     expect(guides["source-metric-lineage"]).toContain(
-      "verified locally available locations ÷ all eligible retailer location queries",
+      "reported separately and never presented as a store count",
     );
     expect(guides["source-metric-lineage"]).toContain(
-      "matched positive search prices with explicit in_stock=true and is_sponsored=false",
+      "matched positive store-level search prices",
     );
     expect(guides["metric-dictionary"]).toContain(
-      "the browser never infers this status from price",
+      "it is not inventory or in-stock status",
     );
     expect(guides["metric-dictionary"]).toContain(
-      "a sparse verified subset cannot appear as 100% carriage",
+      "never presented as stores sold",
     );
     expect(guides.limitations).toContain(
-      "treat those counts as search reach only",
+      "distinct positive-price store-level search results",
     );
     expect(guides["change-orders"]).toContain("2026-09-08");
-    expect(guides["change-orders"]).toContain("unverified_sponsored");
+    expect(guides["change-orders"]).toContain(
+      "restored the owner-defined positive-price search footprint",
+    );
     expect(guides.matching).toContain(
-      "compatibility counts on older immutable queues may support identity-oriented ai review",
+      "counts distinct normalized store keys when the exact product appears",
     );
     expect(guides.matching).toContain(
-      "never authorize local availability, comparison, or reporting",
+      "service-area presence is counted separately",
+    );
+    expect(guides["change-orders"]).toContain("does not use stock status");
+    expect(guides["change-orders"]).toContain(
+      "no result is extrapolated to an unobserved store",
     );
     expect(guides["change-orders"]).toContain(
-      "selects the latest availability state before positive-price admission",
+      "match certification administration exposes reprocess retained evidence with a required reason",
     );
     expect(guides["change-orders"]).toContain(
-      "all eligible local queries as its denominator",
-    );
-    expect(guides["change-orders"]).toContain(
-      "historical availability language is obsolete",
-    );
-    expect(guides["change-orders"]).toContain(
-      "must be read as search reach only",
+      "new immutable replay generation with zero collection, provider, or ai calls",
     );
   });
 });

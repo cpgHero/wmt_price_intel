@@ -20,7 +20,18 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.15.2"
+RENDERER_VERSION = "2.16.0"
+
+_STORE_SEARCH_DISTRIBUTION_CONTRACT: JsonObject = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -188,16 +199,8 @@ def _compact_interactive_view(view: JsonObject) -> None:
         "image_url",
         "url",
         "seller",
-        "observed_locations",
-        "observed_zipcodes",
-        "verified_available_locations",
-        "verified_available_zipcodes",
-        "search_observed_locations",
-        "search_observed_zipcodes",
-        "availability_status",
-        "explicitly_out_of_stock_locations",
-        "unverified_locations",
-        "unverified_sponsored_locations",
+        "distribution_store_count",
+        "service_area_presence_count",
         "observed_brand",
     }
     for retailer in retailers:
@@ -279,6 +282,16 @@ def _integer(value: object) -> int:
         return int(float(str(value or 0).replace(",", "")))
     except ValueError:
         return 0
+
+
+def _nonnegative_integer(value: object) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _has_store_search_distribution_definition(document: JsonObject) -> bool:
+    return document.get("distribution_contract") == _STORE_SEARCH_DISTRIBUTION_CONTRACT
 
 
 def _finite_number(value: object) -> float | None:
@@ -1012,8 +1025,8 @@ def _product_decisions(
     return (
         f"<div class=product-decision-intro><h3>{escape(title)}</h3>"
         "<p>Each card names the exact product pair and median matched prices. PDP data supplies "
-        "identity and imagery; Search supplies listed price, while only explicit in-stock, "
-        "non-sponsored local Search evidence verifies availability."
+        "identity and imagery; Search supplies listed price and store/ZIP comparison evidence. "
+        "These cards describe price evidence, not inventory status."
         "</p></div>"
         f"<div class=product-decisions>{''.join(cards)}</div>"
     )
@@ -1218,13 +1231,31 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
     if not comparisons:
         return ""
 
+    has_distribution_contract = _has_store_search_distribution_definition(assortment)
+
     def product_list(title: str, products: list[JsonObject]) -> str:
-        verified_products = [
+        distribution_products = [
             row
             for row in products
-            if row.get("availability_status") == "verified_in_stock"
-            and _integer(row.get("verified_available_locations")) > 0
+            if _nonnegative_integer(row.get("distribution_store_count")) is not None
+            and _nonnegative_integer(row.get("service_area_presence_count")) is not None
+            and (
+                _integer(row.get("distribution_store_count")) > 0
+                or _integer(row.get("service_area_presence_count")) > 0
+            )
         ]
+
+        def footprint(row: JsonObject) -> str:
+            stores = _integer(row.get("distribution_store_count"))
+            service_areas = _integer(row.get("service_area_presence_count"))
+            store_label = "store" if stores == 1 else "stores"
+            service_label = (
+                "service-area Search presence"
+                if service_areas == 1
+                else "service-area Search presences"
+            )
+            return f"{stores:,} positive-price {store_label} · {service_areas:,} {service_label}"
+
         rows = "".join(
             "<div class=assortment-product>"
             + (
@@ -1235,26 +1266,23 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
             + "<div><strong>"
             + escape(_display(row.get("name")))
             + "</strong><small>"
-            + f"{_integer(row.get('verified_available_locations')):,} verified locations · "
-            + f"{_integer(row.get('verified_available_zipcodes')):,} verified ZIPs"
+            + escape(footprint(row))
             + "</small></div></div>"
-            for row in verified_products[:8]
+            for row in distribution_products[:8]
         )
         return (
             f"<section><h4>{escape(title)}</h4>"
-            f"{rows or '<p class=empty>No products with verified local availability.</p>'}"
+            f"{rows or '<p class=empty>No products with governed positive-price Search presence.</p>'}"
             "</section>"
         )
 
-    def has_verified_summary(summary: JsonObject) -> bool:
+    def has_distribution_summary(summary: JsonObject) -> bool:
         return all(
-            isinstance(summary.get(field), int)
-            and not isinstance(summary.get(field), bool)
-            and int(summary[field]) >= 0
+            _nonnegative_integer(summary.get(field)) is not None
             for field in (
-                "verified_available_products",
-                "verified_available_locations",
-                "verified_available_zipcodes",
+                "distinct_products",
+                "distribution_store_count",
+                "service_area_presence_count",
             )
         )
 
@@ -1263,26 +1291,30 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
         competitor_id = str(row.get("competitor") or "")
         competitor = _retailer_label(competitor_id)
         competitor_summary = retailers.get(competitor_id, {})
-        if not has_verified_summary(benchmark) or not has_verified_summary(competitor_summary):
+        if (
+            not has_distribution_contract
+            or not has_distribution_summary(benchmark)
+            or not has_distribution_summary(competitor_summary)
+        ):
             cards.append(
                 f"<article data-competitor-id='{escape(competitor_id, quote=True)}'>"
                 f"<header><div><div class=kind>{escape(benchmark_label)} vs. "
-                f"{escape(competitor)}</div><h3>Availability evidence unverified</h3></div>"
-                "<span>Legacy evidence</span></header>"
-                "<p class=empty>This publication does not contain explicit verified-local "
-                "assortment summaries for both retailers. Legacy Search reach cannot support "
-                "product, ZIP, relationship, or whitespace availability claims.</p></article>"
+                f"{escape(competitor)}</div><h3>Store distribution definition unavailable</h3></div>"
+                "<span>Evidence unavailable</span></header>"
+                "<p class=empty>This publication does not contain the governed positive-price "
+                "store Search distribution contract and explicit store/service-area counts for "
+                "both retailers, so location counters are not displayed.</p></article>"
             )
             continue
         geography = _mapping(row, "geography")
         kpis = (
             (
-                benchmark_label + " verified-available products",
-                benchmark.get("verified_available_products"),
+                benchmark_label + " positive-price Search products",
+                benchmark.get("distinct_products"),
             ),
             (
-                competitor + " verified-available products",
-                competitor_summary.get("verified_available_products"),
+                competitor + " positive-price Search products",
+                competitor_summary.get("distinct_products"),
             ),
             ("Product relationships", row.get("product_relationships")),
             (benchmark_label + "-only", row.get("benchmark_only_products")),
@@ -1296,9 +1328,9 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
             f"<li>{escape(str(point))}</li>" for point in row.get("key_points", [])
         )
         geographic_points = (
-            f"<li>{benchmark_label} has broader verified-available variety in "
+            f"<li>{benchmark_label} has broader positive-price Search variety in "
             f"{_integer(geography.get('benchmark_broader_zipcodes')):,} shared ZIPs.</li>"
-            f"<li>{competitor} has broader verified-available variety in "
+            f"<li>{competitor} has broader positive-price Search variety in "
             f"{_integer(geography.get('competitor_broader_zipcodes')):,} shared ZIPs.</li>"
             f"<li>{_integer(geography.get('parity_zipcodes')):,} shared ZIPs have the same "
             "distinct-product count.</li>"
@@ -1324,10 +1356,11 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
         )
     return (
         "<section class=report-section><div class=kind>Assortment intelligence</div>"
-        f"<h2>Verified local assortment overlap for {escape(benchmark_label)}</h2>"
-        "<p class=group-note>Local assortment requires explicit in-stock, non-sponsored Search "
-        "evidence. Search-only placements are retained separately and do not prove store "
-        "availability. Product Pack rules govern matches; PDP supplies identity and imagery.</p>"
+        f"<h2>Store-search distribution and assortment overlap for {escape(benchmark_label)}</h2>"
+        "<p class=group-note>Store distribution counts distinct store IDs where a product appears "
+        "in a store-level Search result with a listed price above $0. Service-area Search presence "
+        "is reported separately. Neither measure is an inventory or in-stock claim. Product Pack "
+        "rules govern matches; PDP supplies identity and imagery.</p>"
         f"<div class=assortment-score>{''.join(cards)}</div></section>"
     )
 

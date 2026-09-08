@@ -157,19 +157,38 @@ def test_price_monitoring_examples_are_contract_valid_and_search_authoritative()
     assert view["source"]["authority"] == "Search"
 
 
-def test_availability_contracts_reject_contradictory_verified_and_search_states() -> None:
+def test_distribution_contracts_reject_inventory_fields_and_invalid_store_identity() -> None:
     observation = json.loads(
         (REPOSITORY_ROOT / "examples/price-observation.example.json").read_text()
     )
-    sponsored_verified = deepcopy(observation)
-    sponsored_verified["is_sponsored"] = True
+    organic_observation = deepcopy(observation)
+    organic_observation["is_sponsored"] = False
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-observation.schema.json",
+        organic_observation,
+        label="organic positive-price Search observation",
+    )
+
+    inventory_claim = deepcopy(observation)
+    inventory_claim["in_stock"] = True
 
     with pytest.raises(ContractError):
         validate_instance(
             REPOSITORY_ROOT,
             "price-observation.schema.json",
-            sponsored_verified,
-            label="sponsored row claiming verified local availability",
+            inventory_claim,
+            label="Search observation containing a store-level inventory claim",
+        )
+
+    missing_store_identity = deepcopy(observation)
+    missing_store_identity["distribution_store_id"] = None
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-observation.schema.json",
+            missing_store_identity,
+            label="store observation missing its distribution store ID",
         )
 
     map_view = json.loads(

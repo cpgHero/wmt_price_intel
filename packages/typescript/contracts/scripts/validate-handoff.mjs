@@ -91,8 +91,21 @@ const narrativeBenchmarkValidator = validator(
 const productDetailCatalogValidator = validator(
   "product-detail-catalog.schema.json",
 );
+const priceObservationValidator = validator("price-observation.schema.json");
+const priceMonitoringViewValidator = validator(
+  "price-monitoring-view.schema.json",
+);
 const priceMonitoringMapValidator = validator(
   "price-monitoring-map.schema.json",
+);
+const competitiveProductLeadershipValidator = validator(
+  "competitive-product-leadership.schema.json",
+);
+const matchingV2GoldSetValidator = validator(
+  "matching-v2-gold-set.schema.json",
+);
+const matchingV2ReviewQueueValidator = validator(
+  "matching-v2-review-queue.schema.json",
 );
 
 await assertValid(
@@ -158,9 +171,34 @@ await assertValid(
   "alert definition",
 );
 await assertValid(
+  priceObservationValidator,
+  await loadJson("examples", "price-observation.example.json"),
+  "price observation",
+);
+await assertValid(
+  priceMonitoringViewValidator,
+  await loadJson("examples", "price-monitoring-view.example.json"),
+  "price monitoring view",
+);
+await assertValid(
   priceMonitoringMapValidator,
   await loadJson("examples", "price-monitoring-map.example.json"),
   "price monitoring map",
+);
+await assertValid(
+  competitiveProductLeadershipValidator,
+  await loadJson("examples", "competitive-product-leadership.example.json"),
+  "competitive product leadership",
+);
+await assertValid(
+  matchingV2GoldSetValidator,
+  await loadJson("examples", "matching-v2-gold-set.milk.json"),
+  "Matching v2 gold set",
+);
+await assertValid(
+  matchingV2ReviewQueueValidator,
+  await loadJson("examples", "matching-v2-review-queue.milk.json"),
+  "Matching v2 review queue",
 );
 const exampleFiles = await readdir(join(repositoryRoot, "examples"));
 const collectionDefinitionFiles = exampleFiles
@@ -257,14 +295,25 @@ await assertValid(
 await assertValid(
   productFootprintValidator,
   {
-    schema_version: "1.0.0",
+    schema_version: "1.1.0",
     analysis_id: "analysis-milk",
     retailer_id: "walmart_us",
     product_id: "15136790",
-    source_authority: "search",
+    source_authority: "store_level_search",
+    distribution_contract: {
+      version: "1.0.0",
+      basis: "positive_price_store_search_result",
+      grain: "retailer_product_id_x_store_id",
+      deduplication: "distinct_store_id_per_product",
+      price_rule: "price_gt_zero",
+      inventory_claim: false,
+      stock_status_used: false,
+      sponsorship_used: false,
+    },
+    store_count: 1,
     locations: [
       {
-        scope_key: "walmart_us|03038|1753",
+        scope_key: "walmart_us|store|1753",
         store_number: "1753",
         zipcode: "03038",
         observations: 1,
@@ -315,7 +364,7 @@ await assertValid(
 await assertValid(
   brandWorkbenchValidator,
   {
-    schema_version: "1.0.0",
+    schema_version: "1.1.0",
     analysis_id: "analysis-milk",
     product_pack_id: "fresh_fluid_milk",
     product_pack_version: "1.2.0",
@@ -337,9 +386,11 @@ await assertValid(
         observed_products: 1,
         observed_locations: 1,
         observed_zipcodes: 1,
-        location_share: 0,
-        distribution_tier: "unknown",
-        distribution_evidence: "search_brand_field",
+        distribution_store_count: 1,
+        service_area_presence_count: 0,
+        location_share: 1,
+        distribution_tier: "single_location",
+        distribution_evidence: "positive_price_store_search_result",
         product_examples: [],
       },
     ],
@@ -472,6 +523,6 @@ console.log(
     agentPromptFiles.length +
     brandFoundationIndex.foundations.length +
     retailerPackIndex.packs.length +
-    12
+    17
   } normative JSON documents.`,
 );

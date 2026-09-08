@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "observation_id": "walmart_us:15136790:1753:2026-08-07T05:16:43Z",
   "analysis_id": "fresh_ground_beef-example",
   "product_pack_id": "fresh_ground_beef",
@@ -32,10 +32,18 @@
   "discounted_price": null,
   "currency": "USD",
   "search_observed": true,
-  "in_stock": true,
-  "is_sponsored": false,
-  "availability_status": "verified_in_stock",
-  "verified_local_availability": true,
+  "is_sponsored": true,
+  "distribution_store_id": "1753",
+  "distribution_contract": {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": false,
+    "stock_status_used": false,
+    "sponsorship_used": false
+  },
   "price_metrics": {
     "package_price": 5.84,
     "price_per_lb": 5.84

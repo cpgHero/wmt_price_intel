@@ -1057,7 +1057,7 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
     )
 
 
-async def test_worker_coverage_uses_latest_product_location_availability_state(
+async def test_worker_coverage_uses_latest_positive_price_product_location_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_completion = analysis_module.complete_attributes_from_pdp
@@ -1234,12 +1234,13 @@ async def test_worker_coverage_uses_latest_product_location_availability_state(
 
     analysis = await result_service.get_by_collection_run(RUN_ID)
     metrics = {row["metric_id"]: row["value"] for row in analysis.result["metrics"]}
-    assert metrics["coverage.walmart_us.verified_available_offers"] == 1
-    assert metrics["coverage.walmart_us.verified_available_stores"] == 1
-    assert metrics["coverage.walmart_us.verified_available_zips"] == 1
-    assert metrics["coverage.walmart_us.explicitly_out_of_stock_search_offers"] == 2
-    assert metrics["coverage.walmart_us.sponsored_search_offers"] == 1
-    assert metrics["coverage.walmart_us.unverified_availability_search_offers"] == 3
+    assert metrics["coverage.walmart_us.distribution_search_offers"] == 2
+    assert metrics["coverage.walmart_us.distribution_stores"] == 1
+    assert metrics["coverage.walmart_us.service_area_presence_count"] == 0
+    assert not any("verified_available" in metric_id for metric_id in metrics)
+    assert metrics["coverage.walmart_us.sponsored_search_offers"] == 0
+    assert metrics["coverage.walmart_us.third_party_excluded_offers"] == 1
+    assert not any("availability" in metric_id for metric_id in metrics)
 
 
 async def test_composite_unavailable_competitor_is_declared_but_never_scored() -> None:

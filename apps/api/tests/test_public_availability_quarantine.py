@@ -6,7 +6,7 @@ from typing import Any
 
 from httpx import ASGITransport, AsyncClient
 
-from rci_api.analyses import get_analysis_service, has_verified_local_availability_contract
+from rci_api.analyses import get_analysis_service
 from rci_api.automation import get_automation_service
 from rci_api.competitive_leadership import (
     PostgresCompetitiveLeadershipRepository,
@@ -14,6 +14,7 @@ from rci_api.competitive_leadership import (
 )
 from rci_api.main import create_app
 from rci_api.price_monitoring import PostgresPriceMonitoringRepository, get_price_monitoring_service
+from rci_results.contracts import has_store_search_distribution_contract
 from rci_results.models import AnalysisPublicationRecord, AnalysisRecord, DownloadLink
 from rci_results.service import AnalysisNotFoundError, ArtifactNotCurrentError
 
@@ -28,9 +29,9 @@ def _result(*, current: bool, unavailable: set[str] | None = None) -> dict[str, 
     metrics = []
     for retailer in required:
         metric_ids = [
-            f"coverage.{retailer}.verified_available_offers",
-            f"coverage.{retailer}.verified_available_zips",
-            f"coverage.{retailer}.verified_available_stores",
+            f"coverage.{retailer}.distribution_search_offers",
+            f"coverage.{retailer}.distribution_stores",
+            f"coverage.{retailer}.service_area_presence_count",
         ]
         coverage.append(
             {
@@ -44,8 +45,8 @@ def _result(*, current: bool, unavailable: set[str] | None = None) -> dict[str, 
                 unit = (
                     "offers"
                     if metric_id.endswith("offers")
-                    else "zipcodes"
-                    if metric_id.endswith("zips")
+                    else "service_areas"
+                    if metric_id.endswith("service_area_presence_count")
                     else "stores"
                 )
                 metrics.append(
@@ -59,6 +60,22 @@ def _result(*, current: bool, unavailable: set[str] | None = None) -> dict[str, 
     return {
         "schema_version": "2.0.0",
         "analysis_id": "current-analysis" if current else "legacy-analysis",
+        **(
+            {
+                "distribution_contract": {
+                    "version": "1.0.0",
+                    "basis": "positive_price_store_search_result",
+                    "grain": "retailer_product_id_x_store_id",
+                    "deduplication": "distinct_store_id_per_product",
+                    "price_rule": "price_gt_zero",
+                    "inventory_claim": False,
+                    "stock_status_used": False,
+                    "sponsorship_used": False,
+                }
+            }
+            if current
+            else {}
+        ),
         "source": {"unavailable_retailers": sorted(unavailable)},
         "benchmark_retailer": "walmart_us",
         "competitors": ["aldi_us"],
@@ -71,7 +88,7 @@ def _result(*, current: bool, unavailable: set[str] | None = None) -> dict[str, 
             "status": "ready_to_share",
             "checks": [
                 {
-                    "id": "verified-local-availability",
+                    "id": "store-search-distribution",
                     # A passing marker without its metrics is an intentionally
                     # adversarial legacy case covered by this fixture.
                     "status": "passed",
@@ -189,24 +206,26 @@ class _CapturingEngine:
         return _ConnectionContext(self.connection)
 
 
-def test_availability_contract_requires_metrics_and_honors_governed_unavailability() -> None:
-    assert has_verified_local_availability_contract(_result(current=True)) is True
-    assert has_verified_local_availability_contract(_result(current=False)) is False
+def test_distribution_contract_requires_metrics_and_honors_governed_unavailability() -> None:
+    assert has_store_search_distribution_contract(_result(current=True)) is True
+    assert has_store_search_distribution_contract(_result(current=False)) is False
 
     result = _result(current=True)
     result["metrics"][0]["value"] = 0
-    assert has_verified_local_availability_contract(result) is False
+    assert has_store_search_distribution_contract(result) is True
+    result["metrics"][0]["value"] = -1
+    assert has_store_search_distribution_contract(result) is False
 
     unavailable = _result(current=True, unavailable={"aldi_us"})
-    assert has_verified_local_availability_contract(unavailable) is True
+    assert has_store_search_distribution_contract(unavailable) is True
 
     unavailable_benchmark = copy.deepcopy(unavailable)
     unavailable_benchmark["source"]["unavailable_retailers"] = ["walmart_us", "aldi_us"]
-    assert has_verified_local_availability_contract(unavailable_benchmark) is False
+    assert has_store_search_distribution_contract(unavailable_benchmark) is False
 
     unknown_unavailable = copy.deepcopy(unavailable)
     unknown_unavailable["source"]["unavailable_retailers"] = ["target_us"]
-    assert has_verified_local_availability_contract(unknown_unavailable) is False
+    assert has_store_search_distribution_contract(unknown_unavailable) is False
 
 
 async def test_exact_latest_publication_document_is_quarantined_when_contract_diverges() -> None:
@@ -235,7 +254,7 @@ async def test_exact_latest_publication_document_is_quarantined_when_contract_di
         response = await client.get("/api/v1/analyses/current-analysis/report")
 
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
+    assert response.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
     assert service.report_calls == 0
 
 
@@ -268,8 +287,8 @@ async def test_valid_publication_cannot_unquarantine_legacy_base_result_endpoint
         listing = await client.get("/api/v1/analyses")
 
     assert analysis.status_code == report.status_code == 409
-    assert analysis.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
-    assert report.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
+    assert analysis.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
+    assert report.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
     assert listing.json() == []
     assert service.report_calls == 0
 
@@ -334,10 +353,10 @@ async def test_direct_analysis_report_and_artifact_reads_quarantine_legacy_resul
         listing = await client.get("/api/v1/analyses")
 
     expected = {
-        "code": "legacy_availability_contract_quarantined",
+        "code": "legacy_distribution_contract_quarantined",
         "message": (
             "This report is quarantined because it does not contain validated "
-            "local-availability evidence for every scoreable retailer."
+            "positive-price store-Search distribution fields for every scoreable retailer."
         ),
         "analysis_id": "legacy-analysis",
     }
@@ -402,7 +421,7 @@ async def test_price_monitoring_cached_document_cannot_bypass_analysis_quarantin
         )
 
     assert quarantined.status_code == 409
-    assert quarantined.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
+    assert quarantined.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
     assert price_service.calls == 1
     assert current.status_code == 200
     assert current.json()["cached"] is True
@@ -438,7 +457,7 @@ async def test_competitive_stored_document_cannot_bypass_analysis_quarantine() -
         )
 
     assert quarantined.status_code == 409
-    assert quarantined.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
+    assert quarantined.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
     assert leadership_service.calls == 1
     assert current.status_code == 200
     assert current.json()["stored"] is True
@@ -472,8 +491,8 @@ async def test_automation_history_and_evaluation_cannot_bypass_analysis_quaranti
         evaluation = await client.post("/api/v1/analyses/legacy-analysis/evaluate-alerts")
 
     assert history.status_code == evaluation.status_code == 409
-    assert history.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
-    assert evaluation.json()["detail"]["code"] == "legacy_availability_contract_quarantined"
+    assert history.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
+    assert evaluation.json()["detail"]["code"] == "legacy_distribution_contract_quarantined"
     assert automation_service.history_calls == 0
     assert automation_service.evaluation_calls == 0
 

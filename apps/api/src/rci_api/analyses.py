@@ -48,7 +48,7 @@ from rci_results import (
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
-from rci_results.contracts import has_verified_local_availability_contract
+from rci_results.contracts import has_store_search_distribution_contract
 from rci_results.models import AnalysisRecord, DownloadLink, ReportArtifactRecord
 from rci_results.service import (
     AnalysisNotFoundError,
@@ -247,14 +247,14 @@ def _analysis_not_found(exc: AnalysisNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
-def _legacy_availability_quarantine(analysis_id: str) -> HTTPException:
+def _legacy_distribution_quarantine(analysis_id: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={
-            "code": "legacy_availability_contract_quarantined",
+            "code": "legacy_distribution_contract_quarantined",
             "message": (
                 "This report is quarantined because it does not contain validated "
-                "local-availability evidence for every scoreable retailer."
+                "positive-price store-Search distribution fields for every scoreable retailer."
             ),
             "analysis_id": analysis_id,
         },
@@ -294,7 +294,7 @@ async def _public_presentation_document(
 
     # Several canonical public endpoints return immutable result sections rather
     # than the presentation overlay. Both sources must therefore be certified.
-    if not has_verified_local_availability_contract(analysis.result):
+    if not has_store_search_distribution_contract(analysis.result):
         return None
     source_analysis, publication, document = await service.presentation_source(analysis.analysis_id)
     if source_analysis.id != analysis.id:
@@ -305,7 +305,7 @@ async def _public_presentation_document(
         or publication.source_result_checksum != analysis.checksum
     ):
         return None
-    return document if has_verified_local_availability_contract(document) else None
+    return document if has_store_search_distribution_contract(document) else None
 
 
 async def require_public_analysis(
@@ -322,10 +322,10 @@ async def require_public_analysis(
         except AnalysisNotFoundError as missing_exc:
             raise _analysis_not_found(missing_exc) from missing_exc
         if await _public_presentation_document(analysis, service) is None:
-            raise _legacy_availability_quarantine(analysis.analysis_id) from inactive_exc
+            raise _legacy_distribution_quarantine(analysis.analysis_id) from inactive_exc
         raise _inactive_report_quarantine(analysis.analysis_id) from inactive_exc
     if await _public_presentation_document(analysis, service) is None:
-        raise _legacy_availability_quarantine(analysis.analysis_id)
+        raise _legacy_distribution_quarantine(analysis.analysis_id)
     return analysis
 
 
@@ -347,7 +347,7 @@ async def require_public_artifact(
     except AnalysisNotFoundError as exc:
         raise _inactive_report_quarantine(analysis.analysis_id) from exc
     if await _public_presentation_document(active, service) is None:
-        raise _legacy_availability_quarantine(active.analysis_id)
+        raise _legacy_distribution_quarantine(active.analysis_id)
     return active
 
 

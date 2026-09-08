@@ -10,7 +10,10 @@ from statistics import mean, median
 from typing import Literal, TypedDict
 
 from rci_analytics.models import JsonObject
-from rci_analytics.product_location import ProductLocationObservation
+from rci_analytics.product_location import (
+    ProductLocationObservation,
+    store_search_distribution_contract,
+)
 
 PriceArchitectureMode = Literal["benchmark_anchored", "fixed_range"]
 
@@ -41,11 +44,16 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
         grouped[observation.product_id].append(observation)
     products: list[JsonObject] = []
     for product_id, observations in grouped.items():
-        verified = [row for row in observations if row.verified_local_availability]
-        if not verified:
-            continue
-        identity = verified[0]
-        prices = [row.package_price for row in verified]
+        identity = observations[0]
+        prices = [row.package_price for row in observations]
+        distribution_store_ids = {
+            row.location.store_number
+            for row in observations
+            if row.location.kind == "store" and row.location.store_number is not None
+        }
+        service_area_keys = {
+            row.location.scope_key for row in observations if row.location.kind == "service_area"
+        }
         products.append(
             {
                 "product_id": product_id,
@@ -59,12 +67,11 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
                 "median_price": _round(median(prices)),
                 "minimum_price": _round(min(prices)),
                 "maximum_price": _round(max(prices)),
-                # Price-architecture coverage is a local-carriage claim and is
-                # therefore restricted to verified organic in-stock evidence.
-                "observed_locations": len({row.location.scope_key for row in verified}),
-                "verified_available_locations": len({row.location.scope_key for row in verified}),
+                "observed_locations": len(distribution_store_ids) + len(service_area_keys),
+                "distribution_store_count": len(distribution_store_ids),
+                "service_area_presence_count": len(service_area_keys),
                 "search_observed_locations": len({row.location.scope_key for row in observations}),
-                "location_keys": frozenset(row.location.scope_key for row in verified),
+                "location_keys": frozenset(row.location.scope_key for row in observations),
             }
         )
     # Product arrays are presentation-ready materialized evidence. Within any
@@ -222,13 +229,19 @@ class PriceArchitectureMatrixProjector:
                 if normalized_brand is None
                 or str(row.brand or "").casefold().strip() == normalized_brand
             ]
-            observed_locations = len(
-                {
-                    row.location.scope_key
-                    for row in retailer.observations
-                    if row.product_id in included_product_ids and row.verified_local_availability
-                }
-            )
+            distribution_store_ids = {
+                row.location.store_number
+                for row in search_observations
+                if row.product_id in included_product_ids
+                and row.location.kind == "store"
+                and row.location.store_number is not None
+            }
+            service_area_keys = {
+                row.location.scope_key
+                for row in search_observations
+                if row.product_id in included_product_ids and row.location.kind == "service_area"
+            }
+            observed_locations = len(distribution_store_ids) + len(service_area_keys)
             search_observed_locations = len({row.location.scope_key for row in search_observations})
             search_observed_skus = len({row.product_id for row in search_observations})
             retailer_status = "available" if products else "unavailable"
@@ -241,7 +254,8 @@ class PriceArchitectureMatrixProjector:
                     "sku_count": len(products),
                     "eligible_locations": len(retailer.eligible_scope_keys),
                     "observed_locations": observed_locations,
-                    "verified_available_locations": observed_locations,
+                    "distribution_store_count": len(distribution_store_ids),
+                    "service_area_presence_count": len(service_area_keys),
                     "search_observed_locations": search_observed_locations,
                     "search_observed_skus": search_observed_skus,
                     "verified_first_party_skus": sum(
@@ -257,7 +271,7 @@ class PriceArchitectureMatrixProjector:
                     "reason": (
                         None
                         if products
-                        else "No verified local availability evidence for price architecture."
+                        else "No positive-priced Search products for price architecture."
                     ),
                 }
             )
@@ -336,7 +350,7 @@ class PriceArchitectureMatrixProjector:
         crowded = max(rung_rows, key=lambda row: int(row["competitor_sku_count"]))
         whitespace = [row for row in rung_rows if int(row["competitor_sku_count"]) == 0]
         return {
-            "schema_version": "1.2.0",
+            "schema_version": "1.3.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": product_pack,
@@ -344,9 +358,12 @@ class PriceArchitectureMatrixProjector:
                 "authority": "Search",
                 "price_grain": (
                     "retailer product x median positive Search-listed package price across "
-                    "verified-available locations"
+                    "observed Search locations"
                 ),
-                "availability_rule": ("explicit in-stock signal from an organic Search result"),
+                "distribution_rule": (
+                    "distinct store IDs where the product appears in store-level Search "
+                    "with price greater than zero; not an in-stock indicator"
+                ),
                 "assignment_rule": "price only; no product-match relationship is used",
                 "anchor_rule": (
                     "midpoints between adjacent distinct benchmark SKU median prices"
@@ -354,6 +371,7 @@ class PriceArchitectureMatrixProjector:
                     else f"fixed ${fixed_increment:.2f} package-price bands"
                 ),
             },
+            "distribution_contract": store_search_distribution_contract(),
             "filters": {
                 "anchor_retailer_id": anchor_retailer_id,
                 "mode": mode,

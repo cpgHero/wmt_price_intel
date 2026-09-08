@@ -1,7 +1,17 @@
 {
-  "schema_version": "1.3.0",
+  "schema_version": "1.4.0",
   "analysis_id": "fresh-fluid-milk-example",
   "generated_at": "2026-08-07T06:00:00Z",
+  "distribution_contract": {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": false,
+    "stock_status_used": false,
+    "sponsorship_used": false
+  },
   "benchmark_retailer": { "id": "walmart_us", "name": "Walmart (US)" },
   "benchmark_product": {
     "id": "w1",
@@ -34,8 +44,8 @@
     "price_authority": "Search",
     "identity_authority": "Product Pack classification with PDP enrichment",
     "location_authority": "Retailer location master",
-    "observation_definition": "A verified local observation requires an organic Search listing, explicit provider in-stock status, and a positive Search-listed price. Search presence or a positive price alone does not prove store carriage. The latest observation in the collection run controls duplicate product-location rows.",
-    "comparison_definition": "Each verified local benchmark location is compared with the lowest current verified local Search-listed value among its governed matched competitor products within the selected radius. Service-area retailers are compared within the same ZIP.",
+    "observation_definition": "A Search observation is retained when the product appears in Search with a price greater than zero. Store distribution counts distinct nonblank store IDs per product; service-area presence is reported separately. This is not an inventory or in-stock claim.",
+    "comparison_definition": "Each positive-price benchmark Search location is compared with the lowest positive Search-listed value among its governed matched competitor products within the selected radius. Service-area retailers are compared within the same ZIP.",
     "comparison_metric": "package_price",
     "comparison_unit": "USD/package",
     "parity_tolerance": 0.01,
@@ -45,11 +55,13 @@
       "tied": "Absolute price difference is within the parity tolerance.",
       "at_risk": "Benchmark leads, but by no more than the at-risk threshold.",
       "losing": "The lowest geographically comparable competitor is lower.",
-      "unscored": "No governed matched competitor has comparable verified local evidence."
+      "unscored": "No governed matched competitor has comparable positive-price Search evidence."
     }
   },
   "summary": {
     "benchmark_observed_stores": 1,
+    "distribution_store_count": 1,
+    "service_area_presence_count": 0,
     "scored_stores": 1,
     "coverage_rate": 1.0,
     "leader_stores": 0,
@@ -63,7 +75,7 @@
     "maximum_losing_gap": 0.09
   },
   "price_ladder_summary": {
-    "definition": "Footprint-level price architecture for the selected Walmart product and governed matched competitor products. Each competitor product is counted at most once per verified Walmart location, using its lowest verified local Search-listed price within the selected radius; service-area retailers use the same ZIP.",
+    "definition": "Footprint-level price architecture for the selected Walmart product and governed matched competitor products. Each competitor product is counted at most once per positive-price Walmart Search location, using its lowest positive Search-listed price within the selected radius; service-area retailers use the same ZIP.",
     "benchmark_observed_locations": 1,
     "comparable_benchmark_locations": 1,
     "benchmark_rank_one_locations": 0,
@@ -118,6 +130,8 @@
       "level": "state",
       "label": "AR",
       "benchmark_observed_stores": 1,
+      "distribution_store_count": 1,
+      "service_area_presence_count": 0,
       "scored_stores": 1,
       "coverage_rate": 1.0,
       "leader_stores": 0,
@@ -137,6 +151,8 @@
       "competitor_id": "aldi_us",
       "competitor": "ALDI",
       "benchmark_observed_stores": 1,
+      "distribution_store_count": 1,
+      "service_area_presence_count": 0,
       "scored_stores": 1,
       "coverage_rate": 1.0,
       "leader_stores": 0,
@@ -201,9 +217,7 @@
         "discounted_price": null,
         "search_observed": true,
         "is_sponsored": false,
-        "in_stock": true,
-        "availability_status": "verified_in_stock",
-        "verified_local_availability": true,
+        "distribution_store_id": "100",
         "offer_id": "walmart-w1-store-100",
         "comparison_value": 3.88,
         "observed_at": "2026-08-07T06:00:00Z"
@@ -234,9 +248,7 @@
         "discounted_price": null,
         "search_observed": true,
         "is_sponsored": false,
-        "in_stock": true,
-        "availability_status": "verified_in_stock",
-        "verified_local_availability": true,
+        "distribution_store_id": "200",
         "offer_id": "aldi-a1-store-200",
         "comparison_value": 3.79,
         "observed_at": "2026-08-07T06:00:00Z"

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from rci_analytics.insights import ComparisonInsightInput, DeterministicInsightEngine
 from rci_analytics.models import JsonObject
+from rci_analytics.product_location import store_search_distribution_contract
 from rci_analytics.product_pack import ProductPack
 
 _SAFE_ID = re.compile(r"[^a-z0-9_.-]+")
@@ -257,15 +258,15 @@ class AnalysisResultV2Builder:
         scoreable_competitors = [
             competitor for competitor in competitors if competitor not in unavailable_competitors
         ]
-        required_availability_retailers = {benchmark_retailer, *scoreable_competitors}
+        required_distribution_retailers = {benchmark_retailer, *scoreable_competitors}
         coverage_by_retailer = {str(fact.get("retailer_id")): fact for fact in coverage_facts}
-        verified_availability_contract_present = all(
-            "verified_available_offers" in coverage_by_retailer.get(retailer, {})
-            for retailer in required_availability_retailers
-        )
-        verified_availability_ready = verified_availability_contract_present and all(
-            int(coverage_by_retailer[retailer].get("verified_available_offers") or 0) > 0
-            for retailer in required_availability_retailers
+        distribution_contract_ready = all(
+            {
+                "distribution_search_offers",
+                "distribution_stores",
+                "service_area_presence_count",
+            }.issubset(coverage_by_retailer.get(retailer, {}))
+            for retailer in required_distribution_retailers
         )
         matching_v2_certification_ready = matching_v2_certification_is_complete(
             source,
@@ -274,7 +275,7 @@ class AnalysisResultV2Builder:
         )
         ready_to_share = (
             bool(comparisons)
-            and verified_availability_ready
+            and distribution_contract_ready
             and (
                 matched_competitors == set(scoreable_competitors) or matching_v2_certification_ready
             )
@@ -285,6 +286,7 @@ class AnalysisResultV2Builder:
             "analysis_run_id": analysis_run_id,
             "generated_at": generated_at,
             "source": source,
+            "distribution_contract": store_search_distribution_contract(),
             "benchmark_retailer": benchmark_retailer,
             "competitors": competitors,
             "product_pack": {
@@ -306,9 +308,7 @@ class AnalysisResultV2Builder:
             },
             "data_quality": {
                 "status": (
-                    "blocked"
-                    if not verified_availability_ready
-                    else "warning"
+                    "warning"
                     if any(int(value) > 0 for value in data_quality_facts.values())
                     else "ready"
                 ),
@@ -335,8 +335,8 @@ class AnalysisResultV2Builder:
                         ),
                     },
                     {
-                        "id": "verified-local-availability",
-                        "status": "passed" if verified_availability_ready else "failed",
+                        "id": "store-search-distribution",
+                        "status": "passed" if distribution_contract_ready else "failed",
                         "evidence_refs": sorted(
                             {ref for row in coverage for ref in row["evidence_refs"]}
                         ),
@@ -403,20 +403,23 @@ class AnalysisResultV2Builder:
                 ("in_scope_offers", "Search-qualified offers", "offers"),
                 ("in_scope_zips", "Search-qualified ZIP contexts", "zipcodes"),
                 ("in_scope_stores", "Search-qualified store contexts", "stores"),
-                ("verified_available_offers", "Verified locally available offers", "offers"),
-                ("verified_available_zips", "Verified-available ZIPs", "zipcodes"),
-                ("verified_available_stores", "Verified-available stores", "stores"),
+                (
+                    "distribution_search_offers",
+                    "Positive-price store-level Search offers",
+                    "offers",
+                ),
+                ("distribution_stores", "Distinct distribution store IDs", "stores"),
+                (
+                    "service_area_presence_count",
+                    "Distinct service-area Search contexts",
+                    "service_areas",
+                ),
                 (
                     "explicitly_out_of_stock_search_offers",
                     "Explicitly out-of-stock Search offers",
                     "offers",
                 ),
                 ("sponsored_search_offers", "Sponsored Search offers", "offers"),
-                (
-                    "unverified_availability_search_offers",
-                    "Search offers with unverified local availability",
-                    "offers",
-                ),
                 (
                     "seller_verified_first_party_offers",
                     "First-party seller verified offers",
@@ -438,11 +441,7 @@ class AnalysisResultV2Builder:
                         [evidence_ref],
                     )
                 )
-                if field == (
-                    "verified_available_offers"
-                    if "verified_available_offers" in fact
-                    else "in_scope_offers"
-                ):
+                if field == "distribution_search_offers":
                     assortment_refs.append(metric_id)
             rows.append(
                 {
@@ -788,16 +787,16 @@ class AnalysisResultV2Builder:
         coverage_parts = [source_sentence]
         for row in coverage:
             retailer = _display_id(row["retailer_id"])
-            verified_selected = [
+            distribution_selected = [
                 metric_index[str(ref)]
                 for ref in row["metric_refs"]
                 if str(ref) in metric_index
                 and (
-                    str(ref).endswith("verified_available_zips")
-                    or str(ref).endswith("verified_available_stores")
+                    str(ref).endswith("distribution_stores")
+                    or str(ref).endswith("service_area_presence_count")
                 )
             ]
-            selected = verified_selected or [
+            selected = distribution_selected or [
                 metric_index[str(ref)]
                 for ref in row["metric_refs"]
                 if str(ref) in metric_index
@@ -810,11 +809,8 @@ class AnalysisResultV2Builder:
                 )
                 coverage_parts.append(
                     f"{retailer} contributes {details} to the "
-                    + (
-                        "verified-available footprint."
-                        if verified_selected
-                        else "legacy Search-qualified footprint."
-                    )
+                    + "positive-price Search footprint. Store counts are distinct store IDs; "
+                    "service-area counts are separate and neither is an in-stock metric."
                 )
         coverage_refs, coverage_evidence = refs_for(coverage)
 

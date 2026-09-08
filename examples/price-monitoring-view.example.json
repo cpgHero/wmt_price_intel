@@ -1,11 +1,11 @@
 {
-  "schema_version": "1.4.0",
+  "schema_version": "1.5.0",
   "analysis_id": "fresh_ground_beef-example",
   "generated_at": "2026-08-13T12:00:00Z",
   "product_pack": {
     "id": "fresh_ground_beef",
     "name": "Fresh Ground Beef",
-    "version": "1.0.0"
+    "version": "1.2.0"
   },
   "retailer": {
     "id": "walmart_us",
@@ -16,13 +16,23 @@
     "authority": "Search",
     "location_authority": "Retailer location master",
     "grain": "retailer product x retailer location x latest observation in run",
-    "observed_start": null,
-    "observed_end": null,
-    "source_rows": 0,
-    "classified_rows": 0,
-    "observation_schema_version": "1.2.0",
-    "observation_population_checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "observed_start": "2026-08-07T05:16:43Z",
+    "observed_end": "2026-08-07T05:16:43Z",
+    "source_rows": 1,
+    "classified_rows": 1,
+    "observation_schema_version": "1.3.0",
+    "observation_population_checksum": "49728c4e576e4134fce4ec47f128b42feef67f7ddf4e61a56a1ad580c668f00a",
     "artifact_checksums": []
+  },
+  "distribution_contract": {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": false,
+    "stock_status_used": false,
+    "sponsorship_used": false
   },
   "filters": {
     "retailer_id": "walmart_us",
@@ -35,97 +45,313 @@
   "filter_options": {
     "retailers": [{ "id": "walmart_us", "name": "Walmart (US)" }],
     "brand_types": [
-      { "value": "private_label", "label": "Private Label", "count": 0 },
+      { "value": "private_label", "label": "Private Label", "count": 1 },
       { "value": "regional", "label": "Regional", "count": 0 },
       { "value": "national", "label": "National", "count": 0 },
       { "value": "unclassified", "label": "Unclassified", "count": 0 }
     ],
-    "states": [],
+    "states": [{ "value": "NH", "label": "NH", "count": 1 }],
     "cities": [],
     "zipcodes": [],
-    "products": []
+    "products": [
+      {
+        "value": "15136790",
+        "label": "93% Lean / 7% Fat Ground Beef, 1 lb",
+        "count": 1,
+        "distribution_store_count": 1,
+        "service_area_presence_count": 0,
+        "brand": "Great Value",
+        "brand_type": "private_label",
+        "image_url": "https://i5.walmartimages.com/example.jpeg"
+      }
+    ]
   },
   "summary": {
-    "observed_locations": 0,
-    "verified_available_locations": 0,
-    "expected_locations": 0,
-    "coverage_rate": null,
-    "observed_products": 0,
-    "verified_available_products": 0,
-    "eligible_observations": 0,
-    "search_price_observations": 0,
-    "verified_availability_observations": 0,
-    "usable_price_rate": 0,
-    "price_consistency_rate": null
+    "observed_locations": 1,
+    "distribution_store_count": 1,
+    "service_area_presence_count": 0,
+    "expected_locations": 1,
+    "coverage_rate": 1.0,
+    "observed_products": 1,
+    "eligible_observations": 1,
+    "search_price_observations": 1,
+    "usable_price_rate": 1.0,
+    "price_consistency_rate": 1.0
   },
   "presence": {
     "status": "observed_only",
-    "observed_locations": 0,
-    "eligible_locations": 0,
-    "observed_presence_rate": null,
+    "observed_locations": 1,
+    "distribution_store_count": 1,
+    "service_area_presence_count": 0,
+    "eligible_locations": 1,
+    "observed_presence_rate": 1.0,
     "not_observed_locations": 0,
     "confirmed_gap_locations": 0,
-    "definition": "Observed presence means the selected product appeared in successful Search evidence. A Search non-observation is not proof that a store does not carry the product."
-  },
-  "availability": {
-    "status": "unverified",
-    "verified_available_locations": 0,
-    "eligible_locations": 0,
-    "verified_availability_rate": null,
-    "explicitly_out_of_stock_locations": 0,
-    "unverified_locations": 0,
-    "definition": "Verified local availability requires an explicit in-stock signal from an organic Search result. Sponsored placements, unknown sponsorship, and missing stock signals remain Search presence only."
+    "definition": "Store distribution counts distinct store IDs where the selected product appeared in a store-level Search result with price greater than zero. It is not an in-stock indicator. Service-area presence is separate."
   },
   "distribution_gaps": {
     "status": "search_non_observation",
-    "definition": "Not observed means the selected product did not appear in the successful Search result for a planned location. It is a location review signal, not proof that the retailer does not carry the item.",
+    "definition": "Not observed means the selected product did not appear in a successful Search result for a searched location. It is a review signal, not proof that the retailer does not carry the item.",
     "location_display": {
       "returned": 0,
       "total": 0,
       "sampled": false,
       "missing_location_details": 0
     },
-    "geographies": [],
+    "geographies": [
+      {
+        "level": "state",
+        "key": "NH",
+        "label": "NH",
+        "state": "NH",
+        "city": null,
+        "zipcode": null,
+        "eligible_locations": 1,
+        "observed_locations": 1,
+        "not_observed_locations": 0,
+        "observed_rate": 1.0
+      }
+    ],
     "locations": []
   },
   "price_distribution": {
-    "minimum": null,
-    "q1": null,
-    "observation_median": null,
-    "product_equal_weighted_median": null,
-    "q3": null,
-    "maximum": null,
-    "range": null,
-    "modal_price": null,
-    "modal_share": null,
-    "observation_count": 0
+    "minimum": 5.84,
+    "q1": 5.84,
+    "observation_median": 5.84,
+    "product_equal_weighted_median": 5.84,
+    "q3": 5.84,
+    "maximum": 5.84,
+    "range": 0.0,
+    "modal_price": 5.84,
+    "modal_share": 1.0,
+    "observation_count": 1
   },
   "search_price_distribution": {
-    "minimum": null,
-    "q1": null,
-    "observation_median": null,
-    "product_equal_weighted_median": null,
-    "q3": null,
-    "maximum": null,
-    "range": null,
-    "modal_price": null,
-    "modal_share": null,
-    "observation_count": 0
+    "minimum": 5.84,
+    "q1": 5.84,
+    "observation_median": 5.84,
+    "product_equal_weighted_median": 5.84,
+    "q3": 5.84,
+    "maximum": 5.84,
+    "range": 0.0,
+    "modal_price": 5.84,
+    "modal_share": 1.0,
+    "observation_count": 1
   },
-  "price_histogram": [],
-  "search_price_histogram": [],
-  "brand_portfolio": [],
-  "geographies": [],
+  "price_histogram": [
+    { "lower": 5.84, "upper": 5.84, "count": 1, "share": 1.0 }
+  ],
+  "search_price_histogram": [
+    { "lower": 5.84, "upper": 5.84, "count": 1, "share": 1.0 }
+  ],
+  "brand_portfolio": [
+    {
+      "brand_type": "private_label",
+      "products": 1,
+      "search_observed_products": 1,
+      "locations": 1,
+      "search_observed_locations": 1,
+      "distribution_store_count": 1,
+      "service_area_presence_count": 0,
+      "observations": 1,
+      "median_price": 5.84,
+      "search_median_price": 5.84
+    }
+  ],
+  "geographies": [
+    {
+      "level": "state",
+      "key": "NH",
+      "label": "NH",
+      "state": "NH",
+      "city": null,
+      "zipcode": null,
+      "locations": 1,
+      "products": 1,
+      "observations": 1,
+      "search_observed_locations": 1,
+      "distribution_store_count": 1,
+      "service_area_presence_count": 0,
+      "search_observed_products": 1,
+      "latitude": 42.8806,
+      "longitude": -71.3273,
+      "price_stats": {
+        "minimum": 5.84,
+        "q1": 5.84,
+        "observation_median": 5.84,
+        "product_equal_weighted_median": null,
+        "q3": 5.84,
+        "maximum": 5.84,
+        "range": 0.0,
+        "modal_price": 5.84,
+        "modal_share": 1.0,
+        "observation_count": 1
+      },
+      "search_price_stats": {
+        "minimum": 5.84,
+        "q1": 5.84,
+        "observation_median": 5.84,
+        "product_equal_weighted_median": null,
+        "q3": 5.84,
+        "maximum": 5.84,
+        "range": 0.0,
+        "modal_price": 5.84,
+        "modal_share": 1.0,
+        "observation_count": 1
+      }
+    }
+  ],
   "locations": [],
   "location_display": { "returned": 0, "total": 0, "sampled": false },
-  "products": [],
+  "products": [
+    {
+      "product_id": "15136790",
+      "name": "93% Lean / 7% Fat Ground Beef, 1 lb",
+      "brand": "Great Value",
+      "seller": "Walmart.com",
+      "pdp": {
+        "enriched": false,
+        "authority": { "identity": "search", "price": "search" }
+      },
+      "brand_type": "private_label",
+      "brand_origin": "pdp",
+      "brand_status": "suggested",
+      "image_url": "https://i5.walmartimages.com/example.jpeg",
+      "url": "https://www.walmart.com/ip/15136790",
+      "locations": 1,
+      "states": 1,
+      "cities": 1,
+      "distribution_store_count": 1,
+      "service_area_presence_count": 0,
+      "search_observed_locations": 1,
+      "search_observed_states": 1,
+      "search_observed_cities": 1,
+      "search_observed_zipcodes": 1,
+      "price_stats": {
+        "minimum": 5.84,
+        "q1": 5.84,
+        "observation_median": 5.84,
+        "product_equal_weighted_median": null,
+        "q3": 5.84,
+        "maximum": 5.84,
+        "range": 0.0,
+        "modal_price": 5.84,
+        "modal_share": 1.0,
+        "observation_count": 1
+      },
+      "search_price_stats": {
+        "minimum": 5.84,
+        "q1": 5.84,
+        "observation_median": 5.84,
+        "product_equal_weighted_median": null,
+        "q3": 5.84,
+        "maximum": 5.84,
+        "range": 0.0,
+        "modal_price": 5.84,
+        "modal_share": 1.0,
+        "observation_count": 1
+      },
+      "unit_price": {
+        "status": "unavailable",
+        "metric": null,
+        "label": null,
+        "unit": null,
+        "price_stats": {
+          "minimum": null,
+          "q1": null,
+          "observation_median": null,
+          "product_equal_weighted_median": null,
+          "q3": null,
+          "maximum": null,
+          "range": null,
+          "modal_price": null,
+          "modal_share": null,
+          "observation_count": 0
+        },
+        "known_observations": 0,
+        "total_observations": 1,
+        "coverage_rate": 0.0,
+        "definition": "Unit price is unavailable when package evidence is missing or ambiguous."
+      },
+      "search_unit_price": {
+        "status": "unavailable",
+        "metric": null,
+        "label": null,
+        "unit": null,
+        "price_stats": {
+          "minimum": null,
+          "q1": null,
+          "observation_median": null,
+          "product_equal_weighted_median": null,
+          "q3": null,
+          "maximum": null,
+          "range": null,
+          "modal_price": null,
+          "modal_share": null,
+          "observation_count": 0
+        },
+        "known_observations": 0,
+        "total_observations": 1,
+        "coverage_rate": 0.0,
+        "definition": "Unit price is unavailable when package evidence is missing or ambiguous."
+      },
+      "consistency_rate": 1.0,
+      "promotion": {
+        "status": "unavailable",
+        "known_observations": 0,
+        "promotion_observations": 0,
+        "rate": null,
+        "definition": "Promotion requires an explicit regular or discounted Search price."
+      },
+      "search_promotion": {
+        "status": "unavailable",
+        "known_observations": 0,
+        "promotion_observations": 0,
+        "rate": null,
+        "definition": "Promotion requires an explicit regular or discounted Search price."
+      },
+      "sponsorship": {
+        "status": "observed",
+        "known_observations": 1,
+        "sponsorship_observations": 1,
+        "rate": 1.0,
+        "definition": "Sponsorship is diagnostic metadata and does not gate distribution."
+      },
+      "presence": {
+        "observed_locations": 1,
+        "eligible_locations": 1,
+        "not_observed_locations": 0,
+        "observed_rate": 1.0,
+        "not_observed_rate": 0.0,
+        "definition": "Observed means the exact product appeared in Search with a positive price."
+      },
+      "price_histogram": [
+        { "lower": 5.84, "upper": 5.84, "count": 1, "share": 1.0 }
+      ],
+      "search_price_histogram": [
+        { "lower": 5.84, "upper": 5.84, "count": 1, "share": 1.0 }
+      ],
+      "sample_locations": [
+        {
+          "scope_key": "walmart_us|store|1753",
+          "store_number": "1753",
+          "store_name": "Derry Supercenter",
+          "zipcode": "03038",
+          "city": "Derry",
+          "state": "NH",
+          "price": 5.84,
+          "search_observed": true,
+          "is_sponsored": true,
+          "distribution_store_id": "1753",
+          "observed_at": "2026-08-07T05:16:43Z"
+        }
+      ]
+    }
+  ],
   "exceptions": [],
-  "quality": {
-    "status": "ready",
-    "checks": []
-  },
+  "quality": { "status": "ready", "checks": [] },
   "movement": {
     "status": "unavailable",
-    "reason": "A second complete comparable snapshot is required before price movement is calculated."
+    "reason": "A second comparable snapshot is required before price movement is calculated."
   }
 }

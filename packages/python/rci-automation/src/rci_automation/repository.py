@@ -21,7 +21,7 @@ from rci_automation.models import (
     ScheduleRecord,
     ScheduleSource,
 )
-from rci_results.contracts import has_verified_local_availability_contract
+from rci_results.contracts import has_store_search_distribution_contract
 from rci_results.models import AnalysisRecord
 
 DEFAULT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000001"
@@ -267,7 +267,7 @@ def _has_public_automation_lineage(
     if alert_organization_id is not None and str(alert_organization_id) != organization_id:
         return False
     result = row.get("public_result")
-    if not isinstance(result, dict) or not has_verified_local_availability_contract(result):
+    if not isinstance(result, dict) or not has_store_search_distribution_contract(result):
         return False
 
     publication_id = row.get("public_publication_id")
@@ -280,7 +280,7 @@ def _has_public_automation_lineage(
             and str(row.get("public_publication_source_result_checksum") or "")
             == str(row.get("public_result_checksum") or "")
             and isinstance(publication_result, dict)
-            and has_verified_local_availability_contract(publication_result)
+            and has_store_search_distribution_contract(publication_result)
         ):
             return False
 
@@ -305,7 +305,7 @@ def _has_public_automation_lineage(
         str(row.get("public_baseline_reporting_status") or "") == "ready"
         and str(row.get("public_baseline_organization_id") or "") == organization_id
         and isinstance(baseline_result, dict)
-        and has_verified_local_availability_contract(baseline_result)
+        and has_store_search_distribution_contract(baseline_result)
     )
 
 

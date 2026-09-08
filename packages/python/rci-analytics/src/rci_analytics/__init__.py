@@ -24,6 +24,7 @@ from rci_analytics.latest_product_location import (
     LatestProductLocationSelector,
     add_classified_offer,
     is_product_location_state,
+    is_seller_policy_exclusion,
     latest_classified_offers,
     product_location_key,
 )
@@ -103,6 +104,7 @@ from rci_analytics.product_location import (
     ProductLocationProjector,
     ProductPriceObservation,
     classify_local_availability,
+    store_search_distribution_contract,
 )
 from rci_analytics.product_pack import (
     CatalogProductPackLoader,
@@ -183,6 +185,7 @@ __all__ = [
     "complete_attributes_from_pdp",
     "evidence_set",
     "is_product_location_state",
+    "is_seller_policy_exclusion",
     "latest_classified_offers",
     "location_scope_key",
     "merge_assortment_product_context",
@@ -197,4 +200,5 @@ __all__ = [
     "reconcile_local_comparisons",
     "resolve_one_to_one_relationships",
     "shadow_result_checksum",
+    "store_search_distribution_contract",
 ]

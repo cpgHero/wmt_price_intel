@@ -25,7 +25,7 @@ from rci_automation.ports import AutomationRepository, EmailSender
 from rci_collections.service import CollectionService
 from rci_contracts import validate_instance
 from rci_results import ArtifactRenderer
-from rci_results.contracts import has_verified_local_availability_contract
+from rci_results.contracts import has_store_search_distribution_contract
 
 
 def _checksum(document: JsonObject) -> str:
@@ -329,7 +329,7 @@ class AutomationService:
     def _require_certified(context: AnalysisContext) -> None:
         if (
             context.analysis.reporting_status != "ready"
-            or not has_verified_local_availability_contract(context.analysis.result)
+            or not has_store_search_distribution_contract(context.analysis.result)
         ):
             raise AutomationNotFoundError(
                 f"analysis {context.analysis.analysis_id!r} is quarantined from automation"

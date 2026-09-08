@@ -8,11 +8,12 @@ export type GeographySummary = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
-  schema_version: "1.3.0";
+  schema_version: "1.4.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
   benchmark_product: ProductOption;
+  distribution_contract: DistributionContract;
   competitors: IdName[];
   filters: {
     competitor_id: string;
@@ -25,6 +26,10 @@ export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
     products: ProductOption[];
     competitors: IdName[];
     profiles: IdName[];
+    /**
+     * @minItems 3
+     * @maxItems 3
+     */
     radii_miles: never[];
     states: FilterOption[];
     cities: (FilterOption & {
@@ -71,6 +76,16 @@ export interface ProductOption {
   name: string;
   image_url: string | null;
 }
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
+}
 export interface FilterOption {
   value: string;
   label: string;
@@ -79,9 +94,11 @@ export interface FilterOption {
 }
 export interface Summary {
   /**
-   * Legacy field name for distinct benchmark stores with verified local availability evidence. It must never contain Search-only reach.
+   * Distinct positive-price benchmark Search locations used by the leadership view.
    */
   benchmark_observed_stores: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   scored_stores: number;
   coverage_rate: number | null;
   leader_stores: number;
@@ -98,7 +115,7 @@ export interface Summary {
 export interface FootprintPriceLadder {
   definition: string;
   /**
-   * Legacy field name for distinct benchmark locations with verified local availability evidence. It must never contain Search-only reach.
+   * Distinct retained positive-price benchmark Search locations.
    */
   benchmark_observed_locations: number;
   comparable_benchmark_locations: number;
@@ -181,10 +198,8 @@ export interface Location {
   regular_price: number | null;
   discounted_price: number | null;
   search_observed: true;
-  is_sponsored: false;
-  in_stock: true;
-  availability_status: "verified_in_stock";
-  verified_local_availability: true;
+  is_sponsored: boolean | null;
+  distribution_store_id: string | null;
   offer_id: string | null;
   comparison_value: number;
   observed_at: string | null;

@@ -29,7 +29,8 @@ from rci_analytics.pdp_attributes import complete_attributes_from_pdp
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
-PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.2.0"
+PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.3.0"
+STORE_SEARCH_DISTRIBUTION_CONTRACT_VERSION = "1.0.0"
 
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 BrandOrigin = Literal["user", "retailer_pack", "search", "pdp", "unresolved"]
@@ -41,6 +42,21 @@ AvailabilityStatus = Literal[
     "unverified",
 ]
 PriceEvidenceScope = Literal["verified_local", "search_presence"]
+
+
+def store_search_distribution_contract() -> JsonObject:
+    """Return the exact, versioned definition used by report projections."""
+
+    return {
+        "version": STORE_SEARCH_DISTRIBUTION_CONTRACT_VERSION,
+        "basis": "positive_price_store_search_result",
+        "grain": "retailer_product_id_x_store_id",
+        "deduplication": "distinct_store_id_per_product",
+        "price_rule": "price_gt_zero",
+        "inventory_claim": False,
+        "stock_status_used": False,
+        "sponsorship_used": False,
+    }
 
 
 def classify_local_availability(
@@ -174,6 +190,15 @@ class ProductLocationObservation:
     def verified_local_availability(self) -> bool:
         return self.availability_status == "verified_in_stock"
 
+    @property
+    def distribution_store_id(self) -> str | None:
+        """Return the store ID counted by distribution, if this is a store row."""
+
+        if self.location.kind != "store":
+            return None
+        store_number = str(self.location.store_number or "").strip()
+        return store_number or None
+
     def comparison_value(self, metric: str) -> float | None:
         if metric == "package_price":
             return self.package_price
@@ -196,10 +221,8 @@ class ProductLocationObservation:
             "regular_price": self.regular_price,
             "discounted_price": self.discounted_price,
             "search_observed": True,
-            "in_stock": self.in_stock,
             "is_sponsored": self.is_sponsored,
-            "availability_status": self.availability_status,
-            "verified_local_availability": self.verified_local_availability,
+            "distribution_store_id": self.distribution_store_id,
             "observed_at": self.observed_at,
             "offer_id": self.offer_id,
         }
@@ -234,10 +257,9 @@ class ProductLocationObservation:
             "discounted_price": self.discounted_price,
             "currency": "USD",
             "search_observed": True,
-            "in_stock": self.in_stock,
             "is_sponsored": self.is_sponsored,
-            "availability_status": self.availability_status,
-            "verified_local_availability": self.verified_local_availability,
+            "distribution_store_id": self.distribution_store_id,
+            "distribution_contract": store_search_distribution_contract(),
             "price_metrics": dict(self.metric_values),
             "observed_at": self.observed_at,
             "source_authority": "search_location_observation",
@@ -250,10 +272,13 @@ class ProductLocationObservation:
         self,
         metric: str,
         *,
-        evidence_scope: PriceEvidenceScope = "verified_local",
+        evidence_scope: PriceEvidenceScope = "search_presence",
     ) -> ProductPriceObservation | None:
-        if evidence_scope == "verified_local" and not self.verified_local_availability:
-            return None
+        # ``verified_local`` remains accepted while callers migrate, but it no
+        # longer invokes stock/sponsorship eligibility. Both values identify the
+        # same positive-priced Search evidence population.
+        if evidence_scope not in {"verified_local", "search_presence"}:
+            raise ValueError(f"unsupported price evidence scope {evidence_scope!r}")
         value = self.comparison_value(metric)
         if value is None or value <= 0:
             return None
@@ -313,7 +338,7 @@ class ProductLocationPopulation:
         product_ids: set[str],
         comparison_metric: str,
         *,
-        evidence_scope: PriceEvidenceScope = "verified_local",
+        evidence_scope: PriceEvidenceScope = "search_presence",
     ) -> dict[str, tuple[ProductPriceObservation, ...]]:
         grouped: dict[str, list[ProductPriceObservation]] = {
             product_id: [] for product_id in product_ids
@@ -347,21 +372,20 @@ def _location_from_offer(
     location_index: dict[tuple[str, str], JsonObject],
 ) -> PriceLocation:
     value = offer.offer
-    kind: Literal["store", "service_area"] = (
-        "store" if value.store_number is not None else "service_area"
-    )
+    store_number = str(value.store_number or "").strip() or None
+    kind: Literal["store", "service_area"] = "store" if store_number else "service_area"
     lookup = (
-        location_index.get((value.retailer_id, value.store_number))
-        if value.store_number is not None
+        location_index.get((value.retailer_id, store_number))
+        if store_number is not None
         else location_index.get((value.retailer_id, f"zip:{value.zipcode}"))
         if value.zipcode is not None
         else None
     ) or {}
-    scope_value = value.store_number or value.zipcode or "unknown"
+    scope_value = store_number or value.zipcode or "unknown"
     return PriceLocation(
         scope_key=f"{value.retailer_id}|{kind}|{scope_value}",
         kind=kind,
-        store_number=value.store_number,
+        store_number=store_number,
         store_name=str(lookup["store_name"]) if lookup.get("store_name") else None,
         zipcode=(
             str(lookup["zipcode"])
@@ -397,10 +421,8 @@ def _population_checksum(observations: Iterable[ProductLocationObservation]) -> 
             "price": row.package_price,
             "regular_price": row.regular_price,
             "discounted_price": row.discounted_price,
-            "in_stock": row.in_stock,
             "is_sponsored": row.is_sponsored,
-            "availability_status": row.availability_status,
-            "verified_local_availability": row.verified_local_availability,
+            "distribution_store_id": row.distribution_store_id,
             "observed_at": row.observed_at,
             "metrics": row.metric_values,
         }
@@ -538,11 +560,7 @@ class ProductLocationProjector:
             if reasons:
                 excluded_rows += 1
                 excluded.update(reasons)
-                state_blockers = {
-                    "out_of_scope",
-                    "missing_location_identity",
-                }
-                if any(reason in state_blockers for reason in reasons):
+                if "known_third_party_seller" not in reasons:
                     continue
                 selector.add(
                     None,

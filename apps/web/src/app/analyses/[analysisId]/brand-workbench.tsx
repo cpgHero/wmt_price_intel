@@ -293,9 +293,11 @@ export function BrandWorkbenchPanel({
         <p>
           <strong>Human-governed brand intelligence</strong>
           Product Packs propose private-label, regional, and national brand
-          roles. Only an explicit in-stock, non-sponsored local Search result
-          verifies availability; Search discovery alone does not prove where a
-          brand is distributed. A broad footprint never proves a national role.{" "}
+          roles. Store distribution counts distinct stores where the exact
+          product appeared in store-level Search with a price greater than zero.
+          Service-area presence is reported separately and never counted as
+          stores. Neither measure is an inventory claim, and a broad footprint
+          never proves a national role.{" "}
           {readOnly
             ? "This report view is read-only; open the Administration Brand Workbench to govern classifications."
             : ""}
@@ -457,19 +459,14 @@ export function BrandWorkbenchPanel({
               <div className="brand-footprint">
                 <span>
                   <b>
-                    {distribution.verified
-                      ? distributionLabels[brand.distribution_tier]
-                      : "Availability unverified"}
+                    {!distribution.contractSupplied
+                      ? "Distribution not supplied"
+                      : distribution.hasDistribution
+                        ? "Observed distribution"
+                        : "No observed distribution"}
                   </b>
                   <em>{distribution.footprintLabel}</em>
                 </span>
-                <i>
-                  <b
-                    style={{
-                      width: `${distribution.footprintShare ? Math.max(2, distribution.footprintShare * 100) : 0}%`,
-                    }}
-                  />
-                </i>
               </div>
 
               {brand.product_examples.length ? (
@@ -481,8 +478,8 @@ export function BrandWorkbenchPanel({
               ) : (
                 <p className="brand-no-pdp">
                   No PDP image is persisted; the evidence labels above still
-                  distinguish verified local availability from Search-only
-                  discovery.
+                  distinguish product identity from observed store distribution
+                  and service-area presence.
                 </p>
               )}
 
@@ -635,11 +632,13 @@ export function BrandWorkbenchPanel({
       ) : null}
 
       <p className="brand-authority-note">
-        Search is authoritative for listed price and its explicit stock and
-        sponsorship fields. Only in-stock, non-sponsored local Search evidence
-        verifies availability; legacy Search reach remains unverified. PDP
-        enrichment supplies identity, descriptions, specifications, URLs, and
-        imagery. Role changes are staged until a user explicitly re-evaluates.
+        Store distribution is deduplicated by retailer product and store ID from
+        store-level Search results with price greater than zero. Service-area
+        presence is separate. Stock status and sponsorship are not used for this
+        measure, and no unobserved store is inferred from a retailer location
+        master. PDP enrichment supplies identity, descriptions, specifications,
+        URLs, and imagery. Role changes are staged until a user explicitly
+        re-evaluates.
       </p>
 
       {!readOnly && showRecompute ? (

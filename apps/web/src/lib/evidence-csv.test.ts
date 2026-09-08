@@ -68,14 +68,16 @@ describe("productEvidenceCsv", () => {
 });
 
 describe("competitiveProductCoverageCsv", () => {
-  it("labels the strict availability count as verified local coverage", () => {
+  it("exports explicit store distribution and service-area presence separately", () => {
     const coverage = {
       analysis_id: "analysis-1",
       products: [
         {
           product_id: "46942839",
           product_name: "Regional milk",
-          observed_locations: 0,
+          observed_locations: 4_510,
+          distribution_store_count: 83,
+          service_area_presence_count: 0,
           status: "benchmark_not_observed",
           certified_relationships: 0,
           selected_price_basis_relationships: 0,
@@ -87,8 +89,9 @@ describe("competitiveProductCoverageCsv", () => {
 
     const csv = competitiveProductCoverageCsv(coverage);
 
-    expect(csv.split("\r\n")[0]).toContain("verified_local_locations");
+    expect(csv.split("\r\n")[0]).toContain("distribution_store_count");
+    expect(csv.split("\r\n")[0]).toContain("service_area_presence_count");
     expect(csv.split("\r\n")[0]).not.toContain(",observed_locations,");
-    expect(csv).toContain('"46942839","Regional milk","0"');
+    expect(csv).toContain('"46942839","Regional milk","83","0"');
   });
 });

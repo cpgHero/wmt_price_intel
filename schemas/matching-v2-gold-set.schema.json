@@ -97,8 +97,17 @@
         },
         "allOf": [
           {
-            "if": { "properties": { "expected_comparable": { "const": false } } },
-            "then": { "properties": { "allowed_tiers": { "maxItems": 0 } } }
+            "if": {
+              "type": "object",
+              "properties": { "expected_comparable": { "const": false } },
+              "required": ["expected_comparable"]
+            },
+            "then": {
+              "type": "object",
+              "properties": {
+                "allowed_tiers": { "type": "array", "maxItems": 0 }
+              }
+            }
           }
         ]
       }
@@ -147,25 +156,34 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "purpose": { "const": "release_certification" } } },
+      "if": {
+        "type": "object",
+        "properties": { "purpose": { "const": "release_certification" } },
+        "required": ["purpose"]
+      },
       "then": {
+        "type": "object",
         "properties": {
           "labels": {
+            "type": "array",
             "items": {
+              "type": "object",
               "properties": {
                 "review_status": {
                   "enum": ["single_reviewed", "adjudicated"]
                 },
-                "reviewers": { "minItems": 1 },
-                "evidence_refs": { "minItems": 1 }
+                "reviewers": { "type": "array", "minItems": 1 },
+                "evidence_refs": { "type": "array", "minItems": 1 }
               }
             }
           },
           "exclusions": {
+            "type": "array",
             "items": {
+              "type": "object",
               "properties": {
-                "reviewers": { "minItems": 1 },
-                "evidence_refs": { "minItems": 1 }
+                "reviewers": { "type": "array", "minItems": 1 },
+                "evidence_refs": { "type": "array", "minItems": 1 }
               }
             }
           }

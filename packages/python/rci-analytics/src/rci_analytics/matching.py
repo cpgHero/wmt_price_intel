@@ -24,29 +24,23 @@ from rci_analytics.models import (
     ProductMatchRule,
 )
 from rci_analytics.package_semantics import labeled_unit_packs_are_compatible
-from rci_analytics.product_location import classify_local_availability
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
 
 
-def _is_verified_local_observation(item: ClassifiedOffer | None) -> bool:
-    """Return whether Search supplied affirmative, organic local availability.
+def _is_positive_search_observation(item: ClassifiedOffer | None) -> bool:
+    """Return whether the Product Pack admitted a positive-priced Search row.
 
-    A positive Search price proves that a product was returned by Search; it does
-    not prove that the product is carried at the requested location. Local
-    comparisons and distribution footprints therefore fail closed unless the
-    provider explicitly reports the offer in stock and explicitly identifies the
-    placement as non-sponsored.
+    Search presence plus a price greater than zero is authoritative for price
+    evidence and observed distribution.  It is not an in-stock claim.  Provider
+    stock and sponsorship fields therefore do not participate in this predicate.
     """
 
     return bool(
         item is not None
-        and item.in_scope
-        and classify_local_availability(
-            in_stock=item.offer.in_stock,
-            is_sponsored=item.offer.is_sponsored,
-        )
-        == "verified_in_stock"
+        and (item.in_scope or item.scope_reason == "explicitly out of stock")
+        and item.offer.price is not None
+        and item.offer.price > 0
     )
 
 
@@ -256,15 +250,15 @@ def resolve_one_to_one_relationships(
     match_rows = [
         match
         for match in matches
-        if _is_verified_local_observation(classified_index.get(match.benchmark_offer_id))
-        and _is_verified_local_observation(classified_index.get(match.competitor_offer_id))
+        if _is_positive_search_observation(classified_index.get(match.benchmark_offer_id))
+        and _is_positive_search_observation(classified_index.get(match.competitor_offer_id))
     ]
     configured_scope_policies = profile_scope_policies or {}
     product_locations: dict[str, set[str]] = {}
     for item in offer_rows:
         offer = item.offer
         if (
-            _is_verified_local_observation(item)
+            _is_positive_search_observation(item)
             and offer.retailer_id == benchmark_retailer
             and offer.zipcode is not None
             and offer.price is not None
@@ -690,14 +684,14 @@ def geographic_overlap(
     benchmark = {
         item.offer.zipcode
         for item in latest
-        if _is_verified_local_observation(item)
+        if _is_positive_search_observation(item)
         and item.offer.retailer_id == benchmark_id
         and item.offer.zipcode is not None
     }
     competitor = {
         item.offer.zipcode
         for item in latest
-        if _is_verified_local_observation(item)
+        if _is_positive_search_observation(item)
         and item.offer.retailer_id == competitor_id
         and item.offer.zipcode is not None
     }
@@ -705,7 +699,7 @@ def geographic_overlap(
 
 
 def location_scope_key(offer: Any) -> str:
-    """Return the stable location grain used by verified scoped relationships."""
+    """Return the stable Search-evidence grain used by scoped relationships."""
 
     zipcode = str(offer.zipcode or "unknown")
     store = str(offer.store_number or f"zip:{zipcode}")
@@ -715,48 +709,65 @@ def location_scope_key(offer: Any) -> str:
 def product_footprint(
     offers: Iterable[ClassifiedOffer], *, analysis_id: str, retailer_id: str, product_id: str
 ) -> JsonObject:
-    """Project an auditable footprint from verified local Search observations."""
+    """Project an auditable store distribution from positive Search rows.
+
+    The distribution count is the number of distinct store IDs where this exact
+    retailer product appears in a Search result with price greater than zero. It
+    is not an in-stock claim. ZIP and location-master fields may enrich returned
+    rows but never decide whether a store contributes to the footprint.
+    """
 
     locations: dict[str, JsonObject] = {}
     for item in latest_classified_offers(offers):
         offer = item.offer
+        store_number = str(offer.store_number or "").strip()
         if (
-            not _is_verified_local_observation(item)
+            not _is_positive_search_observation(item)
             or offer.retailer_id != retailer_id
             or offer.retailer_product_id != product_id
-            or offer.zipcode is None
+            or not store_number
             or offer.price is None
             or offer.price <= 0
         ):
             continue
-        key = location_scope_key(offer)
+        price = float(offer.price)
+        key = f"{retailer_id}|store|{store_number}"
         current = locations.setdefault(
             key,
             {
                 "scope_key": key,
-                "store_number": offer.store_number,
+                "store_number": store_number,
                 "zipcode": offer.zipcode,
                 "state": offer.raw.get("state"),
                 "latitude": offer.latitude,
                 "longitude": offer.longitude,
                 "observations": 0,
-                "lowest_positive_price": float(offer.price),
+                "lowest_positive_price": price,
             },
         )
         current["observations"] = int(current["observations"]) + 1
-        current["lowest_positive_price"] = min(
-            float(current["lowest_positive_price"]), float(offer.price)
-        )
+        current["lowest_positive_price"] = min(float(current["lowest_positive_price"]), price)
     rows = [locations[key] for key in sorted(locations)]
     seed = "\n".join(
         f"{row['scope_key']}|{row['observations']}|{row['lowest_positive_price']}" for row in rows
     )
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "analysis_id": analysis_id,
         "retailer_id": retailer_id,
         "product_id": product_id,
-        "source_authority": "search",
+        "source_authority": "store_level_search",
+        "distribution_contract": {
+            "version": "1.0.0",
+            "basis": "positive_price_store_search_result",
+            "grain": "retailer_product_id_x_store_id",
+            "deduplication": "distinct_store_id_per_product",
+            "price_rule": "price_gt_zero",
+            "inventory_claim": False,
+            "stock_status_used": False,
+            "sponsorship_used": False,
+        },
+        "store_count": len(rows),
         "locations": rows,
         "checksum": hashlib.sha256(seed.encode()).hexdigest(),
     }
@@ -1076,7 +1087,7 @@ class ComparisonEngine:
         observed = {
             location_scope_key(item.offer)
             for item in offers
-            if _is_verified_local_observation(item)
+            if _is_positive_search_observation(item)
             and item.offer.retailer_id == benchmark_id
             and item.offer.retailer_product_id == rule.benchmark_product_id
             and item.offer.zipcode is not None
@@ -1258,7 +1269,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or value is None
@@ -1287,7 +1298,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
@@ -1315,7 +1326,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
@@ -1432,11 +1443,10 @@ class ComparisonEngine:
             policy = str(retailer.get("matching_availability_policy", "search_presence"))
         if policy not in {"search_presence", "in_stock_only"}:
             raise ValueError(f"matching availability policy {policy!r} is not implemented")
-        # ``search_presence`` remains useful for product discovery and identity
-        # evidence, but this engine produces location-scoped price comparisons.
-        # Every local comparison must use the stricter verified-availability
-        # invariant regardless of the legacy discovery policy name.
-        return _is_verified_local_observation(item)
+        # The current contract does not infer inventory. Both legacy policy
+        # labels therefore resolve to the same positive-price Search predicate.
+        # The labels remain accepted until Product Pack migration removes them.
+        return _is_positive_search_observation(item)
 
     def _selected(
         self,
@@ -1452,7 +1462,7 @@ class ComparisonEngine:
         selected: dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
                 or not self._available_for_matching(item, profile)
@@ -1528,7 +1538,7 @@ class ComparisonEngine:
         selected: dict[tuple[str, str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
                 or not self._available_for_matching(item, profile)
@@ -1757,7 +1767,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                _is_verified_local_observation(item)
+                _is_positive_search_observation(item)
                 and item.offer.retailer_id == retailer_id
                 and item.offer.zipcode is not None
                 and self._available_for_matching(item, profile)
@@ -1926,7 +1936,7 @@ class ComparisonEngine:
         brand_policy = str(profile.get("brand_policy", "ignore_brand"))
         for item in offers:
             if (
-                not _is_verified_local_observation(item)
+                not _is_positive_search_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or not self._available_for_matching(item, profile)
                 or not self._satisfies_constraints(item, profile, role)

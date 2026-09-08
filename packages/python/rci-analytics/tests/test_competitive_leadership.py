@@ -116,7 +116,7 @@ def _single_store_result(
     competitors: list[ProductPriceObservation],
 ) -> dict[str, Any]:
     relationship = ProductLeadershipRelationship(
-        relationship_id="verified-local-relationship",
+        relationship_id="positive-search-relationship",
         competitor_id="aldi_us",
         competitor_name="ALDI",
         benchmark_product_id="w1",
@@ -127,7 +127,7 @@ def _single_store_result(
         comparison_unit="USD/package",
     )
     return CompetitiveProductLeadershipProjector().build(
-        analysis_id="verified-local-analysis",
+        analysis_id="positive-search-analysis",
         generated_at="2026-08-07T06:00:00Z",
         benchmark_retailer={"id": "walmart_us", "name": "Walmart (US)"},
         benchmark_product={"id": "w1", "name": "Product w1", "image_url": None},
@@ -143,7 +143,7 @@ def _single_store_result(
     )
 
 
-def test_leadership_excludes_search_presence_without_verified_local_availability() -> None:
+def test_leadership_uses_positive_price_search_evidence_without_stock_gating() -> None:
     reasons = (
         "sponsored",
         "out_of_stock",
@@ -173,38 +173,38 @@ def test_leadership_excludes_search_presence_without_verified_local_availability
 
     summary = result["summary"]
     assert isinstance(summary, dict)
-    assert summary["benchmark_observed_stores"] == 1
-    assert summary["scored_stores"] == 1
+    assert summary["benchmark_observed_stores"] == 6
+    assert summary["distribution_store_count"] == 6
+    assert summary["service_area_presence_count"] == 0
+    assert summary["scored_stores"] == 6
     outcomes = result["outcomes"]
     assert isinstance(outcomes, list)
-    assert len(outcomes) == 1
-    outcome = outcomes[0]
-    assert isinstance(outcome, dict)
-    assert outcome["status"] == "leader"
-    assert outcome["benchmark"]["store_number"] == "w-verified"
-    assert outcome["competitor"]["store_number"] == "a-verified"
-    assert "verified local Search-listed" in result["policy"]["comparison_definition"]
+    assert len(outcomes) == 6
+    assert all(outcome["status"] == "losing" for outcome in outcomes)
+    assert {outcome["benchmark"]["distribution_store_id"] for outcome in outcomes} == {
+        "w-0",
+        "w-1",
+        "w-2",
+        "w-3",
+        "w-4",
+        "w-verified",
+    }
+    assert all("in_stock" not in outcome["benchmark"] for outcome in outcomes)
+    assert all("availability_status" not in outcome["benchmark"] for outcome in outcomes)
+    assert "positive Search-listed value" in result["policy"]["comparison_definition"]
     assert certify_competitive_product_leadership(result).ready
 
 
 @pytest.mark.parametrize(
     ("side", "field", "value"),
     [
-        ("benchmark", "is_sponsored", True),
-        ("benchmark", "is_sponsored", None),
-        ("benchmark", "in_stock", False),
-        ("benchmark", "in_stock", None),
-        ("benchmark", "availability_status", "unverified"),
-        ("benchmark", "verified_local_availability", False),
-        ("competitor", "is_sponsored", True),
-        ("competitor", "is_sponsored", None),
-        ("competitor", "in_stock", False),
-        ("competitor", "in_stock", None),
-        ("competitor", "availability_status", "unverified"),
-        ("competitor", "verified_local_availability", False),
+        ("benchmark", "distribution_store_id", None),
+        ("benchmark", "distribution_store_id", "wrong-store"),
+        ("competitor", "distribution_store_id", None),
+        ("competitor", "distribution_store_id", "wrong-store"),
     ],
 )
-def test_certifier_independently_rejects_unverified_local_outcome_evidence(
+def test_certifier_independently_rejects_invalid_store_distribution_identity(
     side: str,
     field: str,
     value: object,
@@ -219,7 +219,10 @@ def test_certifier_independently_rejects_unverified_local_outcome_evidence(
     certification = certify_competitive_product_leadership(corrupted)
 
     assert not certification.ready
-    assert f"outcomes[0]: {side} lacks verified local availability evidence" in certification.errors
+    assert (
+        f"outcomes[0]: {side} store distribution ID is missing or inconsistent"
+        in certification.errors
+    )
 
 
 @pytest.mark.parametrize("side", ["benchmark", "competitor"])
@@ -284,6 +287,8 @@ def test_store_leadership_uses_radius_scope_and_mutually_exclusive_statuses() ->
 
     assert result["summary"] == {
         "benchmark_observed_stores": 3,
+        "distribution_store_count": 3,
+        "service_area_presence_count": 0,
         "scored_stores": 2,
         "coverage_rate": 0.6667,
         "leader_stores": 0,

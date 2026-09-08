@@ -37,9 +37,7 @@ const baseLocation: Outcome["benchmark"] = {
   discounted_price: null,
   search_observed: true,
   is_sponsored: false,
-  in_stock: true,
-  availability_status: "verified_in_stock",
-  verified_local_availability: true,
+  distribution_store_id: "1",
   offer_id: "offer-1",
   comparison_value: 3.49,
   observed_at: "2026-08-07T05:00:00Z",
@@ -147,13 +145,15 @@ describe("product leadership analytics", () => {
     ]);
   });
 
-  it("uses scored stores for market loss rates and observed stores for coverage", () => {
+  it("uses explicit store distribution for coverage and scored stores for loss rate", () => {
     const rows = marketPerformance([
       {
         id: "state:AR",
         level: "state",
         label: "AR",
         benchmark_observed_stores: 10,
+        distribution_store_count: 10,
+        service_area_presence_count: 0,
         scored_stores: 8,
         coverage_rate: 0.8,
         leader_stores: 3,

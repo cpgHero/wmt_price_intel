@@ -559,7 +559,7 @@ def test_certified_product_footprints_allow_many_to_one_relationship_evidence() 
     assert all(row["status"] == "confirmed" for row in resolution.relationships)
 
 
-def test_product_footprint_uses_verified_local_observations_at_store_grain() -> None:
+def test_product_footprint_uses_positive_price_search_rows_at_distinct_store_grain() -> None:
     offers, _engine = _classified()
 
     footprint = product_footprint(
@@ -569,10 +569,21 @@ def test_product_footprint_uses_verified_local_observations_at_store_grain() -> 
         product_id="w-1",
     )
 
-    assert footprint["source_authority"] == "search"
+    assert footprint["source_authority"] == "store_level_search"
+    assert footprint["store_count"] == 1
+    assert footprint["distribution_contract"] == {
+        "version": "1.0.0",
+        "basis": "positive_price_store_search_result",
+        "grain": "retailer_product_id_x_store_id",
+        "deduplication": "distinct_store_id_per_product",
+        "price_rule": "price_gt_zero",
+        "inventory_claim": False,
+        "stock_status_used": False,
+        "sponsorship_used": False,
+    }
     assert footprint["locations"] == [
         {
-            "scope_key": "walmart_us|10001|store-1",
+            "scope_key": "walmart_us|store|store-1",
             "store_number": "store-1",
             "zipcode": "10001",
             "state": None,
@@ -584,7 +595,7 @@ def test_product_footprint_uses_verified_local_observations_at_store_grain() -> 
     ]
 
 
-def test_product_footprint_excludes_unverified_search_placements() -> None:
+def test_product_footprint_does_not_use_stock_or_sponsorship_as_distribution_filters() -> None:
     normalizer, classifier, _engine = _pipeline()
     offers = classifier.classify_many(
         normalizer.normalize_many(
@@ -637,7 +648,84 @@ def test_product_footprint_excludes_unverified_search_placements() -> None:
         product_id="w-1",
     )
 
-    assert [row["scope_key"] for row in footprint["locations"]] == ["walmart_us|10001|store-1"]
+    assert footprint["store_count"] == 5
+    assert {row["store_number"] for row in footprint["locations"]} == {
+        "store-1",
+        "out-of-stock",
+        "sponsored",
+        "unknown-stock",
+        "unknown-sponsorship",
+    }
+
+
+def test_product_46942839_distribution_equals_83_distinct_positive_price_store_rows() -> None:
+    normalizer, classifier, _engine = _pipeline()
+    rows = [
+        _row(
+            "walmart_us",
+            "46942839",
+            "Fresh Strawberries, 1 lb",
+            "5.28",
+            zipcode=f"9{index:04d}",
+            store=f"ca-{index:03d}",
+            in_stock=None if index % 2 else False,
+            is_sponsored=True if index % 3 == 0 else None,
+        )
+        for index in range(83)
+    ]
+    # Duplicate the same store under a different ZIP and add nonqualifying rows.
+    rows.extend(
+        [
+            _row(
+                "walmart_us",
+                "46942839",
+                "Fresh Strawberries, 1 lb",
+                "5.18",
+                zipcode="90099",
+                store="ca-000",
+            ),
+            _row(
+                "walmart_us",
+                "46942839",
+                "Fresh Strawberries, 1 lb",
+                "0",
+                zipcode="90210",
+                store="zero-price-store",
+            ),
+            _row(
+                "walmart_us",
+                "46942839",
+                "Fresh Strawberries, 1 lb",
+                "5.28",
+                zipcode="94105",
+                store=None,  # type: ignore[arg-type]
+            ),
+        ]
+    )
+    offers = classifier.classify_many(normalizer.normalize_many(rows))
+
+    footprint = product_footprint(
+        offers,
+        analysis_id="analysis-milk-regression",
+        retailer_id="walmart_us",
+        product_id="46942839",
+    )
+    retained_store_ids = {
+        item.offer.store_number
+        for item in offers
+        if item.offer.retailer_id == "walmart_us"
+        and item.offer.retailer_product_id == "46942839"
+        and item.offer.store_number
+        and item.offer.price is not None
+        and item.offer.price > 0
+        and (item.in_scope or item.scope_reason == "explicitly out of stock")
+    }
+
+    assert footprint["store_count"] == len(footprint["locations"])
+    assert footprint["store_count"] == len(retained_store_ids) == 83
+    assert {row["store_number"] for row in footprint["locations"]} == retained_store_ids
+    assert "zero-price-store" not in retained_store_ids
+    assert all(row["store_number"] for row in footprint["locations"])
 
 
 @pytest.mark.parametrize(
@@ -649,7 +737,7 @@ def test_product_footprint_excludes_unverified_search_placements() -> None:
         (True, None),
     ],
 )
-def test_positive_search_price_without_verified_availability_cannot_match(
+def test_positive_search_price_matches_without_stock_or_sponsorship_gating(
     in_stock: bool | None,
     is_sponsored: bool | None,
 ) -> None:
@@ -670,20 +758,21 @@ def test_positive_search_price_without_verified_availability_cannot_match(
         )
     )
 
-    assert (
-        engine.compare(
-            offers,
-            benchmark_id="walmart_us",
-            competitor_id="aldi_us",
-            profile_id="strict",
-        )
-        == []
+    matches = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
     )
-    assert geographic_overlap(offers, "walmart_us", "aldi_us") == set()
+    assert len(matches) == 1
+    assert geographic_overlap(offers, "walmart_us", "aldi_us") == {"10001"}
 
     reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
     reducer.extend(offers)
-    assert {row.offer.retailer_product_id for row in reducer.offers()} == {"w-1"}
+    assert {row.offer.retailer_product_id for row in reducer.offers()} == {
+        "w-1",
+        "a-1",
+    }
 
 
 def test_explicit_in_stock_non_sponsored_observation_can_match_locally() -> None:
@@ -852,7 +941,7 @@ def test_later_seller_policy_exclusion_retracts_matching_and_footprint_evidence(
     assert {item.offer.retailer_product_id for item in reducer.offers()} == {"a-1"}
 
 
-def test_classifier_out_of_stock_tombstone_retracts_older_verified_match() -> None:
+def test_classifier_does_not_exclude_explicit_out_of_stock_search_metadata() -> None:
     normalizer, classifier, engine = _pipeline()
     offers = classifier.classify_many(
         normalizer.normalize_many(
@@ -884,8 +973,8 @@ def test_classifier_out_of_stock_tombstone_retracts_older_verified_match() -> No
         for item in offers
         if item.offer.retailer_id == "walmart_us" and item.offer.in_stock is False
     )
-    assert tombstone.in_scope is False
-    assert tombstone.scope_reason == "explicitly out of stock"
+    assert tombstone.in_scope is True
+    assert tombstone.scope_reason is None
 
     assert (
         engine.compare(
@@ -902,7 +991,7 @@ def test_classifier_out_of_stock_tombstone_retracts_older_verified_match() -> No
 
 
 @pytest.mark.parametrize("reverse_order", [False, True])
-def test_same_timestamp_organic_stock_conflict_fails_closed_for_matching(
+def test_same_timestamp_stock_conflict_does_not_gate_positive_price_matching(
     reverse_order: bool,
 ) -> None:
     offers, engine = _classified()
@@ -942,18 +1031,16 @@ def test_same_timestamp_organic_stock_conflict_fails_closed_for_matching(
         offer=replace(competitor.offer, collected_at=observed_at),
     )
 
-    assert (
-        engine.compare(
-            [*benchmark_states, current_competitor],
-            benchmark_id="walmart_us",
-            competitor_id="aldi_us",
-            profile_id="strict",
-        )
-        == []
+    matches = engine.compare(
+        [*benchmark_states, current_competitor],
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
     )
+    assert len(matches) == 1
 
 
-def test_relationship_resolution_rejects_stale_unverified_match_evidence() -> None:
+def test_relationship_resolution_ignores_sponsorship_for_positive_price_search_evidence() -> None:
     offers, engine = _classified()
     match = engine.compare(
         offers,
@@ -975,8 +1062,10 @@ def test_relationship_resolution_rejects_stale_unverified_match_evidence() -> No
         profile_priority=("strict",),
     )
 
-    assert resolution.matches == ()
-    assert resolution.relationships == ()
+    assert len(resolution.matches) == 1
+    assert resolution.matches[0].benchmark_offer_id == match.benchmark_offer_id
+    assert resolution.matches[0].competitor_offer_id == match.competitor_offer_id
+    assert len(resolution.relationships) == 1
 
 
 def test_relationship_resolution_cannot_reuse_superseded_verified_match() -> None:
@@ -1595,7 +1684,7 @@ def test_conflicting_product_identity_attributes_require_manual_review() -> None
     assert resolution.ambiguous_groups[0]["reason"] == "inconsistent_product_attributes"
 
 
-def test_retailer_specific_match_availability_does_not_change_scope_counts() -> None:
+def test_legacy_match_availability_policy_does_not_gate_positive_price_search_rows() -> None:
     offers, original = _classified()
     amazon = next(
         item
@@ -1628,4 +1717,4 @@ def test_retailer_specific_match_availability_does_not_change_scope_counts() -> 
         competitor_id="amazon_us_same_day",
         profile_id="strict",
     )
-    assert all(match.competitor_offer_id != unavailable.offer.offer_id for match in matches)
+    assert any(match.competitor_offer_id == unavailable.offer.offer_id for match in matches)

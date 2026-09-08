@@ -263,6 +263,8 @@ describe("report presentation", () => {
         name: "Broad-basis milk",
         observed_locations: 4000,
         observed_zipcodes: 3500,
+        distribution_store_count: 4000,
+        service_area_presence_count: 0,
       },
       {
         product_id: "same-brand",
@@ -270,6 +272,8 @@ describe("report presentation", () => {
         name: "Same-brand milk",
         observed_locations: 1200,
         observed_zipcodes: 1100,
+        distribution_store_count: 1200,
+        service_area_presence_count: 0,
       },
     ];
     const candidates = [
@@ -538,6 +542,16 @@ describe("report presentation", () => {
         {
           source: "classified_search_rows",
           grain: "retailer_product_location",
+          distribution_contract: {
+            version: "1.0.0",
+            basis: "positive_price_store_search_result",
+            grain: "retailer_product_id_x_store_id",
+            deduplication: "distinct_store_id_per_product",
+            price_rule: "price_gt_zero",
+            inventory_claim: false,
+            stock_status_used: false,
+            sponsorship_used: false,
+          },
           benchmark_retailer: "walmart_us",
           retailers: [
             {
@@ -545,6 +559,8 @@ describe("report presentation", () => {
               distinct_products: 1,
               observed_locations: 10,
               observed_zipcodes: 10,
+              distribution_store_count: 10,
+              service_area_presence_count: 0,
               median_products_per_location: 1,
               products: [
                 {
@@ -554,6 +570,8 @@ describe("report presentation", () => {
                   image_url: "https://example.com/walmart.jpg",
                   observed_locations: 10,
                   observed_zipcodes: 10,
+                  distribution_store_count: 10,
+                  service_area_presence_count: 0,
                 },
               ],
             },
@@ -562,6 +580,8 @@ describe("report presentation", () => {
               distinct_products: 1,
               observed_locations: 5,
               observed_zipcodes: 5,
+              distribution_store_count: 5,
+              service_area_presence_count: 0,
               median_products_per_location: 1,
               products: [
                 {
@@ -571,6 +591,8 @@ describe("report presentation", () => {
                   image_url: "https://example.com/shoprite.jpg",
                   observed_locations: 5,
                   observed_zipcodes: 5,
+                  distribution_store_count: 5,
+                  service_area_presence_count: 0,
                 },
               ],
             },

@@ -72,12 +72,15 @@
   "allOf": [
     {
       "if": {
+        "type": "object",
         "properties": { "purpose": { "const": "operational_match_certification" } },
         "required": ["purpose"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "sampling": {
+            "type": "object",
             "properties": { "method": { "const": "exhaustive_governed_candidates" } },
             "required": ["method"]
           }
@@ -86,12 +89,15 @@
     },
     {
       "if": {
+        "type": "object",
         "properties": { "purpose": { "const": "human_gold_set_adjudication" } },
         "required": ["purpose"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "sampling": {
+            "type": "object",
             "properties": { "method": { "const": "deterministic_stratified_sha256" } },
             "required": ["method"]
           }

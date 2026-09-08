@@ -311,10 +311,13 @@ def _assortment_count(row: dict[str, Any], field: str) -> int:
     return max(value, 0)
 
 
-def _is_verified_assortment_product(row: dict[str, Any]) -> bool:
+def _is_distribution_assortment_product(row: dict[str, Any]) -> bool:
+    """Return whether explicit positive-price Search footprint evidence exists."""
+
     return (
-        row.get("availability_status") == "verified_in_stock"
-        and _assortment_count(row, "verified_available_locations") > 0
+        _assortment_count(row, "distribution_store_count")
+        + _assortment_count(row, "service_area_presence_count")
+        > 0
     )
 
 
@@ -332,23 +335,18 @@ def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
             "brand": row.get("brand"),
             "brand_type": str(row.get("brand_type") or "unclassified"),
             "image_url": row.get("image_url"),
-            "observed_locations": _assortment_count(row, "verified_available_locations"),
-            "observed_zipcodes": _assortment_count(row, "verified_available_zipcodes"),
-            "verified_available_locations": _assortment_count(row, "verified_available_locations"),
-            "verified_available_zipcodes": _assortment_count(row, "verified_available_zipcodes"),
-            "search_observed_locations": _assortment_count(row, "search_observed_locations"),
-            "search_observed_zipcodes": _assortment_count(row, "search_observed_zipcodes"),
-            "availability_status": str(row["availability_status"]),
-            "explicitly_out_of_stock_locations": _assortment_count(
-                row, "explicitly_out_of_stock_locations"
+            "observed_locations": (
+                _assortment_count(row, "distribution_store_count")
+                + _assortment_count(row, "service_area_presence_count")
             ),
-            "unverified_locations": _assortment_count(row, "unverified_locations"),
-            "unverified_sponsored_locations": _assortment_count(
-                row, "unverified_sponsored_locations"
-            ),
+            "observed_zipcodes": _assortment_count(row, "observed_zipcodes"),
+            "distribution_store_count": _assortment_count(row, "distribution_store_count"),
+            "service_area_presence_count": _assortment_count(row, "service_area_presence_count"),
         }
         for row in rows
-        if isinstance(row, dict) and row.get("product_id") and _is_verified_assortment_product(row)
+        if isinstance(row, dict)
+        and row.get("product_id")
+        and _is_distribution_assortment_product(row)
     ]
 
 
@@ -367,8 +365,11 @@ def _assortment_products(assortment: Any, retailer_id: str) -> list[dict[str, An
         return sorted(
             products,
             key=lambda row: (
-                0 if _is_verified_assortment_product(row) else 1,
-                -_assortment_count(row, "verified_available_locations"),
+                0 if _is_distribution_assortment_product(row) else 1,
+                -(
+                    _assortment_count(row, "distribution_store_count")
+                    + _assortment_count(row, "service_area_presence_count")
+                ),
                 str(row.get("name") or row.get("product_id") or "").casefold(),
             ),
         )
@@ -442,7 +443,7 @@ def _coverage_rows(
     observed_product_ids = {
         product_id
         for product_id in in_scope_product_ids
-        if _is_verified_assortment_product(observed_products.get(product_id, {}))
+        if _is_distribution_assortment_product(observed_products.get(product_id, {}))
     }
     certified_product_ids = observed_product_ids & set(identity_by_product)
     selected_product_ids = certified_product_ids & set(selected_by_product)
@@ -456,8 +457,9 @@ def _coverage_rows(
     for product_id in product_ids:
         observed = observed_products.get(product_id, {})
         observed_locations = (
-            _assortment_count(observed, "verified_available_locations")
-            if _is_verified_assortment_product(observed)
+            _assortment_count(observed, "distribution_store_count")
+            + _assortment_count(observed, "service_area_presence_count")
+            if _is_distribution_assortment_product(observed)
             else 0
         )
         certified_relationships = len(identity_by_product.get(product_id, set()))
@@ -1158,7 +1160,7 @@ class CompetitiveProductLeadershipService:
         benchmark_observed_ids = {
             str(row.get("product_id"))
             for row in benchmark_assortment_products
-            if row.get("product_id") and _is_verified_assortment_product(row)
+            if row.get("product_id") and _is_distribution_assortment_product(row)
         }
         benchmark_catalog = await self._benchmark_catalog(
             analysis,
@@ -1407,7 +1409,7 @@ class CompetitiveProductLeadershipService:
             competitor_observed_ids = {
                 str(row.get("product_id"))
                 for row in competitor_assortment_products
-                if row.get("product_id") and _is_verified_assortment_product(row)
+                if row.get("product_id") and _is_distribution_assortment_product(row)
             }
             matched_observed_benchmark_ids = set(benchmark_product_ids) & benchmark_observed_ids
             matched_observed_competitor_ids = competitor_product_ids & competitor_observed_ids
@@ -1507,7 +1509,7 @@ class CompetitiveProductLeadershipService:
                 "physical_store_rule": "within selected radius",
                 "service_area_rule": "same delivery ZIP",
                 "grain": (
-                    "certified product relationship x verified-available Walmart product-store"
+                    "certified product relationship x positive-price Walmart Search location"
                 ),
             },
             "scorecards": scorecards,
@@ -1770,10 +1772,10 @@ class CompetitiveProductLeadershipService:
         verified_benchmark_product_ids = {
             str(row.get("product_id"))
             for row in benchmark_assortment_products
-            if row.get("product_id") and _is_verified_assortment_product(row)
+            if row.get("product_id") and _is_distribution_assortment_product(row)
         }
         for row in benchmark_assortment_products:
-            if not _is_verified_assortment_product(row):
+            if not _is_distribution_assortment_product(row):
                 continue
             product_id = str(row.get("product_id") or "")
             if not product_id:
@@ -1783,7 +1785,9 @@ class CompetitiveProductLeadershipService:
                 "name": str(row.get("name") or product_id),
                 "image_url": row.get("image_url"),
             }
-            product_rank[product_id] = _assortment_count(row, "verified_available_locations")
+            product_rank[product_id] = _assortment_count(
+                row, "distribution_store_count"
+            ) + _assortment_count(row, "service_area_presence_count")
         for row in candidates:
             product_id = str(row.get("benchmark_product_id") or "")
             if not product_id or product_id not in verified_benchmark_product_ids:

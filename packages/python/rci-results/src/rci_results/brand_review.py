@@ -19,6 +19,17 @@ from rci_results.repository import DEFAULT_ORGANIZATION_ID
 from rci_results.service import AnalysisResultService
 from rci_retailer_packs import GovernedBrandResolver
 
+_STORE_SEARCH_DISTRIBUTION_CONTRACT: JsonObject = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+
 
 def _nonnegative_integer(value: Any) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
@@ -688,7 +699,7 @@ class BrandReviewService:
             brand_resolver=self._brand_resolver,
         )
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "analysis_id": analysis.analysis_id,
             "product_pack_id": analysis.product_pack_id,
             "product_pack_version": analysis.product_pack_version,
@@ -767,6 +778,8 @@ class BrandReviewService:
                     "observed_products",
                     "observed_locations",
                     "observed_zipcodes",
+                    "distribution_store_count",
+                    "service_area_presence_count",
                     "location_share",
                     "distribution_tier",
                 )
@@ -910,39 +923,15 @@ class BrandReviewService:
                     }
                 )
 
-        benchmark_retailer = str(document.get("benchmark_retailer") or retailer_ids[0])
-        product_zip_lower_bounds: dict[tuple[str, str], int] = {}
-        product_location_lower_bounds: dict[tuple[str, str], int] = {}
-        for row in context.get("match_candidates", []):
-            if not isinstance(row, dict):
-                continue
-            competitor_id = str(row.get("competitor") or "")
-            pairs = (
-                (benchmark_retailer, str(row.get("benchmark_product_id") or "")),
-                (competitor_id, str(row.get("competitor_product_id") or "")),
-            )
-            market_count = max(0, int(row.get("geographies") or 0))
-            location_count = len(
-                {str(value) for value in row.get("benchmark_location_scope_keys", []) if value}
-            )
-            for retailer_id, product_id in pairs:
-                if not retailer_id or not product_id:
-                    continue
-                key = (retailer_id, product_id)
-                product_zip_lower_bounds[key] = max(
-                    product_zip_lower_bounds.get(key, 0), market_count
-                )
-                product_location_lower_bounds[key] = max(
-                    product_location_lower_bounds.get(key, 0),
-                    location_count if retailer_id == benchmark_retailer else 0,
-                )
-
         assortment_value = (
             context.get("assortment_analysis")
             or document.get("assortment_analysis")
             or document.get("assortment", {})
         )
         assortment = assortment_value if isinstance(assortment_value, dict) else {}
+        has_distribution_contract = (
+            assortment.get("distribution_contract") == _STORE_SEARCH_DISTRIBUTION_CONTRACT
+        )
         summaries = {
             str(row.get("retailer")): row
             for row in assortment.get("retailers", [])
@@ -980,92 +969,71 @@ class BrandReviewService:
                 )
                 product_ids = highlighted_products.get(key, set())
                 if row is not None:
-                    verified_count_keys = (
-                        "verified_available_products",
-                        "verified_available_locations",
-                        "verified_available_zipcodes",
+                    products_value = _nonnegative_integer(row.get("distinct_products"))
+                    store_count_value = _nonnegative_integer(row.get("distribution_store_count"))
+                    service_area_count_value = _nonnegative_integer(
+                        row.get("service_area_presence_count")
                     )
-                    has_explicit_verified_counts = any(
-                        count_key in row for count_key in verified_count_keys
+                    zipcodes_value = _nonnegative_integer(row.get("observed_zipcodes"))
+                    retailer_store_count = _nonnegative_integer(
+                        summary.get("distribution_store_count")
                     )
-                    verified_products_value = _nonnegative_integer(
-                        row.get("verified_available_products")
+                    retailer_service_area_count = _nonnegative_integer(
+                        summary.get("service_area_presence_count")
                     )
-                    verified_locations_value = _nonnegative_integer(
-                        row.get("verified_available_locations")
-                    )
-                    verified_zipcodes_value = _nonnegative_integer(
-                        row.get("verified_available_zipcodes")
-                    )
-                    verified_counts_are_valid = all(
+                    distribution_counts_are_valid = has_distribution_contract and all(
                         value is not None
                         for value in (
-                            verified_products_value,
-                            verified_locations_value,
-                            verified_zipcodes_value,
+                            products_value,
+                            store_count_value,
+                            service_area_count_value,
+                            zipcodes_value,
+                            retailer_store_count,
+                            retailer_service_area_count,
                         )
                     )
-                    has_verified_distribution = (
-                        has_explicit_verified_counts
-                        and verified_counts_are_valid
-                        and verified_products_value is not None
-                        and verified_products_value > 0
-                        and verified_locations_value is not None
-                        and verified_locations_value > 0
-                        and verified_zipcodes_value is not None
-                        and verified_zipcodes_value >= 0
-                    )
-                    if has_explicit_verified_counts:
-                        # Corrected availability counts are authoritative, including zero.
-                        # A partial or malformed corrected triplet fails closed rather than
-                        # falling back to legacy Search-observation reach.
-                        if verified_counts_are_valid:
-                            products = verified_products_value or 0
-                            locations = verified_locations_value or 0
-                            zipcodes = verified_zipcodes_value or 0
-                        else:
-                            products = locations = zipcodes = 0
+                    if distribution_counts_are_valid:
+                        assert products_value is not None
+                        assert store_count_value is not None
+                        assert service_area_count_value is not None
+                        assert retailer_store_count is not None
+                        assert retailer_service_area_count is not None
+                        distribution_counts_are_valid = (
+                            store_count_value <= retailer_store_count
+                            and service_area_count_value <= retailer_service_area_count
+                            and (products_value == 0)
+                            == (store_count_value + service_area_count_value == 0)
+                        )
+                    if distribution_counts_are_valid:
+                        products = products_value or 0
+                        distribution_stores = store_count_value or 0
+                        service_areas = service_area_count_value or 0
+                        zipcodes = zipcodes_value or 0
+                        share = (
+                            distribution_stores / retailer_store_count
+                            if retailer_store_count
+                            else 0.0
+                        )
+                        distribution_evidence = "positive_price_store_search_result"
                     else:
                         products = max(
                             1,
                             int(row.get("distinct_products") or len(product_ids) or 1),
                         )
-                        locations = max(0, int(row.get("observed_locations") or 0))
-                        zipcodes = max(0, int(row.get("observed_zipcodes") or 0))
-                    share = (
-                        float(row.get("location_share") or 0) if has_verified_distribution else 0.0
-                    )
-                    distribution_evidence = (
-                        "verified_local_search_availability"
-                        if has_verified_distribution
-                        else "search_brand_field"
-                    )
+                        distribution_stores = service_areas = zipcodes = 0
+                        share = 0.0
+                        distribution_evidence = "search_brand_field"
                 else:
                     products = max(1, len(product_ids))
-                    zipcodes = max(
-                        (
-                            product_zip_lower_bounds.get((retailer_id, value), 0)
-                            for value in product_ids
-                        ),
-                        default=0,
-                    )
-                    locations = max(
-                        (
-                            product_location_lower_bounds.get((retailer_id, value), 0)
-                            for value in product_ids
-                        ),
-                        default=0,
-                    )
+                    distribution_stores = service_areas = zipcodes = 0
                     share = 0.0
-                    distribution_evidence = (
-                        "pdp_identity_joined_to_matched_search" if zipcodes else "pdp_identity_only"
-                    )
+                    distribution_evidence = "pdp_identity_only"
                 tier = (
                     "unknown"
-                    if distribution_evidence != "verified_local_search_availability"
-                    or locations <= 0
+                    if distribution_evidence != "positive_price_store_search_result"
+                    or distribution_stores <= 0
                     else "single_location"
-                    if locations <= 1
+                    if distribution_stores <= 1
                     else "broad"
                     if share >= 0.75
                     else "multi_market"
@@ -1141,8 +1109,10 @@ class BrandReviewService:
                         "candidate_status": candidate_status,
                         "candidate_matches": candidate_rows,
                         "observed_products": products,
-                        "observed_locations": locations,
+                        "observed_locations": distribution_stores,
                         "observed_zipcodes": zipcodes,
+                        "distribution_store_count": distribution_stores,
+                        "service_area_presence_count": service_areas,
                         "location_share": min(1.0, max(0.0, share)),
                         "distribution_tier": tier,
                         "distribution_evidence": distribution_evidence,
@@ -1156,7 +1126,7 @@ class BrandReviewService:
                 {"unclassified": 0, "suggested": 1, "confirmed": 2, "rejected": 3}[
                     str(row["status"])
                 ],
-                -int(row["observed_locations"]),
+                -int(row["distribution_store_count"]),
                 str(row["display_brand"]).casefold(),
             ),
         )

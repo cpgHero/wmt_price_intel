@@ -10,6 +10,7 @@
     "generated_at",
     "benchmark_retailer",
     "benchmark_product",
+    "distribution_contract",
     "competitors",
     "filters",
     "filter_options",
@@ -23,11 +24,12 @@
     "outcomes"
   ],
   "properties": {
-    "schema_version": { "const": "1.3.0" },
+    "schema_version": { "const": "1.4.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "benchmark_retailer": { "$ref": "#/$defs/idName" },
     "benchmark_product": { "$ref": "#/$defs/productOption" },
+    "distribution_contract": { "$ref": "#/$defs/distributionContract" },
     "competitors": {
       "type": "array",
       "items": { "$ref": "#/$defs/idName" }
@@ -70,6 +72,8 @@
         "radii_miles": {
           "type": "array",
           "prefixItems": [{ "const": 1 }, { "const": 3 }, { "const": 5 }],
+          "minItems": 3,
+          "maxItems": 3,
           "items": false
         },
         "states": {
@@ -166,6 +170,21 @@
     }
   },
   "$defs": {
+    "distributionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "basis", "grain", "deduplication", "price_rule", "inventory_claim", "stock_status_used", "sponsorship_used"],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_store_search_result" },
+        "grain": { "const": "retailer_product_id_x_store_id" },
+        "deduplication": { "const": "distinct_store_id_per_product" },
+        "price_rule": { "const": "price_gt_zero" },
+        "inventory_claim": { "const": false },
+        "stock_status_used": { "const": false },
+        "sponsorship_used": { "const": false }
+      }
+    },
     "idName": {
       "type": "object",
       "additionalProperties": false,
@@ -200,6 +219,8 @@
       "additionalProperties": true,
       "required": [
         "benchmark_observed_stores",
+        "distribution_store_count",
+        "service_area_presence_count",
         "scored_stores",
         "coverage_rate",
         "leader_stores",
@@ -216,8 +237,10 @@
         "benchmark_observed_stores": {
           "type": "integer",
           "minimum": 0,
-          "description": "Legacy field name for distinct benchmark stores with verified local availability evidence. It must never contain Search-only reach."
+          "description": "Distinct positive-price benchmark Search locations used by the leadership view."
         },
+        "distribution_store_count": { "type": "integer", "minimum": 0 },
+        "service_area_presence_count": { "type": "integer", "minimum": 0 },
         "scored_stores": { "type": "integer", "minimum": 0 },
         "coverage_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "leader_stores": { "type": "integer", "minimum": 0 },
@@ -274,9 +297,7 @@
         "discounted_price",
         "search_observed",
         "is_sponsored",
-        "in_stock",
-        "availability_status",
-        "verified_local_availability",
+        "distribution_store_id",
         "offer_id",
         "comparison_value",
         "observed_at"
@@ -310,10 +331,8 @@
         "regular_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "discounted_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "search_observed": { "const": true },
-        "is_sponsored": { "const": false },
-        "in_stock": { "const": true },
-        "availability_status": { "const": "verified_in_stock" },
-        "verified_local_availability": { "const": true },
+        "is_sponsored": { "type": ["boolean", "null"] },
+        "distribution_store_id": { "type": ["string", "null"], "minLength": 1 },
         "offer_id": { "type": ["string", "null"] },
         "comparison_value": { "type": "number", "exclusiveMinimum": 0 },
         "observed_at": { "type": ["string", "null"] }
@@ -362,7 +381,7 @@
         "benchmark_observed_locations": {
           "type": "integer",
           "minimum": 0,
-          "description": "Legacy field name for distinct benchmark locations with verified local availability evidence. It must never contain Search-only reach."
+          "description": "Distinct retained positive-price benchmark Search locations."
         },
         "comparable_benchmark_locations": { "type": "integer", "minimum": 0 },
         "benchmark_rank_one_locations": { "type": "integer", "minimum": 0 },

@@ -17,6 +17,17 @@ from rci_results.models import AnalysisPublicationRecord, AnalysisRecord
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
+STORE_SEARCH_DISTRIBUTION_CONTRACT = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+
 
 def _analysis() -> AnalysisRecord:
     return AnalysisRecord(
@@ -68,6 +79,52 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
         publication_checksum="b" * 64,
         result=analysis.result,
         presentation_context={
+            "assortment_analysis": {
+                "distribution_contract": STORE_SEARCH_DISTRIBUTION_CONTRACT,
+                "retailers": [
+                    {
+                        "retailer": "walmart_us",
+                        "products": [
+                            {
+                                "product_id": "w1",
+                                "name": "Walmart 93/7 Ground Beef",
+                                "distribution_store_count": 1,
+                                "service_area_presence_count": 1,
+                                "location_scope_keys": [
+                                    "walmart_us|store|store-1",
+                                    "walmart_us|service_area|72712",
+                                ],
+                            },
+                            {
+                                "product_id": "w2",
+                                "name": "Walmart 80/20 Ground Beef",
+                                "distribution_store_count": 1,
+                                "service_area_presence_count": 0,
+                                "location_scope_keys": ["walmart_us|store|store-2"],
+                            },
+                        ],
+                    },
+                    {
+                        "retailer": "aldi_us",
+                        "products": [
+                            {
+                                "product_id": "a1",
+                                "name": "ALDI 93/7 Ground Beef",
+                                "distribution_store_count": 0,
+                                "service_area_presence_count": 1,
+                                "location_scope_keys": ["aldi_us|service_area|72712"],
+                            },
+                            {
+                                "product_id": "a2",
+                                "name": "ALDI 80/20 Ground Beef",
+                                "distribution_store_count": 0,
+                                "service_area_presence_count": 1,
+                                "location_scope_keys": ["aldi_us|service_area|72713"],
+                            },
+                        ],
+                    },
+                ],
+            },
             "product_highlights": [
                 {
                     "canonical_product_id": "walmart_us:w1",
@@ -238,6 +295,12 @@ async def test_match_review_overlays_durable_user_decisions() -> None:
         "rating": 4.7,
         "reviews_count": 120,
     }
+    assert products["walmart_us:w1"]["distribution_store_count"] == 1
+    assert products["walmart_us:w1"]["distribution_store_scope_keys"] == [
+        "walmart_us|store|store-1"
+    ]
+    assert products["walmart_us:w1"]["service_area_presence_count"] == 1
+    assert products["walmart_us:w1"]["service_area_scope_keys"] == ["walmart_us|service_area|72712"]
     strict_evidence = initial["connections"][0]["profile_evidence"][0]
     assert strict_evidence["benchmark_median"] == 5.47
     assert strict_evidence["competitor_median"] == 5.29
@@ -416,7 +479,7 @@ async def test_reanalysis_only_updates_future_policy_after_explicit_confirmation
     }
 
 
-async def test_observed_scope_is_materialized_from_verified_local_footprint() -> None:
+async def test_observed_scope_is_materialized_from_positive_price_store_footprint() -> None:
     repository = InMemoryMatchReviewRepository()
     service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
 
@@ -427,17 +490,17 @@ async def test_observed_scope_is_materialized_from_verified_local_footprint() ->
 
     assert rules[0].scope_mode == "observed_benchmark_product_footprint"
     assert rules[0].scope_definition["benchmark_location_scope_keys"] == [
-        "walmart_us|72712|store-1"
+        "walmart_us|store|store-1"
     ]
     assert rules[0].scope_definition["source_analysis_id"] == "analysis"
     assert rules[0].scope_checksum != "0" * 64
 
 
-async def test_observed_scope_fails_closed_for_legacy_search_only_footprint() -> None:
+async def test_observed_scope_fails_closed_without_distribution_contract() -> None:
     results = FakeResults()
     benchmark = results.publication.presentation_context["product_highlights"][0]
-    benchmark.pop("verified_location_scope_keys")
     benchmark["location_scope_keys"] = ["walmart_us|72712|legacy-search-only"]
+    results.publication.presentation_context["assortment_analysis"].pop("distribution_contract")
     repository = InMemoryMatchReviewRepository()
     service = MatchReviewService(results, repository)  # type: ignore[arg-type]
 

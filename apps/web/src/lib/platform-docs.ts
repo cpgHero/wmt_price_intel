@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 8, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.82",
+  version: "1.3.83",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -112,7 +112,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "The platform's job",
-          text: "First, preserve each Search-listed price together with its retailer product and store- or service-area query context. Second, classify verified local availability separately and compare same or governed-similar products only from eligible evidence at geographically relevant locations. Every summary must remain traceable to those atomic observations.",
+          text: "First, preserve each Search-listed price together with its retailer product and store- or service-area query context. Second, count an exact product's observed store distribution from distinct store-level Search results with price greater than $0; report service-area presence separately. Do not extrapolate either measure to locations that were not observed. Every summary must remain traceable to those atomic observations.",
         },
         {
           kind: "definitions",
@@ -121,7 +121,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Price Intelligence",
               definition:
-                "Examines a retailer's own products, Search-listed prices, Search reach, verified local availability, sponsorship, and query-context price exceptions. It does not claim that products are competitive substitutes or that a Search appearance proves store carriage.",
+                "Examines a retailer's own products, Search-listed prices, observed store distribution, separately labeled service-area presence, sponsorship, and query-context price exceptions. Store distribution counts each distinct store once when the exact product appears in a store-level Search result with price greater than $0. It is not an inventory or in-stock measure and is never extrapolated.",
             },
             {
               term: "Competitive Intelligence",
@@ -149,9 +149,9 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           title: "Trust rules that never change",
           items: [
-            "Search data owns listed price, query context, explicit stock status, sponsorship, and collection time. Only in_stock=true on a non-sponsored result verifies local availability; a positive price, sponsored result, or missing flag does not.",
+            "Search data owns listed price, query context, sponsorship, and collection time. Observed store distribution counts a distinct store when the exact product appears in that store-level Search result with price greater than $0. It does not use stock status, does not make an inventory claim, and never extrapolates to unobserved stores.",
             "The location master owns current store identity, ZIP, city, state, country, latitude, and longitude. A roster's active status does not prove that a retailer Search page is callable.",
-            "PDP data may improve identity, package attributes, imagery, seller, and descriptive context; it never overwrites Search-listed price, query context, explicit stock status, sponsorship, or verified-availability classification.",
+            "PDP data may improve identity, package attributes, imagery, seller, and descriptive context; it never overwrites Search-listed price, query context, sponsorship, or observed store distribution.",
             "Product Packs own category qualification, attribute, comparison-basis, and reporting rules. Retailer Packs own retailer-specific identifiers, seller policy, endpoints, and location behavior.",
             "Deterministic code computes every authoritative count, price, median, rate, distance, denominator, match rule, and unit conversion.",
             "AI may interpret, propose, extract, and prioritize. It cannot silently approve matches or calculate authoritative metrics.",
@@ -162,7 +162,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current authority boundary",
-          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes certified not-comparable and final insufficient-evidence cases from price metrics, and disables automatic match fallback. Human certification governs whether a product pair is comparable; Product Pack brand policies separately govern which reporting views may include that certified pair. Inclusive ignore-brand views retain every certified-comparable pair, while private-label and same-brand views require affirmative governed brand evidence and fail closed when it is missing. Final insufficient-evidence decisions remain in an immutable exclusion ledger with reviewer, rationale, and evidence provenance; cases without any final human outcome block publication. Repeating the same source and release is idempotent by default. A current-code rebuild requires an explicit force-rebuild instruction and audit reason; it increments the immutable replay generation and creates a new report ID rather than mutating the prior publication. Certification decisions never silently rewrite a published report.",
+          text: "The existing governed matcher remains authoritative unless an administrator explicitly creates a Matching v2 gold-set replay from an exhaustive operational certification queue. Sampled validation gold sets measure matcher quality but cannot drive reporting. A cutover replay is checksum-bound to one certified snapshot, uses certified comparable relationships only, excludes certified not-comparable and final insufficient-evidence cases from price metrics, and disables automatic match fallback. Human certification governs whether a product pair is comparable; Product Pack brand policies separately govern which reporting views may include that certified pair. Inclusive ignore-brand views retain every certified-comparable pair, while private-label and same-brand views require affirmative governed brand evidence and fail closed when it is missing. Final insufficient-evidence decisions remain in an immutable exclusion ledger with reviewer, rationale, and evidence provenance; cases without any final human outcome block publication. Repeating the same source and release is idempotent by default. In Match Certification administration, selecting Reprocess retained evidence requires an audit reason, increments the immutable replay generation, and creates a new report ID rather than mutating the prior publication. That rebuild makes zero collection, provider, or AI calls. Certification decisions never silently rewrite a published report.",
         },
       ],
     },
@@ -189,8 +189,8 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "Price Intelligence",
-              "One-retailer product, Search-listed price, Search reach, verified local availability, architecture, review, and future history.",
-              "Search appearance is not availability. Verified local availability requires explicit in_stock=true and a non-sponsored result; non-observation is not confirmed out-of-stock.",
+              "One-retailer product, Search-listed price, observed store distribution, separate service-area presence, architecture, review, and future history.",
+              "Distribution is the distinct positive-price store-level Search footprint. It is not inventory or in-stock status, is not extrapolated, and keeps service areas separate from stores.",
             ],
             [
               "Competitive Intelligence",
@@ -313,7 +313,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "8. Build the canonical product-location population",
               detail:
-                "For each retailer × product × location, select the latest Search availability state before admitting price evidence. A newer explicit out-of-stock, sponsored, unknown-stock, or otherwise unverified row—including one with null or zero price—retracts an older verified state. Retain that selected row's raw in_stock and sponsorship evidence, classify local availability deterministically, disclose same-timestamp conflicts, and enrich geography from the location master. Only after latest-state selection may an in-scope positive-USD row enter Search-reach or price projection; only explicit in_stock=true plus is_sponsored=false verifies local availability.",
+                "For each retailer × product × location, select the latest Search evidence, preserve its source fields for audit, and enrich geography from the location master. An in-scope store-level row with price greater than $0 enters observed store distribution; deduplicate by retailer product ID × store ID. Service-area rows enter a separate service-area presence count. Stock and sponsorship flags do not determine either footprint, and no count is extrapolated to unobserved locations.",
             },
             {
               title: "9. Exclude noise and known marketplace sellers",
@@ -323,7 +323,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "10. Enrich distinct admitted products",
               detail:
-                "Create a read-only, cache-adjusted estimate first. Reuse fresh PDP cache, then collect at most one representative Search-observed location context per distinct in-scope product unless contradictory evidence or a governed price-regime diagnostic requires another sample. PDP enhances identity—not local Search price or availability.",
+                "Create a read-only, cache-adjusted estimate first. Reuse fresh PDP cache, then collect at most one representative Search-observed location context per distinct in-scope product unless contradictory evidence or a governed price-regime diagnostic requires another sample. PDP enhances identity—not Search-listed price or observed distribution.",
             },
             {
               title: "11. Resolve identity, brands, and attributes",
@@ -333,7 +333,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               title: "12. Generate and govern product relationships",
               detail:
-                "High-recall candidates are blocked by known hard conflicts, evaluated against Product Pack tiers, and scoped to verified local availability overlap. Price similarity is never a semantic matching signal.",
+                "High-recall candidates are blocked by known hard conflicts, evaluated against Product Pack tiers, and scoped to positive-price observed-distribution overlap. Price similarity is never a semantic matching signal.",
               link: {
                 href: "/admin/matching-v2",
                 label: "Match Certification",
@@ -694,7 +694,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "AI and vision",
-          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any newly generated candidate missing nonzero verified-local benchmark or competitor footprint evidence cannot cross this paid-call boundary. Compatibility counts on older immutable queues may support identity-oriented AI review but are Search reach only and never authorize local availability, comparison, or reporting. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Match Certification consolidates eligible retry-lineage observations in Product evidence claims, so the platform reasons once about each product attribute while retaining every pair-level citation and affected relationship. Structured evidence is always supplied. When Product Pack attributes are missing or held by reviewable lower-authority extraction, the evidence packet adds primary and available secondary PDP images, interleaved across both products and bounded to six per product. An image proposal must name an active Product Pack attribute, cite visible text, cite an exact image attached to exactly one listing, meet the 85% confidence floor, and normalize under the active Product Pack. The server classifies it as completion, corroboration, refinement, or conflict. Corroboration requires no action. The Auto-reconcile safe claims action handles the complete high-confidence consensus population in one checksum-bound administrator confirmation only when every observation names one value, fills an unknown attribute, has at least 95% confidence, and retains its exact image plus visible label text. Refinements, conflicts, and weaker evidence remain unresolved rather than becoming a mandatory clerical queue. Product Pack/configured constants, governed brand decisions, manual overrides, and previously human-verified values cannot be replaced in this lane. Structured AI proposals remain prohibited. Each append-only decision is bound to the complete proposal membership, selected source citation, queue and Product Pack versions, visible text, normalized and superseded values, policy checksum, and stale-safe claim checksum. The complete batch commits atomically. Raw Search, PDP, AI, and queue evidence never changes; conflicting verified values fail closed. Certification and reporting remain separate explicit gates. Every AI draft remains advisory.",
+          text: "A user may request AI drafts for explicit page selections or every currently eligible candidate in the active review queue and competitor-retailer filter. One governed run may contain up to 1,500 cases, enough for every current five-category release queue. Before any paid work is created, the UI discloses the exact case count, model, per-case ceiling, and worst-case aggregate exposure and requires an identified administrator to confirm. Each request is one idempotent durable Postgres batch with queue-wide queued, reviewing, ready, and needs-attention counts; the latest batch shows completed items, timestamps, estimated remaining time, and recorded cost. The worker processes two cases concurrently by default and automatically attempts each task twice. Existing AI tasks, final comparable/not-comparable decisions, known third-party listings, and any newly generated candidate missing nonzero positive-price benchmark or competitor footprint evidence cannot cross this paid-call boundary. After a terminal needs-attention failure, an identified administrator may confirm an individual or filtered-page bulk retry. A retry creates a new task linked to the failed task and preserves every prior attempt, safe error, and recorded cost; it never resets history. Each case permits at most four administrator retry rounds. Match Certification consolidates eligible retry-lineage observations in Product evidence claims, so the platform reasons once about each product attribute while retaining every pair-level citation and affected relationship. Structured evidence is always supplied. When Product Pack attributes are missing or held by reviewable lower-authority extraction, the evidence packet adds primary and available secondary PDP images, interleaved across both products and bounded to six per product. An image proposal must name an active Product Pack attribute, cite visible text, cite an exact image attached to exactly one listing, meet the 85% confidence floor, and normalize under the active Product Pack. The server classifies it as completion, corroboration, refinement, or conflict. Corroboration requires no action. The Auto-reconcile safe claims action handles the complete high-confidence consensus population in one checksum-bound administrator confirmation only when every observation names one value, fills an unknown attribute, has at least 95% confidence, and retains its exact image plus visible label text. Refinements, conflicts, and weaker evidence remain unresolved rather than becoming a mandatory clerical queue. Product Pack/configured constants, governed brand decisions, manual overrides, and previously human-verified values cannot be replaced in this lane. Structured AI proposals remain prohibited. Each append-only decision is bound to the complete proposal membership, selected source citation, queue and Product Pack versions, visible text, normalized and superseded values, policy checksum, and stale-safe claim checksum. The complete batch commits atomically. Raw Search, PDP, AI, and queue evidence never changes; conflicting verified values fail closed. Certification and reporting remain separate explicit gates. Every AI draft remains advisory.",
         },
         {
           kind: "callout",
@@ -718,13 +718,13 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "Matching footprint completeness",
-          text: "Current certification listing evidence counts distinct normalized store/location keys only when local availability is explicitly in stock and non-sponsored. Older immutable queues may receive a versioned compatibility count derived from positive-price Search reach; the UI labels that mixed-version field as a matching footprint, not verified availability. Compatibility counts support identity review only and cannot authorize local comparison, availability, distribution, or reporting. Existing queue evidence is never overwritten. The same compatibility view supplements missing seller-governance status, suppresses any known third-party case, and leaves permitted blank sellers explicitly unverified.",
+          text: "Current certification listing evidence counts distinct normalized store keys when the exact product appears in a store-level Search result with price greater than $0. Service-area presence is counted separately and never relabeled as stores. Existing queue evidence is never overwritten. The same compatibility view supplements missing seller-governance status, suppresses any known third-party case, and leaves permitted blank sellers explicitly unverified.",
         },
         {
           kind: "callout",
           tone: "attention",
           title: "Milk package volume is exact",
-          text: "Fresh Fluid Milk Product Pack 1.6.0 preserves package volume as a hard compatibility requirement and adds verified-local-footprint eligibility before a pair can enter current certification. A gallon, half gallon, quart, and pint are different products for matching; unit-price normalization may support price analysis only after a valid semantic relationship exists. Match Certification visibly blocks comparable approval when volume conflicts or is unresolved, and preserves historical queue roles for audit. Brand agreement never rescues a volume mismatch.",
+          text: "Fresh Fluid Milk Product Pack 1.6.0 preserves package volume as a hard compatibility requirement and adds positive-price observed-footprint eligibility before a pair can enter current certification. A gallon, half gallon, quart, and pint are different products for matching; unit-price normalization may support price analysis only after a valid semantic relationship exists. Match Certification visibly blocks comparable approval when volume conflicts or is unresolved, and preserves historical queue roles for audit. Brand agreement never rescues a volume mismatch.",
         },
         {
           kind: "callout",
@@ -752,8 +752,8 @@ export const platformDocumentation: PlatformDocumentation = {
         {
           kind: "callout",
           tone: "attention",
-          title: "Availability correction release boundary",
-          text: "Price Monitoring View 1.4.0, Price Monitoring Map 1.2.0, and Price Observation 1.2.0 are the corrected release contracts. Before their production deployment and a category rebuild pass the release gate, prior publications must not be shared as store-availability or distribution evidence. Their positive-price and sponsored rows describe Search reach only.",
+          title: "Observed distribution release boundary",
+          text: "The current report contracts define observed store distribution as distinct stores where the exact retailer product ID appears in a store-level Search result with price greater than $0. Stock flags and sponsorship do not determine this footprint. Service-area presence is a separate count and is never relabeled as stores. Reprocessing retained evidence creates corrected immutable reports without repeating provider collection.",
         },
         {
           kind: "definitions",
@@ -762,7 +762,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Price Intelligence",
               definition:
-                "Aggregates canonical product-location evidence without requiring product matches. Home selects an exact retailer product. Search reach and Search-listed price remain distinct from verified local availability. The cross-retailer Price Architecture Matrix places every eligible SKU into Walmart-defined or fixed verified-local Search-price bands. Product Overview combines identity, Search reach, verified availability, price, sponsorship, and map evidence; Product Price Architecture explains one SKU's verified-local Search-price distribution; Store Review focuses unusual verified-local prices and Search non-observations.",
+                "Aggregates canonical product-location evidence without requiring product matches. Home selects an exact retailer product. The cross-retailer Price Architecture Matrix places every positive-price SKU into Walmart-defined or fixed Search-price bands. Product Overview combines identity, observed store distribution, separate service-area presence, price, sponsorship, and map evidence; Product Price Architecture explains one SKU's positive Search-price distribution; Store Review focuses unusual Search-listed prices and Search non-observations.",
             },
             {
               term: "Competitive Intelligence",
@@ -776,30 +776,30 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Metric integrity rules",
           items: [
             "Calculate at product × location grain before rolling up to products, stores, cohorts, brands, markets, or retailers.",
-            "Name every denominator: Search-observed location contexts, verified-availability locations, eligible network locations, matched observations, scored benchmark stores, or another explicit governed population.",
-            "Never infer local availability or store carriage from a positive Search price. Only an explicit in_stock=true result with is_sponsored=false is verified locally in stock. Sponsored results, unknown sponsorship, missing stock flags, and legacy rows remain unverified; in_stock=false is explicitly out of stock.",
-            "Comparable Store Coverage is the share of distinct benchmark stores with verified local evidence and at least one valid local competitor comparison under the selected retailer, comparison basis, period, geography, and radius. Count each benchmark store once even when several products contribute evidence; count each contributing competitor store once. Service-area retailers use distinct delivery ZIPs instead of stores.",
+            "Name every denominator: observed-distribution stores, searched stores, service-area Search contexts, matched observations, scored benchmark stores, or another explicit governed population.",
+            "Observed store distribution counts each distinct store once when an exact retailer product ID appears in that store-level Search result with price greater than $0. It does not use store-level stock status, does not claim current inventory, and never extrapolates to unobserved stores. Service-area presence is calculated and labeled separately.",
+            "Comparable Store Coverage is the share of distinct benchmark stores with positive-price Search evidence and at least one valid local competitor comparison under the selected retailer, comparison basis, period, geography, and radius. Count each benchmark store once even when several products contribute evidence; count each contributing competitor store once. Service-area retailers use distinct delivery ZIPs instead of stores.",
             "Keep package price and normalized unit price as distinct comparison bases; use a unit price only when package evidence supports it.",
-            "Assign every unscored local context a reason such as no eligible match, no overlap, no verified local evidence, stale or missing price, collection failure, incomplete attributes, or review required.",
+            "Assign every unscored local context a reason such as no eligible match, no overlap, no positive-price Search evidence, stale or missing price, collection failure, incomplete attributes, or review required.",
             "Preserve retailer, Product Pack, relationship, geography, period, policy, evidence checksum, and freshness context with each result.",
             "Bind every live read model to the exact immutable artifact set cited by the published AnalysisResult evidence checksum. If more than one generation exists and none reconciles exactly, fail closed instead of merging generations.",
             "Apply Retailer Pack first-party seller policy at both classification and canonical product-location projection. Known third-party marketplace offers never enter price, coverage, assortment, matching, or competitive metrics; permitted blank sellers remain explicitly unverified.",
             "Apply the selected competitor and comparison basis to every scorecard and supporting product view. A context selector must never be presentation-only.",
-            "For physical retailers, radius-native scorecards rebuild certified product relationships at product × verified-local Walmart store grain and require the competitor store to be within the selected 1, 3, or 5 mile radius. Service-area retailers remain explicitly same-delivery-ZIP because they do not expose a comparable physical store footprint.",
+            "For physical retailers, radius-native scorecards rebuild certified product relationships at product × observed-distribution Walmart store grain and require the competitor store to be within the selected 1, 3, or 5 mile radius. Service-area retailers remain explicitly same-delivery-ZIP because they do not expose a comparable physical store footprint.",
             "Cohort Scorecards aggregate those same certified product-location outcomes by Product Pack segment; cohort membership never creates a new match. Assortment Scorecards keep global assortment breadth separate while applying the selected radius to local comparable coverage.",
             "Current Cohort Scorecard drawers read the exact radius-native relationship lineage materialized with each cohort. A cohort's displayed counts, rates, medians, gaps, product rows, and drill-down relationships are release-gated to the same relationship IDs; legacy exact-location candidates cannot populate or empty the drawer.",
             "Cohort price presentation follows the governed package signature. When every member has one fixed fluid-ounce size, the observation-weighted package-equivalent median is primary and price per fluid ounce is secondary. When package volumes differ, price per fluid ounce is primary. The canonical normalized metric remains available in export and audit lineage; presentation never changes eligibility, price outcomes, or stored calculations.",
-            "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search-listed price, query context, explicit stock status, sponsorship, or verified availability classification. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
+            "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search-listed price, query context, sponsorship, or observed distribution. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
             "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
-            "Distinguish no governed relationship, no verified local observation, Search-only evidence, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
+            "Distinguish no governed relationship, no positive-price Search observation, a location not searched, a Search non-observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
-            "Build local price ladders only from governed matched products and positive Search prices whose rows have explicit in_stock=true and is_sponsored=false. At each benchmark store, retain the lowest verified local offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
+            "Build local price ladders only from governed matched products with positive store-level Search prices. At each benchmark store, retain the lowest observed positive-price offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
-            "Keep the Price Architecture Matrix independent from matching. Admit a retailer SKU only when at least one non-sponsored Search row explicitly reports it in stock, then assign it exactly once from its median positive Search-listed package price across verified locally available locations. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
-            "Read Price Architecture Matrix rungs from the lowest Walmart price position to the highest. Exact canonical-brand filtering changes the displayed assortment but preserves the Walmart-defined rung boundaries; retailer verified-availability and Search-reach counters both use the active geography, brand-type, and brand filter scope. Every product card identifies the retailer product ID, verified local availability footprint, separate Search-observed reach, and seller-governance state.",
-            "Calculate matrix verified-availability coverage as the distinct union of eligible retailer locations with explicit in-stock, non-sponsored evidence for any product in a cell. Never sum individual product coverage. An empty cell means no eligible SKU with verified local availability fell in that price band; it is not proof of retailer assortment absence. Search reach remains a separate disclosure and never substitutes for availability coverage.",
+            "Keep the Price Architecture Matrix independent from matching. Admit a retailer SKU when it has at least one positive-price Search row, then assign it exactly once from its median positive Search-listed package price. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
+            "Read Price Architecture Matrix rungs from the lowest Walmart price position to the highest. Exact canonical-brand filtering changes the displayed assortment but preserves the Walmart-defined rung boundaries. Every product card identifies the retailer product ID, observed store distribution or separately labeled service-area presence, and seller-governance state.",
+            "Calculate matrix distribution coverage as the distinct union of positive-price store-level Search locations for any product in a cell. Never sum individual product footprints and never extrapolate to unobserved stores. An empty cell means no positive-price SKU was observed in that price band; it is not proof of retailer assortment absence.",
             "Keep every admitted benchmark product visible across the leadership tabs. A product without a governed relationship remains an explicit unscored product; it is never removed from the selector or represented as a measured zero.",
             "Prefer transparent retailer coverage, readiness, matched evidence, win/tie/loss, price gaps, and ladder rank over an opaque composite score. Any future index must publish its formula, direction, denominator, and exclusions beside the result.",
           ],
@@ -2081,7 +2081,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "information",
           title: "PDP collection is selective and cache-first",
-          text: "Search remains the listed package-price, query-context, explicit stock-status, sponsorship, and collection-time authority. Only explicit in_stock=true plus is_sponsored=false verifies local availability. PDP enrichment runs only for distinct admitted analysis products, reuses evidence that is fresh under the current 30-day policy, and normally selects one representative positive-price Search location context per product. Another PDP context is justified only by contradictory identity evidence or a governed location/variant diagnostic. Paid-calls-enabled means the contract is eligible for planning—not that every product/location request will succeed.",
+          text: "Search remains the listed package-price, query-context, sponsorship, and collection-time authority. Store distribution counts distinct store-level Search contexts where the exact product has price greater than $0; service-area presence remains separate. PDP enrichment runs only for distinct admitted analysis products, reuses evidence that is fresh under the current 30-day policy, and normally selects one representative positive-price Search location context per product. Another PDP context is justified only by contradictory identity evidence or a governed location/variant diagnostic. Paid-calls-enabled means the contract is eligible for planning—not that every product/location request will succeed.",
         },
         {
           kind: "table",
@@ -2096,12 +2096,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Search price",
               "Current, regular, discounted, currency, and positive-price observation",
-              "Only Search may author listed price and query reach; shelf/local language requires separately verified availability",
+              "Only Search may author listed price and observed distribution; price must be greater than $0",
             ],
             [
-              "Search availability",
-              "Raw in_stock, raw is_sponsored, availability status, and verified-local boolean",
-              "Only in_stock=true with is_sponsored=false is verified locally in stock; sponsored, unknown, missing, or legacy evidence fails closed",
+              "Search distribution",
+              "Distinct product × store positive-price Search presence, plus separate service-area presence",
+              "Stock status is retained only as raw audit evidence and is not used to calculate or label public distribution",
             ],
             [
               "Search location",
@@ -2310,22 +2310,22 @@ export const platformDocumentation: PlatformDocumentation = {
           ],
           rows: [
             [
-              "Search-observed location context",
-              "Distinct eligible retailer store or service-area queries returning the exact product with price > 0",
-              "Search positive listed price + product admission + frozen location",
-              "Measures Search reach only; never proves local availability or carriage",
+              "Observed store distribution",
+              "Distinct stores where the exact retailer product ID appears in a store-level Search result with price > 0",
+              "Search positive listed price + exact product identity + frozen store ID",
+              "Counts each observed store once; makes no inventory claim and never extrapolates to unobserved stores",
             ],
             [
-              "Verified locally available location",
-              "Distinct Search-observed locations with in_stock=true and is_sponsored=false",
-              "Explicit Search stock flag + explicit non-sponsored flag + product admission + frozen location",
-              "Sponsored results, unknown sponsorship, missing stock flags, and legacy rows remain unverified; in_stock=false is explicitly out of stock",
+              "Observed service-area presence",
+              "Distinct service-area Search contexts returning the exact product with price > 0",
+              "Search positive listed price + exact product identity + frozen service-area context",
+              "Reported separately and never presented as a store count",
             ],
             [
-              "Verified location coverage",
-              "Verified locally available locations ÷ all eligible retailer location queries",
-              "Explicit verified-local numerator + frozen eligible-location denominator",
-              "A known-signal rate such as verified ÷ (verified + explicit out-of-stock) is not carriage coverage; sponsored and unknown rows remain in the eligible denominator",
+              "Observed distribution coverage",
+              "Observed distribution stores ÷ searched store scope",
+              "Distinct positive-price store numerator + frozen searched-store denominator",
+              "The numerator is never projected beyond observed stores; service-area contexts use their own separately labeled denominator",
             ],
             [
               "Not observed",
@@ -2334,16 +2334,16 @@ export const platformDocumentation: PlatformDocumentation = {
               "A review signal, not proof of out-of-stock or non-carriage",
             ],
             [
-              "Search reach",
-              "Search-observed exact-product location contexts ÷ eligible retailer location queries",
+              "Positive-price Search presence",
+              "Distinct exact-product locations with a Search-listed price greater than $0",
               "Distinct store or service-area query grain",
-              "Describes search exposure, including sponsored exposure; it must not be labeled distribution or availability",
+              "Physical stores become observed store distribution; service areas remain separately labeled presence",
             ],
             [
               "Search-listed package price",
               "Positive Search price for the offered package",
               "Search price authority",
-              "PDP price may diagnose identity but never substitutes for this value; shelf/local wording is reserved for verified availability rows",
+              "PDP price may diagnose identity but never substitutes for this value",
             ],
             [
               "Unit price",
@@ -2352,16 +2352,16 @@ export const platformDocumentation: PlatformDocumentation = {
               "Unavailable when the denominator or conversion is unknown or conflicting",
             ],
             [
-              "Verified local median price",
-              "Median of exact-product prices whose rows have explicit in_stock=true and is_sponsored=false",
-              "Verified local Search observations in the selected retailer/geography",
-              "The UI must label package or normalized unit explicitly; when no verified rows exist, any Search-listed median is labeled unverified",
+              "Median Search-listed price",
+              "Median of positive exact-product Search prices in the selected observed footprint",
+              "Positive-price Search observations in the selected retailer/geography",
+              "The UI must label package or normalized unit explicitly",
             ],
             [
-              "Verified local price range",
-              "Minimum through maximum exact-product price among verified local rows",
-              "Same explicit in-stock, non-sponsored rows as the verified local median",
-              "Search-only ranges remain labeled Search-listed and availability unverified",
+              "Search-listed price range",
+              "Minimum through maximum positive exact-product Search price",
+              "Same positive-price rows as the Search-listed median",
+              "The range describes observed Search prices, not inventory",
             ],
             [
               "Sponsored share",
@@ -2372,7 +2372,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "IQR price exception",
               "Outside Q1 − 1.5×IQR or Q3 + 1.5×IQR; modal-tolerance fallback when IQR is zero",
-              "Exact-product verified-local Search prices by query context + Product Pack tolerance",
+              "Exact-product positive Search-listed prices by query context + Product Pack tolerance",
               "An exception is a review priority, not automatic bad data",
             ],
           ],
@@ -2395,8 +2395,8 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "Local comparable offer",
-              "Eligible competitor product with explicit in_stock=true and is_sponsored=false at the same delivery ZIP or physical store within selected 1, 3, or 5 miles",
-              "Verified local Search observations + certified relationship + frozen coordinates",
+              "Eligible competitor product with a positive store-level Search price at the same delivery ZIP or physical store within selected 1, 3, or 5 miles",
+              "Positive-price Search observations + certified relationship + frozen coordinates",
               "Changing radius changes local evidence, never the product identity or certification",
             ],
             [
@@ -2407,9 +2407,9 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "Comparable store coverage",
-              "Comparable benchmark stores ÷ distinct benchmark stores with verified local availability for an in-scope benchmark product",
-              "Distinct verified benchmark-store grain",
-              "Search discovery and sponsored-only rows do not enter the denominator; this is not product-location volume",
+              "Comparable benchmark stores ÷ distinct observed-distribution benchmark stores for an in-scope benchmark product",
+              "Distinct positive-price benchmark-store grain",
+              "Multiple positive-price products at one store still count the store once",
             ],
             [
               "Contributing competitor footprint",
@@ -2432,13 +2432,13 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Product leadership",
               "At each benchmark store, compare the benchmark product with the controlling lowest eligible local competitor offer",
-              "Certified relationship + explicit in-stock, non-sponsored local Search evidence on both sides",
+              "Certified relationship + positive-price local Search evidence on both sides",
               "Leader, tied, at-risk, losing, and unscored are mutually exclusive",
             ],
             [
               "Price ladder",
               "Order governed comparable product prices within match group × geography × snapshot",
-              "Matched positive Search prices with explicit in_stock=true and is_sponsored=false",
+              "Matched positive store-level Search prices",
               "Unrelated category products may not be presented as substitutes",
             ],
             [
@@ -2449,8 +2449,8 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "Whitespace / exclusivity",
-              "Product with verified local availability and no governed eligible equivalent in the corresponding verified footprint",
-              "Explicit in-stock, non-sponsored assortment evidence + relationship ledger + geography",
+              "Product with observed store distribution and no governed eligible equivalent in the corresponding observed footprint",
+              "Positive-price assortment evidence + relationship ledger + geography",
               "A missing Search row alone does not prove whitespace",
             ],
           ],
@@ -2515,9 +2515,9 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "definitions",
           items: [
             {
-              term: "Search-observed location context",
+              term: "Observed store distribution",
               definition:
-                "An eligible retailer store or service-area query where the exact product had an admitted positive-price Search result. It measures Search reach and does not prove local availability or carriage.",
+                "The count of distinct stores where the exact retailer product ID appeared in a store-level Search result with a listed price greater than $0. Each store counts once. It is not inventory or in-stock status and is never extrapolated to unobserved stores.",
             },
             {
               term: "Not observed location",
@@ -2525,29 +2525,24 @@ export const platformDocumentation: PlatformDocumentation = {
                 "An eligible planned location where the exact product was not found in the admitted Search evidence. This is not proof of out-of-stock or confirmed non-carriage.",
             },
             {
-              term: "Verified locally in stock",
+              term: "Observed service-area presence",
               definition:
-                "A product-location Search result with explicit in_stock=true and explicit is_sponsored=false. Sponsored results, unknown sponsorship, missing stock flags, and legacy rows are unverified; the browser never infers this status from price.",
+                "The count of distinct service-area Search contexts where the exact retailer product ID appeared with a listed price greater than $0. It is always reported separately and never presented as stores sold.",
             },
             {
-              term: "Search reach",
+              term: "Observed distribution coverage",
               definition:
-                "Search-observed exact-product location contexts divided by the eligible retailer-location query population under the current geography. This may include sponsored exposure and must not be labeled distribution or availability.",
-            },
-            {
-              term: "Verified location coverage",
-              definition:
-                "Distinct locations with explicit in_stock=true and is_sponsored=false divided by the complete eligible retailer-location query population. Sponsored and unknown-stock rows stay in the denominator, so a sparse verified subset cannot appear as 100% carriage merely because no explicit out-of-stock row exists.",
+                "Distinct positive-price store-level Search locations divided by the searched store scope. The numerator is not projected beyond observed stores. Service-area coverage uses its own separately labeled population.",
             },
             {
               term: "Sponsored",
               definition:
-                "Search is_sponsored=true for the product-location evidence. It is not a generalized promotion label and cannot prove local availability even when a positive price is present.",
+                "Search is_sponsored=true for the product-location evidence. It is not a generalized promotion label. Sponsorship does not exclude an otherwise valid positive-price store Search result from observed distribution.",
             },
             {
               term: "Search-listed package price",
               definition:
-                "The positive price returned for the offered package by a store- or service-area-context Search query. Shelf/local-price wording is reserved for rows with verified local availability.",
+                "The positive price returned for the offered package by a store- or service-area-context Search query.",
             },
             {
               term: "Unit price",
@@ -2587,12 +2582,12 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Coverage",
               definition:
-                "The portion of the intended comparison population with sufficient source, match, geography, freshness, and price evidence to score. Semantic, availability, and price coverage are separate.",
+                "The portion of the intended comparison population with sufficient source, match, geography, freshness, and positive-price evidence to score. Semantic, observed-distribution, and price coverage are separate.",
             },
             {
               term: "Comparable store coverage",
               definition:
-                "Distinct benchmark stores with at least one valid local competitor product comparison divided by distinct benchmark stores with verified local availability for an in-scope benchmark product. Search discovery and sponsored-only rows do not enter the denominator. Multiple products at one store count once. Physical competitors report distinct contributing stores; service-area competitors report distinct delivery ZIPs.",
+                "Distinct benchmark stores with at least one valid local competitor product comparison divided by distinct observed-distribution benchmark stores for an in-scope benchmark product. Multiple products at one store count once. Physical competitors report distinct contributing stores; service-area competitors report distinct delivery ZIPs.",
             },
             {
               term: "Whitespace / gap",
@@ -2798,7 +2793,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Scored product-location comparison",
               definition:
-                "A certified eligible relationship with admissible positive Search prices whose rows have explicit in_stock=true and is_sponsored=false under the selected physical-store radius. Amazon Same Day remains explicitly labeled same-ZIP service-area evidence.",
+                "A certified eligible relationship with admissible positive Search prices under the selected physical-store radius. Store distribution requires the exact retailer product in a store-level Search result with price greater than zero; stock and sponsorship fields do not determine distribution. Amazon Same Day remains explicitly labeled same-ZIP service-area evidence and is never counted as stores.",
             },
             {
               term: "Explicit warning",
@@ -2856,7 +2851,7 @@ export const platformDocumentation: PlatformDocumentation = {
         {
           kind: "list",
           items: [
-            "Price Monitoring View 1.4.0, Price Monitoring Map 1.2.0, and Price Observation 1.2.0 implement the corrected availability boundary, but production deployment and category rebuild validation remain pending. Older publications may contain sponsored or unknown-stock Search appearances in legacy location/distribution counts; treat those counts as Search reach only and do not share them as store availability.",
+            "Corrected report contracts and category reprocessing use distinct positive-price store-level Search results as observed distribution, keep service-area presence separate, and do not expose store-level inventory status. A prior report is not current until its immutable reprocessed successor passes the release gate.",
             "Matching v2 is shadow/certification evidence and does not replace the authoritative report matcher until per-Product-Pack release gates pass.",
             "The active Vitamin Brand Foundation resolves and verifies 1,246 of 1,440 distinct queue listings (86.53%). The remaining 194 unresolved brands stay explicitly unknown; the platform does not infer brand authority from weak or ambiguous text.",
             "Vitamins & Supplements reporting is published from the immutable 480-relationship Matching v2 release. The 388 rejected and 1,448 insufficient-evidence cases remain outside price reporting. Competitive Portfolio 1.4.0 is deployed with a complete 322-product source-catalog evidence funnel: 320 products are governed in scope and two topical skin oils are visible governed exclusions. The on-demand product disposition ledger and Product Pack-controlled five-mile default are production-verified. AI remains advisory and no report relationship changes automatically.",
@@ -2882,7 +2877,7 @@ export const platformDocumentation: PlatformDocumentation = {
         "How product decisions are recorded and how these docs stay synchronized with implementation, testing, and production.",
       audience: "Platform owner · Platform administrator · Engineering",
       readingTime: "7 min",
-      lastVerified,
+      lastVerified: availabilityEvidenceLastVerified,
       status: "Current",
       blocks: [
         {
@@ -2930,8 +2925,8 @@ export const platformDocumentation: PlatformDocumentation = {
         {
           kind: "callout",
           tone: "attention",
-          title: "Historical availability language is obsolete",
-          text: "Entries before September 8, 2026 preserve the terminology used when those changes were recorded. Any historical statement that Search, a positive price, an observed location, store coverage, or distribution proved availability is superseded by the September 8 correction and must be read as Search reach only. Current authority requires explicit in_stock=true and is_sponsored=false for verified local availability.",
+          title: "Current distribution authority",
+          text: "Change-order entries preserve the terminology used when they were recorded. The owner's later September 8 correction supersedes the earlier same-day availability interpretation: observed store distribution is the distinct store footprint where an exact product appears in store-level Search with price greater than $0. It is not an inventory claim, does not use stock status, keeps service areas separate, and is never extrapolated.",
         },
         {
           kind: "table",
@@ -2940,9 +2935,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-08",
-              "Implemented and locally test-verified; deployment, immutable rebuilds, and production acceptance pending",
-              "Corrected the category-wide defect that allowed sponsored or unknown-stock positive-price Search results to be presented as store availability or distribution.",
-              "Price Observation 1.2.0 preserves raw in_stock and classifies each Search row as verified_in_stock, explicitly_out_of_stock, unverified_sponsored, or unverified. Only explicit in_stock=true plus is_sponsored=false verifies local availability. The canonical product-location projector selects the latest availability state before positive-price admission, so a newer out-of-stock, sponsored, or unknown row—including null or zero price—retracts stale verified evidence. Price Monitoring View 1.4.0 keeps Search reach additive and separately reports verified-availability counts; Price Monitoring Map 1.2.0 carries the same row status and separates Search-reach, verified in-stock, explicit out-of-stock, and unverified counts. Product availability coverage uses all eligible local queries as its denominator, so sponsored or unknown rows cannot turn sparse proof into 100% carriage. Price Architecture retailer counters use the same active geography, brand-type, and brand filter scope for both verified availability and Search reach. Missing legacy evidence fails closed. Price Intelligence, maps, product rows, price architecture, assortment cards, Brand Workbench, report renderers, matching-footprint presentation, and administrator guidance now use Search-listed price and Search-observed reach terminology with explicit availability proof. Prior reports remain immutable but are quarantined from availability/distribution use until corrected replacements pass contract, analytics, UI, category regression, and production acceptance gates. No provider or AI call is required for the code correction; retained evidence may be rebuilt only through the governed publication path.",
+              "Implemented and locally test-verified; category reprocessing and production acceptance in progress",
+              "Restored the owner-defined positive-price Search footprint as product distribution and removed public store-level stock indicators.",
+              "For each exact retailer product, a distinct physical store counts once when the product appears in that store-level Search result with price greater than $0. Service-area presence uses a separate field and is never presented as stores. Stock and sponsorship fields do not determine this distribution count; no result is extrapolated to an unobserved store. Price Intelligence product cards, maps, geographic price views, store review, and the Price Architecture Matrix now use this definition and positive Search-listed prices. Match Certification administration exposes Reprocess retained evidence with a required reason; it creates a new immutable replay generation with zero collection, provider, or AI calls while preserving prior audit history.",
+            ],
+            [
+              "2026-09-08",
+              "Superseded by the owner-defined distribution correction recorded immediately above",
+              "The interim stock-status interpretation in this entry is not current authority.",
+              "Price Observation 1.3.0, Price Monitoring View 1.5.0, Price Monitoring Map 1.3.0, and Price Architecture Matrix 1.3.0 use the explicit positive-price Search distribution contract. A distinct physical store counts once per exact retailer product when that product appears in store-level Search with price greater than zero. Service-area presence is stored separately and never counted as stores. Stock status and sponsorship do not determine distribution, and no retailer location master is used to extrapolate to unobserved stores. Retained immutable evidence can be rebuilt through the governed publication path without a provider or AI call.",
             ],
             [
               "2026-08-30",
@@ -3308,7 +3309,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-22",
               "Deployed and production-verified",
               "Phase 13.41 changes the governed Product Details freshness default from seven days to 30 days.",
-              "This historical entry described Search as collection-cadence and store-authoritative for price, availability, and sponsorship. Its availability wording is obsolete: current authority treats Search as listed-price and query-context evidence, and only explicit in_stock=true plus is_sponsored=false verifies local availability. PDP planning continues after scope filtering and selects one representative observed context per distinct admitted retailer product. A fresh normalized HTTP 200 snapshot is reused at zero credits; only new, missing, unsuccessful, explicitly refreshed, or at-least-30-day-old identity evidence is eligible for a paid PDP call. The worker, immutable-raw recovery path, environment template, and Railway deployment guide share the 2,592,000-second default. Commit c100b66 is live and the production worker reports 2,592,000 seconds. A bounded operational transition extended 2,768 successful normalized HTTP 200 snapshots to observed_at plus 30 days; the post-check found zero eligible snapshots remaining on the former expiration. Raw payloads, observed timestamps, failures, audit lineage, Search data, and prices were untouched. GitHub Actions run 32615296706 passed every Python, TypeScript, contract, reversible-migration, browser, build, and service-container gate. No Search, PDP, or AI call was made.",
+              "This historical entry described Search as collection-cadence and store-authoritative for price, availability, and sponsorship. That wording and the later interim stock-status rule are superseded. Current distribution authority counts an exact product in a distinct store only when it appears in store-level Search with price greater than zero; service areas remain separate, stock status is not used, and no inventory claim is made. PDP planning continues after scope filtering and selects one representative observed context per distinct admitted retailer product. A fresh normalized HTTP 200 snapshot is reused at zero credits; only new, missing, unsuccessful, explicitly refreshed, or at-least-30-day-old identity evidence is eligible for a paid PDP call. The worker, immutable-raw recovery path, environment template, and Railway deployment guide share the 2,592,000-second default. Commit c100b66 is live and the production worker reports 2,592,000 seconds. A bounded operational transition extended 2,768 successful normalized HTTP 200 snapshots to observed_at plus 30 days; the post-check found zero eligible snapshots remaining on the former expiration. Raw payloads, observed timestamps, failures, audit lineage, Search data, and prices were untouched. GitHub Actions run 32615296706 passed every Python, TypeScript, contract, reversible-migration, browser, build, and service-container gate. No Search, PDP, or AI call was made.",
             ],
             [
               "2026-08-22",
@@ -3362,7 +3363,7 @@ export const platformDocumentation: PlatformDocumentation = {
               "2026-08-21",
               "Deployed, contract-audited, replayed, semantically audited, and production-verified",
               "Phase 13.32 makes MetricsCart Search by ZIP APIs the only mechanism for new collections and pins a fail-closed live response contract before controlled Strawberry and Milk publication acceptance.",
-              "The 2026-08-16 owner-supplied catalog hashes and 14 representative Search endpoint samples govern explicit field aliases and source authority. This historical entry used positive Search price as observed/in-stock authority; that convention is obsolete and now represents Search reach only. Current verified local availability requires explicit in_stock=true plus is_sponsored=false. Recognized empty arrays stop pagination, while unknown shapes, non-object rows, missing required identity, nonnumeric price, or incompatible sponsorship types retain the raw billable page and fail as nonretryable schema_drift. Historical CSVs remain reproducible evidence only. Walmart, ALDI, and Amazon Same Day remain the only enabled V1 Search adapters; every additional catalogued retailer requires controlled endpoint, location, billing, and payload preflight. Strawberry generation 4 completed 10/10 durable stages with zero semantic errors or warnings. Milk generation 5 completed 13/13 durable stages with zero semantic errors and 21 explicit nonblocking disclosures. Each old report stayed ready until its replacement activated, then was recoverably archived. Exactly five active reports remain, all ready. Commit e50f538 and GitHub Actions run 32548641460 passed the full release gate. No MetricsCart, PDP, or OpenAI call was made.",
+              "The 2026-08-16 owner-supplied catalog hashes and 14 representative Search endpoint samples govern explicit field aliases and source authority. This historical entry used positive Search price as observed/in-stock authority, and a later interim rule substituted explicit stock flags; both interpretations are superseded. Current distribution authority counts the exact retailer product in each distinct store-level Search result with price greater than zero, reports service-area presence separately, does not use stock status, and makes no inventory claim. Recognized empty arrays stop pagination, while unknown shapes, non-object rows, missing required identity, nonnumeric price, or incompatible sponsorship types retain the raw billable page and fail as nonretryable schema_drift. Historical CSVs remain reproducible evidence only. Walmart, ALDI, and Amazon Same Day remain the only enabled V1 Search adapters; every additional catalogued retailer requires controlled endpoint, location, billing, and payload preflight. Strawberry generation 4 completed 10/10 durable stages with zero semantic errors or warnings. Milk generation 5 completed 13/13 durable stages with zero semantic errors and 21 explicit nonblocking disclosures. Each old report stayed ready until its replacement activated, then was recoverably archived. Exactly five active reports remain, all ready. Commit e50f538 and GitHub Actions run 32548641460 passed the full release gate. No MetricsCart, PDP, or OpenAI call was made.",
             ],
             [
               "2026-08-21",

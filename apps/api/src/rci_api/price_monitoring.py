@@ -27,6 +27,7 @@ from rci_analytics import (
     PriceMonitoringProjector,
     ProductPriceObservation,
     classified_offer_from_record,
+    store_search_distribution_contract,
 )
 from rci_analytics.product_location import ProductLocationPopulation
 from rci_api.analyses import PublicAnalysisDependency, get_analysis_service
@@ -581,12 +582,13 @@ class PostgresPriceMonitoringRepository:
             WHERE retailer_id = :retailer_id
             """
         )
-        planned = text(
+        successful_searches = text(
             """
             SELECT DISTINCT location_scope_key, store_number, zipcode
             FROM collection_task
             WHERE collection_run_id::text = :collection_run_id
               AND retailer_id = :retailer_id
+              AND status = 'succeeded'
             """
         )
         zip_geography = text(
@@ -618,9 +620,11 @@ class PostgresPriceMonitoringRepository:
                         for row in zip_rows
                     }
                 )
-            planned_rows = (await connection.execute(planned, parameters)).mappings().all()
+            successful_rows = (
+                (await connection.execute(successful_searches, parameters)).mappings().all()
+            )
         eligible_index: dict[tuple[str, str], dict[str, Any]] = {}
-        for row in planned_rows:
+        for row in successful_rows:
             store_number = str(row["store_number"]) if row["store_number"] is not None else None
             zipcode = str(row["zipcode"]) if row["zipcode"] is not None else None
             location_key = store_number or (f"zip:{zipcode}" if zipcode else None)
@@ -631,7 +635,7 @@ class PostgresPriceMonitoringRepository:
             context.setdefault("store_number", store_number)
             context.setdefault("zipcode", zipcode)
             eligible_index[(retailer_id, location_key)] = context
-        return location_index, eligible_index, len(planned_rows)
+        return location_index, eligible_index, len(successful_rows)
 
     async def product_context(
         self,
@@ -1413,7 +1417,8 @@ class PriceMonitoringService:
                         "sku_count": 0,
                         "eligible_locations": 0,
                         "observed_locations": 0,
-                        "verified_available_locations": 0,
+                        "distribution_store_count": 0,
+                        "service_area_presence_count": 0,
                         "search_observed_locations": 0,
                         "search_observed_skus": 0,
                         "verified_first_party_skus": 0,
@@ -1709,10 +1714,8 @@ class PriceMonitoringService:
                 "state",
                 "price",
                 "search_observed",
-                "in_stock",
                 "is_sponsored",
-                "availability_status",
-                "verified_local_availability",
+                "distribution_store_id",
                 "observed_at",
             ]
         )
@@ -1728,10 +1731,8 @@ class PriceMonitoringService:
                     row["state"],
                     row["price"],
                     row.get("search_observed", True),
-                    row.get("in_stock"),
                     row["is_sponsored"],
-                    row.get("availability_status", "unverified"),
-                    row.get("verified_local_availability", False),
+                    row.get("distribution_store_id"),
                     row["observed_at"],
                 ]
             )
@@ -1748,7 +1749,7 @@ class PriceMonitoringService:
             raise ValueError("a product_id is required for the price footprint map")
         if filters.city is not None and filters.state is None:
             raise ValueError("a city filter requires its state")
-        cache_key = (*self._view_key(analysis_id, filters), "map-v2", detail)
+        cache_key = (*self._view_key(analysis_id, filters), "map-v3", detail)
         cached = self._map_cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1775,16 +1776,6 @@ class PriceMonitoringService:
             price = (
                 row.get("search_median_price", row.get("median_price")) if search_observed else None
             )
-            availability_status = (
-                str(row.get("availability_status") or "unverified")
-                if search_observed
-                else "unverified"
-            )
-            verified_local_availability = bool(
-                search_observed
-                and availability_status == "verified_in_stock"
-                and row.get("verified_local_availability") is True
-            )
             difference = (
                 round(float(price) - float(reference_price), 4)
                 if price is not None and reference_price is not None
@@ -1794,10 +1785,12 @@ class PriceMonitoringService:
                 "scope_key": str(row["scope_key"]),
                 "status": status_value,
                 "search_observed": search_observed,
-                "in_stock": row.get("in_stock") if search_observed else None,
                 "is_sponsored": row.get("is_sponsored") if search_observed else None,
-                "availability_status": availability_status,
-                "verified_local_availability": verified_local_availability,
+                "distribution_store_id": (
+                    row.get("store_number")
+                    if search_observed and row.get("kind") == "store"
+                    else None
+                ),
                 "kind": row["kind"],
                 "store_number": row.get("store_number"),
                 "store_name": row.get("store_name"),
@@ -1850,7 +1843,7 @@ class PriceMonitoringService:
             map_point(row, "not_observed") for row in evenly_sample(not_observed_with_coordinates)
         ]
         result = {
-            "schema_version": "1.2.0",
+            "schema_version": "1.3.0",
             "analysis_id": analysis_id,
             "retailer": {
                 "id": view["retailer"]["id"],
@@ -1860,6 +1853,7 @@ class PriceMonitoringService:
                 "id": products[0]["product_id"],
                 "name": products[0]["name"],
             },
+            "distribution_contract": store_search_distribution_contract(),
             "filters": {
                 "state": filters.state,
                 "city": filters.city,
@@ -1870,27 +1864,17 @@ class PriceMonitoringService:
                 "authority": "Search",
                 "location_authority": "Retailer location master",
                 "definition": (
-                    "Search-observed points have positive Search-listed prices. Verified "
-                    "local availability additionally requires explicit in-stock and "
-                    "non-sponsored evidence. Not-observed points are planned collection "
-                    "locations where the exact product did not appear in Search; neither "
-                    "state alone proves chainwide carriage or non-carriage."
+                    "Store distribution is the count of distinct store IDs where the exact "
+                    "product appears in store-level Search with price greater than zero. "
+                    "Service-area Search presence is separate. Neither is an in-stock claim."
                 ),
             },
             "reference_price": reference_price,
             "display": {
                 "observed_locations": int(view["location_display"]["total"]),
                 "search_observed_locations": int(view["location_display"]["total"]),
-                "verified_available_locations": sum(
-                    row.get("verified_local_availability") is True for row in observed_rows
-                ),
-                "explicitly_out_of_stock_locations": sum(
-                    row.get("availability_status") == "explicitly_out_of_stock"
-                    for row in observed_rows
-                ),
-                "unverified_locations": sum(
-                    row.get("verified_local_availability") is not True for row in observed_rows
-                ),
+                "distribution_store_count": int(view["summary"]["distribution_store_count"]),
+                "service_area_presence_count": int(view["summary"]["service_area_presence_count"]),
                 "observed_points": len(observed_points),
                 "observed_missing_coordinates": max(
                     0,

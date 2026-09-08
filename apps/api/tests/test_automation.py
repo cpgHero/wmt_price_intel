@@ -40,15 +40,15 @@ def _context(analysis_id: str, created_at: datetime, rate: float) -> AnalysisCon
             "evidence_refs": ["evidence-source-manifest"],
         }
     )
-    availability_evidence = []
+    distribution_evidence = []
     for coverage in document["coverage"]:
         retailer_id = str(coverage["retailer_id"])
         evidence_ref = str(coverage["evidence_refs"][0])
-        availability_evidence.append(evidence_ref)
+        distribution_evidence.append(evidence_ref)
         for field, unit in (
-            ("verified_available_offers", "offers"),
-            ("verified_available_zips", "zipcodes"),
-            ("verified_available_stores", "stores"),
+            ("distribution_search_offers", "offers"),
+            ("distribution_stores", "stores"),
+            ("service_area_presence_count", "service_areas"),
         ):
             metric_id = f"coverage.{retailer_id}.{field}"
             coverage["metric_refs"].append(metric_id)
@@ -56,18 +56,18 @@ def _context(analysis_id: str, created_at: datetime, rate: float) -> AnalysisCon
                 {
                     "metric_id": metric_id,
                     "name": metric_id,
-                    "value": 1,
+                    "value": 0 if field == "service_area_presence_count" else 1,
                     "unit": unit,
-                    "method": "verified automation API regression fixture",
+                    "method": "distribution automation API regression fixture",
                     "source": "deterministic",
                     "evidence_refs": [evidence_ref],
                 }
             )
     document["validation"]["checks"].append(
         {
-            "id": "verified-local-availability",
+            "id": "store-search-distribution",
             "status": "passed",
-            "evidence_refs": availability_evidence,
+            "evidence_refs": distribution_evidence,
         }
     )
     result_id = f"result-{analysis_id}"

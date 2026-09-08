@@ -1,5 +1,9 @@
 # Phase 13.81 — Verified Local Availability Boundary
 
+> Superseded for current reporting by
+> [Phase 13.82 — Positive-price Search store distribution](136_PHASE_13_82_POSITIVE_SEARCH_STORE_DISTRIBUTION.md).
+> This file records the prior implementation and is not the current metric definition.
+
 Date: 2026-09-08
 Status: implemented and locally validated; production deployment and governed report replay pending
 

@@ -94,8 +94,8 @@ function scopeLabel(scope: MatchReviewConnection["scope"]) {
   if (scope.mode === "explicit_benchmark_locations")
     return `${count} selected primary locations`;
   return count
-    ? `Verified-local primary product footprint · ${count} locations`
-    : "Verified-local primary product footprint · no locations";
+    ? `Observed primary product store distribution · ${count} stores`
+    : "Observed primary product store distribution · no stores";
 }
 
 function ProductImage({
@@ -746,9 +746,11 @@ function MatchEvidenceDrawer({
           ) : null}
           <p>
             Listed price and retailer location query context come from Search.
-            Only explicit in-stock, non-sponsored evidence verifies local
-            availability. PDP evidence is used for product identity,
-            descriptions, specifications, URLs, and imagery.
+            Store distribution counts distinct stores where the exact product
+            appeared in store-level Search with price greater than zero.
+            Service-area presence is separate, and neither measure claims
+            inventory. PDP evidence is used for product identity, descriptions,
+            specifications, URLs, and imagery.
           </p>
           {selection.connection ? (
             <span>
@@ -1254,7 +1256,7 @@ export function MatchReviewWorkbench({
             onChange={(event) => setScopeMode(event.target.value as ScopeMode)}
           >
             <option value="observed_benchmark_product_footprint">
-              Verified-local primary product footprint
+              Observed primary product store distribution
             </option>
             <option value="global">All governed locations</option>
           </select>
@@ -1273,9 +1275,10 @@ export function MatchReviewWorkbench({
         </div>
         <p>
           {selectedProfile?.label}. New decisions default to the primary
-          product&apos;s verified-local store footprint, allowing the same
+          product&apos;s observed store distribution, allowing the same
           competitor item to map to different regional primary products only
-          where their footprints do not overlap.
+          where their observed store sets do not overlap. Service-area presence
+          is separate and never treated as stores.
         </p>
       </div>
 

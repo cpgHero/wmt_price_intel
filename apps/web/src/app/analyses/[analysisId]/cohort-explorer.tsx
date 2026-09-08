@@ -11,6 +11,7 @@ import {
   cohortPricePresentation,
   sortComparableCohorts,
 } from "@/lib/cohort-model";
+import { distributionCount } from "@/lib/distribution-presentation";
 
 type OutcomeFilter = "all" | Exclude<CohortOutcome, "unavailable">;
 
@@ -39,7 +40,8 @@ function formatCohortCurrency(value: number | null, unitLabel: string) {
       });
 }
 
-function formatRate(value: number) {
+function formatRate(value: number | null) {
+  if (value === null) return "—";
   return value.toLocaleString("en-US", {
     style: "percent",
     maximumFractionDigits: 1,
@@ -47,15 +49,41 @@ function formatRate(value: number) {
 }
 
 function contributingLocationLabel(
-  stores: number,
-  serviceAreas: number,
-  fallbackLocations: number,
+  stores: number | null | undefined,
+  serviceAreas: number | null | undefined,
 ) {
+  if (
+    stores === undefined ||
+    stores === null ||
+    serviceAreas === undefined ||
+    serviceAreas === null
+  )
+    return "competitor store and service-area counts not supplied";
   if (serviceAreas && !stores)
     return `${serviceAreas.toLocaleString()} delivery ZIP${serviceAreas === 1 ? "" : "s"}`;
   if (stores && !serviceAreas)
     return `${stores.toLocaleString()} competitor store${stores === 1 ? "" : "s"}`;
-  return `${fallbackLocations.toLocaleString()} competitor location${fallbackLocations === 1 ? "" : "s"}`;
+  if (stores && serviceAreas)
+    return `${stores.toLocaleString()} competitor stores · ${serviceAreas.toLocaleString()} delivery ZIPs`;
+  return "no contributing competitor store or service-area context";
+}
+
+function storeDistributionCoverageRate(
+  evidence: object | null | undefined,
+  scoredStores: unknown,
+) {
+  const distributedStores = distributionCount(evidence, "store");
+  if (
+    distributedStores === null ||
+    typeof scoredStores !== "number" ||
+    !Number.isInteger(scoredStores) ||
+    scoredStores < 0 ||
+    distributedStores === 0 ||
+    scoredStores > distributedStores
+  ) {
+    return null;
+  }
+  return scoredStores / distributedStores;
 }
 
 function outcomeCopy(
@@ -184,46 +212,53 @@ export function ComparableCohortExplorer({
   const [showAll, setShowAll] = useState(false);
   const cohorts = useMemo(
     () =>
-      (radiusCohorts ?? []).map((row): ComparableCohort => ({
-        id: row.id,
-        competitorId: row.competitor_id,
-        competitor: row.competitor,
-        profileId: row.profile_id,
-        segmentId: row.segment_id,
-        segment: row.segment,
-        attributes: row.attributes,
-        comparisonMetric:
-          row.comparison_metric ??
-          row.product_relationships?.[0]?.comparison_metric ??
-          "",
-        comparisonUnit:
-          row.comparison_unit ??
-          row.product_relationships?.[0]?.comparison_unit ??
-          "",
-        medianGrain:
-          row.median_grain ?? "scored benchmark product-location observations",
-        overall: false,
-        pairCount: row.relationships,
-        matches: row.scored_product_locations,
-        matchedGeographies: row.benchmark_product_locations,
-        benchmarkVerifiedLocations: row.benchmark_observed_locations ?? 0,
-        benchmarkScoredLocations: row.benchmark_scored_locations ?? 0,
-        benchmarkUnscoredLocations: row.benchmark_unscored_locations ?? 0,
-        locationCoverageRate: row.location_coverage_rate ?? null,
-        competitorContributingLocations:
-          row.competitor_contributing_locations ?? 0,
-        competitorContributingStores: row.competitor_contributing_stores ?? 0,
-        competitorContributingServiceAreas:
-          row.competitor_contributing_service_areas ?? 0,
-        benchmarkLowerRate: row.benchmark_lower_rate ?? 0,
-        competitorLowerRate: row.competitor_lower_rate ?? 0,
-        parityRate: row.parity_rate ?? 0,
-        benchmarkMedian: row.benchmark_median,
-        competitorMedian: row.competitor_median,
-        medianGap: row.paired_median_gap,
-        outcome: row.dominant_outcome,
-        productRelationships: row.product_relationships ?? [],
-      })),
+      (radiusCohorts ?? []).map((row): ComparableCohort => {
+        const benchmarkScoredLocations = row.benchmark_scored_locations ?? 0;
+        return {
+          id: row.id,
+          competitorId: row.competitor_id,
+          competitor: row.competitor,
+          profileId: row.profile_id,
+          segmentId: row.segment_id,
+          segment: row.segment,
+          attributes: row.attributes,
+          comparisonMetric:
+            row.comparison_metric ??
+            row.product_relationships?.[0]?.comparison_metric ??
+            "",
+          comparisonUnit:
+            row.comparison_unit ??
+            row.product_relationships?.[0]?.comparison_unit ??
+            "",
+          medianGrain:
+            row.median_grain ??
+            "scored benchmark product-location observations",
+          overall: false,
+          pairCount: row.relationships,
+          matches: row.scored_product_locations,
+          matchedGeographies: row.benchmark_product_locations,
+          benchmarkDistributionStores: distributionCount(row, "store"),
+          benchmarkServiceAreaPresences: distributionCount(row, "service_area"),
+          benchmarkScoredLocations,
+          benchmarkUnscoredLocations: row.benchmark_unscored_locations ?? 0,
+          storeDistributionCoverageRate: storeDistributionCoverageRate(
+            row,
+            benchmarkScoredLocations,
+          ),
+          competitorContributingStores:
+            row.competitor_contributing_stores ?? null,
+          competitorContributingServiceAreas:
+            row.competitor_contributing_service_areas ?? null,
+          benchmarkLowerRate: row.benchmark_lower_rate ?? 0,
+          competitorLowerRate: row.competitor_lower_rate ?? 0,
+          parityRate: row.parity_rate ?? 0,
+          benchmarkMedian: row.benchmark_median,
+          competitorMedian: row.competitor_median,
+          medianGap: row.paired_median_gap,
+          outcome: row.dominant_outcome,
+          productRelationships: row.product_relationships ?? [],
+        };
+      }),
     [radiusCohorts],
   );
   const filtered = useMemo(
@@ -291,11 +326,14 @@ export function ComparableCohortExplorer({
       "Competitor brand-type mix":
         evidence?.competitorBrandTypes ?? "unresolved",
       "Paired observations": cohort.matches,
-      [`${benchmarkName} stores with verified local availability for the cohort`]:
-        cohort.benchmarkVerifiedLocations,
+      [`${benchmarkName} stores in observed distribution for the cohort`]:
+        cohort.benchmarkDistributionStores,
+      [`${benchmarkName} service-area presences for the cohort`]:
+        cohort.benchmarkServiceAreaPresences,
       [`${benchmarkName} stores with a valid local comparison`]:
         cohort.benchmarkScoredLocations,
-      "Comparable verified-location coverage": cohort.locationCoverageRate,
+      "Comparable store-distribution coverage":
+        cohort.storeDistributionCoverageRate,
       "Contributing competitor stores": cohort.competitorContributingStores,
       "Contributing competitor delivery ZIPs":
         cohort.competitorContributingServiceAreas,
@@ -322,12 +360,20 @@ export function ComparableCohortExplorer({
     : "Product Pack matching attributes";
   const pricePositionRows = (radiusScorecards ?? []).map((scorecard) => ({
     Competitor: scorecard.competitor,
-    [`${benchmarkName} stores in scope`]:
-      scorecard.benchmark_observed_locations ?? 0,
+    [`${benchmarkName} stores in observed distribution`]: distributionCount(
+      scorecard,
+      "store",
+    ),
+    [`${benchmarkName} service-area presences`]: distributionCount(
+      scorecard,
+      "service_area",
+    ),
     [`${benchmarkName} stores with a valid local comparison`]:
       scorecard.benchmark_scored_locations ?? 0,
-    "Comparable verified-location coverage":
-      scorecard.location_coverage_rate ?? null,
+    "Comparable store-distribution coverage": storeDistributionCoverageRate(
+      scorecard,
+      scorecard.benchmark_scored_locations,
+    ),
     "Contributing competitor stores":
       scorecard.competitor_contributing_stores ?? 0,
     "Contributing competitor delivery ZIPs":
@@ -423,9 +469,10 @@ export function ComparableCohortExplorer({
             <p className="eyebrow">Overall retailer position</p>
             <h2>Price Position Table</h2>
             <p>
-              Coverage counts each {benchmarkName} store with verified local
-              evidence once, regardless of how many comparable products were
-              found there. Lower-price share and average position use the
+              Store-distribution coverage uses only distinct stores where the
+              exact product appeared in store-level Search with price greater
+              than zero. Service-area presence is separate, and neither measure
+              claims inventory. Lower-price share and average position use the
               underlying paired local product-price comparisons. Physical
               competitors must have eligible evidence within {radiusMiles} mile
               {radiusMiles === 1 ? "" : "s"}; service-area retailers use the
@@ -465,7 +512,7 @@ export function ComparableCohortExplorer({
           <div className="radius-price-position-head" aria-hidden="true">
             <span>Competitor</span>
             <span>Included products</span>
-            <span>Comparable verified-location coverage</span>
+            <span>Comparable store-distribution coverage</span>
             <span>Lower-price share</span>
             <span>Average position</span>
           </div>
@@ -490,19 +537,26 @@ export function ComparableCohortExplorer({
               </div>
               <div>
                 <strong>
-                  {formatRate(scorecard.location_coverage_rate ?? 0)}
+                  {formatRate(
+                    storeDistributionCoverageRate(
+                      scorecard,
+                      scorecard.benchmark_scored_locations,
+                    ),
+                  )}
                 </strong>
                 <small>
                   {(scorecard.benchmark_scored_locations ?? 0).toLocaleString()}{" "}
-                  of{" "}
-                  {(
-                    scorecard.benchmark_observed_locations ?? 0
-                  ).toLocaleString()}{" "}
-                  {benchmarkName} stores ·{" "}
+                  {benchmarkName} stores with a valid comparison ·{" "}
+                  {distributionCount(scorecard, "store") === null
+                    ? "distribution denominator not supplied"
+                    : `${distributionCount(scorecard, "store")?.toLocaleString()} stores in observed distribution`}
+                  {distributionCount(scorecard, "service_area") === null
+                    ? " · service-area presence not supplied"
+                    : ` · ${distributionCount(scorecard, "service_area")?.toLocaleString()} service-area presences`}
+                  {" · "}
                   {contributingLocationLabel(
-                    scorecard.competitor_contributing_stores ?? 0,
-                    scorecard.competitor_contributing_service_areas ?? 0,
-                    scorecard.competitor_contributing_locations ?? 0,
+                    scorecard.competitor_contributing_stores,
+                    scorecard.competitor_contributing_service_areas,
                   )}
                 </small>
               </div>
@@ -674,15 +728,20 @@ export function ComparableCohortExplorer({
                   <span>{cohort.competitor}</span>
                   <h3>{cohort.segment}</h3>
                   <p>
-                    {formatRate(cohort.locationCoverageRate ?? 0)} store
-                    coverage ·{" "}
-                    {cohort.benchmarkScoredLocations.toLocaleString()} of{" "}
-                    {cohort.benchmarkVerifiedLocations.toLocaleString()}{" "}
-                    {benchmarkName} stores ·{" "}
+                    {formatRate(cohort.storeDistributionCoverageRate)}{" "}
+                    store-distribution coverage ·{" "}
+                    {cohort.benchmarkScoredLocations.toLocaleString()}{" "}
+                    {benchmarkName} stores with a valid comparison ·{" "}
+                    {cohort.benchmarkDistributionStores === null
+                      ? "distribution denominator not supplied"
+                      : `${cohort.benchmarkDistributionStores.toLocaleString()} stores in observed distribution`}
+                    {cohort.benchmarkServiceAreaPresences === null
+                      ? " · service-area presence not supplied"
+                      : ` · ${cohort.benchmarkServiceAreaPresences.toLocaleString()} service-area presences`}
+                    {" · "}
                     {contributingLocationLabel(
                       cohort.competitorContributingStores,
                       cohort.competitorContributingServiceAreas,
-                      cohort.competitorContributingLocations,
                     )}
                   </p>
                   <div className="cohort-pair-evidence">
@@ -831,9 +890,10 @@ export function ComparableCohortExplorer({
         ) : null}
         <footer>
           Search supplies listed price and the retailer location query context.
-          Only explicit in-stock, non-sponsored evidence enters these certified
-          product-location outcomes; the browser does not recalculate rates or
-          medians.
+          Store distribution counts exact-product store-level results with price
+          greater than zero; service-area presence stays separate and no
+          inventory status is inferred. The browser does not recalculate price
+          outcomes or medians.
         </footer>
       </section>
     </div>

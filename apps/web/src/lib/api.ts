@@ -1,13 +1,13 @@
 import type {
   RetailCompetitiveIntelligenceAnalysisResult,
   RetailCompetitiveIntelligenceAnalysisResultV2,
-  RetailCompetitiveIntelligenceBrandWorkbench,
+  RetailCompetitiveIntelligenceBrandWorkbench as GeneratedBrandWorkbench,
   RetailCompetitiveIntelligenceCollectionGeographyRequest,
   RetailCompetitiveIntelligenceCollectionGeographyResolution,
   RetailCompetitiveIntelligenceCollectionScopeEstimate,
-  RetailCompetitiveIntelligenceCompetitivePortfolioScorecards,
+  RetailCompetitiveIntelligenceCompetitivePortfolioScorecards as GeneratedCompetitivePortfolioScorecards,
   RetailCompetitiveIntelligenceCompetitiveDecisionQuality,
-  RetailCompetitiveIntelligenceCompetitiveProductCoverage,
+  RetailCompetitiveIntelligenceCompetitiveProductCoverage as GeneratedCompetitiveProductCoverage,
   RetailCompetitiveIntelligenceCompetitiveProductLeadership,
   RetailCompetitiveIntelligenceProductMatchReview,
   RetailCompetitiveIntelligenceProductMatchScope,
@@ -20,6 +20,21 @@ import type {
 import { loadServerConfig } from "./config";
 
 export type JsonObject = Record<string, unknown>;
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
+}
+
+export interface DistributionEvidenceCounts {
+  distribution_store_count: number;
+  service_area_presence_count: number;
+}
 export type PriceMonitoringView =
   RetailCompetitiveIntelligencePriceMonitoringView;
 export interface PriceMonitoringCatalogPage {
@@ -51,12 +66,37 @@ export type PriceArchitectureMatrix =
   RetailCompetitiveIntelligencePriceArchitectureMatrix;
 export type CompetitiveProductLeadership =
   RetailCompetitiveIntelligenceCompetitiveProductLeadership;
-export type CompetitivePortfolioScorecards =
-  RetailCompetitiveIntelligenceCompetitivePortfolioScorecards;
+type PortfolioDistributionCounts = Partial<DistributionEvidenceCounts>;
+export type CompetitivePortfolioScorecards = Omit<
+  GeneratedCompetitivePortfolioScorecards,
+  "scorecards" | "cohorts" | "assortment_scorecards"
+> & {
+  distribution_contract?: DistributionContract;
+  scorecards: Array<
+    GeneratedCompetitivePortfolioScorecards["scorecards"][number] &
+      PortfolioDistributionCounts
+  >;
+  cohorts: Array<
+    GeneratedCompetitivePortfolioScorecards["cohorts"][number] &
+      PortfolioDistributionCounts
+  >;
+  assortment_scorecards: Array<
+    GeneratedCompetitivePortfolioScorecards["assortment_scorecards"][number] &
+      PortfolioDistributionCounts
+  >;
+};
 export type CompetitiveDecisionQuality =
   RetailCompetitiveIntelligenceCompetitiveDecisionQuality;
-export type CompetitiveProductCoverage =
-  RetailCompetitiveIntelligenceCompetitiveProductCoverage;
+export type CompetitiveProductCoverage = Omit<
+  GeneratedCompetitiveProductCoverage,
+  "products"
+> & {
+  distribution_contract?: DistributionContract;
+  products: Array<
+    GeneratedCompetitiveProductCoverage["products"][number] &
+      Partial<DistributionEvidenceCounts>
+  >;
+};
 
 export interface AnalysisRecord {
   id: string;
@@ -207,20 +247,13 @@ export interface AssortmentProduct {
   seller?: string | null;
   observed_locations: number;
   observed_zipcodes: number;
-  /** Explicit in-stock, non-sponsored local evidence. Missing legacy values are unverified. */
-  verified_available_locations?: number;
-  verified_available_zipcodes?: number;
+  /** Distinct stores where this product appeared in store-level Search with price > 0. */
+  distribution_store_count: number;
+  /** Distinct service-area scopes with positive-price Search presence; never stores. */
+  service_area_presence_count: number;
   /** Search discovery reach, which is not proof of local carriage. */
   search_observed_locations?: number;
   search_observed_zipcodes?: number;
-  availability_status?:
-    | "verified_in_stock"
-    | "explicitly_out_of_stock"
-    | "unverified_sponsored"
-    | "unverified";
-  explicitly_out_of_stock_locations?: number;
-  unverified_locations?: number;
-  unverified_sponsored_locations?: number;
 }
 
 export interface AssortmentComparison {
@@ -257,16 +290,16 @@ export interface AssortmentComparison {
 export interface AssortmentAnalysis {
   source: string;
   grain: string;
+  distribution_contract: DistributionContract;
   benchmark_retailer: string;
   retailers: Array<{
     retailer: string;
     distinct_products: number;
-    verified_available_products?: number;
     search_distinct_products?: number;
     observed_locations: number;
     observed_zipcodes: number;
-    verified_available_locations?: number;
-    verified_available_zipcodes?: number;
+    distribution_store_count: number;
+    service_area_presence_count: number;
     search_observed_locations?: number;
     search_observed_zipcodes?: number;
     median_products_per_location: number;
@@ -285,9 +318,8 @@ export interface AssortmentBrand {
   distinct_products: number;
   observed_locations: number;
   observed_zipcodes: number;
-  verified_available_products?: number;
-  verified_available_locations?: number;
-  verified_available_zipcodes?: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   location_share: number;
 }
 
@@ -460,8 +492,12 @@ export type MatchReview = RetailCompetitiveIntelligenceProductMatchReview;
 export type MatchReviewProduct = MatchReview["products"][number];
 export type MatchReviewConnection = MatchReview["connections"][number];
 export type ProductMatchScope = RetailCompetitiveIntelligenceProductMatchScope;
-export type BrandWorkbench = RetailCompetitiveIntelligenceBrandWorkbench;
-export type BrandWorkbenchBrand = BrandWorkbench["brands"][number];
+export type BrandWorkbenchBrand = GeneratedBrandWorkbench["brands"][number] &
+  Partial<DistributionEvidenceCounts>;
+export type BrandWorkbench = Omit<GeneratedBrandWorkbench, "brands"> & {
+  distribution_contract?: DistributionContract;
+  brands: BrandWorkbenchBrand[];
+};
 
 export interface MatchingV2AttributeEvidence {
   attribute: string;

@@ -158,9 +158,10 @@ def test_assortment_reports_brand_breadth_and_geographic_concentration() -> None
     assert walmart["distinct_brands"] == 2
     assert walmart["unbranded_products"] == 1
     assert walmart["top_brands"][0]["brand"] == "National Dairy"
-    assert walmart["top_brands"][0]["verified_available_products"] == 3
-    assert walmart["top_brands"][0]["verified_available_locations"] == 6
-    assert walmart["top_brands"][0]["verified_available_zipcodes"] == 6
+    assert walmart["top_brands"][0]["distinct_products"] == 3
+    assert walmart["top_brands"][0]["distribution_store_count"] == 6
+    assert walmart["top_brands"][0]["service_area_presence_count"] == 0
+    assert walmart["top_brands"][0]["observed_zipcodes"] == 6
     assert walmart["geographically_concentrated_brands"][0]["brand"] == ("Regional Dairy")
     assert comparison["ambiguous_candidate_groups"] == 1
     assert comparison["ambiguous_benchmark_products"] == 1
@@ -193,7 +194,7 @@ def test_assortment_products_retain_governed_brand_type() -> None:
     assert result["retailers"][0]["products"][0]["brand_type"] == "private_label"
 
 
-def test_assortment_separates_search_reach_from_verified_local_availability() -> None:
+def test_assortment_counts_positive_price_store_search_rows_without_stock_gating() -> None:
     accumulator = AssortmentAccumulator()
     for offer in (
         _offer("verified", "walmart_us", "verified", "10001", "1"),
@@ -240,25 +241,20 @@ def test_assortment_separates_search_reach_from_verified_local_availability() ->
     )
 
     walmart = result["retailers"][0]
-    assert walmart["distinct_products"] == 1
-    assert walmart["verified_available_products"] == 1
+    assert walmart["distinct_products"] == 5
     assert walmart["search_distinct_products"] == 5
-    assert walmart["observed_locations"] == 1
-    assert walmart["verified_available_locations"] == 1
-    assert walmart["search_observed_locations"] == 5
+    assert walmart["observed_locations"] == 5
+    assert walmart["distribution_store_count"] == 5
+    assert walmart["service_area_presence_count"] == 0
     products = {row["product_id"]: row for row in walmart["products"]}
-    assert products["verified"]["availability_status"] == "verified_in_stock"
-    assert products["out-of-stock"]["availability_status"] == "explicitly_out_of_stock"
-    assert products["sponsored"]["availability_status"] == "unverified_sponsored"
-    assert products["unknown-stock"]["availability_status"] == "unverified"
-    assert products["unknown-sponsorship"]["availability_status"] == "unverified"
-    assert products["sponsored"]["verified_available_locations"] == 0
-    assert products["sponsored"]["search_observed_locations"] == 1
-    assert products["sponsored"]["verified_location_scope_keys"] == []
-    assert products["sponsored"]["search_location_scope_keys"] == ["walmart_us|10003|3"]
+    assert all(product["distribution_store_count"] == 1 for product in products.values())
+    assert all(product["service_area_presence_count"] == 0 for product in products.values())
+    assert products["sponsored"]["location_scope_keys"] == ["walmart_us|store|3"]
+    assert all("availability_status" not in product for product in products.values())
+    assert all("in_stock" not in product for product in products.values())
 
 
-def test_assortment_uses_latest_location_state_and_fails_closed_on_timestamp_ties() -> None:
+def test_assortment_uses_latest_positive_price_row_without_stock_tie_gating() -> None:
     accumulator = AssortmentAccumulator()
     for offer in (
         # Intentionally arrive newest first: input order must not resurrect stale stock.
@@ -327,16 +323,14 @@ def test_assortment_uses_latest_location_state_and_fails_closed_on_timestamp_tie
     walmart = result["retailers"][0]
     products = {row["product_id"]: row for row in walmart["products"]}
 
-    assert walmart["verified_available_products"] == 1
-    assert products["chronological"]["availability_status"] == "explicitly_out_of_stock"
-    assert products["chronological"]["verified_available_locations"] == 0
-    assert products["organic-tie"]["availability_status"] == "verified_in_stock"
-    assert products["organic-tie"]["verified_available_locations"] == 1
-    assert products["stock-conflict"]["availability_status"] == "explicitly_out_of_stock"
-    assert products["stock-conflict"]["verified_available_locations"] == 0
+    assert walmart["distinct_products"] == 3
+    assert walmart["distribution_store_count"] == 3
+    assert walmart["service_area_presence_count"] == 0
+    assert all(product["distribution_store_count"] == 1 for product in products.values())
+    assert all("availability_status" not in product for product in products.values())
 
 
-def test_assortment_does_not_invent_a_verified_location_without_geography() -> None:
+def test_assortment_does_not_invent_store_or_service_area_without_location_identity() -> None:
     accumulator = AssortmentAccumulator()
     accumulator.add(_offer("unknown", "walmart_us", "unknown", None, None))
 
@@ -347,15 +341,13 @@ def test_assortment_does_not_invent_a_verified_location_without_geography() -> N
         matches=[],
     )
     walmart = result["retailers"][0]
-    product = walmart["products"][0]
-
-    assert walmart["verified_available_products"] == 0
-    assert walmart["verified_available_locations"] == 0
-    assert walmart["search_observed_locations"] == 0
-    assert product["availability_status"] == "unverified"
+    assert walmart["distinct_products"] == 0
+    assert walmart["distribution_store_count"] == 0
+    assert walmart["service_area_presence_count"] == 0
+    assert walmart["products"] == []
 
 
-def test_real_banana_classifier_out_of_scope_tombstone_retracts_older_availability() -> None:
+def test_real_banana_classifier_keeps_positive_price_row_despite_out_of_stock_metadata() -> None:
     classifier = OfferClassifier(ProductPackLoader(REPOSITORY_ROOT).load("fresh_bananas"))
     base = replace(
         _offer(
@@ -378,8 +370,8 @@ def test_real_banana_classifier_out_of_scope_tombstone_retracts_older_availabili
         )
     )
     assert verified.in_scope is True
-    assert out_of_stock.in_scope is False
-    assert out_of_stock.scope_reason == "explicitly out of stock"
+    assert out_of_stock.in_scope is True
+    assert out_of_stock.scope_reason is None
 
     accumulator = AssortmentAccumulator()
     accumulator.add(verified)
@@ -393,10 +385,11 @@ def test_real_banana_classifier_out_of_scope_tombstone_retracts_older_availabili
     walmart = result["retailers"][0]
     product = walmart["products"][0]
 
-    assert walmart["verified_available_products"] == 0
-    assert product["availability_status"] == "explicitly_out_of_stock"
-    assert product["verified_available_locations"] == 0
-    assert product["search_observed_locations"] == 1
+    assert walmart["distinct_products"] == 1
+    assert walmart["distribution_store_count"] == 1
+    assert product["distribution_store_count"] == 1
+    assert product["service_area_presence_count"] == 0
+    assert "availability_status" not in product
 
 
 def test_newer_seller_policy_exclusion_retracts_assortment_availability() -> None:
@@ -438,12 +431,10 @@ def test_newer_seller_policy_exclusion_retracts_assortment_availability() -> Non
         matches=[],
     )
     walmart = result["retailers"][0]
-    product = walmart["products"][0]
-
-    assert walmart["verified_available_products"] == 0
-    assert product["availability_status"] == "unverified"
-    assert product["verified_available_locations"] == 0
-    assert product["search_observed_locations"] == 1
+    assert walmart["distinct_products"] == 0
+    assert walmart["distribution_store_count"] == 0
+    assert walmart["service_area_presence_count"] == 0
+    assert walmart["products"] == []
 
 
 def test_assortment_uses_certified_relationship_without_price_overlap() -> None:
@@ -513,7 +504,7 @@ def test_assortment_relationship_absent_from_verified_assortment_cannot_reduce_w
     assert comparison["competitor_match_coverage"] == 0.0
 
 
-def test_stale_competitor_relationship_cannot_reduce_verified_assortment_whitespace() -> None:
+def test_legacy_out_of_stock_scope_reason_keeps_positive_price_assortment_relationship() -> None:
     accumulator = AssortmentAccumulator()
     walmart = _offer(
         "w1",
@@ -592,15 +583,17 @@ def test_stale_competitor_relationship_cannot_reduce_verified_assortment_whitesp
     aldi = result["retailers"][1]
     comparison = result["comparisons"][0]
     assert aldi["search_distinct_products"] == 1
-    assert aldi["verified_available_products"] == 0
-    assert comparison["product_relationships"] == 0
-    assert comparison["ambiguous_candidate_groups"] == 0
-    assert comparison["matched_benchmark_products"] == 0
-    assert comparison["matched_competitor_products"] == 0
-    assert comparison["benchmark_only_products"] == 1
+    assert aldi["distinct_products"] == 1
+    assert aldi["distribution_store_count"] == 1
+    assert aldi["service_area_presence_count"] == 0
+    assert comparison["product_relationships"] == 1
+    assert comparison["ambiguous_candidate_groups"] == 1
+    assert comparison["matched_benchmark_products"] == 1
+    assert comparison["matched_competitor_products"] == 1
+    assert comparison["benchmark_only_products"] == 0
     assert comparison["competitor_whitespace_products"] == 0
-    assert comparison["profiles"][0]["relationships"] == 0
-    assert comparison["top_benchmark_only"][0]["product_id"] == "w1"
+    assert comparison["profiles"][0]["relationships"] == 1
+    assert comparison["top_benchmark_only"] == []
 
 
 def test_pdp_context_enriches_identity_without_changing_metrics() -> None:

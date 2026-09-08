@@ -1,7 +1,8 @@
-"""Independent semantic trust checks for availability-bearing read models."""
+"""Independent semantic trust checks for distribution-bearing read models."""
 
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from statistics import mean
@@ -10,22 +11,77 @@ from typing import Any
 Finding = dict[str, Any]
 _RATE_TOLERANCE = 0.00011
 _VALUE_TOLERANCE = 0.0006
+_DISTRIBUTION_CONTRACT = {
+    "version": "1.0.0",
+    "basis": "positive_price_store_search_result",
+    "grain": "retailer_product_id_x_store_id",
+    "deduplication": "distinct_store_id_per_product",
+    "price_rule": "price_gt_zero",
+    "inventory_claim": False,
+    "stock_status_used": False,
+    "sponsorship_used": False,
+}
+_INVENTORY_FIELDS = frozenset(
+    {
+        "availability",
+        "availability_status",
+        "verified_local_availability",
+        "verified_available_locations",
+        "verified_available_products",
+        "verified_available_states",
+        "verified_available_cities",
+        "verified_available_zipcodes",
+        "verified_availability_observations",
+        "verified_availability_rate",
+        "verified_in_stock_observations",
+        "explicitly_out_of_stock_locations",
+        "explicitly_out_of_stock_observations",
+        "unverified_locations",
+        "unverified_observations",
+        "in_stock",
+        "in_stock_observations",
+        "stock_status",
+    }
+)
+_PRICE_FIELDS = (
+    "minimum",
+    "q1",
+    "observation_median",
+    "product_equal_weighted_median",
+    "q3",
+    "maximum",
+    "range",
+    "modal_price",
+    "modal_share",
+)
 
 
 def _rows(value: object) -> list[dict[str, Any]]:
-    return [dict(row) for row in value] if isinstance(value, list) else []
+    if not isinstance(value, list) or any(not isinstance(row, Mapping) for row in value):
+        raise ValueError("value is not an array of objects")
+    return [dict(row) for row in value]
 
 
 def _integer(value: object) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError("value is not an integer count")
+        raise ValueError("value is not an integer")
+    return value
+
+
+def _count(value: object) -> int:
+    value = _integer(value)
+    if value < 0:
+        raise ValueError("count is negative")
     return value
 
 
 def _number(value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("value is not numeric")
-    return float(value)
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError("value is not finite")
+    return value
 
 
 def _close(left: object, right: object, tolerance: float = _VALUE_TOLERANCE) -> bool:
@@ -41,6 +97,10 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
+def _nonblank(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def _finding(code: str, message: str, *, path: str, **context: object) -> Finding:
     return {
         "severity": "error",
@@ -50,12 +110,75 @@ def _finding(code: str, message: str, *, path: str, **context: object) -> Findin
     }
 
 
+def _inventory_paths(value: object, path: str = "<root>") -> list[str]:
+    paths: list[str] = []
+    if isinstance(value, Mapping):
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            child_path = key if path == "<root>" else f"{path}.{key}"
+            if key in _INVENTORY_FIELDS:
+                paths.append(child_path)
+            paths.extend(_inventory_paths(child, child_path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            paths.extend(_inventory_paths(child, f"{path}[{index}]"))
+    return paths
+
+
+def _price_stats_valid(value: object, expected_count: int) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    stats = dict(value)
+    try:
+        count = _count(stats.get("observation_count"))
+        if count != expected_count:
+            return False
+        if count == 0:
+            return all(stats.get(field) is None for field in _PRICE_FIELDS)
+        minimum = _number(stats.get("minimum"))
+        q1 = _number(stats.get("q1"))
+        observation_median = _number(stats.get("observation_median"))
+        q3 = _number(stats.get("q3"))
+        maximum = _number(stats.get("maximum"))
+        price_range = _number(stats.get("range"))
+        modal_price = _number(stats.get("modal_price"))
+        modal_share = _number(stats.get("modal_share"))
+        product_median = stats.get("product_equal_weighted_median")
+        return (
+            0 < minimum <= q1 <= observation_median <= q3 <= maximum
+            and minimum <= modal_price <= maximum
+            and price_range >= 0
+            and _close(price_range, maximum - minimum)
+            and 0 < modal_share <= 1
+            and (product_median is None or _number(product_median) > 0)
+        )
+    except ValueError:
+        return False
+
+
+def _positive_price_range(product: Mapping[str, Any]) -> tuple[float, float, float] | None:
+    try:
+        prices = (
+            _number(product.get("minimum_price")),
+            _number(product.get("median_price")),
+            _number(product.get("maximum_price")),
+        )
+    except ValueError:
+        return None
+    return prices if 0 < prices[0] <= prices[1] <= prices[2] else None
+
+
 def audit_price_monitoring_catalog(
     document: Mapping[str, Any],
     *,
     expected_retailer_id: str | None = None,
 ) -> list[Finding]:
-    """Reconcile publication catalog availability from independent aggregates."""
+    """Reconcile a positive-price Search distribution catalog.
+
+    Compact catalogs do not contain the full store-ID population. Exact distinct-ID
+    reconstruction is therefore limited to product-filtered, explicitly unsampled
+    location payloads.
+    """
 
     findings: list[Finding] = []
 
@@ -65,328 +188,313 @@ def audit_price_monitoring_catalog(
 
     try:
         check(
-            document.get("schema_version") == "1.4.0",
+            document.get("schema_version") == "1.5.0",
             "price_catalog_contract_version_invalid",
-            "Price Intelligence catalog is not on the current availability contract.",
+            "Price Intelligence catalog is not on distribution contract 1.5.0.",
             "schema_version",
             actual=document.get("schema_version"),
         )
+        check(
+            document.get("distribution_contract") == _DISTRIBUTION_CONTRACT,
+            "price_catalog_distribution_contract_invalid",
+            "Catalog lacks the exact positive-price store-Search distribution contract.",
+            "distribution_contract",
+        )
+        inventory_paths = _inventory_paths(document)
+        check(
+            not inventory_paths,
+            "price_catalog_inventory_claim_present",
+            "Catalog exposes inventory claims outside the distribution contract.",
+            inventory_paths[0] if inventory_paths else "<root>",
+            claim_paths=inventory_paths,
+        )
+
         retailer = dict(document.get("retailer") or {})
+        retailer_id = retailer.get("id")
         if expected_retailer_id is not None:
             check(
-                retailer.get("id") == expected_retailer_id,
+                retailer_id == expected_retailer_id,
                 "price_catalog_retailer_scope_mismatch",
                 "Catalog retailer does not match its staged publication scope.",
                 "retailer.id",
                 expected=expected_retailer_id,
-                actual=retailer.get("id"),
+                actual=retailer_id,
             )
+        filters = dict(document.get("filters") or {})
+        check(
+            filters.get("retailer_id") == retailer_id,
+            "price_catalog_filter_scope_invalid",
+            "Catalog filter retailer does not match its retailer.",
+            "filters.retailer_id",
+        )
         source = dict(document.get("source") or {})
         check(
-            source.get("observation_schema_version") == "1.2.0",
+            source.get("authority") == "Search"
+            and source.get("grain")
+            == "retailer product x retailer location x latest observation in run"
+            and source.get("observation_schema_version") == "1.3.0",
             "price_catalog_observation_contract_invalid",
-            "Catalog evidence was not projected from the current observation contract.",
-            "source.observation_schema_version",
-            actual=source.get("observation_schema_version"),
+            "Catalog is not projected from the canonical Search observation contract.",
+            "source",
         )
 
         summary = dict(document.get("summary") or {})
-        presence = dict(document.get("presence") or {})
-        availability = dict(document.get("availability") or {})
-        observed_locations = _integer(summary.get("observed_locations"))
-        verified_locations = _integer(summary.get("verified_available_locations"))
-        expected_locations = _integer(summary.get("expected_locations"))
-        observed_products = _integer(summary.get("observed_products"))
-        verified_products = _integer(summary.get("verified_available_products"))
-        search_observations = _integer(summary.get("search_price_observations"))
-        verified_observations = _integer(summary.get("verified_availability_observations"))
+        stores = _count(summary.get("distribution_store_count"))
+        services = _count(summary.get("service_area_presence_count"))
+        observed_locations = _count(summary.get("observed_locations"))
+        expected_locations = _count(summary.get("expected_locations"))
+        observed_products = _count(summary.get("observed_products"))
+        observations = _count(summary.get("search_price_observations"))
+        eligible_observations = _count(summary.get("eligible_observations"))
+        source_rows = _count(source.get("source_rows"))
+        classified_rows = _count(source.get("classified_rows"))
         check(
-            0 < verified_locations <= observed_locations <= expected_locations,
-            "price_catalog_location_counts_invalid",
-            "Verified, Search-observed, and eligible location counts do not reconcile.",
+            observed_locations == stores + services,
+            "price_catalog_distribution_counts_invalid",
+            "Store distribution and service-area presence do not reconcile.",
             "summary",
-            verified=verified_locations,
-            observed=observed_locations,
-            eligible=expected_locations,
         )
         check(
-            0 < verified_products <= observed_products,
-            "price_catalog_product_counts_invalid",
-            "Verified and Search-observed product counts do not reconcile.",
-            "summary",
-            verified=verified_products,
-            observed=observed_products,
+            expected_locations == 0 or observed_locations <= expected_locations,
+            "price_catalog_location_scope_invalid",
+            "Observed Search locations exceed the declared eligible scope.",
+            "summary.expected_locations",
         )
         check(
-            0 < verified_observations <= search_observations,
+            eligible_observations == observations <= classified_rows <= source_rows,
             "price_catalog_observation_counts_invalid",
-            "Verified availability observations exceed or lack Search evidence.",
+            "Positive-price observations do not reconcile to the source population.",
+            "summary.search_price_observations",
+        )
+        check(
+            observed_products <= observations,
+            "price_catalog_product_counts_invalid",
+            "Observed products exceed the product-location population.",
+            "summary.observed_products",
+        )
+        check(
+            _close(summary.get("coverage_rate"), _rate(observed_locations, expected_locations)),
+            "price_catalog_coverage_rate_invalid",
+            "Coverage rate does not reconcile to its declared scope.",
+            "summary.coverage_rate",
+        )
+        usable_rate = _number(summary.get("usable_price_rate"))
+        consistency_rate = summary.get("price_consistency_rate")
+        check(
+            0 <= usable_rate <= 1
+            and (
+                consistency_rate is None
+                if observations == 0
+                else 0 <= _number(consistency_rate) <= 1
+            ),
+            "price_catalog_summary_rates_invalid",
+            "Catalog price-quality rates are outside valid bounds.",
             "summary",
-            verified=verified_observations,
-            search=search_observations,
         )
+
+        presence = dict(document.get("presence") or {})
+        not_observed = _count(presence.get("not_observed_locations"))
         check(
-            _integer(summary.get("eligible_observations")) == verified_observations,
-            "price_catalog_eligible_observations_invalid",
-            "Eligible price observations differ from verified availability observations.",
-            "summary.eligible_observations",
-        )
-        check(
-            _integer(presence.get("observed_locations")) == observed_locations
-            and _integer(presence.get("eligible_locations")) == expected_locations
-            and _integer(presence.get("not_observed_locations"))
-            == expected_locations - observed_locations,
+            presence.get("status") == "observed_only"
+            and _count(presence.get("observed_locations")) == observed_locations
+            and _count(presence.get("distribution_store_count")) == stores
+            and _count(presence.get("service_area_presence_count")) == services
+            and _count(presence.get("eligible_locations")) == expected_locations
+            and not_observed == max(0, expected_locations - observed_locations)
+            and _count(presence.get("confirmed_gap_locations")) == 0,
             "price_catalog_presence_counts_invalid",
-            "Catalog Search-presence counts do not reconcile to the summary.",
+            "Search-presence counts do not reconcile.",
             "presence",
         )
         check(
             _close(
                 presence.get("observed_presence_rate"),
                 _rate(observed_locations, expected_locations),
-                _RATE_TOLERANCE,
             ),
             "price_catalog_presence_rate_invalid",
-            "Catalog Search-presence rate does not reconcile to its numerator and denominator.",
+            "Search-presence rate does not reconcile.",
             "presence.observed_presence_rate",
         )
-        out_locations = _integer(availability.get("explicitly_out_of_stock_locations"))
-        unverified_locations = _integer(availability.get("unverified_locations"))
+
+        price_distribution = dict(document.get("price_distribution") or {})
+        search_distribution = dict(document.get("search_price_distribution") or {})
         check(
-            availability.get("status") == "verified"
-            and _integer(availability.get("verified_available_locations")) == verified_locations
-            and _integer(availability.get("eligible_locations")) == expected_locations,
-            "price_catalog_availability_summary_invalid",
-            "Catalog availability status or totals differ from the verified summary.",
-            "availability",
-        )
-        check(
-            verified_locations + out_locations + unverified_locations == observed_locations,
-            "price_catalog_availability_partition_invalid",
-            "Verified, out-of-stock, and unverified locations do not partition Search presence.",
-            "availability",
-        )
-        check(
-            _close(
-                availability.get("verified_availability_rate"),
-                _rate(verified_locations, expected_locations),
-                _RATE_TOLERANCE,
-            ),
-            "price_catalog_availability_rate_invalid",
-            "Verified availability rate does not reconcile to eligible locations.",
-            "availability.verified_availability_rate",
-        )
-        check(
-            _integer(dict(document.get("price_distribution") or {}).get("observation_count"))
-            == verified_observations
-            and _integer(
-                dict(document.get("search_price_distribution") or {}).get("observation_count")
-            )
-            == search_observations,
+            _price_stats_valid(price_distribution, observations)
+            and _price_stats_valid(search_distribution, observations)
+            and price_distribution == search_distribution,
             "price_catalog_price_population_invalid",
-            "Verified and Search price distributions use inconsistent observation populations.",
+            "Price distributions do not use the same positive-price Search population.",
             "price_distribution",
         )
 
         products = _rows(document.get("products"))
-        product_ids = [str(row.get("product_id") or "") for row in products]
+        product_ids = [str(row.get("product_id") or "").strip() for row in products]
         check(
-            len(product_ids) == observed_products
+            len(products) == observed_products
             and all(product_ids)
             and len(product_ids) == len(set(product_ids)),
             "price_catalog_product_population_invalid",
-            "Catalog product rows do not uniquely reconcile to the reported product count.",
+            "Product rows are missing, duplicated, or do not reconcile.",
             "products",
         )
-        check(
-            sum(_integer(row.get("verified_available_locations")) > 0 for row in products)
-            == verified_products,
-            "price_catalog_verified_product_total_invalid",
-            "Catalog verified-product total does not reconcile to product rows.",
-            "summary.verified_available_products",
-        )
-        product_search_observations_total = 0
-        product_verified_observations_total = 0
+        selected_product_id = filters.get("product_id")
+        if selected_product_id is not None:
+            check(
+                len(products) <= 1
+                and all(value == str(selected_product_id) for value in product_ids),
+                "price_catalog_product_filter_invalid",
+                "Product-filtered catalog contains a product outside its scope.",
+                "products",
+            )
+
+        product_observations = 0
         for index, product in enumerate(products):
             path = f"products[{index}]"
-            product_verified_locations = _integer(product.get("verified_available_locations"))
-            product_search_locations = _integer(product.get("search_observed_locations"))
+            product_stores = _count(product.get("distribution_store_count"))
+            product_services = _count(product.get("service_area_presence_count"))
+            product_locations = _count(product.get("search_observed_locations"))
+            price_stats = dict(product.get("price_stats") or {})
+            search_price_stats = dict(product.get("search_price_stats") or {})
+            product_count = _count(price_stats.get("observation_count"))
+            product_observations += product_count
             check(
-                _integer(product.get("locations")) == product_verified_locations
-                and 0 <= product_verified_locations <= product_search_locations,
-                "price_catalog_product_location_counts_invalid",
-                "Product footprint does not reconcile verified availability to Search presence.",
+                _count(product.get("locations")) == product_stores
+                and product_locations == product_stores + product_services,
+                "price_catalog_product_distribution_invalid",
+                "Product store distribution is not separate from service-area presence.",
                 path,
-                product_id=product.get("product_id"),
-            )
-            for verified_field, search_field in (
-                ("verified_available_states", "search_observed_states"),
-                ("verified_available_cities", "search_observed_cities"),
-                ("verified_available_zipcodes", "search_observed_zipcodes"),
-            ):
-                check(
-                    _integer(product.get(verified_field)) <= _integer(product.get(search_field)),
-                    "price_catalog_product_geography_counts_invalid",
-                    "Verified product geography exceeds Search-observed geography.",
-                    f"{path}.{verified_field}",
-                    product_id=product.get("product_id"),
-                )
-            product_availability = dict(product.get("availability") or {})
-            product_search_observations = _integer(product_availability.get("search_observations"))
-            product_verified_observations = _integer(
-                product_availability.get("verified_in_stock_observations")
-            )
-            product_search_observations_total += product_search_observations
-            product_verified_observations_total += product_verified_observations
-            product_out_observations = _integer(
-                product_availability.get("explicitly_out_of_stock_observations")
-            )
-            product_unverified_observations = _integer(
-                product_availability.get("unverified_observations")
-            )
-            known_observations = product_verified_observations + product_out_observations
-            expected_status = "verified" if product_verified_observations else "unverified"
-            check(
-                product_availability.get("status") == expected_status
-                and _integer(product_availability.get("known_observations")) == known_observations
-                and _integer(product_availability.get("in_stock_observations"))
-                == product_verified_observations
-                and product_verified_observations
-                + product_out_observations
-                + product_unverified_observations
-                == product_search_observations,
-                "price_catalog_product_availability_observations_invalid",
-                "Product availability observations do not form the governed partition.",
-                f"{path}.availability",
-                product_id=product.get("product_id"),
             )
             check(
-                product_search_observations == product_search_locations
-                and product_verified_observations == product_verified_locations,
+                product_count == product_locations,
                 "price_catalog_product_grain_invalid",
-                (
-                    "Product observations do not reconcile to the canonical latest "
-                    "product-location grain."
-                ),
-                f"{path}.availability",
-                product_id=product.get("product_id"),
-            )
-            check(
-                _integer(product.get("states"))
-                == _integer(product.get("verified_available_states"))
-                and _integer(product.get("cities"))
-                == _integer(product.get("verified_available_cities")),
-                "price_catalog_product_geography_alias_invalid",
-                "Legacy product geography aliases are not verified-availability counts.",
+                "Product observations do not reconcile to latest product-location grain.",
                 path,
-                product_id=product.get("product_id"),
+            )
+            state_count = _count(product.get("search_observed_states"))
+            city_count = _count(product.get("search_observed_cities"))
+            zip_count = _count(product.get("search_observed_zipcodes"))
+            check(
+                _count(product.get("states")) == state_count
+                and _count(product.get("cities")) == city_count
+                and max(state_count, city_count, zip_count) <= product_locations,
+                "price_catalog_product_geography_counts_invalid",
+                "Product geography counts exceed Search evidence.",
+                path,
             )
             check(
-                _close(
-                    product_availability.get("rate"),
-                    _rate(product_verified_observations, known_observations),
-                    _RATE_TOLERANCE,
-                ),
-                "price_catalog_product_availability_rate_invalid",
-                "Product availability rate does not reconcile to known stock observations.",
-                f"{path}.availability.rate",
-                product_id=product.get("product_id"),
-            )
-            product_out_locations = _integer(
-                product_availability.get("explicitly_out_of_stock_locations")
-            )
-            product_unverified_locations = _integer(
-                product_availability.get("unverified_locations")
-            )
-            check(
-                _integer(product_availability.get("search_observed_locations"))
-                == product_search_locations
-                and _integer(product_availability.get("verified_available_locations"))
-                == product_verified_locations
-                and product_verified_locations
-                + product_out_locations
-                + product_unverified_locations
-                == product_search_locations,
-                "price_catalog_product_availability_locations_invalid",
-                "Product availability locations do not partition Search-observed locations.",
-                f"{path}.availability",
-                product_id=product.get("product_id"),
+                _price_stats_valid(price_stats, product_count)
+                and _price_stats_valid(search_price_stats, product_count)
+                and price_stats == search_price_stats,
+                "price_catalog_product_price_population_invalid",
+                "Product prices do not use its positive-price Search population.",
+                path,
             )
             product_presence = dict(product.get("presence") or {})
-            eligible_product_locations = _integer(product_presence.get("eligible_locations"))
+            product_eligible = _count(product_presence.get("eligible_locations"))
+            product_missing = _count(product_presence.get("not_observed_locations"))
             check(
-                _integer(product_presence.get("observed_locations")) == product_search_locations
-                and eligible_product_locations >= product_search_locations
-                and _integer(product_presence.get("not_observed_locations"))
-                == eligible_product_locations - product_search_locations,
+                _count(product_presence.get("observed_locations")) == product_locations
+                and product_eligible >= product_locations
+                and product_missing == product_eligible - product_locations,
                 "price_catalog_product_presence_invalid",
                 "Product Search-presence counts do not reconcile.",
                 f"{path}.presence",
-                product_id=product.get("product_id"),
             )
             check(
                 _close(
                     product_presence.get("observed_rate"),
-                    _rate(product_search_locations, eligible_product_locations),
-                    _RATE_TOLERANCE,
+                    _rate(product_locations, product_eligible),
                 )
                 and _close(
                     product_presence.get("not_observed_rate"),
-                    _rate(
-                        eligible_product_locations - product_search_locations,
-                        eligible_product_locations,
-                    ),
-                    _RATE_TOLERANCE,
+                    _rate(product_missing, product_eligible),
                 ),
                 "price_catalog_product_presence_rates_invalid",
                 "Product Search-presence rates do not reconcile.",
                 f"{path}.presence",
-                product_id=product.get("product_id"),
             )
+            samples = _rows(product.get("sample_locations"))
+            sample_keys = [str(row.get("scope_key") or "").strip() for row in samples]
+            samples_valid = (
+                len(samples) <= product_locations
+                and all(sample_keys)
+                and len(sample_keys) == len(set(sample_keys))
+            )
+            for sample in samples:
+                try:
+                    samples_valid = (
+                        samples_valid
+                        and _number(sample.get("price")) > 0
+                        and sample.get("search_observed") is True
+                    )
+                except ValueError:
+                    samples_valid = False
+                store_number = sample.get("store_number")
+                distribution_id = sample.get("distribution_store_id")
+                samples_valid = samples_valid and (
+                    store_number is None
+                    if distribution_id is None
+                    else _nonblank(distribution_id) and distribution_id == store_number
+                )
             check(
-                _integer(dict(product.get("price_stats") or {}).get("observation_count"))
-                == product_verified_observations
-                and _integer(dict(product.get("search_price_stats") or {}).get("observation_count"))
-                == product_search_observations,
-                "price_catalog_product_price_population_invalid",
-                "Product price distributions do not use the declared evidence populations.",
-                path,
-                product_id=product.get("product_id"),
+                samples_valid,
+                "price_catalog_product_sample_invalid",
+                "Product sample has duplicate, nonpositive, or misidentified Search evidence.",
+                f"{path}.sample_locations",
             )
-
         check(
-            product_search_observations_total == search_observations
-            and product_verified_observations_total == verified_observations,
+            product_observations == observations,
             "price_catalog_product_observation_totals_invalid",
-            "Product evidence populations do not reconcile to catalog totals.",
+            "Product observations do not reconcile to the catalog total.",
             "products",
         )
 
         brand_rows = _rows(document.get("brand_portfolio"))
         brand_types = [str(row.get("brand_type") or "") for row in brand_rows]
         check(
-            len(brand_types) == len(set(brand_types)),
+            all(brand_types) and len(brand_types) == len(set(brand_types)),
             "price_catalog_brand_population_invalid",
-            "Brand portfolio contains duplicate brand-type rows.",
+            "Brand portfolio contains missing or duplicate rows.",
             "brand_portfolio",
         )
         for index, row in enumerate(brand_rows):
+            row_stores = _count(row.get("distribution_store_count"))
+            row_services = _count(row.get("service_area_presence_count"))
+            row_locations = _count(row.get("search_observed_locations"))
+            row_products = _count(row.get("products"))
+            row_observations = _count(row.get("observations"))
             check(
-                _integer(row.get("locations"))
-                == _integer(row.get("verified_available_locations"))
-                <= _integer(row.get("search_observed_locations"))
-                and _integer(row.get("products")) <= _integer(row.get("search_observed_products")),
-                "price_catalog_brand_availability_invalid",
-                "Brand footprint promotes Search presence beyond verified availability.",
+                _count(row.get("locations")) == row_stores
+                and row_locations == row_stores + row_services
+                and row_products == _count(row.get("search_observed_products"))
+                and row_products <= row_observations,
+                "price_catalog_brand_distribution_invalid",
+                "Brand distribution does not reconcile.",
+                f"brand_portfolio[{index}]",
+            )
+            median_price = row.get("median_price")
+            check(
+                (
+                    row_observations == 0
+                    and median_price is None
+                    and row.get("search_median_price") is None
+                )
+                or (
+                    row_observations > 0
+                    and _number(median_price) > 0
+                    and _close(median_price, row.get("search_median_price"))
+                ),
+                "price_catalog_brand_price_invalid",
+                "Brand median is not based on positive Search prices.",
                 f"brand_portfolio[{index}]",
             )
         check(
-            sum(_integer(row.get("observations")) for row in brand_rows) == search_observations
-            and sum(_integer(row.get("products")) for row in brand_rows) == verified_products
-            and sum(_integer(row.get("search_observed_products")) for row in brand_rows)
+            sum(_count(row.get("observations")) for row in brand_rows) == observations
+            and sum(_count(row.get("products")) for row in brand_rows) == observed_products
+            and sum(_count(row.get("search_observed_products")) for row in brand_rows)
             == observed_products,
             "price_catalog_brand_totals_invalid",
-            "Brand portfolio populations do not reconcile to catalog totals.",
+            "Brand populations do not reconcile to catalog totals.",
             "brand_portfolio",
         )
 
@@ -395,81 +503,145 @@ def audit_price_monitoring_catalog(
             (str(row.get("level") or ""), str(row.get("key") or "")) for row in geography_rows
         ]
         check(
-            bool(geography_rows)
-            and all(level and key for level, key in geography_keys)
+            all(level and key for level, key in geography_keys)
             and len(geography_keys) == len(set(geography_keys)),
             "price_catalog_geography_population_invalid",
-            "Catalog geography rows are empty, duplicated, or unidentified.",
+            "Geography rows are duplicated or unidentified.",
             "geographies",
         )
         for index, row in enumerate(geography_rows):
-            geography_search_locations = _integer(row.get("search_observed_locations"))
-            geography_verified_locations = _integer(row.get("verified_available_locations"))
-            geography_out_locations = _integer(row.get("explicitly_out_of_stock_locations"))
-            geography_unverified_locations = _integer(row.get("unverified_locations"))
-            geography_observations = _integer(row.get("observations"))
-            geography_verified_observations = _integer(
-                row.get("verified_availability_observations")
-            )
+            row_stores = _count(row.get("distribution_store_count"))
+            row_services = _count(row.get("service_area_presence_count"))
+            row_locations = _count(row.get("search_observed_locations"))
+            row_observations = _count(row.get("observations"))
+            price_stats = dict(row.get("price_stats") or {})
+            search_price_stats = dict(row.get("search_price_stats") or {})
             check(
-                _integer(row.get("locations")) == geography_verified_locations
-                and geography_verified_locations
-                + geography_out_locations
-                + geography_unverified_locations
-                == geography_search_locations,
-                "price_catalog_geography_availability_invalid",
-                "Geography location populations do not form the governed partition.",
+                _count(row.get("locations")) == row_stores
+                and row_locations == row_stores + row_services
+                and _count(row.get("products"))
+                == _count(row.get("search_observed_products"))
+                <= row_observations,
+                "price_catalog_geography_distribution_invalid",
+                "Geography distribution does not reconcile.",
                 f"geographies[{index}]",
             )
             check(
-                _integer(row.get("products"))
-                == _integer(row.get("verified_available_products"))
-                <= _integer(row.get("search_observed_products"))
-                and 0 <= geography_verified_observations <= geography_observations,
-                "price_catalog_geography_product_counts_invalid",
-                "Geography verified products or observations exceed Search evidence.",
-                f"geographies[{index}]",
-            )
-            check(
-                _integer(dict(row.get("price_stats") or {}).get("observation_count"))
-                == geography_verified_observations
-                and _integer(dict(row.get("search_price_stats") or {}).get("observation_count"))
-                == geography_observations,
+                _price_stats_valid(price_stats, row_observations)
+                and _price_stats_valid(search_price_stats, row_observations)
+                and price_stats == search_price_stats,
                 "price_catalog_geography_price_population_invalid",
-                "Geography price populations differ from their evidence populations.",
+                "Geography prices do not use its Search population.",
                 f"geographies[{index}]",
             )
-        check(
-            sum(_integer(row.get("observations")) for row in geography_rows) == search_observations
-            and sum(
-                _integer(row.get("verified_availability_observations")) for row in geography_rows
+        if geography_rows:
+            check(
+                sum(_count(row.get("observations")) for row in geography_rows) == observations
+                and sum(_count(row.get("search_observed_locations")) for row in geography_rows)
+                == observed_locations
+                and sum(_count(row.get("distribution_store_count")) for row in geography_rows)
+                == stores
+                and sum(_count(row.get("service_area_presence_count")) for row in geography_rows)
+                == services,
+                "price_catalog_geography_totals_invalid",
+                "Geography populations do not reconcile to catalog totals.",
+                "geographies",
             )
-            == verified_observations
-            and sum(_integer(row.get("search_observed_locations")) for row in geography_rows)
-            == observed_locations
-            and sum(_integer(row.get("verified_available_locations")) for row in geography_rows)
-            == verified_locations,
-            "price_catalog_geography_totals_invalid",
-            "Geography evidence populations do not reconcile to catalog totals.",
-            "geographies",
-        )
 
         location_rows = _rows(document.get("locations"))
         location_display = dict(document.get("location_display") or {})
+        returned = _count(location_display.get("returned"))
+        total = _count(location_display.get("total"))
+        sampled = location_display.get("sampled")
         check(
-            _integer(location_display.get("returned")) == len(location_rows)
-            and _integer(location_display.get("total")) >= len(location_rows)
-            and bool(location_display.get("sampled"))
-            == (_integer(location_display.get("total")) > len(location_rows)),
+            returned == len(location_rows)
+            and total >= returned
+            and isinstance(sampled, bool)
+            and sampled == (total > returned),
             "price_catalog_location_display_invalid",
-            "Location sample metadata does not reconcile to returned rows.",
+            "Location display metadata does not reconcile.",
             "location_display",
         )
-        quality = dict(document.get("quality") or {})
+        location_keys = [str(row.get("scope_key") or "").strip() for row in location_rows]
         check(
-            quality.get("status") != "blocked",
+            all(location_keys) and len(location_keys) == len(set(location_keys)),
+            "price_catalog_location_population_invalid",
+            "Returned locations are missing or duplicated.",
+            "locations",
+        )
+        for index, row in enumerate(location_rows):
+            kind = row.get("kind")
+            is_store = kind == "store"
+            is_service = kind == "service_area"
+            row_stores = _count(row.get("distribution_store_count"))
+            row_services = _count(row.get("service_area_presence_count"))
+            check(
+                (is_store or is_service)
+                and row_stores == int(is_store)
+                and row_services == int(is_service)
+                and (
+                    _nonblank(row.get("store_number"))
+                    if is_store
+                    else row.get("store_number") is None
+                ),
+                "price_catalog_location_kind_invalid",
+                "Location is misclassified between store and service-area evidence.",
+                f"locations[{index}]",
+            )
+            price_range = _positive_price_range(row)
+            check(
+                _count(row.get("products"))
+                == _count(row.get("search_observed_products"))
+                == _count(row.get("observations"))
+                and _count(row.get("observations")) > 0
+                and row.get("search_observed") is True
+                and price_range is not None
+                and _close(row.get("minimum_price"), row.get("search_minimum_price"))
+                and _close(row.get("median_price"), row.get("search_median_price"))
+                and _close(row.get("maximum_price"), row.get("search_maximum_price")),
+                "price_catalog_location_price_population_invalid",
+                "Location is not a positive-price canonical Search population.",
+                f"locations[{index}]",
+            )
+
+        if selected_product_id is not None:
+            selected_locations = sum(
+                _count(product.get("search_observed_locations")) for product in products
+            )
+            check(
+                total == selected_locations == observed_locations,
+                "price_catalog_product_location_display_invalid",
+                "Product-filtered location total does not reconcile.",
+                "location_display.total",
+            )
+            # Only an explicitly complete location array supports an independent
+            # distinct-ID check. Compact or sampled documents remain aggregate audits.
+            if sampled is False:
+                evidence_stores = {
+                    str(row.get("store_number"))
+                    for row in location_rows
+                    if row.get("kind") == "store" and _nonblank(row.get("store_number"))
+                }
+                evidence_services = {
+                    str(row.get("scope_key"))
+                    for row in location_rows
+                    if row.get("kind") == "service_area" and _nonblank(row.get("scope_key"))
+                }
+                check(
+                    len(evidence_stores) == stores
+                    and len(evidence_services) == services
+                    and len(evidence_stores) + len(evidence_services) == observed_locations,
+                    "price_catalog_full_location_distribution_invalid",
+                    "Complete locations do not support the reported distinct-store distribution.",
+                    "locations",
+                    evidence_stores=len(evidence_stores),
+                    reported_stores=stores,
+                )
+
+        check(
+            dict(document.get("quality") or {}).get("status") != "blocked",
             "price_catalog_quality_blocked",
-            "A catalog with blocking data-quality findings cannot be published.",
+            "A catalog with blocking quality findings cannot be published.",
             "quality.status",
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -490,7 +662,7 @@ def audit_price_architecture_matrix(
     expected_retailer_ids: Iterable[str] | None = None,
     expected_catalog_retailer_ids: Iterable[str] | None = None,
 ) -> list[Finding]:
-    """Recompute matrix totals and reject Search-only availability promotion."""
+    """Recompute matrix price-rung, seller, SKU, and distribution aggregates."""
 
     findings: list[Finding] = []
 
@@ -500,20 +672,57 @@ def audit_price_architecture_matrix(
 
     try:
         check(
-            document.get("schema_version") == "1.2.0",
+            document.get("schema_version") == "1.3.0",
             "price_architecture_contract_version_invalid",
-            "Price Architecture is not on the current availability contract.",
+            "Price Architecture is not on distribution contract 1.3.0.",
             "schema_version",
             actual=document.get("schema_version"),
         )
-        filters = dict(document.get("filters") or {})
-        anchor_id = str(filters.get("anchor_retailer_id") or "")
-        retailers = _rows(document.get("retailers"))
-        retailer_ids = [str(row.get("id") or "") for row in retailers]
         check(
-            bool(anchor_id) and all(retailer_ids) and len(retailer_ids) == len(set(retailer_ids)),
+            document.get("distribution_contract") == _DISTRIBUTION_CONTRACT,
+            "price_architecture_distribution_contract_invalid",
+            "Price Architecture lacks the positive-price Search distribution contract.",
+            "distribution_contract",
+        )
+        inventory_paths = _inventory_paths(document)
+        check(
+            not inventory_paths,
+            "price_architecture_inventory_claim_present",
+            "Price Architecture exposes inventory claims.",
+            inventory_paths[0] if inventory_paths else "<root>",
+            claim_paths=inventory_paths,
+        )
+        source = dict(document.get("source") or {})
+        check(
+            source.get("authority") == "Search"
+            and source.get("price_grain")
+            == (
+                "retailer product x median positive Search-listed package price across "
+                "observed Search locations"
+            )
+            and source.get("distribution_rule")
+            == (
+                "distinct store IDs where the product appears in store-level Search "
+                "with price greater than zero; not an in-stock indicator"
+            )
+            and source.get("assignment_rule")
+            == "price only; no product-match relationship is used",
+            "price_architecture_source_contract_invalid",
+            "Matrix source rules are not the positive-price Search contract.",
+            "source",
+        )
+
+        filters = dict(document.get("filters") or {})
+        anchor_id = str(filters.get("anchor_retailer_id") or "").strip()
+        retailers = _rows(document.get("retailers"))
+        retailer_ids = [str(row.get("id") or "").strip() for row in retailers]
+        check(
+            bool(anchor_id)
+            and anchor_id in retailer_ids
+            and all(retailer_ids)
+            and len(retailer_ids) == len(set(retailer_ids)),
             "price_architecture_retailer_scope_invalid",
-            "Price Architecture retailer scope is empty or duplicated.",
+            "Retailer scope is empty, duplicated, or lacks the benchmark.",
             "retailers",
         )
         if expected_retailer_ids is not None:
@@ -521,71 +730,99 @@ def audit_price_architecture_matrix(
             check(
                 set(retailer_ids) == expected_scope,
                 "price_architecture_retailer_scope_mismatch",
-                "Price Architecture retailer scope differs from the configured report scope.",
+                "Matrix retailer scope differs from the configured report scope.",
                 "retailers",
                 expected=sorted(expected_scope),
                 actual=sorted(set(retailer_ids)),
             )
         retailer_index = {str(row.get("id")): row for row in retailers}
+
+        rungs = _rows(document.get("rungs"))
+        rung_ids = [str(row.get("id") or "").strip() for row in rungs]
+        check(
+            bool(rungs)
+            and all(rung_ids)
+            and len(rung_ids) == len(set(rung_ids))
+            and [_integer(row.get("rank")) for row in rungs] == list(range(1, len(rungs) + 1)),
+            "price_architecture_rungs_invalid",
+            "Price rungs are missing, duplicated, or not contiguous.",
+            "rungs",
+        )
+        cell_retailer_ids = (
+            {str(cell.get("retailer_id") or "") for cell in _rows(rungs[0].get("cells"))}
+            if rungs
+            else set()
+        )
+        check(
+            anchor_id in cell_retailer_ids and cell_retailer_ids.issubset(retailer_index),
+            "price_architecture_catalog_scope_invalid",
+            "Matrix cells omit the benchmark or contain an unknown retailer.",
+            "rungs[0].cells",
+        )
+        if expected_catalog_retailer_ids is not None:
+            expected_catalog_scope = {str(value) for value in expected_catalog_retailer_ids}
+            check(
+                cell_retailer_ids == expected_catalog_scope,
+                "price_architecture_catalog_scope_mismatch",
+                "Matrix cells differ from the certified catalog scope.",
+                "rungs",
+                expected=sorted(expected_catalog_scope),
+                actual=sorted(cell_retailer_ids),
+            )
+
+        products_by_retailer: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        seller_counts: dict[str, Counter[str]] = defaultdict(Counter)
+        competitor_counts: list[int] = []
         available_retailer_ids = {
             retailer_id
             for retailer_id, row in retailer_index.items()
             if row.get("status") == "available"
         }
-        if expected_catalog_retailer_ids is not None:
-            expected_catalog_scope = {str(value) for value in expected_catalog_retailer_ids}
-            check(
-                available_retailer_ids == expected_catalog_scope,
-                "price_architecture_catalog_scope_mismatch",
-                ("Available Price Architecture retailers differ from the certified catalog scope."),
-                "retailers",
-                expected=sorted(expected_catalog_scope),
-                actual=sorted(available_retailer_ids),
-            )
-        anchor = retailer_index.get(anchor_id, {})
-        check(
-            anchor.get("status") == "available" and _integer(anchor.get("sku_count")) > 0,
-            "price_architecture_anchor_unavailable",
-            "The benchmark retailer lacks verified products for price-rung construction.",
-            "filters.anchor_retailer_id",
-            anchor_retailer_id=anchor_id,
-        )
-
-        rungs = _rows(document.get("rungs"))
-        rung_ids = [str(row.get("id") or "") for row in rungs]
-        check(
-            all(rung_ids)
-            and len(rung_ids) == len(set(rung_ids))
-            and [_integer(row.get("rank")) for row in rungs] == list(range(1, len(rungs) + 1)),
-            "price_architecture_rungs_invalid",
-            "Price Architecture rungs are duplicated or not contiguous.",
-            "rungs",
-        )
-        products_by_retailer: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        seller_counts: dict[str, Counter[str]] = defaultdict(Counter)
-        competitor_counts: list[int] = []
+        previous_upper: object = None
         for rung_index, rung in enumerate(rungs):
             path = f"rungs[{rung_index}]"
+            lower = rung.get("lower_bound")
+            upper = rung.get("upper_bound")
+            bounds_valid = True
+            try:
+                if lower is not None:
+                    bounds_valid = bounds_valid and _number(lower) >= 0
+                if upper is not None:
+                    bounds_valid = bounds_valid and _number(upper) > 0
+                if lower is not None and upper is not None:
+                    bounds_valid = bounds_valid and _number(lower) < _number(upper)
+                if rung_index > 0:
+                    bounds_valid = bounds_valid and _close(previous_upper, lower)
+            except ValueError:
+                bounds_valid = False
+            check(
+                bounds_valid,
+                "price_architecture_rung_bounds_invalid",
+                "Rung boundaries are invalid or discontinuous.",
+                path,
+            )
+            previous_upper = upper
+
             cells = _rows(rung.get("cells"))
             cell_ids = [str(cell.get("retailer_id") or "") for cell in cells]
             check(
                 all(cell_ids)
                 and len(cell_ids) == len(set(cell_ids))
-                and set(cell_ids) == available_retailer_ids,
+                and set(cell_ids) == cell_retailer_ids,
                 "price_architecture_cells_invalid",
-                "A price rung does not contain exactly one cell per available retailer.",
+                "A rung does not contain exactly one cell per catalog retailer.",
                 f"{path}.cells",
             )
             cell_index = {str(cell.get("retailer_id")): cell for cell in cells}
-            anchor_product_ids = {
-                str(row.get("product_id") or "") for row in _rows(rung.get("anchor_products"))
-            }
-            cell_anchor_product_ids = {
-                str(row.get("product_id") or "")
-                for row in _rows(cell_index.get(anchor_id, {}).get("products"))
-            }
+            anchor_products = _rows(rung.get("anchor_products"))
+            anchor_cell_products = _rows(dict(cell_index.get(anchor_id) or {}).get("products"))
+            anchor_product_ids = [
+                str(row.get("product_id") or "").strip() for row in anchor_products
+            ]
             check(
-                anchor_product_ids == cell_anchor_product_ids,
+                all(anchor_product_ids)
+                and len(anchor_product_ids) == len(set(anchor_product_ids))
+                and anchor_products == anchor_cell_products,
                 "price_architecture_anchor_products_invalid",
                 "Rung anchor products differ from the benchmark cell.",
                 f"{path}.anchor_products",
@@ -593,148 +830,201 @@ def audit_price_architecture_matrix(
             expected_competitor_skus = 0
             for cell_index_value, cell in enumerate(cells):
                 retailer_id = str(cell.get("retailer_id") or "")
+                cell_path = f"{path}.cells[{cell_index_value}]"
                 products = _rows(cell.get("products"))
+                product_ids = [str(product.get("product_id") or "").strip() for product in products]
+                cell_skus = _count(cell.get("sku_count"))
                 check(
-                    _integer(cell.get("sku_count")) == len(products),
+                    cell_skus == len(products)
+                    and all(product_ids)
+                    and len(product_ids) == len(set(product_ids)),
                     "price_architecture_cell_sku_count_invalid",
-                    "Cell SKU count does not reconcile to its product rows.",
-                    f"{path}.cells[{cell_index_value}]",
+                    "Cell SKU count or product population does not reconcile.",
+                    cell_path,
                     retailer_id=retailer_id,
                 )
-                if (
-                    retailer_id != anchor_id
-                    and retailer_index.get(retailer_id, {}).get("status") == "available"
-                ):
+                if retailer_id != anchor_id and retailer_id in available_retailer_ids:
                     expected_competitor_skus += len(products)
                 median_prices: list[float] = []
                 for product_index, product in enumerate(products):
-                    product_path = f"{path}.cells[{cell_index_value}].products[{product_index}]"
-                    product_id = str(product.get("product_id") or "")
-                    verified_locations = _integer(product.get("verified_available_locations"))
-                    search_locations = _integer(product.get("search_observed_locations"))
-                    minimum = _number(product.get("minimum_price"))
-                    median_price = _number(product.get("median_price"))
-                    maximum = _number(product.get("maximum_price"))
-                    median_prices.append(median_price)
+                    product_path = f"{cell_path}.products[{product_index}]"
+                    stores = _count(product.get("distribution_store_count"))
+                    services = _count(product.get("service_area_presence_count"))
+                    observed = _count(product.get("observed_locations"))
+                    search_observed = _count(product.get("search_observed_locations"))
+                    price_range = _positive_price_range(product)
                     check(
-                        _integer(product.get("observed_locations")) == verified_locations
-                        and 0 < verified_locations <= search_locations,
-                        "price_architecture_product_availability_invalid",
-                        (
-                            "Architecture product footprint is not verified or exceeds "
-                            "Search presence."
-                        ),
+                        observed == stores + services
+                        and search_observed == observed
+                        and observed > 0,
+                        "price_architecture_product_distribution_invalid",
+                        "Product distribution does not reconcile store and service-area evidence.",
                         product_path,
                         retailer_id=retailer_id,
-                        product_id=product_id,
                     )
                     check(
-                        0 < minimum <= median_price <= maximum,
+                        price_range is not None,
                         "price_architecture_product_price_invalid",
-                        "Architecture product price range is invalid.",
+                        "Product price range is not strictly positive and ordered.",
                         product_path,
                         retailer_id=retailer_id,
-                        product_id=product_id,
                     )
-                    lower = rung.get("lower_bound")
-                    upper = rung.get("upper_bound")
+                    median_price = price_range[1] if price_range else 0.0
+                    median_prices.append(median_price)
                     check(
                         (lower is None or median_price >= _number(lower))
                         and (upper is None or median_price < _number(upper)),
                         "price_architecture_product_rung_invalid",
-                        "Product median price falls outside its declared rung.",
+                        "Product median price falls outside its rung.",
                         product_path,
                         retailer_id=retailer_id,
-                        product_id=product_id,
+                    )
+                    seller_status = str(product.get("seller_status") or "")
+                    check(
+                        seller_status
+                        in {
+                            "verified_first_party",
+                            "seller_unverified",
+                            "not_governed",
+                        },
+                        "price_architecture_product_seller_status_invalid",
+                        "Product has an unknown seller-governance status.",
+                        f"{product_path}.seller_status",
+                        retailer_id=retailer_id,
                     )
                     products_by_retailer[retailer_id].append(product)
-                    seller_counts[retailer_id][str(product.get("seller_status") or "")] += 1
+                    seller_counts[retailer_id][seller_status] += 1
                 expected_average = round(mean(median_prices), 4) if median_prices else None
                 check(
                     _close(cell.get("average_price"), expected_average),
                     "price_architecture_cell_average_invalid",
-                    "Cell average price does not reconcile to product medians.",
-                    f"{path}.cells[{cell_index_value}].average_price",
+                    "Cell average does not reconcile to product medians.",
+                    f"{cell_path}.average_price",
+                    retailer_id=retailer_id,
+                )
+                finite_width = (
+                    _number(upper) - _number(lower)
+                    if lower is not None and upper is not None
+                    else None
+                )
+                expected_density = (
+                    round(cell_skus / finite_width, 4) if cell_skus and finite_width else None
+                )
+                check(
+                    _close(cell.get("price_density"), expected_density),
+                    "price_architecture_cell_density_invalid",
+                    "Cell density does not reconcile to SKU count and rung width.",
+                    f"{cell_path}.price_density",
                     retailer_id=retailer_id,
                 )
             competitor_counts.append(expected_competitor_skus)
             check(
-                _integer(rung.get("competitor_sku_count")) == expected_competitor_skus,
+                _count(rung.get("competitor_sku_count")) == expected_competitor_skus,
                 "price_architecture_rung_competitor_count_invalid",
-                "Rung competitor SKU count does not reconcile to verified product rows.",
+                "Rung competitor count does not reconcile.",
                 f"{path}.competitor_sku_count",
             )
 
-        for retailer_index_value, retailer in enumerate(retailers):
+        for index, retailer in enumerate(retailers):
             retailer_id = str(retailer.get("id") or "")
+            path = f"retailers[{index}]"
             products = products_by_retailer.get(retailer_id, [])
             product_ids = [str(row.get("product_id") or "") for row in products]
-            sku_count = _integer(retailer.get("sku_count"))
-            verified_locations = _integer(retailer.get("verified_available_locations") or 0)
-            observed_locations = _integer(retailer.get("observed_locations") or 0)
-            search_locations = _integer(retailer.get("search_observed_locations") or 0)
-            search_skus = _integer(retailer.get("search_observed_skus") or 0)
+            sku_count = _count(retailer.get("sku_count"))
+            search_skus = _count(retailer.get("search_observed_skus"))
+            stores = _count(retailer.get("distribution_store_count"))
+            services = _count(retailer.get("service_area_presence_count"))
+            observed = _count(retailer.get("observed_locations"))
+            search_observed = _count(retailer.get("search_observed_locations"))
+            eligible = _count(retailer.get("eligible_locations"))
             expected_status = "available" if products else "unavailable"
             check(
                 all(product_ids)
                 and len(product_ids) == len(set(product_ids))
-                and sku_count == len(products)
+                and sku_count == search_skus == len(products)
                 and retailer.get("status") == expected_status,
                 "price_architecture_retailer_skus_invalid",
-                "Retailer SKU population is duplicated or does not reconcile to its status.",
-                f"retailers[{retailer_index_value}]",
+                "Retailer SKU population does not reconcile to its status.",
+                path,
                 retailer_id=retailer_id,
             )
             check(
-                verified_locations == observed_locations <= search_locations
-                and sku_count <= search_skus,
-                "price_architecture_retailer_availability_invalid",
-                ("Retailer verified products or footprint differ from or exceed Search presence."),
-                f"retailers[{retailer_index_value}]",
+                observed == stores + services and search_observed == observed,
+                "price_architecture_retailer_distribution_invalid",
+                "Retailer distribution does not reconcile store and service-area evidence.",
+                path,
                 retailer_id=retailer_id,
             )
+            if products:
+                product_store_counts = [
+                    _count(product.get("distribution_store_count")) for product in products
+                ]
+                product_service_counts = [
+                    _count(product.get("service_area_presence_count")) for product in products
+                ]
+                check(
+                    max(product_store_counts, default=0) <= stores <= sum(product_store_counts)
+                    and max(product_service_counts, default=0)
+                    <= services
+                    <= sum(product_service_counts),
+                    "price_architecture_retailer_distribution_bounds_invalid",
+                    "Retailer union footprint falls outside product distribution bounds.",
+                    path,
+                    retailer_id=retailer_id,
+                )
             counts = seller_counts[retailer_id]
+            first_party = _count(retailer.get("verified_first_party_skus"))
+            seller_unverified = _count(retailer.get("seller_unverified_skus"))
+            not_governed = _count(retailer.get("seller_not_governed_skus"))
             check(
-                _integer(retailer.get("verified_first_party_skus"))
-                == counts["verified_first_party"]
-                and _integer(retailer.get("seller_unverified_skus")) == counts["seller_unverified"]
-                and _integer(retailer.get("seller_not_governed_skus")) == counts["not_governed"]
-                and sum(counts.values()) == sku_count,
+                first_party == counts["verified_first_party"]
+                and seller_unverified == counts["seller_unverified"]
+                and not_governed == counts["not_governed"]
+                and first_party + seller_unverified + not_governed == sku_count,
                 "price_architecture_seller_counts_invalid",
-                "Retailer seller-governance counts do not reconcile to products.",
-                f"retailers[{retailer_index_value}]",
+                "Seller-governance counts do not reconcile to products.",
+                path,
                 retailer_id=retailer_id,
             )
             if retailer.get("status") == "unavailable":
-                check(
+                valid_unavailable = (
                     sku_count == 0
-                    and verified_locations == 0
-                    and observed_locations == 0
-                    and search_locations == 0
-                    and search_skus == 0
-                    and _integer(retailer.get("eligible_locations") or 0) == 0
-                    and sum(counts.values()) == 0
-                    and bool(str(retailer.get("reason") or "").strip()),
+                    and stores == services == observed == search_observed == search_skus == 0
+                    and first_party == seller_unverified == not_governed == 0
+                    and _nonblank(retailer.get("reason"))
+                )
+                if retailer_id not in cell_retailer_ids:
+                    valid_unavailable = (
+                        valid_unavailable
+                        and eligible == 0
+                        and retailer.get("population_checksum") is None
+                    )
+                check(
+                    valid_unavailable,
                     "price_architecture_unavailable_retailer_invalid",
                     "Unavailable retailer is not an explicit zero-valued, reasoned row.",
-                    f"retailers[{retailer_index_value}]",
+                    path,
+                    retailer_id=retailer_id,
+                )
+            elif retailer_id in cell_retailer_ids:
+                check(
+                    _nonblank(retailer.get("population_checksum")),
+                    "price_architecture_population_checksum_invalid",
+                    "Available retailer lacks a population checksum.",
+                    f"{path}.population_checksum",
                     retailer_id=retailer_id,
                 )
 
         for rung_index, rung in enumerate(rungs):
-            for cell_index_value, cell in enumerate(_rows(rung.get("cells"))):
+            for cell_position, cell in enumerate(_rows(rung.get("cells"))):
                 retailer_id = str(cell.get("retailer_id") or "")
-                retailer_skus = _integer(retailer_index.get(retailer_id, {}).get("sku_count") or 0)
-                cell_skus = _integer(cell.get("sku_count"))
+                retailer_skus = _count(retailer_index[retailer_id].get("sku_count"))
+                cell_skus = _count(cell.get("sku_count"))
                 check(
-                    _close(
-                        cell.get("assortment_share"),
-                        _rate(cell_skus, retailer_skus),
-                        _RATE_TOLERANCE,
-                    ),
+                    _close(cell.get("assortment_share"), _rate(cell_skus, retailer_skus)),
                     "price_architecture_cell_share_invalid",
-                    "Cell assortment share does not reconcile to retailer SKU count.",
-                    f"rungs[{rung_index}].cells[{cell_index_value}].assortment_share",
+                    "Cell assortment share does not reconcile.",
+                    f"rungs[{rung_index}].cells[{cell_position}].assortment_share",
                     retailer_id=retailer_id,
                 )
 
@@ -752,19 +1042,29 @@ def audit_price_architecture_matrix(
             if count == max_competitor_skus
         }
         check(
-            _integer(summary.get("rung_count")) == len(rungs)
-            and _integer(summary.get("anchor_skus")) == len(anchor_products)
-            and _integer(summary.get("competitor_skus")) == competitor_skus
-            and _integer(summary.get("whitespace_rung_count"))
+            _count(summary.get("rung_count")) == len(rungs)
+            and _count(summary.get("anchor_skus")) == len(anchor_products)
+            and _count(summary.get("competitor_skus")) == competitor_skus
+            and _count(summary.get("whitespace_rung_count"))
             == sum(count == 0 for count in competitor_counts)
             and str(summary.get("most_crowded_rung_id")) in crowded_ids,
             "price_architecture_summary_invalid",
-            "Price Architecture summary does not reconcile to verified product rows.",
+            "Matrix summary does not reconcile to product rows.",
             "summary",
         )
-        if filters.get("brand") is None:
+        anchor_price_points = _count(summary.get("anchor_price_points"))
+        if filters.get("mode") == "benchmark_anchored":
+            rung_anchor_prices = [rung.get("anchor_price") for rung in rungs]
             check(
-                _integer(summary.get("anchor_price_points"))
+                all(price is not None and _number(price) > 0 for price in rung_anchor_prices)
+                and len({_number(price) for price in rung_anchor_prices}) == anchor_price_points,
+                "price_architecture_anchor_price_points_invalid",
+                "Benchmark price-point count does not reconcile to anchored rungs.",
+                "summary.anchor_price_points",
+            )
+        elif filters.get("brand") is None:
+            check(
+                anchor_price_points
                 == len({_number(row.get("median_price")) for row in anchor_products}),
                 "price_architecture_anchor_price_points_invalid",
                 "Benchmark price-point count does not reconcile to benchmark products.",

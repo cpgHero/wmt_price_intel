@@ -200,6 +200,51 @@ def test_match_candidates_preserve_profile_eligibility_without_inventing_pairs()
     )
 
 
+def test_match_candidate_footprint_uses_positive_store_search_rows_only() -> None:
+    benchmark = _offer("store-a", "100", -94.2)
+    explicit_out = replace(
+        _offer("store-b", "100", -94.1),
+        offer=replace(_offer("store-b", "100", -94.1).offer, in_stock=False),
+        in_scope=False,
+        scope_reason="explicitly out of stock",
+    )
+    service_area = replace(
+        _offer("service-area", "100", -94.0),
+        offer=replace(
+            _offer("service-area", "100", -94.0).offer,
+            store_number=None,
+        ),
+    )
+    competitor = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="competitor-store-a",
+            retailer_id="aldi_us",
+            retailer_product_id="aldi-100",
+        ),
+    )
+
+    candidates = benchmark_product_match_candidates(
+        [benchmark, explicit_out, service_area, competitor],
+        [_match("store-a", "aldi_us", "-0.50")],
+        benchmark_retailer="walmart_us",
+        profiles=[
+            {
+                "id": "strict",
+                "label": "Exact package",
+                "geography": "exact_zip",
+                "comparison_metric": "package_price",
+            }
+        ],
+    )
+
+    assert candidates[0]["benchmark_location_scope_keys"] == [
+        "walmart_us|72712|store-a",
+        "walmart_us|72712|store-b",
+    ]
+
+
 def test_presentation_excludes_mismatched_weighted_multipacks() -> None:
     benchmark = _offer("store-a", "walmart-three-pack", -94.2)
     benchmark = replace(

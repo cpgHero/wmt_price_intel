@@ -14,94 +14,26 @@ export type PriceStats = {
   modal_share: number | null;
   observation_count: number;
 };
-export type LocationSummary = AvailabilityInvariant & {
-  scope_key: string;
-  kind: "store" | "service_area";
-  store_number: string | null;
-  store_name: string | null;
-  zipcode: string | null;
-  city: string | null;
-  state: string | null;
-  country: string;
-  latitude: number | null;
-  longitude: number | null;
-  products: number;
-  search_observed_products: number;
-  observations: number;
-  verified_availability_observations: number;
-  minimum_price: number | null;
-  median_price: number | null;
-  maximum_price: number | null;
-  search_minimum_price: number | null;
-  search_median_price: number | null;
-  search_maximum_price: number | null;
-  sponsorship_status: "sponsored" | "organic" | "mixed" | "unknown";
-  is_sponsored: boolean | null;
-  search_observed: true;
-  in_stock: boolean | null;
-  availability_status: AvailabilityStatus;
-  verified_local_availability: boolean;
-};
-export type AvailabilityInvariant =
-  | {
-      availability_status: "verified_in_stock";
-      in_stock: true;
-      is_sponsored: false;
-      verified_local_availability: true;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "explicitly_out_of_stock";
-      in_stock: false;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "unverified_sponsored";
-      in_stock: true | null;
-      is_sponsored: true;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    }
-  | {
-      availability_status: "unverified";
-      in_stock: true | null;
-      is_sponsored: false | null;
-      verified_local_availability: false;
-      [k: string]: unknown;
-    };
-export type AvailabilityStatus =
-  "verified_in_stock" | "explicitly_out_of_stock" | "unverified_sponsored" | "unverified";
 export type EvidenceRate = EvidenceRate1 & {
   status: "observed" | "unavailable";
   known_observations: number;
-  in_stock_observations?: number;
   promotion_observations?: number;
   sponsorship_observations?: number;
   rate: number | null;
   definition: string;
 };
-export type EvidenceRate1 = {
-  [k: string]: unknown;
-};
-export type ProductLocation = AvailabilityInvariant & {
-  scope_key: string;
-  store_number: string | null;
-  store_name: string | null;
-  zipcode: string | null;
-  city: string | null;
-  state: string | null;
-  price: number;
-  search_observed: true;
-  in_stock: boolean | null;
-  is_sponsored: boolean | null;
-  availability_status: AvailabilityStatus;
-  verified_local_availability: boolean;
-  observed_at: string | null;
-};
+export type EvidenceRate1 =
+  | {
+      promotion_observations: number;
+      [k: string]: unknown;
+    }
+  | {
+      sponsorship_observations: number;
+      [k: string]: unknown;
+    };
 
 export interface RetailCompetitiveIntelligencePriceMonitoringView {
-  schema_version: "1.4.0";
+  schema_version: "1.5.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
@@ -118,10 +50,11 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     observed_end: string | null;
     source_rows: number;
     classified_rows: number;
-    observation_schema_version: "1.2.0";
+    observation_schema_version: "1.3.0";
     observation_population_checksum: string;
     artifact_checksums: string[];
   };
+  distribution_contract: DistributionContract;
   filters: {
     retailer_id: string;
     brand_type: "all" | "private_label" | "regional" | "national" | "unclassified";
@@ -140,27 +73,27 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
   };
   summary: {
     observed_locations: number;
-    verified_available_locations: number;
+    distribution_store_count: number;
+    service_area_presence_count: number;
     expected_locations: number;
     coverage_rate: number | null;
     observed_products: number;
-    verified_available_products: number;
     eligible_observations: number;
     search_price_observations: number;
-    verified_availability_observations: number;
     usable_price_rate: number;
     price_consistency_rate: number | null;
   };
   presence: {
     status: "observed_only";
     observed_locations: number;
+    distribution_store_count: number;
+    service_area_presence_count: number;
     eligible_locations: number;
     observed_presence_rate: number | null;
     not_observed_locations: number;
     confirmed_gap_locations: number;
     definition: string;
   };
-  availability: AvailabilitySummary;
   distribution_gaps: {
     status: "search_non_observation";
     definition: string;
@@ -183,7 +116,8 @@ export interface RetailCompetitiveIntelligencePriceMonitoringView {
     search_observed_products: number;
     locations: number;
     search_observed_locations: number;
-    verified_available_locations: number;
+    distribution_store_count: number;
+    service_area_presence_count: number;
     observations: number;
     median_price: number | null;
     search_median_price: number | null;
@@ -221,6 +155,16 @@ export interface IdNameVersion {
   name: string;
   version: string;
 }
+export interface DistributionContract {
+  version: "1.0.0";
+  basis: "positive_price_store_search_result";
+  grain: "retailer_product_id_x_store_id";
+  deduplication: "distinct_store_id_per_product";
+  price_rule: "price_gt_zero";
+  inventory_claim: false;
+  stock_status_used: false;
+  sponsorship_used: false;
+}
 export interface IdName {
   id: string;
   name: string;
@@ -234,19 +178,11 @@ export interface ProductOption {
   value: string;
   label: string;
   count: number;
-  verified_count: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   brand: string | null;
   brand_type: "private_label" | "regional" | "national" | "unclassified";
   image_url: string | null;
-}
-export interface AvailabilitySummary {
-  status: "verified" | "unverified";
-  verified_available_locations: number;
-  eligible_locations: number;
-  verified_availability_rate: number | null;
-  explicitly_out_of_stock_locations: number;
-  unverified_locations: number;
-  definition: string;
 }
 export interface GapGeography {
   level: "state" | "city" | "zipcode";
@@ -289,16 +225,39 @@ export interface Geography {
   products: number;
   observations: number;
   search_observed_locations: number;
-  verified_available_locations: number;
-  explicitly_out_of_stock_locations: number;
-  unverified_locations: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   search_observed_products: number;
-  verified_available_products: number;
-  verified_availability_observations: number;
   latitude?: number | null;
   longitude?: number | null;
   price_stats: PriceStats;
   search_price_stats: PriceStats;
+}
+export interface LocationSummary {
+  scope_key: string;
+  kind: "store" | "service_area";
+  store_number: string | null;
+  store_name: string | null;
+  zipcode: string | null;
+  city: string | null;
+  state: string | null;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+  products: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
+  search_observed_products: number;
+  observations: number;
+  minimum_price: number | null;
+  median_price: number | null;
+  maximum_price: number | null;
+  search_minimum_price: number | null;
+  search_median_price: number | null;
+  search_maximum_price: number | null;
+  sponsorship_status: "sponsored" | "organic" | "mixed" | "unknown";
+  is_sponsored: boolean | null;
+  search_observed: true;
 }
 export interface ProductSummary {
   product_id: string;
@@ -310,7 +269,6 @@ export interface ProductSummary {
     authority: {
       identity: "pdp" | "search";
       price: "search";
-      availability: "explicit_provider_stock_availability";
     };
     [k: string]: unknown;
   };
@@ -322,10 +280,8 @@ export interface ProductSummary {
   locations: number;
   states: number;
   cities: number;
-  verified_available_locations: number;
-  verified_available_states: number;
-  verified_available_cities: number;
-  verified_available_zipcodes: number;
+  distribution_store_count: number;
+  service_area_presence_count: number;
   search_observed_locations: number;
   search_observed_states: number;
   search_observed_cities: number;
@@ -335,7 +291,6 @@ export interface ProductSummary {
   unit_price: UnitPriceSummary;
   search_unit_price: UnitPriceSummary;
   consistency_rate: number | null;
-  availability: AvailabilityEvidence;
   promotion: EvidenceRate;
   search_promotion: EvidenceRate;
   sponsorship: EvidenceRate;
@@ -355,24 +310,6 @@ export interface UnitPriceSummary {
   coverage_rate: number | null;
   definition: string;
 }
-export interface AvailabilityEvidence {
-  status: "verified" | "unverified" | "unavailable";
-  search_observations: number;
-  known_observations: number;
-  in_stock_observations: number;
-  verified_in_stock_observations: number;
-  explicitly_out_of_stock_observations: number;
-  unverified_observations: number;
-  search_observed_locations: number;
-  verified_available_locations: number;
-  explicitly_out_of_stock_locations: number;
-  unverified_locations: number;
-  /**
-   * Verified observations divided by known stock observations (verified plus explicit out-of-stock). This is not eligible-location carriage coverage.
-   */
-  rate: number | null;
-  definition: string;
-}
 export interface ProductPresence {
   observed_locations: number;
   eligible_locations: number;
@@ -380,6 +317,19 @@ export interface ProductPresence {
   observed_rate: number | null;
   not_observed_rate: number | null;
   definition: string;
+}
+export interface ProductLocation {
+  scope_key: string;
+  store_number: string | null;
+  store_name: string | null;
+  zipcode: string | null;
+  city: string | null;
+  state: string | null;
+  price: number;
+  search_observed: true;
+  is_sponsored: boolean | null;
+  distribution_store_id: string | null;
+  observed_at: string | null;
 }
 export interface StoreException {
   id: string;

@@ -44,12 +44,13 @@ def complete_attributes_from_pdp(
 ) -> ClassifiedOffer:
     """Fill unresolved Product Pack attributes from PDP text without changing price.
 
-    The Search result remains the admission and price-placement source. Explicit
-    ``in_stock=true`` and ``is_sponsored=false`` evidence is required for verified
-    local availability; a Search placement by itself proves neither availability nor
-    store carriage. PDP content is flattened into a classification-only text surface
-    and can fill an unresolved attribute; it never overwrites explicit Search, Product
-    Pack override, or configured-constant evidence. Inferred defaults are not evidence.
+    The Search result remains the admission, price-placement, and observed-distribution
+    source. A positive-priced store-level Search result contributes that distinct store
+    to distribution without making an inventory or in-stock claim; service-area Search
+    presence is separate. PDP content is flattened into a classification-only text
+    surface and can fill an unresolved attribute; it never overwrites explicit Search,
+    Product Pack override, or configured-constant evidence. Inferred defaults are not
+    evidence.
     """
 
     if not is_product_location_state(classified):

@@ -17,38 +17,36 @@ function nonNegativeInteger(value: unknown): value is number {
 }
 
 /**
- * Assortment presentation fails closed. Search discovery or a legacy
- * `observed_locations` count cannot be relabeled as verified local carriage.
+ * Assortment presentation fails closed unless both explicit distribution
+ * dimensions are present. Legacy Search, availability, and observed-location
+ * counters are intentionally ignored.
  */
-export function isVerifiedAssortmentProduct(product: AssortmentProduct) {
+export function hasAssortmentDistribution(product: AssortmentProduct) {
   return (
-    product.availability_status === "verified_in_stock" &&
-    nonNegativeInteger(product.verified_available_locations) &&
-    product.verified_available_locations > 0 &&
-    nonNegativeInteger(product.verified_available_zipcodes) &&
-    nonNegativeInteger(product.search_observed_locations) &&
-    product.search_observed_locations >= product.verified_available_locations &&
-    nonNegativeInteger(product.search_observed_zipcodes) &&
-    product.search_observed_zipcodes >= product.verified_available_zipcodes
+    nonNegativeInteger(product.distribution_store_count) &&
+    nonNegativeInteger(product.service_area_presence_count) &&
+    (product.distribution_store_count > 0 ||
+      product.service_area_presence_count > 0)
   );
 }
 
-export function verifiedAssortmentProducts(products: AssortmentProduct[]) {
-  return products.filter(isVerifiedAssortmentProduct);
+export function assortmentProductsWithDistribution(
+  products: AssortmentProduct[],
+) {
+  return products.filter(hasAssortmentDistribution);
 }
 
-export function isVerifiedAssortmentBrand(brand: AssortmentBrand) {
+export function hasAssortmentBrandDistribution(brand: AssortmentBrand) {
   return (
-    nonNegativeInteger(brand.verified_available_products) &&
-    brand.verified_available_products > 0 &&
-    nonNegativeInteger(brand.verified_available_locations) &&
-    brand.verified_available_locations > 0 &&
-    nonNegativeInteger(brand.verified_available_zipcodes)
+    nonNegativeInteger(brand.distribution_store_count) &&
+    nonNegativeInteger(brand.service_area_presence_count) &&
+    (brand.distribution_store_count > 0 ||
+      brand.service_area_presence_count > 0)
   );
 }
 
-export function verifiedAssortmentBrands(brands: AssortmentBrand[]) {
-  return brands.filter(isVerifiedAssortmentBrand);
+export function assortmentBrandsWithDistribution(brands: AssortmentBrand[]) {
+  return brands.filter(hasAssortmentBrandDistribution);
 }
 
 export function productsForObservedBrand(
@@ -56,7 +54,7 @@ export function productsForObservedBrand(
   brand: AssortmentBrand,
 ) {
   const target = brandToken(brand.brand);
-  return verifiedAssortmentProducts(products).filter(
+  return assortmentProductsWithDistribution(products).filter(
     (product) =>
       brandToken(
         Object.prototype.hasOwnProperty.call(product, "observed_brand")

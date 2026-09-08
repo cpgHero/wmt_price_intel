@@ -15,7 +15,7 @@
     "summary"
   ],
   "properties": {
-    "schema_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "product_pack_id": { "type": "string", "minLength": 1 },
     "product_pack_version": { "type": "string", "minLength": 1 },
@@ -85,22 +85,25 @@
           "if": {
             "properties": {
               "distribution_evidence": {
-                "const": "verified_local_search_availability"
+                "const": "positive_price_store_search_result"
               }
             },
             "required": ["distribution_evidence"]
           },
           "then": {
             "properties": {
-              "observed_products": { "type": "integer", "minimum": 1 },
-              "observed_locations": { "type": "integer", "minimum": 1 },
-              "distribution_tier": {
-                "enum": ["single_location", "concentrated", "multi_market", "broad"]
-              }
+              "observed_products": { "type": "integer", "minimum": 0 },
+              "observed_locations": { "type": "integer", "minimum": 0 },
+              "distribution_store_count": { "type": "integer", "minimum": 0 },
+              "service_area_presence_count": { "type": "integer", "minimum": 0 }
             }
           },
           "else": {
             "properties": {
+              "observed_locations": { "const": 0 },
+              "observed_zipcodes": { "const": 0 },
+              "distribution_store_count": { "const": 0 },
+              "service_area_presence_count": { "const": 0 },
               "location_share": { "const": 0 },
               "distribution_tier": { "const": "unknown" }
             }
@@ -117,6 +120,8 @@
         "observed_products",
         "observed_locations",
         "observed_zipcodes",
+        "distribution_store_count",
+        "service_area_presence_count",
         "location_share",
         "distribution_tier",
         "distribution_evidence",
@@ -147,32 +152,41 @@
         "observed_products": {
           "type": "integer",
           "minimum": 0,
-          "description": "Verified-available products only when distribution_evidence is verified_local_search_availability; otherwise a discovery or identity count that must remain explicitly unverified. Zero is authoritative when corrected verified-local counters prove no available products."
+          "description": "Products with positive-price Search presence when distribution_evidence is positive_price_store_search_result; otherwise a discovery or identity count with no distribution claim."
         },
         "observed_locations": {
           "type": "integer",
           "minimum": 0,
-          "description": "Verified locations only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified."
+          "description": "Deprecated display alias for distribution_store_count. It is never an inventory or in-stock count."
         },
         "observed_zipcodes": {
           "type": "integer",
           "minimum": 0,
-          "description": "Verified ZIPs only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified."
+          "description": "ZIPs with governed positive-price Search presence; not a store count."
+        },
+        "distribution_store_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct store IDs where a brand product appeared in a store-level Search result with price greater than zero."
+        },
+        "service_area_presence_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct service-area Search presences, kept separate from store distribution."
         },
         "location_share": {
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "A verified-availability footprint only when distribution_evidence is verified_local_search_availability."
+          "description": "Share of the retailer's governed positive-price Search stores carrying the brand; not an inventory claim."
         },
         "distribution_tier": {
           "enum": ["unknown", "single_location", "concentrated", "multi_market", "broad"]
         },
         "distribution_evidence": {
           "enum": [
-            "verified_local_search_availability",
+            "positive_price_store_search_result",
             "search_brand_field",
-            "pdp_identity_joined_to_matched_search",
             "pdp_identity_only"
           ]
         },

@@ -41,12 +41,12 @@ export default async function PriceMonitoringDetailPage({
         <EmptyState
           eyebrow={
             analysisResponse.status === 409
-              ? "Report quarantined"
+              ? "Report unavailable"
               : "Price view unavailable"
           }
           title={
             analysisResponse.status === 409
-              ? "This report is not available for sharing"
+              ? "This report is not currently available"
               : "The analysis could not be loaded"
           }
           message={
@@ -96,10 +96,11 @@ export default async function PriceMonitoringDetailPage({
     return (
       <main>
         <EmptyState
-          eyebrow="Search evidence unavailable"
+          eyebrow="Distribution evidence unavailable"
           title="This price view cannot be assembled yet"
           message={
-            viewResponse.error ?? "No classified Search evidence was found."
+            viewResponse.error ??
+            "No positive-price store-level Search evidence was found."
           }
         />
       </main>

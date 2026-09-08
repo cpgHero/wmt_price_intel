@@ -31,20 +31,17 @@ from rci_analytics.matching_v2 import (
     compile_matching_policy_v2,
 )
 from rci_analytics.models import ClassifiedOffer, JsonObject
-from rci_analytics.product_location import classify_local_availability
 from rci_analytics.product_pack import ProductPack
 
 
-def _is_verified_local_observation(item: ClassifiedOffer) -> bool:
-    """Return whether a placement may support a local footprint or candidate."""
+def _is_positive_search_observation(item: ClassifiedOffer) -> bool:
+    """Return whether a retained Search row can support a candidate footprint."""
 
     return (
-        item.in_scope
-        and classify_local_availability(
-            in_stock=item.offer.in_stock,
-            is_sponsored=item.offer.is_sponsored,
-        )
-        == "verified_in_stock"
+        (item.in_scope or item.scope_reason == "explicitly out of stock")
+        and item.offer.price is not None
+        and item.offer.price > 0
+        and not is_seller_policy_exclusion(item)
     )
 
 
@@ -159,10 +156,9 @@ class ListingEvidenceAccumulatorV2:
                 retailer_product_id=offer.retailer_product_id,
             ),
         )
-        # Availability is stateful even when the latest Search placement has no
-        # usable price. Retain that state before applying the positive-price gate
-        # so it can retract an older verified location without creating a new
-        # price-less listing by itself.
+        # Retain current Search placement state before applying the price gate.
+        # Seller-policy exclusions can retract a listing; stock and sponsorship
+        # metadata never alter distribution eligibility.
         add_classified_offer(state.location_states, item)
         if is_seller_policy_exclusion(item):
             return
@@ -281,7 +277,7 @@ class ListingEvidenceAccumulatorV2:
                             longitude=item.offer.longitude,
                         )
                         for item in state.location_states.values()
-                        if _is_verified_local_observation(item)
+                        if _is_positive_search_observation(item)
                     ),
                     key=lambda location: location.scope_key,
                 )
@@ -368,9 +364,9 @@ def build_listing_evidence_v2(
     """Collapse positive Search placements into conservative listing evidence.
 
     Conflicting product-level attributes are retained as conflicted unknowns so
-    they cannot create automatic exact matches. Search placements remain useful
-    for product identity, while only explicitly in-stock, non-sponsored rows
-    contribute observed-location evidence.
+    they cannot create automatic exact matches. Positive-price Search placements
+    supply product identity and observed-location evidence; stock and sponsorship
+    metadata do not gate that evidence.
     """
 
     accumulator = ListingEvidenceAccumulatorV2(pack)

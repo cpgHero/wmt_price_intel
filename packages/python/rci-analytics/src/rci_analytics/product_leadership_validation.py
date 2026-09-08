@@ -8,6 +8,7 @@ from statistics import mean
 from typing import Any
 
 from rci_analytics.models import JsonObject
+from rci_analytics.product_location import store_search_distribution_contract
 
 _STATUSES = ("leader", "tied", "at_risk", "losing", "unscored")
 _ABS_TOLERANCE = 0.0006
@@ -26,15 +27,17 @@ def _rows(value: Any) -> list[JsonObject]:
     return [dict(row) for row in value] if isinstance(value, list) else []
 
 
-def _has_verified_local_evidence(location: JsonObject) -> bool:
-    """Independently enforce the four-field local-availability invariant."""
+def _has_positive_search_evidence(location: JsonObject) -> bool:
+    """Independently enforce positive-price Search evidence."""
 
-    return (
-        location.get("in_stock") is True
-        and location.get("is_sponsored") is False
-        and location.get("availability_status") == "verified_in_stock"
-        and location.get("verified_local_availability") is True
-    )
+    try:
+        return (
+            location.get("search_observed") is True
+            and float(location.get("package_price") or 0) > 0
+            and float(location.get("comparison_value") or 0) > 0
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def _summary(rows: list[JsonObject]) -> JsonObject:
@@ -43,8 +46,24 @@ def _summary(rows: list[JsonObject]) -> JsonObject:
     losses = [row for row in rows if row.get("status") == "losing"]
     gaps = [float(row["competitor_minus_benchmark"]) for row in scored]
     losing_gaps = [abs(float(row["competitor_minus_benchmark"])) for row in losses]
+    distribution_store_ids = {
+        str(benchmark["store_number"])
+        for row in rows
+        if isinstance((benchmark := row.get("benchmark")), dict)
+        and benchmark.get("location_kind") == "store"
+        and benchmark.get("store_number")
+    }
+    service_area_scope_keys = {
+        str(benchmark["scope_key"])
+        for row in rows
+        if isinstance((benchmark := row.get("benchmark")), dict)
+        and benchmark.get("location_kind") == "service_area"
+        and benchmark.get("scope_key")
+    }
     return {
         "benchmark_observed_stores": len(rows),
+        "distribution_store_count": len(distribution_store_ids),
+        "service_area_presence_count": len(service_area_scope_keys),
         "scored_stores": len(scored),
         "coverage_rate": round(len(scored) / len(rows), 4) if rows else None,
         "leader_stores": outcomes["leader"],
@@ -94,6 +113,15 @@ def certify_competitive_product_leadership(
         if not condition:
             errors.append(message)
 
+    check(
+        document.get("schema_version") == "1.4.0",
+        "competitive leadership document does not use schema version 1.4.0",
+    )
+    check(
+        document.get("distribution_contract") == store_search_distribution_contract(),
+        "competitive leadership document lacks the current store-search distribution contract",
+    )
+
     outcomes = _rows(document.get("outcomes"))
     policy = dict(document.get("policy") or {})
     filters = dict(document.get("filters") or {})
@@ -129,18 +157,24 @@ def certify_competitive_product_leadership(
             f"{label}: benchmark product differs from the selected product",
         )
         check(
-            _has_verified_local_evidence(benchmark),
-            f"{label}: benchmark lacks verified local availability evidence",
-        )
-        check(
-            benchmark.get("search_observed") is True
-            and float(benchmark.get("package_price") or 0) > 0,
+            _has_positive_search_evidence(benchmark),
             f"{label}: benchmark lacks a positive Search-listed price",
         )
         check(
             float(benchmark.get("comparison_value") or 0) > 0,
             f"{label}: benchmark comparison value is not positive",
         )
+        if benchmark.get("location_kind") == "store":
+            check(
+                bool(str(benchmark.get("store_number") or "").strip())
+                and benchmark.get("distribution_store_id") == benchmark.get("store_number"),
+                f"{label}: benchmark store distribution ID is missing or inconsistent",
+            )
+        else:
+            check(
+                benchmark.get("distribution_store_id") is None,
+                f"{label}: service-area benchmark is presented as store distribution",
+            )
         benchmark_identity = (
             str(benchmark.get("retailer_id")),
             str(benchmark.get("product_id")),
@@ -174,14 +208,20 @@ def certify_competitive_product_leadership(
             f"{label}: competitor product differs from the relationship",
         )
         check(
-            _has_verified_local_evidence(competitor),
-            f"{label}: competitor lacks verified local availability evidence",
-        )
-        check(
-            competitor.get("search_observed") is True
-            and float(competitor.get("package_price") or 0) > 0,
+            _has_positive_search_evidence(competitor),
             f"{label}: competitor lacks a positive Search-listed price",
         )
+        if competitor.get("location_kind") == "store":
+            check(
+                bool(str(competitor.get("store_number") or "").strip())
+                and competitor.get("distribution_store_id") == competitor.get("store_number"),
+                f"{label}: competitor store distribution ID is missing or inconsistent",
+            )
+        else:
+            check(
+                competitor.get("distribution_store_id") is None,
+                f"{label}: service-area competitor is presented as store distribution",
+            )
         expected_gap = float(competitor.get("comparison_value") or 0) - float(
             benchmark.get("comparison_value") or 0
         )

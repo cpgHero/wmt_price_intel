@@ -10,27 +10,24 @@ from statistics import mean, median
 from typing import Any, Literal
 
 from rci_analytics.models import JsonObject
-from rci_analytics.product_location import ProductPriceObservation
+from rci_analytics.product_location import (
+    ProductPriceObservation,
+    store_search_distribution_contract,
+)
 
 LeadershipStatus = Literal["leader", "tied", "at_risk", "losing", "unscored"]
 _SPATIAL_BUCKET_DEGREES = 0.1
 
 
-def _is_verified_local(observation: ProductPriceObservation) -> bool:
-    """Admit only internally consistent, provider-confirmed local availability.
+def _is_positive_search(observation: ProductPriceObservation) -> bool:
+    """Admit a retained Search row with positive package and comparison values.
 
-    Search presence and a positive price are useful listing evidence, but neither
-    proves store carriage.  Keep this check at the leadership boundary even
-    though canonical comparison projections already filter to verified evidence;
-    direct callers must fail closed too.
+    Inventory, sponsorship, mastered-store membership, ZIP, and inferred location
+    attributes are intentionally not eligibility conditions.
     """
 
     return (
-        observation.in_stock is True
-        and observation.is_sponsored is False
-        and observation.availability_status == "verified_in_stock"
-        and observation.verified_local_availability is True
-        and observation.search_observed is True
+        observation.search_observed is True
         and observation.package_price > 0
         and observation.comparison_value > 0
     )
@@ -52,7 +49,7 @@ class ProductLeadershipRelationship:
 
     def admits(self, benchmark_scope_key: str) -> bool:
         # Footprint scopes mean every location where this exact benchmark product
-        # has verified local evidence. Interactive report views deliberately compact
+        # appears in positive-price Search evidence. Interactive report views compact
         # that redundant key list, while explicit-location scopes retain their keys.
         if self.scope_mode == "global":
             return True
@@ -158,9 +155,7 @@ def _location(value: ProductPriceObservation) -> JsonObject:
         "discounted_price": _round(value.discounted_price),
         "search_observed": value.search_observed,
         "is_sponsored": value.is_sponsored,
-        "in_stock": value.in_stock,
-        "availability_status": value.availability_status,
-        "verified_local_availability": value.verified_local_availability,
+        "distribution_store_id": (value.store_number if value.location_kind == "store" else None),
         "offer_id": value.offer_id,
         "comparison_value": _round(value.comparison_value),
         "observed_at": value.observed_at,
@@ -173,8 +168,24 @@ def _summary(rows: list[JsonObject]) -> JsonObject:
     losses = [row for row in rows if row["status"] == "losing"]
     gaps = [float(row["competitor_minus_benchmark"]) for row in scored]
     losing_gaps = [abs(float(row["competitor_minus_benchmark"])) for row in losses]
+    distribution_store_ids = {
+        str(benchmark["store_number"])
+        for row in rows
+        if isinstance((benchmark := row.get("benchmark")), dict)
+        and benchmark.get("location_kind") == "store"
+        and benchmark.get("store_number")
+    }
+    service_area_scope_keys = {
+        str(benchmark["scope_key"])
+        for row in rows
+        if isinstance((benchmark := row.get("benchmark")), dict)
+        and benchmark.get("location_kind") == "service_area"
+        and benchmark.get("scope_key")
+    }
     return {
         "benchmark_observed_stores": len(rows),
+        "distribution_store_count": len(distribution_store_ids),
+        "service_area_presence_count": len(service_area_scope_keys),
         "scored_stores": len(scored),
         "coverage_rate": _round(len(scored) / len(rows)) if rows else None,
         "leader_stores": outcomes["leader"],
@@ -300,8 +311,8 @@ def _price_ladder(
     )
     return {
         "definition": (
-            "Ordered verified local Search-listed prices for the benchmark product and the "
-            "lowest verified local offer for each governed matched competitor product."
+            "Ordered positive Search-listed prices for the benchmark product and the "
+            "lowest positive Search-listed offer for each governed matched competitor product."
         ),
         "rung_count": len(rungs),
         "benchmark_rank": benchmark_rank,
@@ -449,7 +460,7 @@ def _footprint_price_ladder(
         "definition": (
             "Footprint-level price architecture for the selected Walmart product and "
             "governed matched competitor products. Each competitor product is counted at "
-            "most once per verified Walmart location, using its lowest verified local "
+            "most once per retained Walmart Search location, using its lowest positive "
             "Search-listed price within the selected radius; service-area retailers use "
             "the same ZIP."
         ),
@@ -467,7 +478,7 @@ def _footprint_price_ladder(
 class CompetitiveProductLeadershipProjector:
     """Score one benchmark product at verified benchmark-location grain.
 
-    Every verified local benchmark location is assigned exactly one mutually
+    Every retained positive-price benchmark Search location is assigned exactly one mutually
     exclusive status. A competitor service area (for example Amazon Same Day) is
     comparable only in the same ZIP; physical competitor stores must fall within
     the selected radius.
@@ -509,20 +520,20 @@ class CompetitiveProductLeadershipProjector:
         if not resolved_metric or not resolved_unit:
             raise ValueError("comparison metric and unit are required for an unmatched product")
 
-        verified_benchmark_observations = [
-            row for row in benchmark_observations if _is_verified_local(row)
+        search_benchmark_observations = [
+            row for row in benchmark_observations if _is_positive_search(row)
         ]
-        verified_competitor_observations = [
-            row for row in competitor_observations if _is_verified_local(row)
+        search_competitor_observations = [
+            row for row in competitor_observations if _is_positive_search(row)
         ]
         visible_benchmark = [
             row
-            for row in verified_benchmark_observations
+            for row in search_benchmark_observations
             if (state is None or row.state == state) and (city is None or row.city == city)
         ]
-        benchmark_identity = {row.product_id: row for row in verified_benchmark_observations}
+        benchmark_identity = {row.product_id: row for row in search_benchmark_observations}
         competitor_identity = {
-            (row.retailer_id, row.product_id): row for row in verified_competitor_observations
+            (row.retailer_id, row.product_id): row for row in search_competitor_observations
         }
         store_candidates: dict[tuple[str, str, int, int], list[ProductPriceObservation]] = (
             defaultdict(list)
@@ -530,7 +541,7 @@ class CompetitiveProductLeadershipProjector:
         service_area_candidates: dict[tuple[str, str, str], list[ProductPriceObservation]] = (
             defaultdict(list)
         )
-        for observation in verified_competitor_observations:
+        for observation in search_competitor_observations:
             if observation.location_kind == "service_area":
                 if observation.zipcode:
                     service_area_candidates[
@@ -744,7 +755,7 @@ class CompetitiveProductLeadershipProjector:
                 "comparison_unit": row.comparison_unit,
                 "scope_mode": row.scope_mode,
                 "scoped_benchmark_locations": (
-                    len(verified_benchmark_observations)
+                    len(search_benchmark_observations)
                     if row.scope_mode == "observed_benchmark_product_footprint"
                     and not row.benchmark_location_scope_keys
                     else len(row.benchmark_location_scope_keys)
@@ -752,11 +763,12 @@ class CompetitiveProductLeadershipProjector:
             }
 
         return {
-            "schema_version": "1.3.0",
+            "schema_version": "1.4.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "benchmark_retailer": benchmark_retailer,
             "benchmark_product": benchmark_product,
+            "distribution_contract": store_search_distribution_contract(),
             "competitors": competitor_options,
             "filters": {
                 "competitor_id": selected_competitor,
@@ -790,15 +802,14 @@ class CompetitiveProductLeadershipProjector:
                 "identity_authority": "Product Pack classification with PDP enrichment",
                 "location_authority": "Retailer location master",
                 "observation_definition": (
-                    "A verified local observation requires an organic Search listing, explicit "
-                    "provider in-stock status, and a positive Search-listed price. Search "
-                    "presence or a positive price alone does not prove store carriage. The "
-                    "latest observation in the collection run controls duplicate "
-                    "product-location rows."
+                    "A Search observation is retained when the product appears in Search with "
+                    "a price greater than zero. Store distribution counts distinct nonblank "
+                    "store IDs per product; service-area presence is reported separately. "
+                    "This is not an inventory or in-stock claim."
                 ),
                 "comparison_definition": (
-                    "Each verified local benchmark location is compared with the lowest current "
-                    "verified local Search-listed value among its governed matched competitor "
+                    "Each positive-price benchmark Search location is compared with the lowest "
+                    "positive Search-listed value among its governed matched competitor "
                     "products within the selected radius. Service-area retailers are compared "
                     "within the same ZIP."
                 ),
@@ -812,7 +823,8 @@ class CompetitiveProductLeadershipProjector:
                     "at_risk": "Benchmark leads, but by no more than the at-risk threshold.",
                     "losing": "The lowest geographically comparable competitor is lower.",
                     "unscored": (
-                        "No governed matched competitor has comparable verified local evidence."
+                        "No governed matched competitor has comparable positive-price "
+                        "Search evidence."
                     ),
                 },
             },

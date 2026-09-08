@@ -112,15 +112,15 @@ def _analysis_context(
                 "evidence_refs": ["evidence-source-manifest"],
             }
         )
-    availability_evidence = []
+    distribution_evidence = []
     for coverage in document["coverage"]:
         retailer_id = str(coverage["retailer_id"])
         evidence_ref = str(coverage["evidence_refs"][0])
-        availability_evidence.append(evidence_ref)
+        distribution_evidence.append(evidence_ref)
         for field, unit in (
-            ("verified_available_offers", "offers"),
-            ("verified_available_zips", "zipcodes"),
-            ("verified_available_stores", "stores"),
+            ("distribution_search_offers", "offers"),
+            ("distribution_stores", "stores"),
+            ("service_area_presence_count", "service_areas"),
         ):
             metric_id = f"coverage.{retailer_id}.{field}"
             coverage["metric_refs"].append(metric_id)
@@ -128,18 +128,18 @@ def _analysis_context(
                 {
                     "metric_id": metric_id,
                     "name": metric_id,
-                    "value": 1,
+                    "value": 0 if field == "service_area_presence_count" else 1,
                     "unit": unit,
-                    "method": "verified automation regression fixture",
+                    "method": "distribution automation regression fixture",
                     "source": "deterministic",
                     "evidence_refs": [evidence_ref],
                 }
             )
     document["validation"]["checks"].append(
         {
-            "id": "verified-local-availability",
+            "id": "store-search-distribution",
             "status": "passed",
-            "evidence_refs": availability_evidence,
+            "evidence_refs": distribution_evidence,
         }
     )
     result_id = f"result-{analysis_id}"
@@ -207,12 +207,12 @@ def _quarantined_context(
     context: AnalysisContext, *, reporting_status: str = "ready"
 ) -> AnalysisContext:
     document = copy.deepcopy(context.analysis.result)
-    availability_check = next(
+    distribution_check = next(
         row
         for row in document["validation"]["checks"]
-        if row.get("id") == "verified-local-availability"
+        if row.get("id") == "store-search-distribution"
     )
-    availability_check["status"] = "failed"
+    distribution_check["status"] = "failed"
     return replace(
         context,
         analysis=replace(
@@ -392,12 +392,12 @@ async def test_public_automation_feeds_fail_closed_on_owner_and_publication_line
         publication_status="ready_to_share",
     )
     legacy_result = copy.deepcopy(context.analysis.result)
-    availability_check = next(
+    distribution_check = next(
         row
         for row in legacy_result["validation"]["checks"]
-        if row.get("id") == "verified-local-availability"
+        if row.get("id") == "store-search-distribution"
     )
-    availability_check["status"] = "failed"
+    distribution_check["status"] = "failed"
     cases = {
         "certified": certified,
         "legacy": _public_feed_fields(
@@ -851,12 +851,12 @@ async def test_email_sender_rechecks_certification_after_enqueue() -> None:
     service = AutomationService(repository, collection_service, sender, REPOSITORY_ROOT)
     assert await service.evaluate_analysis("current") == (0, 1)
 
-    availability_check = next(
+    distribution_check = next(
         row
         for row in current.analysis.result["validation"]["checks"]
-        if row.get("id") == "verified-local-availability"
+        if row.get("id") == "store-search-distribution"
     )
-    availability_check["status"] = "failed"
+    distribution_check["status"] = "failed"
 
     assert await service.deliver_emails("scheduler-1") == (0, 1)
     assert sender.deliveries == []

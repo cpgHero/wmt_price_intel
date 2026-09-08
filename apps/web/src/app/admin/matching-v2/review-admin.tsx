@@ -522,6 +522,8 @@ interface GoldSetReplayResult {
   gold_set_checksum: string;
   analysis_run_id: string;
   analysis_status: string;
+  replay_generation: number;
+  rebuild_reason: string | null;
   coverage: {
     candidate_count: number;
     certified_count: number;
@@ -798,6 +800,10 @@ export function MatchingV2ReviewAdmin({
     useState<AttributeEvidenceBulkPreview | null>(null);
   const [reviewerId, setReviewerId] = useState("");
   const [replaySourceAnalysisId, setReplaySourceAnalysisId] = useState("");
+  const [forceReplayRebuild, setForceReplayRebuild] = useState(false);
+  const [replayRebuildReason, setReplayRebuildReason] = useState(
+    "Recompute reports from retained Search evidence under the current reporting contract",
+  );
   const [replayResult, setReplayResult] = useState<GoldSetReplayResult | null>(
     null,
   );
@@ -1189,6 +1195,7 @@ export function MatchingV2ReviewAdmin({
     if (!view) return;
     const sourceAnalysisId = replaySourceAnalysisId.trim();
     const releasedBy = reviewerId.trim();
+    const rebuildReason = replayRebuildReason.trim();
     if (!sourceAnalysisId) {
       setError("Enter the source analysis ID that supplied this review queue.");
       return;
@@ -1198,6 +1205,10 @@ export function MatchingV2ReviewAdmin({
         "Enter the current administrator identity before releasing a replay.",
       );
       reviewerInputRef.current?.focus();
+      return;
+    }
+    if (forceReplayRebuild && !rebuildReason) {
+      setError("Enter the reason for rebuilding this governed replay.");
       return;
     }
     setBusy(true);
@@ -1211,6 +1222,8 @@ export function MatchingV2ReviewAdmin({
           body: JSON.stringify({
             source_analysis_id: sourceAnalysisId,
             released_by: releasedBy,
+            force_rebuild: forceReplayRebuild,
+            rebuild_reason: forceReplayRebuild ? rebuildReason : null,
           }),
         },
       );
@@ -2732,6 +2745,38 @@ export function MatchingV2ReviewAdmin({
                     Use the analysis ID before any -match-v2 suffix.
                   </small>
                 </label>
+                <label className="cert-replay-rebuild">
+                  <span>
+                    <input
+                      type="checkbox"
+                      checked={forceReplayRebuild}
+                      onChange={(event) => {
+                        setForceReplayRebuild(event.target.checked);
+                        setReplayResult(null);
+                        setError(null);
+                      }}
+                    />
+                    Reprocess retained evidence
+                  </span>
+                  <small>
+                    Create a new replay generation even when this certified gold
+                    set was already released.
+                  </small>
+                </label>
+                {forceReplayRebuild ? (
+                  <label>
+                    <span>Rebuild reason</span>
+                    <input
+                      value={replayRebuildReason}
+                      onChange={(event) => {
+                        setReplayRebuildReason(event.target.value);
+                        setReplayResult(null);
+                        if (event.target.value.trim()) setError(null);
+                      }}
+                      maxLength={1000}
+                    />
+                  </label>
+                ) : null}
                 <button
                   className="button primary"
                   type="submit"
@@ -2746,6 +2791,10 @@ export function MatchingV2ReviewAdmin({
                     <div>
                       <dt>Analysis run</dt>
                       <dd>{replayResult.analysis_run_id}</dd>
+                    </div>
+                    <div>
+                      <dt>Replay generation</dt>
+                      <dd>{replayResult.replay_generation.toLocaleString()}</dd>
                     </div>
                     <div>
                       <dt>Certified</dt>

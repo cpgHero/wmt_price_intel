@@ -1,10 +1,4 @@
-"""Canonical latest-state selection at the retailer product-location grain.
-
-Availability evidence is stateful: a later Search observation supersedes an
-earlier observation for the same retailer product and physical/service-area
-location.  This module keeps that rule in one category-neutral implementation
-so streaming projections cannot retain stale verified availability.
-"""
+"""Canonical latest Search-row selection at retailer product-location grain."""
 
 from __future__ import annotations
 
@@ -47,21 +41,14 @@ def availability_selection_rank(
     in_stock: bool | None,
     is_sponsored: bool | None,
 ) -> int:
-    """Return the canonical same-instant availability precedence.
+    """Return neutral precedence retained for backward API compatibility.
 
-    Organic explicit out-of-stock wins a conflict with organic in-stock so the
-    result fails closed.  Organic verified evidence otherwise outranks organic
-    unknown, missing sponsorship evidence, and sponsored placement evidence.
+    Stock and sponsorship are diagnostics, not Search-distribution eligibility
+    or tie-breakers. Same-instant selection is therefore determined only by the
+    stable source-row tie-breaker.
     """
 
-    if is_sponsored is False:
-        if in_stock is False:
-            return 4
-        if in_stock is True:
-            return 3
-        return 2
-    if is_sponsored is None:
-        return 1
+    del in_stock, is_sponsored
     return 0
 
 
@@ -74,10 +61,12 @@ def product_location_key(
 ) -> ProductLocationKey | None:
     """Return the canonical key, or ``None`` when location identity is absent."""
 
-    if store_number is not None:
-        return (retailer_id, product_id, "store", store_number)
-    if zipcode is not None:
-        return (retailer_id, product_id, "service_area", zipcode)
+    normalized_store = str(store_number or "").strip()
+    if normalized_store:
+        return (retailer_id, product_id, "store", normalized_store)
+    normalized_zipcode = str(zipcode or "").strip()
+    if normalized_zipcode:
+        return (retailer_id, product_id, "service_area", normalized_zipcode)
     return None
 
 
@@ -192,20 +181,20 @@ def add_classified_offer(
 
 
 def is_product_location_state(item: ClassifiedOffer) -> bool:
-    """Return whether a classified row can establish or retract location state.
+    """Return whether a row can establish product-location Search evidence.
 
-    Some Product Packs apply availability or positive-price policy after all
-    category exclusions. Rows that fail only those policies remain authoritative
-    availability states and must retract older verified evidence. Other
-    out-of-scope rows remain excluded.
+    Positive-priced rows rejected only by a legacy stock policy remain valid
+    Search evidence. Missing/zero-price and stock-only states do not retract a
+    qualifying Search placement because distribution is not inventory state.
+    Explicit seller-policy exclusions still retract an otherwise admitted row.
     """
 
     return bool(
         item.in_scope
-        or (item.scope_reason == "explicitly out of stock" and item.offer.in_stock is False)
         or (
-            item.scope_reason == "positive USD price is required"
-            and (item.offer.price is None or item.offer.price <= 0)
+            item.scope_reason == "explicitly out of stock"
+            and item.offer.price is not None
+            and item.offer.price > 0
         )
         or is_seller_policy_exclusion(item)
     )

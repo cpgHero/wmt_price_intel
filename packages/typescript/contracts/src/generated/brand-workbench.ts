@@ -18,27 +18,31 @@ export type Brand = {
    */
   candidate_matches: [] | [Candidate] | [Candidate, Candidate] | [Candidate, Candidate, Candidate];
   /**
-   * Verified-available products only when distribution_evidence is verified_local_search_availability; otherwise a discovery or identity count that must remain explicitly unverified. Zero is authoritative when corrected verified-local counters prove no available products.
+   * Products with positive-price Search presence when distribution_evidence is positive_price_store_search_result; otherwise a discovery or identity count with no distribution claim.
    */
   observed_products: number;
   /**
-   * Verified locations only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified.
+   * Deprecated display alias for distribution_store_count. It is never an inventory or in-stock count.
    */
   observed_locations: number;
   /**
-   * Verified ZIPs only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified.
+   * ZIPs with governed positive-price Search presence; not a store count.
    */
   observed_zipcodes: number;
   /**
-   * A verified-availability footprint only when distribution_evidence is verified_local_search_availability.
+   * Distinct store IDs where a brand product appeared in a store-level Search result with price greater than zero.
+   */
+  distribution_store_count: number;
+  /**
+   * Distinct service-area Search presences, kept separate from store distribution.
+   */
+  service_area_presence_count: number;
+  /**
+   * Share of the retailer's governed positive-price Search stores carrying the brand; not an inventory claim.
    */
   location_share: number;
   distribution_tier: "unknown" | "single_location" | "concentrated" | "multi_market" | "broad";
-  distribution_evidence:
-    | "verified_local_search_availability"
-    | "search_brand_field"
-    | "pdp_identity_joined_to_matched_search"
-    | "pdp_identity_only";
+  distribution_evidence: "positive_price_store_search_result" | "search_brand_field" | "pdp_identity_only";
   product_examples: {
     product_id: string;
     name: string;
@@ -47,7 +51,7 @@ export type Brand = {
 };
 
 export interface RetailCompetitiveIntelligenceBrandWorkbench {
-  schema_version: "1.0.0";
+  schema_version: "1.1.0";
   analysis_id: string;
   product_pack_id: string;
   product_pack_version: string;

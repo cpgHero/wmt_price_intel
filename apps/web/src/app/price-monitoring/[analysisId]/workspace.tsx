@@ -22,13 +22,13 @@ import type {
   PriceMonitoringView,
 } from "@/lib/api";
 import {
-  availabilityEvidenceLabel,
-  availabilityStatus,
-  hasVerifiedLocalPriceEvidence,
-  isVerifiedLocalAvailability,
-  priceEvidenceLabel,
-  verifiedLocationCoverageRate,
-} from "@/lib/availability-presentation";
+  distributionCount,
+  distributionCoverageRate,
+  distributionLabel,
+  distributionNoun,
+  serviceAreaPresenceDefinition,
+  storeDistributionDefinition,
+} from "@/lib/distribution-presentation";
 import { displayDate } from "@/lib/presentation";
 
 import { EvidenceRetailMap as InteractiveEvidenceRetailMap } from "./evidence-retail-map";
@@ -222,19 +222,6 @@ function optionalCount(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function searchObservedLocations(product: Product): number {
-  return (
-    optionalCount(objectValue(product).search_observed_locations) ??
-    product.presence.observed_locations
-  );
-}
-
-function verifiedAvailableLocations(product: Product): number | null {
-  return optionalCount(
-    objectValue(product.availability).verified_available_locations,
-  );
-}
-
 function productSearchPriceStats(product: Product): PriceStats {
   const value = objectValue(objectValue(product).search_price_stats);
   return typeof value.observation_count === "number"
@@ -256,10 +243,23 @@ function productSearchPriceHistogram(product: Product): PriceBin[] {
 }
 
 function locationPrice(location: Location): number | null {
-  return isVerifiedLocalAvailability(location)
-    ? location.median_price
-    : (optionalCount(objectValue(location).search_median_price) ??
-        location.median_price);
+  return (
+    optionalCount(objectValue(location).search_median_price) ??
+    location.median_price
+  );
+}
+
+function primaryDistributionCount(
+  evidence: object,
+  view: PriceMonitoringView,
+): number | null {
+  return distributionCount(evidence, view.retailer.location_dimension);
+}
+
+function primaryDistributionDefinition(view: PriceMonitoringView): string {
+  return view.retailer.location_dimension === "store"
+    ? storeDistributionDefinition
+    : serviceAreaPresenceDefinition;
 }
 
 function geographySearchObservedLocations(geography: {
@@ -419,13 +419,21 @@ function PriceHistogram({
 }
 
 function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  const dimension = view.retailer.location_dimension;
   const stateRows = new Map(
     view.geographies
       .filter((row) => row.level === "state")
-      .map((row) => [row.key, row]),
+      .map((row) => [
+        row.key,
+        {
+          ...row,
+          locations: distributionCount(row, dimension) ?? 0,
+          price_stats: row.search_price_stats,
+        },
+      ]),
   );
   const medians = view.geographies
-    .map((row) => row.price_stats.observation_median)
+    .map((row) => row.search_price_stats.observation_median)
     .filter((value): value is number => value !== null);
   const minimum = medians.length ? Math.min(...medians) : 0;
   const maximum = medians.length ? Math.max(...medians) : minimum;
@@ -435,7 +443,9 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
       ? view.locations
           .filter(
             (row) =>
-              row.verified_local_availability &&
+              row.kind === dimension &&
+              locationPrice(row) !== null &&
+              (locationPrice(row) ?? 0) > 0 &&
               row.latitude !== null &&
               row.longitude !== null,
           )
@@ -454,7 +464,7 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
           .filter(
             (row) =>
               row.level === "city" &&
-              row.verified_available_locations > 0 &&
+              (distributionCount(row, dimension) ?? 0) > 0 &&
               row.latitude !== null &&
               row.latitude !== undefined &&
               row.longitude !== null &&
@@ -465,8 +475,8 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             label: row.label,
             latitude: row.latitude!,
             longitude: row.longitude!,
-            price: row.price_stats.observation_median,
-            locations: row.verified_available_locations,
+            price: row.search_price_stats.observation_median,
+            locations: distributionCount(row, dimension) ?? 0,
             city: row.key,
           }))
     : [];
@@ -494,7 +504,7 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
       <svg
         className="pm-map"
         role="img"
-        aria-label={`${view.retailer.name} exact-product verified-local price footprint`}
+        aria-label={`${view.retailer.name} exact-product positive-price Search distribution`}
         viewBox={mapViewBox}
       >
         <g className="pm-state-layer">
@@ -505,8 +515,9 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             const selectedAggregate =
               view.filters.state === stateCode && view.products[0]
                 ? {
-                    locations: view.products[0].verified_available_locations,
-                    price_stats: view.products[0].price_stats,
+                    locations:
+                      primaryDistributionCount(view.products[0], view) ?? 0,
+                    price_stats: productSearchPriceStats(view.products[0]),
                   }
                 : undefined;
             const stateEvidence = geography ?? selectedAggregate;
@@ -523,7 +534,7 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
               <path
                 aria-label={
                   stateEvidence && hasData
-                    ? `${stateCode}: ${count(stateEvidence.locations)} verified in-stock ${stateEvidence.locations === 1 ? "location" : "locations"}, ${currency(medianPrice)} median verified local Search price`
+                    ? `${stateCode}: ${count(stateEvidence.locations)} observed ${distributionNoun(dimension, stateEvidence.locations)}, ${currency(medianPrice)} median Search-listed price`
                     : stateCode
                 }
                 className={`${hasData ? "has-data" : ""} ${view.filters.state === stateCode ? "selected" : ""}`}
@@ -566,7 +577,7 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
             const point = row.point;
             return (
               <circle
-                aria-label={`${row.label}: ${count(row.locations)} verified in-stock ${row.locations === 1 ? "location" : "locations"}, ${currency(row.price)} median verified local Search price`}
+                aria-label={`${row.label}: ${count(row.locations)} observed ${distributionNoun(dimension, row.locations)}, ${currency(row.price)} median Search-listed price`}
                 cx={point.x}
                 cy={point.y}
                 key={row.key}
@@ -588,10 +599,10 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
       <aside className="pm-map-legend">
         <span>
           {view.filters.city
-            ? "Verified in-stock locations in the selected city"
+            ? `${distributionLabel(dimension)} in the selected city`
             : view.filters.state
-              ? "Select a city to drill into verified local evidence"
-              : "Select a state to drill into verified local evidence"}
+              ? "Select a city to drill into observed distribution"
+              : "Select a state to drill into observed distribution"}
         </span>
         <div>
           <i />
@@ -602,10 +613,9 @@ function RetailMap({ view }: Readonly<{ view: PriceMonitoringView }>) {
         <small>{currency(minimum)}</small>
         <small>{currency(maximum)}</small>
         <p>
-          Teal shading uses only non-sponsored Search results with an explicit
-          in-stock signal. Search-only and sponsored rows are excluded from this
-          verified-local price view. Location names and geography come from the
-          retailer location master.
+          {primaryDistributionDefinition(view)} Price shading compares the
+          positive Search-listed prices in that observed footprint. Location
+          names and geography come from the retailer location master.
         </p>
       </aside>
     </div>
@@ -866,7 +876,7 @@ function EvidenceRetailMap({
             }}
             type="button"
           >
-            Search reach
+            {distributionLabel(view.retailer.location_dimension)}
           </button>
           <button
             aria-pressed={mode === "not_observed"}
@@ -905,7 +915,7 @@ function EvidenceRetailMap({
           <div className="pi-map-point-detail">
             <small>
               {selectedPoint.status === "observed"
-                ? availabilityEvidenceLabel(selectedPoint)
+                ? distributionLabel(selectedPoint.kind)
                 : "Search non-observation"}
             </small>
             <strong>
@@ -934,8 +944,8 @@ function EvidenceRetailMap({
               " is fitted to the map. Select a point for store detail."
             : "Select a state or location point to open the state footprint."}{" "}
           Price colors compare each Search-listed price with the median for the
-          visible Search reach. Search appearance alone does not prove local
-          availability. Location details come from the retailer location master.
+          visible positive-price distribution footprint. Location details come
+          from the retailer location master.
           {modeSampled ? " This overview is a bounded map sample." : ""}
         </p>
       </aside>
@@ -990,7 +1000,7 @@ function StoreDrawer({
         </header>
         <section className="pm-drawer-metrics">
           <div>
-            <span>{priceEvidenceLabel(location)}</span>
+            <span>Search-listed price</span>
             <strong>{currency(locationPrice(location))}</strong>
           </div>
           <div>
@@ -1002,8 +1012,12 @@ function StoreDrawer({
             <strong>{location.store_number ?? "Service area"}</strong>
           </div>
           <div>
-            <span>Availability proof</span>
-            <strong>{availabilityEvidenceLabel(location)}</strong>
+            <span>Distribution evidence</span>
+            <strong>
+              {location.kind === "store"
+                ? "Observed store"
+                : "Observed service area"}
+            </strong>
           </div>
           <div>
             <span>Search placement</span>
@@ -1019,9 +1033,9 @@ function StoreDrawer({
         <section className="pm-drawer-section">
           <h3>What this record means</h3>
           <p>
-            {isVerifiedLocalAvailability(location)
-              ? "The current non-sponsored Search result explicitly reported the product in stock for this retailer location query. Search supplies the listed price and query context; PDP contributes only identity and imagery."
-              : "The product appeared in a store-context Search query. That proves Search reach and a listed price only; it does not prove local availability or store carriage."}
+            {location.kind === "store"
+              ? "This exact retailer product appeared in this store-level Search result with a listed price greater than $0, so the distinct store counts once in the product's observed distribution footprint. This is not an inventory or in-stock claim."
+              : "This exact retailer product appeared with a listed price greater than $0 in this service-area Search context. Service-area presence is reported separately and is not counted as a store."}
           </p>
         </section>
       </aside>
@@ -1232,14 +1246,13 @@ function PdpReferencePanel({ product }: Readonly<{ product: Product }>) {
         <p className="pi-pdp-description">
           No successful Product Details payload is linked to this exact retailer
           product. Search still provides its governed name, listed price, and
-          query-reach evidence; those facts do not prove local availability.
+          observed store or service-area context.
         </p>
       )}
       <footer>
         <span>
-          PDP owns descriptive identity. Search owns listed price, query reach,
-          sponsorship, and collection time. Verified local availability requires
-          an explicit in-stock signal on a non-sponsored result.
+          PDP owns descriptive identity. Search owns listed price, observed
+          store or service-area context, sponsorship, and collection time.
         </span>
         {product.url ? (
           <a href={product.url} rel="noreferrer" target="_blank">
@@ -1265,7 +1278,7 @@ function LocationTable({
               <th>Location</th>
               <th>Market</th>
               <th>Search-listed price</th>
-              <th>Availability proof</th>
+              <th>Search placement</th>
             </tr>
           </thead>
           <tbody>
@@ -1299,10 +1312,10 @@ function LocationTable({
                   <strong>{currency(locationPrice(row))}</strong>
                 </td>
                 <td>
-                  <span
-                    className={`pi-evidence-pill ${availabilityStatus(row)}`}
-                  >
-                    {availabilityEvidenceLabel(row)}
+                  <span className="pi-evidence-pill">
+                    {row.kind === "store"
+                      ? "Observed store distribution"
+                      : "Observed service-area presence"}
                   </span>
                   <small>
                     {row.sponsorship_status === "sponsored"
@@ -1329,6 +1342,7 @@ function LocationTable({
 }
 
 function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
+  const dimension = view.retailer.location_dimension;
   const geographyLabel = view.filters.city
     ? "ZIP code"
     : view.filters.state
@@ -1340,15 +1354,15 @@ function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
         <thead>
           <tr>
             <th>{geographyLabel}</th>
-            <th>Verified in-stock locations</th>
-            <th>Median verified local price</th>
-            <th>Verified local range</th>
+            <th>{distributionLabel(dimension)}</th>
+            <th>Median Search-listed price</th>
+            <th>Search-listed range</th>
             <th>Consistency</th>
           </tr>
         </thead>
         <tbody>
           {view.geographies
-            .filter((row) => row.verified_available_locations > 0)
+            .filter((row) => (distributionCount(row, dimension) ?? 0) > 0)
             .map((row) => (
               <tr key={`${row.level}-${row.key}`}>
                 <td>
@@ -1369,17 +1383,17 @@ function MarketTable({ view }: Readonly<{ view: PriceMonitoringView }>) {
                     <small>Open market</small>
                   </button>
                 </td>
-                <td>{count(row.verified_available_locations)}</td>
+                <td>{count(distributionCount(row, dimension) ?? 0)}</td>
                 <td>
                   <strong>
-                    {currency(row.price_stats.observation_median)}
+                    {currency(row.search_price_stats.observation_median)}
                   </strong>
                 </td>
                 <td>
-                  {currency(row.price_stats.minimum)}–
-                  {currency(row.price_stats.maximum)}
+                  {currency(row.search_price_stats.minimum)}–
+                  {currency(row.search_price_stats.maximum)}
                 </td>
-                <td>{percent(row.price_stats.modal_share)}</td>
+                <td>{percent(row.search_price_stats.modal_share)}</td>
               </tr>
             ))}
         </tbody>
@@ -1489,7 +1503,7 @@ function GapLocationTable({
           Showing {count(locations.length)} of{" "}
           {count(gaps.location_display.total)}
           {gaps.location_display.missing_location_details
-            ? ` non-observations; ${count(gaps.location_display.missing_location_details)} planned locations lack complete location-master detail.`
+            ? ` non-observations; ${count(gaps.location_display.missing_location_details)} successfully searched locations lack complete location-master detail.`
             : " non-observations."}
         </p>
       ) : null}
@@ -1498,12 +1512,13 @@ function GapLocationTable({
 }
 
 function GeographicHeatmap({ view }: Readonly<{ view: PriceMonitoringView }>) {
-  const verifiedRows = view.geographies.filter(
-    (row) => row.verified_available_locations > 0,
+  const dimension = view.retailer.location_dimension;
+  const distributionRows = view.geographies.filter(
+    (row) => (distributionCount(row, dimension) ?? 0) > 0,
   );
-  const rows = verifiedRows.slice(0, 24);
+  const rows = distributionRows.slice(0, 24);
   const medians = rows
-    .map((row) => row.price_stats.observation_median)
+    .map((row) => row.search_price_stats.observation_median)
     .filter((value): value is number => value !== null);
   const minimum = medians.length ? Math.min(...medians) : 0;
   const maximum = medians.length ? Math.max(...medians) : minimum;
@@ -1513,13 +1528,13 @@ function GeographicHeatmap({ view }: Readonly<{ view: PriceMonitoringView }>) {
     <div className="pi-geography-heatmap" role="table">
       <div className="pi-heatmap-header" role="row">
         <span role="columnheader">Market</span>
-        <span role="columnheader">Verified in stock</span>
-        <span role="columnheader">Median verified local price</span>
-        <span role="columnheader">Verified local range</span>
+        <span role="columnheader">{distributionLabel(dimension)}</span>
+        <span role="columnheader">Median Search-listed price</span>
+        <span role="columnheader">Search-listed range</span>
         <span role="columnheader">At modal price</span>
       </div>
       {rows.map((row) => {
-        const medianPrice = row.price_stats.observation_median;
+        const medianPrice = row.search_price_stats.observation_median;
         const intensity =
           medianPrice === null ? 0 : (medianPrice - minimum) / span;
         return (
@@ -1542,7 +1557,9 @@ function GeographicHeatmap({ view }: Readonly<{ view: PriceMonitoringView }>) {
               <strong>{row.label}</strong>
               <small>Open {row.level}</small>
             </span>
-            <span role="cell">{count(row.verified_available_locations)}</span>
+            <span role="cell">
+              {count(distributionCount(row, dimension) ?? 0)}
+            </span>
             <span
               className="pi-heat-cell"
               role="cell"
@@ -1554,18 +1571,20 @@ function GeographicHeatmap({ view }: Readonly<{ view: PriceMonitoringView }>) {
               {currency(medianPrice)}
             </span>
             <span role="cell">
-              {currency(row.price_stats.minimum)}–
-              {currency(row.price_stats.maximum)}
+              {currency(row.search_price_stats.minimum)}–
+              {currency(row.search_price_stats.maximum)}
             </span>
-            <span role="cell">{percent(row.price_stats.modal_share)}</span>
+            <span role="cell">
+              {percent(row.search_price_stats.modal_share)}
+            </span>
           </button>
         );
       })}
-      {verifiedRows.length > rows.length ? (
+      {distributionRows.length > rows.length ? (
         <p>
-          Showing the first {count(rows.length)} of {count(verifiedRows.length)}{" "}
-          markets with verified local availability. Open the detail drawer for
-          the complete table.
+          Showing the first {count(rows.length)} of{" "}
+          {count(distributionRows.length)} markets with observed distribution.
+          Open the detail drawer for the complete table.
         </p>
       ) : null}
     </div>
@@ -1609,8 +1628,8 @@ function LocationEvidenceDrawer({
             </h2>
             <small>
               {observed
-                ? `${count(view.location_display.total)} store-context queries that returned the product with a positive listed price; each row states whether local availability was verified`
-                : `${count(view.distribution_gaps.location_display.total)} planned locations where the product did not appear`}
+                ? `${count(primaryDistributionCount(product, view) ?? 0)} distinct ${distributionNoun(view.retailer.location_dimension, primaryDistributionCount(product, view) ?? 0)} where the product appeared with a price greater than $0`
+                : `${count(view.distribution_gaps.location_display.total)} successfully searched locations where the product did not appear`}
             </small>
           </div>
           <button
@@ -1635,11 +1654,7 @@ function LocationEvidenceDrawer({
           )}
         </section>
         <footer>
-          <p>
-            Search-listed price and query-context evidence remain authoritative.
-            A result is locally available only when the governed availability
-            status is verified.
-          </p>
+          <p>{primaryDistributionDefinition(view)}</p>
           {observed ? (
             <button
               className="button secondary"
@@ -1679,8 +1694,8 @@ function GeographyDrawer({
             <p className="section-kicker">Geographic price structure</p>
             <h2>All visible markets</h2>
             <small>
-              Exact-product prices with verified local availability; select a
-              market to drill down.
+              Exact-product positive Search-listed prices in the observed
+              distribution footprint; select a market to drill down.
             </small>
           </div>
           <button
@@ -1726,11 +1741,13 @@ function FootprintModal({
       >
         <header>
           <div>
-            <p className="section-kicker">Exact-product Search reach</p>
+            <p className="section-kicker">
+              Exact-product observed distribution
+            </p>
             <h2>
               {mode === "observed"
-                ? "Store-context queries returning the product"
-                : "Planned locations not observed in Search"}
+                ? distributionLabel(view.retailer.location_dimension)
+                : "Successfully searched locations where the product was not observed"}
             </h2>
           </div>
           <button aria-label="Close full-screen footprint" onClick={onClose}>
@@ -1902,12 +1919,12 @@ function ProductCatalog({
       <header>
         <div>
           <p className="section-kicker">Single-retailer product intelligence</p>
-          <h2>Product price, Search reach, and verified availability</h2>
+          <h2>Product price and observed distribution</h2>
         </div>
         <p>
-          One row per exact retailer product, ranked by Search-observed location
-          contexts. Search reach and verified local availability are separate
-          measures.
+          One row per exact retailer product. Store distribution counts distinct
+          stores where Search returned that product with a listed price greater
+          than $0. Service-area presence stays separate.
         </p>
       </header>
       <div className="pi-catalog-filters" aria-label="Filter retailer products">
@@ -2016,33 +2033,27 @@ function ProductCatalog({
           <span role="columnheader">Product</span>
           <span role="columnheader">Price</span>
           <span role="columnheader">Price range</span>
-          <span role="columnheader">Search reach / availability</span>
+          <span role="columnheader">Observed distribution</span>
           <span role="columnheader">Sponsored</span>
           <span role="columnheader">Workspace</span>
         </div>
         <div className="pi-product-table-body" role="rowgroup">
           {visibleProducts.map((product) => {
-            const stats = product.price_stats;
             const searchStats = productSearchPriceStats(product);
-            const verifiedLocations = verifiedAvailableLocations(product);
-            const hasVerifiedPrice = hasVerifiedLocalPriceEvidence(
-              verifiedLocations,
-              stats.observation_count,
-            );
-            const displayedStats = hasVerifiedPrice ? stats : searchStats;
             const typicalPrice =
-              displayedStats.modal_price ?? displayedStats.observation_median;
-            const unitPrice = hasVerifiedPrice
-              ? product.unit_price
-              : productSearchUnitPrice(product);
+              searchStats.modal_price ?? searchStats.observation_median;
+            const unitPrice = productSearchUnitPrice(product);
             const typicalUnitPrice =
               unitPrice.price_stats.modal_price ??
               unitPrice.price_stats.observation_median;
-            const observedRate = product.presence.observed_rate;
             const notObservedRate = product.presence.not_observed_rate;
-            const searchReach = searchObservedLocations(product);
-            const verifiedCoverage = verifiedLocationCoverageRate(
-              verifiedLocations,
+            const observedDistribution = primaryDistributionCount(
+              product,
+              view,
+            );
+            const observedDistributionCoverage = distributionCoverageRate(
+              product,
+              view.retailer.location_dimension,
               product.presence.eligible_locations,
             );
             return (
@@ -2084,16 +2095,11 @@ function ProductCatalog({
                   role="cell"
                   type="button"
                 >
-                  <small>
-                    {hasVerifiedPrice
-                      ? "Typical verified local price"
-                      : "Search-listed price · availability unverified"}
-                  </small>
+                  <small>Typical Search-listed price</small>
                   <strong>{currency(typicalPrice)}</strong>
                   <span>
-                    {hasVerifiedPrice
-                      ? `Verified median ${currency(stats.observation_median)} · Search-listed median ${currency(searchStats.observation_median)}`
-                      : `Search-listed median ${currency(searchStats.observation_median)}`}
+                    Search-listed median{" "}
+                    {currency(searchStats.observation_median)}
                   </span>
                   <span>
                     {unitPrice.status === "observed"
@@ -2110,14 +2116,10 @@ function ProductCatalog({
                   role="cell"
                   type="button"
                 >
-                  <small>
-                    {hasVerifiedPrice
-                      ? "Verified local range"
-                      : "Search-listed range · availability unverified"}
-                  </small>
+                  <small>Search-listed price range</small>
                   <strong>
-                    {currency(displayedStats.minimum)}–
-                    {currency(displayedStats.maximum)}
+                    {currency(searchStats.minimum)}–
+                    {currency(searchStats.maximum)}
                   </strong>
                   <span>
                     {unitPrice.status === "observed"
@@ -2125,13 +2127,13 @@ function ProductCatalog({
                       : "Unit range unavailable"}
                   </span>
                   <span>
-                    {hasVerifiedPrice
-                      ? `${percent(product.consistency_rate)} verified-price consistency`
-                      : "Verified-price consistency unavailable"}
+                    {percent(product.consistency_rate)} price consistency
                   </span>
                 </button>
                 <div className="pi-product-footprint" role="cell">
-                  <small>Search reach / local proof</small>
+                  <small>
+                    {distributionLabel(view.retailer.location_dimension)}
+                  </small>
                   <div>
                     <button
                       onClick={() =>
@@ -2143,9 +2145,19 @@ function ProductCatalog({
                       }
                       type="button"
                     >
-                      <strong>{count(searchReach)}</strong> Search-observed
+                      {observedDistribution === null ? (
+                        <strong>Not calculated</strong>
+                      ) : (
+                        <>
+                          <strong>{count(observedDistribution)}</strong>{" "}
+                          {distributionNoun(
+                            view.retailer.location_dimension,
+                            observedDistribution,
+                          )}
+                        </>
+                      )}
                     </button>
-                    <span>{percent(observedRate)}</span>
+                    <span>Positive-price Search results</span>
                   </div>
                   <div>
                     <button
@@ -2154,29 +2166,21 @@ function ProductCatalog({
                       }
                       type="button"
                     >
-                      {verifiedLocations === null ? (
-                        <strong>Availability unverified</strong>
-                      ) : (
-                        <>
-                          <strong>
-                            {count(verifiedLocations)} of{" "}
-                            {count(product.presence.eligible_locations)}
-                          </strong>{" "}
-                          eligible locations verified in stock
-                        </>
-                      )}
+                      <strong>
+                        {count(product.presence.not_observed_locations)}
+                      </strong>{" "}
+                      searched locations did not return the product
                     </button>
-                    <span>
-                      {count(product.presence.not_observed_locations)} not in
-                      Search · {percent(notObservedRate)}
-                    </span>
+                    <span>{percent(notObservedRate)} of searched scope</span>
                   </div>
                   <i
                     aria-hidden="true"
-                    title={`Verified local availability coverage ${percent(verifiedCoverage)}`}
+                    title={`${distributionLabel(view.retailer.location_dimension)} across ${percent(observedDistributionCoverage)} of the searched scope`}
                   >
                     <span
-                      style={{ width: `${(verifiedCoverage ?? 0) * 100}%` }}
+                      style={{
+                        width: `${(observedDistributionCoverage ?? 0) * 100}%`,
+                      }}
                     />
                   </i>
                 </div>
@@ -2248,10 +2252,7 @@ function ProductCatalog({
         ) : null}
       </div>
       <p className="pi-catalog-grain-note">
-        Search-observed and Search-non-observed counts use distinct retailer
-        store IDs from the location master. They measure query reach, not store
-        carriage. Verified availability requires an explicit in-stock signal on
-        a non-sponsored result; missing legacy evidence remains unverified.
+        {storeDistributionDefinition} {serviceAreaPresenceDefinition}
       </p>
     </section>
   );
@@ -2465,13 +2466,7 @@ export function PriceMonitoringWorkspace({
     ],
   );
 
-  const verifiedExceptionRows = useMemo(
-    () =>
-      view.summary.verified_availability_observations > 0
-        ? view.exceptions
-        : [],
-    [view.exceptions, view.summary.verified_availability_observations],
-  );
+  const priceExceptionRows = useMemo(() => view.exceptions, [view.exceptions]);
 
   const contextDefinition = useMemo<ApplicationContextDefinition>(
     () => ({
@@ -2496,12 +2491,12 @@ export function PriceMonitoringWorkspace({
                   },
                   {
                     label: "Assignment",
-                    value: "Median verified-local package price only",
+                    value: "Median positive Search-listed package price",
                   },
                 ],
                 messages: [
                   "Products in the same price rung are not automatically matches or substitutes.",
-                  "Only explicit in-stock, non-sponsored rows enter price rungs; Search reach remains separate.",
+                  "A SKU enters a price rung from its positive-price Search observations; stock status is not used.",
                   "Known third-party marketplace products remain excluded upstream.",
                 ],
               },
@@ -2512,7 +2507,7 @@ export function PriceMonitoringWorkspace({
                 label: "Retailer",
                 title: "Choose the retailer to monitor",
                 description:
-                  "This module separates a product's Search-observed reach from verified local availability.",
+                  "This module counts observed store distribution from distinct positive-price store-level Search results.",
                 value: view.retailer.name,
                 selectedValue: view.filters.retailer_id,
                 defaultValue: "",
@@ -2534,7 +2529,7 @@ export function PriceMonitoringWorkspace({
                 label: "Product",
                 title: "Choose one retailer product",
                 description:
-                  "Search-listed prices are compared only for this exact retailer product ID; a Search return alone does not prove carriage.",
+                  "Search-listed prices and observed distribution are calculated only for this exact retailer product ID.",
                 value:
                   view.filter_options.products.find(
                     (row) => row.value === view.filters.product_id,
@@ -2545,14 +2540,14 @@ export function PriceMonitoringWorkspace({
                 options: view.filter_options.products.map((row) => ({
                   value: row.value,
                   label: row.label,
-                  description: `${row.brand ?? "Brand unresolved"} · ${count(row.verified_count)} verified in-stock · ${count(row.count)} Search-observed`,
+                  description: `${row.brand ?? "Brand unresolved"} · ${count(row.count)} positive-price Search locations`,
                 })),
               },
             ]),
         {
           id: "geography-view",
           label: "Geography",
-          title: "Scope the visible Search reach",
+          title: "Scope the visible observed distribution",
           description:
             "Geography filters apply consistently to every workspace tab and export.",
           value:
@@ -2604,15 +2599,14 @@ export function PriceMonitoringWorkspace({
                 label: "Status & notifications",
                 title: "Current assessment and evidence readiness",
                 description:
-                  "Unsupported measures remain unavailable rather than being inferred.",
-                value: verifiedExceptionRows.length
-                  ? `${count(verifiedExceptionRows.length)} verified-local price reviews`
+                  "Distribution is limited to the exact observed Search footprint and is never extrapolated.",
+                value: priceExceptionRows.length
+                  ? `${count(priceExceptionRows.length)} Search-price reviews`
                   : view.quality.status === "ready"
                     ? "Ready"
                     : "Review caveats",
                 tone:
-                  view.quality.status === "ready" &&
-                  !verifiedExceptionRows.length
+                  view.quality.status === "ready" && !priceExceptionRows.length
                     ? ("ready" as const)
                     : ("attention" as const),
                 facts: [
@@ -2621,8 +2615,10 @@ export function PriceMonitoringWorkspace({
                     value: percent(view.summary.usable_price_rate),
                   },
                   {
-                    label: "Search-observed reach",
-                    value: percent(view.presence.observed_presence_rate),
+                    label: distributionLabel(view.retailer.location_dimension),
+                    value: count(
+                      primaryDistributionCount(view.summary, view) ?? 0,
+                    ),
                   },
                   {
                     label: "Immutable artifacts",
@@ -2636,17 +2632,17 @@ export function PriceMonitoringWorkspace({
                   },
                 ],
                 messages: [
-                  verifiedExceptionRows.length
-                    ? `${count(verifiedExceptionRows.length)} verified local Search prices meet the deterministic review rule. Open Store Review for exact evidence.`
-                    : "No verified local Search prices meet the current deterministic exception rule.",
-                  view.presence.definition,
-                  "PDP identity enrichment never overrides Search-listed price, query context, or verified availability status.",
+                  priceExceptionRows.length
+                    ? `${count(priceExceptionRows.length)} Search-listed prices meet the deterministic review rule. Open Store Review for exact evidence.`
+                    : "No Search-listed prices meet the current deterministic exception rule.",
+                  primaryDistributionDefinition(view),
+                  "PDP identity enrichment never overrides Search-listed price or observed store context.",
                 ],
               },
             ]),
       ],
     }),
-    [tab, verifiedExceptionRows, view],
+    [priceExceptionRows, tab, view],
   );
   useApplicationContextDefinition(contextDefinition);
 
@@ -2672,7 +2668,7 @@ export function PriceMonitoringWorkspace({
             <p>
               {tab === "price-architecture-matrix"
                 ? "See how each retailer constructs its assortment across Walmart-defined price points."
-                : "Select one retailer product to examine Search-listed prices, Search reach, and verified local availability."}
+                : "Select one retailer product to examine Search-listed prices and its observed distribution footprint."}
             </p>
           </div>
         </header>
@@ -2739,34 +2735,19 @@ export function PriceMonitoringWorkspace({
     );
   }
 
-  const stats = selectedProduct.price_stats;
   const searchStats = productSearchPriceStats(selectedProduct);
-  const unitPrice = selectedProduct.unit_price;
   const searchUnitPrice = productSearchUnitPrice(selectedProduct);
-  const typicalUnitPrice =
-    unitPrice.price_stats.modal_price ??
-    unitPrice.price_stats.observation_median;
   const typicalSearchUnitPrice =
     searchUnitPrice.price_stats.modal_price ??
     searchUnitPrice.price_stats.observation_median;
-  const availability = selectedProduct.availability;
-  const verifiedLocations = verifiedAvailableLocations(selectedProduct);
-  const availabilityRecord = objectValue(availability);
   const eligibleLocations = selectedProduct.presence.eligible_locations;
-  const verifiedLocationCoverage = verifiedLocationCoverageRate(
-    verifiedLocations,
+  const observedDistribution = primaryDistributionCount(selectedProduct, view);
+  const observedDistributionCoverage = distributionCoverageRate(
+    selectedProduct,
+    view.retailer.location_dimension,
     eligibleLocations,
   );
-  const verifiedPriceEvidence = hasVerifiedLocalPriceEvidence(
-    verifiedLocations,
-    stats.observation_count,
-  );
-  const unverifiedLocations = optionalCount(
-    availabilityRecord.unverified_locations,
-  );
-  const explicitOutOfStockLocations = optionalCount(
-    availabilityRecord.explicitly_out_of_stock_locations,
-  );
+  const hasSearchPriceEvidence = searchStats.observation_count > 0;
   const sponsorship = selectedProduct.sponsorship ?? {
     status: "unavailable" as const,
     known_observations: 0,
@@ -2820,8 +2801,12 @@ export function PriceMonitoringWorkspace({
             </dd>
           </div>
           <div>
-            <dt>Search reach</dt>
-            <dd>{count(searchObservedLocations(selectedProduct))}</dd>
+            <dt>{distributionLabel(view.retailer.location_dimension)}</dt>
+            <dd>
+              {observedDistribution === null
+                ? "—"
+                : count(observedDistribution)}
+            </dd>
           </div>
           <div>
             <dt>Source</dt>
@@ -2885,34 +2870,30 @@ export function PriceMonitoringWorkspace({
         <section className="pm-tab-content pi-tab-content">
           <div className="pm-metric-grid pi-metric-grid">
             <article>
-              <span>Search-observed reach</span>
-              <strong>{percent(view.presence.observed_presence_rate)}</strong>
+              <span>{distributionLabel(view.retailer.location_dimension)}</span>
+              <strong>
+                {observedDistribution === null
+                  ? "Not calculated"
+                  : count(observedDistribution)}
+              </strong>
               <small>
-                {count(view.presence.observed_locations)} of{" "}
-                {count(view.presence.eligible_locations)} planned store-context
-                queries
+                {observedDistribution === null
+                  ? "The explicit distribution contract is missing"
+                  : `${count(observedDistribution)} distinct ${distributionNoun(view.retailer.location_dimension, observedDistribution)} with a positive-price Search result`}
+              </small>
+              <small>
+                {percent(observedDistributionCoverage)} of the searched location
+                scope
               </small>
             </article>
             <article>
-              <span>Verified local availability</span>
-              <strong>
-                {verifiedLocations === null
-                  ? "Unverified"
-                  : count(verifiedLocations)}
-              </strong>
+              <span>Not observed in Search</span>
+              <strong>{count(view.presence.not_observed_locations)}</strong>
               <small>
-                {verifiedLocations === null
-                  ? "Legacy or incomplete evidence is never treated as available"
-                  : `${count(verifiedLocations)} of ${count(eligibleLocations)} eligible local-query locations · ${percent(verifiedLocationCoverage)} coverage`}
+                Product did not appear with a positive listed price in these
+                searched locations
               </small>
-              {unverifiedLocations !== null ? (
-                <small>{count(unverifiedLocations)} locations unverified</small>
-              ) : null}
-              {explicitOutOfStockLocations !== null ? (
-                <small>
-                  {count(explicitOutOfStockLocations)} explicitly out of stock
-                </small>
-              ) : null}
+              <small>Non-observation is not proof of non-distribution</small>
             </article>
             <article>
               <span>Median Search-listed price</span>
@@ -2933,20 +2914,20 @@ export function PriceMonitoringWorkspace({
             <article>
               <span>Price consistency</span>
               <strong>
-                {verifiedPriceEvidence
+                {hasSearchPriceEvidence
                   ? percent(selectedProduct.consistency_rate)
                   : "Unavailable"}
               </strong>
               <small>
-                {verifiedPriceEvidence
-                  ? "At verified-local modal price ± Product Pack tolerance"
-                  : "Requires verified local price evidence"}
+                {hasSearchPriceEvidence
+                  ? "At modal Search-listed price ± Product Pack tolerance"
+                  : "Requires positive Search-listed price evidence"}
               </small>
             </article>
             <article>
-              <span>Verified local prices to review</span>
-              <strong>{count(verifiedExceptionRows.length)}</strong>
-              <small>Unusual exact-product prices with local proof</small>
+              <span>Search-listed prices to review</span>
+              <strong>{count(priceExceptionRows.length)}</strong>
+              <small>Unusual exact-product positive-price observations</small>
             </article>
           </div>
           <article className="pm-panel pi-retail-signals">
@@ -2958,18 +2939,15 @@ export function PriceMonitoringWorkspace({
             </header>
             <div className="pi-signal-grid">
               <div>
-                <span>Verified availability breadth</span>
+                <span>
+                  {distributionLabel(view.retailer.location_dimension)}
+                </span>
                 <strong>
-                  {verifiedLocations === null
-                    ? "Unverified"
-                    : `${count(selectedProduct.verified_available_states)} states · ${count(selectedProduct.verified_available_cities)} cities`}
+                  {observedDistribution === null
+                    ? "Not calculated"
+                    : `${count(observedDistribution)} ${distributionNoun(view.retailer.location_dimension, observedDistribution)}`}
                 </strong>
-                <small>
-                  Search reach is broader:{" "}
-                  {count(searchObservedLocations(selectedProduct))}{" "}
-                  store-context queries. Location hierarchy comes from the
-                  retailer location master.
-                </small>
+                <small>{primaryDistributionDefinition(view)}</small>
               </div>
               <div>
                 <span>Sponsored visibility</span>
@@ -2999,7 +2977,9 @@ export function PriceMonitoringWorkspace({
             <article className="pm-panel">
               <header>
                 <div>
-                  <p className="section-kicker">Exact-product Search reach</p>
+                  <p className="section-kicker">
+                    Exact-product observed distribution
+                  </p>
                   <h2>
                     {overviewMapMode === "observed"
                       ? "Where Search returned the product"
@@ -3078,12 +3058,8 @@ export function PriceMonitoringWorkspace({
                   </dd>
                 </div>
                 <div>
-                  <dt>Verified location coverage</dt>
-                  <dd>
-                    {verifiedLocations === null
-                      ? "Not supported"
-                      : percent(verifiedLocationCoverage)}
-                  </dd>
+                  <dt>{distributionLabel(view.retailer.location_dimension)}</dt>
+                  <dd>{percent(observedDistributionCoverage)}</dd>
                 </div>
               </dl>
             </article>
@@ -3107,84 +3083,74 @@ export function PriceMonitoringWorkspace({
             <header>
               <div>
                 <p className="section-kicker">
-                  {verifiedPriceEvidence
-                    ? "Verified local price distribution"
-                    : "Verified local price distribution unavailable"}
+                  Search-listed price distribution
                 </p>
                 <h2>
-                  {verifiedPriceEvidence
-                    ? `${count(stats.observation_count)} verified local prices`
-                    : "No verified local prices"}
+                  {hasSearchPriceEvidence
+                    ? `${count(searchStats.observation_count)} positive-price Search observations`
+                    : "No positive Search-listed prices"}
                 </h2>
               </div>
-              <span className="pi-evidence-pill">
-                {verifiedPriceEvidence
-                  ? "Availability verified"
-                  : "Availability unverified"}
-              </span>
+              <span className="pi-evidence-pill">Search price evidence</span>
             </header>
             <div className="pi-architecture-layout">
               <PriceHistogram
-                bins={
-                  verifiedPriceEvidence ? selectedProduct.price_histogram : []
-                }
-                label={
-                  verifiedPriceEvidence
-                    ? "Verified local Search price distribution"
-                    : "Verified local Search price distribution unavailable"
-                }
+                bins={productSearchPriceHistogram(selectedProduct)}
+                label="Positive Search-listed price distribution"
               />
               <div className="pi-architecture-metrics">
                 <div>
-                  <span>Verified local range</span>
+                  <span>Search-listed range</span>
                   <strong>
-                    {verifiedPriceEvidence
-                      ? `${currency(stats.minimum)}–${currency(stats.maximum)}`
+                    {hasSearchPriceEvidence
+                      ? `${currency(searchStats.minimum)}–${currency(searchStats.maximum)}`
                       : "Unavailable"}
                   </strong>
                   <small>
-                    {verifiedPriceEvidence
-                      ? `Q1 ${currency(stats.q1)} · Q3 ${currency(stats.q3)}`
-                      : "Requires verified local availability"}
+                    {hasSearchPriceEvidence
+                      ? `Q1 ${currency(searchStats.q1)} · Q3 ${currency(searchStats.q3)}`
+                      : "Requires positive Search-listed price evidence"}
                   </small>
                 </div>
                 <div>
-                  <span>Median verified local price</span>
+                  <span>Median Search-listed price</span>
                   <strong>
-                    {verifiedPriceEvidence
-                      ? currency(stats.observation_median)
+                    {hasSearchPriceEvidence
+                      ? currency(searchStats.observation_median)
                       : "Unavailable"}
                   </strong>
                   <small>
-                    {verifiedPriceEvidence
-                      ? "Exact-product, location-weighted"
-                      : "Requires verified local availability"}
+                    {hasSearchPriceEvidence
+                      ? "Exact-product, observed-location weighted"
+                      : "Requires positive Search-listed price evidence"}
                   </small>
                 </div>
                 <div>
-                  <span>Most common verified price</span>
+                  <span>Most common Search-listed price</span>
                   <strong>
-                    {verifiedPriceEvidence
-                      ? currency(stats.modal_price)
+                    {hasSearchPriceEvidence
+                      ? currency(searchStats.modal_price)
                       : "Unavailable"}
                   </strong>
                   <small>
-                    {verifiedPriceEvidence
-                      ? `${percent(stats.modal_share)} of observations`
-                      : "Requires verified local availability"}
+                    {hasSearchPriceEvidence
+                      ? `${percent(searchStats.modal_share)} of observations`
+                      : "Requires positive Search-listed price evidence"}
                   </small>
                 </div>
                 <div>
-                  <span>Verified location coverage</span>
+                  <span>
+                    {distributionLabel(view.retailer.location_dimension)}
+                  </span>
                   <strong>
-                    {verifiedLocations === null
-                      ? "Unverified"
-                      : percent(verifiedLocationCoverage)}
+                    {observedDistribution === null
+                      ? "Not calculated"
+                      : count(observedDistribution)}
                   </strong>
                   <small>
-                    {verifiedLocations === null
-                      ? "Legacy or incomplete evidence is never treated as available"
-                      : `${count(verifiedLocations)} of ${count(eligibleLocations)} eligible local-query locations`}
+                    {observedDistribution === null
+                      ? "Explicit distribution contract unavailable"
+                      : `${percent(observedDistributionCoverage)} of ${count(eligibleLocations)} searched ${distributionNoun(view.retailer.location_dimension, eligibleLocations)}`}
                   </small>
                 </div>
                 <div>
@@ -3199,22 +3165,22 @@ export function PriceMonitoringWorkspace({
                 <div>
                   <span>Price consistency</span>
                   <strong>
-                    {verifiedPriceEvidence
+                    {hasSearchPriceEvidence
                       ? percent(selectedProduct.consistency_rate)
                       : "Unavailable"}
                   </strong>
                   <small>
-                    {verifiedPriceEvidence
+                    {hasSearchPriceEvidence
                       ? "Within Product Pack modal tolerance"
-                      : "Requires verified local price evidence"}
+                      : "Requires positive Search-listed price evidence"}
                   </small>
                 </div>
               </div>
             </div>
             <div className="pi-signal-definitions">
               <div>
-                <strong>Verified-availability rule</strong>
-                <span>{availability.definition}</span>
+                <strong>Distribution rule</strong>
+                <span>{primaryDistributionDefinition(view)}</span>
               </div>
               <div>
                 <strong>Sponsorship rule</strong>
@@ -3275,10 +3241,11 @@ export function PriceMonitoringWorkspace({
                 </button>
               </div>
             </header>
-            {!verifiedPriceEvidence ? (
+            {!hasSearchPriceEvidence ? (
               <div className="empty-inline">
                 Geographic price structure is unavailable because this product
-                has no verified local price evidence in the selected scope.
+                has no positive Search-listed price evidence in the selected
+                scope.
               </div>
             ) : architectureView === "heatmap" ? (
               <GeographicHeatmap view={view} />
@@ -3297,9 +3264,9 @@ export function PriceMonitoringWorkspace({
               <h2>Store review</h2>
             </div>
             <p>
-              Review unusual exact-product prices with verified local evidence
-              or planned location contexts where the product did not appear in
-              Search. Neither signal prescribes an action by itself.
+              Review unusual exact-product positive Search-listed prices or
+              searched locations where the product did not appear. Neither
+              signal prescribes an action by itself.
             </p>
           </article>
           <div
@@ -3312,9 +3279,9 @@ export function PriceMonitoringWorkspace({
               onClick={() => setStoreReviewMode("price")}
               type="button"
             >
-              <span>Unusual verified local prices</span>
-              <strong>{count(verifiedExceptionRows.length)}</strong>
-              <small>Deterministic verified-local price review</small>
+              <span>Unusual Search-listed prices</span>
+              <strong>{count(priceExceptionRows.length)}</strong>
+              <small>Deterministic positive-price review</small>
             </button>
             <button
               aria-pressed={storeReviewMode === "not_observed"}
@@ -3331,22 +3298,21 @@ export function PriceMonitoringWorkspace({
               <article className="pi-governance-callout pi-iqr-explainer">
                 <strong>What “IQR price review” means</strong>
                 <p>
-                  IQR is the middle 50% of verified local Search prices: Q3
-                  minus Q1. A verified-local row is flagged when its price is
-                  below Q1 − 1.5×IQR or above Q3 + 1.5×IQR. If every middle
-                  price is identical, the Product Pack tolerance around the most
-                  common price is used instead. A flag means “verify this
-                  evidence,” not “the price is wrong.”
+                  IQR is the middle 50% of positive Search-listed prices: Q3
+                  minus Q1. A row is flagged when its price is below Q1 −
+                  1.5×IQR or above Q3 + 1.5×IQR. If every middle price is
+                  identical, the Product Pack tolerance around the most common
+                  price is used instead. A flag means “review this evidence,”
+                  not “the price is wrong.”
                 </p>
               </article>
-              {verifiedExceptionRows.length ? (
+              {priceExceptionRows.length ? (
                 <article className="pm-panel">
                   <header>
                     <div>
                       <p className="section-kicker">Unusual price evidence</p>
                       <h2>
-                        {count(verifiedExceptionRows.length)} price rows to
-                        review
+                        {count(priceExceptionRows.length)} price rows to review
                       </h2>
                     </div>
                   </header>
@@ -3355,14 +3321,14 @@ export function PriceMonitoringWorkspace({
                       <thead>
                         <tr>
                           <th>Store</th>
-                          <th>Verified local Search price</th>
+                          <th>Search-listed price</th>
                           <th>Median reference</th>
                           <th>Difference</th>
                           <th>Reason</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {verifiedExceptionRows.map((row) => (
+                        {priceExceptionRows.map((row) => (
                           <tr key={row.id}>
                             <td>
                               <strong>
@@ -3422,20 +3388,24 @@ export function PriceMonitoringWorkspace({
                   <small>Collection scope denominator</small>
                 </article>
                 <article>
-                  <span>Search-observed</span>
-                  <strong>{count(view.presence.observed_locations)}</strong>
+                  <span>
+                    {distributionLabel(view.retailer.location_dimension)}
+                  </span>
+                  <strong>
+                    {observedDistribution === null
+                      ? "—"
+                      : count(observedDistribution)}
+                  </strong>
                   <small>
-                    Query returned the product with a positive listed price
+                    Distinct{" "}
+                    {distributionNoun(view.retailer.location_dimension, 2)} with
+                    a positive-price Search result
                   </small>
                 </article>
                 <article>
-                  <span>Verified locally in stock</span>
-                  <strong>
-                    {verifiedLocations === null
-                      ? "Unverified"
-                      : count(verifiedLocations)}
-                  </strong>
-                  <small>Sponsored-only results never qualify</small>
+                  <span>Distribution method</span>
+                  <strong>Observed, not extrapolated</strong>
+                  <small>No inventory or in-stock claim</small>
                 </article>
                 <article>
                   <span>Not observed</span>

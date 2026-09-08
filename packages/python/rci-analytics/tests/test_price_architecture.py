@@ -148,7 +148,8 @@ def test_benchmark_rungs_use_distinct_product_medians_and_true_midpoints() -> No
 @pytest.mark.parametrize(
     "field",
     [
-        "verified_available_locations",
+        "distribution_store_count",
+        "service_area_presence_count",
         "search_observed_locations",
         "search_observed_skus",
     ],
@@ -166,17 +167,18 @@ def test_matrix_contract_requires_explicit_retailer_evidence_counts(field: str) 
         )
 
 
-def test_matrix_contract_rejects_available_status_without_verified_breadth() -> None:
+def test_matrix_contract_rejects_unavailable_status_with_store_distribution() -> None:
     matrix = deepcopy(_matrix())
-    matrix["retailers"][0]["verified_available_locations"] = 0
-    matrix["retailers"][0]["observed_locations"] = 0
+    matrix["retailers"][0]["status"] = "unavailable"
+    matrix["retailers"][0]["sku_count"] = 0
+    matrix["retailers"][0]["reason"] = "No positive-priced Search products."
 
     with pytest.raises(ContractError):
         validate_instance(
             REPOSITORY_ROOT,
             "price-architecture-matrix.schema.json",
             matrix,
-            label="available matrix retailer without verified breadth",
+            label="unavailable matrix retailer with store distribution",
         )
 
 
@@ -215,7 +217,7 @@ def test_store_coverage_is_union_of_distinct_locations_not_product_sum() -> None
         assert sum(float(value or 0) for value in shares) == pytest.approx(1, abs=0.0001)
 
 
-def test_products_within_each_rung_are_materialized_by_verified_store_count() -> None:
+def test_products_within_each_rung_are_materialized_by_distribution_store_count() -> None:
     matrix = _matrix()
     middle = next(rung for rung in matrix["rungs"] if rung["lower_bound"] == 3.0)
     target_cell = next(cell for cell in middle["cells"] if cell["retailer_id"] == "target_us")
@@ -224,7 +226,7 @@ def test_products_within_each_rung_are_materialized_by_verified_store_count() ->
     assert [product["observed_locations"] for product in target_cell["products"]] == [2, 1]
 
 
-def test_price_architecture_excludes_unverified_search_only_products() -> None:
+def test_price_architecture_includes_positive_price_search_products_without_stock_gating() -> None:
     walmart = _retailer(
         "walmart_us",
         [
@@ -259,9 +261,10 @@ def test_price_architecture_excludes_unverified_search_only_products() -> None:
     )
 
     walmart_summary = next(row for row in matrix["retailers"] if row["id"] == "walmart_us")
-    assert walmart_summary["sku_count"] == 2
-    assert walmart_summary["observed_locations"] == 2
-    assert walmart_summary["verified_available_locations"] == 2
+    assert walmart_summary["sku_count"] == 4
+    assert walmart_summary["observed_locations"] == 4
+    assert walmart_summary["distribution_store_count"] == 4
+    assert walmart_summary["service_area_presence_count"] == 0
     assert walmart_summary["search_observed_locations"] == 4
     assert walmart_summary["search_observed_skus"] == 4
     products = [
@@ -271,7 +274,14 @@ def test_price_architecture_excludes_unverified_search_only_products() -> None:
         if cell["retailer_id"] == "walmart_us"
         for product in cell["products"]
     ]
-    assert {row["product_id"] for row in products} == {"verified", "verified-high"}
+    assert {row["product_id"] for row in products} == {
+        "verified",
+        "verified-high",
+        "sponsored",
+        "out-of-stock",
+    }
+    assert all("in_stock" not in row for row in products)
+    assert all("availability_status" not in row for row in products)
 
 
 def test_fixed_rungs_use_stable_intervals_with_benchmark_bounded_edges() -> None:
@@ -310,10 +320,12 @@ def test_brand_filter_preserves_walmart_rungs_and_filters_displayed_products() -
     )
     walmart = next(row for row in matrix["retailers"] if row["id"] == "walmart_us")
     aldi = next(row for row in matrix["retailers"] if row["id"] == "aldi_us")
-    assert walmart["verified_available_locations"] == 3
+    assert walmart["distribution_store_count"] == 3
+    assert walmart["service_area_presence_count"] == 0
     assert walmart["search_observed_locations"] == 3
     assert walmart["search_observed_skus"] == 4
-    assert aldi["verified_available_locations"] == 0
+    assert aldi["distribution_store_count"] == 0
+    assert aldi["service_area_presence_count"] == 0
     assert aldi["search_observed_locations"] == 0
     assert aldi["search_observed_skus"] == 0
 

@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 from statistics import median
 
+from rci_analytics.latest_product_location import latest_classified_offers
 from rci_analytics.matching import location_scope_key
 from rci_analytics.models import ClassifiedOffer, JsonObject, MatchRecord, NormalizedOffer
 from rci_analytics.package_semantics import labeled_unit_packs_are_compatible
@@ -286,12 +287,12 @@ def benchmark_product_match_candidates(
         raise ValueError("product match candidate limits must be positive")
     offer_rows = list(offers)
     benchmark_footprints: dict[str, set[str]] = {}
-    for classified in offer_rows:
+    for classified in latest_classified_offers(offer_rows):
         offer = classified.offer
         if (
-            classified.in_scope
+            (classified.in_scope or classified.scope_reason == "explicitly out of stock")
             and offer.retailer_id == benchmark_retailer
-            and offer.zipcode is not None
+            and offer.store_number is not None
             and offer.price is not None
             and offer.price > 0
         ):
@@ -503,7 +504,8 @@ def benchmark_product_evidence(
         evidence[decision_id] = {
             "decision_id": decision_id,
             "comparison_grain": (
-                f"one row per verified-available benchmark store; exact product pair; same ZIP; "
+                f"one row per positive-price benchmark store Search observation; "
+                f"exact product pair; same ZIP; "
                 f"outcomes use {comparison_metric}"
             ),
             "comparison_metric": comparison_metric,

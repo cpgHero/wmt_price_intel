@@ -265,7 +265,7 @@ def _starter_documents(
                     "unknown_policy": "reject",
                     "price_selection": "lowest_positive",
                     "comparison_metric": "package_price",
-                    "availability_policy": "in_stock_only",
+                    "availability_policy": "search_presence",
                 }
             ],
             "brand_rules": {"aliases": {}, "private_labels": {}},
@@ -281,8 +281,9 @@ def _starter_documents(
         "headline_segments": [],
         "required_caveats": [
             (
-                "Search observations establish price placement, not local availability. "
-                "Verified local availability requires explicit in-stock, non-sponsored evidence."
+                "Store distribution counts distinct store IDs where the exact product appears "
+                "in a store-level Search result with price greater than zero. It is not an "
+                "inventory or in-stock claim; service-area Search presence is separate."
             ),
             "Comparison eligibility follows the configured Product Pack attributes.",
         ],

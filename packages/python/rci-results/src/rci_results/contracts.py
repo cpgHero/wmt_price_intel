@@ -24,14 +24,23 @@ def result_checksum(document: JsonObject) -> str:
     return hashlib.sha256(canonical_result_bytes(document)).hexdigest()
 
 
-def has_verified_local_availability_contract(document: JsonObject) -> bool:
-    """Return whether a V2 result has a complete local-availability trust contract.
+STORE_SEARCH_DISTRIBUTION_CONTRACT_VERSION = "1.0.0"
+STORE_SEARCH_DISTRIBUTION_RULE = "positive_price_store_search_result"
 
-    JSON Schema establishes the shape of AnalysisResult V2, but the public trust
-    boundary also depends on relationships between retailer scope, coverage
-    metrics, validation evidence, and governed unavailability.  Keep that
-    fail-closed predicate next to the canonical result validator so publication
-    and API delivery paths use exactly the same definition.
+
+def has_store_search_distribution_contract(document: JsonObject) -> bool:
+    """Return whether a V2 result has the current distribution trust contract.
+
+    Distribution is a Search-footprint metric, not an inventory metric.  A
+    product contributes one location when it appears in a store-level Search
+    result with a package price greater than zero; the aggregation de-duplicates
+    by retailer product ID and store ID.  Stock, sponsorship, ZIP, planned-store
+    membership, and location-master enrichment are not eligibility conditions.
+
+    JSON Schema establishes the document shape.  This predicate additionally
+    links the explicit distribution definition to retailer-scoped deterministic
+    metrics and evidence.  Counts may validly be zero; the contract must exist
+    and reconcile, but publication does not require a positive count.
     """
 
     if document.get("schema_version") != "2.0.0":
@@ -42,17 +51,30 @@ def has_verified_local_availability_contract(document: JsonObject) -> bool:
     checks = validation.get("checks")
     if not isinstance(checks, list):
         return False
-    availability_checks = [
+    distribution_contract = document.get("distribution_contract")
+    if not isinstance(distribution_contract, dict) or distribution_contract != {
+        "version": STORE_SEARCH_DISTRIBUTION_CONTRACT_VERSION,
+        "basis": STORE_SEARCH_DISTRIBUTION_RULE,
+        "grain": "retailer_product_id_x_store_id",
+        "deduplication": "distinct_store_id_per_product",
+        "price_rule": "price_gt_zero",
+        "inventory_claim": False,
+        "stock_status_used": False,
+        "sponsorship_used": False,
+    }:
+        return False
+
+    distribution_checks = [
         check
         for check in checks
-        if isinstance(check, dict) and check.get("id") == "verified-local-availability"
+        if isinstance(check, dict) and check.get("id") == "store-search-distribution"
     ]
-    if len(availability_checks) != 1 or availability_checks[0].get("status") != "passed":
+    if len(distribution_checks) != 1 or distribution_checks[0].get("status") != "passed":
         return False
-    availability_evidence_refs = availability_checks[0].get("evidence_refs")
-    if not isinstance(availability_evidence_refs, list) or not availability_evidence_refs:
+    distribution_evidence_refs = distribution_checks[0].get("evidence_refs")
+    if not isinstance(distribution_evidence_refs, list) or not distribution_evidence_refs:
         return False
-    availability_evidence = {str(ref) for ref in availability_evidence_refs}
+    distribution_evidence = {str(ref) for ref in distribution_evidence_refs}
 
     evidence_sets = document.get("evidence_sets")
     if not isinstance(evidence_sets, list):
@@ -67,7 +89,7 @@ def has_verified_local_availability_contract(document: JsonObject) -> bool:
     ):
         return False
     evidence_ids = set(evidence_id_values)
-    if not availability_evidence <= evidence_ids:
+    if not distribution_evidence <= evidence_ids:
         return False
 
     benchmark = document.get("benchmark_retailer")
@@ -131,9 +153,9 @@ def has_verified_local_availability_contract(document: JsonObject) -> bool:
 
     covered_evidence: set[str] = set()
     required_fields = {
-        "verified_available_offers": "offers",
-        "verified_available_zips": "zipcodes",
-        "verified_available_stores": "stores",
+        "distribution_search_offers": "offers",
+        "distribution_stores": "stores",
+        "service_area_presence_count": "service_areas",
     }
     for retailer in required_retailers:
         coverage_row = coverage_by_retailer[retailer]
@@ -166,9 +188,17 @@ def has_verified_local_availability_contract(document: JsonObject) -> bool:
             value = metric.get("value")
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 return False
-            if field == "verified_available_offers" and value == 0:
-                return False
-    return covered_evidence <= availability_evidence
+    return covered_evidence <= distribution_evidence
+
+
+def has_verified_local_availability_contract(document: JsonObject) -> bool:
+    """Backward-compatible alias for the superseding distribution contract.
+
+    Kept temporarily for internal callers during the contract migration.  It no
+    longer validates or requires any in-stock claim.
+    """
+
+    return has_store_search_distribution_contract(document)
 
 
 class AnalysisResultValidator:
